@@ -12,12 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/google": "^1.0.18",
-    "ai": "^4.1.16",
-    "effect": "^3.12.0",
-    "zod": "^3.24.1"
+    "@ai-sdk/google": "1.2.22",
+    "ai": "4.3.19",
+    "effect": "3.21.2",
+    "zod": "3.25.76"
   },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "typescript": "5.9.3"
   }
 }

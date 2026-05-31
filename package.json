@@ -1,7 +1,7 @@
 {
   "name": "receipt-ocr-app",
   "private": true,
-  "packageManager": "pnpm@9.15.9",
+  "packageManager": "pnpm@10.16.0",
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
@@ -10,11 +10,11 @@
     "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\""
   },
   "devDependencies": {
-    "@types/node": "^22.10.5",
-    "@types/react": "^19.0.8",
-    "@types/react-dom": "^19.0.3",
-    "prettier": "^3.4.2",
-    "turbo": "^2.3.3",
-    "typescript": "^5.7.3"
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "prettier": "3.8.3",
+    "turbo": "2.9.12",
+    "typescript": "5.9.3"
   }
 }

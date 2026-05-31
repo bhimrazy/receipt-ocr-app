@@ -10,22 +10,22 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.9.6",
-    "@receipt-ocr/core": "workspace:*",
-    "@receipt-ocr/ui": "workspace:*",
-    "clsx": "^2.1.1",
-    "effect": "^3.12.0",
-    "lucide-react": "^0.468.0",
-    "next": "^15.1.4",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "tailwind-merge": "^2.6.0"
+    "@clerk/nextjs": "6.39.3",
+    "@receipt-ocr/core": "workspace:0.0.0",
+    "@receipt-ocr/ui": "workspace:0.0.0",
+    "clsx": "2.1.1",
+    "effect": "3.21.2",
+    "lucide-react": "0.468.0",
+    "next": "15.5.18",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "tailwind-merge": "2.6.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.0.0",
-    "drizzle-kit": "^0.30.1",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.3"
+    "@tailwindcss/postcss": "4.3.0",
+    "drizzle-kit": "0.30.6",
+    "postcss": "8.5.14",
+    "tailwindcss": "4.3.0",
+    "typescript": "5.9.3"
   }
 }
