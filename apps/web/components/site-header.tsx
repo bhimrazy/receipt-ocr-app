@@ -4,7 +4,7 @@ import { Button } from "@receipt-ocr/ui/components/button";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Brand } from "./brand";
+import { Brand } from "@/components/brand";
 
 const navLinks = [
   { href: "#features", label: "Features" },

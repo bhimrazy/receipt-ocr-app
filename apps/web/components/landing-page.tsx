@@ -11,8 +11,9 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { Brand } from "./brand";
-import { SiteHeader } from "./site-header";
+import { Brand } from "@/components/brand";
+import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
+import { SiteHeader } from "@/components/site-header";
 
 const features = [
   {
@@ -69,69 +70,9 @@ const steps = [
   },
 ];
 
-const receiptCards = [
-  {
-    merchant: "Whole Foods",
-    total: "$67.43",
-    lines: [
-      ["Bananas", "$2.49"],
-      ["Almond Milk", "$4.99"],
-      ["Bread", "$5.49"],
-    ],
-    className: "left-[4%] top-[30%] [--r:-6deg]",
-  },
-  {
-    merchant: "Starbucks",
-    total: "$12.75",
-    lines: [
-      ["Oat Latte", "$6.25"],
-      ["Muffin", "$3.95"],
-      ["Water", "$2.55"],
-    ],
-    className: "right-[5%] top-[24%] [--r:5deg] [animation-delay:1s]",
-  },
-  {
-    merchant: "Shell Gas",
-    total: "$52.18",
-    lines: [
-      ["Unleaded", "$48.36"],
-      ["Car Wash", "$3.82"],
-      ["Snack", "$1.00"],
-    ],
-    className: "right-[9%] top-[66%] [--r:-3deg] [animation-delay:2s]",
-  },
-];
-
 function SectionLabel({ children }: { children: string }) {
   return (
     <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">{children}</p>
-  );
-}
-
-function FloatingReceiptCard({ card }: { card: (typeof receiptCards)[number] }) {
-  return (
-    <div
-      className={`floating-receipt absolute hidden h-[182px] w-[212px] flex-col rounded-xl border border-white/10 bg-card/80 p-4 font-mono text-[11px] opacity-90 shadow-2xl shadow-black/40 backdrop-blur-xl xl:flex ${card.className}`}
-    >
-      <div className="mb-3 flex items-center justify-between text-xs font-semibold text-foreground">
-        <span>{card.merchant}</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium text-primary">
-          <Check className="size-2.5" /> parsed
-        </span>
-      </div>
-      <div className="flex flex-1 flex-col gap-1 text-muted-foreground">
-        {card.lines.map(([name, price]) => (
-          <div className="flex justify-between" key={name}>
-            <span>{name}</span>
-            <span>{price}</span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 flex justify-between border-t border-dashed border-white/10 pt-2 font-semibold text-primary">
-        <span>Total</span>
-        <span>{card.total}</span>
-      </div>
-    </div>
   );
 }
 
@@ -145,12 +86,8 @@ export function LandingPage() {
         <div className="grid-mask pointer-events-none absolute inset-0 opacity-40">
           <div className="receipt-grid absolute -inset-1" />
         </div>
-        <div className="glow-orb pointer-events-none absolute left-1/2 top-[34%] size-[680px] rounded-full bg-primary/15 blur-[150px]" />
-        <div className="glow-orb pointer-events-none absolute left-[24%] top-[56%] size-[400px] rounded-full bg-sky-400/10 blur-[120px]" />
-        <div className="glow-orb pointer-events-none absolute left-[78%] top-[60%] size-[340px] rounded-full bg-fuchsia-400/10 blur-[110px]" />
-        {receiptCards.map((card) => (
-          <FloatingReceiptCard card={card} key={card.merchant} />
-        ))}
+        <div className="hero-aurora pointer-events-none absolute left-1/2 top-[36%] size-[780px] -translate-x-1/2 -translate-y-1/2 rounded-full" />
+        <HeroFloatingReceipts />
 
         <div className="relative z-10 mx-auto max-w-3xl animate-fade-up">
           <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 font-mono text-xs text-muted-foreground">

@@ -18,3 +18,37 @@
 .floating-receipt {
   animation: card-float 6s ease-in-out infinite;
 }
+
+.hero-aurora {
+  background:
+    radial-gradient(
+      38% 48% at 32% 42%,
+      color-mix(in oklab, var(--primary) 24%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(36% 46% at 68% 58%, color-mix(in oklab, #60a5fa 20%, transparent), transparent 72%),
+    radial-gradient(34% 44% at 54% 34%, color-mix(in oklab, #a78bfa 18%, transparent), transparent 72%);
+  filter: blur(56px);
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-aurora {
+    animation: aurora-drift 18s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes aurora-drift {
+  0% {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translate3d(3%, 2%, 0) scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(-2%, 3%, 0) scale(1.04);
+    opacity: 0.8;
+  }
+}
