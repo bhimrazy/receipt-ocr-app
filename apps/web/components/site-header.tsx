@@ -69,15 +69,10 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Button
-            asChild
-            variant="ghost"
-            size="sm"
-            className="hidden rounded-full sm:inline-flex"
-          >
+          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
             <Link href="/sign-in">Sign in</Link>
           </Button>
-          <Button asChild size="sm" className="rounded-full">
+          <Button asChild size="sm">
             <Link href="/sign-in">
               Get started
               <ArrowRight className="size-3.5" />

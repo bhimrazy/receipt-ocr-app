@@ -5,10 +5,10 @@ import {
   Check,
   Download,
   Globe2,
-  ReceiptText,
+  KeyRound,
+  ScanLine,
   Search,
   Shield,
-  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
@@ -17,56 +17,56 @@ import { SiteHeader } from "@/components/site-header";
 
 const features = [
   {
-    icon: Zap,
-    title: "Provider-ready OCR",
-    desc: "Gemini powers the MVP through the AI SDK, with clean seams for future providers.",
+    icon: ScanLine,
+    title: "Accurate extraction",
+    desc: "Merchant, dates, line items, tax, and totals pulled into clean fields — each with a confidence score so you know what to trust.",
+  },
+  {
+    icon: KeyRound,
+    title: "Bring your own keys",
+    desc: "Start fully managed on the free tier. Outgrow it? Plug in your own AI and storage keys to lift the limits and pay providers directly — no markup.",
   },
   {
     icon: Shield,
     title: "Private by design",
-    desc: "Clerk protects every receipt route and storage keys stay server-side.",
-  },
-  {
-    icon: Globe2,
-    title: "Portable storage",
-    desc: "R2 first, S3-compatible always, so MinIO and AWS S3 remain easy exits.",
-  },
-  {
-    icon: ReceiptText,
-    title: "Structured output",
-    desc: "Merchant, dates, line items, tax, totals, and confidence in typed JSON.",
-  },
-  {
-    icon: Search,
-    title: "Fast history",
-    desc: "Searchable, dense receipt records built for repeated finance workflows.",
+    desc: "Every receipt and route is protected, and your storage keys stay server-side — never exposed to the browser.",
   },
   {
     icon: Download,
-    title: "Exports ready",
-    desc: "Result views are shaped for JSON and CSV exports from day one.",
+    title: "Export anywhere",
+    desc: "Send structured results to JSON or CSV in a click — straight into your spreadsheet, ledger, or pipeline.",
+  },
+  {
+    icon: Search,
+    title: "Searchable history",
+    desc: "Every receipt is stored, statused, and searchable — built for repeat finance workflows, not one-offs.",
+  },
+  {
+    icon: Globe2,
+    title: "No lock-in",
+    desc: "S3-compatible from day one — Cloudflare R2, AWS S3, or self-hosted MinIO. Your data stays portable.",
   },
 ];
 
 const stats: Array<[string, string]> = [
-  ["6", "Fields per receipt"],
-  ["JSON + CSV", "Export formats"],
-  ["S3 / R2", "Portable storage"],
-  ["Typed", "End-to-end schema"],
+  ["$0", "To get started"],
+  ["Seconds", "From upload to data"],
+  ["6+", "Fields per receipt"],
+  ["JSON · CSV", "Export anytime"],
 ];
 
 const steps = [
   {
-    title: "Upload a receipt image",
-    desc: "Server-mediated upload keeps storage credentials private.",
+    title: "Upload a receipt",
+    desc: "Snap a photo or drop in an image. Uploads are handled server-side, so storage keys never touch the browser.",
   },
   {
-    title: "Gemini extracts typed JSON",
-    desc: "The AI SDK keeps provider switching realistic later on.",
+    title: "Get structured data",
+    desc: "Fields are extracted into clean, structured data in seconds — merchant, items, tax, and totals, each with a confidence score.",
   },
   {
-    title: "Review history and export",
-    desc: "Data lands in Postgres with statuses ready for background jobs.",
+    title: "Review, search, export",
+    desc: "Everything lands in your searchable history, ready to review and export to JSON or CSV whenever you need it.",
   },
 ];
 
@@ -92,7 +92,7 @@ export function LandingPage() {
         <div className="relative z-10 mx-auto max-w-3xl animate-fade-up">
           <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 font-mono text-xs text-muted-foreground">
             <span className="size-1.5 rounded-full bg-primary shadow-[0_0_10px_var(--primary)]" />
-            v0.1 · AI SDK · Effect TS
+            Early access · Free to start
           </div>
           <h1 className="text-balance text-5xl font-bold leading-[1.05] tracking-tight md:text-7xl">
             <span className="block">Receipts to</span>
@@ -101,8 +101,8 @@ export function LandingPage() {
             </span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-8 text-muted-foreground md:text-lg">
-            Extract line items, totals, categories, and confidence from receipt images with
-            Gemini OCR, Postgres history, and S3-compatible storage.
+            Snap or upload any receipt and get clean, structured data — merchant, line items,
+            tax, and totals — ready to search, review, and export.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Button asChild size="lg">
@@ -115,7 +115,7 @@ export function LandingPage() {
             </Button>
           </div>
           <p className="mt-5 font-mono text-xs text-muted-foreground/70">
-            No card required · Bring your own keys
+            No card required · Bring your own keys when you outgrow the free tier
           </p>
         </div>
       </section>
@@ -137,12 +137,13 @@ export function LandingPage() {
         <div className="glow-orb pointer-events-none absolute left-1/2 top-0 size-[500px] -translate-x-1/2 rounded-full bg-primary/5 blur-[160px]" />
         <div className="relative mx-auto max-w-6xl">
           <div className="mx-auto mb-14 max-w-2xl text-center">
-            <SectionLabel>Features</SectionLabel>
+            <SectionLabel>What you get</SectionLabel>
             <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
-              Everything for the MVP
+              Everything from snap to export
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              A complete receipt pipeline from upload to structured records — typed end to end.
+              A complete pipeline — capture, extract, review, and export — with your data staying
+              yours the whole way through.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -172,10 +173,10 @@ export function LandingPage() {
           <div className="mx-auto mb-14 max-w-2xl text-center">
             <SectionLabel>How it works</SectionLabel>
             <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
-              Upload, process, export
+              Upload, extract, export
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              Three steps from a photo on your phone to clean rows in your database.
+              Three steps from a photo on your phone to clean data you can actually use.
             </p>
           </div>
           <div className="relative grid gap-5 md:grid-cols-3">
@@ -203,10 +204,11 @@ export function LandingPage() {
           <div className="glow-orb pointer-events-none absolute left-1/2 top-full size-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[130px]" />
           <div className="relative">
             <h2 className="text-balance text-3xl font-bold tracking-tight md:text-4xl">
-              Start extracting data today
+              Start turning receipts into data
             </h2>
             <p className="mx-auto mt-4 max-w-md text-pretty text-muted-foreground">
-              Free local development. Bring your own provider keys and storage — no lock-in.
+              Free to start, no card required. Bring your own keys when you're ready to scale —
+              your data, your costs, no lock-in.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">
