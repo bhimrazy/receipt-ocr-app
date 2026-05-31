@@ -1,3 +1,4 @@
+import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import {
@@ -12,8 +13,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
+import { ContactButton } from "@/components/contact-button";
 import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
 import { SiteHeader } from "@/components/site-header";
+import { SupportWidget } from "@/components/support-widget";
 
 const features = [
   {
@@ -49,10 +52,10 @@ const features = [
 ];
 
 const stats: Array<[string, string]> = [
-  ["$0", "To get started"],
-  ["Seconds", "From upload to data"],
-  ["6+", "Fields per receipt"],
-  ["JSON · CSV", "Export anytime"],
+  ["$0", "Free to start, no card"],
+  ["Every item", "Line-level detail, not just totals"],
+  ["Confidence", "Scored on every field"],
+  ["Your keys", "Own your AI & storage"],
 ];
 
 const steps = [
@@ -70,9 +73,70 @@ const steps = [
   },
 ];
 
+const freePlanFeatures = [
+  "Receipt OCR with confidence scores",
+  "Merchant, items, tax & totals extracted",
+  "Searchable receipt history",
+  "JSON & CSV export",
+  "Bring your own keys to lift limits",
+];
+
+const customPlanFeatures = [
+  "Everything in Free",
+  "Higher request & storage limits",
+  "Help wiring your own providers",
+  "Direct line to the team",
+  "Shape the roadmap with your feedback",
+];
+
 function SectionLabel({ children }: { children: string }) {
   return (
     <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">{children}</p>
+  );
+}
+
+function PlanCard({
+  name,
+  price,
+  cadence,
+  description,
+  features,
+  cta,
+  featured = false,
+}: {
+  name: string;
+  price: string;
+  cadence: string;
+  description: string;
+  features: string[];
+  cta: React.ReactNode;
+  featured?: boolean;
+}) {
+  return (
+    <Card
+      className={`relative flex flex-col p-7 ${
+        featured ? "border-primary/40 bg-primary/4" : ""
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">{name}</h3>
+        {featured && <Badge>Start here</Badge>}
+      </div>
+      <div className="mt-3 flex items-baseline gap-1.5">
+        <span className="font-mono text-3xl font-bold tracking-tight">{price}</span>
+        <span className="text-sm text-muted-foreground">{cadence}</span>
+      </div>
+      <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+      <ul className="mt-6 flex flex-1 flex-col gap-3 text-sm">
+        {features.map((feature) => (
+          <li className="flex items-start gap-2.5" key={feature}>
+            <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-7">{cta}</div>
+    </Card>
   );
 }
 
@@ -125,8 +189,10 @@ export function LandingPage() {
         <div className="mx-auto grid max-w-5xl grid-cols-2 gap-x-8 gap-y-10 text-center md:grid-cols-4">
           {stats.map(([value, label]) => (
             <div key={label}>
-              <div className="font-mono text-2xl font-bold md:text-3xl">{value}</div>
-              <div className="mt-1.5 text-sm text-muted-foreground">{label}</div>
+              <div className="font-mono text-xl font-bold tracking-tight text-foreground md:text-2xl">
+                {value}
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">{label}</div>
             </div>
           ))}
         </div>
@@ -195,8 +261,53 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* Pricing */}
+      <section id="pricing" className="border-t border-border px-5 py-24 md:py-28">
+        <div className="mx-auto max-w-5xl">
+          <div className="mx-auto mb-14 max-w-2xl text-center">
+            <SectionLabel>Pricing</SectionLabel>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+              Start free, scale when you need
+            </h2>
+            <p className="mt-4 text-pretty text-muted-foreground">
+              No credit card to begin. When you outgrow the free tier, bring your own keys —
+              or talk to us about higher volume.
+            </p>
+          </div>
+          <div className="mx-auto grid max-w-3xl items-stretch gap-5 md:grid-cols-2">
+            <PlanCard
+              name="Free"
+              price="$0"
+              cadence="/ forever"
+              description="Everything you need to start turning receipts into structured data."
+              features={freePlanFeatures}
+              featured
+              cta={
+                <Button asChild className="w-full">
+                  <Link href="/sign-in">
+                    Get started free <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+              }
+            />
+            <PlanCard
+              name="Custom"
+              price="Let's talk"
+              cadence=""
+              description="For higher volume, teams, and tailored setups."
+              features={customPlanFeatures}
+              cta={
+                <ContactButton variant="outline" topic="use-case" className="w-full">
+                  Contact us
+                </ContactButton>
+              }
+            />
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
-      <section id="pricing" className="px-5 py-24 md:py-28">
+      <section className="px-5 py-24 md:py-28">
         <div className="relative mx-auto max-w-4xl overflow-hidden rounded-3xl border border-primary/20 bg-primary/[0.06] px-6 py-16 text-center">
           <div className="grid-mask pointer-events-none absolute inset-0 opacity-30">
             <div className="receipt-grid absolute -inset-1" />
@@ -234,6 +345,8 @@ export function LandingPage() {
           </span>
         </div>
       </footer>
+
+      <SupportWidget />
     </main>
   );
 }
