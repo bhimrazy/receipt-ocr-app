@@ -12,9 +12,9 @@ const buttonVariants = cva(
           "bg-primary text-primary-foreground shadow-[0_0_30px_color-mix(in_oklab,var(--primary)_26%,transparent)] hover:-translate-y-0.5 hover:shadow-[0_0_42px_color-mix(in_oklab,var(--primary)_38%,transparent)]",
         secondary:
           "border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",
+        ghost: "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground",
         outline:
-          "border border-border bg-background/40 text-foreground hover:bg-muted"
+          "border border-border bg-background/40 text-foreground hover:bg-foreground/[0.06]"
       },
       size: {
         sm: "h-8 px-3 text-xs",
