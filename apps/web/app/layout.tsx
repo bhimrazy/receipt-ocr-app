@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <ClerkProvider publishableKey={clerkPublishableKey}>
+    <ClerkProvider afterSignOutUrl="/" publishableKey={clerkPublishableKey}>
       {body}
     </ClerkProvider>
   );

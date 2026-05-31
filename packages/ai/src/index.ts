@@ -75,8 +75,8 @@ export async function extractReceiptWithGemini({
           },
           {
             type: "image",
-            image: Buffer.from(imageBytes),
-            mimeType,
+            image: imageBytes,
+            mediaType: mimeType,
           },
         ],
       },

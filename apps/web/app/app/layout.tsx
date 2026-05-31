@@ -13,7 +13,7 @@ const nav = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
   const userControl = clerkEnabled ? (
-    <UserButton afterSignOutUrl="/" />
+    <UserButton />
   ) : (
     <span className="rounded-full border border-border px-3 py-1 font-mono text-xs text-muted-foreground">
       auth preview

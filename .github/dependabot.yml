@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/apps/web"
+      - "/packages/*"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kathmandu"
+    cooldown:
+      default-days: 2
+    versioning-strategy: "increase"
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+        group-by: "dependency-name"
