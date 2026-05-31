@@ -1,0 +1,24 @@
+{
+  "name": "@receipt-ocr/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@receipt-ocr/ai": "workspace:*",
+    "@receipt-ocr/db": "workspace:*",
+    "@receipt-ocr/storage": "workspace:*",
+    "drizzle-orm": "^0.38.4",
+    "effect": "^3.12.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

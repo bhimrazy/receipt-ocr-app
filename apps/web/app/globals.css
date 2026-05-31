@@ -1,0 +1,20 @@
+@import "@receipt-ocr/ui/styles.css";
+
+.grid-mask {
+  mask-image: radial-gradient(ellipse 60% 50% at 50% 40%, black 20%, transparent 72%);
+}
+
+.receipt-grid {
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+.glow-orb {
+  animation: orb-float 8s ease-in-out infinite;
+}
+
+.floating-receipt {
+  animation: card-float 6s ease-in-out infinite;
+}
