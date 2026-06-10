@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clerk/nextjs": "7.4.2",
+    "@clerk/nextjs": "7.4.3",
     "@receipt-ocr/core": "workspace:0.0.0",
     "@receipt-ocr/ui": "workspace:0.0.0",
     "clsx": "2.1.1",
