@@ -14,7 +14,7 @@
   "dependencies": {
     "@ai-sdk/google": "3.0.80",
     "ai": "6.0.193",
-    "effect": "3.21.2",
+    "effect": "3.21.3",
     "zod": "4.4.3"
   },
   "devDependencies": {

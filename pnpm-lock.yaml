@@ -42,8 +42,8 @@ importers:
         specifier: 2.1.1
         version: 2.1.1
       effect:
-        specifier: 3.21.2
-        version: 3.21.2
+        specifier: 3.21.3
+        version: 3.21.3
       lucide-react:
         specifier: 1.17.0
         version: 1.17.0(react@19.2.6)
@@ -85,8 +85,8 @@ importers:
         specifier: 6.0.193
         version: 6.0.193(zod@4.4.3)
       effect:
-        specifier: 3.21.2
-        version: 3.21.2
+        specifier: 3.21.3
+        version: 3.21.3
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -110,8 +110,8 @@ importers:
         specifier: 0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(gel@2.2.0)(postgres@3.4.9)
       effect:
-        specifier: 3.21.2
-        version: 3.21.2
+        specifier: 3.21.3
+        version: 3.21.3
     devDependencies:
       '@types/node':
         specifier: 25.9.1
@@ -1397,8 +1397,8 @@ packages:
       sqlite3:
         optional: true
 
-  effect@3.21.2:
-    resolution: {integrity: sha512-rXd2FGDM8KdjSIrc+mqEELo7ScW7xTVxEf1iInmPSpIde9/nyGuFM710cjTo7/EreGXiUX2MOonPpprbz2XHCg==}
+  effect@3.21.3:
+    resolution: {integrity: sha512-RqwU7WnJ6CqYhyjpOVJA5vh1Sgkn6eVECO6mnD0EjlbWcC2M3LJaPglXXr13Rdo/Y+B+wTEPzGRYFNL2xKxNeQ==}
 
   enhanced-resolve@5.22.1:
     resolution: {integrity: sha512-6QEuw3zoX1SJQc7b87aBXke/no+mG2bTBgw29gWMQonLmpEkWoCAVkl+M49e48AZlWzxiDzDZzYdp6kobcyLww==}
@@ -1630,6 +1630,11 @@ packages:
 
   semver@7.8.1:
     resolution: {integrity: sha512-rkVq3IXh+4FDGch+KwzX3aV9W3kO54GyEgpvBzSyctDA6Xtd7RJQV1xmXbeQp5v7+VzLOfVqiutSE6GICgPFvg==}
+    engines: {node: '>=10'}
+    hasBin: true
+
+  semver@7.8.2:
+    resolution: {integrity: sha512-c8jsqUZm3omBOI66G90z1Dyw5z622G8oLG+omfsHBJf3CWQTlOcwOjvOG6wtiNfW6anKm/eA39LMwMtMez2TiQ==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -2664,7 +2669,7 @@ snapshots:
       gel: 2.2.0
       postgres: 3.4.9
 
-  effect@3.21.2:
+  effect@3.21.3:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 3.23.2
@@ -2788,7 +2793,7 @@ snapshots:
       '@petamoriken/float16': 3.9.3
       debug: 4.4.3
       env-paths: 3.0.0
-      semver: 7.8.1
+      semver: 7.8.2
       shell-quote: 1.8.4
       which: 4.0.0
     transitivePeerDependencies:
@@ -2933,6 +2938,9 @@ snapshots:
   scheduler@0.27.0: {}
 
   semver@7.8.1:
+    optional: true
+
+  semver@7.8.2:
     optional: true
 
   server-only@0.0.1: {}
