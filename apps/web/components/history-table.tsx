@@ -6,7 +6,7 @@ import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@receipt-ocr/ui/components/table";
-import { Download, Search } from "lucide-react";
+import { Download, Search, Upload } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { money, pct } from "@/lib/format";
@@ -73,6 +73,32 @@ export function HistoryTable({ receipts }: { receipts: ReceiptWithItems[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7}>
+                  <div className="flex flex-col items-center gap-3 py-14 text-center">
+                    <span className="flex size-11 items-center justify-center rounded-full border border-border bg-secondary/40 text-muted-foreground">
+                      <Search className="size-5" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium">No receipts found</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {receipts.length === 0
+                          ? "Upload your first receipt to start building history."
+                          : "Try a different search or category filter."}
+                      </p>
+                    </div>
+                    {receipts.length === 0 && (
+                      <Button asChild size="sm" className="mt-1">
+                        <Link href="/app/upload">
+                          <Upload className="size-4" /> Upload a receipt
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
             {filtered.map((receipt) => (
               <TableRow key={receipt.id}>
                 <TableCell>

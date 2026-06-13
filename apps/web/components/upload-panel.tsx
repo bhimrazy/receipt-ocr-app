@@ -2,9 +2,33 @@
 
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { Upload, X } from "lucide-react";
+import { FileJson, ScanLine, Shield, Sparkles, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+
+const pipeline = [
+  {
+    icon: ScanLine,
+    title: "Extracted",
+    desc: "Merchant, items, tax & totals — each with a confidence score.",
+  },
+  {
+    icon: FileJson,
+    title: "Structured",
+    desc: "Clean fields stored in your searchable history.",
+  },
+  {
+    icon: Shield,
+    title: "Private",
+    desc: "Uploads are server-side; your keys never touch the browser.",
+  },
+];
+
+const tips = [
+  "Flat, well-lit photos read best — avoid glare and folds.",
+  "Long receipts are fine; just keep the whole thing in frame.",
+  "PNG, JPG, or HEIC up to 10MB per image.",
+];
 
 export function UploadPanel() {
   const router = useRouter();
@@ -127,6 +151,38 @@ export function UploadPanel() {
           )}
         </div>
       )}
+
+      {/* What happens after upload */}
+      <div className="mt-10 grid gap-4 sm:grid-cols-3">
+        {pipeline.map((step) => {
+          const Icon = step.icon;
+          return (
+            <Card className="p-5" key={step.title}>
+              <div className="mb-3 flex size-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                <Icon className="size-4" />
+              </div>
+              <h3 className="text-sm font-semibold">{step.title}</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{step.desc}</p>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Tips for best results */}
+      <Card className="mt-4 p-5">
+        <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+          <Sparkles className="size-4 text-primary" />
+          Tips for the cleanest extraction
+        </div>
+        <ul className="flex flex-col gap-2 text-sm text-muted-foreground">
+          {tips.map((tip) => (
+            <li className="flex items-start gap-2.5" key={tip}>
+              <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />
+              {tip}
+            </li>
+          ))}
+        </ul>
+      </Card>
     </div>
   );
 }

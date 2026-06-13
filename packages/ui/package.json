@@ -6,6 +6,7 @@
   "exports": {
     "./styles.css": "./src/styles.css",
     "./lib/utils": "./src/lib/utils.ts",
+    "./components/accordion": "./src/components/accordion.tsx",
     "./components/button": "./src/components/button.tsx",
     "./components/card": "./src/components/card.tsx",
     "./components/input": "./src/components/input.tsx",
