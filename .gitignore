@@ -9,3 +9,6 @@ dist
 coverage
 drizzle
 *.tsbuildinfo
+/.tmp-screens/
+.vercel
+.env*.local

@@ -15,9 +15,40 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const title = "receiptOCR — Turn receipts into structured data";
+const description =
+  "Snap or upload any receipt and get clean, structured data — merchant, line items, tax, and totals — each with a confidence score, ready to search, review, and export. Free to start, bring your own keys when you scale.";
+
 export const metadata: Metadata = {
-  title: "Receipt OCR",
-  description: "Extract structured data from receipt images with Gemini OCR.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: title,
+    template: "%s · receiptOCR",
+  },
+  description,
+  applicationName: "receiptOCR",
+  keywords: [
+    "receipt OCR",
+    "receipt scanner",
+    "extract receipt data",
+    "receipt to JSON",
+    "expense tracking",
+    "line item extraction",
+  ],
+  openGraph: {
+    type: "website",
+    url: siteUrl,
+    siteName: "receiptOCR",
+    title,
+    description,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

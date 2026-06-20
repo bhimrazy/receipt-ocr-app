@@ -1,20 +1,27 @@
+import { Accordion, AccordionItem } from "@receipt-ocr/ui/components/accordion";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import {
   ArrowRight,
+  Briefcase,
+  Calculator,
   Check,
+  Code2,
   Download,
   Globe2,
   KeyRound,
   ScanLine,
   Search,
   Shield,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { ContactButton } from "@/components/contact-button";
 import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
+import { ProductPreview } from "@/components/product-preview";
+import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
 
@@ -52,10 +59,10 @@ const features = [
 ];
 
 const stats: Array<[string, string]> = [
-  ["$0", "Free to start, no card"],
-  ["Every item", "Line-level detail, not just totals"],
+  ["Seconds", "From upload to structured data"],
+  ["Line items", "Every line, not just the total"],
   ["Confidence", "Scored on every field"],
-  ["Your keys", "Own your AI & storage"],
+  ["$0", "Free to start, no card"],
 ];
 
 const steps = [
@@ -70,6 +77,56 @@ const steps = [
   {
     title: "Review, search, export",
     desc: "Everything lands in your searchable history, ready to review and export to JSON or CSV whenever you need it.",
+  },
+];
+
+const useCases = [
+  {
+    icon: Briefcase,
+    title: "Founders & freelancers",
+    desc: "Keep expenses in order without hand-typing every receipt at tax time.",
+  },
+  {
+    icon: Calculator,
+    title: "Bookkeepers",
+    desc: "Pull line-item detail straight into ledgers — totals, tax, and items, scored for review.",
+  },
+  {
+    icon: Code2,
+    title: "Developers",
+    desc: "Receipts in, clean JSON out. Wire it into your own pipeline with portable storage.",
+  },
+  {
+    icon: Users,
+    title: "Small teams",
+    desc: "A shared, searchable history so nothing gets lost between people or months.",
+  },
+];
+
+const faqs = [
+  {
+    q: "What image formats can I upload?",
+    a: "PNG, JPG, and HEIC images up to 10MB. Snap a photo on your phone or drop in a scan — both work.",
+  },
+  {
+    q: "How accurate is the extraction?",
+    a: "Every field — merchant, date, each line item, tax, and total — comes back with its own confidence score, so you always know exactly what to trust and what to double-check.",
+  },
+  {
+    q: "What does “bring your own keys” mean?",
+    a: "Start on the managed free tier with zero setup. When you outgrow it, plug in your own AI and storage keys to lift the limits and pay providers directly — no markup, no lock-in.",
+  },
+  {
+    q: "Where is my receipt data stored?",
+    a: "In S3-compatible storage — Cloudflare R2, AWS S3, or self-hosted MinIO. Your storage keys stay server-side and your data stays portable and yours.",
+  },
+  {
+    q: "Is it really free to start?",
+    a: "Yes. The free tier needs no credit card. You only ever bring your own keys or talk to us when you genuinely need higher volume.",
+  },
+  {
+    q: "Can I export what gets extracted?",
+    a: "Any receipt exports to JSON or CSV in a click — ready for your spreadsheet, ledger, or data pipeline.",
   },
 ];
 
@@ -114,7 +171,7 @@ function PlanCard({
 }) {
   return (
     <Card
-      className={`relative flex flex-col p-7 ${
+      className={`card-sheen relative flex flex-col p-7 ${
         featured ? "border-primary/40 bg-primary/4" : ""
       }`}
     >
@@ -160,9 +217,7 @@ export function LandingPage() {
           </div>
           <h1 className="text-balance text-5xl font-bold leading-[1.05] tracking-tight md:text-7xl">
             <span className="block">Receipts to</span>
-            <span className="block bg-gradient-to-r from-primary via-sky-300 to-violet-300 bg-clip-text text-transparent">
-              structured data
-            </span>
+            <span className="text-gradient block">structured data</span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-8 text-muted-foreground md:text-lg">
             Snap or upload any receipt and get clean, structured data — merchant, line items,
@@ -184,8 +239,15 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* Product preview */}
+      <section className="relative px-5 pb-8">
+        <div className="mx-auto -mt-6 max-w-4xl animate-fade-up">
+          <ProductPreview />
+        </div>
+      </section>
+
       {/* Stats band */}
-      <section className="border-y border-border bg-secondary/30 px-5 py-12">
+      <section className="mt-16 border-y border-border bg-secondary/30 px-5 py-12">
         <div className="mx-auto grid max-w-5xl grid-cols-2 gap-x-8 gap-y-10 text-center md:grid-cols-4">
           {stats.map(([value, label]) => (
             <div key={label}>
@@ -261,8 +323,38 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* Use cases */}
+      <section className="border-t border-border px-5 py-24 md:py-28">
+        <div className="mx-auto max-w-6xl">
+          <div className="mx-auto mb-14 max-w-2xl text-center">
+            <SectionLabel>Who it&apos;s for</SectionLabel>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+              Built for anyone drowning in receipts
+            </h2>
+            <p className="mt-4 text-pretty text-muted-foreground">
+              From a single founder at tax time to a team that needs every line item — the same
+              clean data, ready when you are.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {useCases.map((useCase) => {
+              const Icon = useCase.icon;
+              return (
+                <Card className="p-6" key={useCase.title}>
+                  <div className="mb-4 flex size-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+                    <Icon className="size-5" />
+                  </div>
+                  <h3 className="font-semibold">{useCase.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{useCase.desc}</p>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
       {/* Pricing */}
-      <section id="pricing" className="border-t border-border px-5 py-24 md:py-28">
+      <section id="pricing" className="border-t border-border bg-secondary/20 px-5 py-24 md:py-28">
         <div className="mx-auto max-w-5xl">
           <div className="mx-auto mb-14 max-w-2xl text-center">
             <SectionLabel>Pricing</SectionLabel>
@@ -306,6 +398,28 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* FAQ */}
+      <section id="faq" className="border-t border-border px-5 py-24 md:py-28">
+        <div className="mx-auto max-w-3xl">
+          <div className="mx-auto mb-12 max-w-2xl text-center">
+            <SectionLabel>FAQ</SectionLabel>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+              Questions, answered
+            </h2>
+            <p className="mt-4 text-pretty text-muted-foreground">
+              Still curious? Reach out any time — we read every message.
+            </p>
+          </div>
+          <Accordion>
+            {faqs.map((faq) => (
+              <AccordionItem key={faq.q} question={faq.q}>
+                {faq.a}
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="px-5 py-24 md:py-28">
         <div className="relative mx-auto max-w-4xl overflow-hidden rounded-3xl border border-primary/20 bg-primary/[0.06] px-6 py-16 text-center">
@@ -335,17 +449,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border px-5 py-10">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-sm text-muted-foreground md:flex-row">
-          <Brand />
-          <span className="font-mono text-xs">Next.js · Clerk · Effect · AI SDK · Drizzle</span>
-          <span className="flex items-center gap-1.5">
-            <Check className="size-4 text-primary" /> Built for real OCR
-          </span>
-        </div>
-      </footer>
-
+      <SiteFooter />
       <SupportWidget />
     </main>
   );
