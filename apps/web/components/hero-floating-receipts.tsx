@@ -85,7 +85,7 @@ export function HeroFloatingReceipts() {
           >
             <div className="mb-3 flex items-center justify-between text-xs font-semibold text-foreground">
               <span>{card.merchant}</span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium text-primary">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[11px] font-medium text-primary">
                 <Check className="size-2.5" /> parsed
               </span>
             </div>

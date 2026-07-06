@@ -14,9 +14,9 @@ const columns: Array<{ title: string; links: Array<{ label: string; href: string
   {
     title: "Get started",
     links: [
+      { label: "Create a free account", href: "/sign-in" },
       { label: "Sign in", href: "/sign-in" },
       { label: "Upload a receipt", href: "/app/upload" },
-      { label: "History", href: "/app/history" },
     ],
   },
   {
@@ -41,7 +41,7 @@ export function SiteFooter() {
           </div>
           {columns.map((column) => (
             <div key={column.title}>
-              <h3 className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground/70">
+              <h3 className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
                 {column.title}
               </h3>
               <ul className="mt-4 flex flex-col gap-3 text-sm">
