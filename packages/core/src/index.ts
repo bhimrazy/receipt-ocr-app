@@ -13,7 +13,7 @@ import {
   type S3StorageConfig,
 } from "@receipt-ocr/storage";
 import { and, desc, eq } from "drizzle-orm";
-import { Context, Data, Effect, Layer } from "effect";
+import { Context, Data, Duration, Effect, Layer } from "effect";
 
 export type ReceiptWithItems = Receipt & { items: ReceiptItem[]; imageUrl?: string };
 
@@ -101,13 +101,39 @@ export class ReceiptRepository extends Context.Tag("ReceiptRepository")<
   ReceiptRepositoryShape
 >() {}
 
+export type ProcessingStepTiming = { step: string; ms: number };
+
+export type ProcessingResult = {
+  receipt: ReceiptWithItems;
+  timings: ProcessingStepTiming[];
+};
+
+export type UploadInput = {
+  userId: string;
+  fileName: string;
+  mimeType: string;
+  body: Uint8Array;
+};
+
 export type ReceiptProcessingServiceShape = {
-  processUpload(input: {
+  /** Stage 1: create the receipt row and store the image (fast, always synchronous). */
+  ingestUpload(
+    input: UploadInput,
+  ): Effect.Effect<
+    { receipt: Receipt; timings: ProcessingStepTiming[] },
+    StorageError | RepositoryError | ValidationError
+  >;
+  /** Stage 2: run OCR and persist results; marks the receipt failed on any error. */
+  extractStored(input: {
+    receiptId: string;
     userId: string;
-    fileName: string;
     mimeType: string;
     body: Uint8Array;
-  }): Effect.Effect<ReceiptWithItems, StorageError | AiOcrError | RepositoryError | ValidationError>;
+  }): Effect.Effect<ProcessingResult, AiOcrError | RepositoryError>;
+  /** Both stages back to back — the instant path. */
+  processUpload(
+    input: UploadInput,
+  ): Effect.Effect<ProcessingResult, StorageError | AiOcrError | RepositoryError | ValidationError>;
 };
 
 export class ReceiptProcessingService extends Context.Tag("ReceiptProcessingService")<
@@ -291,6 +317,23 @@ export const ReceiptRepositoryLive = Layer.effect(
   }),
 );
 
+/**
+ * Runs a pipeline step and records its duration into `timings`. Timings are
+ * returned to the caller so the request boundary can emit one wide event
+ * (canonical log line) instead of scattered per-step logs.
+ */
+const timedStep = <A, E, R>(
+  timings: ProcessingStepTiming[],
+  step: string,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.timed(effect).pipe(
+    Effect.map(([duration, value]) => {
+      timings.push({ step, ms: Math.round(Duration.toMillis(duration)) });
+      return value;
+    }),
+  );
+
 export const ReceiptProcessingLive = Layer.effect(
   ReceiptProcessingService,
   Effect.gen(function* () {
@@ -298,45 +341,94 @@ export const ReceiptProcessingLive = Layer.effect(
     const ai = yield* AiOcrService;
     const repo = yield* ReceiptRepository;
 
-    return {
-      processUpload: (input) =>
-        Effect.gen(function* () {
-          if (!input.mimeType.startsWith("image/")) {
-            return yield* Effect.fail(new ValidationError({ message: "Only image uploads are supported" }));
-          }
+    const ingestUpload = (input: UploadInput) =>
+      Effect.gen(function* () {
+        if (!input.mimeType.startsWith("image/")) {
+          return yield* Effect.fail(new ValidationError({ message: "Only image uploads are supported" }));
+        }
 
-          const receipt = yield* repo.createUploaded({
-            userId: input.userId,
-            fileName: input.fileName,
-          });
-          const stored = yield* storage.putReceiptImage({
+        const timings: ProcessingStepTiming[] = [];
+        const receipt = yield* timedStep(
+          timings,
+          "db.create",
+          repo.createUploaded({ userId: input.userId, fileName: input.fileName }),
+        );
+        const stored = yield* timedStep(
+          timings,
+          "storage.put",
+          storage.putReceiptImage({
             userId: input.userId,
             receiptId: receipt.id,
             fileName: input.fileName,
             mimeType: input.mimeType,
             body: input.body,
-          });
+          }),
+        );
+        yield* timedStep(
+          timings,
+          "db.markProcessing",
+          repo.markProcessing(receipt.id, input.userId, stored.objectKey),
+        );
+        return { receipt, timings };
+      });
 
-          yield* repo.markProcessing(receipt.id, input.userId, stored.objectKey);
-
-          const extraction = yield* ai.extractReceipt({
-            imageBytes: input.body,
-            mimeType: input.mimeType,
-          });
-
-          yield* repo.completeReceipt(receipt.id, input.userId, extraction);
-          const completed = yield* repo.getReceipt(receipt.id, input.userId);
-          if (!completed) {
-            return yield* Effect.fail(new RepositoryError({ message: "Completed receipt could not be loaded" }));
-          }
-          return completed;
-        }).pipe(
-          Effect.tapError((error) =>
-            "message" in error
-              ? Effect.logError(error.message)
-              : Effect.logError("Receipt processing failed"),
-          ),
+    const extractStored = (input: {
+      receiptId: string;
+      userId: string;
+      mimeType: string;
+      body: Uint8Array;
+    }) =>
+      Effect.gen(function* () {
+        const timings: ProcessingStepTiming[] = [];
+        const extraction = yield* timedStep(
+          timings,
+          "ai.extract",
+          ai.extractReceipt({ imageBytes: input.body, mimeType: input.mimeType }),
+        );
+        yield* timedStep(
+          timings,
+          "db.complete",
+          repo.completeReceipt(input.receiptId, input.userId, extraction),
+        );
+        const completed = yield* timedStep(
+          timings,
+          "db.load",
+          repo.getReceipt(input.receiptId, input.userId),
+        );
+        if (!completed) {
+          return yield* Effect.fail(new RepositoryError({ message: "Completed receipt could not be loaded" }));
+        }
+        return { receipt: completed, timings };
+      }).pipe(
+        // A failed extraction must never leave the receipt stuck in "processing".
+        Effect.tapError((error) =>
+          repo
+            .failReceipt(input.receiptId, input.userId, error.message)
+            .pipe(
+              Effect.catchAll(() =>
+                Effect.logError(`receipt.failReceipt_failed: ${input.receiptId}`),
+              ),
+            ),
         ),
+      );
+
+    return {
+      ingestUpload,
+      extractStored,
+      processUpload: (input) =>
+        Effect.gen(function* () {
+          const ingested = yield* ingestUpload(input);
+          const extracted = yield* extractStored({
+            receiptId: ingested.receipt.id,
+            userId: input.userId,
+            mimeType: input.mimeType,
+            body: input.body,
+          });
+          return {
+            receipt: extracted.receipt,
+            timings: [...ingested.timings, ...extracted.timings],
+          };
+        }),
     } satisfies ReceiptProcessingServiceShape;
   }),
 );

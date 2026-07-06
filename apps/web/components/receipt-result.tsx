@@ -3,21 +3,38 @@ import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@receipt-ocr/ui/components/table";
 import type { ReceiptWithItems } from "@receipt-ocr/core";
-import { ArrowLeft, Copy, Download, ReceiptText } from "lucide-react";
+import { ArrowLeft, Copy, Download, Loader2, ReceiptText, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { money, pct } from "@/lib/format";
+import { ProcessingPoller } from "@/components/processing-poller";
 
 export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
   const json = JSON.stringify(receipt.rawJson ?? receipt, null, 2);
+  const inFlight = receipt.status === "processing" || receipt.status === "uploaded";
 
   return (
     <div className="mx-auto max-w-6xl">
+      <ProcessingPoller id={receipt.id} status={receipt.status} />
       <Button asChild className="mb-6" variant="ghost">
         <Link href="/app/history">
           <ArrowLeft className="size-4" />
           Back to history
         </Link>
       </Button>
+
+      {inFlight && (
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm">
+          <Loader2 className="size-4 animate-spin text-primary" />
+          Extraction in progress — this page updates automatically when it finishes.
+        </div>
+      )}
+      {receipt.status === "failed" && (
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <TriangleAlert className="size-4 shrink-0" />
+          Extraction failed{receipt.errorMessage ? `: ${receipt.errorMessage}` : "."} Try
+          re-uploading the receipt.
+        </div>
+      )}
 
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div>

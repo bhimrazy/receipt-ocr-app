@@ -2,7 +2,7 @@
 
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { FileJson, ScanLine, Shield, Sparkles, Upload, X } from "lucide-react";
+import { Camera, FileJson, Layers, ScanLine, Shield, Sparkles, Upload, X, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -30,41 +30,71 @@ const tips = [
   "PNG, JPG, or HEIC up to 10MB per image.",
 ];
 
+type UploadResponse = { receiptId?: string; error?: string };
+
+async function postReceipt(file: File, mode: "instant" | "queued"): Promise<UploadResponse> {
+  const form = new FormData();
+  form.set("file", file);
+  form.set("mode", mode);
+  const res = await fetch("/api/receipts", { method: "POST", body: form });
+  const body = (await res.json().catch(() => null)) as UploadResponse | null;
+  if (!res.ok) {
+    return { error: body?.error ?? "Failed to process receipt" };
+  }
+  return body ?? {};
+}
+
 export function UploadPanel() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
-  const [processing, setProcessing] = useState(false);
+  const [processing, setProcessing] = useState<"instant" | "queued" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function addFiles(nextFiles: FileList | File[]) {
     setFiles((current) => [...current, ...Array.from(nextFiles)].slice(0, 20));
   }
 
-  async function processFirstReceipt() {
+  async function processInstantly() {
     const file = files[0];
     if (!file) return;
-    setProcessing(true);
+    setProcessing("instant");
     setError(null);
 
-    const form = new FormData();
-    form.set("file", file);
+    const result = await postReceipt(file, "instant");
+    if (result.error || !result.receiptId) {
+      setError(result.error ?? "Failed to process receipt");
+      setProcessing(null);
+      return;
+    }
+    router.push(`/app/receipts/${result.receiptId}`);
+  }
 
-    const res = await fetch("/api/receipts", {
-      method: "POST",
-      body: form,
-    });
+  async function queueAll() {
+    if (files.length === 0) return;
+    setProcessing("queued");
+    setError(null);
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Failed to process receipt");
-      setProcessing(false);
+    const results = await Promise.all(files.map((file) => postReceipt(file, "queued")));
+    const failures = results.filter((result) => result.error);
+    if (failures.length > 0) {
+      setError(
+        failures.length === files.length
+          ? (failures[0]?.error ?? "Failed to queue receipts")
+          : `${failures.length} of ${files.length} uploads failed — the rest are processing.`,
+      );
+      setProcessing(null);
       return;
     }
 
-    const body = (await res.json()) as { receiptId: string };
-    router.push(`/app/receipts/${body.receiptId}`);
+    const queued = results[0];
+    if (files.length === 1 && queued?.receiptId) {
+      router.push(`/app/receipts/${queued.receiptId}`);
+      return;
+    }
+    router.push("/app/history");
   }
 
   return (
@@ -72,7 +102,8 @@ export function UploadPanel() {
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Upload receipts</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Drop images or click to browse. The MVP processes the first receipt synchronously.
+          Drop images, browse, or snap a photo. Process one instantly, or queue a batch and keep
+          working while extraction runs in the background.
         </p>
       </div>
 
@@ -100,11 +131,30 @@ export function UploadPanel() {
           multiple
           onChange={(event) => event.target.files && addFiles(event.target.files)}
         />
+        <input
+          ref={cameraRef}
+          className="hidden"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={(event) => event.target.files && addFiles(event.target.files)}
+        />
         {files.length === 0 ? (
           <div className="flex flex-col items-center">
             <Upload className="mb-4 size-10 text-muted-foreground" />
             <p className="font-medium">Drop receipt images here</p>
             <p className="mt-2 text-sm text-muted-foreground">PNG, JPG, HEIC up to 10MB</p>
+            <Button
+              className="mt-5 md:hidden"
+              onClick={(event) => {
+                event.stopPropagation();
+                cameraRef.current?.click();
+              }}
+              variant="outline"
+            >
+              <Camera className="size-4" />
+              Take a photo
+            </Button>
           </div>
         ) : (
           <div className="flex flex-wrap justify-center gap-2">
@@ -138,15 +188,35 @@ export function UploadPanel() {
 
       {files.length > 0 && (
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <Button disabled={processing} onClick={processFirstReceipt}>
-            {processing ? "Processing..." : `Process ${files.length} receipt${files.length > 1 ? "s" : ""}`}
+          {files.length === 1 && (
+            <Button disabled={processing !== null} onClick={processInstantly}>
+              <Zap className="size-4" />
+              {processing === "instant" ? "Processing..." : "Process now"}
+            </Button>
+          )}
+          <Button
+            disabled={processing !== null}
+            onClick={queueAll}
+            variant={files.length === 1 ? "outline" : "default"}
+          >
+            <Layers className="size-4" />
+            {processing === "queued"
+              ? "Queueing..."
+              : files.length === 1
+                ? "Queue in background"
+                : `Queue ${files.length} receipts`}
           </Button>
-          <Button disabled={processing} onClick={() => setFiles([])} variant="outline">
+          <Button disabled={processing !== null} onClick={() => setFiles([])} variant="outline">
             Clear
           </Button>
-          {processing && (
+          {processing === "instant" && (
             <span className="font-mono text-xs text-muted-foreground">
-              Uploading, storing, and extracting with Gemini...
+              Uploading, storing, and extracting...
+            </span>
+          )}
+          {processing === "queued" && (
+            <span className="font-mono text-xs text-muted-foreground">
+              Uploading — extraction continues in the background.
             </span>
           )}
         </div>
