@@ -29,6 +29,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@receipt-ocr/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@receipt-ocr/core':
         specifier: workspace:0.0.0
         version: link:../../packages/core

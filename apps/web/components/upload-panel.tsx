@@ -2,7 +2,19 @@
 
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { Camera, FileJson, Layers, ScanLine, Shield, Sparkles, Upload, X, Zap } from "lucide-react";
+import {
+  Camera,
+  Check,
+  FileJson,
+  Layers,
+  Loader2,
+  ScanLine,
+  Shield,
+  Sparkles,
+  Upload,
+  X,
+  Zap,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -32,6 +44,16 @@ const tips = [
 
 type UploadResponse = { receiptId?: string; error?: string };
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILES = 20;
+
+/** Per-file state so a partly-failed batch says exactly which files failed. */
+type Queued = {
+  file: File;
+  state: "pending" | "uploading" | "done" | "error";
+  error?: string;
+};
+
 async function postReceipt(file: File, mode: "instant" | "queued"): Promise<UploadResponse> {
   const form = new FormData();
   form.set("file", file);
@@ -44,17 +66,56 @@ async function postReceipt(file: File, mode: "instant" | "queued"): Promise<Uplo
   return body ?? {};
 }
 
+function formatSize(bytes: number) {
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+/**
+ * Rejects what the server would reject anyway, but before spending a 10MB
+ * round trip on it.
+ */
+function rejectionFor(file: File): string | null {
+  if (!file.type.startsWith("image/")) return `${file.name} isn't an image`;
+  if (file.size > MAX_FILE_SIZE) return `${file.name} is ${formatSize(file.size)} (10MB max)`;
+  return null;
+}
+
 export function UploadPanel() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
-  const [files, setFiles] = useState<File[]>([]);
+  const [queue, setQueue] = useState<Queued[]>([]);
   const [dragging, setDragging] = useState(false);
   const [processing, setProcessing] = useState<"instant" | "queued" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const files = queue.map((item) => item.file);
 
   function addFiles(nextFiles: FileList | File[]) {
-    setFiles((current) => [...current, ...Array.from(nextFiles)].slice(0, 20));
+    const incoming = Array.from(nextFiles);
+    const rejected: string[] = [];
+    const accepted: Queued[] = [];
+
+    for (const file of incoming) {
+      const rejection = rejectionFor(file);
+      if (rejection) rejected.push(rejection);
+      else accepted.push({ file, state: "pending" });
+    }
+
+    setQueue((current) => {
+      const room = MAX_FILES - current.length;
+      if (accepted.length > room) {
+        rejected.push(`only ${MAX_FILES} receipts can be queued at once`);
+      }
+      return [...current, ...accepted.slice(0, Math.max(0, room))];
+    });
+    // Silent truncation used to drop files with no explanation at all.
+    setNotice(rejected.length > 0 ? `Skipped: ${rejected.join("; ")}.` : null);
+  }
+
+  function markFile(index: number, patch: Partial<Queued>) {
+    setQueue((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   }
 
   async function processInstantly() {
@@ -62,10 +123,12 @@ export function UploadPanel() {
     if (!file) return;
     setProcessing("instant");
     setError(null);
+    markFile(0, { state: "uploading" });
 
     const result = await postReceipt(file, "instant");
     if (result.error || !result.receiptId) {
       setError(result.error ?? "Failed to process receipt");
+      markFile(0, { state: "error", error: result.error });
       setProcessing(null);
       return;
     }
@@ -73,24 +136,38 @@ export function UploadPanel() {
   }
 
   async function queueAll() {
-    if (files.length === 0) return;
+    if (queue.length === 0) return;
     setProcessing("queued");
     setError(null);
 
-    const results = await Promise.all(files.map((file) => postReceipt(file, "queued")));
-    const failures = results.filter((result) => result.error);
+    // Sequential, not Promise.all: firing 20 uploads at once trips the burst
+    // quota and gives the user no idea which ones landed.
+    const outcomes: UploadResponse[] = [];
+    for (let index = 0; index < queue.length; index += 1) {
+      markFile(index, { state: "uploading" });
+      const result = await postReceipt(queue[index]!.file, "queued");
+      outcomes.push(result);
+      markFile(index, {
+        state: result.error ? "error" : "done",
+        error: result.error,
+      });
+      if (result.error) break; // usually a quota stop; keep the rest queued
+    }
+
+    const failures = outcomes.filter((result) => result.error);
     if (failures.length > 0) {
+      const succeeded = outcomes.length - failures.length;
       setError(
-        failures.length === files.length
+        succeeded === 0
           ? (failures[0]?.error ?? "Failed to queue receipts")
-          : `${failures.length} of ${files.length} uploads failed — the rest are processing.`,
+          : `${failures[0]?.error ?? "An upload failed"} ${succeeded} receipt${succeeded === 1 ? "" : "s"} already queued.`,
       );
       setProcessing(null);
       return;
     }
 
-    const queued = results[0];
-    if (files.length === 1 && queued?.receiptId) {
+    const queued = outcomes[0];
+    if (queue.length === 1 && queued?.receiptId) {
       router.push(`/app/receipts/${queued.receiptId}`);
       return;
     }
@@ -108,7 +185,8 @@ export function UploadPanel() {
       </div>
 
       <Card
-        className={`cursor-pointer border-2 border-dashed p-8 text-center transition md:p-16 ${
+        aria-label="Add receipt images"
+        className={`cursor-pointer border-2 border-dashed p-8 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:p-16 ${
           dragging ? "border-primary bg-primary/5" : "border-border bg-card"
         }`}
         onClick={() => inputRef.current?.click()}
@@ -122,6 +200,16 @@ export function UploadPanel() {
           setDragging(false);
           addFiles(event.dataTransfer.files);
         }}
+        // The dropzone was a plain div: unreachable by keyboard and invisible
+        // to assistive tech. Enter/Space now open the same file picker.
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <input
           ref={inputRef}
@@ -158,30 +246,51 @@ export function UploadPanel() {
           </div>
         ) : (
           <div className="flex flex-wrap justify-center gap-2">
-            {files.map((file, index) => (
+            {queue.map((item, index) => (
               <span
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground"
-                key={`${file.name}-${index}`}
+                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-xs ${
+                  item.state === "error"
+                    ? "border-red-500/40 bg-red-500/10 text-red-300"
+                    : item.state === "done"
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground"
+                }`}
+                key={`${item.file.name}-${index}`}
               >
-                {file.name.length > 24 ? `${file.name.slice(0, 24)}...` : file.name}
-                <button
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
-                  }}
-                  type="button"
-                >
-                  <X className="size-3" />
-                </button>
+                {item.state === "uploading" ? <Loader2 className="size-3 animate-spin" /> : null}
+                {item.state === "done" ? <Check className="size-3" /> : null}
+                {item.file.name.length > 24 ? `${item.file.name.slice(0, 24)}...` : item.file.name}
+                <span className="text-muted-foreground/70">{formatSize(item.file.size)}</span>
+                {processing === null ? (
+                  <button
+                    aria-label={`Remove ${item.file.name}`}
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setQueue((current) => current.filter((_, fileIndex) => fileIndex !== index));
+                    }}
+                    type="button"
+                  >
+                    <X className="size-3" />
+                  </button>
+                ) : null}
               </span>
             ))}
           </div>
         )}
       </Card>
 
+      {notice && (
+        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          {notice}
+        </div>
+      )}
+
       {error && (
-        <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div
+          className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+          role="alert"
+        >
           {error}
         </div>
       )}
@@ -206,7 +315,7 @@ export function UploadPanel() {
                 ? "Queue in background"
                 : `Queue ${files.length} receipts`}
           </Button>
-          <Button disabled={processing !== null} onClick={() => setFiles([])} variant="outline">
+          <Button disabled={processing !== null} onClick={() => setQueue([])} variant="outline">
             Clear
           </Button>
           {processing === "instant" && (

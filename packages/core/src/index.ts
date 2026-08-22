@@ -17,6 +17,8 @@ import { Context, Data, Duration, Effect, Layer } from "effect";
 
 export type ReceiptWithItems = Receipt & { items: ReceiptItem[]; imageUrl?: string };
 
+export { RECEIPT_CATEGORIES, type ReceiptCategory } from "@receipt-ocr/ai/categories";
+
 export type AppConfig = {
   databaseUrl: string;
   geminiApiKey: string;

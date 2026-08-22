@@ -1,7 +1,10 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { Schema } from "effect";
 import { z } from "zod";
+import { RECEIPT_CATEGORIES } from "./categories";
+
+export { RECEIPT_CATEGORIES, type ReceiptCategory } from "./categories";
 
 export const ReceiptItemSchema = Schema.Struct({
   name: Schema.String,
@@ -14,7 +17,7 @@ export const ReceiptItemSchema = Schema.Struct({
 export const ReceiptExtractionSchema = Schema.Struct({
   merchant: Schema.String,
   receiptDate: Schema.NullOr(Schema.String),
-  category: Schema.String,
+  category: Schema.Literal(...RECEIPT_CATEGORIES),
   currency: Schema.String,
   subtotal: Schema.NullOr(Schema.Number),
   tax: Schema.NullOr(Schema.Number),
@@ -36,8 +39,8 @@ export type GeminiOcrInput = {
 const receiptObjectSchema = z.object({
   merchant: z.string(),
   receiptDate: z.string().nullable(),
-  category: z.string(),
-  currency: z.string(),
+  category: z.enum(RECEIPT_CATEGORIES),
+  currency: z.string().length(3).describe("ISO 4217 currency code, e.g. USD"),
   subtotal: z.number().nullable(),
   tax: z.number().nullable(),
   tip: z.number().nullable(),
@@ -61,17 +64,24 @@ export async function extractReceiptWithGemini({
   mimeType,
 }: GeminiOcrInput): Promise<ReceiptExtraction> {
   const google = createGoogleGenerativeAI({ apiKey });
-  const { object } = await generateObject({
+  // `generateObject` is deprecated in AI SDK 6 in favour of `generateText`
+  // with an `output` specification.
+  const { output } = await generateText({
     model: google(model),
-    schema: receiptObjectSchema,
+    output: Output.object({ schema: receiptObjectSchema }),
     messages: [
       {
         role: "user",
         content: [
           {
             type: "text",
-            text:
-              "Extract this receipt into structured data. Use null for missing numeric/date fields. Confidence values must be between 0 and 1.",
+            text: [
+              "Extract this receipt into structured data.",
+              "Use null for missing numeric/date fields; receiptDate must be ISO (YYYY-MM-DD) when present.",
+              "currency must be an ISO 4217 code such as USD or EUR.",
+              `category must be exactly one of: ${RECEIPT_CATEGORIES.join(", ")}.`,
+              "Confidence values must be between 0 and 1 and reflect how legible each value was.",
+            ].join(" "),
           },
           {
             type: "image",
@@ -83,5 +93,5 @@ export async function extractReceiptWithGemini({
     ],
   });
 
-  return Schema.decodeUnknownPromise(ReceiptExtractionSchema)(object);
+  return Schema.decodeUnknownPromise(ReceiptExtractionSchema)(output);
 }

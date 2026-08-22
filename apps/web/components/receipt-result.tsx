@@ -3,10 +3,11 @@ import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@receipt-ocr/ui/components/table";
 import type { ReceiptWithItems } from "@receipt-ocr/core";
-import { ArrowLeft, Copy, Download, Loader2, ReceiptText, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Loader2, ReceiptText, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { money, pct } from "@/lib/format";
 import { ProcessingPoller } from "@/components/processing-poller";
+import { ReceiptToolbar } from "@/components/receipt-actions";
 
 export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
   const json = JSON.stringify(receipt.rawJson ?? receipt, null, 2);
@@ -36,7 +37,7 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
         </div>
       )}
 
-      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
+      <ReceiptToolbar receipt={receipt}>
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">{receipt.merchant ?? "Untitled receipt"}</h1>
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -45,17 +46,7 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
             <span className="font-mono text-xs text-primary">{pct(receipt.confidence)}</span>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <Copy className="size-4" />
-            Copy JSON
-          </Button>
-          <Button>
-            <Download className="size-4" />
-            Export CSV
-          </Button>
-        </div>
-      </div>
+      </ReceiptToolbar>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">

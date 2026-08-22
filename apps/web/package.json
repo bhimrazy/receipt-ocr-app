@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@receipt-ocr/ai": "workspace:*",
     "@receipt-ocr/core": "workspace:0.0.0",
     "@receipt-ocr/db": "workspace:*",
     "@receipt-ocr/ui": "workspace:0.0.0",

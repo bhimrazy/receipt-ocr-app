@@ -1,5 +1,6 @@
 "use client";
 
+import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
 import type { ReceiptWithItems } from "@receipt-ocr/core";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
@@ -12,7 +13,9 @@ import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { money, pct } from "@/lib/format";
 
-const categories = ["All", "Grocery", "Restaurant", "Gas", "Pharmacy", "Shopping", "Other"];
+// Derived from the AI schema's closed enum so a filter can never drift away
+// from the values the extractor is allowed to produce.
+const categories = ["All", ...RECEIPT_CATEGORIES];
 
 export function HistoryTable({
   receipts,
@@ -61,9 +64,12 @@ export function HistoryTable({
             {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
           </p>
         </div>
-        <Button>
-          <Download className="size-4" />
-          Export All
+        <Button asChild>
+          {/* Server-rendered CSV of the whole workspace, not just this page. */}
+          <a href="/api/receipts/export">
+            <Download className="size-4" />
+            Export all
+          </a>
         </Button>
       </div>
 
