@@ -23,6 +23,7 @@ export type AppConfig = {
   databaseUrl: string;
   geminiApiKey: string;
   geminiModel: string;
+  geminiTimeoutMs: number;
   storage: S3StorageConfig;
 };
 
@@ -203,6 +204,7 @@ export const ConfigLive = Layer.effect(
       databaseUrl: requireEnv("DATABASE_URL"),
       geminiApiKey: requireEnv("GOOGLE_GENERATIVE_AI_API_KEY"),
       geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.7-flash",
+      geminiTimeoutMs: Number.parseInt(process.env.GEMINI_TIMEOUT_MS ?? "", 10) || 45_000,
       storage: {
         endpoint: process.env.S3_ENDPOINT,
         region: process.env.S3_REGION ?? "auto",
@@ -245,6 +247,7 @@ export const AiOcrLive = Layer.effect(
             extractReceiptWithGemini({
               apiKey: config.geminiApiKey,
               model: config.geminiModel,
+              timeoutMs: config.geminiTimeoutMs,
               imageBytes: input.imageBytes,
               mimeType: input.mimeType,
             }),
