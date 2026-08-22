@@ -15,7 +15,9 @@
     "docker:logs": "docker compose logs -f",
     "db:migrate": "pnpm --filter @receipt-ocr/web exec drizzle-kit migrate",
     "db:generate": "pnpm --filter @receipt-ocr/web exec drizzle-kit generate",
-    "db:studio": "pnpm --filter @receipt-ocr/web exec drizzle-kit studio"
+    "db:studio": "pnpm --filter @receipt-ocr/web exec drizzle-kit studio",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/node": "25.9.1",
@@ -23,6 +25,7 @@
     "@types/react-dom": "19.2.3",
     "prettier": "3.8.3",
     "turbo": "2.9.16",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "^4.1.11"
   }
 }
