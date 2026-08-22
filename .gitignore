@@ -7,7 +7,7 @@ node_modules
 .turbo
 dist
 coverage
-drizzle
+.drizzle
 *.tsbuildinfo
 /.tmp-screens/
 .vercel

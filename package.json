@@ -7,7 +7,15 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\"",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:reset": "docker compose down -v",
+    "docker:app": "docker compose --profile app up --build",
+    "docker:logs": "docker compose logs -f",
+    "db:migrate": "pnpm --filter @receipt-ocr/web exec drizzle-kit migrate",
+    "db:generate": "pnpm --filter @receipt-ocr/web exec drizzle-kit generate",
+    "db:studio": "pnpm --filter @receipt-ocr/web exec drizzle-kit studio"
   },
   "devDependencies": {
     "@types/node": "25.9.1",

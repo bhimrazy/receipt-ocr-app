@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1783960313283,
+      "tag": "0000_better-auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783961089210,
+      "tag": "0001_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787421399967,
+      "tag": "0002_receipts_organization",
+      "breakpoints": true
+    }
+  ]
+}
