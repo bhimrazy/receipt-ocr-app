@@ -17,6 +17,12 @@ export async function getCurrentUserId(): Promise<string | null> {
   return session?.user.id ?? null;
 }
 
+/** The caller's billing plan, defaulting to "free". */
+export function planFor(session: Session | null): string {
+  const plan = (session?.user as { plan?: unknown } | undefined)?.plan;
+  return typeof plan === "string" && plan ? plan : "free";
+}
+
 /** For pages: redirects to /sign-in when there is no session. */
 export async function requireSession(): Promise<Session> {
   const session = await getSession();

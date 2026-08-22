@@ -3,7 +3,8 @@ import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { logger, type WideEvent } from "@/lib/log";
-import { getCurrentUserId } from "@/lib/session";
+import { checkUploadQuota, quotaMessage } from "@/lib/quota";
+import { getSession, planFor } from "@/lib/session";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -30,13 +31,34 @@ export async function POST(request: Request) {
   };
 
   try {
-    const userId = await getCurrentUserId();
+    const session = await getSession();
+    const userId = session?.user.id ?? null;
     if (!userId) {
       event.status_code = 401;
       event.outcome = "unauthorized";
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     event.user_id = userId;
+
+    const plan = planFor(session);
+    event.plan = plan;
+    const quota = await checkUploadQuota(userId, plan);
+    event.quota_used = quota.used;
+    event.quota_limit = quota.limit;
+    if (!quota.allowed) {
+      event.status_code = 429;
+      event.outcome = "rate_limited";
+      event.quota_window = quota.window;
+      return NextResponse.json(
+        { error: quotaMessage(quota) },
+        {
+          status: 429,
+          headers: quota.retryAfterSeconds
+            ? { "Retry-After": String(quota.retryAfterSeconds) }
+            : undefined,
+        },
+      );
+    }
 
     const form = await request.formData();
     const file = form.get("file");

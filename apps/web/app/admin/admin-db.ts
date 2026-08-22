@@ -6,15 +6,13 @@ import { authEnv } from "@/lib/env";
  * organization listing, so those views query the schema directly. Server-only:
  * this module is imported exclusively by admin server components/actions, which
  * already gate on requireAdmin().
+ *
+ * `createDb` memoizes per connection string, so this hands back the same pool
+ * the rest of the app uses.
  */
-let client: DbClient | null = null;
-
 export function adminDb(): DbClient {
   if (!authEnv.databaseUrl) {
     throw new Error("DATABASE_URL is not configured");
   }
-  if (!client) {
-    client = createDb(authEnv.databaseUrl);
-  }
-  return client;
+  return createDb(authEnv.databaseUrl);
 }

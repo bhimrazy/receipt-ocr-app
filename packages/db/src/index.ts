@@ -26,7 +26,7 @@ import {
 export * from "./auth-schema";
 // Re-export query operators so consumers use THIS package's drizzle-orm
 // instance (avoids duplicate-instance type conflicts under pnpm).
-export { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+export { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 export const receiptStatus = pgEnum("receipt_status", [
   "uploaded",
@@ -128,9 +128,35 @@ export const schema = {
   rateLimit,
 };
 
+/**
+ * One pool per connection string, per process.
+ *
+ * `createDb` used to open a fresh postgres-js pool on every call, and it is
+ * called from inside `ReceiptRepositoryLive` — an Effect Layer that is rebuilt
+ * on every `Effect.provide(AppLive)`, i.e. on every request. That opened a new
+ * pool per request and exhausted Postgres/pooler connections under load.
+ * Memoizing here keeps every caller (auth, admin, the Effect layer) on a
+ * single shared pool without any of them having to remember to cache.
+ */
+const pools = new Map<string, ReturnType<typeof drizzle<typeof schema>>>();
+
+/** Max pooled connections per process. Keep this low on serverless. */
+const MAX_CONNECTIONS = Number.parseInt(process.env.DATABASE_POOL_MAX ?? "", 10) || 5;
+
 export function createDb(databaseUrl: string) {
-  const client = postgres(databaseUrl, { prepare: false });
-  return drizzle(client, { schema });
+  const cached = pools.get(databaseUrl);
+  if (cached) return cached;
+
+  const client = postgres(databaseUrl, {
+    // Supabase's transaction pooler does not support prepared statements.
+    prepare: false,
+    max: MAX_CONNECTIONS,
+    idle_timeout: 20,
+    connect_timeout: 10,
+  });
+  const db = drizzle(client, { schema });
+  pools.set(databaseUrl, db);
+  return db;
 }
 
 export type DbClient = ReturnType<typeof createDb>;
