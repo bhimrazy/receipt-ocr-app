@@ -1,6 +1,6 @@
 # Receipt OCR App
 
-A pnpm/Turborepo Receipt OCR MVP with Next.js, Clerk, Drizzle/Postgres, S3-compatible storage, Gemini OCR, shadcn/ui, Tailwind v4, and an Effect TS backend service layer.
+A pnpm/Turborepo Receipt OCR MVP with Next.js, Better Auth, Drizzle/Postgres, S3-compatible storage, Gemini OCR, shadcn/ui, Tailwind v4, and an Effect TS backend service layer.
 
 ## Apps and Packages
 
@@ -19,4 +19,4 @@ cp apps/web/.env.example apps/web/.env.local
 pnpm dev
 ```
 
-The UI renders without backend credentials. Real upload/OCR requires Clerk, Postgres, S3/R2, and Gemini env vars.
+The UI renders without backend credentials. Real upload/OCR requires Better Auth (`BETTER_AUTH_SECRET`), Postgres (`DATABASE_URL`, e.g. a Supabase pooler URL), S3/R2, and Gemini env vars. Apply migrations with `pnpm --filter @receipt-ocr/web exec drizzle-kit migrate` (against the Supabase session pooler on port 5432, not the transaction pooler).

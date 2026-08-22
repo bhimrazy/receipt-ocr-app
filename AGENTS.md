@@ -4,7 +4,7 @@
 
 This repo is a pnpm/Turborepo Receipt OCR MVP.
 
-- `apps/web`: Next.js App Router app with Clerk, shadcn-style UI, Tailwind v4, and route handlers.
+- `apps/web`: Next.js App Router app with Better Auth, shadcn-style UI, Tailwind v4, and route handlers.
 - `packages/ui`: shared UI primitives and global theme CSS.
 - `packages/db`: Drizzle/Postgres schema and database client.
 - `packages/storage`: S3-compatible storage helpers. Configure for Cloudflare R2 first, but keep it portable to AWS S3 or MinIO.
@@ -26,7 +26,7 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Monorepo: Turborepo.
 - Web framework: Next.js App Router.
 - UI: shadcn-style primitives in `packages/ui`, Tailwind v4, lucide icons.
-- Auth: Clerk with Google/GitHub.
+- Auth: Better Auth (email/password + Google/GitHub, organization + admin plugins).
 - Database: Drizzle ORM with Postgres.
 - Storage: S3-compatible API, R2-first.
 - OCR: AI SDK with Google Gemini as v1 provider.

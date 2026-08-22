@@ -61,7 +61,7 @@ export function SiteFooter() {
         </div>
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground md:flex-row">
           <span>© {new Date().getFullYear()} receiptOCR. All rights reserved.</span>
-          <span className="font-mono">Next.js · Clerk · Effect · AI SDK · Drizzle</span>
+          <span className="font-mono">Next.js · Better Auth · Effect · AI SDK · Drizzle</span>
         </div>
       </div>
     </footer>
