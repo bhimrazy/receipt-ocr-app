@@ -1,7 +1,8 @@
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
-import { Check, Cloud, Database, Key, Plus, Shield } from "lucide-react";
+import { Check, Cloud, Database, Key, Plus, Shield, Users } from "lucide-react";
+import Link from "next/link";
 
 export default function SettingsPage() {
   return (
@@ -14,6 +15,24 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-5">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="size-5 text-primary" />
+              Workspace &amp; members
+            </CardTitle>
+            <CardDescription>Invite teammates, assign roles, and manage pending invitations.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/app/settings/members">
+                <Users className="size-4" />
+                Manage members
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -75,7 +94,7 @@ export default function SettingsPage() {
               <Shield className="size-5 text-primary" />
               Auth
             </CardTitle>
-            <CardDescription>Clerk protects app routes and upload APIs. Enable Google/GitHub in Clerk dashboard.</CardDescription>
+            <CardDescription>Better Auth protects app routes and upload APIs. Enable Google/GitHub by setting their OAuth env vars.</CardDescription>
           </CardHeader>
         </Card>
       </div>
