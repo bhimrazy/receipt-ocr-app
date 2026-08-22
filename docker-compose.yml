@@ -9,16 +9,18 @@
 
 name: receipt-ocr
 
+# No `restart:` policies on purpose: stopped containers stay stopped until you
+# bring them back with `pnpm docker:up`.
+
 services:
   postgres:
     image: postgres:17-alpine
-    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: receipt_ocr
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -31,7 +33,6 @@ services:
   # stands in locally with no code changes — only env.
   minio:
     image: minio/minio:latest
-    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -81,7 +82,6 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy

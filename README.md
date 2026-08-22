@@ -28,7 +28,7 @@ pnpm dev
 
 | Service | What it is | Where |
 | --- | --- | --- |
-| `postgres` | Postgres 17 | `localhost:5432` (override with `POSTGRES_PORT`) |
+| `postgres` | Postgres 17 | `localhost:5433` (override with `POSTGRES_PORT`) |
 | `minio` | S3-compatible storage, stands in for R2 | `localhost:9000`, console on `:9001` |
 | `minio-init` | One-shot: creates the `receipt-ocr` bucket | exits when done |
 | `migrate` | One-shot: applies drizzle migrations | exits when done |
@@ -40,13 +40,17 @@ pnpm docker:app     # ...plus the app in a container
 pnpm docker:reset   # tear down and delete the volumes
 ```
 
-If port 5432 is already taken by a local Postgres, set `POSTGRES_PORT=5433` in
-`.env` and point `DATABASE_URL` at it.
+Postgres is published on **5433**, not 5432, because 5432 is usually already
+taken by another local Postgres. Change `POSTGRES_PORT` in `.env` if you'd
+rather use a different one, and keep `DATABASE_URL` in step.
+
+Containers carry no restart policy — once stopped they stay stopped until the
+next `pnpm docker:up`.
 
 For `pnpm dev`, `apps/web/.env.local` needs at minimum:
 
 ```
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/receipt_ocr
+DATABASE_URL=postgres://postgres:postgres@localhost:5433/receipt_ocr
 BETTER_AUTH_SECRET=<openssl rand -base64 32>
 S3_ENDPOINT=http://localhost:9000
 S3_REGION=us-east-1

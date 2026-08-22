@@ -8,16 +8,34 @@ import { getActiveScope, getSession, planFor } from "@/lib/session";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-function failureContext(cause: Cause.Cause<{ readonly message: string; readonly _tag?: string }>) {
+/** Unwraps the provider error a tagged failure was built from, for logging. */
+function causeDetail(error: unknown): string | undefined {
+  const inner = (error as { cause?: unknown } | null)?.cause;
+  if (!inner) return undefined;
+  if (inner instanceof Error) return `${inner.name}: ${inner.message}`;
+  return String(inner);
+}
+
+function failureContext(
+  cause: Cause.Cause<{ readonly message: string; readonly _tag?: string }>,
+) {
   const failure = Cause.failureOption(cause);
   if (Option.isSome(failure)) {
     return {
       message: failure.value.message,
       type: failure.value._tag ?? "UnknownError",
       status: failure.value instanceof ValidationError ? 400 : 500,
+      // The tagged error carries a generic message; the wrapped provider error
+      // is the one that says WHY (bad key, unknown model, quota).
+      detail: causeDetail(failure.value),
     };
   }
-  return { message: "Receipt processing failed", type: "Defect", status: 500 };
+  return {
+    message: "Receipt processing failed",
+    type: "Defect",
+    status: 500,
+    detail: Cause.pretty(cause).slice(0, 500),
+  };
 }
 
 export async function POST(request: Request) {
@@ -109,7 +127,7 @@ export async function POST(request: Request) {
         const failure = failureContext(ingested.cause);
         event.status_code = failure.status;
         event.outcome = "error";
-        event.error = { message: failure.message, type: failure.type };
+        event.error = { message: failure.message, type: failure.type, detail: failure.detail };
         return NextResponse.json({ error: failure.message }, { status: failure.status });
       }
 
@@ -145,7 +163,7 @@ export async function POST(request: Request) {
         if (Exit.isFailure(extracted)) {
           const failure = failureContext(extracted.cause);
           extractEvent.outcome = "error";
-          extractEvent.error = { message: failure.message, type: failure.type };
+          extractEvent.error = { message: failure.message, type: failure.type, detail: failure.detail };
           logger.error(extractEvent);
           return;
         }
@@ -174,7 +192,7 @@ export async function POST(request: Request) {
       const failure = failureContext(result.cause);
       event.status_code = failure.status;
       event.outcome = "error";
-      event.error = { message: failure.message, type: failure.type };
+      event.error = { message: failure.message, type: failure.type, detail: failure.detail };
       return NextResponse.json({ error: failure.message }, { status: failure.status });
     }
 
