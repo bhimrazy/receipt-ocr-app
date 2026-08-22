@@ -5,6 +5,7 @@ import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { authEnabled, authEnv } from "./env";
+import { workspaceLimitForPlan } from "./plans";
 
 export { authEnabled };
 
@@ -18,11 +19,6 @@ const PLACEHOLDER_DATABASE_URL = "postgres://placeholder:placeholder@localhost:5
 const PLACEHOLDER_SECRET = "auth-disabled-placeholder-secret-do-not-use-0000";
 
 const db = createDb(authEnv.databaseUrl ?? PLACEHOLDER_DATABASE_URL);
-
-/** Max organizations a user may create, by plan. Paid plans raise this later. */
-const ORGANIZATION_LIMITS: Record<string, number> = {
-  free: 1,
-};
 
 function slugForUser(userId: string) {
   return userId.toLowerCase().replace(/[^a-z0-9-]/g, "-");
@@ -166,8 +162,7 @@ export const auth = betterAuth({
       },
       // Returns true when the user has REACHED their plan's org limit.
       organizationLimit: async (user) => {
-        const plan = typeof user.plan === "string" ? user.plan : "free";
-        const limit = ORGANIZATION_LIMITS[plan] ?? ORGANIZATION_LIMITS.free;
+        const limit = workspaceLimitForPlan(typeof user.plan === "string" ? user.plan : "free");
         const owned = await db
           .select({ id: member.id })
           .from(member)

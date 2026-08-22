@@ -5,14 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
-/** Max workspaces a user may own, by plan. Mirrors ORGANIZATION_LIMITS in lib/auth.ts. */
-const PLAN_WORKSPACE_LIMITS: Record<string, number> = { free: 1 };
-
 function initialFor(name: string) {
   return (name.trim() || "?").charAt(0).toUpperCase();
 }
 
-export function WorkspaceSwitcher() {
+/**
+ * `canCreate` is computed on the server (see lib/workspaces.ts) from the number
+ * of workspaces the user OWNS. Counting client-side from the org list was
+ * wrong: it included workspaces the user had merely been invited to, so being
+ * a member somewhere else falsely locked "Create workspace".
+ */
+export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
   const { data: organizations, isPending: orgsPending } = authClient.useListOrganizations();
   const { data: activeOrg } = authClient.useActiveOrganization();
   const { data: session } = authClient.useSession();
@@ -53,12 +56,7 @@ export function WorkspaceSwitcher() {
   }
 
   const orgs = organizations ?? [];
-  // `plan` is a server-side additionalField; it isn't in the client's inferred
-  // user type, so read it defensively.
-  const userPlan = (session?.user as { plan?: unknown } | undefined)?.plan;
-  const plan = typeof userPlan === "string" ? userPlan : "free";
-  const limit = PLAN_WORKSPACE_LIMITS[plan] ?? PLAN_WORKSPACE_LIMITS.free;
-  const limitReached = orgs.length >= limit;
+  const limitReached = !canCreate;
   const current = activeOrg ?? orgs.find((org) => org.id === session?.session.activeOrganizationId) ?? orgs[0];
 
   async function handleSwitch(organizationId: string) {

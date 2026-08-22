@@ -12,7 +12,7 @@ import {
   putReceiptImage as putS3ReceiptImage,
   type S3StorageConfig,
 } from "@receipt-ocr/storage";
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { Context, Data, Duration, Effect, Layer } from "effect";
 
 export type ReceiptWithItems = Receipt & { items: ReceiptItem[]; imageUrl?: string };
@@ -80,20 +80,64 @@ export class AiOcrService extends Context.Tag("AiOcrService")<
   AiOcrServiceShape
 >() {}
 
+/**
+ * Receipts belong to a workspace, not to a person: every member of the
+ * organization can read and act on them. `userId` is carried alongside for
+ * attribution ("uploaded by") and quota accounting — it never narrows reads.
+ */
+export type ReceiptScope = {
+  organizationId: string;
+  userId: string;
+};
+
+export type ListReceiptsOptions = {
+  /** Rows to return. Omit for the default page size. */
+  limit?: number;
+  offset?: number;
+};
+
+export type ReceiptPage = {
+  receipts: ReceiptWithItems[];
+  total: number;
+};
+
 export type ReceiptRepositoryShape = {
   createUploaded(input: {
-    userId: string;
+    scope: ReceiptScope;
     fileName: string;
   }): Effect.Effect<Receipt, RepositoryError>;
-  markProcessing(id: string, userId: string, objectKey: string): Effect.Effect<void, RepositoryError>;
+  markProcessing(id: string, scope: ReceiptScope, objectKey: string): Effect.Effect<void, RepositoryError>;
   completeReceipt(
     id: string,
-    userId: string,
+    scope: ReceiptScope,
     extraction: ReceiptExtraction,
   ): Effect.Effect<void, RepositoryError>;
-  failReceipt(id: string, userId: string, message: string): Effect.Effect<void, RepositoryError>;
-  getReceipt(id: string, userId: string): Effect.Effect<ReceiptWithItems | null, RepositoryError>;
-  listReceipts(userId: string): Effect.Effect<ReceiptWithItems[], RepositoryError>;
+  failReceipt(id: string, scope: ReceiptScope, message: string): Effect.Effect<void, RepositoryError>;
+  getReceipt(id: string, scope: ReceiptScope): Effect.Effect<ReceiptWithItems | null, RepositoryError>;
+  listReceipts(
+    scope: ReceiptScope,
+    options?: ListReceiptsOptions,
+  ): Effect.Effect<ReceiptPage, RepositoryError>;
+  /** Deletes a receipt and its items. Returns false when nothing matched. */
+  deleteReceipt(id: string, scope: ReceiptScope): Effect.Effect<boolean, RepositoryError>;
+  /** Applies user corrections to an extracted receipt. */
+  updateReceipt(
+    id: string,
+    scope: ReceiptScope,
+    patch: ReceiptPatch,
+  ): Effect.Effect<ReceiptWithItems | null, RepositoryError>;
+};
+
+/** Fields a user may correct on an extracted receipt. */
+export type ReceiptPatch = {
+  merchant?: string | null;
+  receiptDate?: string | null;
+  category?: string | null;
+  currency?: string | null;
+  subtotal?: string | null;
+  tax?: string | null;
+  tip?: string | null;
+  total?: string | null;
 };
 
 export class ReceiptRepository extends Context.Tag("ReceiptRepository")<
@@ -109,7 +153,7 @@ export type ProcessingResult = {
 };
 
 export type UploadInput = {
-  userId: string;
+  scope: ReceiptScope;
   fileName: string;
   mimeType: string;
   body: Uint8Array;
@@ -126,7 +170,7 @@ export type ReceiptProcessingServiceShape = {
   /** Stage 2: run OCR and persist results; marks the receipt failed on any error. */
   extractStored(input: {
     receiptId: string;
-    userId: string;
+    scope: ReceiptScope;
     mimeType: string;
     body: Uint8Array;
   }): Effect.Effect<ProcessingResult, AiOcrError | RepositoryError>;
@@ -208,6 +252,13 @@ export const AiOcrLive = Layer.effect(
   }),
 );
 
+/** Every read and write is narrowed to the caller's workspace. */
+function scopeWhere(id: string, scope: ReceiptScope) {
+  return and(eq(receipts.id, id), eq(receipts.organizationId, scope.organizationId));
+}
+
+const DEFAULT_PAGE_SIZE = 25;
+
 function repositoryFromDb(db: DbClient): ReceiptRepositoryShape {
   return {
     createUploaded: (input) =>
@@ -216,26 +267,30 @@ function repositoryFromDb(db: DbClient): ReceiptRepositoryShape {
           const [created] = await db
             .insert(receipts)
             .values({
-              userId: input.userId,
+              organizationId: input.scope.organizationId,
+              userId: input.scope.userId,
               status: "uploaded",
               rawJson: { fileName: input.fileName },
             })
             .returning();
+          if (!created) {
+            throw new Error("Insert returned no row");
+          }
           return created;
         },
         catch: (cause) => new RepositoryError({ message: "Failed to create receipt", cause }),
       }),
-    markProcessing: (id, userId, objectKey) =>
+    markProcessing: (id, scope, objectKey) =>
       Effect.tryPromise({
         try: async () => {
           await db
             .update(receipts)
             .set({ status: "processing", imageObjectKey: objectKey, updatedAt: new Date() })
-            .where(and(eq(receipts.id, id), eq(receipts.userId, userId)));
+            .where(scopeWhere(id, scope));
         },
         catch: (cause) => new RepositoryError({ message: "Failed to mark receipt processing", cause }),
       }),
-    completeReceipt: (id, userId, extraction) =>
+    completeReceipt: (id, scope, extraction) =>
       Effect.tryPromise({
         try: async () => {
           await db.transaction(async (tx) => {
@@ -256,7 +311,7 @@ function repositoryFromDb(db: DbClient): ReceiptRepositoryShape {
                 errorMessage: null,
                 updatedAt: new Date(),
               })
-              .where(and(eq(receipts.id, id), eq(receipts.userId, userId)));
+              .where(scopeWhere(id, scope));
 
             await tx.delete(receiptItems).where(eq(receiptItems.receiptId, id));
             if (extraction.items.length > 0) {
@@ -275,36 +330,77 @@ function repositoryFromDb(db: DbClient): ReceiptRepositoryShape {
         },
         catch: (cause) => new RepositoryError({ message: "Failed to complete receipt", cause }),
       }),
-    failReceipt: (id, userId, message) =>
+    failReceipt: (id, scope, message) =>
       Effect.tryPromise({
         try: async () => {
           await db
             .update(receipts)
             .set({ status: "failed", errorMessage: message, updatedAt: new Date() })
-            .where(and(eq(receipts.id, id), eq(receipts.userId, userId)));
+            .where(scopeWhere(id, scope));
         },
         catch: (cause) => new RepositoryError({ message: "Failed to mark receipt failed", cause }),
       }),
-    getReceipt: (id, userId) =>
+    getReceipt: (id, scope) =>
       Effect.tryPromise({
         try: async () => {
           const receipt = await db.query.receipts.findFirst({
-            where: and(eq(receipts.id, id), eq(receipts.userId, userId)),
+            where: scopeWhere(id, scope),
             with: { items: true },
           });
           return receipt ?? null;
         },
         catch: (cause) => new RepositoryError({ message: "Failed to load receipt", cause }),
       }),
-    listReceipts: (userId) =>
+    listReceipts: (scope, options) =>
       Effect.tryPromise({
-        try: () =>
-          db.query.receipts.findMany({
-            where: eq(receipts.userId, userId),
-            with: { items: true },
-            orderBy: [desc(receipts.createdAt)],
-          }),
+        try: async () => {
+          const limit = options?.limit ?? DEFAULT_PAGE_SIZE;
+          const offset = options?.offset ?? 0;
+          const where = eq(receipts.organizationId, scope.organizationId);
+          const [rows, totals] = await Promise.all([
+            db.query.receipts.findMany({
+              where,
+              with: { items: true },
+              orderBy: [desc(receipts.createdAt)],
+              limit,
+              offset,
+            }),
+            db.select({ value: count() }).from(receipts).where(where),
+          ]);
+          return { receipts: rows, total: Number(totals[0]?.value ?? 0) };
+        },
         catch: (cause) => new RepositoryError({ message: "Failed to list receipts", cause }),
+      }),
+    deleteReceipt: (id, scope) =>
+      Effect.tryPromise({
+        try: async () => {
+          // receipt_items cascades on the FK, so one delete is enough.
+          const deleted = await db.delete(receipts).where(scopeWhere(id, scope)).returning({
+            id: receipts.id,
+          });
+          return deleted.length > 0;
+        },
+        catch: (cause) => new RepositoryError({ message: "Failed to delete receipt", cause }),
+      }),
+    updateReceipt: (id, scope, patch) =>
+      Effect.tryPromise({
+        try: async () => {
+          const fields = Object.fromEntries(
+            Object.entries(patch).filter(([, value]) => value !== undefined),
+          );
+          if (Object.keys(fields).length > 0) {
+            await db
+              .update(receipts)
+              .set({ ...fields, updatedAt: new Date() })
+              .where(scopeWhere(id, scope));
+          }
+          const updated = await db.query.receipts.findFirst({
+            where: scopeWhere(id, scope),
+            with: { items: true },
+          });
+          return updated ?? null;
+        },
+        catch: (cause) => new RepositoryError({ message: "Failed to update receipt", cause }),
       }),
   };
 }
@@ -351,13 +447,13 @@ export const ReceiptProcessingLive = Layer.effect(
         const receipt = yield* timedStep(
           timings,
           "db.create",
-          repo.createUploaded({ userId: input.userId, fileName: input.fileName }),
+          repo.createUploaded({ scope: input.scope, fileName: input.fileName }),
         );
         const stored = yield* timedStep(
           timings,
           "storage.put",
           storage.putReceiptImage({
-            userId: input.userId,
+            userId: input.scope.userId,
             receiptId: receipt.id,
             fileName: input.fileName,
             mimeType: input.mimeType,
@@ -367,14 +463,14 @@ export const ReceiptProcessingLive = Layer.effect(
         yield* timedStep(
           timings,
           "db.markProcessing",
-          repo.markProcessing(receipt.id, input.userId, stored.objectKey),
+          repo.markProcessing(receipt.id, input.scope, stored.objectKey),
         );
         return { receipt, timings };
       });
 
     const extractStored = (input: {
       receiptId: string;
-      userId: string;
+      scope: ReceiptScope;
       mimeType: string;
       body: Uint8Array;
     }) =>
@@ -388,12 +484,12 @@ export const ReceiptProcessingLive = Layer.effect(
         yield* timedStep(
           timings,
           "db.complete",
-          repo.completeReceipt(input.receiptId, input.userId, extraction),
+          repo.completeReceipt(input.receiptId, input.scope, extraction),
         );
         const completed = yield* timedStep(
           timings,
           "db.load",
-          repo.getReceipt(input.receiptId, input.userId),
+          repo.getReceipt(input.receiptId, input.scope),
         );
         if (!completed) {
           return yield* Effect.fail(new RepositoryError({ message: "Completed receipt could not be loaded" }));
@@ -403,7 +499,7 @@ export const ReceiptProcessingLive = Layer.effect(
         // A failed extraction must never leave the receipt stuck in "processing".
         Effect.tapError((error) =>
           repo
-            .failReceipt(input.receiptId, input.userId, error.message)
+            .failReceipt(input.receiptId, input.scope, error.message)
             .pipe(
               Effect.catchAll(() =>
                 Effect.logError(`receipt.failReceipt_failed: ${input.receiptId}`),
@@ -420,7 +516,7 @@ export const ReceiptProcessingLive = Layer.effect(
           const ingested = yield* ingestUpload(input);
           const extracted = yield* extractStored({
             receiptId: ingested.receipt.id,
-            userId: input.userId,
+            scope: input.scope,
             mimeType: input.mimeType,
             body: input.body,
           });

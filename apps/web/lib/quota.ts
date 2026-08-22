@@ -1,5 +1,6 @@
 import { createDb, sql } from "@receipt-ocr/db";
 import { authEnv } from "@/lib/env";
+import { planPolicy } from "@/lib/plans";
 
 /**
  * Per-plan upload limits. `/api/receipts` is an unmetered call to a paid OCR
@@ -8,22 +9,6 @@ import { authEnv } from "@/lib/env";
  * rows instead: it is accurate across serverless instances and survives
  * restarts, unlike an in-memory counter.
  */
-export interface PlanLimits {
-  /** Receipts a user may upload per rolling 24 hours. */
-  perDay: number;
-  /** Burst ceiling per rolling minute. */
-  perMinute: number;
-}
-
-export const PLAN_LIMITS: Record<string, PlanLimits> = {
-  free: { perDay: 50, perMinute: 10 },
-  pro: { perDay: 1000, perMinute: 30 },
-};
-
-export function limitsForPlan(plan: string | undefined): PlanLimits {
-  return PLAN_LIMITS[plan ?? "free"] ?? PLAN_LIMITS.free;
-}
-
 export interface QuotaVerdict {
   allowed: boolean;
   /** Which window was exhausted, when `allowed` is false. */
@@ -42,8 +27,8 @@ export async function checkUploadQuota(
   userId: string,
   plan: string | undefined,
 ): Promise<QuotaVerdict> {
-  const limits = limitsForPlan(plan);
-  if (!authEnv.databaseUrl) return { allowed: true, limit: limits.perDay, used: 0 };
+  const limits = planPolicy(plan);
+  if (!authEnv.databaseUrl) return { allowed: true, limit: limits.receiptsPerDay, used: 0 };
 
   const db = createDb(authEnv.databaseUrl);
   const rows = await db.execute<{ minute: string; day: string }>(sql`
@@ -58,25 +43,25 @@ export async function checkUploadQuota(
   const perMinute = Number(row?.minute ?? 0);
   const perDay = Number(row?.day ?? 0);
 
-  if (perMinute >= limits.perMinute) {
+  if (perMinute >= limits.receiptsPerMinute) {
     return {
       allowed: false,
       window: "minute",
-      limit: limits.perMinute,
+      limit: limits.receiptsPerMinute,
       used: perMinute,
       retryAfterSeconds: 60,
     };
   }
-  if (perDay >= limits.perDay) {
+  if (perDay >= limits.receiptsPerDay) {
     return {
       allowed: false,
       window: "day",
-      limit: limits.perDay,
+      limit: limits.receiptsPerDay,
       used: perDay,
       retryAfterSeconds: 60 * 60,
     };
   }
-  return { allowed: true, limit: limits.perDay, used: perDay };
+  return { allowed: true, limit: limits.receiptsPerDay, used: perDay };
 }
 
 export function quotaMessage(verdict: QuotaVerdict): string {

@@ -1,11 +1,11 @@
 import { AppLive, ReceiptRepository } from "@receipt-ocr/core";
 import { Effect, Exit } from "effect";
 import { NextResponse } from "next/server";
-import { getCurrentUserId } from "@/lib/session";
+import { getActiveScope } from "@/lib/session";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const userId = await getCurrentUserId();
-  if (!userId) {
+  const scope = await getActiveScope();
+  if (!scope) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -13,7 +13,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const result = await Effect.runPromiseExit(
     Effect.gen(function* () {
       const repo = yield* ReceiptRepository;
-      return yield* repo.getReceipt(id, userId);
+      return yield* repo.getReceipt(id, scope);
     }).pipe(Effect.provide(AppLive)),
   );
 

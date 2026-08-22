@@ -1,6 +1,8 @@
+import { createDb, asc, eq, member } from "@receipt-ocr/db";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { auth, authEnabled, type Session } from "./auth";
+import { authEnv } from "./env";
 
 /**
  * Single place for server-side session lookups. Returns null when auth is
@@ -45,4 +47,45 @@ export async function requireAdmin(): Promise<Session> {
   const session = await requireSession();
   if (!isAdmin(session)) notFound();
   return session;
+}
+
+/**
+ * The workspace a request acts in, plus who is acting. Receipts are scoped to
+ * `organizationId`; `userId` is attribution only.
+ *
+ * `session.activeOrganizationId` is set by Better Auth on session creation and
+ * only ever to an organization the user belongs to, so it is safe to trust as
+ * an authorization boundary. The membership lookup below is a fallback for
+ * sessions created before that hook existed.
+ */
+export interface ActiveScope {
+  organizationId: string;
+  userId: string;
+}
+
+export async function getActiveScope(): Promise<ActiveScope | null> {
+  const session = await getSession();
+  if (!session) return null;
+
+  const active = session.session.activeOrganizationId;
+  if (active) return { organizationId: active, userId: session.user.id };
+
+  if (!authEnv.databaseUrl) return null;
+  const db = createDb(authEnv.databaseUrl);
+  const [membership] = await db
+    .select({ organizationId: member.organizationId })
+    .from(member)
+    .where(eq(member.userId, session.user.id))
+    .orderBy(asc(member.createdAt))
+    .limit(1);
+
+  if (!membership) return null;
+  return { organizationId: membership.organizationId, userId: session.user.id };
+}
+
+/** For pages: requires a signed-in user who is in a workspace. */
+export async function requireActiveScope(): Promise<ActiveScope> {
+  const scope = await getActiveScope();
+  if (!scope) redirect("/sign-in");
+  return scope;
 }

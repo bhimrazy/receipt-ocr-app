@@ -6,16 +6,40 @@ import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@receipt-ocr/ui/components/table";
-import { Download, Search, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Search, Upload } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { money, pct } from "@/lib/format";
 
 const categories = ["All", "Grocery", "Restaurant", "Gas", "Pharmacy", "Shopping", "Other"];
 
-export function HistoryTable({ receipts }: { receipts: ReceiptWithItems[] }) {
+export function HistoryTable({
+  receipts,
+  total,
+  page,
+  pageSize,
+}: {
+  receipts: ReceiptWithItems[];
+  total: number;
+  page: number;
+  pageSize: number;
+}) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  function goToPage(next: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next > 1) params.set("page", String(next));
+    else params.delete("page");
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname);
+  }
 
   const filtered = useMemo(
     () =>
@@ -32,7 +56,10 @@ export function HistoryTable({ receipts }: { receipts: ReceiptWithItems[] }) {
       <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">History</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{receipts.length} receipts processed</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {total} {total === 1 ? "receipt" : "receipts"} in this workspace
+            {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
+          </p>
         </div>
         <Button>
           <Download className="size-4" />
@@ -85,7 +112,7 @@ export function HistoryTable({ receipts }: { receipts: ReceiptWithItems[] }) {
                       <p className="mt-1 text-sm text-muted-foreground">
                         {receipts.length === 0
                           ? "Upload your first receipt to start building history."
-                          : "Try a different search or category filter."}
+                          : "Try a different search or category filter — these narrow the current page."}
                       </p>
                     </div>
                     {receipts.length === 0 && (
@@ -132,6 +159,29 @@ export function HistoryTable({ receipts }: { receipts: ReceiptWithItems[] }) {
           </TableBody>
         </Table>
       </Card>
+
+      {totalPages > 1 ? (
+        <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <Button disabled={page <= 1} onClick={() => goToPage(page - 1)} size="sm" variant="outline">
+              <ChevronLeft className="size-4" />
+              Prev
+            </Button>
+            <Button
+              disabled={page >= totalPages}
+              onClick={() => goToPage(page + 1)}
+              size="sm"
+              variant="outline"
+            >
+              Next
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { logger, type WideEvent } from "@/lib/log";
 import { checkUploadQuota, quotaMessage } from "@/lib/quota";
-import { getSession, planFor } from "@/lib/session";
+import { getActiveScope, getSession, planFor } from "@/lib/session";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -39,6 +39,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     event.user_id = userId;
+
+    const scope = await getActiveScope();
+    if (!scope) {
+      event.status_code = 409;
+      event.outcome = "no_workspace";
+      return NextResponse.json(
+        { error: "No active workspace. Pick or create one before uploading." },
+        { status: 409 },
+      );
+    }
+    event.organization_id = scope.organizationId;
 
     const plan = planFor(session);
     event.plan = plan;
@@ -80,7 +91,7 @@ export async function POST(request: Request) {
 
     const body = new Uint8Array(await file.arrayBuffer());
     const upload = {
-      userId,
+      scope,
       fileName: file.name,
       mimeType: file.type || "application/octet-stream",
       body,
@@ -124,7 +135,7 @@ export async function POST(request: Request) {
             const processor = yield* ReceiptProcessingService;
             return yield* processor.extractStored({
               receiptId,
-              userId,
+              scope,
               mimeType: upload.mimeType,
               body,
             });

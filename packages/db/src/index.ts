@@ -39,6 +39,11 @@ export const receipts = pgTable(
   "receipts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** The workspace that owns this receipt. Every member of it can read it. */
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Who uploaded it. Kept for attribution — it does NOT scope visibility. */
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -60,7 +65,11 @@ export const receipts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("receipts_user_id_idx").on(table.userId)],
+  (table) => [
+    index("receipts_user_id_idx").on(table.userId),
+    // History lists a workspace newest-first; this index serves that directly.
+    index("receipts_org_created_at_idx").on(table.organizationId, table.createdAt),
+  ],
 );
 
 export const receiptItems = pgTable("receipt_items", {

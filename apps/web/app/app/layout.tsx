@@ -3,6 +3,7 @@ import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { UserMenu } from "@/components/user-menu";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { authEnabled } from "@/lib/env";
+import { getWorkspaceAllowance } from "@/lib/workspaces";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { History, Settings, Upload } from "lucide-react";
 import Link from "next/link";
@@ -13,7 +14,8 @@ const nav = [
   { href: "/app/settings", label: "Settings", icon: Settings },
 ];
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const allowance = authEnabled ? await getWorkspaceAllowance() : null;
   const userControl = authEnabled ? (
     <UserMenu />
   ) : (
@@ -22,7 +24,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </span>
   );
 
-  const workspaceControl = authEnabled ? <WorkspaceSwitcher /> : null;
+  const workspaceControl = authEnabled ? (
+    <WorkspaceSwitcher canCreate={allowance?.canCreate ?? false} />
+  ) : null;
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
