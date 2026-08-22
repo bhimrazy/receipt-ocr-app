@@ -1,4 +1,3 @@
-import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
@@ -62,8 +61,7 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const body = (
+  return (
     <html
       lang="en"
       className={`${dmSans.variable} ${jetbrainsMono.variable}`}
@@ -71,15 +69,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="font-sans antialiased">{children}</body>
     </html>
-  );
-
-  if (!clerkPublishableKey) {
-    return body;
-  }
-
-  return (
-    <ClerkProvider afterSignOutUrl="/" publishableKey={clerkPublishableKey}>
-      {body}
-    </ClerkProvider>
   );
 }

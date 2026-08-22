@@ -1,21 +1,36 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { getSessionCookie } from "better-auth/cookies";
+import { NextResponse, type NextRequest } from "next/server";
 
-const isProtectedRoute = createRouteMatcher(["/app(.*)", "/api/receipts(.*)"]);
-const clerkEnabled = Boolean(
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY,
-);
+const authEnabled = Boolean(process.env.DATABASE_URL && process.env.BETTER_AUTH_SECRET);
 
-const protectedProxy = clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    await auth.protect();
+/**
+ * Optimistic auth gate: only checks for the presence of the session cookie
+ * (fast, no DB hit) and redirects signed-out visitors of /app to /sign-in.
+ * API routes are NOT gated here — they do a real session check server-side
+ * via `getSession()`, since a cookie's presence alone proves nothing.
+ */
+export default function proxy(request: NextRequest) {
+  if (!authEnabled) return NextResponse.next();
+
+  const { pathname } = request.nextUrl;
+  const isGuarded =
+    pathname === "/app" ||
+    pathname.startsWith("/app/") ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/");
+  if (isGuarded) {
+    const sessionCookie = getSessionCookie(request);
+    if (!sessionCookie) {
+      const signInUrl = new URL("/sign-in", request.url);
+      return NextResponse.redirect(signInUrl);
+    }
   }
-});
 
-export default clerkEnabled ? protectedProxy : function proxy() {
+  // The /admin role check is enforced server-side in app/admin/layout.tsx via
+  // requireAdmin(); the cookie check here only weeds out signed-out visitors.
   return NextResponse.next();
-};
+}
 
 export const config = {
-  matcher: ["/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|png|gif|svg|ico|woff2?|ttf|map)).*)", "/api/(.*)"],
+  matcher: ["/app/:path*", "/app", "/admin/:path*", "/admin"],
 };

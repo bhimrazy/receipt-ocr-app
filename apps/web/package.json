@@ -10,9 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clerk/nextjs": "7.4.2",
     "@receipt-ocr/core": "workspace:0.0.0",
+    "@receipt-ocr/db": "workspace:*",
     "@receipt-ocr/ui": "workspace:0.0.0",
+    "better-auth": "^1.6.23",
     "clsx": "2.1.1",
     "effect": "3.21.2",
     "lucide-react": "1.17.0",
