@@ -59,7 +59,7 @@ const receiptObjectSchema = z.object({
 
 export async function extractReceiptWithGemini({
   apiKey,
-  model = "gemini-2.5-flash",
+  model = "gemini-3.7-flash",
   imageBytes,
   mimeType,
 }: GeminiOcrInput): Promise<ReceiptExtraction> {

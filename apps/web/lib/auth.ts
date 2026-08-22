@@ -1,10 +1,16 @@
 import { and, createDb, eq, member, organization, schema } from "@receipt-ocr/db";
+import {
+  invitationEmail,
+  passwordResetEmail,
+  sendEmail,
+  verificationEmail,
+} from "@receipt-ocr/email";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
-import { authEnabled, authEnv } from "./env";
+import { authEnabled, authEnv, emailEnv } from "./env";
 import { workspaceLimitForPlan } from "./plans";
 
 export { authEnabled };
@@ -19,6 +25,9 @@ const PLACEHOLDER_DATABASE_URL = "postgres://placeholder:placeholder@localhost:5
 const PLACEHOLDER_SECRET = "auth-disabled-placeholder-secret-do-not-use-0000";
 
 const db = createDb(authEnv.databaseUrl ?? PLACEHOLDER_DATABASE_URL);
+
+/** Resend when configured; otherwise every message is logged with its link. */
+const mailer = { apiKey: emailEnv.resendApiKey, from: emailEnv.from };
 
 function slugForUser(userId: string) {
   return userId.toLowerCase().replace(/[^a-z0-9-]/g, "-");
@@ -43,15 +52,18 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 128,
     revokeSessionsOnPasswordReset: true,
-    // Email delivery is stubbed to the server log until an email provider is
-    // wired up (later phase). The URL in the log is a working reset link.
     sendResetPassword: async ({ user, url }) => {
-      console.info(`[auth] Password reset requested for ${user.email}: ${url}`);
+      await sendEmail(mailer, { to: user.email, ...passwordResetEmail(url) });
     },
   },
   emailVerification: {
+    // Sent on sign-up, but not required to use the app: blocking an unverified
+    // user before any email provider is guaranteed to be configured would lock
+    // people out of their own accounts.
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
-      console.info(`[auth] Email verification for ${user.email}: ${url}`);
+      await sendEmail(mailer, { to: user.email, ...verificationEmail(url) });
     },
   },
   socialProviders: {
@@ -151,14 +163,16 @@ export const auth = betterAuth({
       // same email so a workspace never accumulates duplicate invitations.
       invitationExpiresIn: 60 * 60 * 24 * 7,
       cancelPendingInvitationsOnReInvite: true,
-      // Email delivery is stubbed to the server log until an email provider is
-      // wired up (later phase). The accept URL in the log is a working invite
-      // link; the Members UI also surfaces a copyable version of it.
       sendInvitationEmail: async ({ email, invitation, organization, inviter }) => {
         const acceptUrl = `${authEnv.betterAuthUrl}/accept-invitation/${invitation.id}`;
-        console.info(
-          `[auth] ${inviter.user.email} invited ${email} to "${organization.name}": ${acceptUrl}`,
-        );
+        await sendEmail(mailer, {
+          to: email,
+          ...invitationEmail({
+            organizationName: organization.name,
+            inviterEmail: inviter.user.email,
+            url: acceptUrl,
+          }),
+        });
       },
       // Returns true when the user has REACHED their plan's org limit.
       organizationLimit: async (user) => {

@@ -5,6 +5,7 @@ import { ArrowRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Brand } from "@/components/brand";
+import { authClient } from "@/lib/auth-client";
 
 const navLinks = [
   { href: "#features", label: "Features" },
@@ -16,6 +17,7 @@ const navLinks = [
 type Bubble = { left: number; width: number; opacity: number };
 
 export function SiteHeader() {
+  const { data: session, isPending } = authClient.useSession();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [bubble, setBubble] = useState<Bubble>({ left: 0, width: 0, opacity: 0 });
@@ -80,15 +82,29 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-            <Link href="/sign-in">Sign in</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/sign-in">
-              Get started
-              <ArrowRight className="size-3.5" />
-            </Link>
-          </Button>
+          {/* Signed-in visitors were still shown "Sign in / Get started". */}
+          {isPending ? (
+            <span className="h-8 w-28 animate-pulse rounded-full bg-foreground/[0.06]" />
+          ) : session ? (
+            <Button asChild size="sm">
+              <Link href="/app/upload">
+                Go to app
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </Button>
+          ) : (
+            <>
+              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+                <Link href="/sign-in">Sign in</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link href="/sign-up">
+                  Get started
+                  <ArrowRight className="size-3.5" />
+                </Link>
+              </Button>
+            </>
+          )}
           <button
             type="button"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
@@ -117,11 +133,11 @@ export function SiteHeader() {
             ))}
             <li className="mt-2 border-t border-border pt-3 sm:hidden">
               <Link
-                href="/sign-in"
+                href={session ? "/app/upload" : "/sign-in"}
                 onClick={() => setMenuOpen(false)}
                 className="block rounded-xl px-4 py-3 text-sm text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
               >
-                Sign in
+                {session ? "Go to app" : "Sign in"}
               </Link>
             </li>
           </ul>

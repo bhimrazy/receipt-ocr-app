@@ -98,7 +98,7 @@ services:
       BETTER_AUTH_URL: http://localhost:${APP_PORT:-3000}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       S3_ENDPOINT: http://minio:9000
       S3_REGION: us-east-1
       S3_BUCKET: receipt-ocr

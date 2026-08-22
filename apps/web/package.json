@@ -13,6 +13,7 @@
     "@receipt-ocr/ai": "workspace:*",
     "@receipt-ocr/core": "workspace:0.0.0",
     "@receipt-ocr/db": "workspace:*",
+    "@receipt-ocr/email": "workspace:*",
     "@receipt-ocr/ui": "workspace:0.0.0",
     "better-auth": "^1.6.23",
     "clsx": "2.1.1",

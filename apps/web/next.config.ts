@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
     "@receipt-ocr/ai",
     "@receipt-ocr/core",
     "@receipt-ocr/db",
+    "@receipt-ocr/email",
     "@receipt-ocr/storage",
     "@receipt-ocr/ui",
   ],

@@ -39,6 +39,15 @@ function adminEmailList(): string[] {
   return [...new Set(emails)];
 }
 
+export const emailEnv = {
+  /** Resend API key. Without it, mail is logged instead of sent. */
+  resendApiKey: optional("RESEND_API_KEY"),
+  /** Verified sender, e.g. `receiptOCR <noreply@yourdomain.com>`. */
+  from: optional("EMAIL_FROM"),
+};
+
+export const emailEnabled = Boolean(emailEnv.resendApiKey && emailEnv.from);
+
 export const authEnv = {
   /** Supabase transaction-pooler (port 6543) URL works here; postgres-js runs with prepare:false. */
   databaseUrl: optional("DATABASE_URL"),

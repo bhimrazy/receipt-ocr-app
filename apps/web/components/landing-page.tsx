@@ -239,7 +239,7 @@ export function LandingPage() {
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Button asChild size="lg">
-              <Link href="/sign-in">
+              <Link href="/sign-up">
                 Get started free <ArrowRight className="size-4" />
               </Link>
             </Button>
@@ -396,7 +396,7 @@ export function LandingPage() {
               featured
               cta={
                 <Button asChild className="w-full">
-                  <Link href="/sign-in">
+                  <Link href="/sign-up">
                     Get started free <ArrowRight className="size-4" />
                   </Link>
                 </Button>
@@ -457,7 +457,7 @@ export function LandingPage() {
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">
-                <Link href="/sign-in">
+                <Link href="/sign-up">
                   Get started free <ArrowRight className="size-4" />
                 </Link>
               </Button>

@@ -162,16 +162,25 @@ export function CredentialsForm({
           type="email"
           value={email}
         />
-        <Input
-          autoComplete={isSignUp ? "new-password" : "current-password"}
-          aria-label="Password"
-          minLength={8}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="Password (min. 8 characters)"
-          required
-          type="password"
-          value={password}
-        />
+        <div>
+          <Input
+            autoComplete={isSignUp ? "new-password" : "current-password"}
+            aria-label="Password"
+            minLength={8}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Password (min. 8 characters)"
+            required
+            type="password"
+            value={password}
+          />
+          {isSignUp ? null : (
+            <p className="mt-2 text-right text-xs">
+              <Link className="text-muted-foreground hover:text-foreground" href="/forgot-password">
+                Forgot your password?
+              </Link>
+            </p>
+          )}
+        </div>
         {error ? (
           <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400" role="alert">
             {error}

@@ -202,7 +202,7 @@ export const ConfigLive = Layer.effect(
     return {
       databaseUrl: requireEnv("DATABASE_URL"),
       geminiApiKey: requireEnv("GOOGLE_GENERATIVE_AI_API_KEY"),
-      geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+      geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.7-flash",
       storage: {
         endpoint: process.env.S3_ENDPOINT,
         region: process.env.S3_REGION ?? "auto",

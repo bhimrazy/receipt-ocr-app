@@ -2,15 +2,11 @@ import type { Metadata } from "next";
 import { AuthLayout, AuthNotConfiguredCard } from "@/components/auth/auth-layout";
 import { CredentialsForm, type SocialProvider } from "@/components/auth/credentials-form";
 import { authEnabled, authEnv } from "@/lib/env";
+import { safeRedirect } from "@/lib/redirect";
+import { getSession } from "@/lib/session";
+import { redirect as nextRedirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Sign in" };
-
-/** Only allow internal, single-slash paths as post-auth redirects (no open redirects). */
-function safeRedirect(value: string | string[] | undefined): string {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
-  return "/app/upload";
-}
 
 export default async function SignInPage({
   searchParams,
@@ -19,6 +15,9 @@ export default async function SignInPage({
 }) {
   const { redirect } = await searchParams;
   const redirectTo = safeRedirect(redirect);
+
+  // Nothing to do here if you're already signed in.
+  if (await getSession()) nextRedirect(redirectTo);
 
   const providers = [
     authEnv.google ? "google" : null,
