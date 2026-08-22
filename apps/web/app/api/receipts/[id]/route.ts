@@ -1,10 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
 import { AppLive, ReceiptRepository } from "@receipt-ocr/core";
 import { Effect, Exit } from "effect";
 import { NextResponse } from "next/server";
+import { getCurrentUserId } from "@/lib/session";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { userId } = await auth();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

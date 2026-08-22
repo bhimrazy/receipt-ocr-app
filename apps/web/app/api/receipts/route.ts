@@ -1,9 +1,9 @@
-import { auth } from "@clerk/nextjs/server";
 import { AppLive, ReceiptProcessingService, ValidationError } from "@receipt-ocr/core";
 import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { logger, type WideEvent } from "@/lib/log";
+import { getCurrentUserId } from "@/lib/session";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   };
 
   try {
-    const { userId } = await auth();
+    const userId = await getCurrentUserId();
     if (!userId) {
       event.status_code = 401;
       event.outcome = "unauthorized";

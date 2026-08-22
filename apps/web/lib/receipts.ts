@@ -1,7 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
 import { AppLive, ReceiptRepository, StorageService, type ReceiptWithItems } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { mockReceipts } from "./mock-data";
+import { getCurrentUserId } from "./session";
 
 function mockToReceipt(id: string): ReceiptWithItems | null {
   const receipt = mockReceipts.find((item) => item.id === id) ?? mockReceipts[0];
@@ -20,6 +20,7 @@ function mockToReceipt(id: string): ReceiptWithItems | null {
     confidence: receipt.confidence,
     status: receipt.status as "uploaded" | "processing" | "completed" | "failed",
     imageObjectKey: null,
+    storageSource: "managed",
     rawJson: receipt,
     errorMessage: null,
     createdAt: new Date(),
@@ -29,11 +30,6 @@ function mockToReceipt(id: string): ReceiptWithItems | null {
       receiptId: receipt.id,
     })),
   };
-}
-
-export async function getCurrentUserId() {
-  const { userId } = await auth();
-  return userId;
 }
 
 export async function listReceiptsForCurrentUser() {
