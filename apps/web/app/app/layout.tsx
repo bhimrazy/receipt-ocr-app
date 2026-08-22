@@ -1,5 +1,8 @@
-import { UserButton } from "@clerk/nextjs";
 import { Brand } from "@/components/brand";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { UserMenu } from "@/components/user-menu";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
+import { authEnabled } from "@/lib/env";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { History, Settings, Upload } from "lucide-react";
 import Link from "next/link";
@@ -11,21 +14,23 @@ const nav = [
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
-  const userControl = clerkEnabled ? (
-    <UserButton />
+  const userControl = authEnabled ? (
+    <UserMenu />
   ) : (
     <span className="rounded-full border border-border px-3 py-1 font-mono text-xs text-muted-foreground">
       auth preview
     </span>
   );
 
+  const workspaceControl = authEnabled ? <WorkspaceSwitcher /> : null;
+
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <aside className="hidden w-60 shrink-0 border-r border-border bg-[#0f0f11] p-5 md:flex md:flex-col">
-        <div className="mb-10">
+        <div className="mb-6">
           <Brand />
         </div>
+        {workspaceControl ? <div className="mb-6">{workspaceControl}</div> : null}
         <nav className="flex flex-col gap-1">
           {nav.map((item) => {
             const Icon = item.icon;
@@ -51,9 +56,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-border px-5 md:hidden">
+        {authEnabled ? <ImpersonationBanner /> : null}
+        <header className="flex h-16 items-center justify-between gap-3 border-b border-border px-5 md:hidden">
           <Brand />
-          {userControl}
+          <div className="flex items-center gap-2">
+            {workspaceControl ? <div className="w-36">{workspaceControl}</div> : null}
+            {userControl}
+          </div>
         </header>
         <header className="hidden h-16 items-center justify-end border-b border-border px-8 md:flex">
           {userControl}
