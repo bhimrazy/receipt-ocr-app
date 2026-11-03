@@ -5,7 +5,7 @@ export const mockReceipts = [
     receiptDate: "2026-04-25",
     total: "67.43",
     tax: "4.23",
-    category: "Grocery",
+    category: "Groceries",
     status: "completed",
     confidence: "0.96",
     items: [
@@ -41,7 +41,7 @@ export const mockReceipts = [
     receiptDate: "2026-04-24",
     total: "52.18",
     tax: "0.00",
-    category: "Gas",
+    category: "Fuel",
     status: "completed",
     confidence: "0.99",
     items: [
@@ -69,7 +69,7 @@ export const mockReceipts = [
     receiptDate: "2026-04-22",
     total: "34.56",
     tax: "1.82",
-    category: "Pharmacy",
+    category: "Supplies",
     status: "failed",
     confidence: "0",
     items: [],

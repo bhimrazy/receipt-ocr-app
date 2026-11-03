@@ -1,0 +1,20 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/styles.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@receipt-ocr/ui/components",
+    "utils": "@receipt-ocr/ui/lib/utils",
+    "hooks": "@receipt-ocr/ui/hooks",
+    "lib": "@receipt-ocr/ui/lib",
+    "ui": "@receipt-ocr/ui/components"
+  }
+}

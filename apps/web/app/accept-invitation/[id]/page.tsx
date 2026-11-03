@@ -13,9 +13,9 @@ export default async function AcceptInvitationPage({
   const { id } = await params;
 
   return (
-    <AuthLayout subtitle="Accept your invitation to join a workspace and start turning receipts into structured data.">
+    <AuthLayout subtitle="Join a workspace to share receipts with your team.">
       {authEnabled ? (
-        <div className="w-full rounded-2xl border border-white/10 bg-card/80 p-8 shadow-2xl backdrop-blur-xl">
+        <div className="w-full rounded-2xl border border-border bg-card/80 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
           <AcceptInvitation invitationId={id} />
         </div>
       ) : (

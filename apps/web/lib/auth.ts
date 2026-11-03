@@ -1,17 +1,23 @@
-import { and, createDb, eq, member, organization, schema } from "@receipt-ocr/db";
+import "server-only";
+import { ensurePersonalWorkspace, purgeReceiptFiles } from "@receipt-ocr/core";
+import { and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
 import {
   invitationEmail,
   passwordResetEmail,
   sendEmail,
   verificationEmail,
+  type SendEmailInput,
 } from "@receipt-ocr/email";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
-import { authEnabled, authEnv, emailEnv } from "./env";
+import { isBootstrapAdmin } from "./admin-bootstrap";
+import { authEnabled, authEnv, emailEnv, isProduction, requireEmailVerification } from "./env";
+import { logger } from "./log";
 import { workspaceLimitForPlan } from "./plans";
+import { runtime } from "./runtime";
 
 export { authEnabled };
 
@@ -26,16 +32,43 @@ const PLACEHOLDER_SECRET = "auth-disabled-placeholder-secret-do-not-use-0000";
 
 const db = createDb(authEnv.databaseUrl ?? PLACEHOLDER_DATABASE_URL);
 
-/** Resend when configured; otherwise every message is logged with its link. */
-const mailer = { apiKey: emailEnv.resendApiKey, from: emailEnv.from };
+const mailer = {
+  apiKey: emailEnv.resendApiKey,
+  from: emailEnv.from,
+  logUndelivered: process.env.NODE_ENV === "development",
+};
 
-function slugForUser(userId: string) {
-  return userId.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+/**
+ * In production an undelivered reset/verification/invite mail fails the
+ * request: a silent success would leave the user waiting for nothing.
+ */
+async function deliver(input: SendEmailInput) {
+  const result = await sendEmail(mailer, input);
+  if (!result.delivered && isProduction) {
+    throw new Error(`Email not delivered (${result.reason})`);
+  }
 }
 
-function workspaceNameFor(user: { name: string; email: string }) {
-  const base = user.name?.trim() || user.email.split("@")[0] || "Personal";
-  return `${base}'s Workspace`;
+/**
+ * Grants the admin role to an ADMIN_EMAILS address only once it is verified;
+ * granting it at sign-up would hand admin to whoever registers the address first.
+ */
+async function promoteIfBootstrapAdmin(user: {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+}) {
+  if (!isBootstrapAdmin(user, authEnv.adminEmails)) return;
+  await db
+    .update(userTable)
+    .set({ role: "admin" })
+    .where(and(eq(userTable.id, user.id), eq(userTable.emailVerified, true)));
+}
+
+/** Removes stored receipt files before the rows they belong to cascade away (U1). */
+async function purgeFiles(owner: { organizationId: string } | { userId: string }) {
+  const purged = await runtime.runPromise(purgeReceiptFiles(owner));
+  logger.info({ event: "receipt.files_purged", ...owner, count: purged });
 }
 
 export const auth = betterAuth({
@@ -52,18 +85,21 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 128,
     revokeSessionsOnPasswordReset: true,
+    requireEmailVerification,
     sendResetPassword: async ({ user, url }) => {
-      await sendEmail(mailer, { to: user.email, ...passwordResetEmail(url) });
+      await deliver({ to: user.email, ...passwordResetEmail(url) });
     },
   },
   emailVerification: {
-    // Sent on sign-up, but not required to use the app: blocking an unverified
-    // user before any email provider is guaranteed to be configured would lock
-    // people out of their own accounts.
-    sendOnSignUp: true,
+    // Dev logs the link; in production a send without a mailer throws, so only send when required.
+    sendOnSignUp: requireEmailVerification || !isProduction,
+    sendOnSignIn: requireEmailVerification,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
-      await sendEmail(mailer, { to: user.email, ...verificationEmail(url) });
+      await deliver({ to: user.email, ...verificationEmail(url) });
+    },
+    afterEmailVerification: async (user) => {
+      await promoteIfBootstrapAdmin({ ...user, emailVerified: true });
     },
   },
   socialProviders: {
@@ -90,10 +126,18 @@ export const auth = betterAuth({
   },
   advanced: {
     ipAddress: {
-      ipAddressHeaders: ["x-forwarded-for", "x-real-ip"],
+      // Only headers a trusted proxy sets (TRUSTED_IP_HEADERS). Trusting a
+      // client-supplied X-Forwarded-For lets anyone rotate it past the limits.
+      ipAddressHeaders: authEnv.trustedIpHeaders,
     },
   },
   user: {
+    deleteUser: {
+      enabled: true,
+      beforeDelete: async (user) => {
+        await purgeFiles({ userId: user.id });
+      },
+    },
     additionalFields: {
       plan: {
         type: "string",
@@ -106,32 +150,11 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        // Bootstrap the first admin(s): any signup whose email is listed in
-        // ADMIN_EMAILS is created with the "admin" role. Existing users must be
-        // promoted via the admin panel or SQL (see .env.example).
-        before: async (user) => {
-          if (authEnv.adminEmails.includes(user.email.toLowerCase())) {
-            return { data: { ...user, role: "admin" } };
-          }
-          return undefined;
-        },
         after: async (user) => {
-          // Every new user gets a personal workspace they own.
-          const orgId = crypto.randomUUID();
-          const now = new Date();
-          await db.insert(organization).values({
-            id: orgId,
-            name: workspaceNameFor(user),
-            slug: slugForUser(user.id),
-            createdAt: now,
-          });
-          await db.insert(member).values({
-            id: crypto.randomUUID(),
-            organizationId: orgId,
-            userId: user.id,
-            role: "owner",
-            createdAt: now,
-          });
+          // Personal workspace + owner membership, in one transaction (U4).
+          await runtime.runPromise(ensurePersonalWorkspace(user));
+          // OAuth sign-ups can arrive already verified.
+          await promoteIfBootstrapAdmin(user);
         },
       },
     },
@@ -163,9 +186,10 @@ export const auth = betterAuth({
       // same email so a workspace never accumulates duplicate invitations.
       invitationExpiresIn: 60 * 60 * 24 * 7,
       cancelPendingInvitationsOnReInvite: true,
+      requireEmailVerificationOnInvitation: true,
       sendInvitationEmail: async ({ email, invitation, organization, inviter }) => {
         const acceptUrl = `${authEnv.betterAuthUrl}/accept-invitation/${invitation.id}`;
-        await sendEmail(mailer, {
+        await deliver({
           to: email,
           ...invitationEmail({
             organizationName: organization.name,
@@ -173,6 +197,11 @@ export const auth = betterAuth({
             url: acceptUrl,
           }),
         });
+      },
+      organizationHooks: {
+        beforeDeleteOrganization: async ({ organization }) => {
+          await purgeFiles({ organizationId: organization.id });
+        },
       },
       // Returns true when the user has REACHED their plan's org limit.
       organizationLimit: async (user) => {

@@ -2,39 +2,10 @@
 
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import {
-  Camera,
-  Check,
-  FileJson,
-  Layers,
-  Loader2,
-  ScanLine,
-  Shield,
-  Sparkles,
-  Upload,
-  X,
-  Zap,
-} from "lucide-react";
+import { cn } from "@receipt-ocr/ui/lib/utils";
+import { Camera, Check, ImageUp, Layers, Loader2, Sparkles, Upload, X, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-
-const pipeline = [
-  {
-    icon: ScanLine,
-    title: "Extracted",
-    desc: "Merchant, items, tax & totals — each with a confidence score.",
-  },
-  {
-    icon: FileJson,
-    title: "Structured",
-    desc: "Clean fields stored in your searchable history.",
-  },
-  {
-    icon: Shield,
-    title: "Private",
-    desc: "Uploads are server-side; your keys never touch the browser.",
-  },
-];
 
 const tips = [
   "Flat, well-lit photos read best — avoid glare and folds.",
@@ -80,7 +51,13 @@ function rejectionFor(file: File): string | null {
   return null;
 }
 
-export function UploadPanel() {
+export function UploadPanel({
+  remaining,
+  limit,
+}: {
+  remaining: number | null;
+  limit: number | null;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -179,16 +156,17 @@ export function UploadPanel() {
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Upload receipts</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Drop images, browse, or snap a photo. Process one instantly, or queue a batch and keep
-          working while extraction runs in the background.
+          Add a photo of a receipt and we&apos;ll read the merchant, date, items and total. Adding
+          several? They&apos;re read in the background while you keep working.
         </p>
       </div>
 
       <Card
         aria-label="Add receipt images"
-        className={`cursor-pointer border-2 border-dashed p-8 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:p-16 ${
-          dragging ? "border-primary bg-primary/5" : "border-border bg-card"
-        }`}
+        className={cn(
+          "cursor-pointer border-2 border-dashed p-6 text-center transition outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-8 md:p-16",
+          dragging ? "border-primary bg-primary/5" : "border-input bg-card",
+        )}
         onClick={() => inputRef.current?.click()}
         onDragLeave={() => setDragging(false)}
         onDragOver={(event) => {
@@ -229,49 +207,63 @@ export function UploadPanel() {
         />
         {files.length === 0 ? (
           <div className="flex flex-col items-center">
-            <Upload className="mb-4 size-10 text-muted-foreground" />
-            <p className="font-medium">Drop receipt images here</p>
-            <p className="mt-2 text-sm text-muted-foreground">PNG, JPG, HEIC up to 10MB</p>
-            <Button
-              className="mt-5 md:hidden"
-              onClick={(event) => {
-                event.stopPropagation();
-                cameraRef.current?.click();
-              }}
-              variant="outline"
-            >
-              <Camera className="size-4" />
-              Take a photo
-            </Button>
+            <Upload aria-hidden="true" className="mb-4 size-10 text-muted-foreground" />
+            <p className="font-medium">
+              <span className="max-md:hidden">Drop receipt images here, or click to browse</span>
+              <span className="md:hidden">Take a photo or choose images</span>
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">PNG, JPG or HEIC, up to 10MB each</p>
+            <div className="mt-5 flex w-full flex-col gap-2 sm:w-auto sm:flex-row md:hidden">
+              <Button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  cameraRef.current?.click();
+                }}
+              >
+                <Camera aria-hidden="true" />
+                Take a photo
+              </Button>
+              <Button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  inputRef.current?.click();
+                }}
+                variant="outline"
+              >
+                <ImageUp aria-hidden="true" />
+                Choose images
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-wrap justify-center gap-2">
             {queue.map((item, index) => (
               <span
-                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-xs ${
+                className={cn(
+                  "inline-flex max-w-full items-center gap-2 rounded-lg border py-1 pr-1 pl-3 font-mono text-xs",
                   item.state === "error"
-                    ? "border-red-500/40 bg-red-500/10 text-red-300"
+                    ? "border-destructive/40 bg-destructive/10 text-destructive"
                     : item.state === "done"
                       ? "border-primary/40 bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground"
-                }`}
+                      : "border-border bg-background text-muted-foreground",
+                )}
                 key={`${item.file.name}-${index}`}
               >
                 {item.state === "uploading" ? <Loader2 className="size-3 animate-spin" /> : null}
                 {item.state === "done" ? <Check className="size-3" /> : null}
-                {item.file.name.length > 24 ? `${item.file.name.slice(0, 24)}...` : item.file.name}
-                <span className="text-muted-foreground/70">{formatSize(item.file.size)}</span>
+                <span className="min-w-0 truncate">{item.file.name}</span>
+                <span className="shrink-0 text-muted-foreground">{formatSize(item.file.size)}</span>
                 {processing === null ? (
                   <button
                     aria-label={`Remove ${item.file.name}`}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:size-11"
                     onClick={(event) => {
                       event.stopPropagation();
                       setQueue((current) => current.filter((_, fileIndex) => fileIndex !== index));
                     }}
                     type="button"
                   >
-                    <X className="size-3" />
+                    <X aria-hidden="true" className="size-3.5" />
                   </button>
                 ) : null}
               </span>
@@ -281,14 +273,17 @@ export function UploadPanel() {
       </Card>
 
       {notice && (
-        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <div
+          className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
+          role="status"
+        >
           {notice}
         </div>
       )}
 
       {error && (
         <div
-          className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+          className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           role="alert"
         >
           {error}
@@ -296,62 +291,53 @@ export function UploadPanel() {
       )}
 
       {files.length > 0 && (
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          {files.length === 1 && (
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          {/* One file is read right away; a mode choice only appears for a batch. */}
+          {files.length === 1 ? (
             <Button disabled={processing !== null} onClick={processInstantly}>
-              <Zap className="size-4" />
-              {processing === "instant" ? "Processing..." : "Process now"}
+              {processing ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : (
+                <Zap aria-hidden="true" />
+              )}
+              {processing === "instant" ? "Reading…" : "Read receipt"}
+            </Button>
+          ) : (
+            <Button disabled={processing !== null} onClick={queueAll}>
+              {processing ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : (
+                <Layers aria-hidden="true" />
+              )}
+              {processing === "queued" ? "Uploading…" : `Read ${files.length} receipts`}
             </Button>
           )}
-          <Button
-            disabled={processing !== null}
-            onClick={queueAll}
-            variant={files.length === 1 ? "outline" : "default"}
-          >
-            <Layers className="size-4" />
-            {processing === "queued"
-              ? "Queueing..."
-              : files.length === 1
-                ? "Queue in background"
-                : `Queue ${files.length} receipts`}
-          </Button>
           <Button disabled={processing !== null} onClick={() => setQueue([])} variant="outline">
             Clear
           </Button>
-          {processing === "instant" && (
-            <span className="font-mono text-xs text-muted-foreground">
-              Uploading, storing, and extracting...
-            </span>
-          )}
-          {processing === "queued" && (
-            <span className="font-mono text-xs text-muted-foreground">
-              Uploading — extraction continues in the background.
-            </span>
-          )}
+          <span aria-live="polite" className="font-mono text-xs text-muted-foreground">
+            {processing === "instant"
+              ? "Uploading and reading. This takes a few seconds."
+              : processing === "queued"
+                ? "Uploading. Reading continues in the background."
+                : remaining !== null && limit !== null
+                  ? `${remaining} of ${limit} left today`
+                  : null}
+          </span>
         </div>
       )}
 
-      {/* What happens after upload */}
-      <div className="mt-10 grid gap-4 sm:grid-cols-3">
-        {pipeline.map((step) => {
-          const Icon = step.icon;
-          return (
-            <Card className="p-5" key={step.title}>
-              <div className="mb-3 flex size-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-                <Icon className="size-4" />
-              </div>
-              <h3 className="text-sm font-semibold">{step.title}</h3>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">{step.desc}</p>
-            </Card>
-          );
-        })}
-      </div>
+      {files.length === 0 && remaining !== null && limit !== null ? (
+        <p className="mt-3 text-right font-mono text-xs text-muted-foreground">
+          {remaining} of {limit} receipts left today
+        </p>
+      ) : null}
 
       {/* Tips for best results */}
-      <Card className="mt-4 p-5">
+      <Card className="mt-8 p-5">
         <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-          <Sparkles className="size-4 text-primary" />
-          Tips for the cleanest extraction
+          <Sparkles aria-hidden="true" className="size-4 text-primary" />
+          Tips for a clean read
         </div>
         <ul className="flex flex-col gap-2 text-sm text-muted-foreground">
           {tips.map((tip) => (

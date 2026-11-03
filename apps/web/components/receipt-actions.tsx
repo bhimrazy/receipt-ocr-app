@@ -2,7 +2,17 @@
 
 import type { ReceiptWithItems } from "@receipt-ocr/core";
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Check, Copy, Download, Loader2, Pencil, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@receipt-ocr/ui/components/dropdown-menu";
+import { toast } from "@receipt-ocr/ui/components/toast";
+import { Copy, Download, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { csvFilename, receiptItemsToCsv } from "@/lib/csv";
@@ -17,34 +27,44 @@ function downloadBlob(contents: string, filename: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
+function useDeleteReceipt(receipt: ReceiptWithItems) {
+  const router = useRouter();
+  return async (): Promise<string | void> => {
+    const res = await fetch(`/api/receipts/${receipt.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      return body?.error ?? "Couldn't delete this receipt. Try again.";
+    }
+    toast.add({ title: "Receipt deleted", type: "success" });
+    router.push("/app/history");
+    router.refresh();
+  };
+}
+
 /**
- * Copy / export / delete for a single receipt. These three buttons existed as
- * static markup with no handlers; the export in particular is the outcome the
- * whole product promises, so it had to actually produce a file.
+ * Actions per state. Completed: Edit and Export CSV, with Copy JSON and
+ * Delete in the overflow menu. Failed or still reading: Delete only (retry
+ * lives in the failure banner), since there is nothing to export yet.
  */
 export function ReceiptActions({
   receipt,
+  editing = false,
   onEdit,
-  editing,
 }: {
   receipt: ReceiptWithItems;
-  onEdit: () => void;
-  editing: boolean;
+  editing?: boolean;
+  onEdit?: () => void;
 }) {
-  const router = useRouter();
-  const [copied, setCopied] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const remove = useDeleteReceipt(receipt);
+  const completed = receipt.status === "completed";
 
   async function copyJson() {
-    const json = JSON.stringify(receipt.rawJson ?? receipt, null, 2);
     try {
-      await navigator.clipboard.writeText(json);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(JSON.stringify(receipt.rawJson ?? receipt, null, 2));
+      toast.add({ title: "JSON copied", type: "success" });
     } catch {
-      setError("Couldn't copy to the clipboard.");
+      toast.add({ title: "Couldn't copy to the clipboard", type: "error" });
     }
   }
 
@@ -56,110 +76,111 @@ export function ReceiptActions({
     );
   }
 
-  async function remove() {
-    setDeleting(true);
-    setError(null);
-    const res = await fetch(`/api/receipts/${receipt.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      setError(body?.error ?? "Couldn't delete this receipt.");
-      setDeleting(false);
-      setConfirmingDelete(false);
-      return;
-    }
-    router.push("/app/history");
-    router.refresh();
+  const dialog = (
+    <ConfirmDialog
+      cancelLabel="Keep receipt"
+      confirmLabel="Delete receipt"
+      description="The image, the extracted data and its line items are removed for everyone in this workspace. This can't be undone."
+      destructive
+      onConfirm={remove}
+      onOpenChange={setConfirmOpen}
+      open={confirmOpen}
+      title={`Delete ${receipt.merchant ? `the ${receipt.merchant} receipt` : "this receipt"}?`}
+    />
+  );
+
+  if (!completed) {
+    return (
+      <>
+        <Button className="max-md:w-full" onClick={() => setConfirmOpen(true)} variant="outline">
+          <Trash2 aria-hidden="true" />
+          Delete
+        </Button>
+        {dialog}
+      </>
+    );
   }
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button onClick={onEdit} variant={editing ? "default" : "outline"}>
-          <Pencil className="size-4" />
+    <div className="flex w-full gap-2 md:w-auto">
+      {onEdit ? (
+        <Button aria-pressed={editing} className="max-md:hidden" onClick={onEdit} variant="outline">
+          <Pencil aria-hidden="true" />
           {editing ? "Editing" : "Edit"}
         </Button>
-        <Button onClick={copyJson} variant="outline">
-          {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-          {copied ? "Copied" : "Copy JSON"}
-        </Button>
-        <Button onClick={exportCsv}>
-          <Download className="size-4" />
-          Export CSV
-        </Button>
-        <Button
-          aria-label="Delete receipt"
-          disabled={deleting}
-          onClick={() => setConfirmingDelete(true)}
-          variant="outline"
-        >
-          <Trash2 className="size-4" />
-        </Button>
-      </div>
-
-      {confirmingDelete ? (
-        <div
-          className="w-full max-w-sm rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm"
-          role="alertdialog"
-        >
-          <p className="font-medium text-red-200">Delete this receipt?</p>
-          <p className="mt-1 text-xs text-red-200/80">
-            The extracted data and line items are removed permanently. This can&apos;t be undone.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <Button disabled={deleting} onClick={remove} size="sm" variant="destructive">
-              {deleting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Trash2 className="size-4" />
-              )}
-              Delete
-            </Button>
-            <Button
-              disabled={deleting}
-              onClick={() => setConfirmingDelete(false)}
-              size="sm"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
       ) : null}
-
-      {error ? (
-        <p className="text-xs text-red-400" role="alert">
-          {error}
-        </p>
-      ) : null}
+      <Button className="max-md:flex-1" onClick={exportCsv}>
+        <Download aria-hidden="true" />
+        Export CSV
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button aria-label="More actions" size="icon" variant="outline" />}
+        >
+          <MoreHorizontal aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuGroup>
+            {onEdit ? (
+              <DropdownMenuItem className="md:hidden" onClick={onEdit}>
+                <Pencil aria-hidden="true" />
+                {editing ? "Stop editing" : "Edit"}
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem onClick={copyJson}>
+              <Copy aria-hidden="true" />
+              Copy JSON
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={() => setConfirmOpen(true)} variant="destructive">
+              <Trash2 aria-hidden="true" />
+              Delete receipt
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {dialog}
     </div>
   );
 }
 
 /**
- * Owns the edit toggle so the server-rendered header stays a server component:
- * the (static) title block is passed through as children and the interactive
- * pieces live here.
+ * Owns the edit toggle. Editing swaps the extracted-data card for the form,
+ * so the receipt image stays beside the fields being corrected.
  */
-export function ReceiptToolbar({
+export function ReceiptWorkspace({
   receipt,
-  children,
+  header,
+  image,
+  extracted,
 }: {
   receipt: ReceiptWithItems;
-  children: React.ReactNode;
+  header: React.ReactNode;
+  image: React.ReactNode;
+  extracted: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
 
   return (
     <>
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
-        {children}
+        {header}
         <ReceiptActions
           editing={editing}
           onEdit={() => setEditing((value) => !value)}
           receipt={receipt}
         />
       </div>
-      {editing ? <ReceiptEditor onClose={() => setEditing(false)} receipt={receipt} /> : null}
+      <div className="grid gap-5 lg:grid-cols-2">
+        {image}
+        {editing ? (
+          <ReceiptEditor onClose={() => setEditing(false)} receipt={receipt} />
+        ) : (
+          extracted
+        )}
+      </div>
     </>
   );
 }

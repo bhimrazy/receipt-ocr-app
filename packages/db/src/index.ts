@@ -26,7 +26,23 @@ import {
 export * from "./auth-schema";
 // Re-export query operators so consumers use THIS package's drizzle-orm
 // instance (avoids duplicate-instance type conflicts with isolated installs).
-export { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+export {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 export const receiptStatus = pgEnum("receipt_status", [
   "uploaded",
@@ -57,6 +73,8 @@ export const receipts = pgTable(
     total: numeric("total", { precision: 12, scale: 2 }),
     confidence: numeric("confidence", { precision: 5, scale: 4 }),
     status: receiptStatus("status").notNull().default("uploaded"),
+    /** Original upload name; kept outside raw_json, which extraction overwrites. */
+    fileName: text("file_name"),
     imageObjectKey: text("image_object_key"),
     // Which storage credentials the image was written with: "managed" | "byok".
     storageSource: text("storage_source").notNull().default("managed"),
@@ -66,23 +84,31 @@ export const receipts = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("receipts_user_id_idx").on(table.userId),
+    // Serves the per-user quota count over a time window.
+    index("receipts_user_created_at_idx").on(table.userId, table.createdAt),
+    // Serves the global daily OCR cap.
+    index("receipts_created_at_idx").on(table.createdAt),
     // History lists a workspace newest-first; this index serves that directly.
     index("receipts_org_created_at_idx").on(table.organizationId, table.createdAt),
   ],
 );
 
-export const receiptItems = pgTable("receipt_items", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  receiptId: uuid("receipt_id")
-    .notNull()
-    .references(() => receipts.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  quantity: integer("quantity").notNull().default(1),
-  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }),
-  totalPrice: numeric("total_price", { precision: 12, scale: 2 }),
-  confidence: numeric("confidence", { precision: 5, scale: 4 }),
-});
+export const receiptItems = pgTable(
+  "receipt_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    receiptId: uuid("receipt_id")
+      .notNull()
+      .references(() => receipts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    unitPrice: numeric("unit_price", { precision: 12, scale: 2 }),
+    totalPrice: numeric("total_price", { precision: 12, scale: 2 }),
+    confidence: numeric("confidence", { precision: 5, scale: 4 }),
+  },
+  // Loading a receipt's items and the cascade delete both look up by receipt.
+  (table) => [index("receipt_items_receipt_id_idx").on(table.receiptId)],
+);
 
 /**
  * User-provided BYOK credentials. The secret is AES-256-GCM encrypted with
@@ -138,14 +164,8 @@ export const schema = {
 };
 
 /**
- * One pool per connection string, per process.
- *
- * `createDb` used to open a fresh postgres-js pool on every call, and it is
- * called from inside `ReceiptRepositoryLive` — an Effect Layer that is rebuilt
- * on every `Effect.provide(AppLive)`, i.e. on every request. That opened a new
- * pool per request and exhausted Postgres/pooler connections under load.
- * Memoizing here keeps every caller (auth, admin, the Effect layer) on a
- * single shared pool without any of them having to remember to cache.
+ * One pool per connection string, per process, shared by auth, admin and the
+ * Effect runtime. A pool per caller would exhaust the Supabase pooler.
  */
 const pools = new Map<string, ReturnType<typeof drizzle<typeof schema>>>();
 

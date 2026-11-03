@@ -68,10 +68,10 @@ export default async function AdminOrganizationsPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Organizations</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Workspaces</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {organizations.length} {organizations.length === 1 ? "organization" : "organizations"} ·
-          expand a row to view members.
+          {organizations.length} {organizations.length === 1 ? "workspace" : "workspaces"}. Expand
+          one to see its members.
         </p>
       </div>
       <OrganizationsList organizations={organizations} />

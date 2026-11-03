@@ -1,6 +1,32 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 
+// Report-only until it has run clean in production: Next's inline bootstrap scripts need nonces
+// before `script-src` can be enforced. Receipt images load from presigned storage URLs (R2/S3/RustFS).
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https: http://localhost:9000",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+].join("; ");
+
+const securityHeaders = [
+  // Enforced now: no framing (admin actions, settings), no MIME sniffing, and no full URLs
+  // (reset-password tokens) in Referer headers to other origins.
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+  { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
+  { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy },
+];
+
 const nextConfig: NextConfig = {
   // Self-contained server bundle for the Docker image. Ignored by Vercel.
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
@@ -15,6 +41,10 @@ const nextConfig: NextConfig = {
     "@receipt-ocr/storage",
     "@receipt-ocr/ui",
   ],
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
 };
 
 export default nextConfig;

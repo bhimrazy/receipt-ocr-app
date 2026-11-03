@@ -450,8 +450,8 @@ export function LandingPage() {
               Start turning receipts into data
             </h2>
             <p className="mx-auto mt-4 max-w-md text-pretty text-muted-foreground">
-              Free to start, no card required. Bring your own keys when you're ready to scale — your
-              data, your costs, no lock-in.
+              Free to start, no card required. Bring your own keys when you&apos;re ready to scale —
+              your data, your costs, no lock-in.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">

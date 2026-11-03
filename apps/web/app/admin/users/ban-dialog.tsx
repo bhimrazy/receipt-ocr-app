@@ -1,8 +1,18 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@receipt-ocr/ui/components/dialog";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { useState } from "react";
+import { Label } from "@receipt-ocr/ui/components/label";
+import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 const DURATIONS: { label: string; seconds?: number }[] = [
   { label: "Permanent", seconds: undefined },
@@ -14,78 +24,104 @@ const DURATIONS: { label: string; seconds?: number }[] = [
 export function BanDialog({
   open,
   userEmail,
-  onClose,
+  onOpenChange,
   onSubmit,
 }: {
   open: boolean;
   userEmail: string;
-  onClose: () => void;
-  onSubmit: (reason: string | undefined, expiresInSeconds: number | undefined) => void;
+  onOpenChange: (open: boolean) => void;
+  /** Return an error message to keep the dialog open. */
+  onSubmit: (
+    reason: string | undefined,
+    expiresInSeconds: number | undefined,
+  ) => Promise<string | void>;
 }) {
   const [reason, setReason] = useState("");
   const [durationIndex, setDurationIndex] = useState(0);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (!open) {
+      setReason("");
+      setDurationIndex(0);
+      setError(null);
+      setPending(false);
+    }
+  }, [open]);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    const message = await onSubmit(reason.trim() || undefined, DURATIONS[durationIndex].seconds);
+    setPending(false);
+    if (message) {
+      setError(message);
+      return;
+    }
+    onOpenChange(false);
+  }
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-      role="presentation"
-    >
-      <div
-        className="w-full max-w-md rounded-xl border border-border bg-card p-5 text-left shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-      >
-        <h2 className="text-lg font-semibold">Ban user</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Banning <span className="font-medium text-foreground">{userEmail}</span> ends their
-          sessions and blocks sign-in.
-        </p>
-
-        <label className="mt-4 block text-sm font-medium" htmlFor="ban-reason">
-          Reason
-        </label>
-        <Input
-          className="mt-1.5"
-          id="ban-reason"
-          onChange={(event) => setReason(event.target.value)}
-          placeholder="Reason for the ban (optional)"
-          value={reason}
-        />
-
-        <p className="mt-4 text-sm font-medium">Duration</p>
-        <div className="mt-1.5 flex flex-wrap gap-2">
-          {DURATIONS.map((duration, index) => (
+    <Dialog onOpenChange={(next) => !pending && onOpenChange(next)} open={open}>
+      <DialogContent className="sm:max-w-md">
+        <form className="grid gap-4" onSubmit={submit}>
+          <DialogHeader>
+            <DialogTitle>Ban {userEmail}?</DialogTitle>
+            <DialogDescription>
+              This ends their sessions and stops them signing in until the ban ends or you lift it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ban-reason">Reason (optional)</Label>
+            <Input
+              autoComplete="off"
+              id="ban-reason"
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="e.g. Spam uploads"
+              value={reason}
+            />
+          </div>
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="mb-1.5 text-sm font-medium">Duration</legend>
+            <div className="flex flex-wrap gap-2">
+              {DURATIONS.map((duration, index) => (
+                <Button
+                  aria-pressed={durationIndex === index}
+                  key={duration.label}
+                  onClick={() => setDurationIndex(index)}
+                  size="sm"
+                  type="button"
+                  variant={durationIndex === index ? "secondary" : "outline"}
+                  className={durationIndex === index ? "border-primary/50 text-primary" : undefined}
+                >
+                  {duration.label}
+                </Button>
+              ))}
+            </div>
+          </fieldset>
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <DialogFooter>
             <Button
-              key={duration.label}
-              onClick={() => setDurationIndex(index)}
-              size="sm"
+              disabled={pending}
+              onClick={() => onOpenChange(false)}
               type="button"
-              variant={durationIndex === index ? "default" : "outline"}
+              variant="ghost"
             >
-              {duration.label}
+              Cancel
             </Button>
-          ))}
-        </div>
-
-        <div className="mt-6 flex justify-end gap-2">
-          <Button onClick={onClose} size="sm" type="button" variant="ghost">
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              onSubmit(reason.trim() || undefined, DURATIONS[durationIndex].seconds);
-              onClose();
-            }}
-            size="sm"
-            type="button"
-          >
-            Ban user
-          </Button>
-        </div>
-      </div>
-    </div>
+            <Button disabled={pending} type="submit" variant="destructive">
+              {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+              Ban user
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

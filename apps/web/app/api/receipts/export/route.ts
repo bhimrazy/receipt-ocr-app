@@ -1,38 +1,30 @@
-import { AppLive, ReceiptRepository } from "@receipt-ocr/core";
-import { Effect, Exit } from "effect";
 import { NextResponse } from "next/server";
 import { csvFilename, receiptsToCsv } from "@/lib/csv";
+import { jsonError, runRoute } from "@/lib/http";
+import { exportRows, filtersFromSearchParams, MAX_EXPORT_ROWS } from "@/lib/receipts";
 import { getActiveScope } from "@/lib/session";
 
-/** Hard ceiling so one request can't try to stream an unbounded workspace. */
-const MAX_EXPORT_ROWS = 5000;
-
 /**
- * CSV export of the active workspace's receipts. Streamed as an attachment so
- * the browser saves it rather than rendering it — the previous "Export All"
- * button was wired to nothing.
+ * CSV of the active workspace's receipts, filtered by the same query params
+ * as History (q, category, status, from, to). Built in memory: fine up to
+ * MAX_EXPORT_ROWS; a truncated export says so in a header.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const scope = await getActiveScope();
-  if (!scope) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!scope) return jsonError(401, "Unauthorized");
+  const filters = filtersFromSearchParams(new URL(request.url).searchParams);
 
-  const result = await Effect.runPromiseExit(
-    Effect.gen(function* () {
-      const repo = yield* ReceiptRepository;
-      return yield* repo.listReceipts(scope, { limit: MAX_EXPORT_ROWS, offset: 0 });
-    }).pipe(Effect.provide(AppLive)),
+  return runRoute(
+    exportRows(scope, filters),
+    ({ rows, truncated }) =>
+      new NextResponse(receiptsToCsv(rows), {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${csvFilename("receipts")}"`,
+          "Cache-Control": "no-store",
+          "X-Export-Rows": String(rows.length),
+          ...(truncated ? { "X-Export-Truncated": `first ${MAX_EXPORT_ROWS} rows` } : {}),
+        },
+      }),
   );
-
-  if (Exit.isFailure(result)) {
-    return NextResponse.json({ error: "Failed to export receipts" }, { status: 500 });
-  }
-
-  const csv = receiptsToCsv(result.value.receipts);
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${csvFilename("receipts")}"`,
-      "Cache-Control": "no-store",
-    },
-  });
 }

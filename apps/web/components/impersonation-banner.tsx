@@ -31,12 +31,15 @@ export function ImpersonationBanner() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-200">
-      <div className="flex items-center gap-2">
-        <UserCog className="size-4 shrink-0" />
-        <span>
-          Impersonating <span className="font-medium">{session?.user?.email}</span>. Actions run as
-          this user.
+    <div
+      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-warning/30 bg-warning/10 px-5 py-2 text-sm text-warning"
+      role="status"
+    >
+      <div className="flex min-w-0 items-start gap-2">
+        <UserCog aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+        <span className="min-w-0 break-words">
+          Signed in as <span className="font-medium break-all">{session?.user?.email}</span>.
+          Everything you do runs as this user.
         </span>
       </div>
       <Button disabled={pending} onClick={stop} size="sm" variant="outline">

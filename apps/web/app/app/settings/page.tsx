@@ -1,10 +1,10 @@
 import { AccountSettings } from "@/components/account-settings";
+import { UsageMeter, type Usage } from "@/components/usage-meter";
+import { authEnv, authEnabled } from "@/lib/env";
 import { planPolicy } from "@/lib/plans";
-import { getSession, planFor } from "@/lib/session";
-import { authEnabled } from "@/lib/env";
-import { getWorkspaceAllowance } from "@/lib/workspaces";
-import { Badge } from "@receipt-ocr/ui/components/badge";
-import { Button } from "@receipt-ocr/ui/components/button";
+import { getActiveScope, getSession, planFor } from "@/lib/session";
+import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
+import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import {
   Card,
   CardContent,
@@ -12,24 +12,62 @@ import {
   CardHeader,
   CardTitle,
 } from "@receipt-ocr/ui/components/card";
-import { Gauge, Users } from "lucide-react";
+import { ChevronRight, Gauge, Users } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { getUsageSummary } from "../_data/receipts-contract";
 
 export const metadata: Metadata = { title: "Settings" };
+
+function planLabel(plan: string) {
+  return `${plan.charAt(0).toUpperCase()}${plan.slice(1)} plan`;
+}
+
+async function loadUsage(): Promise<Usage | null> {
+  try {
+    const { used, limit, resetsAt } = await getUsageSummary();
+    return { used, limit, resetsAt };
+  } catch {
+    return null;
+  }
+}
+
+async function loadWorkspace(): Promise<{ name: string; members: number } | null> {
+  if (!authEnv.databaseUrl) return null;
+  try {
+    const scope = await getActiveScope();
+    if (!scope) return null;
+    const db = createDb(authEnv.databaseUrl);
+    const [org] = await db
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, scope.organizationId))
+      .limit(1);
+    const [row] = await db
+      .select({ value: count() })
+      .from(member)
+      .where(eq(member.organizationId, scope.organizationId));
+    return org ? { name: org.name, members: Number(row?.value ?? 0) } : null;
+  } catch {
+    return null;
+  }
+}
 
 export default async function SettingsPage() {
   const session = authEnabled ? await getSession() : null;
   const plan = planFor(session);
   const policy = planPolicy(plan);
-  const allowance = authEnabled ? await getWorkspaceAllowance() : null;
+  const label = planLabel(plan);
+  const [usage, workspace] = authEnabled
+    ? await Promise.all([loadUsage(), loadWorkspace()])
+    : [null, null];
 
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Your account, your workspace, and what your plan allows.
+          Your account, your workspace and what your plan allows.
         </p>
       </div>
 
@@ -37,49 +75,39 @@ export default async function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Gauge className="size-5 text-primary" />
-              Plan &amp; limits
+              <Gauge aria-hidden="true" className="size-5 text-primary" />
+              Plan and limits
             </CardTitle>
             <CardDescription>
-              What the <Badge variant="secondary">{plan}</Badge> plan includes today.
+              {label}: {policy.receiptsPerDay} receipts a day, {policy.workspaces}{" "}
+              {policy.workspaces === 1 ? "workspace" : "workspaces"}.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-border bg-background/40 p-4">
-              <div className="font-mono text-2xl">{policy.receiptsPerDay}</div>
-              <div className="mt-1 text-xs text-muted-foreground">receipts per day</div>
-            </div>
-            <div className="rounded-lg border border-border bg-background/40 p-4">
-              <div className="font-mono text-2xl">{policy.receiptsPerMinute}</div>
-              <div className="mt-1 text-xs text-muted-foreground">per minute (burst)</div>
-            </div>
-            <div className="rounded-lg border border-border bg-background/40 p-4">
-              <div className="font-mono text-2xl">
-                {allowance ? `${allowance.owned}/${allowance.limit}` : policy.workspaces}
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">workspaces owned</div>
-            </div>
-          </CardContent>
+          {usage ? (
+            <CardContent>
+              <UsageMeter planLabel={label} usage={usage} />
+            </CardContent>
+          ) : null}
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="size-5 text-primary" />
-              Workspace &amp; members
-            </CardTitle>
-            <CardDescription>
-              Invite teammates, assign roles, and manage pending invitations. Everyone in a
-              workspace shares its receipts.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild variant="outline">
-              <Link href="/app/settings/members">
-                <Users className="size-4" />
-                Manage members
-              </Link>
-            </Button>
+          <CardContent className="flex flex-wrap items-center gap-3 pt-5">
+            <Users aria-hidden="true" className="size-5 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold">Workspace and members</h2>
+              <p className="break-words text-sm text-muted-foreground">
+                {workspace
+                  ? `${workspace.name} · ${workspace.members} ${workspace.members === 1 ? "member" : "members"}`
+                  : "Invite teammates and manage their roles."}
+              </p>
+            </div>
+            <Link
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+              href="/app/settings/members"
+            >
+              Manage
+              <ChevronRight aria-hidden="true" />
+            </Link>
           </CardContent>
         </Card>
 
@@ -87,10 +115,9 @@ export default async function SettingsPage() {
           <AccountSettings />
         ) : (
           <Card>
-            <CardContent className="p-6 text-sm text-muted-foreground">
-              Auth is not configured, so account settings are unavailable. Set{" "}
-              <code className="font-mono">DATABASE_URL</code> and{" "}
-              <code className="font-mono">BETTER_AUTH_SECRET</code> to enable them.
+            <CardContent className="pt-5 text-sm text-muted-foreground">
+              Account settings aren&apos;t available because sign-in isn&apos;t set up on this
+              server.
             </CardContent>
           </Card>
         )}

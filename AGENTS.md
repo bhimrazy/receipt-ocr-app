@@ -49,11 +49,15 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 
 ## Validation
 
-Before handing off, prefer:
+Before handing off, run what CI runs:
 
 ```bash
-bun run typecheck
-bun run build
+bun run format:check && bun run lint && bun run check:deps && bun run knip && bun run audit
+bun run typecheck && bun run test && bun run build
+scripts/test.sh   # unit + Playwright e2e against the compose stack (when UI or API behaviour changed)
 ```
+
+Dependencies are exact pins and at least 7 days old; `bun run check:deps` enforces the pins. `bench/` holds the OCR
+benchmark (`bun run bench:ocr`) and the k6 upload test.
 
 If credentials are missing, the UI should still render with mock receipt data. Real OCR requires `apps/web/.env.local`.

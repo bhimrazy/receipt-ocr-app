@@ -1,0 +1,36 @@
+{
+  "merchant": "Himalayan Electronics Pvt. Ltd.",
+  "receiptDate": "2026-09-14",
+  "category": "Shopping",
+  "currency": "NPR",
+  "subtotal": 140850,
+  "tax": 18310.5,
+  "tip": null,
+  "total": 159160.5,
+  "items": [
+    {
+      "name": "Wireless Router AX3000",
+      "quantity": 2,
+      "unitPrice": 8750,
+      "totalPrice": 17500
+    },
+    {
+      "name": "UPS 650VA",
+      "quantity": 1,
+      "unitPrice": 12400,
+      "totalPrice": 12400
+    },
+    {
+      "name": "Cat6 Cable 50m",
+      "quantity": 3,
+      "unitPrice": 4150,
+      "totalPrice": 12450
+    },
+    {
+      "name": "Laptop Stand",
+      "quantity": 1,
+      "unitPrice": 98500,
+      "totalPrice": 98500
+    }
+  ]
+}

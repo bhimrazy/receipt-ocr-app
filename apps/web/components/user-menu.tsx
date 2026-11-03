@@ -1,46 +1,35 @@
 "use client";
 
+import { buttonVariants } from "@receipt-ocr/ui/components/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@receipt-ocr/ui/components/dropdown-menu";
 import { LogOut, Settings } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { AdminLink } from "@/components/admin-link";
+import { AdminMenuItem } from "@/components/admin-link";
 import { authClient } from "@/lib/auth-client";
 
 export function UserMenu() {
   const { data: session, isPending } = authClient.useSession();
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: PointerEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
   if (isPending) {
-    return <span className="size-9 animate-pulse rounded-full border border-border bg-card" />;
+    return (
+      <span
+        aria-hidden="true"
+        className="block size-9 animate-pulse rounded-full border border-border bg-card max-md:size-11"
+      />
+    );
   }
 
   if (!session) {
     return (
-      <Link
-        className="rounded-full border border-border px-3 py-1 font-mono text-xs text-muted-foreground hover:text-foreground"
-        href="/sign-in"
-      >
+      <Link className={buttonVariants({ variant: "outline", size: "sm" })} href="/sign-in">
         Sign in
       </Link>
     );
@@ -56,55 +45,35 @@ export function UserMenu() {
   }
 
   return (
-    <div className="relative" ref={menuRef}>
-      <button
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label="Open user menu"
-        className="flex size-9 items-center justify-center rounded-full border border-border bg-primary/15 font-mono text-sm font-semibold text-primary transition hover:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => setOpen((value) => !value)}
-        type="button"
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Account menu"
+        className="flex size-9 items-center justify-center overflow-hidden rounded-full border border-border bg-primary/15 font-mono text-sm font-semibold text-primary transition outline-none hover:bg-primary/25 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background max-md:size-11"
       >
         {user.image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" className="size-full rounded-full object-cover" src={user.image} />
+          <img alt="" className="size-full object-cover" src={user.image} />
         ) : (
-          initial
+          <span aria-hidden="true">{initial}</span>
         )}
-      </button>
-      {open ? (
-        <div
-          className="absolute right-0 top-11 z-50 w-56 rounded-xl border border-border bg-card p-1.5 shadow-2xl"
-          role="menu"
-        >
-          <div className="border-b border-border px-3 py-2.5">
-            <p className="truncate text-sm font-medium">{user.name || "Account"}</p>
-            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-          </div>
-          <Link
-            className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground"
-            href="/app/settings"
-            onClick={() => setOpen(false)}
-            role="menuitem"
-          >
-            <Settings className="size-4" />
-            Settings
-          </Link>
-          <AdminLink
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground"
-            onNavigate={() => setOpen(false)}
-          />
-          <button
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground"
-            onClick={handleSignOut}
-            role="menuitem"
-            type="button"
-          >
-            <LogOut className="size-4" />
-            Sign out
-          </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60 max-w-[calc(100vw-2rem)]">
+        <div className="px-2.5 py-2">
+          <p className="truncate text-sm font-medium">{user.name || "Your account"}</p>
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
         </div>
-      ) : null}
-    </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<Link href="/app/settings" />}>
+          <Settings aria-hidden="true" />
+          Settings
+        </DropdownMenuItem>
+        <AdminMenuItem />
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleSignOut}>
+          <LogOut aria-hidden="true" />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -1,14 +1,17 @@
-import type { ReceiptWithItems } from "@receipt-ocr/core";
+import type { ReceiptExportRow, ReceiptWithItems } from "@receipt-ocr/core";
+
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
 
 /**
  * RFC 4180 quoting. Also guards against CSV injection: a cell starting with
  * =, +, -, or @ is executed as a formula by Excel and Sheets, and receipt
- * merchant names come from OCR of an untrusted image.
+ * merchant names come from OCR of an untrusted image. Plain numbers are left
+ * alone so refunds (-5.00) stay numeric.
  */
 function cell(value: unknown): string {
   if (value === null || value === undefined) return "";
   let text = String(value);
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  if (/^[=+\-@\t\r]/.test(text) && !PLAIN_NUMBER.test(text)) text = `'${text}`;
   if (/[",\n\r]/.test(text)) text = `"${text.replace(/"/g, '""')}"`;
   return text;
 }
@@ -30,11 +33,12 @@ const RECEIPT_HEADERS = [
   "total",
   "confidence",
   "items",
+  "file_name",
   "created_at",
 ];
 
-/** One row per receipt, with the line-item count. For "Export all". */
-export function receiptsToCsv(receipts: ReceiptWithItems[]): string {
+/** One row per receipt, with the line-item count. For the filtered export. */
+export function receiptsToCsv(receipts: ReceiptExportRow[]): string {
   const lines = [row(RECEIPT_HEADERS)];
   for (const receipt of receipts) {
     lines.push(
@@ -50,7 +54,8 @@ export function receiptsToCsv(receipts: ReceiptWithItems[]): string {
         receipt.tip,
         receipt.total,
         receipt.confidence,
-        receipt.items.length,
+        receipt.itemCount,
+        receipt.fileName,
         receipt.createdAt instanceof Date ? receipt.createdAt.toISOString() : receipt.createdAt,
       ]),
     );
