@@ -80,6 +80,10 @@ export const receipts = pgTable(
     storageSource: text("storage_source").notNull().default("managed"),
     rawJson: jsonb("raw_json"),
     errorMessage: text("error_message"),
+    /** Extraction attempts so far (1 = the upload itself); retries are capped on this. */
+    attempts: integer("attempts").notNull().default(1),
+    /** When the latest retry started; quota windows count it like a new upload. */
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
