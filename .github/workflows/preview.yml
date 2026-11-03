@@ -58,7 +58,7 @@ jobs:
           PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
         run: |
           alias="receipt-ocr-pr-${PR_NUMBER}.vercel.app"
-          vercel alias set "$PREVIEW_URL" "$alias" --token="$VERCEL_TOKEN"
+          vercel alias set "$PREVIEW_URL" "$alias" --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"
           echo "alias_url=https://$alias" >> "$GITHUB_OUTPUT"
 
       - name: Find existing preview comment
