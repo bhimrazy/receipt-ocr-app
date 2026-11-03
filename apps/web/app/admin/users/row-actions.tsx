@@ -1,149 +1,163 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
+import { ConfirmDialog, type ConfirmDialogProps } from "@receipt-ocr/ui/components/confirm-dialog";
 import {
-  Ban,
-  LogIn,
-  MoreHorizontal,
-  ShieldOff,
-  ShieldPlus,
-  UserX,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { useTransition } from "react";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@receipt-ocr/ui/components/dropdown-menu";
+import { toast } from "@receipt-ocr/ui/components/toast";
+import { Ban, LogIn, MoreHorizontal, ShieldOff, ShieldPlus, UserX } from "lucide-react";
+import { useState } from "react";
 import {
   banUserAction,
   impersonateUserAction,
   revokeUserSessionsAction,
   setRoleAction,
   unbanUserAction,
+  type ActionResult,
 } from "../actions";
-import type { AdminUser } from "./users-table";
 import { BanDialog } from "./ban-dialog";
+import type { AdminUser } from "./users-table";
+
+type Confirm = Omit<ConfirmDialogProps, "open" | "onOpenChange">;
 
 /**
- * Per-row admin actions. Every action goes through a server action that
- * re-verifies the admin role — nothing here is trusted authorization.
+ * Per-row admin actions, each confirmed first. The server actions re-check
+ * the admin role, so nothing here is trusted authorization.
  */
-export function RowActions({ user }: { user: AdminUser }) {
-  const [open, setOpen] = useState(false);
+export function RowActions({ user, currentUserId }: { user: AdminUser; currentUserId: string | null }) {
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [banOpen, setBanOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  const ref = useRef<HTMLDivElement>(null);
+  const isSelf = user.id === currentUserId;
+  const who = user.email;
 
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: PointerEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
-
-  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
-    setError(null);
-    setOpen(false);
-    startTransition(async () => {
-      // Actions that redirect (impersonate) resolve to undefined on the client.
+  // Impersonate redirects on success, so its promise resolves without a result.
+  function runner(action: () => Promise<ActionResult | undefined>, success?: string) {
+    return async (): Promise<string | void> => {
       const result = await action();
-      if (result && !result.ok) setError(result.error ?? "Action failed");
-    });
+      if (result && !result.ok) return result.error ?? "That didn't work. Try again.";
+      if (success) toast.add({ title: success, type: "success" });
+    };
   }
 
-  const menuItemClass =
-    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground disabled:opacity-50";
+  function ask(next: Confirm) {
+    setConfirm(next);
+    setConfirmOpen(true);
+  }
 
   return (
-    <div className="relative inline-block text-left" ref={ref}>
-      <Button
-        aria-label="Row actions"
-        disabled={pending}
-        onClick={() => setOpen((value) => !value)}
-        size="sm"
-        variant="ghost"
-      >
-        <MoreHorizontal className="size-4" />
-      </Button>
-      {open ? (
-        <div
-          className="absolute right-0 top-9 z-50 w-52 rounded-xl border border-border bg-card p-1.5 text-left shadow-2xl"
-          role="menu"
-        >
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button aria-label={`Actions for ${who}`} size="icon-sm" variant="ghost" />}>
+          <MoreHorizontal aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
           {user.role === "admin" ? (
-            <button
-              className={menuItemClass}
-              onClick={() => run(() => setRoleAction(user.id, "user"))}
-              type="button"
-            >
-              <ShieldOff className="size-4" />
-              Demote to user
-            </button>
+            isSelf ? null : (
+              <DropdownMenuItem
+                onClick={() =>
+                  ask({
+                    title: `Remove admin access for ${who}?`,
+                    description: "They lose access to the admin area. Their account and receipts stay as they are.",
+                    confirmLabel: "Remove admin access",
+                    destructive: true,
+                    onConfirm: runner(() => setRoleAction(user.id, "user"), `${who} is no longer an admin.`),
+                  })
+                }
+              >
+                <ShieldOff aria-hidden="true" />
+                Remove admin access
+              </DropdownMenuItem>
+            )
           ) : (
-            <button
-              className={menuItemClass}
-              onClick={() => run(() => setRoleAction(user.id, "admin"))}
-              type="button"
+            <DropdownMenuItem
+              onClick={() =>
+                ask({
+                  title: `Make ${who} an admin?`,
+                  description: "They can see every user and workspace, ban people and impersonate accounts.",
+                  confirmLabel: "Make admin",
+                  onConfirm: runner(() => setRoleAction(user.id, "admin"), `${who} is now an admin.`),
+                })
+              }
             >
-              <ShieldPlus className="size-4" />
-              Promote to admin
-            </button>
+              <ShieldPlus aria-hidden="true" />
+              Make admin
+            </DropdownMenuItem>
           )}
-          {user.banned ? (
-            <button
-              className={menuItemClass}
-              onClick={() => run(() => unbanUserAction(user.id))}
-              type="button"
-            >
-              <Ban className="size-4" />
-              Unban user
-            </button>
-          ) : (
-            <button
-              className={menuItemClass}
-              onClick={() => {
-                setOpen(false);
-                setBanOpen(true);
-              }}
-              type="button"
-            >
-              <Ban className="size-4" />
-              Ban user
-            </button>
-          )}
-          <button
-            className={menuItemClass}
-            onClick={() => run(() => revokeUserSessionsAction(user.id))}
-            type="button"
+          <DropdownMenuItem
+            onClick={() =>
+              ask({
+                title: `Sign ${who} out everywhere?`,
+                description: isSelf
+                  ? "This ends all your sessions, including this one. You'll need to sign in again."
+                  : "This ends all their sessions. They can sign in again right away.",
+                confirmLabel: "Revoke sessions",
+                destructive: true,
+                onConfirm: runner(() => revokeUserSessionsAction(user.id), `Signed ${who} out everywhere.`),
+              })
+            }
           >
-            <UserX className="size-4" />
+            <UserX aria-hidden="true" />
             Revoke sessions
-          </button>
-          <button
-            className={menuItemClass}
-            onClick={() => run(() => impersonateUserAction(user.id))}
-            type="button"
-          >
-            <LogIn className="size-4" />
-            Impersonate
-          </button>
-        </div>
-      ) : null}
+          </DropdownMenuItem>
+          {isSelf ? null : (
+            <>
+              <DropdownMenuItem
+                onClick={() =>
+                  ask({
+                    title: `Impersonate ${who}?`,
+                    description:
+                      "You'll be signed in as them, and everything you do runs as this user until you stop impersonating.",
+                    confirmLabel: "Impersonate",
+                    confirmText: who,
+                    onConfirm: runner(() => impersonateUserAction(user.id)),
+                  })
+                }
+              >
+                <LogIn aria-hidden="true" />
+                Impersonate
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {user.banned ? (
+                <DropdownMenuItem
+                  onClick={() =>
+                    ask({
+                      title: `Unban ${who}?`,
+                      description: "They can sign in again straight away.",
+                      confirmLabel: "Unban",
+                      onConfirm: runner(() => unbanUserAction(user.id), `${who} is unbanned.`),
+                    })
+                  }
+                >
+                  <Ban aria-hidden="true" />
+                  Unban
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={() => setBanOpen(true)} variant="destructive">
+                  <Ban aria-hidden="true" />
+                  Ban
+                </DropdownMenuItem>
+              )}
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-      {error ? (
-        <p className="absolute right-0 top-9 z-40 mt-9 w-52 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-left text-xs text-red-300">
-          {error}
-        </p>
-      ) : null}
+      {confirm ? <ConfirmDialog onOpenChange={setConfirmOpen} open={confirmOpen} {...confirm} /> : null}
 
       <BanDialog
-        onClose={() => setBanOpen(false)}
+        onOpenChange={setBanOpen}
         onSubmit={(reason, expiresInSeconds) =>
-          run(() => banUserAction(user.id, reason, expiresInSeconds))
+          runner(() => banUserAction(user.id, reason, expiresInSeconds), `${who} is banned.`)()
         }
         open={banOpen}
-        userEmail={user.email}
+        userEmail={who}
       />
-    </div>
+    </>
   );
 }

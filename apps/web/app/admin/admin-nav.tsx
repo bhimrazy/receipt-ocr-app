@@ -1,48 +1,37 @@
 "use client";
 
-import { Button } from "@receipt-ocr/ui/components/button";
-import { Building2, CreditCard, Users } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { ArrowLeft, Building2, CreditCard, Users } from "lucide-react";
+import { BottomTabBar, SidebarNav, type NavItem } from "@/components/app-nav";
 
-const sections = [
+// Defined here, not in the server layout: icon components can't cross the server/client boundary.
+const SECTIONS: NavItem[] = [
   { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/organizations", label: "Organizations", icon: Building2 },
+  { href: "/admin/organizations", label: "Workspaces", icon: Building2 },
 ];
+const BACK: NavItem = { href: "/app", label: "Back to app", icon: ArrowLeft, exact: true };
 
-export function AdminNav() {
-  const pathname = usePathname();
-
+export function AdminSidebarNav() {
   return (
-    <nav className="flex flex-col gap-1">
-      {sections.map((item) => {
-        const Icon = item.icon;
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-        return (
-          <Button
-            asChild
-            className="justify-start"
-            key={item.href}
-            variant={active ? "secondary" : "ghost"}
-          >
-            <Link href={item.href}>
-              <Icon className="size-4" />
-              {item.label}
-            </Link>
-          </Button>
-        );
-      })}
+    <div className="flex flex-col gap-1">
+      <SidebarNav items={SECTIONS} label="Admin" />
       <div
-        aria-disabled
-        className="mt-1 flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted-foreground/50"
-        title="Coming soon"
+        aria-disabled="true"
+        className="flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-muted-foreground"
       >
-        <CreditCard className="size-4" />
-        Plans &amp; Billing
+        <CreditCard aria-hidden="true" className="size-4" />
+        Billing
         <span className="ml-auto rounded-full border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide">
           Soon
         </span>
       </div>
-    </nav>
+    </div>
   );
+}
+
+export function AdminBackLink() {
+  return <SidebarNav items={[BACK]} label="App" />;
+}
+
+export function AdminTabBar() {
+  return <BottomTabBar items={[...SECTIONS, BACK]} label="Admin" />;
 }

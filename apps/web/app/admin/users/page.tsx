@@ -16,7 +16,7 @@ export default async function AdminUsersPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
-  await requireAdmin();
+  const session = await requireAdmin();
   const params = await searchParams;
   const search = (params.q ?? "").trim();
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
@@ -53,13 +53,14 @@ export default async function AdminUsersPage({
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Users</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {total} {total === 1 ? "user" : "users"} · manage roles, bans, sessions, and impersonation.
+          {total} {total === 1 ? "user" : "users"}. Manage roles, bans and sessions.
         </p>
       </div>
       <UsersTable
         page={page}
         pageSize={PAGE_SIZE}
         search={search}
+        currentUserId={session.user.id}
         total={total}
         users={users}
       />
