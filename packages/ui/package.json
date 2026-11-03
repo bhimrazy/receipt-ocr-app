@@ -6,12 +6,7 @@
   "exports": {
     "./styles.css": "./src/styles.css",
     "./lib/utils": "./src/lib/utils.ts",
-    "./components/accordion": "./src/components/accordion.tsx",
-    "./components/button": "./src/components/button.tsx",
-    "./components/card": "./src/components/card.tsx",
-    "./components/input": "./src/components/input.tsx",
-    "./components/badge": "./src/components/badge.tsx",
-    "./components/table": "./src/components/table.tsx"
+    "./components/*": "./src/components/*.tsx"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -19,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@radix-ui/react-slot": "1.2.4",
+    "@base-ui/react": "1.9.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "lucide-react": "1.62.0",
