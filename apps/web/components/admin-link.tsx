@@ -1,36 +1,22 @@
 "use client";
 
-import { authClient } from "@/lib/auth-client";
+import { DropdownMenuItem } from "@receipt-ocr/ui/components/dropdown-menu";
 import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { authClient } from "@/lib/auth-client";
 
 /**
- * Renders an "Admin" entry only for signed-in admins. Purely presentational —
- * the /admin routes are protected server-side by requireAdmin(); this just
- * hides the link from non-admins.
+ * "Admin" menu item, shown only to admins. Presentational: /admin is guarded
+ * server-side by requireAdmin(). Must render inside a DropdownMenu.
  */
-export function AdminLink({
-  className,
-  onNavigate,
-}: {
-  className?: string;
-  onNavigate?: () => void;
-}) {
+export function AdminMenuItem() {
   const { data: session } = authClient.useSession();
   if (session?.user?.role !== "admin") return null;
 
   return (
-    <Link
-      className={
-        className ??
-        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground"
-      }
-      href="/admin"
-      onClick={onNavigate}
-      role="menuitem"
-    >
-      <ShieldCheck className="size-4" />
+    <DropdownMenuItem render={<Link href="/admin" />}>
+      <ShieldCheck aria-hidden="true" />
       Admin
-    </Link>
+    </DropdownMenuItem>
   );
 }

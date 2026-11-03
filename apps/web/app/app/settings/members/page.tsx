@@ -1,7 +1,7 @@
 import { MembersManager } from "@/components/members-manager";
 import { authEnabled } from "@/lib/env";
 import { Card, CardContent } from "@receipt-ocr/ui/components/card";
-import { Users } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -11,16 +11,27 @@ export default function MembersPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-8">
-        <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-          <Link className="hover:text-foreground" href="/app/settings">
-            Settings
-          </Link>
-          <span>/</span>
-          <span className="text-foreground">Members</span>
-        </div>
+        <nav aria-label="Breadcrumb" className="mb-3">
+          <ol className="flex items-center gap-1 text-xs text-muted-foreground">
+            <li>
+              <Link
+                className="inline-flex items-center rounded-md py-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
+                href="/app/settings"
+              >
+                Settings
+              </Link>
+            </li>
+            <li aria-hidden="true">
+              <ChevronRight className="size-3.5" />
+            </li>
+            <li aria-current="page" className="text-foreground">
+              Members
+            </li>
+          </ol>
+        </nav>
         <h1 className="text-3xl font-semibold tracking-tight">Workspace members</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Invite teammates, manage roles, and control who can access the active workspace.
+          Invite teammates and choose what they can do. Everyone in a workspace shares its receipts.
         </p>
       </div>
 
@@ -28,12 +39,8 @@ export default function MembersPage() {
         <MembersManager />
       ) : (
         <Card>
-          <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
-            <Users className="size-5 text-muted-foreground" />
-            <span>
-              Auth is not configured, so workspaces are unavailable. Add <code className="font-mono">DATABASE_URL</code>{" "}
-              and <code className="font-mono">BETTER_AUTH_SECRET</code> to enable members and invitations.
-            </span>
+          <CardContent className="pt-5 text-sm text-muted-foreground">
+            Workspaces aren&apos;t available because sign-in isn&apos;t set up on this server.
           </CardContent>
         </Card>
       )}
