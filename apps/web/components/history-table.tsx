@@ -24,7 +24,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronLeft, ChevronRight, Download, Search, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { ReceiptSummary } from "@/app/app/_data/receipts-contract";
 import { ListPoller } from "@/components/processing-poller";
 import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
@@ -101,6 +101,14 @@ export function HistoryTable({
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState(filters.q ?? "");
+  // Keep the box in step with the URL (back/forward, Clear links): adjust state during render
+  // rather than in an effect.
+  const [syncedQ, setSyncedQ] = useState(filters.q);
+  if (syncedQ !== filters.q) {
+    setSyncedQ(filters.q);
+    setQuery(filters.q ?? "");
+  }
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const filtered = FILTER_KEYS.some((key) => filters[key]);
@@ -124,10 +132,24 @@ export function HistoryTable({
   // Debounced search so typing doesn't fire a request per keystroke.
   useEffect(() => {
     if (query.trim() === (filters.q ?? "")) return;
-    const timer = setTimeout(() => apply({ q: query.trim() || undefined }), 350);
-    return () => clearTimeout(timer);
+    // Fires after any navigation in between (e.g. Clear), so build from the URL at fire time.
+    searchTimer.current = setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const q = query.trim();
+      if (q) params.set("q", q);
+      else params.delete("q");
+      params.delete("page");
+      const qs = params.toString();
+      startTransition(() => router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false }));
+    }, 350);
+    return () => clearTimeout(searchTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  function clearFilters() {
+    clearTimeout(searchTimer.current);
+    setQuery("");
+  }
 
   const exportParams = new URLSearchParams();
   for (const key of FILTER_KEYS) if (filters[key]) exportParams.set(key, filters[key]!);
@@ -242,7 +264,7 @@ export function HistoryTable({
             <Link
               className={cn(buttonVariants({ variant: "ghost" }), "col-span-2 sm:col-span-1")}
               href={pathname}
-              onClick={() => setQuery("")}
+              onClick={clearFilters}
             >
               <X aria-hidden="true" />
               Clear filters
@@ -274,6 +296,7 @@ export function HistoryTable({
             <Link
               className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-1")}
               href={pathname}
+              onClick={clearFilters}
             >
               Clear filters
             </Link>
