@@ -3,7 +3,26 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "dist/**", "!.next/cache/**"]
+      "outputs": [".next/**", "dist/**", "!.next/cache/**"],
+      "env": [
+        "ADMIN_EMAILS",
+        "AUTH_REQUIRE_EMAIL_VERIFICATION",
+        "BETTER_AUTH_*",
+        "DATABASE_*",
+        "DIRECT_URL",
+        "EMAIL_FROM",
+        "GEMINI_*",
+        "GITHUB_CLIENT_*",
+        "GOOGLE_*",
+        "NEXT_OUTPUT",
+        "NEXT_PUBLIC_*",
+        "OCR_*",
+        "RESEND_API_KEY",
+        "S3_*",
+        "TRUSTED_IP_HEADERS",
+        "VERCEL",
+        "VERCEL_*"
+      ]
     },
     "dev": {
       "cache": false,
