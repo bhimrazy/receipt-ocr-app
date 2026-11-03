@@ -1,7 +1,14 @@
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@receipt-ocr/ui/components/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@receipt-ocr/ui/components/table";
 import type { ReceiptWithItems } from "@receipt-ocr/core";
 import { ArrowLeft, Loader2, ReceiptText, TriangleAlert } from "lucide-react";
 import Link from "next/link";
@@ -39,9 +46,13 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
 
       <ReceiptToolbar receipt={receipt}>
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">{receipt.merchant ?? "Untitled receipt"}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {receipt.merchant ?? "Untitled receipt"}
+          </h1>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <span className="font-mono text-sm text-muted-foreground">{receipt.receiptDate ?? "No date"}</span>
+            <span className="font-mono text-sm text-muted-foreground">
+              {receipt.receiptDate ?? "No date"}
+            </span>
             <Badge>{receipt.category ?? "Other"}</Badge>
             <span className="font-mono text-xs text-primary">{pct(receipt.confidence)}</span>
           </div>
@@ -52,12 +63,18 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
         <Card className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
           {receipt.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img alt="Receipt preview" className="max-h-[520px] rounded-lg object-contain" src={receipt.imageUrl} />
+            <img
+              alt="Receipt preview"
+              className="max-h-[520px] rounded-lg object-contain"
+              src={receipt.imageUrl}
+            />
           ) : (
             <>
               <ReceiptText className="mb-4 size-14 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">Receipt image preview</p>
-              <p className="mt-1 font-mono text-xs text-muted-foreground/60">{receipt.imageObjectKey ?? "demo_receipt.jpg"}</p>
+              <p className="mt-1 font-mono text-xs text-muted-foreground/60">
+                {receipt.imageObjectKey ?? "demo_receipt.jpg"}
+              </p>
             </>
           )}
         </Card>
@@ -65,7 +82,9 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <h2 className="text-sm font-medium">Extracted Data</h2>
-            <span className="font-mono text-xs text-muted-foreground">{receipt.items.length} items</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {receipt.items.length} items
+            </span>
           </div>
           <div className="p-5">
             <Table>
@@ -80,8 +99,12 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
                 {receipt.items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>{item.name}</TableCell>
-                    <TableCell className="text-center font-mono text-muted-foreground">{item.quantity}</TableCell>
-                    <TableCell className="text-right font-mono">{money(item.totalPrice, receipt.currency ?? "USD")}</TableCell>
+                    <TableCell className="text-center font-mono text-muted-foreground">
+                      {item.quantity}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {money(item.totalPrice, receipt.currency ?? "USD")}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -93,7 +116,9 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
               </div>
               <div className="mt-2 flex justify-between text-lg font-semibold">
                 <span>Total</span>
-                <span className="font-mono text-primary">{money(receipt.total, receipt.currency ?? "USD")}</span>
+                <span className="font-mono text-primary">
+                  {money(receipt.total, receipt.currency ?? "USD")}
+                </span>
               </div>
             </div>
           </div>
@@ -101,7 +126,9 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
       </div>
 
       <Card className="mt-5 max-h-72 overflow-auto bg-[#101012] p-5">
-        <pre className="whitespace-pre-wrap font-mono text-xs leading-6 text-muted-foreground">{json}</pre>
+        <pre className="whitespace-pre-wrap font-mono text-xs leading-6 text-muted-foreground">
+          {json}
+        </pre>
       </Card>
     </div>
   );

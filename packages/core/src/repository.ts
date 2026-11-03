@@ -103,7 +103,9 @@ export const EXTRACTION_FAILED_MESSAGE =
 const staleInterval = sql.raw(`interval '${STALE_AFTER_MS / 1000} seconds'`);
 const isStale = sql`(${receipts.status} in ('uploaded', 'processing') and ${receipts.updatedAt} < now() - ${staleInterval})`;
 const effectiveStatus = sql<ReceiptStatus>`case when ${isStale} then 'failed' else ${receipts.status}::text end`;
-const effectiveError = sql<string | null>`case when ${isStale} then ${STALE_MESSAGE} else ${receipts.errorMessage} end`;
+const effectiveError = sql<
+  string | null
+>`case when ${isStale} then ${STALE_MESSAGE} else ${receipts.errorMessage} end`;
 
 export function isStaleReceipt(row: Pick<Receipt, "status" | "updatedAt">, now = Date.now()) {
   return (
@@ -127,7 +129,10 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
   }
   if (filters.category) conditions.push(eq(receipts.category, filters.category));
   if (filters.status === "needs-review") {
-    conditions.push(eq(receipts.status, "completed"), lt(receipts.confidence, String(NEEDS_REVIEW_BELOW)));
+    conditions.push(
+      eq(receipts.status, "completed"),
+      lt(receipts.confidence, String(NEEDS_REVIEW_BELOW)),
+    );
   } else if (filters.status) {
     conditions.push(sql`${effectiveStatus} = ${filters.status}`);
   }
@@ -182,10 +187,17 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       scope: ReceiptScope,
       extraction: ReceiptExtraction,
     ) => Effect.Effect<ReceiptWithItems | null, DbError>;
-    readonly fail: (id: string, scope: ReceiptScope, message: string) => Effect.Effect<void, DbError>;
+    readonly fail: (
+      id: string,
+      scope: ReceiptScope,
+      message: string,
+    ) => Effect.Effect<void, DbError>;
     /** Atomically moves a failed (or stale) receipt back to `processing`. */
     readonly claimRetry: (id: string, scope: ReceiptScope) => Effect.Effect<RetryClaim, DbError>;
-    readonly get: (id: string, scope: ReceiptScope) => Effect.Effect<ReceiptWithItems | null, DbError>;
+    readonly get: (
+      id: string,
+      scope: ReceiptScope,
+    ) => Effect.Effect<ReceiptWithItems | null, DbError>;
     readonly list: (
       scope: ReceiptScope,
       filters: ReceiptFilters,
@@ -197,7 +209,11 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       limit: number,
     ) => Effect.Effect<ReceiptExportRow[], DbError>;
     /** Applies user corrections; false when nothing matched. */
-    readonly update: (id: string, scope: ReceiptScope, patch: ReceiptPatch) => Effect.Effect<boolean, DbError>;
+    readonly update: (
+      id: string,
+      scope: ReceiptScope,
+      patch: ReceiptPatch,
+    ) => Effect.Effect<boolean, DbError>;
     /** Deletes the row (items cascade); returns its object key, or null when nothing matched or not allowed. */
     readonly remove: (
       id: string,
@@ -309,7 +325,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             with: { items: true },
           });
           if (!row) return null;
-          return isStaleReceipt(row) ? { ...row, status: "failed" as const, errorMessage: STALE_MESSAGE } : row;
+          return isStaleReceipt(row)
+            ? { ...row, status: "failed" as const, errorMessage: STALE_MESSAGE }
+            : row;
         }),
 
       list: (scope, filters, page) =>
@@ -348,7 +366,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
 
       update: (id, scope, patch) =>
         use(async (db) => {
-          const fields = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+          const fields = Object.fromEntries(
+            Object.entries(patch).filter(([, v]) => v !== undefined),
+          );
           const [row] = await db
             .update(receipts)
             .set({ ...fields, updatedAt: new Date() })

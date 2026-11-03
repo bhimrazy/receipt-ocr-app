@@ -34,7 +34,11 @@ export async function POST(request: Request) {
     }
 
     const limit = await runtime.runPromise(
-      hitRateLimit(`contact:${clientIp(request) ?? "unknown"}`, RATE_LIMIT.windowMs, RATE_LIMIT.max),
+      hitRateLimit(
+        `contact:${clientIp(request) ?? "unknown"}`,
+        RATE_LIMIT.windowMs,
+        RATE_LIMIT.max,
+      ),
     );
     if (!limit.allowed) {
       event.status_code = 429;

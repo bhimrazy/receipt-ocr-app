@@ -42,7 +42,9 @@ export function sniffMediaType(bytes: Uint8Array): AcceptedMediaType | null {
   return null;
 }
 
-export const validateUpload = (bytes: Uint8Array): Effect.Effect<AcceptedMediaType, InvalidInput> => {
+export const validateUpload = (
+  bytes: Uint8Array,
+): Effect.Effect<AcceptedMediaType, InvalidInput> => {
   if (bytes.length === 0) return Effect.fail(new InvalidInput({ message: "The file is empty" }));
   if (bytes.length > MAX_UPLOAD_BYTES) {
     return Effect.fail(new InvalidInput({ message: "Receipt files must be 10 MB or smaller" }));
@@ -50,5 +52,7 @@ export const validateUpload = (bytes: Uint8Array): Effect.Effect<AcceptedMediaTy
   const mediaType = sniffMediaType(bytes);
   return mediaType
     ? Effect.succeed(mediaType)
-    : Effect.fail(new InvalidInput({ message: "Upload a JPEG, PNG, WebP or HEIC photo, or a PDF" }));
+    : Effect.fail(
+        new InvalidInput({ message: "Upload a JPEG, PNG, WebP or HEIC photo, or a PDF" }),
+      );
 };

@@ -19,7 +19,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!session || !scope) return jsonError(401, "Unauthorized");
   const { id } = await params;
   const requestId = crypto.randomUUID();
-  const event: WideEvent = { event: "receipt.retry", request_id: requestId, receipt_id: id, user_id: scope.userId };
+  const event: WideEvent = {
+    event: "receipt.retry",
+    request_id: requestId,
+    receipt_id: id,
+    user_id: scope.userId,
+  };
 
   const response = await runRoute(
     enforceUploadQuota(session.user.id, planFor(session)).pipe(

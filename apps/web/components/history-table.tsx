@@ -6,7 +6,14 @@ import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@receipt-ocr/ui/components/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@receipt-ocr/ui/components/table";
 import { ChevronLeft, ChevronRight, Download, Search, Upload } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -76,7 +83,12 @@ export function HistoryTable({
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder="Search merchants..." value={search} />
+          <Input
+            className="pl-9"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search merchants..."
+            value={search}
+          />
         </div>
         <div className="flex flex-wrap gap-2">
           {categories.map((item) => (
@@ -149,12 +161,18 @@ export function HistoryTable({
                   </span>
                 </TableCell>
                 <TableCell className="font-medium">{receipt.merchant ?? "Untitled"}</TableCell>
-                <TableCell className="font-mono text-muted-foreground">{receipt.receiptDate ?? "No date"}</TableCell>
+                <TableCell className="font-mono text-muted-foreground">
+                  {receipt.receiptDate ?? "No date"}
+                </TableCell>
                 <TableCell>
                   <Badge variant="secondary">{receipt.category ?? "Other"}</Badge>
                 </TableCell>
-                <TableCell className="text-right font-mono">{money(receipt.total, receipt.currency ?? "USD")}</TableCell>
-                <TableCell className="text-right font-mono text-primary">{pct(receipt.confidence)}</TableCell>
+                <TableCell className="text-right font-mono">
+                  {money(receipt.total, receipt.currency ?? "USD")}
+                </TableCell>
+                <TableCell className="text-right font-mono text-primary">
+                  {pct(receipt.confidence)}
+                </TableCell>
                 <TableCell className="text-right">
                   <Button asChild size="sm" variant="outline">
                     <Link href={`/app/receipts/${receipt.id}`}>Open</Link>
@@ -172,7 +190,12 @@ export function HistoryTable({
             Page {page} of {totalPages}
           </span>
           <div className="flex gap-2">
-            <Button disabled={page <= 1} onClick={() => goToPage(page - 1)} size="sm" variant="outline">
+            <Button
+              disabled={page <= 1}
+              onClick={() => goToPage(page - 1)}
+              size="sm"
+              variant="outline"
+            >
               <ChevronLeft className="size-4" />
               Prev
             </Button>

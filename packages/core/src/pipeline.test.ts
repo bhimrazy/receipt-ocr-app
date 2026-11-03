@@ -36,7 +36,11 @@ function harness(options: { storagePut?: "fail"; ocr?: "fixture" | "fail" | "unc
       Effect.sync(() => {
         const row = rows.get(id);
         if (!row) return null;
-        Object.assign(row, { status: "completed", merchant: extraction.merchant, errorMessage: null });
+        Object.assign(row, {
+          status: "completed",
+          merchant: extraction.merchant,
+          errorMessage: null,
+        });
         return row;
       }),
     fail: (id, _scope, message) =>
@@ -81,7 +85,8 @@ function harness(options: { storagePut?: "fail"; ocr?: "fixture" | "fail" | "unc
 
   const ocr = Layer.succeed(Ocr, {
     extract: (file) => {
-      if (options.ocr === "unconfigured") return Effect.fail(new NotConfigured({ message: "no key" }));
+      if (options.ocr === "unconfigured")
+        return Effect.fail(new NotConfigured({ message: "no key" }));
       const text = new TextDecoder().decode(file.data);
       if (options.ocr === "fail" || text.includes(FIXTURE_FAIL_MARKER)) {
         return Effect.fail(new OcrError({ message: "Receipt extraction failed" }));
@@ -131,7 +136,10 @@ describe("extractStored", () => {
     const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body }));
     if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
     const id = ingested.value.receipt.id;
-    return { id, exit: await h.run(extractStored({ receiptId: id, scope, file: ingested.value.file })) };
+    return {
+      id,
+      exit: await h.run(extractStored({ receiptId: id, scope, file: ingested.value.file })),
+    };
   };
 
   it("completes the receipt on success", async () => {
@@ -145,7 +153,10 @@ describe("extractStored", () => {
     const h = harness({ ocr: "fail" });
     const { id, exit } = await ingestAndExtract(h);
     expect(Exit.isFailure(exit)).toBe(true);
-    expect(h.rows.get(id)).toMatchObject({ status: "failed", errorMessage: EXTRACTION_FAILED_MESSAGE });
+    expect(h.rows.get(id)).toMatchObject({
+      status: "failed",
+      errorMessage: EXTRACTION_FAILED_MESSAGE,
+    });
     expect(h.rows.get(id)?.errorMessage).not.toMatch(/gemini/i);
   });
 

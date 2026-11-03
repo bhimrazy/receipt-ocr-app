@@ -5,7 +5,13 @@ import { authEnabled } from "@/lib/env";
 import { getWorkspaceAllowance } from "@/lib/workspaces";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { Gauge, Users } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";

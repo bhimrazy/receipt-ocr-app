@@ -45,7 +45,9 @@ export const FIXTURE_RECEIPTS: readonly ReceiptExtraction[] = [
     tip: null,
     total: 60,
     confidence: 0.72,
-    items: [{ name: "Super E10 33.9 L", quantity: 1, unitPrice: 60, totalPrice: 60, confidence: 0.7 }],
+    items: [
+      { name: "Super E10 33.9 L", quantity: 1, unitPrice: 60, totalPrice: 60, confidence: 0.7 },
+    ],
   },
 ];
 

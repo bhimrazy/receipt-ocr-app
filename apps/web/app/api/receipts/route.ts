@@ -25,7 +25,12 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const startedAt = Date.now();
   const requestId = crypto.randomUUID();
-  const event: WideEvent = { event: "receipt.upload", method: "POST", path: "/api/receipts", request_id: requestId };
+  const event: WideEvent = {
+    event: "receipt.upload",
+    method: "POST",
+    path: "/api/receipts",
+    request_id: requestId,
+  };
   const respond = (response: Response) => {
     event.status_code ??= response.status;
     event.duration_ms = Date.now() - startedAt;
@@ -41,7 +46,8 @@ export async function POST(request: Request) {
   const [session, scope] = await Promise.all([getSession(), getActiveScope()]);
   if (!session) return respond(jsonError(401, "Unauthorized"));
   event.user_id = session.user.id;
-  if (!scope) return respond(jsonError(409, "No active workspace. Pick or create one before uploading."));
+  if (!scope)
+    return respond(jsonError(409, "No active workspace. Pick or create one before uploading."));
   event.organization_id = scope.organizationId;
 
   const form = await formPromise;
@@ -71,10 +77,12 @@ export async function POST(request: Request) {
         event.outcome = "queued";
         // Extraction continues after the response; the client polls GET /api/receipts/:id.
         after(() =>
-          runBackground(
-            extractStored({ receiptId, scope, file: ingested.file }),
-            { event: "receipt.extract.background", request_id: requestId, receipt_id: receiptId, user_id: scope.userId },
-          ),
+          runBackground(extractStored({ receiptId, scope, file: ingested.file }), {
+            event: "receipt.extract.background",
+            request_id: requestId,
+            receipt_id: receiptId,
+            user_id: scope.userId,
+          }),
         );
         return NextResponse.json(
           { receiptId, status: "processing", requestId, timings: ingested.timings },
@@ -92,9 +100,11 @@ export async function POST(request: Request) {
       event.receipt_id = ingested.receipt.id;
       // The upload itself succeeded: an extraction failure is reported as the
       // receipt's state (failed, retryable), not as a failed request.
-      const extracted = yield* extractStored({ receiptId: ingested.receipt.id, scope, file: ingested.file }).pipe(
-        Effect.either,
-      );
+      const extracted = yield* extractStored({
+        receiptId: ingested.receipt.id,
+        scope,
+        file: ingested.file,
+      }).pipe(Effect.either);
       return { receiptId: ingested.receipt.id, ingested, extracted };
     }),
     ({ receiptId, ingested, extracted }) => {

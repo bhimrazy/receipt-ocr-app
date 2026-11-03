@@ -108,15 +108,25 @@ function matchesPreview(row: ReceiptSummary, filters: ReceiptFilters): boolean {
 }
 
 /** Server-side search and filtering of the active workspace's receipts, one page at a time. */
-export async function listReceiptSummaries(filters: ReceiptListFilters): Promise<ReceiptSummaryPage> {
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.trunc(filters.pageSize ?? HISTORY_PAGE_SIZE)));
+export async function listReceiptSummaries(
+  filters: ReceiptListFilters,
+): Promise<ReceiptSummaryPage> {
+  const pageSize = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, Math.trunc(filters.pageSize ?? HISTORY_PAGE_SIZE)),
+  );
   const page = Math.max(1, Math.trunc(filters.page ?? 1));
   const clean = cleanFilters(filters);
 
   const scope = await getActiveScope();
   if (!scope || !process.env.DATABASE_URL) {
     const all = previewSummaries().filter((row) => matchesPreview(row, clean));
-    return { rows: all.slice((page - 1) * pageSize, page * pageSize), total: all.length, page, pageSize };
+    return {
+      rows: all.slice((page - 1) * pageSize, page * pageSize),
+      total: all.length,
+      page,
+      pageSize,
+    };
   }
 
   const { rows, total } = await runtime.runPromise(
@@ -130,8 +140,13 @@ export async function listReceiptSummaries(filters: ReceiptListFilters): Promise
 export const MAX_EXPORT_ROWS = 5000;
 
 /** Rows for the CSV export: the same filters as History, up to MAX_EXPORT_ROWS. */
-export const exportRows = (scope: { organizationId: string; userId: string }, filters: ReceiptListFilters) =>
-  Effect.flatMap(ReceiptRepo, (repo) => repo.exportRows(scope, cleanFilters(filters), MAX_EXPORT_ROWS + 1)).pipe(
+export const exportRows = (
+  scope: { organizationId: string; userId: string },
+  filters: ReceiptListFilters,
+) =>
+  Effect.flatMap(ReceiptRepo, (repo) =>
+    repo.exportRows(scope, cleanFilters(filters), MAX_EXPORT_ROWS + 1),
+  ).pipe(
     Effect.map((rows): { rows: ReceiptExportRow[]; truncated: boolean } => ({
       rows: rows.slice(0, MAX_EXPORT_ROWS),
       truncated: rows.length > MAX_EXPORT_ROWS,

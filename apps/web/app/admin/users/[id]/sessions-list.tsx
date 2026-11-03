@@ -17,13 +17,7 @@ export interface AdminSession {
   impersonatedBy: string | null;
 }
 
-export function SessionsList({
-  sessions,
-  userId,
-}: {
-  sessions: AdminSession[];
-  userId: string;
-}) {
+export function SessionsList({ sessions, userId }: { sessions: AdminSession[]; userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -68,9 +62,7 @@ export function SessionsList({
               <div className="flex min-w-0 items-center gap-3">
                 <Monitor className="size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
-                  <div className="truncate text-sm">
-                    {session.userAgent || "Unknown device"}
-                  </div>
+                  <div className="truncate text-sm">{session.userAgent || "Unknown device"}</div>
                   <div className="text-xs text-muted-foreground">
                     {session.ipAddress || "no ip"} · expires{" "}
                     {new Date(session.expiresAt).toLocaleDateString()}
@@ -78,9 +70,7 @@ export function SessionsList({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {session.impersonatedBy ? (
-                  <Badge variant="secondary">Impersonated</Badge>
-                ) : null}
+                {session.impersonatedBy ? <Badge variant="secondary">Impersonated</Badge> : null}
                 <Button
                   disabled={pending}
                   onClick={() => run(() => revokeUserSessionAction(session.token, userId))}

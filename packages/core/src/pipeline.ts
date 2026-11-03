@@ -2,11 +2,7 @@ import { receiptObjectKey } from "@receipt-ocr/storage";
 import { Duration, Effect } from "effect";
 import { Conflict, NotFound, StorageError } from "./errors";
 import { sniffMediaType, validateUpload } from "./files";
-import {
-  EXTRACTION_FAILED_MESSAGE,
-  ReceiptRepo,
-  type ReceiptScope,
-} from "./repository";
+import { EXTRACTION_FAILED_MESSAGE, ReceiptRepo, type ReceiptScope } from "./repository";
 import { Ocr, Storage } from "./services";
 
 export type StepTiming = { step: string; ms: number };
@@ -39,7 +35,12 @@ export const ingestUpload = (input: { scope: ReceiptScope; fileName: string; bod
     const receipt = yield* timed(
       timings,
       "db.insert",
-      repo.insert({ id, scope: input.scope, fileName: input.fileName.slice(0, 200), imageObjectKey }),
+      repo.insert({
+        id,
+        scope: input.scope,
+        fileName: input.fileName.slice(0, 200),
+        imageObjectKey,
+      }),
     ).pipe(
       // No row means nothing would ever delete the object.
       Effect.tapError(() => storage.remove([imageObjectKey]).pipe(Effect.ignore)),
@@ -52,7 +53,11 @@ export const ingestUpload = (input: { scope: ReceiptScope; fileName: string; bod
  * failed (retryable) with a message fit for the UI; the cause stays in the
  * typed error for logs.
  */
-export const extractStored = (input: { receiptId: string; scope: ReceiptScope; file: StoredFile }) =>
+export const extractStored = (input: {
+  receiptId: string;
+  scope: ReceiptScope;
+  file: StoredFile;
+}) =>
   Effect.gen(function* () {
     const repo = yield* ReceiptRepo;
     const ocr = yield* Ocr;
@@ -68,7 +73,9 @@ export const extractStored = (input: { receiptId: string; scope: ReceiptScope; f
   }).pipe(Effect.tapError(() => markFailed(input.receiptId, input.scope)));
 
 const markFailed = (receiptId: string, scope: ReceiptScope) =>
-  Effect.flatMap(ReceiptRepo, (repo) => repo.fail(receiptId, scope, EXTRACTION_FAILED_MESSAGE)).pipe(
+  Effect.flatMap(ReceiptRepo, (repo) =>
+    repo.fail(receiptId, scope, EXTRACTION_FAILED_MESSAGE),
+  ).pipe(
     Effect.catchAll((error) =>
       Effect.logError("receipt.fail_not_recorded", { receiptId, error: error.message }),
     ),
@@ -92,7 +99,8 @@ export const claimRetry = (input: { receiptId: string; scope: ReceiptScope }) =>
     }
     const data = yield* storage.get(claim.imageObjectKey);
     const mediaType = sniffMediaType(data);
-    if (!mediaType) return yield* new StorageError({ message: "The stored file is not a supported type" });
+    if (!mediaType)
+      return yield* new StorageError({ message: "The stored file is not a supported type" });
     return { data, mediaType } satisfies StoredFile;
   }).pipe(
     // Claimed but unreadable: put it back to failed rather than leave it processing.
@@ -116,7 +124,10 @@ export const deleteReceipt = (input: { receiptId: string; scope: ReceiptScope })
         .remove([removed.imageObjectKey])
         .pipe(
           Effect.catchAll((error) =>
-            Effect.logError("receipt.object_delete_failed", { key: removed.imageObjectKey, error: error.message }),
+            Effect.logError("receipt.object_delete_failed", {
+              key: removed.imageObjectKey,
+              error: error.message,
+            }),
           ),
         );
     }

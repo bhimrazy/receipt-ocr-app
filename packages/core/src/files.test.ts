@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { MAX_UPLOAD_BYTES, sniffMediaType, validateUpload } from "./files";
 
 const bytes = (...parts: (number[] | string)[]) =>
-  new Uint8Array(parts.flatMap((part) => (typeof part === "string" ? [...new TextEncoder().encode(part)] : part)));
+  new Uint8Array(
+    parts.flatMap((part) =>
+      typeof part === "string" ? [...new TextEncoder().encode(part)] : part,
+    ),
+  );
 
 describe("sniffMediaType (U3)", () => {
   it.each([

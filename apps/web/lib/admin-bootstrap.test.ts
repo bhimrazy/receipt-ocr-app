@@ -13,6 +13,8 @@ describe("isBootstrapAdmin (B2)", () => {
   });
 
   it("ignores verified emails that are not listed", () => {
-    expect(isBootstrapAdmin({ email: "intern@corp.test", emailVerified: true }, admins)).toBe(false);
+    expect(isBootstrapAdmin({ email: "intern@corp.test", emailVerified: true }, admins)).toBe(
+      false,
+    );
   });
 });

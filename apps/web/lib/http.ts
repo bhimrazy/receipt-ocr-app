@@ -137,7 +137,8 @@ export async function readFormData(
   maxFileBytes: number,
 ): Promise<FormData | Response> {
   const limit = maxFileBytes + MULTIPART_OVERHEAD;
-  const tooLarge = () => jsonError(413, `Receipt files must be ${maxFileBytes / 1024 / 1024} MB or smaller`);
+  const tooLarge = () =>
+    jsonError(413, `Receipt files must be ${maxFileBytes / 1024 / 1024} MB or smaller`);
   const declared = Number(request.headers.get("content-length") ?? "");
   if (declared > limit) return tooLarge();
   if (!request.body) return jsonError(400, "A receipt file is required");

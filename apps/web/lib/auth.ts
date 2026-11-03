@@ -53,7 +53,11 @@ async function deliver(input: SendEmailInput) {
  * Grants the admin role to an ADMIN_EMAILS address only once it is verified;
  * granting it at sign-up would hand admin to whoever registers the address first.
  */
-async function promoteIfBootstrapAdmin(user: { id: string; email: string; emailVerified: boolean }) {
+async function promoteIfBootstrapAdmin(user: {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+}) {
   if (!isBootstrapAdmin(user, authEnv.adminEmails)) return;
   await db
     .update(userTable)

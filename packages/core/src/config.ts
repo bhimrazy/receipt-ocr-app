@@ -32,7 +32,9 @@ const storageConfig = Config.all({
 
 export const loadStorageConfig: Effect.Effect<S3StorageConfig, NotConfigured> = storageConfig.pipe(
   Effect.map((c) => ({ ...c, secretAccessKey: Redacted.value(c.secretAccessKey) })),
-  Effect.mapError((cause) => new NotConfigured({ message: "Receipt storage is not configured", cause })),
+  Effect.mapError(
+    (cause) => new NotConfigured({ message: "Receipt storage is not configured", cause }),
+  ),
 );
 
 export type OcrSettings = {
@@ -41,9 +43,10 @@ export type OcrSettings = {
   timeoutMs: number;
 };
 
-const ocrProvider = Config.literal("google", "fixture")("OCR_PROVIDER").pipe(
-  Config.withDefault("google" as const),
-);
+const ocrProvider = Config.literal(
+  "google",
+  "fixture",
+)("OCR_PROVIDER").pipe(Config.withDefault("google" as const));
 
 const googleConfig = Config.all({
   model: Config.string("GEMINI_MODEL").pipe(Config.withDefault("gemini-3.7-flash")),
@@ -60,7 +63,9 @@ export const loadOcrConfig: Effect.Effect<OcrSettings, NotConfigured> = Effect.g
     timeoutMs: google.timeoutMs,
   } satisfies OcrSettings;
 }).pipe(
-  Effect.mapError((cause) => new NotConfigured({ message: "Receipt extraction is not configured", cause })),
+  Effect.mapError(
+    (cause) => new NotConfigured({ message: "Receipt extraction is not configured", cause }),
+  ),
 );
 
 /** Optional ceiling on receipts created per UTC day across all users: a spend guard. */
@@ -68,5 +73,7 @@ export const loadDailyOcrCap: Effect.Effect<number | undefined, NotConfigured> =
   Config.integer("OCR_DAILY_CAP"),
 ).pipe(
   Effect.map(Option.getOrUndefined),
-  Effect.mapError((cause) => new NotConfigured({ message: "OCR_DAILY_CAP must be an integer", cause })),
+  Effect.mapError(
+    (cause) => new NotConfigured({ message: "OCR_DAILY_CAP must be an integer", cause }),
+  ),
 );

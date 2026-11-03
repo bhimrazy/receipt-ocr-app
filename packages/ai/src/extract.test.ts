@@ -23,8 +23,8 @@ describe("extractReceipt with the fixture provider", () => {
   });
 
   it("fails on demand, to exercise the failure path end to end", async () => {
-    await expect(extractReceipt({ model: "fixture", file: file(`a ${FIXTURE_FAIL_MARKER} b`) })).rejects.toThrow(
-      /simulated/,
-    );
+    await expect(
+      extractReceipt({ model: "fixture", file: file(`a ${FIXTURE_FAIL_MARKER} b`) }),
+    ).rejects.toThrow(/simulated/);
   });
 });

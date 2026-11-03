@@ -1,14 +1,7 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
-import {
-  Ban,
-  LogIn,
-  MoreHorizontal,
-  ShieldOff,
-  ShieldPlus,
-  UserX,
-} from "lucide-react";
+import { Ban, LogIn, MoreHorizontal, ShieldOff, ShieldPlus, UserX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTransition } from "react";
 import {

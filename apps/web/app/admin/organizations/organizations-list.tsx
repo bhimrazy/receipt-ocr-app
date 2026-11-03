@@ -31,11 +31,7 @@ function formatDate(iso: string): string {
   });
 }
 
-export function OrganizationsList({
-  organizations,
-}: {
-  organizations: AdminOrganization[];
-}) {
+export function OrganizationsList({ organizations }: { organizations: AdminOrganization[] }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (

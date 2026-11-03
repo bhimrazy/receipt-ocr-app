@@ -57,7 +57,8 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
 
   const orgs = organizations ?? [];
   const limitReached = !canCreate;
-  const current = activeOrg ?? orgs.find((org) => org.id === session?.session.activeOrganizationId) ?? orgs[0];
+  const current =
+    activeOrg ?? orgs.find((org) => org.id === session?.session.activeOrganizationId) ?? orgs[0];
 
   async function handleSwitch(organizationId: string) {
     if (organizationId === current?.id) {
@@ -81,10 +82,14 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
     setError(null);
     setCreating(true);
     const trimmed = name.trim();
-    const slug = `${trimmed.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "")}-${Math.random()
-      .toString(36)
-      .slice(2, 7)}`;
-    const { data, error: createError } = await authClient.organization.create({ name: trimmed, slug });
+    const slug = `${trimmed
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")}-${Math.random().toString(36).slice(2, 7)}`;
+    const { data, error: createError } = await authClient.organization.create({
+      name: trimmed,
+      slug,
+    });
     setCreating(false);
     if (createError || !data) {
       // Server-side organizationLimit rejects when the plan cap is hit; surface it.
@@ -110,7 +115,9 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
         <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/15 font-mono text-xs font-semibold text-primary">
           {initialFor(current?.name ?? "?")}
         </span>
-        <span className="min-w-0 flex-1 truncate font-medium">{current?.name ?? "No workspace"}</span>
+        <span className="min-w-0 flex-1 truncate font-medium">
+          {current?.name ?? "No workspace"}
+        </span>
         <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
       </button>
 

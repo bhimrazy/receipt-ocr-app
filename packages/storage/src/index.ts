@@ -76,7 +76,10 @@ export async function getObject(config: S3StorageConfig, key: string): Promise<U
 }
 
 /** Deletes keys in batches of the S3 maximum (1000) per request. */
-export async function deleteObjects(config: S3StorageConfig, keys: readonly string[]): Promise<void> {
+export async function deleteObjects(
+  config: S3StorageConfig,
+  keys: readonly string[],
+): Promise<void> {
   for (let i = 0; i < keys.length; i += 1000) {
     const batch = keys.slice(i, i + 1000);
     const result = await s3Client(config).send(
@@ -86,15 +89,15 @@ export async function deleteObjects(config: S3StorageConfig, keys: readonly stri
       }),
     );
     if (result.Errors?.length) {
-      throw new Error(`Failed to delete ${result.Errors.length} object(s): ${result.Errors[0]?.Message}`);
+      throw new Error(
+        `Failed to delete ${result.Errors.length} object(s): ${result.Errors[0]?.Message}`,
+      );
     }
   }
 }
 
 export async function signedGetUrl(config: S3StorageConfig, key: string, expiresIn = 60 * 10) {
-  return getSignedUrl(
-    s3Client(config),
-    new GetObjectCommand({ Bucket: config.bucket, Key: key }),
-    { expiresIn },
-  );
+  return getSignedUrl(s3Client(config), new GetObjectCommand({ Bucket: config.bucket, Key: key }), {
+    expiresIn,
+  });
 }

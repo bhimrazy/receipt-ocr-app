@@ -36,14 +36,23 @@ const nameFor = (user: { name?: string | null; email: string }) =>
  * transaction, so a failure can't leave an org without its owner. Idempotent:
  * returns null when the personal workspace already exists.
  */
-export const ensurePersonalWorkspace = (user: { id: string; name?: string | null; email: string }) =>
+export const ensurePersonalWorkspace = (user: {
+  id: string;
+  name?: string | null;
+  email: string;
+}) =>
   Effect.flatMap(Db, ({ use }) =>
     use((db) =>
       db.transaction(async (tx) => {
         const now = new Date();
         const [org] = await tx
           .insert(organization)
-          .values({ id: crypto.randomUUID(), name: nameFor(user), slug: slugFor(user.id), createdAt: now })
+          .values({
+            id: crypto.randomUUID(),
+            name: nameFor(user),
+            slug: slugFor(user.id),
+            createdAt: now,
+          })
           .onConflictDoNothing({ target: organization.slug })
           .returning({ id: organization.id });
         if (!org) return null;

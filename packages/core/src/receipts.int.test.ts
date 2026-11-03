@@ -52,7 +52,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
   });
 
   afterAll(async () => {
-    for (const owner of [a, b]) await run(purgeReceiptFiles({ organizationId: owner.organizationId }));
+    for (const owner of [a, b])
+      await run(purgeReceiptFiles({ organizationId: owner.organizationId }));
     await run(
       Effect.flatMap(Db, ({ use }) =>
         use(async (db) => {
@@ -108,8 +109,14 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         ),
       ),
     );
-    expect((await run(resolveScope(b.userId, a.organizationId)))?.organizationId).toBe(a.organizationId);
-    await run(Effect.flatMap(Db, ({ use }) => use((db) => db.delete(member).where(sql`${member.id} = ${`${tag}-m`}`))));
+    expect((await run(resolveScope(b.userId, a.organizationId)))?.organizationId).toBe(
+      a.organizationId,
+    );
+    await run(
+      Effect.flatMap(Db, ({ use }) =>
+        use((db) => db.delete(member).where(sql`${member.id} = ${`${tag}-m`}`)),
+      ),
+    );
     const scope = await run(resolveScope(b.userId, a.organizationId));
     expect(scope?.organizationId).toBe(b.organizationId);
     expect(await run(Effect.flatMap(ReceiptRepo, (r) => r.get(receiptId, scope!)))).toBeNull();
@@ -151,10 +158,14 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     );
     const read = await run(Effect.flatMap(ReceiptRepo, (r) => r.get(stuck.receipt.id, a)));
     expect(read?.status).toBe("failed");
-    const failedRows = await run(Effect.flatMap(ReceiptRepo, (r) => r.list(a, { status: "failed" }, { limit: 50, offset: 0 })));
+    const failedRows = await run(
+      Effect.flatMap(ReceiptRepo, (r) => r.list(a, { status: "failed" }, { limit: 50, offset: 0 })),
+    );
     expect(failedRows.rows.map((row) => row.id)).toContain(stuck.receipt.id);
     expect((await run(checkQuota(a.userId, limits))).used).toBe(before.used - 1);
-    expect(await run(Effect.flatMap(ReceiptRepo, (r) => r.claimRetry(stuck.receipt.id, a)))).toMatchObject({
+    expect(
+      await run(Effect.flatMap(ReceiptRepo, (r) => r.claimRetry(stuck.receipt.id, a))),
+    ).toMatchObject({
       kind: "claimed",
     });
   });
@@ -174,6 +185,10 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(results).toEqual([true, true, true, false]);
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect((await run(hitRateLimit(key, 1, 3))).allowed).toBe(true);
-    await run(Effect.flatMap(Db, ({ use }) => use((db) => db.execute(sql`delete from rate_limit where id = ${key}`))));
+    await run(
+      Effect.flatMap(Db, ({ use }) =>
+        use((db) => db.execute(sql`delete from rate_limit where id = ${key}`)),
+      ),
+    );
   });
 });

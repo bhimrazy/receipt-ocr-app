@@ -1,11 +1,6 @@
 import { extractReceipt, type ExtractReceiptResult } from "@receipt-ocr/ai";
 import { createDb, type DbClient } from "@receipt-ocr/db";
-import {
-  deleteObjects,
-  getObject,
-  putObject,
-  signedGetUrl,
-} from "@receipt-ocr/storage";
+import { deleteObjects, getObject, putObject, signedGetUrl } from "@receipt-ocr/storage";
 import { Context, Effect, Layer, Redacted } from "effect";
 import { DatabaseUrl, loadOcrConfig, loadStorageConfig } from "./config";
 import { DbError, NotConfigured, OcrError, StorageError } from "./errors";
@@ -15,9 +10,7 @@ export class Db extends Context.Tag("@receipt-ocr/core/Db")<
   {
     readonly client: DbClient;
     /** Runs a Drizzle query, turning a rejection into a typed DbError. */
-    readonly use: <A>(
-      query: (db: DbClient) => Promise<A>,
-    ) => Effect.Effect<A, DbError>;
+    readonly use: <A>(query: (db: DbClient) => Promise<A>) => Effect.Effect<A, DbError>;
   }
 >() {
   static readonly Live = Layer.effect(
@@ -37,8 +30,7 @@ export class Db extends Context.Tag("@receipt-ocr/core/Db")<
           use: <A>(query: (db: DbClient) => Promise<A>) =>
             Effect.tryPromise({
               try: () => query(client),
-              catch: (cause) =>
-                new DbError({ message: "Database request failed", cause }),
+              catch: (cause) => new DbError({ message: "Database request failed", cause }),
             }),
         };
       }),
@@ -57,9 +49,7 @@ export class Storage extends Context.Tag("@receipt-ocr/core/Storage")<
       contentType: string,
     ) => Effect.Effect<void, StorageFailure>;
     readonly get: (key: string) => Effect.Effect<Uint8Array, StorageFailure>;
-    readonly remove: (
-      keys: readonly string[],
-    ) => Effect.Effect<void, StorageFailure>;
+    readonly remove: (keys: readonly string[]) => Effect.Effect<void, StorageFailure>;
     readonly signedUrl: (key: string) => Effect.Effect<string, StorageFailure>;
   }
 >() {
@@ -68,20 +58,13 @@ export class Storage extends Context.Tag("@receipt-ocr/core/Storage")<
       call("Failed to store the receipt file", (config) =>
         putObject(config, { key, body, contentType }),
       ),
-    get: (key) =>
-      call("Failed to read the receipt file", (config) =>
-        getObject(config, key),
-      ),
+    get: (key) => call("Failed to read the receipt file", (config) => getObject(config, key)),
     remove: (keys) =>
       keys.length === 0
         ? Effect.void
-        : call("Failed to delete the receipt file", (config) =>
-            deleteObjects(config, keys),
-          ),
+        : call("Failed to delete the receipt file", (config) => deleteObjects(config, keys)),
     signedUrl: (key) =>
-      call("Failed to sign the receipt image URL", (config) =>
-        signedGetUrl(config, key),
-      ),
+      call("Failed to sign the receipt image URL", (config) => signedGetUrl(config, key)),
   });
 }
 
@@ -118,8 +101,7 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
               file,
               abortSignal,
             }),
-          catch: (cause) =>
-            new OcrError({ message: "Receipt extraction failed", cause }),
+          catch: (cause) => new OcrError({ message: "Receipt extraction failed", cause }),
         }),
       ),
   });

@@ -50,7 +50,10 @@ describe("0004_canonical_categories.sql backfill", () => {
     new URL("../../../apps/web/drizzle/0004_canonical_categories.sql", import.meta.url),
     "utf8",
   );
-  const pairs = [...sql.matchAll(/WHEN '([^']+)' THEN '([^']+)'/g)].map(([, from, to]) => [from!, to!]);
+  const pairs = [...sql.matchAll(/WHEN '([^']+)' THEN '([^']+)'/g)].map(([, from, to]) => [
+    from!,
+    to!,
+  ]);
 
   it("maps exactly like parseCategory, so old rows match new writes", () => {
     expect(pairs.length).toBeGreaterThan(RECEIPT_CATEGORIES.length);

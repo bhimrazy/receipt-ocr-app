@@ -34,7 +34,8 @@ export default async function AdminUsersPage({
   });
 
   const rawUsers = "users" in result ? result.users : [];
-  const total = "total" in result && typeof result.total === "number" ? result.total : rawUsers.length;
+  const total =
+    "total" in result && typeof result.total === "number" ? result.total : rawUsers.length;
 
   const users: AdminUser[] = rawUsers.map((user) => ({
     id: user.id,
@@ -53,16 +54,11 @@ export default async function AdminUsersPage({
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Users</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {total} {total === 1 ? "user" : "users"} · manage roles, bans, sessions, and impersonation.
+          {total} {total === 1 ? "user" : "users"} · manage roles, bans, sessions, and
+          impersonation.
         </p>
       </div>
-      <UsersTable
-        page={page}
-        pageSize={PAGE_SIZE}
-        search={search}
-        total={total}
-        users={users}
-      />
+      <UsersTable page={page} pageSize={PAGE_SIZE} search={search} total={total} users={users} />
     </div>
   );
 }

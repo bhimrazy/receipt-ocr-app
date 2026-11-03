@@ -75,7 +75,8 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   const currency = text(body.currency, 3);
-  if (currency && !/^[A-Za-z]{3}$/.test(currency)) return jsonError(400, "Currency must be a 3-letter code");
+  if (currency && !/^[A-Za-z]{3}$/.test(currency))
+    return jsonError(400, "Currency must be a 3-letter code");
 
   const patch: ReceiptPatch = {
     merchant: text(body.merchant),
