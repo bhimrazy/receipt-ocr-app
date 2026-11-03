@@ -10,6 +10,9 @@
 **/coverage
 **/*.tsbuildinfo
 
+# Agent worktrees and settings (other branches' source).
+.claude
+
 # VCS and CI.
 .git
 .gitignore

@@ -1,7 +1,11 @@
 name: Vercel Production Deployment
 
+# Deploys only after CI (lint, format, dependencies, audit, typecheck, tests, build, e2e) passes
+# on a push to main.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -13,6 +17,9 @@ concurrency:
 
 jobs:
   deploy-production:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     environment: vercel
@@ -24,15 +31,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The commit CI tested, not whatever main points at now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-bun
 
-      # Same gates as CI, so a red main never deploys.
-      - run: bun run typecheck
-      - run: bun run test
-
-      - name: Install Vercel CLI
-        run: bun add --global vercel@65.4.0
+      - name: Install Vercel CLI (pinned, own lockfile)
+        run: |
+          bun install --frozen-lockfile --cwd .github/vercel-cli
+          echo "$GITHUB_WORKSPACE/.github/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Pull Vercel environment
         env:
