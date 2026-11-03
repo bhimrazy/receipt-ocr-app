@@ -12,7 +12,11 @@ export function SlimHeader() {
   return (
     <header className="border-b border-border px-5">
       <div className="mx-auto flex h-16 max-w-3xl items-center justify-between">
-        <Link aria-label="receiptOCR home" className={`inline-flex min-h-11 items-center rounded-lg ${focusRing}`} href="/">
+        <Link
+          aria-label="receiptOCR home"
+          className={`inline-flex min-h-11 items-center rounded-lg ${focusRing}`}
+          href="/"
+        >
           <Brand />
         </Link>
         <Link
@@ -49,7 +53,8 @@ export function LegalPage({
 
           {process.env.NODE_ENV !== "production" && (
             <p className="mt-8 rounded-xl bg-amber-400/10 p-4 text-sm leading-6 text-amber-200 ring-1 ring-inset ring-amber-400/30">
-              Development only: this copy has not had legal review yet. This note is hidden in production.
+              Development only: this copy has not had legal review yet. This note is hidden in
+              production.
             </p>
           )}
 

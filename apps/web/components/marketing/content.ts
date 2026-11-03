@@ -26,7 +26,10 @@ export const freePlan = {
 
 /** Not built yet. Only ever shown labelled as coming. */
 export const comingSoon = [
-  { title: "Paid plans", desc: "Higher daily limits and more workspaces. Need them now? Contact us." },
+  {
+    title: "Paid plans",
+    desc: "Higher daily limits and more workspaces. Need them now? Contact us.",
+  },
   { title: "PDF receipts", desc: "Images only for now." },
   { title: "Bring your own AI key", desc: "Run extraction on your own Google AI key." },
 ];
@@ -36,10 +39,26 @@ export const specs: Array<{ label: string; value: string; note: string }> = [
   { label: "Formats", value: "PNG · JPG · HEIC", note: "Photos and scans. PDF is coming." },
   { label: "File size", value: "10 MB", note: "Per image." },
   { label: "Batch upload", value: "20 files", note: "Queued and read one after another." },
-  { label: "Fields", value: "Merchant · date · items · tax · total", note: "Plus subtotal, tip, currency and category." },
-  { label: "Confidence", value: "Per receipt + per item", note: "Low scores tell you what to check." },
-  { label: "Export", value: "CSV · JSON", note: "CSV for any receipt or the whole workspace; copy JSON per receipt." },
-  { label: "Free plan", value: `${free.receiptsPerDay} / day`, note: `${free.workspaces} workspace, no card.` },
+  {
+    label: "Fields",
+    value: "Merchant · date · items · tax · total",
+    note: "Plus subtotal, tip, currency and category.",
+  },
+  {
+    label: "Confidence",
+    value: "Per receipt + per item",
+    note: "Low scores tell you what to check.",
+  },
+  {
+    label: "Export",
+    value: "CSV · JSON",
+    note: "CSV for any receipt or the whole workspace; copy JSON per receipt.",
+  },
+  {
+    label: "Free plan",
+    value: `${free.receiptsPerDay} / day`,
+    note: `${free.workspaces} workspace, no card.`,
+  },
 ];
 
 export const faqs = [
@@ -99,9 +118,27 @@ export const demoExport: Array<{
   tax: string;
   total: string;
 }> = [
-  { date: "2026-10-28", merchant: "Paper & Co.", category: "Shopping", tax: "7.08", total: "86.85" },
-  { date: "2026-10-26", merchant: "Bluebird Café", category: "Restaurant", tax: "2.31", total: "28.41" },
-  { date: "2026-10-24", merchant: "Metro Transit", category: "Travel", tax: "0.00", total: "45.00" },
+  {
+    date: "2026-10-28",
+    merchant: "Paper & Co.",
+    category: "Shopping",
+    tax: "7.08",
+    total: "86.85",
+  },
+  {
+    date: "2026-10-26",
+    merchant: "Bluebird Café",
+    category: "Restaurant",
+    tax: "2.31",
+    total: "28.41",
+  },
+  {
+    date: "2026-10-24",
+    merchant: "Metro Transit",
+    category: "Travel",
+    tax: "0.00",
+    total: "45.00",
+  },
   { date: "2026-10-21", merchant: "Shell", category: "Gas", tax: "4.12", total: "61.30" },
   { date: "2026-10-19", merchant: "Fiber Net", category: "Utilities", tax: "6.40", total: "79.99" },
 ];

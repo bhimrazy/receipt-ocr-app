@@ -39,10 +39,13 @@ export function ForgotPasswordForm() {
         </span>
         <h1 className="text-2xl font-semibold tracking-tight">Check your email</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground" role="status">
-          If an account exists for <span className="text-foreground">{email}</span>, a reset link is on its way. It
-          expires in one hour.
+          If an account exists for <span className="text-foreground">{email}</span>, a reset link is
+          on its way. It expires in one hour.
         </p>
-        <Link className={cn(buttonVariants({ variant: "outline" }), "mt-6 h-11 w-full")} href="/sign-in">
+        <Link
+          className={cn(buttonVariants({ variant: "outline" }), "mt-6 h-11 w-full")}
+          href="/sign-in"
+        >
           <ArrowLeft aria-hidden className="size-4" />
           Back to sign in
         </Link>

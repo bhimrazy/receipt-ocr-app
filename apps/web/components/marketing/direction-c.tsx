@@ -14,8 +14,18 @@ import { BackdropGrid, Eyebrow, SignUpCta } from "./primitives";
 import "./marketing.css";
 
 const pipeline = [
-  { step: "01", verb: "Upload", detail: "IMG_4021.HEIC", note: "Phone camera or file, up to 20 at once" },
-  { step: "02", verb: "Read", detail: "merchant · items · tax · total", note: "Google's Gemini model reads the image" },
+  {
+    step: "01",
+    verb: "Upload",
+    detail: "IMG_4021.HEIC",
+    note: "Phone camera or file, up to 20 at once",
+  },
+  {
+    step: "02",
+    verb: "Read",
+    detail: "merchant · items · tax · total",
+    note: "Google's Gemini model reads the image",
+  },
   { step: "03", verb: "Check", detail: "96% confidence", note: "Fix any field that's off" },
   { step: "04", verb: "Export", detail: "receipts.csv", note: "Or copy one receipt as JSON" },
 ];
@@ -47,17 +57,23 @@ export function DirectionC() {
           <div className="relative mx-auto grid max-w-6xl gap-14 lg:grid-cols-[1fr_1fr] lg:items-start">
             <div className="reveal-up lg:pt-10">
               <p className="inline-flex items-center gap-2 rounded-full bg-foreground/[0.04] px-3 py-1.5 font-mono text-xs text-muted-foreground ring-1 ring-border">
-                <span aria-hidden className="size-1.5 rounded-full bg-primary shadow-[0_0_10px_var(--primary)]" />
+                <span
+                  aria-hidden
+                  className="size-1.5 rounded-full bg-primary shadow-[0_0_10px_var(--primary)]"
+                />
                 Early access · Free plan
               </p>
               <h1 className="mt-6 text-balance font-mono text-[2.35rem] font-semibold leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.6rem]">
                 Receipts, read <span className="text-primary">line by line.</span>
               </h1>
               <p className="mt-6 max-w-lg text-pretty text-base leading-7 text-foreground/80 md:text-lg md:leading-8">
-                Photograph or upload any receipt. You get the merchant, date, every line item, tax and total as data you
-                can check, fix and export as CSV or JSON.
+                Photograph or upload any receipt. You get the merchant, date, every line item, tax
+                and total as data you can check, fix and export as CSV or JSON.
               </p>
-              <SignUpCta className="mt-9" secondary={{ href: "#features", label: "Read the spec" }} />
+              <SignUpCta
+                className="mt-9"
+                secondary={{ href: "#features", label: "Read the spec" }}
+              />
             </div>
             <OutputTabs
               className="reveal-up reveal-delay-1 w-full"
@@ -79,17 +95,24 @@ export function DirectionC() {
           </div>
         </section>
 
-        <section className="scroll-mt-24 border-y border-border bg-secondary/25 px-5 py-20" id="how">
+        <section
+          className="scroll-mt-24 border-y border-border bg-secondary/25 px-5 py-20"
+          id="how"
+        >
           <div className="mx-auto max-w-6xl">
             <Eyebrow>How it works</Eyebrow>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Four steps, one of them yours</h2>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+              Four steps, one of them yours
+            </h2>
             <ol className="mt-12 grid gap-px overflow-hidden rounded-2xl bg-border ring-1 ring-border sm:grid-cols-2 lg:grid-cols-4">
               {pipeline.map((p) => (
                 <li className="bg-background p-6" key={p.step}>
                   <p className="font-mono text-xs text-muted-foreground">
                     <span className="text-primary">{p.step}</span> / {p.verb.toUpperCase()}
                   </p>
-                  <p className="mt-4 truncate rounded-md bg-secondary/70 px-2.5 py-1.5 font-mono text-xs">{p.detail}</p>
+                  <p className="mt-4 truncate rounded-md bg-secondary/70 px-2.5 py-1.5 font-mono text-xs">
+                    {p.detail}
+                  </p>
                   <h3 className="mt-4 font-semibold">{p.verb}</h3>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">{p.note}</p>
                 </li>
@@ -106,17 +129,22 @@ export function DirectionC() {
                 What it does today, in numbers we enforce
               </h2>
               <p className="mt-4 max-w-sm text-muted-foreground">
-                No benchmarks we haven&apos;t run, no features we haven&apos;t shipped. If it&apos;s on this list, it
-                works on the free plan right now.
+                No benchmarks we haven&apos;t run, no features we haven&apos;t shipped. If it&apos;s
+                on this list, it works on the free plan right now.
               </p>
             </div>
             <dl className="divide-y divide-border rounded-2xl bg-card/50 font-mono text-sm ring-1 ring-border">
               {specs.map((s) => (
-                <div className="grid gap-1 px-5 py-4 sm:grid-cols-[8rem_1fr] sm:gap-6" key={s.label}>
+                <div
+                  className="grid gap-1 px-5 py-4 sm:grid-cols-[8rem_1fr] sm:gap-6"
+                  key={s.label}
+                >
                   <dt className="text-muted-foreground">{s.label}</dt>
                   <dd>
                     <span className="text-foreground">{s.value}</span>
-                    <span className="mt-1 block font-sans text-xs text-muted-foreground">{s.note}</span>
+                    <span className="mt-1 block font-sans text-xs text-muted-foreground">
+                      {s.note}
+                    </span>
                   </dd>
                 </div>
               ))}
@@ -124,15 +152,24 @@ export function DirectionC() {
           </div>
         </section>
 
-        <section aria-labelledby="c-flow" className="border-t border-border bg-secondary/20 px-5 py-24 md:py-28">
+        <section
+          aria-labelledby="c-flow"
+          className="border-t border-border bg-secondary/20 px-5 py-24 md:py-28"
+        >
           <div className="mx-auto max-w-6xl">
             <Eyebrow>Where your data goes</Eyebrow>
-            <h2 className="mt-3 max-w-xl text-balance text-3xl font-bold tracking-tight md:text-4xl" id="c-flow">
+            <h2
+              className="mt-3 max-w-xl text-balance text-3xl font-bold tracking-tight md:text-4xl"
+              id="c-flow"
+            >
               Four stops, all of them named
             </h2>
             <ol className="mt-12 grid gap-4 md:grid-cols-4">
               {dataFlow.map(([where, what], i) => (
-                <li className="relative rounded-2xl bg-background p-6 ring-1 ring-border" key={where}>
+                <li
+                  className="relative rounded-2xl bg-background p-6 ring-1 ring-border"
+                  key={where}
+                >
                   <p className="font-mono text-xs text-primary">{String(i + 1).padStart(2, "0")}</p>
                   <h3 className="mt-3 font-semibold">{where}</h3>
                   <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{what}</p>
@@ -153,9 +190,12 @@ export function DirectionC() {
           <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1fr_1fr]">
             <div>
               <Eyebrow>Pricing</Eyebrow>
-              <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">The bill, itemised</h2>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+                The bill, itemised
+              </h2>
               <p className="mt-4 max-w-sm text-muted-foreground">
-                One plan today, and it costs nothing. Paid plans come later, once there&apos;s more to pay for.
+                One plan today, and it costs nothing. Paid plans come later, once there&apos;s more
+                to pay for.
               </p>
             </div>
             <div className="receipt-edge mx-auto w-full max-w-md bg-[var(--paper)] px-7 pb-12 pt-8 font-mono text-sm text-[var(--paper-ink)] shadow-2xl shadow-black/60">
@@ -201,7 +241,9 @@ export function DirectionC() {
           <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1fr_1.4fr]">
             <div>
               <Eyebrow>FAQ</Eyebrow>
-              <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Questions, answered</h2>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+                Questions, answered
+              </h2>
             </div>
             <FaqList mono />
           </div>

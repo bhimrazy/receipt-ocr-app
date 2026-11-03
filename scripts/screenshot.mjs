@@ -24,7 +24,9 @@ const flag = (name, fallback) => {
 const paths = args.filter((a, i) => !a.startsWith("--") && !valued.has(args[i - 1]));
 const out = flag("out");
 if (!out || paths.length === 0) {
-  console.error("usage: screenshot.mjs --out <dir> [--base URL] [--login email:password] [--widths 1440,390] <path>...");
+  console.error(
+    "usage: screenshot.mjs --out <dir> [--base URL] [--login email:password] [--widths 1440,390] <path>...",
+  );
   process.exit(2);
 }
 const base = flag("base", "http://localhost:3000");
@@ -51,8 +53,10 @@ try {
     const page = await context.newPage();
     for (const p of paths) {
       const problems = [];
-      const onConsole = (m) => m.type() === "error" && problems.push(`console: ${m.text().slice(0, 200)}`);
-      const onFail = (r) => problems.push(`request failed: ${r.url()} ${r.failure()?.errorText ?? ""}`);
+      const onConsole = (m) =>
+        m.type() === "error" && problems.push(`console: ${m.text().slice(0, 200)}`);
+      const onFail = (r) =>
+        problems.push(`request failed: ${r.url()} ${r.failure()?.errorText ?? ""}`);
       page.on("console", onConsole);
       page.on("requestfailed", onFail);
       const res = await page.goto(new URL(p, base).href, { waitUntil: "networkidle" });

@@ -131,7 +131,11 @@ export function CredentialsForm({
                   type="button"
                   variant="outline"
                 >
-                  {pending === provider ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <Icon />}
+                  {pending === provider ? (
+                    <Loader2 aria-hidden className="size-4 animate-spin" />
+                  ) : (
+                    <Icon />
+                  )}
                   {providerLabels[provider]}
                 </Button>
               );
@@ -171,7 +175,13 @@ export function CredentialsForm({
         <AuthField
           aside={
             isSignUp ? null : (
-              <Link className={cn(authLinkClass, "-my-3 inline-flex min-h-11 items-center text-xs text-muted-foreground hover:text-foreground")} href="/forgot-password">
+              <Link
+                className={cn(
+                  authLinkClass,
+                  "-my-3 inline-flex min-h-11 items-center text-xs text-muted-foreground hover:text-foreground",
+                )}
+                href="/forgot-password"
+              >
                 Forgot your password?
               </Link>
             )
@@ -188,7 +198,9 @@ export function CredentialsForm({
         />
         {error ? <AuthError>{error}</AuthError> : null}
         <Button className="mt-1 h-11 w-full" disabled={pending !== null} type="submit">
-          {pending === "credentials" ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
+          {pending === "credentials" ? (
+            <Loader2 aria-hidden className="size-4 animate-spin" />
+          ) : null}
           {isSignUp ? "Create account" : "Sign in"}
         </Button>
       </form>

@@ -39,13 +39,17 @@ function EditFragment() {
               )}
             >
               {value}
-              {i === 0 && <span className="ml-px inline-block h-4 w-px translate-y-0.5 bg-primary motion-safe:animate-pulse" />}
+              {i === 0 && (
+                <span className="ml-px inline-block h-4 w-px translate-y-0.5 bg-primary motion-safe:animate-pulse" />
+              )}
             </p>
           </div>
         ))}
       </div>
       <div aria-hidden className="mt-4 flex justify-end">
-        <span className="rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">Save changes</span>
+        <span className="rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
+          Save changes
+        </span>
       </div>
     </div>
   );
@@ -73,11 +77,31 @@ const figures = [
 ];
 
 const features = [
-  { icon: Camera, title: "Made for your phone", desc: "Open it in your phone's browser and use the camera. No app to install." },
-  { icon: PencilLine, title: "You have the last word", desc: "Edit the merchant, date, category and amounts. Your corrections are what gets exported." },
-  { icon: Lock, title: "Private to your workspace", desc: "Only you and the people you invite can see your receipts. Delete any of them, or your account, from Settings." },
-  { icon: Users, title: "Share with your bookkeeper", desc: "Invite a partner or bookkeeper to your workspace so they see the same receipts you do." },
-  { icon: Download, title: "Your data, exportable", desc: "CSV for any receipt or everything at once, or copy a receipt as JSON. No export fees." },
+  {
+    icon: Camera,
+    title: "Made for your phone",
+    desc: "Open it in your phone's browser and use the camera. No app to install.",
+  },
+  {
+    icon: PencilLine,
+    title: "You have the last word",
+    desc: "Edit the merchant, date, category and amounts. Your corrections are what gets exported.",
+  },
+  {
+    icon: Lock,
+    title: "Private to your workspace",
+    desc: "Only you and the people you invite can see your receipts. Delete any of them, or your account, from Settings.",
+  },
+  {
+    icon: Users,
+    title: "Share with your bookkeeper",
+    desc: "Invite a partner or bookkeeper to your workspace so they see the same receipts you do.",
+  },
+  {
+    icon: Download,
+    title: "Your data, exportable",
+    desc: "CSV for any receipt or everything at once, or copy a receipt as JSON. No export fees.",
+  },
 ];
 
 export function DirectionA() {
@@ -98,8 +122,8 @@ export function DirectionA() {
                 <span className="text-gradient">Get a spreadsheet.</span>
               </h1>
               <p className="mt-6 max-w-lg text-pretty text-base leading-7 text-foreground/80 md:text-lg md:leading-8">
-                Photograph or upload any receipt. We read the merchant, date, items, tax and total, so you can check
-                it, fix it, and export a CSV for your accountant.
+                Photograph or upload any receipt. We read the merchant, date, items, tax and total,
+                so you can check it, fix it, and export a CSV for your accountant.
               </p>
               <SignUpCta className="mt-9" secondary={{ href: "#how", label: "See how it works" }} />
             </div>
@@ -158,7 +182,10 @@ export function DirectionA() {
           </div>
         </section>
 
-        <section className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28" id="features">
+        <section
+          className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28"
+          id="features"
+        >
           <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[1fr_2fr]">
             <div>
               <Eyebrow>Features</Eyebrow>
@@ -186,10 +213,12 @@ export function DirectionA() {
         <section className="scroll-mt-24 border-t border-border px-5 py-24 md:py-28" id="pricing">
           <div className="mx-auto max-w-5xl">
             <Eyebrow>Pricing</Eyebrow>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Free while we&apos;re early</h2>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+              Free while we&apos;re early
+            </h2>
             <p className="mt-4 max-w-xl text-muted-foreground">
-              One plan, and it&apos;s free. Paid plans with higher limits come later, and we&apos;ll only charge for
-              what we&apos;ve actually built.
+              One plan, and it&apos;s free. Paid plans with higher limits come later, and we&apos;ll
+              only charge for what we&apos;ve actually built.
             </p>
             <div className="mt-12 grid gap-5 md:grid-cols-2">
               <FreePlanCard />
@@ -202,7 +231,9 @@ export function DirectionA() {
           <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1fr_2fr]">
             <div>
               <Eyebrow>FAQ</Eyebrow>
-              <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Questions, answered</h2>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
+                Questions, answered
+              </h2>
             </div>
             <FaqList />
           </div>

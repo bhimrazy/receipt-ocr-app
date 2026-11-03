@@ -19,11 +19,7 @@ function toIso(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export default async function AdminUserDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function AdminUserDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const { id } = await params;
   const db = adminDb();
@@ -128,14 +124,8 @@ export default async function AdminUserDetailPage({
           <CardContent className="space-y-2 text-sm">
             <Row label="User ID" value={row.id} mono />
             <Row label="Plan" value={row.plan ?? "free"} />
-            <Row
-              label="Joined"
-              value={new Date(adminUser.createdAt).toLocaleString()}
-            />
-            <Row
-              label="Email verified"
-              value={adminUser.emailVerified ? "Yes" : "No"}
-            />
+            <Row label="Joined" value={new Date(adminUser.createdAt).toLocaleString()} />
+            <Row label="Email verified" value={adminUser.emailVerified ? "Yes" : "No"} />
           </CardContent>
         </Card>
 

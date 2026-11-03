@@ -47,7 +47,7 @@ Not borrowed: unsourced outcome percentages (Veryfi's "reduce processing time by
 ## Direction B: Shoebox
 
 - **Concept:** Editorial and pain-led, for the tax-time freelancer. A centred display-serif headline, "Your receipts,
-  *sorted* before tax time.", with paper receipts turning into CSV rows. Then an "old way / with receiptOCR"
+  _sorted_ before tax time.", with paper receipts turning into CSV rows. Then an "old way / with receiptOCR"
   comparison, three acts (i. ii. iii.), a "your data" block that names Google Gemini, and a one-line price: "Free.
   50 receipts a day. No card." The coming-soon items sit underneath.
 - **Serves best:** Freelancers and small-business owners, the primary persona.
@@ -72,15 +72,16 @@ Not borrowed: unsourced outcome percentages (Veryfi's "reduce processing time by
 
 1 is weak and 5 is strong. For build cost, 5 means cheapest.
 
-| | Clarity | Trust | Distinctiveness | Conversion intent | Mobile | Build cost |
-|---|---|---|---|---|---|---|
-| A Ledger split | 5 | 4 | 3 | 4 | 4 | 4 |
-| B Shoebox | 4 | 5 | 5 | 4 | 4 | 3 |
-| C Spec sheet | 4 | 5 | 4 | 3 | 4 | 3 |
+|                | Clarity | Trust | Distinctiveness | Conversion intent | Mobile | Build cost |
+| -------------- | ------- | ----- | --------------- | ----------------- | ------ | ---------- |
+| A Ledger split | 5       | 4     | 3               | 4                 | 4      | 4          |
+| B Shoebox      | 4       | 5     | 5               | 4                 | 4      | 3          |
+| C Spec sheet   | 4       | 5     | 4               | 3                 | 4      | 3          |
 
 ## Recommendation
 
 **B (Shoebox), with C's "Where your data goes" flow in place of B's three-promise block.**
+
 - B is the only direction written for the persona the reviews chose. It looks least like an AI template, and its
   pricing line states the real plan with no fine print.
 - C's named data flow is the best trust device across all three: it turns a legal disclosure into proof.

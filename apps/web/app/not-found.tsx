@@ -20,7 +20,9 @@ export default function NotFound() {
         </div>
         <div className="relative max-w-md text-center">
           <p className="font-mono text-sm tracking-[0.22em] text-primary">404</p>
-          <h1 className="mt-4 text-balance text-4xl font-bold tracking-tight md:text-5xl">Page not found</h1>
+          <h1 className="mt-4 text-balance text-4xl font-bold tracking-tight md:text-5xl">
+            Page not found
+          </h1>
           <p className="mt-4 text-pretty leading-7 text-muted-foreground">
             The link may be old, or the page may have moved.
           </p>
@@ -28,7 +30,10 @@ export default function NotFound() {
             <Link className={cn(buttonVariants({ size: "lg" }), "w-full sm:w-auto")} href="/">
               Back to home
             </Link>
-            <Link className={cn(buttonVariants({ size: "lg", variant: "outline" }), "w-full sm:w-auto")} href="/app/upload">
+            <Link
+              className={cn(buttonVariants({ size: "lg", variant: "outline" }), "w-full sm:w-auto")}
+              href="/app/upload"
+            >
               Open the app
             </Link>
           </div>

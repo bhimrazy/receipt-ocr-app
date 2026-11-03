@@ -14,11 +14,19 @@ export function OutputTabs({ tabs, className }: { tabs: OutputTab[]; className?:
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const last = tabs.length - 1;
     const next =
-      event.key === "ArrowRight" ? (active === last ? 0 : active + 1)
-      : event.key === "ArrowLeft" ? (active === 0 ? last : active - 1)
-      : event.key === "Home" ? 0
-      : event.key === "End" ? last
-      : null;
+      event.key === "ArrowRight"
+        ? active === last
+          ? 0
+          : active + 1
+        : event.key === "ArrowLeft"
+          ? active === 0
+            ? last
+            : active - 1
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? last
+              : null;
     if (next === null) return;
     event.preventDefault();
     setActive(next);
@@ -39,7 +47,9 @@ export function OutputTabs({ tabs, className }: { tabs: OutputTab[]; className?:
             aria-selected={i === active}
             className={cn(
               "min-h-11 flex-1 rounded-full px-3 font-mono text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              i === active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+              i === active
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
             id={`${base}-tab-${tab.id}`}
             key={tab.id}

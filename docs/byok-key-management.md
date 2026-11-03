@@ -18,9 +18,9 @@ spend the user's money and read their bucket. Treat them like passwords, not lik
 3. **Least privilege + isolation.** One user's keys are only decryptable in the context of a
    request for that user. Every decrypt is tied to a `userId` check at the repository layer,
    same as receipts.
-4. **Auditable.** Creating, rotating, deleting, and *using* a key each add fields to the
+4. **Auditable.** Creating, rotating, deleting, and _using_ a key each add fields to the
    request's wide event (`key_id`, `key_source: "byok" | "managed"`) — never the material.
-5. **Fail closed.** If decryption or validation fails, fall back to *nothing* (surface the
+5. **Fail closed.** If decryption or validation fails, fall back to _nothing_ (surface the
    error), never to another user's or the platform's keys silently.
 
 ## 2. Storage design (envelope encryption)
@@ -56,9 +56,9 @@ user submits key ──TLS──▶ API route (Clerk-authed)
 export const userCredentials = pgTable("user_credentials", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
-  type: text("type").notNull(),            // "gemini" | "s3"
+  type: text("type").notNull(), // "gemini" | "s3"
   label: text("label"),
-  last4: text("last4").notNull(),           // display only
+  last4: text("last4").notNull(), // display only
   ciphertext: text("ciphertext").notNull(), // base64(nonce ‖ ct ‖ tag)
   wrappedDek: text("wrapped_dek").notNull(),
   kekVersion: integer("kek_version").notNull().default(1),
@@ -97,12 +97,12 @@ type CredentialsServiceShape = {
 
 ## 4. API surface
 
-| Route | Behavior |
-|---|---|
-| `POST /api/settings/credentials` | Validate shape → live-test (1 cheap call: Gemini `models.list`; S3 `HeadBucket`) → encrypt → store. Returns metadata only. |
-| `GET /api/settings/credentials` | List metadata (type, label, last4, status, dates). Never material. |
-| `DELETE /api/settings/credentials/:id` | Mark revoked; stop using immediately. |
-| `POST /api/settings/credentials/:id/validate` | Re-run the live test on demand. |
+| Route                                         | Behavior                                                                                                                   |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/settings/credentials`              | Validate shape → live-test (1 cheap call: Gemini `models.list`; S3 `HeadBucket`) → encrypt → store. Returns metadata only. |
+| `GET /api/settings/credentials`               | List metadata (type, label, last4, status, dates). Never material.                                                         |
+| `DELETE /api/settings/credentials/:id`        | Mark revoked; stop using immediately.                                                                                      |
+| `POST /api/settings/credentials/:id/validate` | Re-run the live test on demand.                                                                                            |
 
 All behind Clerk auth + the existing proxy matcher; add per-user rate limiting on create/validate
 (these hit external providers).
@@ -118,16 +118,16 @@ All behind Clerk auth + the existing proxy matcher; add per-user rate limiting o
 
 ## 6. Threat checklist
 
-| Threat | Mitigation |
-|---|---|
-| DB dump stolen | Ciphertext useless without KMS KEK; AAD binds rows to users |
-| App-server env leaked | KEK not in app env (KMS); managed platform keys still exposed — rotate those |
-| Cross-tenant bug in code | AAD makes wrong-user decryption fail closed |
-| Key echoed to browser | UI contract is metadata-only; code review + tests assert response shape |
-| Keys in logs | Wide-event allowlist + redaction helper + CI grep |
-| Malicious S3 endpoint (SSRF) | Validate endpoint URL: https-only, deny private IP ranges/link-local, resolve-and-check |
+| Threat                             | Mitigation                                                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| DB dump stolen                     | Ciphertext useless without KMS KEK; AAD binds rows to users                                                     |
+| App-server env leaked              | KEK not in app env (KMS); managed platform keys still exposed — rotate those                                    |
+| Cross-tenant bug in code           | AAD makes wrong-user decryption fail closed                                                                     |
+| Key echoed to browser              | UI contract is metadata-only; code review + tests assert response shape                                         |
+| Keys in logs                       | Wide-event allowlist + redaction helper + CI grep                                                               |
+| Malicious S3 endpoint (SSRF)       | Validate endpoint URL: https-only, deny private IP ranges/link-local, resolve-and-check                         |
 | User's key abused after our breach | Document scoping guidance in UI: recommend key restricted to Generative Language API / bucket-scoped IAM policy |
-| Stale invalid keys burning retries | `status: invalid` short-circuits with a settings prompt |
+| Stale invalid keys burning retries | `status: invalid` short-circuits with a settings prompt                                                         |
 
 ## 7. Implementation order
 

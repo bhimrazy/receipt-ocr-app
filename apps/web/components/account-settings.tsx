@@ -1,7 +1,13 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Check, KeyRound, Loader2, Trash2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -240,7 +246,11 @@ function DangerCard({ email }: { email: string }) {
           <Status error={error} ok={null} />
           <div>
             <Button disabled={!armed || pending} type="submit" variant="destructive">
-              {pending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              {pending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
               Delete my account
             </Button>
           </div>

@@ -38,7 +38,10 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
     }
     setPending(true);
     setError(null);
-    const { error: resetError } = await authClient.resetPassword({ newPassword: password, token: token ?? undefined });
+    const { error: resetError } = await authClient.resetPassword({
+      newPassword: password,
+      token: token ?? undefined,
+    });
     setPending(false);
     if (resetError) {
       setError(resetError.message ?? "We couldn't reset your password. The link may have expired.");
@@ -84,7 +87,13 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
         </Button>
       </form>
       <p className="mt-6 text-center text-sm">
-        <Link className={cn(authLinkClass, "inline-flex items-center gap-1 text-muted-foreground hover:text-foreground")} href="/sign-in">
+        <Link
+          className={cn(
+            authLinkClass,
+            "inline-flex items-center gap-1 text-muted-foreground hover:text-foreground",
+          )}
+          href="/sign-in"
+        >
           <ArrowLeft aria-hidden className="size-3.5" />
           Back to sign in
         </Link>

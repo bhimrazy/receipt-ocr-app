@@ -9,7 +9,13 @@ import "./marketing.css";
  * readers, so the page outline stays clean.
  */
 
-export function ReceiptSlip({ className, scanning = false }: { className?: string; scanning?: boolean }) {
+export function ReceiptSlip({
+  className,
+  scanning = false,
+}: {
+  className?: string;
+  scanning?: boolean;
+}) {
   return (
     <div
       role="img"
@@ -70,7 +76,13 @@ function ConfidencePill({ value }: { value: number }) {
   );
 }
 
-export function ExtractedPanel({ className, compact = false }: { className?: string; compact?: boolean }) {
+export function ExtractedPanel({
+  className,
+  compact = false,
+}: {
+  className?: string;
+  compact?: boolean;
+}) {
   return (
     <div
       role="img"
@@ -116,11 +128,15 @@ export function ExtractedPanel({ className, compact = false }: { className?: str
           </div>
           <div className="mt-4 grid grid-cols-[1fr_auto] gap-y-1.5 border-t border-border pt-4">
             <span className="text-muted-foreground">Subtotal</span>
-            <span className="text-right font-mono tabular-nums text-muted-foreground">{r.subtotal}</span>
+            <span className="text-right font-mono tabular-nums text-muted-foreground">
+              {r.subtotal}
+            </span>
             <span className="text-muted-foreground">Tax</span>
             <span className="text-right font-mono tabular-nums text-muted-foreground">{r.tax}</span>
             <span className="font-semibold">Total</span>
-            <span className="text-right font-mono font-semibold tabular-nums text-primary">{r.total}</span>
+            <span className="text-right font-mono font-semibold tabular-nums text-primary">
+              {r.total}
+            </span>
           </div>
         </div>
       </div>
@@ -155,7 +171,9 @@ export function CsvSheet({ className }: { className?: string }) {
           ))}
           {demoExport.map((row) => (
             <div className="contents" key={row.date + row.merchant}>
-              <span className="border-b border-border/60 px-3 py-2 text-muted-foreground">{row.date}</span>
+              <span className="border-b border-border/60 px-3 py-2 text-muted-foreground">
+                {row.date}
+              </span>
               <span className="truncate border-b border-border/60 px-3 py-2">{row.merchant}</span>
               <span className="hidden truncate border-b border-border/60 px-3 py-2 text-muted-foreground sm:block">
                 {row.category}
@@ -218,7 +236,9 @@ export function UploadQueue({ className }: { className?: string }) {
       <div aria-hidden>
         <div className="rounded-lg border border-dashed border-border px-4 py-5 text-center">
           <p className="text-sm font-medium">Drop receipts or take a photo</p>
-          <p className="mt-1 font-mono text-[11px] text-muted-foreground">PNG, JPG, HEIC · up to 10 MB · 20 at a time</p>
+          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+            PNG, JPG, HEIC · up to 10 MB · 20 at a time
+          </p>
         </div>
         <ul className="mt-3 flex flex-col gap-2">
           {queue.map(({ name, state, icon: Icon }) => (
@@ -233,7 +253,9 @@ export function UploadQueue({ className }: { className?: string }) {
                   state === "Done" ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                <Icon className={cn("size-3.5", state === "Reading…" && "motion-safe:animate-spin")} />
+                <Icon
+                  className={cn("size-3.5", state === "Reading…" && "motion-safe:animate-spin")}
+                />
                 {state}
               </span>
             </li>

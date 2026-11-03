@@ -6,7 +6,8 @@ import { CircleCheck } from "lucide-react";
  * Ring, not border: the theme's global border-color currently overrides border utilities, which
  * hid the focus state. foreground/40 on the card is ~3.3:1, enough for WCAG 1.4.11.
  */
-const inputClass = "h-11 ring-1 ring-inset ring-foreground/40 focus-visible:ring-2 focus-visible:ring-ring";
+const inputClass =
+  "h-11 ring-1 ring-inset ring-foreground/40 focus-visible:ring-2 focus-visible:ring-ring";
 
 export const authCardClass =
   "w-full rounded-2xl bg-card/80 p-6 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl sm:p-8";
@@ -44,7 +45,10 @@ export function AuthField({
 
 export function AuthError({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300 ring-1 ring-inset ring-red-500/30" role="alert">
+    <p
+      className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300 ring-1 ring-inset ring-red-500/30"
+      role="alert"
+    >
       {children}
     </p>
   );

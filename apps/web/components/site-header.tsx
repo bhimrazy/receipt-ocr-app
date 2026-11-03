@@ -61,10 +61,16 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
       <div
         className={cn(
           "mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 rounded-full px-2 pl-4 transition-[background-color,box-shadow] duration-300 sm:pl-5",
-          solid ? "bg-background/85 shadow-lg shadow-black/40 ring-1 ring-border backdrop-blur-xl" : "bg-transparent",
+          solid
+            ? "bg-background/85 shadow-lg shadow-black/40 ring-1 ring-border backdrop-blur-xl"
+            : "bg-transparent",
         )}
       >
-        <Link aria-label="receiptOCR home" className={cn("inline-flex min-h-11 items-center rounded-lg", focusRing)} href="/">
+        <Link
+          aria-label="receiptOCR home"
+          className={cn("inline-flex min-h-11 items-center rounded-lg", focusRing)}
+          href="/"
+        >
           <Brand />
         </Link>
 
@@ -85,7 +91,10 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
 
         <div className="flex items-center gap-1.5">
           {isPending ? (
-            <span aria-hidden className="h-11 w-28 animate-pulse rounded-full bg-foreground/[0.06] lg:h-10" />
+            <span
+              aria-hidden
+              className="h-11 w-28 animate-pulse rounded-full bg-foreground/[0.06] lg:h-10"
+            />
           ) : session ? (
             <Link className={cn(buttonVariants(), "h-11 lg:h-10")} href="/app/upload">
               Open the app <ArrowRight aria-hidden className="size-4" />
@@ -93,7 +102,10 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
           ) : (
             <>
               <Link
-                className={cn(buttonVariants({ variant: "ghost" }), "hidden h-11 sm:inline-flex lg:h-10")}
+                className={cn(
+                  buttonVariants({ variant: "ghost" }),
+                  "hidden h-11 sm:inline-flex lg:h-10",
+                )}
                 href="/sign-in"
               >
                 Sign in
@@ -115,7 +127,11 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
               focusRing,
             )}
           >
-            {menuOpen ? <X aria-hidden className="size-5" /> : <Menu aria-hidden className="size-5" />}
+            {menuOpen ? (
+              <X aria-hidden className="size-5" />
+            ) : (
+              <Menu aria-hidden className="size-5" />
+            )}
           </button>
         </div>
       </div>

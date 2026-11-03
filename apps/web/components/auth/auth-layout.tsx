@@ -27,7 +27,13 @@ export const valueProps = [
 const footerLink =
   "inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-export function AuthLayout({ children, subtitle }: { children: React.ReactNode; subtitle: string }) {
+export function AuthLayout({
+  children,
+  subtitle,
+}: {
+  children: React.ReactNode;
+  subtitle: string;
+}) {
   return (
     <div className="relative grid min-h-screen overflow-hidden bg-background lg:grid-cols-2">
       <aside className="relative hidden flex-col justify-between border-r border-border bg-secondary/20 p-12 lg:flex">
@@ -62,7 +68,9 @@ export function AuthLayout({ children, subtitle }: { children: React.ReactNode; 
             ))}
           </ul>
         </div>
-        <p className="relative z-10 text-xs text-muted-foreground">© {new Date().getFullYear()} receiptOCR</p>
+        <p className="relative z-10 text-xs text-muted-foreground">
+          © {new Date().getFullYear()} receiptOCR
+        </p>
       </aside>
 
       <main className="relative flex items-center justify-center px-4 py-12 sm:px-5 sm:py-16">
@@ -101,7 +109,8 @@ export function AuthNotConfiguredCard() {
       <p className="mt-3 text-sm leading-6 text-muted-foreground">
         Add <code className="font-mono text-foreground">DATABASE_URL</code> and{" "}
         <code className="font-mono text-foreground">BETTER_AUTH_SECRET</code> to{" "}
-        <code className="font-mono text-foreground">apps/web/.env.local</code> to turn on email and social sign-in.
+        <code className="font-mono text-foreground">apps/web/.env.local</code> to turn on email and
+        social sign-in.
       </p>
       <Link className={cn(buttonVariants(), "mt-6 h-11")} href="/app/upload">
         Preview the app

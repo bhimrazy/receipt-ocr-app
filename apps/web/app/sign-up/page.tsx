@@ -19,10 +19,9 @@ export default async function SignUpPage({
   // Nothing to do here if you're already signed in.
   if (await getSession()) nextRedirect(redirectTo);
 
-  const providers = [
-    authEnv.google ? "google" : null,
-    authEnv.github ? "github" : null,
-  ].filter(Boolean) as SocialProvider[];
+  const providers = [authEnv.google ? "google" : null, authEnv.github ? "github" : null].filter(
+    Boolean,
+  ) as SocialProvider[];
 
   return (
     <AuthLayout subtitle="Create a free account. Photograph a receipt, check what was read, export a CSV.">

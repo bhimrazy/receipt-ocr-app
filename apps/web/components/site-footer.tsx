@@ -36,7 +36,12 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
   return (
     <footer className="border-t border-border px-5 pb-10 pt-14">
       <div className={cn("mx-auto", narrow ? "max-w-3xl" : "max-w-6xl")}>
-        <div className={cn("grid grid-cols-2 gap-x-6 gap-y-8", narrow ? "sm:grid-cols-3" : "md:grid-cols-[1.5fr_repeat(3,1fr)]")}>
+        <div
+          className={cn(
+            "grid grid-cols-2 gap-x-6 gap-y-8",
+            narrow ? "sm:grid-cols-3" : "md:grid-cols-[1.5fr_repeat(3,1fr)]",
+          )}
+        >
           {!narrow && (
             <div className="col-span-2 max-w-xs md:col-span-1">
               <Brand />
@@ -47,7 +52,9 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
           )}
           {columns.map((column) => (
             <div key={column.title}>
-              <h2 className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">{column.title}</h2>
+              <h2 className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                {column.title}
+              </h2>
               <ul className="mt-3 flex flex-col text-sm md:gap-1">
                 {column.links.map((link) => (
                   <li key={link.label}>

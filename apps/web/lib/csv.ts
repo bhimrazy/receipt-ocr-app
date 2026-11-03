@@ -87,10 +87,27 @@ export function receiptItemsToCsv(receipt: ReceiptWithItems): string {
     );
   }
   // Totals belong in the export too, otherwise tax and tip are lost.
-  lines.push(row([receipt.id, receipt.merchant, receipt.receiptDate, "Subtotal", "", "", receipt.subtotal, ""]));
-  lines.push(row([receipt.id, receipt.merchant, receipt.receiptDate, "Tax", "", "", receipt.tax, ""]));
-  lines.push(row([receipt.id, receipt.merchant, receipt.receiptDate, "Tip", "", "", receipt.tip, ""]));
-  lines.push(row([receipt.id, receipt.merchant, receipt.receiptDate, "Total", "", "", receipt.total, ""]));
+  lines.push(
+    row([
+      receipt.id,
+      receipt.merchant,
+      receipt.receiptDate,
+      "Subtotal",
+      "",
+      "",
+      receipt.subtotal,
+      "",
+    ]),
+  );
+  lines.push(
+    row([receipt.id, receipt.merchant, receipt.receiptDate, "Tax", "", "", receipt.tax, ""]),
+  );
+  lines.push(
+    row([receipt.id, receipt.merchant, receipt.receiptDate, "Tip", "", "", receipt.tip, ""]),
+  );
+  lines.push(
+    row([receipt.id, receipt.merchant, receipt.receiptDate, "Total", "", "", receipt.total, ""]),
+  );
   return `${lines.join("\n")}\n`;
 }
 

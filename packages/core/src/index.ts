@@ -50,10 +50,7 @@ export class ValidationError extends Data.TaggedError("ValidationError")<{
   message: string;
 }> {}
 
-export class ConfigService extends Context.Tag("ConfigService")<
-  ConfigService,
-  AppConfig
->() {}
+export class ConfigService extends Context.Tag("ConfigService")<ConfigService, AppConfig>() {}
 
 export type StorageServiceShape = {
   putReceiptImage(input: {
@@ -78,10 +75,7 @@ export type AiOcrServiceShape = {
   }): Effect.Effect<ReceiptExtraction, AiOcrError>;
 };
 
-export class AiOcrService extends Context.Tag("AiOcrService")<
-  AiOcrService,
-  AiOcrServiceShape
->() {}
+export class AiOcrService extends Context.Tag("AiOcrService")<AiOcrService, AiOcrServiceShape>() {}
 
 /**
  * Receipts belong to a workspace, not to a person: every member of the
@@ -109,14 +103,25 @@ export type ReceiptRepositoryShape = {
     scope: ReceiptScope;
     fileName: string;
   }): Effect.Effect<Receipt, RepositoryError>;
-  markProcessing(id: string, scope: ReceiptScope, objectKey: string): Effect.Effect<void, RepositoryError>;
+  markProcessing(
+    id: string,
+    scope: ReceiptScope,
+    objectKey: string,
+  ): Effect.Effect<void, RepositoryError>;
   completeReceipt(
     id: string,
     scope: ReceiptScope,
     extraction: ReceiptExtraction,
   ): Effect.Effect<void, RepositoryError>;
-  failReceipt(id: string, scope: ReceiptScope, message: string): Effect.Effect<void, RepositoryError>;
-  getReceipt(id: string, scope: ReceiptScope): Effect.Effect<ReceiptWithItems | null, RepositoryError>;
+  failReceipt(
+    id: string,
+    scope: ReceiptScope,
+    message: string,
+  ): Effect.Effect<void, RepositoryError>;
+  getReceipt(
+    id: string,
+    scope: ReceiptScope,
+  ): Effect.Effect<ReceiptWithItems | null, RepositoryError>;
   listReceipts(
     scope: ReceiptScope,
     options?: ListReceiptsOptions,
@@ -230,7 +235,8 @@ export const StorageLive = Layer.effect(
       getReceiptImageUrl: (objectKey) =>
         Effect.tryPromise({
           try: () => getS3ReceiptImageUrl(config.storage, objectKey),
-          catch: (cause) => new StorageError({ message: "Failed to sign receipt image URL", cause }),
+          catch: (cause) =>
+            new StorageError({ message: "Failed to sign receipt image URL", cause }),
         }),
     } satisfies StorageServiceShape;
   }),
@@ -293,7 +299,8 @@ function repositoryFromDb(db: DbClient): ReceiptRepositoryShape {
             .set({ status: "processing", imageObjectKey: objectKey, updatedAt: new Date() })
             .where(scopeWhere(id, scope));
         },
-        catch: (cause) => new RepositoryError({ message: "Failed to mark receipt processing", cause }),
+        catch: (cause) =>
+          new RepositoryError({ message: "Failed to mark receipt processing", cause }),
       }),
     completeReceipt: (id, scope, extraction) =>
       Effect.tryPromise({
@@ -445,7 +452,9 @@ export const ReceiptProcessingLive = Layer.effect(
     const ingestUpload = (input: UploadInput) =>
       Effect.gen(function* () {
         if (!input.mimeType.startsWith("image/")) {
-          return yield* Effect.fail(new ValidationError({ message: "Only image uploads are supported" }));
+          return yield* Effect.fail(
+            new ValidationError({ message: "Only image uploads are supported" }),
+          );
         }
 
         const timings: ProcessingStepTiming[] = [];
@@ -497,7 +506,9 @@ export const ReceiptProcessingLive = Layer.effect(
           repo.getReceipt(input.receiptId, input.scope),
         );
         if (!completed) {
-          return yield* Effect.fail(new RepositoryError({ message: "Completed receipt could not be loaded" }));
+          return yield* Effect.fail(
+            new RepositoryError({ message: "Completed receipt could not be loaded" }),
+          );
         }
         return { receipt: completed, timings };
       }).pipe(
@@ -534,11 +545,9 @@ export const ReceiptProcessingLive = Layer.effect(
   }),
 );
 
-const InfrastructureLive = Layer.mergeAll(
-  StorageLive,
-  AiOcrLive,
-  ReceiptRepositoryLive,
-).pipe(Layer.provide(ConfigLive));
+const InfrastructureLive = Layer.mergeAll(StorageLive, AiOcrLive, ReceiptRepositoryLive).pipe(
+  Layer.provide(ConfigLive),
+);
 
 export const AppLive = Layer.merge(
   InfrastructureLive,

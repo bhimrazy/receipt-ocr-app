@@ -48,7 +48,9 @@ function mockToReceipt(id: string): ReceiptWithItems | null {
  * error rather than quietly showing a signed-in user demo data.
  */
 function previewReceipts(): ReceiptWithItems[] {
-  return mockReceipts.map((receipt) => mockToReceipt(receipt.id)).filter(Boolean) as ReceiptWithItems[];
+  return mockReceipts
+    .map((receipt) => mockToReceipt(receipt.id))
+    .filter(Boolean) as ReceiptWithItems[];
 }
 
 export async function listReceiptsForWorkspace(page = 1): Promise<ReceiptPage> {

@@ -8,10 +8,17 @@ import { comingSoon, freePlan } from "./content";
 /** The real free plan (lib/plans.ts). Paid tiers are not sold yet, so they only appear as "coming". */
 export function FreePlanCard({ className }: { className?: string }) {
   return (
-    <div className={cn("card-sheen flex flex-col rounded-2xl bg-card p-7 ring-1 ring-primary/35", className)}>
+    <div
+      className={cn(
+        "card-sheen flex flex-col rounded-2xl bg-card p-7 ring-1 ring-primary/35",
+        className,
+      )}
+    >
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-lg font-semibold">{freePlan.name}</h3>
-        <span className="rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-medium text-primary">Available now</span>
+        <span className="rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-medium text-primary">
+          Available now
+        </span>
       </div>
       <p className="mt-4 flex items-baseline gap-2">
         <span className="font-mono text-4xl font-bold tracking-tight">{freePlan.price}</span>
@@ -34,7 +41,9 @@ export function FreePlanCard({ className }: { className?: string }) {
 
 export function ComingSoonCard({ className }: { className?: string }) {
   return (
-    <div className={cn("flex flex-col rounded-2xl bg-secondary/30 p-7 ring-1 ring-border", className)}>
+    <div
+      className={cn("flex flex-col rounded-2xl bg-secondary/30 p-7 ring-1 ring-border", className)}
+    >
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-lg font-semibold">On the way</h3>
         <span className="rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-xs font-medium text-muted-foreground">

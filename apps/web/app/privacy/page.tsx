@@ -3,7 +3,8 @@ import { LegalPage } from "@/components/legal-page";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
-  description: "What receiptOCR collects, who processes it, including Google's Gemini AI, and how to delete it.",
+  description:
+    "What receiptOCR collects, who processes it, including Google's Gemini AI, and how to delete it.",
   alternates: { canonical: "/privacy" },
 };
 

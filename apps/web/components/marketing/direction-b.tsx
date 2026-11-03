@@ -12,7 +12,12 @@ import { FaqList } from "./faq";
 import { CsvSheet, ExtractedPanel, ReceiptSlip, UploadQueue } from "./previews";
 import { BackdropGrid, Eyebrow, SignUpCta } from "./primitives";
 
-const serif = Instrument_Serif({ subsets: ["latin"], weight: "400", style: ["normal", "italic"], display: "swap" });
+const serif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  display: "swap",
+});
 
 const oldWay = [
   "Typing every receipt into a spreadsheet, one cell at a time",
@@ -49,8 +54,14 @@ const acts = [
 
 const promises = [
   ["Yours only", "Receipts are visible to you and the people you invite. Nobody else."],
-  ["Read by Google's Gemini AI", "We send the image to Google's Gemini model to read it. We name it because you should know."],
-  ["Delete from Settings", "Remove a receipt, or your whole account, yourself. No email to send, no form to fill."],
+  [
+    "Read by Google's Gemini AI",
+    "We send the image to Google's Gemini model to read it. We name it because you should know.",
+  ],
+  [
+    "Delete from Settings",
+    "Remove a receipt, or your whole account, yourself. No email to send, no form to fill.",
+  ],
 ];
 
 export function DirectionB() {
@@ -71,8 +82,8 @@ export function DirectionB() {
               Your receipts, <em className="text-primary">sorted</em> before tax time.
             </h1>
             <p className="mx-auto mt-7 max-w-xl text-pretty text-base leading-7 text-foreground/80 md:text-lg md:leading-8">
-              Photograph or upload any receipt. We read the merchant, date, items, tax and total, so you can check it,
-              fix it, and export a CSV for your accountant.
+              Photograph or upload any receipt. We read the merchant, date, items, tax and total, so
+              you can check it, fix it, and export a CSV for your accountant.
             </p>
             <SignUpCta align="center" className="mx-auto mt-9 max-w-xs sm:max-w-none" />
           </div>
@@ -80,8 +91,14 @@ export function DirectionB() {
           {/* The transformation: paper on the left, rows on the right. */}
           <div className="reveal-up reveal-delay-2 relative mx-auto mt-20 grid max-w-5xl items-center gap-10 md:grid-cols-[0.8fr_auto_1.2fr]">
             <div className="relative mx-auto h-[23rem] w-72">
-              <div className="absolute left-1 top-8 h-72 w-56 rotate-[-9deg] bg-[var(--paper)]/55 receipt-edge" aria-hidden />
-              <div className="absolute right-0 top-3 h-72 w-56 rotate-[7deg] bg-[var(--paper)]/75 receipt-edge" aria-hidden />
+              <div
+                className="absolute left-1 top-8 h-72 w-56 rotate-[-9deg] bg-[var(--paper)]/55 receipt-edge"
+                aria-hidden
+              />
+              <div
+                className="absolute right-0 top-3 h-72 w-56 rotate-[7deg] bg-[var(--paper)]/75 receipt-edge"
+                aria-hidden
+              />
               <ReceiptSlip className="absolute inset-x-4 top-0 rotate-[-2deg]" />
             </div>
             <ArrowRight aria-hidden className="mx-auto size-6 rotate-90 text-primary md:rotate-0" />
@@ -91,12 +108,20 @@ export function DirectionB() {
 
         <section aria-labelledby="b-compare" className="border-t border-border px-5 py-24 md:py-28">
           <div className="mx-auto max-w-5xl">
-            <h2 className={cn(serif.className, "max-w-2xl text-balance text-4xl leading-tight md:text-5xl")} id="b-compare">
+            <h2
+              className={cn(
+                serif.className,
+                "max-w-2xl text-balance text-4xl leading-tight md:text-5xl",
+              )}
+              id="b-compare"
+            >
               Tax season shouldn&apos;t start with a shoebox.
             </h2>
             <div className="mt-12 grid gap-5 md:grid-cols-2">
               <div className="rounded-2xl bg-secondary/30 p-7 ring-1 ring-border">
-                <h3 className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">The old way</h3>
+                <h3 className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                  The old way
+                </h3>
                 <ul className="mt-5 flex flex-col gap-4">
                   {oldWay.map((line) => (
                     <li className="flex gap-3 text-muted-foreground" key={line}>
@@ -107,7 +132,9 @@ export function DirectionB() {
                 </ul>
               </div>
               <div className="rounded-2xl bg-primary/[0.05] p-7 ring-1 ring-primary/30">
-                <h3 className="font-mono text-xs uppercase tracking-[0.18em] text-primary">With receiptOCR</h3>
+                <h3 className="font-mono text-xs uppercase tracking-[0.18em] text-primary">
+                  With receiptOCR
+                </h3>
                 <ul className="mt-5 flex flex-col gap-4">
                   {newWay.map((line) => (
                     <li className="flex gap-3" key={line}>
@@ -121,14 +148,22 @@ export function DirectionB() {
           </div>
         </section>
 
-        <section className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28" id="how">
+        <section
+          className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28"
+          id="how"
+        >
           <div className="mx-auto max-w-5xl">
             <Eyebrow>How it works</Eyebrow>
-            <h2 className={cn(serif.className, "mt-3 text-4xl md:text-5xl")}>Three steps, no typing.</h2>
+            <h2 className={cn(serif.className, "mt-3 text-4xl md:text-5xl")}>
+              Three steps, no typing.
+            </h2>
             <ol className="mt-14 flex flex-col gap-16">
               {acts.map((act) => (
                 <li className="grid items-start gap-8 md:grid-cols-[6rem_1fr_1.2fr]" key={act.n}>
-                  <span aria-hidden className={cn(serif.className, "text-6xl italic leading-none text-primary")}>
+                  <span
+                    aria-hidden
+                    className={cn(serif.className, "text-6xl italic leading-none text-primary")}
+                  >
                     {act.n}
                   </span>
                   <div>
@@ -159,21 +194,35 @@ export function DirectionB() {
           </div>
         </section>
 
-        <section className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28" id="pricing">
+        <section
+          className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28"
+          id="pricing"
+        >
           <div className="mx-auto max-w-5xl text-center">
             <Eyebrow>Pricing</Eyebrow>
-            <h2 className={cn(serif.className, "mx-auto mt-4 max-w-3xl text-balance text-5xl leading-[1.05] md:text-6xl")}>
-              Free. {freePlan.receiptsPerDay} receipts a day. <em className="text-primary">No card.</em>
+            <h2
+              className={cn(
+                serif.className,
+                "mx-auto mt-4 max-w-3xl text-balance text-5xl leading-[1.05] md:text-6xl",
+              )}
+            >
+              Free. {freePlan.receiptsPerDay} receipts a day.{" "}
+              <em className="text-primary">No card.</em>
             </h2>
             <p className="mx-auto mt-5 max-w-lg text-muted-foreground">
-              The {freePlan.name.toLowerCase()} includes {freePlan.workspaces} workspace, CSV export and every feature on
-              this page. There&apos;s nothing to upgrade to yet.
+              The {freePlan.name.toLowerCase()} includes {freePlan.workspaces} workspace, CSV export
+              and every feature on this page. There&apos;s nothing to upgrade to yet.
             </p>
-            <Link className={cn(buttonVariants({ size: "lg" }), "mt-8 w-full sm:w-auto")} href="/sign-up">
+            <Link
+              className={cn(buttonVariants({ size: "lg" }), "mt-8 w-full sm:w-auto")}
+              href="/sign-up"
+            >
               Get started free <ArrowRight aria-hidden className="size-4" />
             </Link>
             <div className="mx-auto mt-14 max-w-3xl rounded-2xl p-6 text-left ring-1 ring-border">
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">Coming soon</p>
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                Coming soon
+              </p>
               <ul className="mt-4 grid gap-5 sm:grid-cols-3">
                 {comingSoon.map((item) => (
                   <li key={item.title}>
@@ -191,7 +240,9 @@ export function DirectionB() {
 
         <section className="scroll-mt-24 border-t border-border px-5 py-24 md:py-28" id="faq">
           <div className="mx-auto max-w-3xl">
-            <h2 className={cn(serif.className, "text-center text-4xl md:text-5xl")}>Questions, answered.</h2>
+            <h2 className={cn(serif.className, "text-center text-4xl md:text-5xl")}>
+              Questions, answered.
+            </h2>
             <FaqList className="mt-12" />
           </div>
         </section>

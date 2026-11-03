@@ -15,8 +15,13 @@ const faqJsonLd = {
 /** Native <details> keeps it keyboard and screen-reader friendly with no client JS. */
 export function FaqList({ className, mono = false }: { className?: string; mono?: boolean }) {
   return (
-    <div className={cn("divide-y divide-border rounded-2xl bg-card/40 ring-1 ring-border", className)}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+    <div
+      className={cn("divide-y divide-border rounded-2xl bg-card/40 ring-1 ring-border", className)}
+    >
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       {faqs.map((faq) => (
         <details className="group [&_summary::-webkit-details-marker]:hidden" key={faq.q}>
           <summary
@@ -25,7 +30,13 @@ export function FaqList({ className, mono = false }: { className?: string; mono?
               mono ? "font-mono text-sm" : "text-[15px]",
             )}
           >
-            {mono ? <span><span className="text-primary">Q.</span> {faq.q}</span> : faq.q}
+            {mono ? (
+              <span>
+                <span className="text-primary">Q.</span> {faq.q}
+              </span>
+            ) : (
+              faq.q
+            )}
             <Plus
               aria-hidden
               className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-45 group-open:text-primary"

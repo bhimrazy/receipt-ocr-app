@@ -5,11 +5,19 @@ import { Input } from "@receipt-ocr/ui/components/input";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, MessageCircle, Send, X } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
-import { SUPPORT_OPEN_EVENT, type SupportOpenDetail, type SupportTopic } from "@/lib/support-widget";
+import {
+  SUPPORT_OPEN_EVENT,
+  type SupportOpenDetail,
+  type SupportTopic,
+} from "@/lib/support-widget";
 
 const TOPICS: Array<{ id: SupportTopic; label: string; prompt: string }> = [
   { id: "getting-started", label: "Question", prompt: "Ask us anything" },
-  { id: "use-case", label: "Plans & limits", prompt: "How many receipts a month, and what do you need?" },
+  {
+    id: "use-case",
+    label: "Plans & limits",
+    prompt: "How many receipts a month, and what do you need?",
+  },
   { id: "feature", label: "Feature request", prompt: "What would you like us to build?" },
 ];
 
@@ -44,7 +52,8 @@ export function SupportWidget() {
   }, []);
 
   useEffect(() => {
-    const onOpen = (event: Event) => openWidget((event as CustomEvent<SupportOpenDetail>).detail?.topic);
+    const onOpen = (event: Event) =>
+      openWidget((event as CustomEvent<SupportOpenDetail>).detail?.topic);
     window.addEventListener(SUPPORT_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(SUPPORT_OPEN_EVENT, onOpen);
   }, [openWidget]);
@@ -64,7 +73,8 @@ export function SupportWidget() {
     if (status === "sending") return;
     setStatus("sending");
     setError(null);
-    const company = (event.currentTarget.elements.namedItem("company") as HTMLInputElement | null)?.value ?? "";
+    const company =
+      (event.currentTarget.elements.namedItem("company") as HTMLInputElement | null)?.value ?? "";
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
@@ -80,7 +90,9 @@ export function SupportWidget() {
       setMessage("");
     } catch (err) {
       setStatus("error");
-      setError(err instanceof Error ? err.message : "Your message didn't send. Try again in a moment.");
+      setError(
+        err instanceof Error ? err.message : "Your message didn't send. Try again in a moment.",
+      );
     }
   };
 
@@ -117,7 +129,9 @@ export function SupportWidget() {
                 </span>
                 <div>
                   <p className="text-sm font-semibold">Message sent</p>
-                  <p className="mt-1 text-xs text-muted-foreground">We&apos;ll reply to your email.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    We&apos;ll reply to your email.
+                  </p>
                 </div>
                 <Button onClick={() => setStatus("idle")} size="sm" variant="ghost">
                   Send another
@@ -126,7 +140,9 @@ export function SupportWidget() {
             ) : (
               <form onSubmit={submit} className="flex flex-col gap-3">
                 <fieldset>
-                  <legend className="mb-1.5 text-xs font-medium text-muted-foreground">Topic</legend>
+                  <legend className="mb-1.5 text-xs font-medium text-muted-foreground">
+                    Topic
+                  </legend>
                   <div className="flex flex-wrap gap-1.5">
                     {TOPICS.map((t) => (
                       <button
@@ -217,7 +233,11 @@ export function SupportWidget() {
         aria-expanded={open}
         className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_0_30px_color-mix(in_oklab,var(--primary)_30%,transparent)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-safe:hover:-translate-y-0.5"
       >
-        {open ? <X aria-hidden className="size-5" /> : <MessageCircle aria-hidden className="size-5" />}
+        {open ? (
+          <X aria-hidden className="size-5" />
+        ) : (
+          <MessageCircle aria-hidden className="size-5" />
+        )}
       </button>
     </div>
   );
