@@ -61,12 +61,42 @@ export function ProcessingPoller({ id, status }: { id: string; status: string })
   if (!gaveUp) return null;
 
   return (
-    <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-      Still processing after a few minutes — something may have gone wrong.{" "}
-      <button className="underline" onClick={() => router.refresh()} type="button">
+    <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning" role="status">
+      Still reading after a few minutes. Something may have gone wrong.
+      <button
+        className="min-h-11 rounded-md font-medium underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-0"
+        onClick={() => router.refresh()}
+        type="button"
+      >
         Check again
       </button>
-      .
     </div>
   );
+}
+
+/**
+ * Refreshes a server-rendered list while any row is still being read, on the
+ * same backed-off schedule, so a queued batch doesn't sit on a stale page.
+ */
+export function ListPoller({ active }: { active: boolean }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!active) return;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const startedAt = Date.now();
+
+    function tick() {
+      if (Date.now() - startedAt > MAX_POLL_MS) return;
+      router.refresh();
+      attempt += 1;
+      timer = setTimeout(tick, Math.min(BASE_INTERVAL_MS * 2 ** Math.floor(attempt / 3), MAX_INTERVAL_MS));
+    }
+
+    timer = setTimeout(tick, BASE_INTERVAL_MS * 2);
+    return () => clearTimeout(timer);
+  }, [active, router]);
+
+  return null;
 }

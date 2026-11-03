@@ -5,7 +5,10 @@ import type { ReceiptWithItems } from "@receipt-ocr/core";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Loader2, Pencil } from "lucide-react";
+import { Label } from "@receipt-ocr/ui/components/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@receipt-ocr/ui/components/select";
+import { Loader2, Pencil, TriangleAlert } from "lucide-react";
+import { confidenceLevel } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -35,6 +38,15 @@ function draftFrom(receipt: ReceiptWithItems): Draft {
 
 const labelClass = "mb-1.5 block text-xs font-medium text-muted-foreground";
 
+/** Canonical list, plus the stored value when it isn't in it, so what you see is what saves. */
+function categoryItems(current: string) {
+  const items: { value: string; label: string }[] = RECEIPT_CATEGORIES.map((category) => ({ value: category, label: category }));
+  if (current && !items.some((item) => item.value === current)) {
+    items.unshift({ value: current, label: `${current} (unrecognised)` });
+  }
+  return items;
+}
+
 /**
  * Correcting extracted values. Showing a confidence score without a way to fix
  * a wrong reading leaves the user stuck with data they know is wrong, so every
@@ -52,6 +64,8 @@ export function ReceiptEditor({
   const [draft, setDraft] = useState<Draft>(() => draftFrom(receipt));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categories] = useState(() => categoryItems(receipt.category ?? "Other"));
+  const lowConfidence = confidenceLevel(receipt.confidence);
 
   function set<K extends keyof Draft>(key: K, value: string) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -77,22 +91,29 @@ export function ReceiptEditor({
   }
 
   return (
-    <Card className="mb-5">
+    <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Pencil className="size-5 text-primary" />
+          <Pencil aria-hidden="true" className="size-5 text-primary" />
           Correct extracted data
         </CardTitle>
         <CardDescription>
-          Fix anything the scan misread. Line items keep their original values.
+          Fix anything that was misread. Your corrections are what gets exported. Line items can&apos;t be
+          edited yet.
         </CardDescription>
+        {lowConfidence === "check" || lowConfidence === "review" ? (
+          <p className="mt-2 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+            <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+            Parts of this receipt were hard to read. Check the merchant, date and total against the photo first.
+          </p>
+        ) : null}
       </CardHeader>
       <CardContent>
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={save}>
           <div className="sm:col-span-2">
-            <label className={labelClass} htmlFor="merchant">
+            <Label className={labelClass} htmlFor="merchant">
               Merchant
-            </label>
+            </Label>
             <Input
               id="merchant"
               onChange={(event) => set("merchant", event.target.value)}
@@ -102,9 +123,9 @@ export function ReceiptEditor({
           </div>
 
           <div>
-            <label className={labelClass} htmlFor="receiptDate">
+            <Label className={labelClass} htmlFor="receiptDate">
               Date
-            </label>
+            </Label>
             <Input
               id="receiptDate"
               onChange={(event) => set("receiptDate", event.target.value)}
@@ -115,27 +136,27 @@ export function ReceiptEditor({
           </div>
 
           <div>
-            <label className={labelClass} htmlFor="category">
+            <Label className={labelClass} htmlFor="category">
               Category
-            </label>
-            <select
-              className="h-10 w-full rounded-lg border border-border bg-background/60 px-3 text-sm text-foreground outline-none transition focus:border-primary"
-              id="category"
-              onChange={(event) => set("category", event.target.value)}
-              value={draft.category}
-            >
-              {RECEIPT_CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
+            </Label>
+            <Select items={categories} onValueChange={(value) => value && set("category", value as string)} value={draft.category}>
+              <SelectTrigger className="w-full" id="category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                {categories.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
-            <label className={labelClass} htmlFor="currency">
+            <Label className={labelClass} htmlFor="currency">
               Currency
-            </label>
+            </Label>
             <Input
               id="currency"
               maxLength={3}
@@ -146,9 +167,9 @@ export function ReceiptEditor({
           </div>
 
           <div>
-            <label className={labelClass} htmlFor="subtotal">
+            <Label className={labelClass} htmlFor="subtotal">
               Subtotal
-            </label>
+            </Label>
             <Input
               id="subtotal"
               inputMode="decimal"
@@ -159,9 +180,9 @@ export function ReceiptEditor({
           </div>
 
           <div>
-            <label className={labelClass} htmlFor="tax">
+            <Label className={labelClass} htmlFor="tax">
               Tax
-            </label>
+            </Label>
             <Input
               id="tax"
               inputMode="decimal"
@@ -172,9 +193,9 @@ export function ReceiptEditor({
           </div>
 
           <div>
-            <label className={labelClass} htmlFor="tip">
+            <Label className={labelClass} htmlFor="tip">
               Tip
-            </label>
+            </Label>
             <Input
               id="tip"
               inputMode="decimal"
@@ -185,9 +206,9 @@ export function ReceiptEditor({
           </div>
 
           <div>
-            <label className={labelClass} htmlFor="total">
+            <Label className={labelClass} htmlFor="total">
               Total
-            </label>
+            </Label>
             <Input
               id="total"
               inputMode="decimal"
@@ -199,7 +220,7 @@ export function ReceiptEditor({
 
           {error ? (
             <p
-              className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400 sm:col-span-2"
+              className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:col-span-2"
               role="alert"
             >
               {error}
@@ -208,7 +229,7 @@ export function ReceiptEditor({
 
           <div className="flex gap-2 sm:col-span-2">
             <Button disabled={saving} type="submit">
-              {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+              {saving ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
               Save changes
             </Button>
             <Button disabled={saving} onClick={onClose} type="button" variant="outline">
