@@ -44,6 +44,8 @@ export GOOGLE_GENERATIVE_AI_API_KEY="dummy-local"
 export S3_ENDPOINT="http://localhost:$s3_port" S3_REGION=us-east-1 S3_BUCKET=receipt-ocr
 export S3_ACCESS_KEY_ID=rustfsadmin S3_SECRET_ACCESS_KEY=rustfsadmin S3_FORCE_PATH_STYLE=true
 export PORT="$port"
+# Playwright reads its target from here, not from PORT.
+export E2E_BASE_URL="http://localhost:$port"
 
 bun run db:migrate
 bun run build
