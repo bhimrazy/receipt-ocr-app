@@ -29,16 +29,16 @@ const columns: Array<{ title: string; links: Array<{ label: string; href: string
 ];
 
 const linkClass =
-  "inline-flex min-h-11 items-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8";
+  "inline-flex min-h-11 items-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:min-h-8";
 
 /** `narrow` matches the max-w-3xl column of legal and error pages. */
 export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
   return (
     <footer className="border-t border-border px-5 pb-10 pt-14">
       <div className={cn("mx-auto", narrow ? "max-w-3xl" : "max-w-6xl")}>
-        <div className={cn("grid gap-8", narrow ? "sm:grid-cols-3" : "md:grid-cols-[1.5fr_repeat(3,1fr)]")}>
+        <div className={cn("grid grid-cols-2 gap-x-6 gap-y-8", narrow ? "sm:grid-cols-3" : "md:grid-cols-[1.5fr_repeat(3,1fr)]")}>
           {!narrow && (
-            <div className="max-w-xs">
+            <div className="col-span-2 max-w-xs md:col-span-1">
               <Brand />
               <p className="mt-4 text-sm leading-6 text-muted-foreground">
                 Receipts in, spreadsheet out. Check every number before it reaches your books.

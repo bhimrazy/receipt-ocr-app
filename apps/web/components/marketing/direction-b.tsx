@@ -182,7 +182,7 @@ export function DirectionB() {
                   </li>
                 ))}
               </ul>
-              <ContactButton className="mt-6" topic="use-case" variant="outline">
+              <ContactButton className="mt-6 h-11" topic="use-case" variant="outline">
                 Need more now? Contact us
               </ContactButton>
             </div>

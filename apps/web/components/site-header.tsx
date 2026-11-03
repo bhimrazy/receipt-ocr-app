@@ -64,7 +64,7 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
           solid ? "bg-background/85 shadow-lg shadow-black/40 ring-1 ring-border backdrop-blur-xl" : "bg-transparent",
         )}
       >
-        <Link aria-label="receiptOCR home" className={cn("rounded-lg", focusRing)} href="/">
+        <Link aria-label="receiptOCR home" className={cn("inline-flex min-h-11 items-center rounded-lg", focusRing)} href="/">
           <Brand />
         </Link>
 
