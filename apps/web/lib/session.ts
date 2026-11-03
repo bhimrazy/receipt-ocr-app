@@ -1,17 +1,21 @@
-import { createDb, asc, eq, member } from "@receipt-ocr/db";
+import "server-only";
+import { ensurePersonalWorkspace, resolveScope } from "@receipt-ocr/core";
+import { Effect } from "effect";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { cache } from "react";
 import { auth, authEnabled, type Session } from "./auth";
-import { authEnv } from "./env";
+import { runtime } from "./runtime";
 
 /**
- * Single place for server-side session lookups. Returns null when auth is
- * not configured (preview mode) or when there is no valid session.
+ * Single place for server-side session lookups, deduplicated per request.
+ * Returns null when auth is not configured (preview mode) or there is no
+ * valid session.
  */
-export async function getSession(): Promise<Session | null> {
+export const getSession = cache(async (): Promise<Session | null> => {
   if (!authEnabled) return null;
   return auth.api.getSession({ headers: await headers() });
-}
+});
 
 /** Session user id, or null when signed out / auth not configured. */
 export async function getCurrentUserId(): Promise<string | null> {
@@ -50,38 +54,33 @@ export async function requireAdmin(): Promise<Session> {
 }
 
 /**
- * The workspace a request acts in, plus who is acting. Receipts are scoped to
- * `organizationId`; `userId` is attribution only.
+ * The workspace a request acts in, plus who is acting and their role.
+ * Receipts are scoped to `organizationId`; `userId` is attribution only.
  *
- * `session.activeOrganizationId` is set by Better Auth on session creation and
- * only ever to an organization the user belongs to, so it is safe to trust as
- * an authorization boundary. The membership lookup below is a fallback for
- * sessions created before that hook existed.
+ * Resolved through `member` on every request (deduplicated per request):
+ * `session.activeOrganizationId` is only a preference, because Better Auth
+ * leaves it set on a removed member's sessions.
  */
 export interface ActiveScope {
   organizationId: string;
   userId: string;
+  role: string;
 }
 
-export async function getActiveScope(): Promise<ActiveScope | null> {
+export const getActiveScope = cache(async (): Promise<ActiveScope | null> => {
   const session = await getSession();
   if (!session) return null;
-
-  const active = session.session.activeOrganizationId;
-  if (active) return { organizationId: active, userId: session.user.id };
-
-  if (!authEnv.databaseUrl) return null;
-  const db = createDb(authEnv.databaseUrl);
-  const [membership] = await db
-    .select({ organizationId: member.organizationId })
-    .from(member)
-    .where(eq(member.userId, session.user.id))
-    .orderBy(asc(member.createdAt))
-    .limit(1);
-
-  if (!membership) return null;
-  return { organizationId: membership.organizationId, userId: session.user.id };
-}
+  const { user } = session;
+  return runtime.runPromise(
+    Effect.gen(function* () {
+      const scope = yield* resolveScope(user.id, session.session.activeOrganizationId);
+      if (scope) return scope;
+      // Self-heals a sign-up whose workspace bootstrap failed.
+      if (!(yield* ensurePersonalWorkspace(user))) return null;
+      return yield* resolveScope(user.id);
+    }),
+  );
+});
 
 /** For pages: requires a signed-in user who is in a workspace. */
 export async function requireActiveScope(): Promise<ActiveScope> {
