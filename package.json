@@ -11,7 +11,11 @@
     "dev": "turbo dev",
     "lint": "eslint .",
     "typecheck": "turbo typecheck",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:deps": "bun scripts/check-deps.ts",
+    "knip": "knip",
+    "audit": "bun audit --audit-level=high",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:reset": "docker compose down -v",
@@ -31,9 +35,13 @@
     "@types/react-dom": "19.3.0",
     "eslint": "10.13.0",
     "eslint-config-next": "16.4.3",
+    "knip": "6.43.0",
     "prettier": "3.9.10",
     "turbo": "2.11.10",
     "typescript": "6.0.3",
     "vitest": "4.1.12"
+  },
+  "overrides": {
+    "source-map-js": "1.2.2"
   }
 }

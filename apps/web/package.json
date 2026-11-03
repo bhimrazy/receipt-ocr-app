@@ -18,13 +18,11 @@
     "@receipt-ocr/email": "workspace:*",
     "@receipt-ocr/ui": "workspace:0.0.0",
     "better-auth": "1.7.14",
-    "clsx": "2.1.1",
     "effect": "3.22.4",
     "lucide-react": "1.62.0",
     "next": "16.4.3",
     "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "tailwind-merge": "3.7.0"
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

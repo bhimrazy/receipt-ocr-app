@@ -1,0 +1,9 @@
+bun.lock
+.next
+.turbo
+coverage
+apps/web/drizzle
+apps/web/playwright-report
+apps/web/test-results
+bench/results
+docs/reviews
