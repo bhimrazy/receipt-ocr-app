@@ -13,10 +13,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/google": "3.0.80",
-    "ai": "6.0.193",
-    "effect": "3.21.2",
-    "zod": "4.4.3"
+    "@ai-sdk/google": "3.0.139",
+    "ai": "6.0.316",
+    "effect": "3.22.4",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "25.9.1",
