@@ -1,229 +1,126 @@
-import { AppLive, ReceiptProcessingService, ValidationError } from "@receipt-ocr/core";
-import { Cause, Effect, Exit, Option } from "effect";
-import { NextResponse } from "next/server";
-import { after } from "next/server";
+import {
+  EXTRACTION_FAILED_MESSAGE,
+  extractStored,
+  ingestUpload,
+  loadOcrConfig,
+  MAX_UPLOAD_BYTES,
+} from "@receipt-ocr/core";
+import { Cause, Effect } from "effect";
+import { after, NextResponse } from "next/server";
+import {
+  crossOriginResponse,
+  failureResponse,
+  jsonError,
+  readFormData,
+  runBackground,
+  runRoute,
+} from "@/lib/http";
 import { logger, type WideEvent } from "@/lib/log";
-import { checkUploadQuota, quotaMessage } from "@/lib/quota";
+import { enforceUploadQuota } from "@/lib/quota";
 import { getActiveScope, getSession, planFor } from "@/lib/session";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-/** Unwraps the provider error a tagged failure was built from, for logging. */
-function causeDetail(error: unknown): string | undefined {
-  const inner = (error as { cause?: unknown } | null)?.cause;
-  if (!inner) return undefined;
-  if (inner instanceof Error) return `${inner.name}: ${inner.message}`;
-  return String(inner);
-}
-
-function failureContext(
-  cause: Cause.Cause<{ readonly message: string; readonly _tag?: string }>,
-) {
-  const failure = Cause.failureOption(cause);
-  if (Option.isSome(failure)) {
-    return {
-      message: failure.value.message,
-      type: failure.value._tag ?? "UnknownError",
-      status: failure.value instanceof ValidationError ? 400 : 500,
-      // The tagged error carries a generic message; the wrapped provider error
-      // is the one that says WHY (bad key, unknown model, quota).
-      detail: causeDetail(failure.value),
-    };
-  }
-  return {
-    message: "Receipt processing failed",
-    type: "Defect",
-    status: 500,
-    detail: Cause.pretty(cause).slice(0, 500),
-  };
-}
+/** OCR is capped at 45 s; this leaves room for upload and persistence. */
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
   const requestId = crypto.randomUUID();
-  const event: WideEvent = {
-    event: "receipt.upload",
-    method: "POST",
-    path: "/api/receipts",
-    request_id: requestId,
+  const event: WideEvent = { event: "receipt.upload", method: "POST", path: "/api/receipts", request_id: requestId };
+  const respond = (response: Response) => {
+    event.status_code ??= response.status;
+    event.duration_ms = Date.now() - startedAt;
+    (event.outcome === "error" ? logger.error : logger.info)(event);
+    return response;
   };
 
-  try {
-    const session = await getSession();
-    const userId = session?.user.id ?? null;
-    if (!userId) {
-      event.status_code = 401;
-      event.outcome = "unauthorized";
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    event.user_id = userId;
+  const forbidden = crossOriginResponse(request);
+  if (forbidden) return respond(forbidden);
 
-    const scope = await getActiveScope();
-    if (!scope) {
-      event.status_code = 409;
-      event.outcome = "no_workspace";
-      return NextResponse.json(
-        { error: "No active workspace. Pick or create one before uploading." },
-        { status: 409 },
-      );
-    }
-    event.organization_id = scope.organizationId;
+  // Start reading the body while the session and workspace resolve.
+  const formPromise = readFormData(request, MAX_UPLOAD_BYTES);
+  const [session, scope] = await Promise.all([getSession(), getActiveScope()]);
+  if (!session) return respond(jsonError(401, "Unauthorized"));
+  event.user_id = session.user.id;
+  if (!scope) return respond(jsonError(409, "No active workspace. Pick or create one before uploading."));
+  event.organization_id = scope.organizationId;
 
-    const plan = planFor(session);
-    event.plan = plan;
-    const quota = await checkUploadQuota(userId, plan);
-    event.quota_used = quota.used;
-    event.quota_limit = quota.limit;
-    if (!quota.allowed) {
-      event.status_code = 429;
-      event.outcome = "rate_limited";
-      event.quota_window = quota.window;
-      return NextResponse.json(
-        { error: quotaMessage(quota) },
-        {
-          status: 429,
-          headers: quota.retryAfterSeconds
-            ? { "Retry-After": String(quota.retryAfterSeconds) }
-            : undefined,
-        },
-      );
-    }
+  const form = await formPromise;
+  if (form instanceof Response) return respond(form);
+  const file = form.get("file");
+  if (!(file instanceof File)) return respond(jsonError(400, "A receipt file is required"));
+  const mode = form.get("mode") === "queued" ? "queued" : "instant";
+  event.mode = mode;
+  event.file = { size_bytes: file.size, declared_type: file.type };
 
-    const form = await request.formData();
-    const file = form.get("file");
-    const mode = form.get("mode") === "queued" ? "queued" : "instant";
-    event.mode = mode;
+  const plan = planFor(session);
+  event.plan = plan;
+  const body = new Uint8Array(await file.arrayBuffer());
+  // Check quota and OCR config first, so nothing is stored for an upload that can't be read.
+  const ingest = enforceUploadQuota(session.user.id, plan).pipe(
+    Effect.zipRight(loadOcrConfig),
+    Effect.zipRight(ingestUpload({ scope, fileName: file.name, body })),
+  );
 
-    if (!(file instanceof File)) {
-      event.status_code = 400;
-      event.outcome = "invalid_input";
-      return NextResponse.json({ error: "A receipt image file is required" }, { status: 400 });
-    }
-    event.file = { name: file.name, size_bytes: file.size, mime_type: file.type };
-
-    if (file.size > MAX_FILE_SIZE) {
-      event.status_code = 400;
-      event.outcome = "file_too_large";
-      return NextResponse.json({ error: "Receipt image must be 10MB or smaller" }, { status: 400 });
-    }
-
-    const body = new Uint8Array(await file.arrayBuffer());
-    const upload = {
-      scope,
-      fileName: file.name,
-      mimeType: file.type || "application/octet-stream",
-      body,
-    };
-
-    if (mode === "queued") {
-      const ingested = await Effect.runPromiseExit(
-        Effect.gen(function* () {
-          const processor = yield* ReceiptProcessingService;
-          return yield* processor.ingestUpload(upload);
-        }).pipe(Effect.provide(AppLive)),
-      );
-
-      if (Exit.isFailure(ingested)) {
-        const failure = failureContext(ingested.cause);
-        event.status_code = failure.status;
-        event.outcome = "error";
-        event.error = { message: failure.message, type: failure.type, detail: failure.detail };
-        return NextResponse.json({ error: failure.message }, { status: failure.status });
-      }
-
-      const receiptId = ingested.value.receipt.id;
-      event.receipt_id = receiptId;
-      event.timings = ingested.value.timings;
-      event.status_code = 202;
-      event.outcome = "queued";
-
-      // Extraction continues after the response is sent; the client polls
-      // GET /api/receipts/:id (or the receipt page) for the outcome.
-      after(async () => {
-        const extractStartedAt = Date.now();
-        const extractEvent: WideEvent = {
-          event: "receipt.extract.background",
-          request_id: requestId,
-          receipt_id: receiptId,
-          user_id: userId,
-          file: event.file,
-        };
-        const extracted = await Effect.runPromiseExit(
-          Effect.gen(function* () {
-            const processor = yield* ReceiptProcessingService;
-            return yield* processor.extractStored({
-              receiptId,
-              scope,
-              mimeType: upload.mimeType,
-              body,
-            });
-          }).pipe(Effect.provide(AppLive)),
+  if (mode === "queued") {
+    const response = await runRoute(
+      ingest,
+      (ingested) => {
+        const receiptId = ingested.receipt.id;
+        event.receipt_id = receiptId;
+        event.timings = ingested.timings;
+        event.outcome = "queued";
+        // Extraction continues after the response; the client polls GET /api/receipts/:id.
+        after(() =>
+          runBackground(
+            extractStored({ receiptId, scope, file: ingested.file }),
+            { event: "receipt.extract.background", request_id: requestId, receipt_id: receiptId, user_id: scope.userId },
+          ),
         );
-        extractEvent.duration_ms = Date.now() - extractStartedAt;
-        if (Exit.isFailure(extracted)) {
-          const failure = failureContext(extracted.cause);
-          extractEvent.outcome = "error";
-          extractEvent.error = { message: failure.message, type: failure.type, detail: failure.detail };
-          logger.error(extractEvent);
-          return;
-        }
-        extractEvent.outcome = "success";
-        extractEvent.timings = extracted.value.timings;
-        extractEvent.merchant = extracted.value.receipt.merchant;
-        extractEvent.confidence = extracted.value.receipt.confidence;
-        extractEvent.items_count = extracted.value.receipt.items.length;
-        logger.info(extractEvent);
-      });
-
-      return NextResponse.json(
-        { receiptId, status: "processing", requestId, timings: ingested.value.timings },
-        { status: 202 },
-      );
-    }
-
-    const result = await Effect.runPromiseExit(
-      Effect.gen(function* () {
-        const processor = yield* ReceiptProcessingService;
-        return yield* processor.processUpload(upload);
-      }).pipe(Effect.provide(AppLive)),
+        return NextResponse.json(
+          { receiptId, status: "processing", requestId, timings: ingested.timings },
+          { status: 202 },
+        );
+      },
+      event,
     );
-
-    if (Exit.isFailure(result)) {
-      const failure = failureContext(result.cause);
-      event.status_code = failure.status;
-      event.outcome = "error";
-      event.error = { message: failure.message, type: failure.type, detail: failure.detail };
-      return NextResponse.json({ error: failure.message }, { status: failure.status });
-    }
-
-    event.receipt_id = result.value.receipt.id;
-    event.timings = result.value.timings;
-    event.merchant = result.value.receipt.merchant;
-    event.confidence = result.value.receipt.confidence;
-    event.items_count = result.value.receipt.items.length;
-    event.status_code = 200;
-    event.outcome = "success";
-
-    return NextResponse.json({
-      receiptId: result.value.receipt.id,
-      status: "completed",
-      requestId,
-      timings: result.value.timings,
-    });
-  } catch (error) {
-    event.status_code = 500;
-    event.outcome = "error";
-    event.error = {
-      message: error instanceof Error ? error.message : String(error),
-      type: error instanceof Error ? error.name : "UnknownError",
-    };
-    return NextResponse.json({ error: "Receipt processing failed" }, { status: 500 });
-  } finally {
-    event.duration_ms = Date.now() - startedAt;
-    if (event.outcome === "error") {
-      logger.error(event);
-    } else {
-      logger.info(event);
-    }
+    return respond(response);
   }
+
+  const response = await runRoute(
+    Effect.gen(function* () {
+      const ingested = yield* ingest;
+      event.receipt_id = ingested.receipt.id;
+      // The upload itself succeeded: an extraction failure is reported as the
+      // receipt's state (failed, retryable), not as a failed request.
+      const extracted = yield* extractStored({ receiptId: ingested.receipt.id, scope, file: ingested.file }).pipe(
+        Effect.either,
+      );
+      return { receiptId: ingested.receipt.id, ingested, extracted };
+    }),
+    ({ receiptId, ingested, extracted }) => {
+      if (extracted._tag === "Left") {
+        failureResponse(Cause.fail(extracted.left), event);
+        event.outcome = "error";
+        event.status_code = 200;
+        return NextResponse.json({
+          receiptId,
+          status: "failed",
+          requestId,
+          message: EXTRACTION_FAILED_MESSAGE,
+        });
+      }
+      const result = extracted.right;
+      const timings = [...ingested.timings, ...result.timings];
+      event.outcome = "success";
+      event.status_code = 200;
+      event.timings = timings;
+      event.model = result.model;
+      event.usage = result.usage;
+      event.confidence = result.receipt.confidence;
+      event.items_count = result.receipt.items.length;
+      return NextResponse.json({ receiptId, status: "completed", requestId, timings });
+    },
+    event,
+  );
+  return respond(response);
 }

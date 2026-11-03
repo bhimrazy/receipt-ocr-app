@@ -1,7 +1,13 @@
+import "server-only";
+
 /**
- * Centralized, server-only env parsing for auth + database configuration.
- * Read env through this module instead of scattering `process.env` lookups.
+ * Centralized env parsing for auth + database configuration. Receipt
+ * services read their own config through Effect `Config` in packages/core.
  */
+
+export const isProduction = process.env.NODE_ENV === "production";
+/** `next build` runs with NODE_ENV=production but without runtime secrets. */
+const isBuild = process.env.NEXT_PHASE === "phase-production-build";
 
 function optional(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -48,13 +54,40 @@ export const emailEnv = {
 
 export const emailEnabled = Boolean(emailEnv.resendApiKey && emailEnv.from);
 
+function betterAuthUrl(): string {
+  const url = optional("BETTER_AUTH_URL");
+  if (url) return url;
+  // Localhost in production means broken invite links, a trustedOrigins
+  // mismatch and non-Secure cookies; fail at startup instead.
+  if (isProduction && !isBuild && optional("DATABASE_URL")) {
+    throw new Error("BETTER_AUTH_URL must be set in production.");
+  }
+  return "http://localhost:3000";
+}
+
+/**
+ * Headers that carry the client IP, comma-separated, e.g. `x-forwarded-for`.
+ * Only set this behind a proxy that overwrites them: otherwise clients can
+ * spoof the header and dodge rate limits. On Vercel the platform sets
+ * x-forwarded-for, so it is the default there.
+ */
+function trustedIpHeaders(): string[] {
+  const raw = process.env.TRUSTED_IP_HEADERS;
+  if (raw === undefined) return process.env.VERCEL ? ["x-forwarded-for"] : [];
+  return raw
+    .split(",")
+    .map((header) => header.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export const authEnv = {
   /** Supabase transaction-pooler (port 6543) URL works here; postgres-js runs with prepare:false. */
   databaseUrl: optional("DATABASE_URL"),
   /** Min 32 chars. Generate with `openssl rand -base64 32`. */
   betterAuthSecret: optional("BETTER_AUTH_SECRET"),
   /** Canonical app origin, e.g. https://receiptocr.example.com. Defaults to localhost in dev. */
-  betterAuthUrl: optional("BETTER_AUTH_URL") ?? "http://localhost:3000",
+  betterAuthUrl: betterAuthUrl(),
+  trustedIpHeaders: trustedIpHeaders(),
   /** Emails auto-promoted to the `admin` role when they sign up. */
   adminEmails: adminEmailList(),
   google: socialProvider("GOOGLE"),
