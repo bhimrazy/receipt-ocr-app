@@ -2,9 +2,10 @@ name: Vercel Preview Deployment
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
+
+permissions: {}
 
 concurrency:
   group: vercel-preview-${{ github.event.pull_request.number }}
@@ -12,71 +13,71 @@ concurrency:
 
 jobs:
   deploy-preview:
-    runs-on: ubuntu-latest
+    # Dependabot PRs get no secrets, so a preview could only fail.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
     environment: vercel-preview
     permissions:
+      contents: read
       pull-requests: write
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          version: 10.34.1
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
 
       - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+        run: bun add --global vercel@65.4.0
 
       - name: Pull Vercel environment
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
       - name: Build project
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --token="$VERCEL_TOKEN"
 
       - name: Deploy to Vercel
         id: deploy
         run: |
-          url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
-          echo "preview_url=$url" >> $GITHUB_OUTPUT
+          url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          echo "preview_url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Alias deployment to PR number
         id: alias
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
         run: |
-          alias="receipt-ocr-pr-${{ github.event.pull_request.number }}.vercel.app"
-          vercel alias set ${{ steps.deploy.outputs.preview_url }} $alias --token=${{ secrets.VERCEL_TOKEN }}
-          echo "alias_url=https://$alias" >> $GITHUB_OUTPUT
+          alias="receipt-ocr-pr-${PR_NUMBER}.vercel.app"
+          vercel alias set "$PREVIEW_URL" "$alias" --token="$VERCEL_TOKEN"
+          echo "alias_url=https://$alias" >> "$GITHUB_OUTPUT"
 
       - name: Find existing preview comment
         id: find-comment
-        uses: peter-evans/find-comment@v3
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: github-actions[bot]
           body-includes: <!-- vercel-preview-comment -->
 
       - name: Post or update preview comment
-        uses: peter-evans/create-or-update-comment@v4
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
           edit-mode: replace
           body: |
             <!-- vercel-preview-comment -->
-            ## 🔍 Preview Deployment
+            ## Preview deployment
 
             | | |
             |---|---|
-            | **Status** | ✅ Ready |
             | **Alias** | ${{ steps.alias.outputs.alias_url }} |
             | **Unique URL** | ${{ steps.deploy.outputs.preview_url }} |
-            | **Branch** | `${{ github.head_ref }}` |
-            | **Commit** | `${{ github.sha }}` |
+            | **Commit** | `${{ github.event.pull_request.head.sha }}` |
 
-            *Alias is stable for this PR — updates automatically on each push.*
+            The alias stays the same for this PR and updates on each push.

@@ -9,7 +9,6 @@
 **/dist
 **/coverage
 **/*.tsbuildinfo
-.pnpm-store
 
 # VCS and CI.
 .git
@@ -35,5 +34,6 @@ docs
 
 # Local-only tooling that the image never runs.
 docker-compose.yml
+docker/Dockerfile.*
 .dockerignore
 **/.tmp-screens

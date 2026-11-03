@@ -1,7 +1,11 @@
 {
   "name": "receipt-ocr-app",
   "private": true,
-  "packageManager": "pnpm@10.34.1",
+  "packageManager": "bun@1.4.4",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
@@ -12,10 +16,11 @@
     "docker:down": "docker compose down",
     "docker:reset": "docker compose down -v",
     "docker:app": "docker compose --profile app up --build",
+    "docker:dev": "docker compose --profile dev up --build",
     "docker:logs": "docker compose logs -f",
-    "db:migrate": "pnpm --filter @receipt-ocr/web exec drizzle-kit migrate",
-    "db:generate": "pnpm --filter @receipt-ocr/web exec drizzle-kit generate",
-    "db:studio": "pnpm --filter @receipt-ocr/web exec drizzle-kit studio",
+    "db:migrate": "bun run --filter @receipt-ocr/web db:migrate",
+    "db:generate": "bun run --filter @receipt-ocr/web db:generate",
+    "db:studio": "bun run --filter @receipt-ocr/web db:studio",
     "test": "vitest run",
     "test:watch": "vitest"
   },

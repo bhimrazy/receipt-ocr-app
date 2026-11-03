@@ -1,7 +1,8 @@
 # Local development stack.
 #
-#   docker compose up -d          # Postgres + RustFS only (run the app with `pnpm dev`)
-#   docker compose --profile app up --build   # …plus the app in a container
+#   docker compose up -d          # Postgres + RustFS only (run the app with `bun dev`)
+#   docker compose --profile app up --build   # …plus the production image
+#   docker compose --profile dev up --build   # …plus `next dev` in a container
 #
 # Everything except the Gemini API key works offline. Set
 # GOOGLE_GENERATIVE_AI_API_KEY in your shell or a root .env for real OCR;
@@ -10,7 +11,7 @@
 name: receipt-ocr
 
 # No `restart:` policies on purpose: stopped containers stay stopped until you
-# bring them back with `pnpm docker:up`.
+# bring them back with `bun run docker:up`.
 
 services:
   postgres:
@@ -74,7 +75,7 @@ services:
   migrate:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: docker/Dockerfile.prod
       target: builder
     depends_on:
       postgres:
@@ -82,15 +83,15 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
       DIRECT_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
-    working_dir: /repo/apps/web
-    command: pnpm exec drizzle-kit migrate
+    command: bun run db:migrate
 
+  # The production image (`bun run docker:app`).
   app:
     profiles: ["app"]
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
-    depends_on:
+      dockerfile: docker/Dockerfile.prod
+    depends_on: &app-depends
       postgres:
         condition: service_healthy
       rustfs-init:
@@ -99,7 +100,7 @@ services:
         condition: service_completed_successfully
     ports:
       - "${APP_PORT:-3000}:3000"
-    environment:
+    environment: &app-env
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
       DIRECT_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-development-secret-change-me-0000}
@@ -115,6 +116,32 @@ services:
       S3_FORCE_PATH_STYLE: "true"
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-receiptOCR <onboarding@resend.dev>}
+
+  # `next dev` in a container with the repo bind-mounted (`bun run docker:dev`).
+  # Each workspace's node_modules is a volume so the container never uses the
+  # host's (macOS) binaries.
+  app-dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    depends_on: *app-depends
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      <<: *app-env
+      NODE_ENV: development
+    volumes:
+      - .:/repo
+      - /repo/node_modules
+      - /repo/apps/web/node_modules
+      - /repo/apps/web/.next
+      - /repo/packages/ai/node_modules
+      - /repo/packages/core/node_modules
+      - /repo/packages/db/node_modules
+      - /repo/packages/email/node_modules
+      - /repo/packages/storage/node_modules
+      - /repo/packages/ui/node_modules
 
 volumes:
   postgres18-data:

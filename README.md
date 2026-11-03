@@ -1,6 +1,6 @@
 # Receipt OCR App
 
-A pnpm/Turborepo Receipt OCR MVP with Next.js, Better Auth, Drizzle/Postgres, S3-compatible storage, Gemini OCR, shadcn/ui, Tailwind v4, and an Effect TS backend service layer.
+A Bun/Turborepo Receipt OCR MVP with Next.js, Better Auth, Drizzle/Postgres, S3-compatible storage, Gemini OCR, shadcn/ui, Tailwind v4, and an Effect TS backend service layer.
 
 ## Apps and Packages
 
@@ -14,12 +14,12 @@ A pnpm/Turborepo Receipt OCR MVP with Next.js, Better Auth, Drizzle/Postgres, S3
 ## Local Setup
 
 ```bash
-pnpm install
+bun install
 cp .env.example .env                          # root env, read by docker compose
-cp apps/web/.env.example apps/web/.env.local  # app env, read by `pnpm dev`
-pnpm docker:up                                # Postgres + RustFS
-pnpm db:migrate
-pnpm dev
+cp apps/web/.env.example apps/web/.env.local  # app env, read by `bun dev`
+bun run docker:up                                # Postgres + RustFS
+bun run db:migrate
+bun dev
 ```
 
 ## Local development stack
@@ -35,9 +35,10 @@ pnpm dev
 | `app` | The Next.js app itself (profile `app`) | `localhost:3000` |
 
 ```bash
-pnpm docker:up      # infra only — run the app with `pnpm dev`
-pnpm docker:app     # ...plus the app in a container
-pnpm docker:reset   # tear down and delete the volumes
+bun run docker:up      # infra only — run the app with `bun dev`
+bun run docker:app     # ...plus the production image (docker/Dockerfile.prod)
+bun run docker:dev     # ...or `next dev` in a container (docker/Dockerfile.dev)
+bun run docker:reset   # tear down and delete the volumes
 ```
 
 Postgres is published on **5433**, not 5432, because 5432 is usually already
@@ -45,9 +46,9 @@ taken by another local Postgres. Change `POSTGRES_PORT` in `.env` if you'd
 rather use a different one, and keep `DATABASE_URL` in step.
 
 Containers carry no restart policy — once stopped they stay stopped until the
-next `pnpm docker:up`.
+next `bun run docker:up`.
 
-For `pnpm dev`, `apps/web/.env.local` needs at minimum:
+For `bun dev`, `apps/web/.env.local` needs at minimum:
 
 ```
 DATABASE_URL=postgres://postgres:postgres@localhost:5433/receipt_ocr
@@ -61,4 +62,4 @@ S3_FORCE_PATH_STYLE=true
 GOOGLE_GENERATIVE_AI_API_KEY=<your key>
 ```
 
-The UI renders without backend credentials. Real upload/OCR requires Better Auth (`BETTER_AUTH_SECRET`), Postgres (`DATABASE_URL`), S3/R2, and Gemini env vars. Apply migrations with `pnpm db:migrate` — against Supabase, that means the **session** pooler on port 5432 (set `DIRECT_URL`), not the transaction pooler.
+The UI renders without backend credentials. Real upload/OCR requires Better Auth (`BETTER_AUTH_SECRET`), Postgres (`DATABASE_URL`), S3/R2, and Gemini env vars. Apply migrations with `bun run db:migrate` — against Supabase, that means the **session** pooler on port 5432 (set `DIRECT_URL`), not the transaction pooler.

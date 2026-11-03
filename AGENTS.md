@@ -2,7 +2,7 @@
 
 ## Architecture
 
-This repo is a pnpm/Turborepo Receipt OCR MVP.
+This repo is a Bun/Turborepo Receipt OCR MVP.
 
 - `apps/web`: Next.js App Router app with Better Auth, shadcn-style UI, Tailwind v4, and route handlers.
 - `packages/ui`: shared UI primitives and global theme CSS.
@@ -22,7 +22,8 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 
 ## Important Decisions
 
-- Package manager: pnpm.
+- Package manager and tooling: Bun (`bun install`, `bun run`), with a 7-day release cooldown in `bunfig.toml`.
+- Runtime: Next.js runs on Node on Vercel and on Bun in the Docker image (`docker/Dockerfile.prod`).
 - Monorepo: Turborepo.
 - Web framework: Next.js App Router.
 - UI: shadcn-style primitives in `packages/ui`, Tailwind v4, lucide icons.
@@ -51,8 +52,8 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 Before handing off, prefer:
 
 ```bash
-pnpm typecheck
-pnpm build
+bun run typecheck
+bun run build
 ```
 
 If credentials are missing, the UI should still render with mock receipt data. Real OCR requires `apps/web/.env.local`.

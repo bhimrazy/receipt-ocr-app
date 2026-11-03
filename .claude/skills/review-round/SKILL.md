@@ -5,7 +5,7 @@ description: Run the Receipt OCR review round — CTO, CEO, security, product an
 
 # Review round
 
-1. **Prepare the app once.** `pnpm docker:up`, `pnpm db:migrate`, then `pnpm dev` with the local env overrides from
+1. **Prepare the app once.** `bun run docker:up`, `bun run db:migrate`, then `bun dev` with the local env overrides from
    `README.md` (local Postgres and RustFS only). Seed realistic receipts across statuses and currencies (USD, INR, NPR)
    without calling Gemini. Capture every route with `node scripts/screenshot.mjs` at 1440 and 390 into a scratch
    directory. Reviewers read these instead of each starting a server.
@@ -19,7 +19,7 @@ description: Run the Receipt OCR review round — CTO, CEO, security, product an
    or false claims become fix work now; the rest become GitHub issues citing the review file.
 
 4. **Fix in waves.** Split the fixes into tracks that don't touch the same files and run them in parallel, each in its own
-   worktree. Re-run `pnpm typecheck`, `pnpm test`, `pnpm build` and the screenshot pass on the merged result, then
+   worktree. Re-run `bun run typecheck`, `bun run test`, `bun run build` and the screenshot pass on the merged result, then
    compare it with the step 1 screenshots.
 
 5. **Report to the owner** in under ten lines: what changed, what's still open, and the decisions they need to make.

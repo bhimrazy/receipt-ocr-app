@@ -28,5 +28,5 @@ it here in the same session, with the date. `product-reviewer` checks every line
 
 - QA covers every view at 1440 and 390 with Playwright screenshots, which go in a scratch directory and never into the
   repo. (2026-11-04)
-- Before merge: `pnpm typecheck`, `pnpm test` and `pnpm build` pass and the screenshot pass shows no regressions.
+- Before merge: `bun run typecheck`, `bun run test` and `bun run build` pass and the screenshot pass shows no regressions.
   (2026-11-04)

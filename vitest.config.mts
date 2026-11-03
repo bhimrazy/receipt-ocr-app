@@ -6,7 +6,7 @@ const root = import.meta.dirname;
 /**
  * One config for the whole workspace. These are unit tests over pure logic —
  * no database, no network, no DOM — so a single Node environment covers all of
- * them and keeps `pnpm test` fast enough to run on every change.
+ * them and keeps `bun run test` fast enough to run on every change.
  */
 export default defineConfig({
   test: {

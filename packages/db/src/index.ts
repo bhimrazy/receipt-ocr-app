@@ -25,7 +25,7 @@ import {
 
 export * from "./auth-schema";
 // Re-export query operators so consumers use THIS package's drizzle-orm
-// instance (avoids duplicate-instance type conflicts under pnpm).
+// instance (avoids duplicate-instance type conflicts with isolated installs).
 export { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 export const receiptStatus = pgEnum("receipt_status", [

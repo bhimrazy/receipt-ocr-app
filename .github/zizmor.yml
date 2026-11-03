@@ -1,0 +1,6 @@
+# zizmor config (CI: .github/workflows/ci.yml).
+rules:
+  # Prefers the newer `$/...` form for local actions; `./.github/actions/...` is the
+  # documented, widely supported form, so keep it until the new syntax is the norm.
+  self-repository:
+    disable: true
