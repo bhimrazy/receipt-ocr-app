@@ -1,4 +1,9 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export type S3StorageConfig = {
@@ -10,59 +15,89 @@ export type S3StorageConfig = {
   forcePathStyle?: boolean;
 };
 
-export type PutReceiptImageInput = {
-  userId: string;
-  receiptId: string;
-  fileName: string;
-  mimeType: string;
-  body: Uint8Array;
+const clients = new Map<string, S3Client>();
+
+/** One client per config, so keep-alive connections and TLS sessions are reused. */
+export function s3Client(config: S3StorageConfig): S3Client {
+  const key = JSON.stringify([
+    config.endpoint,
+    config.region,
+    config.accessKeyId,
+    config.secretAccessKey,
+    config.forcePathStyle,
+  ]);
+  let client = clients.get(key);
+  if (!client) {
+    client = new S3Client({
+      endpoint: config.endpoint,
+      region: config.region,
+      forcePathStyle: config.forcePathStyle,
+      credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    });
+    clients.set(key, client);
+  }
+  return client;
+}
+
+const EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "application/pdf": "pdf",
 };
 
-export function createS3Client(config: S3StorageConfig) {
-  return new S3Client({
-    endpoint: config.endpoint,
-    region: config.region,
-    forcePathStyle: config.forcePathStyle,
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
-  });
+/** Keyed by id and sniffed type only: the client's file name never reaches the key. */
+export function receiptObjectKey(userId: string, receiptId: string, mediaType: string) {
+  return `users/${userId}/receipts/${receiptId}.${EXTENSIONS[mediaType] ?? "bin"}`;
 }
 
-export function receiptObjectKey(userId: string, receiptId: string, fileName: string) {
-  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 96);
-  return `users/${userId}/receipts/${receiptId}/${safeName}`;
-}
-
-export async function putReceiptImage(config: S3StorageConfig, input: PutReceiptImageInput) {
-  const client = createS3Client(config);
-  const key = receiptObjectKey(input.userId, input.receiptId, input.fileName);
-
-  await client.send(
+export async function putObject(
+  config: S3StorageConfig,
+  input: { key: string; body: Uint8Array; contentType: string },
+): Promise<void> {
+  await s3Client(config).send(
     new PutObjectCommand({
       Bucket: config.bucket,
-      Key: key,
+      Key: input.key,
       Body: input.body,
-      ContentType: input.mimeType,
+      ContentType: input.contentType,
     }),
   );
-
-  return { objectKey: key };
 }
 
-export async function getReceiptImageUrl(
-  config: S3StorageConfig,
-  objectKey: string,
-  expiresIn = 60 * 10,
-) {
-  const client = createS3Client(config);
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({
-      Bucket: config.bucket,
-      Key: objectKey,
-    }),
-    { expiresIn },
+export async function getObject(config: S3StorageConfig, key: string): Promise<Uint8Array> {
+  const response = await s3Client(config).send(
+    new GetObjectCommand({ Bucket: config.bucket, Key: key }),
   );
+  if (!response.Body) throw new Error(`Object ${key} has no body`);
+  return response.Body.transformToByteArray();
+}
+
+/** Deletes keys in batches of the S3 maximum (1000) per request. */
+export async function deleteObjects(
+  config: S3StorageConfig,
+  keys: readonly string[],
+): Promise<void> {
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000);
+    const result = await s3Client(config).send(
+      new DeleteObjectsCommand({
+        Bucket: config.bucket,
+        Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    if (result.Errors?.length) {
+      throw new Error(
+        `Failed to delete ${result.Errors.length} object(s): ${result.Errors[0]?.Message}`,
+      );
+    }
+  }
+}
+
+export async function signedGetUrl(config: S3StorageConfig, key: string, expiresIn = 60 * 10) {
+  return getSignedUrl(s3Client(config), new GetObjectCommand({ Bucket: config.bucket, Key: key }), {
+    expiresIn,
+  });
 }

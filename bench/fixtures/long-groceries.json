@@ -1,0 +1,216 @@
+{
+  "merchant": "Greenfield Market",
+  "receiptDate": "2026-10-30",
+  "category": "Grocery",
+  "currency": "USD",
+  "subtotal": 332.82,
+  "tax": 20.8,
+  "tip": null,
+  "total": 353.62,
+  "items": [
+    {
+      "name": "Organic Apples",
+      "quantity": 1,
+      "unitPrice": 1.25,
+      "totalPrice": 1.25
+    },
+    {
+      "name": "Whole Milk 1gal",
+      "quantity": 2,
+      "unitPrice": 1.62,
+      "totalPrice": 3.24
+    },
+    {
+      "name": "Wheat Bread",
+      "quantity": 3,
+      "unitPrice": 1.99,
+      "totalPrice": 5.97
+    },
+    {
+      "name": "Free Range Eggs",
+      "quantity": 1,
+      "unitPrice": 2.36,
+      "totalPrice": 2.36
+    },
+    {
+      "name": "Basmati Rice 2lb",
+      "quantity": 2,
+      "unitPrice": 2.73,
+      "totalPrice": 5.46
+    },
+    {
+      "name": "Olive Oil 500ml",
+      "quantity": 3,
+      "unitPrice": 3.1,
+      "totalPrice": 9.3
+    },
+    {
+      "name": "Cheddar Block",
+      "quantity": 1,
+      "unitPrice": 3.47,
+      "totalPrice": 3.47
+    },
+    {
+      "name": "Baby Spinach",
+      "quantity": 2,
+      "unitPrice": 3.84,
+      "totalPrice": 7.68
+    },
+    {
+      "name": "Greek Yogurt",
+      "quantity": 3,
+      "unitPrice": 4.21,
+      "totalPrice": 12.63
+    },
+    {
+      "name": "Coffee Beans 12oz",
+      "quantity": 1,
+      "unitPrice": 4.58,
+      "totalPrice": 4.58
+    },
+    {
+      "name": "Pasta Penne",
+      "quantity": 2,
+      "unitPrice": 4.95,
+      "totalPrice": 9.9
+    },
+    {
+      "name": "Tomato Sauce",
+      "quantity": 3,
+      "unitPrice": 5.32,
+      "totalPrice": 15.96
+    },
+    {
+      "name": "Bananas",
+      "quantity": 1,
+      "unitPrice": 5.69,
+      "totalPrice": 5.69
+    },
+    {
+      "name": "Chicken Breast",
+      "quantity": 2,
+      "unitPrice": 6.06,
+      "totalPrice": 12.12
+    },
+    {
+      "name": "Frozen Peas",
+      "quantity": 3,
+      "unitPrice": 6.43,
+      "totalPrice": 19.29
+    },
+    {
+      "name": "Organic Apples #15",
+      "quantity": 1,
+      "unitPrice": 6.8,
+      "totalPrice": 6.8
+    },
+    {
+      "name": "Whole Milk 1gal #16",
+      "quantity": 2,
+      "unitPrice": 7.17,
+      "totalPrice": 14.34
+    },
+    {
+      "name": "Wheat Bread #17",
+      "quantity": 3,
+      "unitPrice": 7.54,
+      "totalPrice": 22.62
+    },
+    {
+      "name": "Free Range Eggs #18",
+      "quantity": 1,
+      "unitPrice": 7.91,
+      "totalPrice": 7.91
+    },
+    {
+      "name": "Basmati Rice 2lb #19",
+      "quantity": 2,
+      "unitPrice": 8.28,
+      "totalPrice": 16.56
+    },
+    {
+      "name": "Olive Oil 500ml #20",
+      "quantity": 3,
+      "unitPrice": 8.65,
+      "totalPrice": 25.95
+    },
+    {
+      "name": "Cheddar Block #21",
+      "quantity": 1,
+      "unitPrice": 9.02,
+      "totalPrice": 9.02
+    },
+    {
+      "name": "Baby Spinach #22",
+      "quantity": 2,
+      "unitPrice": 9.39,
+      "totalPrice": 18.78
+    },
+    {
+      "name": "Greek Yogurt #23",
+      "quantity": 3,
+      "unitPrice": 9.76,
+      "totalPrice": 29.28
+    },
+    {
+      "name": "Coffee Beans 12oz #24",
+      "quantity": 1,
+      "unitPrice": 10.13,
+      "totalPrice": 10.13
+    },
+    {
+      "name": "Pasta Penne #25",
+      "quantity": 2,
+      "unitPrice": 1.5,
+      "totalPrice": 3
+    },
+    {
+      "name": "Tomato Sauce #26",
+      "quantity": 3,
+      "unitPrice": 1.87,
+      "totalPrice": 5.61
+    },
+    {
+      "name": "Bananas #27",
+      "quantity": 1,
+      "unitPrice": 2.24,
+      "totalPrice": 2.24
+    },
+    {
+      "name": "Chicken Breast #28",
+      "quantity": 2,
+      "unitPrice": 2.61,
+      "totalPrice": 5.22
+    },
+    {
+      "name": "Frozen Peas #29",
+      "quantity": 3,
+      "unitPrice": 2.98,
+      "totalPrice": 8.94
+    },
+    {
+      "name": "Organic Apples #30",
+      "quantity": 1,
+      "unitPrice": 3.35,
+      "totalPrice": 3.35
+    },
+    {
+      "name": "Whole Milk 1gal #31",
+      "quantity": 2,
+      "unitPrice": 3.72,
+      "totalPrice": 7.44
+    },
+    {
+      "name": "Wheat Bread #32",
+      "quantity": 3,
+      "unitPrice": 4.09,
+      "totalPrice": 12.27
+    },
+    {
+      "name": "Free Range Eggs #33",
+      "quantity": 1,
+      "unitPrice": 4.46,
+      "totalPrice": 4.46
+    }
+  ]
+}

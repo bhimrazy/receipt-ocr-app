@@ -27,6 +27,24 @@ describe("safeRedirect", () => {
     expect(safeRedirect("/\\evil.example")).toBe(DEFAULT_REDIRECT);
   });
 
+  it("rejects control characters browsers strip into // (M1)", () => {
+    expect(safeRedirect("/\t/evil.example")).toBe(DEFAULT_REDIRECT);
+    expect(safeRedirect("/\n/evil.example")).toBe(DEFAULT_REDIRECT);
+    expect(safeRedirect("/\r/evil.example")).toBe(DEFAULT_REDIRECT);
+    expect(safeRedirect("/\u0000/evil.example")).toBe(DEFAULT_REDIRECT);
+  });
+
+  it("rejects backslashes anywhere and encoded slashes at the start", () => {
+    expect(safeRedirect("/app\\..\\evil")).toBe(DEFAULT_REDIRECT);
+    expect(safeRedirect("/%2f/evil.example")).toBe(DEFAULT_REDIRECT);
+    expect(safeRedirect("/%5C/evil.example")).toBe(DEFAULT_REDIRECT);
+  });
+
+  it("normalises dot segments without leaving the origin", () => {
+    expect(safeRedirect("/app/../app/history")).toBe("/app/history");
+    expect(safeRedirect("/..//evil.example")).toBe(DEFAULT_REDIRECT);
+  });
+
   it("uses the first value when the param repeats", () => {
     expect(safeRedirect(["/app/history", "//evil.example"])).toBe("/app/history");
     expect(safeRedirect(["//evil.example", "/app/history"])).toBe(DEFAULT_REDIRECT);

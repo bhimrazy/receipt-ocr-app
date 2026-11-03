@@ -1,8 +1,13 @@
+import { hitRateLimit } from "@receipt-ocr/core";
 import { NextResponse } from "next/server";
+import { clientIp, crossOriginResponse } from "@/lib/http";
 import { logger, type WideEvent } from "@/lib/log";
+import { runtime } from "@/lib/runtime";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_MESSAGE = 2000;
+/** Per client IP; without a trusted IP header everyone shares one bucket. */
+const RATE_LIMIT = { windowMs: 10 * 60_000, max: 5 };
 
 type ContactPayload = {
   email?: unknown;
@@ -21,6 +26,29 @@ export async function POST(request: Request) {
   };
 
   try {
+    const forbidden = crossOriginResponse(request);
+    if (forbidden) {
+      event.status_code = 403;
+      event.outcome = "cross_origin";
+      return forbidden;
+    }
+
+    const limit = await runtime.runPromise(
+      hitRateLimit(
+        `contact:${clientIp(request) ?? "unknown"}`,
+        RATE_LIMIT.windowMs,
+        RATE_LIMIT.max,
+      ),
+    );
+    if (!limit.allowed) {
+      event.status_code = 429;
+      event.outcome = "rate_limited";
+      return NextResponse.json(
+        { error: "Too many messages. Try again later." },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+      );
+    }
+
     let data: ContactPayload;
     try {
       data = (await request.json()) as ContactPayload;
@@ -59,10 +87,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Message is too long" }, { status: 400 });
     }
 
-    // TODO(resend): send this as a transactional email once RESEND_API_KEY is set.
-    // Until then the wide event below preserves early-access submissions in logs.
-    event.email = email;
-    event.message = message;
+    // TODO(resend): deliver this to the support inbox. The address and
+    // message are personal data, so the log line carries only their shape.
+    event.email_domain = email.split("@")[1]?.toLowerCase();
     event.status_code = 200;
     event.outcome = "success";
     return NextResponse.json({ ok: true });

@@ -19,8 +19,11 @@ description: Run the Receipt OCR review round — CTO, CEO, security, product an
    or false claims become fix work now; the rest become GitHub issues citing the review file.
 
 4. **Fix in waves.** Split the fixes into tracks that don't touch the same files and run them in parallel, each in its own
-   worktree. Re-run `bun run typecheck`, `bun run test`, `bun run build` and the screenshot pass on the merged result, then
+   worktree under `.claude/worktrees/<track>` with the `engineer` role (5 agents at most). Re-run `bun run typecheck`, `bun run test`, `bun run build` and the screenshot pass on the merged result, then
    compare it with the step 1 screenshots.
 
 5. **Report to the owner** in under ten lines: what changed, what's still open, and the decisions they need to make.
    Report only what actually ran.
+
+6. **Clean up.** Merge the track branches, then `git worktree remove` each track worktree, delete merged branches,
+   drop per-track databases, and stop every dev server you started.

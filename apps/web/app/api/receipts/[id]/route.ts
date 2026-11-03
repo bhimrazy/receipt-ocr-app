@@ -1,39 +1,33 @@
-import { AppLive, ReceiptRepository, type ReceiptPatch } from "@receipt-ocr/core";
-import { Effect, Exit } from "effect";
+import { parseCategory } from "@receipt-ocr/ai/categories";
+import { deleteReceipt, ReceiptRepo, type ReceiptPatch } from "@receipt-ocr/core";
+import { Effect } from "effect";
 import { NextResponse } from "next/server";
-import { RECEIPT_CATEGORIES } from "@receipt-ocr/core";
+import { crossOriginResponse, jsonError, runRoute } from "@/lib/http";
 import { getActiveScope } from "@/lib/session";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+type Params = { params: Promise<{ id: string }> };
+
+const notFound = () => jsonError(404, "Receipt not found");
+
+/** Status for the polling client. */
+export async function GET(_request: Request, { params }: Params) {
   const scope = await getActiveScope();
-  if (!scope) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+  if (!scope) return jsonError(401, "Unauthorized");
   const { id } = await params;
-  const result = await Effect.runPromiseExit(
-    Effect.gen(function* () {
-      const repo = yield* ReceiptRepository;
-      return yield* repo.getReceipt(id, scope);
-    }).pipe(Effect.provide(AppLive)),
+  return runRoute(
+    Effect.flatMap(ReceiptRepo, (repo) => repo.get(id, scope)),
+    (receipt) =>
+      receipt
+        ? NextResponse.json({
+            id: receipt.id,
+            status: receipt.status,
+            merchant: receipt.merchant,
+            total: receipt.total,
+            errorMessage: receipt.errorMessage,
+            updatedAt: receipt.updatedAt,
+          })
+        : notFound(),
   );
-
-  if (Exit.isFailure(result)) {
-    return NextResponse.json({ error: "Failed to load receipt" }, { status: 500 });
-  }
-  if (!result.value) {
-    return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
-  }
-
-  const receipt = result.value;
-  return NextResponse.json({
-    id: receipt.id,
-    status: receipt.status,
-    merchant: receipt.merchant,
-    total: receipt.total,
-    errorMessage: receipt.errorMessage,
-    updatedAt: receipt.updatedAt,
-  });
 }
 
 /** Decimal string for a numeric column, or null to clear it. */
@@ -54,34 +48,36 @@ function text(value: unknown, maxLength = 200): string | null | undefined {
 }
 
 /**
- * User corrections to an extracted receipt. OCR gets things wrong, and a
- * confidence score the user cannot act on is worse than no score at all.
- * Only the human-correctable fields are accepted — never status, confidence,
- * ownership, or the raw extraction.
+ * User corrections to an extracted receipt. Only human-correctable fields
+ * are accepted: never status, confidence, ownership or the raw extraction.
  */
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: Request, { params }: Params) {
+  const forbidden = crossOriginResponse(request);
+  if (forbidden) return forbidden;
   const scope = await getActiveScope();
-  if (!scope) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!scope) return jsonError(401, "Unauthorized");
 
   const { id } = await params;
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return jsonError(400, "Invalid request body");
   }
 
-  const category = text(body.category, 40);
-  if (category && !(RECEIPT_CATEGORIES as readonly string[]).includes(category)) {
-    return NextResponse.json({ error: "Unknown category" }, { status: 400 });
-  }
+  const rawCategory = text(body.category, 40);
+  const category = rawCategory ? parseCategory(rawCategory) : rawCategory;
+  if (category === undefined && rawCategory) return jsonError(400, "Unknown category");
 
   const receiptDate = text(body.receiptDate, 10);
   if (receiptDate && !/^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) {
-    return NextResponse.json({ error: "Date must be in YYYY-MM-DD format" }, { status: 400 });
+    return jsonError(400, "Date must be in YYYY-MM-DD format");
   }
 
   const currency = text(body.currency, 3);
+  if (currency && !/^[A-Za-z]{3}$/.test(currency))
+    return jsonError(400, "Currency must be a 3-letter code");
+
   const patch: ReceiptPatch = {
     merchant: text(body.merchant),
     receiptDate,
@@ -93,39 +89,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     total: decimal(body.total),
   };
 
-  const result = await Effect.runPromiseExit(
-    Effect.gen(function* () {
-      const repo = yield* ReceiptRepository;
-      return yield* repo.updateReceipt(id, scope, patch);
-    }).pipe(Effect.provide(AppLive)),
+  return runRoute(
+    Effect.flatMap(ReceiptRepo, (repo) => repo.update(id, scope, patch)),
+    (updated) => (updated ? NextResponse.json({ ok: true }) : notFound()),
   );
-
-  if (Exit.isFailure(result)) {
-    return NextResponse.json({ error: "Failed to update receipt" }, { status: 500 });
-  }
-  if (!result.value) {
-    return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
-  }
-  return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+/** Deletes the receipt and its stored file. Members may delete only their own uploads. */
+export async function DELETE(request: Request, { params }: Params) {
+  const forbidden = crossOriginResponse(request);
+  if (forbidden) return forbidden;
   const scope = await getActiveScope();
-  if (!scope) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  if (!scope) return jsonError(401, "Unauthorized");
   const { id } = await params;
-  const result = await Effect.runPromiseExit(
-    Effect.gen(function* () {
-      const repo = yield* ReceiptRepository;
-      return yield* repo.deleteReceipt(id, scope);
-    }).pipe(Effect.provide(AppLive)),
-  );
-
-  if (Exit.isFailure(result)) {
-    return NextResponse.json({ error: "Failed to delete receipt" }, { status: 500 });
-  }
-  if (!result.value) {
-    return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
-  }
-  return NextResponse.json({ ok: true });
+  return runRoute(deleteReceipt({ receiptId: id, scope }), () => NextResponse.json({ ok: true }));
 }

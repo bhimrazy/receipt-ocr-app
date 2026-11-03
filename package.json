@@ -9,9 +9,13 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
-    "lint": "turbo lint",
-    "typecheck": "turbo typecheck",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\"",
+    "lint": "eslint .",
+    "typecheck": "turbo typecheck && tsc -p bench",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:deps": "bun scripts/check-deps.ts",
+    "knip": "knip",
+    "audit": "bun audit --audit-level=high",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:reset": "docker compose down -v",
@@ -22,15 +26,26 @@
     "db:generate": "bun run --filter @receipt-ocr/web db:generate",
     "db:studio": "bun run --filter @receipt-ocr/web db:studio",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "bun run --filter @receipt-ocr/web test:e2e",
+    "bench:ocr": "bun bench/ocr.ts",
+    "bench:fixtures": "bun bench/make-fixtures.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@receipt-ocr/ai": "workspace:*",
     "@types/node": "25.9.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "eslint": "10.13.0",
+    "eslint-config-next": "16.4.3",
+    "knip": "6.43.0",
     "prettier": "3.9.10",
     "turbo": "2.11.10",
     "typescript": "6.0.3",
     "vitest": "4.1.12"
+  },
+  "overrides": {
+    "source-map-js": "1.2.2"
   }
 }

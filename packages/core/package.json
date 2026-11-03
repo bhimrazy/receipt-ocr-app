@@ -8,14 +8,13 @@
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "lint": "tsc --noEmit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:int": "INTEGRATION=1 vitest run --root ../.. packages/core/src/receipts.int.test.ts"
   },
   "dependencies": {
     "@receipt-ocr/ai": "workspace:0.0.0",
     "@receipt-ocr/db": "workspace:0.0.0",
     "@receipt-ocr/storage": "workspace:0.0.0",
-    "drizzle-orm": "0.45.4",
     "effect": "3.22.4"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import type { ReceiptWithItems } from "@receipt-ocr/core";
+import type { ReceiptExportRow, ReceiptWithItems } from "@receipt-ocr/core";
 import { describe, expect, it } from "vitest";
 import { csvFilename, receiptItemsToCsv, receiptsToCsv } from "./csv";
 
@@ -9,7 +9,7 @@ function receipt(overrides: Partial<ReceiptWithItems> = {}): ReceiptWithItems {
     userId: "u1",
     merchant: "Corner Store",
     receiptDate: "2026-08-01",
-    category: "Grocery",
+    category: "Groceries",
     currency: "USD",
     subtotal: "10.00",
     tax: "1.00",
@@ -17,6 +17,7 @@ function receipt(overrides: Partial<ReceiptWithItems> = {}): ReceiptWithItems {
     total: "11.00",
     confidence: "0.9500",
     status: "completed",
+    fileName: "corner.jpg",
     imageObjectKey: null,
     storageSource: "managed",
     rawJson: null,
@@ -38,9 +39,30 @@ function receipt(overrides: Partial<ReceiptWithItems> = {}): ReceiptWithItems {
   } as ReceiptWithItems;
 }
 
+function row(overrides: Partial<ReceiptExportRow> = {}): ReceiptExportRow {
+  return {
+    id: "r1",
+    status: "completed",
+    merchant: "Corner Store",
+    receiptDate: "2026-08-01",
+    category: "Groceries",
+    currency: "USD",
+    subtotal: "10.00",
+    tax: "1.00",
+    tip: null,
+    total: "11.00",
+    confidence: 0.95,
+    fileName: "corner.jpg",
+    errorMessage: null,
+    itemCount: 1,
+    createdAt: new Date("2026-08-01T10:00:00Z"),
+    ...overrides,
+  };
+}
+
 describe("receiptsToCsv", () => {
   it("emits a header plus one row per receipt", () => {
-    const lines = receiptsToCsv([receipt(), receipt({ id: "r2" })])
+    const lines = receiptsToCsv([row(), row({ id: "r2" })])
       .trimEnd()
       .split("\n");
     expect(lines).toHaveLength(3);
@@ -49,22 +71,28 @@ describe("receiptsToCsv", () => {
   });
 
   it("renders null fields as empty cells rather than the string 'null'", () => {
-    const csv = receiptsToCsv([receipt({ tip: null, merchant: null })]);
+    const csv = receiptsToCsv([row({ tip: null, merchant: null })]);
     expect(csv).not.toContain("null");
   });
 
   it("quotes cells containing commas, quotes, or newlines", () => {
-    const csv = receiptsToCsv([receipt({ merchant: 'Bob, "The Grocer"' })]);
+    const csv = receiptsToCsv([row({ merchant: 'Bob, "The Grocer"' })]);
     expect(csv).toContain('"Bob, ""The Grocer"""');
   });
 
   it("neutralises formula injection from OCR'd merchant names", () => {
     // A cell starting with = + - or @ is executed by Excel and Sheets, and
     // merchant names come straight out of an untrusted image.
-    for (const dangerous of ["=1+1", "+1", "-1", "@SUM(A1)"]) {
-      const csv = receiptsToCsv([receipt({ merchant: dangerous })]);
+    for (const dangerous of ["=1+1", "+1", "-1+A1", "@SUM(A1)"]) {
+      const csv = receiptsToCsv([row({ merchant: dangerous })]);
       expect(csv).toContain(`'${dangerous}`);
     }
+  });
+
+  it("leaves negative amounts numeric so refunds still add up (L7)", () => {
+    const csv = receiptsToCsv([row({ total: "-5.00", tax: "-0.40" })]);
+    expect(csv).toContain(",-5.00,");
+    expect(csv).not.toContain("'-5.00");
   });
 });
 

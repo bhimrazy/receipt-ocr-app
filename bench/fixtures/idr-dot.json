@@ -1,0 +1,36 @@
+{
+  "merchant": "Warung Makan Bahagia",
+  "receiptDate": "2026-10-02",
+  "category": "Restaurant",
+  "currency": "IDR",
+  "subtotal": 141000,
+  "tax": 14100,
+  "tip": null,
+  "total": 155100,
+  "items": [
+    {
+      "name": "Nasi Goreng",
+      "quantity": 2,
+      "unitPrice": 31000,
+      "totalPrice": 62000
+    },
+    {
+      "name": "Es Teh Manis",
+      "quantity": 3,
+      "unitPrice": 8000,
+      "totalPrice": 24000
+    },
+    {
+      "name": "Sate Ayam",
+      "quantity": 1,
+      "unitPrice": 45000,
+      "totalPrice": 45000
+    },
+    {
+      "name": "Air Mineral",
+      "quantity": 2,
+      "unitPrice": 5000,
+      "totalPrice": 10000
+    }
+  ]
+}

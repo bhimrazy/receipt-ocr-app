@@ -24,32 +24,33 @@ export interface MailerConfig {
   apiKey?: string;
   /** e.g. `receiptOCR <noreply@yourdomain.com>` */
   from?: string;
+  /** Log the full message when no provider is configured. Development only. */
+  logUndelivered?: boolean;
 }
 
 /**
- * Sends transactional mail through Resend when it is configured, and logs the
- * message otherwise.
+ * Sends transactional mail through Resend when it is configured. It never
+ * throws: callers decide whether an undelivered message should fail.
  *
- * The logging fallback is deliberate: local development and previews have no
- * mail provider, and password-reset and invitation links printed to the server
- * log are still usable. It never throws — a failed notification must not fail
- * the sign-up, invite, or reset that triggered it.
+ * Without a provider only the subject is logged unless `logUndelivered` is
+ * set (development, so reset and invite links stay usable locally): those
+ * links are credentials, and logs are readable by more people than the
+ * recipient.
  */
 export async function sendEmail(
   config: MailerConfig,
   input: SendEmailInput,
 ): Promise<SendEmailResult> {
   if (!config.apiKey || !config.from) {
-    console.info(
-      JSON.stringify({
-        level: "info",
-        event: "email.not_configured",
-        to: input.to,
-        subject: input.subject,
-        // The body carries the actionable link in every template we send.
-        text: input.text,
-      }),
-    );
+    const development = config.logUndelivered === true;
+    const line = JSON.stringify({
+      level: development ? "info" : "error",
+      event: "email.not_configured",
+      subject: input.subject,
+      ...(development ? { to: input.to, text: input.text } : {}),
+    });
+    if (development) console.info(line);
+    else console.error(line);
     return { delivered: false, reason: "not_configured" };
   }
 

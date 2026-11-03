@@ -1,0 +1,36 @@
+{
+  "merchant": "Blue Door Bistro",
+  "receiptDate": "2026-10-21",
+  "category": "Restaurant",
+  "currency": "USD",
+  "subtotal": 78,
+  "tax": 6.82,
+  "tip": 15.6,
+  "total": 100.42,
+  "items": [
+    {
+      "name": "Mushroom Risotto",
+      "quantity": 1,
+      "unitPrice": 22,
+      "totalPrice": 22
+    },
+    {
+      "name": "Grilled Salmon",
+      "quantity": 1,
+      "unitPrice": 29.5,
+      "totalPrice": 29.5
+    },
+    {
+      "name": "House Salad",
+      "quantity": 2,
+      "unitPrice": 9,
+      "totalPrice": 18
+    },
+    {
+      "name": "Sparkling Water",
+      "quantity": 2,
+      "unitPrice": 4.25,
+      "totalPrice": 8.5
+    }
+  ]
+}

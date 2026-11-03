@@ -1,0 +1,36 @@
+{
+  "merchant": "Bäckerei Sonnenschein",
+  "receiptDate": "2026-11-04",
+  "category": "Restaurant",
+  "currency": "EUR",
+  "subtotal": 23.5,
+  "tax": 1.65,
+  "tip": null,
+  "total": 25.15,
+  "items": [
+    {
+      "name": "Roggenbrot",
+      "quantity": 1,
+      "unitPrice": 4.5,
+      "totalPrice": 4.5
+    },
+    {
+      "name": "Butterbrezel",
+      "quantity": 4,
+      "unitPrice": 1.2,
+      "totalPrice": 4.8
+    },
+    {
+      "name": "Käsekuchen Stück",
+      "quantity": 2,
+      "unitPrice": 3.9,
+      "totalPrice": 7.8
+    },
+    {
+      "name": "Kaffee groß",
+      "quantity": 2,
+      "unitPrice": 3.2,
+      "totalPrice": 6.4
+    }
+  ]
+}
