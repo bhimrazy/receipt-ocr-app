@@ -3,11 +3,12 @@
   "include": ["files", "dependencies", "unlisted", "unresolved", "binaries", "duplicates"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/*.{ts,mjs}", "bench/*.{ts,js}"],
+      "entry": ["scripts/*.{ts,mjs}", "bench/*.{ts,mjs}"],
       "ignoreDependencies": ["@types/react-dom"]
     },
     "apps/web": {
       "ignoreDependencies": ["tailwindcss"]
     }
-  }
+  },
+  "ignore": ["bench/upload.k6.js"]
 }

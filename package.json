@@ -10,7 +10,7 @@
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "eslint .",
-    "typecheck": "turbo typecheck",
+    "typecheck": "turbo typecheck && tsc -p bench",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:deps": "bun scripts/check-deps.ts",
@@ -27,10 +27,13 @@
     "db:studio": "bun run --filter @receipt-ocr/web db:studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "bun run --filter @receipt-ocr/web test:e2e"
+    "test:e2e": "bun run --filter @receipt-ocr/web test:e2e",
+    "bench:ocr": "bun bench/ocr.ts",
+    "bench:fixtures": "bun bench/make-fixtures.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
+    "@receipt-ocr/ai": "workspace:*",
     "@types/node": "25.9.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

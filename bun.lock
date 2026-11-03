@@ -6,6 +6,7 @@
       "name": "receipt-ocr-app",
       "devDependencies": {
         "@playwright/test": "1.64.1",
+        "@receipt-ocr/ai": "workspace:*",
         "@types/node": "25.9.1",
         "@types/react": "19.3.0",
         "@types/react-dom": "19.3.0",

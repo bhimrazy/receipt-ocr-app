@@ -21,3 +21,4 @@ playwright-report/
 test-results/
 /bench/results/*
 !/bench/results/.gitkeep
+!/bench/results/*.md
