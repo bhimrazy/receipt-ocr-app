@@ -18,16 +18,13 @@ test("sign up, history, receipt detail, CSV export, sign out and back in", async
   await expect(page.getByRole("cell", { name: "Second Market" })).toBeVisible();
 
   const download = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Export all" }).click();
+  await page.getByRole("link", { name: "Export CSV" }).click();
   const file = await download;
   expect(file.suggestedFilename()).toMatch(/^receipts.*\.csv$/);
   const csv = await (await import("node:fs/promises")).readFile((await file.path())!, "utf8");
   expect(csv).toContain(merchant);
 
-  await page
-    .getByRole("row", { name: new RegExp(merchant) })
-    .getByRole("link", { name: "Open" })
-    .click();
+  await page.getByRole("link", { name: merchant }).click();
   await expect(page).toHaveURL(new RegExp(`/app/receipts/${receiptId}`));
   await expect(page.getByRole("heading", { level: 1, name: merchant })).toBeVisible();
 
