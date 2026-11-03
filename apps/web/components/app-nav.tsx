@@ -83,3 +83,17 @@ export function BottomTabBar({ items, label = "Main" }: { items: NavItem[]; labe
     </nav>
   );
 }
+
+// Nav items hold icon components, which can't cross the server/client
+// boundary, so the server layout passes only whether to show Admin.
+function appItems(showAdmin: boolean) {
+  return showAdmin ? [...APP_NAV, ADMIN_NAV_ITEM] : APP_NAV;
+}
+
+export function AppSidebarNav({ showAdmin }: { showAdmin: boolean }) {
+  return <SidebarNav items={appItems(showAdmin)} />;
+}
+
+export function AppTabBar({ showAdmin }: { showAdmin: boolean }) {
+  return <BottomTabBar items={appItems(showAdmin)} />;
+}
