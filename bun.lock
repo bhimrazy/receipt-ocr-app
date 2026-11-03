@@ -38,6 +38,7 @@
         "@tailwindcss/postcss": "4.3.3",
         "drizzle-kit": "0.31.11",
         "postcss": "8.5.32",
+        "postgres": "3.4.9",
         "tailwindcss": "4.3.3",
         "typescript": "6.0.3",
       },

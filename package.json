@@ -26,7 +26,8 @@
     "db:generate": "bun run --filter @receipt-ocr/web db:generate",
     "db:studio": "bun run --filter @receipt-ocr/web db:studio",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "bun run --filter @receipt-ocr/web test:e2e"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
