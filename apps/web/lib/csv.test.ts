@@ -20,6 +20,8 @@ function receipt(overrides: Partial<ReceiptWithItems> = {}): ReceiptWithItems {
     fileName: "corner.jpg",
     imageObjectKey: null,
     storageSource: "managed",
+    attempts: 1,
+    lastAttemptAt: null,
     rawJson: null,
     errorMessage: null,
     createdAt: new Date("2026-08-01T10:00:00Z"),

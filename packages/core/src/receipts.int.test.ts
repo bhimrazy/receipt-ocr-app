@@ -170,6 +170,35 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     });
   });
 
+  it("retries count against the burst and global windows, and stop after the attempt cap", async () => {
+    const failing = await run(ingestUpload({ scope: a, fileName: "blurry.jpg", body: JPEG }));
+    const id = failing.receipt.id;
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    const window = () => {
+      const now = Date.now();
+      return {
+        userId: a.userId,
+        dayStart: new Date(now - 60 * 60 * 1000),
+        minuteStart: new Date(now - 60 * 1000),
+        includeGlobal: true,
+      };
+    };
+    const markFailed = () => repo((r) => r.fail(id, a, "unreadable"));
+
+    await markFailed();
+    const before = await repo((r) => r.usage(window()));
+    expect(await repo((r) => r.claimRetry(id, a))).toMatchObject({ kind: "claimed" });
+    const after = await repo((r) => r.usage(window()));
+    expect(after.userMinute).toBe(before.userMinute + 1);
+    expect(after.globalDay).toBe((before.globalDay ?? 0) + 1);
+
+    await markFailed();
+    expect(await repo((r) => r.claimRetry(id, a))).toMatchObject({ kind: "claimed" });
+    await markFailed();
+    expect(await repo((r) => r.claimRetry(id, a))).toEqual({ kind: "attempts-exhausted" });
+  });
+
   it("U1: deleting a receipt deletes its stored object", async () => {
     const storage = <A>(f: (s: typeof Storage.Service) => Effect.Effect<A, unknown>) =>
       runExit(Effect.flatMap(Storage, f));

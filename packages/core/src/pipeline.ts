@@ -2,7 +2,12 @@ import { receiptObjectKey } from "@receipt-ocr/storage";
 import { Duration, Effect } from "effect";
 import { Conflict, NotFound, StorageError } from "./errors";
 import { sniffMediaType, validateUpload } from "./files";
-import { EXTRACTION_FAILED_MESSAGE, ReceiptRepo, type ReceiptScope } from "./repository";
+import {
+  MAX_EXTRACTION_ATTEMPTS,
+  EXTRACTION_FAILED_MESSAGE,
+  ReceiptRepo,
+  type ReceiptScope,
+} from "./repository";
 import { Ocr, Storage } from "./services";
 
 export type StepTiming = { step: string; ms: number };
@@ -93,6 +98,11 @@ export const claimRetry = (input: { receiptId: string; scope: ReceiptScope }) =>
     if (claim.kind === "not-found") return yield* new NotFound({ message: "Receipt not found" });
     if (claim.kind === "not-retryable") {
       return yield* new Conflict({ message: "Only receipts that failed can be retried" });
+    }
+    if (claim.kind === "attempts-exhausted") {
+      return yield* new Conflict({
+        message: `This receipt was tried ${MAX_EXTRACTION_ATTEMPTS} times. Upload a clearer photo instead.`,
+      });
     }
     if (!claim.imageObjectKey) {
       return yield* new StorageError({ message: "This receipt has no stored file to retry" });
