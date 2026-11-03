@@ -17,7 +17,6 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { Brand } from "@/components/brand";
 import { ContactButton } from "@/components/contact-button";
 import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
 import { ProductPreview } from "@/components/product-preview";
@@ -54,15 +53,15 @@ const features = [
   {
     icon: Globe2,
     title: "No lock-in",
-    desc: "S3-compatible from day one — Cloudflare R2, AWS S3, or self-hosted MinIO. Your data stays portable.",
+    desc: "S3-compatible from day one — Cloudflare R2, AWS S3, or self-hosted RustFS. Your data stays portable.",
   },
 ];
 
 const stats: Array<[string, string]> = [
-  ["Seconds", "From upload to structured data"],
-  ["Line items", "Every line, not just the total"],
-  ["Confidence", "Scored on every field"],
-  ["$0", "Free to start, no card"],
+  ["100%", "Of line items captured, not just the total"],
+  ["Every field", "Scored with its own confidence value"],
+  ["JSON + CSV", "Export formats, one click away"],
+  ["$0", "To start — no card required"],
 ];
 
 const steps = [
@@ -118,7 +117,7 @@ const faqs = [
   },
   {
     q: "Where is my receipt data stored?",
-    a: "In S3-compatible storage — Cloudflare R2, AWS S3, or self-hosted MinIO. Your storage keys stay server-side and your data stays portable and yours.",
+    a: "In S3-compatible storage — Cloudflare R2, AWS S3, or self-hosted RustFS. Your storage keys stay server-side and your data stays portable and yours.",
   },
   {
     q: "Is it really free to start?",
@@ -146,10 +145,18 @@ const customPlanFeatures = [
   "Shape the roadmap with your feedback",
 ];
 
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((faq) => ({
+    "@type": "Question",
+    name: faq.q,
+    acceptedAnswer: { "@type": "Answer", text: faq.a },
+  })),
+};
+
 function SectionLabel({ children }: { children: string }) {
-  return (
-    <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">{children}</p>
-  );
+  return <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">{children}</p>;
 }
 
 function PlanCard({
@@ -200,6 +207,10 @@ function PlanCard({
 export function LandingPage() {
   return (
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       <SiteHeader />
 
       {/* Hero */}
@@ -219,13 +230,13 @@ export function LandingPage() {
             <span className="block">Receipts to</span>
             <span className="text-gradient block">structured data</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-8 text-muted-foreground md:text-lg">
-            Snap or upload any receipt and get clean, structured data — merchant, line items,
-            tax, and totals — ready to search, review, and export.
+          <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-8 text-foreground/80 md:text-lg">
+            Snap or upload any receipt and get clean, structured data — merchant, line items, tax,
+            and totals — ready to search, review, and export.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Button asChild size="lg">
-              <Link href="/sign-in">
+              <Link href="/sign-up">
                 Get started free <ArrowRight className="size-4" />
               </Link>
             </Button>
@@ -233,7 +244,7 @@ export function LandingPage() {
               <a href="#how">See how it works</a>
             </Button>
           </div>
-          <p className="mt-5 font-mono text-xs text-muted-foreground/70">
+          <p className="mt-5 font-mono text-xs text-muted-foreground">
             No card required · Bring your own keys when you outgrow the free tier
           </p>
         </div>
@@ -261,7 +272,7 @@ export function LandingPage() {
       </section>
 
       {/* Features */}
-      <section id="features" className="relative px-5 py-24 md:py-28">
+      <section id="features" className="relative scroll-mt-24 px-5 py-24 md:py-28">
         <div className="glow-orb pointer-events-none absolute left-1/2 top-0 size-[500px] -translate-x-1/2 rounded-full bg-primary/5 blur-[160px]" />
         <div className="relative mx-auto max-w-6xl">
           <div className="mx-auto mb-14 max-w-2xl text-center">
@@ -296,7 +307,10 @@ export function LandingPage() {
       </section>
 
       {/* How it works */}
-      <section id="how" className="border-t border-border bg-secondary/20 px-5 py-24 md:py-28">
+      <section
+        id="how"
+        className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28"
+      >
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto mb-14 max-w-2xl text-center">
             <SectionLabel>How it works</SectionLabel>
@@ -309,7 +323,7 @@ export function LandingPage() {
           </div>
           <div className="relative grid gap-5 md:grid-cols-3">
             {/* connector line */}
-            <div className="pointer-events-none absolute inset-x-[16%] top-[3.25rem] hidden h-px bg-gradient-to-r from-transparent via-border to-transparent md:block" />
+            <div className="pointer-events-none absolute inset-x-[16%] top-[3.25rem] hidden h-px bg-linear-to-r from-transparent via-border to-transparent md:block" />
             {steps.map((step, index) => (
               <Card className="relative p-7 text-center" key={step.title}>
                 <div className="relative z-10 mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl border border-primary/20 bg-background font-mono text-lg font-bold text-primary shadow-[0_0_24px_color-mix(in_oklab,var(--primary)_18%,transparent)]">
@@ -354,7 +368,10 @@ export function LandingPage() {
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="border-t border-border bg-secondary/20 px-5 py-24 md:py-28">
+      <section
+        id="pricing"
+        className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28"
+      >
         <div className="mx-auto max-w-5xl">
           <div className="mx-auto mb-14 max-w-2xl text-center">
             <SectionLabel>Pricing</SectionLabel>
@@ -362,8 +379,8 @@ export function LandingPage() {
               Start free, scale when you need
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              No credit card to begin. When you outgrow the free tier, bring your own keys —
-              or talk to us about higher volume.
+              No credit card to begin. When you outgrow the free tier, bring your own keys — or talk
+              to us about higher volume.
             </p>
           </div>
           <div className="mx-auto grid max-w-3xl items-stretch gap-5 md:grid-cols-2">
@@ -376,7 +393,7 @@ export function LandingPage() {
               featured
               cta={
                 <Button asChild className="w-full">
-                  <Link href="/sign-in">
+                  <Link href="/sign-up">
                     Get started free <ArrowRight className="size-4" />
                   </Link>
                 </Button>
@@ -399,7 +416,7 @@ export function LandingPage() {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="border-t border-border px-5 py-24 md:py-28">
+      <section id="faq" className="scroll-mt-24 border-t border-border px-5 py-24 md:py-28">
         <div className="mx-auto max-w-3xl">
           <div className="mx-auto mb-12 max-w-2xl text-center">
             <SectionLabel>FAQ</SectionLabel>
@@ -422,7 +439,7 @@ export function LandingPage() {
 
       {/* CTA */}
       <section className="px-5 py-24 md:py-28">
-        <div className="relative mx-auto max-w-4xl overflow-hidden rounded-3xl border border-primary/20 bg-primary/[0.06] px-6 py-16 text-center">
+        <div className="relative mx-auto max-w-4xl overflow-hidden rounded-3xl border border-primary/20 bg-primary/6 px-6 py-16 text-center">
           <div className="grid-mask pointer-events-none absolute inset-0 opacity-30">
             <div className="receipt-grid absolute -inset-1" />
           </div>
@@ -432,12 +449,12 @@ export function LandingPage() {
               Start turning receipts into data
             </h2>
             <p className="mx-auto mt-4 max-w-md text-pretty text-muted-foreground">
-              Free to start, no card required. Bring your own keys when you're ready to scale —
+              Free to start, no card required. Bring your own keys when you&apos;re ready to scale —
               your data, your costs, no lock-in.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">
-                <Link href="/sign-in">
+                <Link href="/sign-up">
                   Get started free <ArrowRight className="size-4" />
                 </Link>
               </Button>

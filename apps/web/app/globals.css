@@ -23,8 +23,8 @@
   background-image: linear-gradient(
     to right,
     var(--primary),
-    color-mix(in oklab, #60a5fa 90%, white),
-    color-mix(in oklab, #a78bfa 90%, white)
+    color-mix(in oklab, #2dd4bf 90%, white),
+    color-mix(in oklab, #22d3ee 85%, white)
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -41,11 +41,55 @@
   inset: 0;
   border-radius: inherit;
   padding-top: 1px;
-  background: linear-gradient(to bottom, color-mix(in oklab, white 8%, transparent), transparent 40%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, white 8%, transparent),
+    transparent 40%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
+}
+
+/* Scanner sweep on the product-preview receipt suggesting live extraction. */
+.scan-line {
+  height: 44px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in oklab, var(--primary) 14%, transparent) 70%,
+    color-mix(in oklab, var(--primary) 55%, transparent)
+  );
+  border-bottom: 1px solid color-mix(in oklab, var(--primary) 70%, transparent);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .scan-line {
+    animation: scan-sweep 5s ease-in-out infinite;
+  }
+}
+
+@keyframes scan-sweep {
+  0%,
+  55%,
+  100% {
+    transform: translateY(-48px);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  90% {
+    transform: translateY(320px);
+    opacity: 1;
+  }
+  95% {
+    opacity: 0;
+  }
 }
 
 .hero-aurora {
@@ -55,8 +99,16 @@
       color-mix(in oklab, var(--primary) 24%, transparent),
       transparent 72%
     ),
-    radial-gradient(36% 46% at 68% 58%, color-mix(in oklab, #60a5fa 20%, transparent), transparent 72%),
-    radial-gradient(34% 44% at 54% 34%, color-mix(in oklab, #a78bfa 18%, transparent), transparent 72%);
+    radial-gradient(
+      36% 46% at 68% 58%,
+      color-mix(in oklab, #2dd4bf 20%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      34% 44% at 54% 34%,
+      color-mix(in oklab, #22d3ee 16%, transparent),
+      transparent 72%
+    );
   filter: blur(56px);
   opacity: 0.9;
 }

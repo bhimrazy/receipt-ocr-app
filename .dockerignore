@@ -1,0 +1,42 @@
+# Keep the build context small and reproducible. The Dockerfile copies the
+# whole workspace (five workspace packages are transpiled from source), so
+# everything not needed to install and build must be excluded here.
+
+# Installed and generated output — reinstalled/rebuilt inside the image.
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+**/*.tsbuildinfo
+
+# Agent worktrees and settings (other branches' source).
+.claude
+
+# VCS and CI.
+.git
+.gitignore
+.github
+
+# Deploy provider state.
+.vercel
+.vercelignore
+
+# Secrets must never enter an image layer. .env.example is kept as reference.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Docs and editor/OS noise.
+docs
+*.md
+!README.md
+.vscode
+.idea
+**/.DS_Store
+
+# Local-only tooling that the image never runs.
+docker-compose.yml
+docker/Dockerfile.*
+.dockerignore
+**/.tmp-screens

@@ -28,9 +28,10 @@ export function ProductPreview() {
       <div className="grid gap-px bg-border md:grid-cols-2">
         {/* Receipt image side */}
         <div className="flex flex-col items-center justify-center gap-4 bg-card p-8">
-          <div className="w-full max-w-[220px] rounded-lg border border-dashed border-white/10 bg-background/60 p-5 font-mono text-[11px] text-muted-foreground">
+          <div className="relative w-full max-w-[220px] overflow-hidden rounded-lg border border-dashed border-white/10 bg-background/60 p-5 font-mono text-[11px] text-muted-foreground">
+            <div className="scan-line pointer-events-none absolute inset-x-0 top-0" aria-hidden />
             <div className="mb-3 text-center text-foreground">WHOLE FOODS MARKET</div>
-            <div className="mb-3 text-center text-[10px] text-muted-foreground/70">
+            <div className="mb-3 text-center text-[11px] text-muted-foreground">
               Mar 14, 2026 · 18:42
             </div>
             <div className="flex flex-col gap-1 border-y border-dashed border-white/10 py-3">

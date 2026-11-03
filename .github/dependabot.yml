@@ -1,20 +1,60 @@
 version: 2
+
+# Owner policy: only releases at least 7 days old (matches bunfig.toml).
 updates:
-  - package-ecosystem: "npm"
-    directories:
-      - "/"
-      - "/apps/web"
-      - "/packages/*"
+  - package-ecosystem: "bun"
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "09:00"
       timezone: "Asia/Kathmandu"
     cooldown:
-      default-days: 2
+      default-days: 7
     versioning-strategy: "increase"
     groups:
-      npm-dependencies:
-        patterns:
-          - "*"
-        group-by: "dependency-name"
+      dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: "bun"
+    directory: "/.github/vercel-cli"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kathmandu"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "github-actions"
+    directories: ["/", "/.github/actions/*"]
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kathmandu"
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kathmandu"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kathmandu"
+    cooldown:
+      default-days: 7

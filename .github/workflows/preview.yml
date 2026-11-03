@@ -2,9 +2,10 @@ name: Vercel Preview Deployment
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
+
+permissions: {}
 
 concurrency:
   group: vercel-preview-${{ github.event.pull_request.number }}
@@ -12,71 +13,66 @@ concurrency:
 
 jobs:
   deploy-preview:
-    runs-on: ubuntu-latest
-    environment: vercel-preview
+    # Dependabot PRs get no secrets, so a preview could only fail.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    environment: vercel
     permissions:
+      contents: read
       pull-requests: write
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          version: 10.34.1
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+      - name: Install Vercel CLI (pinned, own lockfile)
+        run: |
+          bun install --frozen-lockfile --cwd .github/vercel-cli
+          echo "$GITHUB_WORKSPACE/.github/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Pull Vercel environment
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
+      # No token for the build step: it runs repository code, which only needs the pulled settings.
       - name: Build project
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build
 
       - name: Deploy to Vercel
         id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
-          echo "preview_url=$url" >> $GITHUB_OUTPUT
-
-      - name: Alias deployment to PR number
-        id: alias
-        run: |
-          alias="receipt-ocr-pr-${{ github.event.pull_request.number }}.vercel.app"
-          vercel alias set ${{ steps.deploy.outputs.preview_url }} $alias --token=${{ secrets.VERCEL_TOKEN }}
-          echo "alias_url=https://$alias" >> $GITHUB_OUTPUT
+          url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          echo "preview_url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Find existing preview comment
         id: find-comment
-        uses: peter-evans/find-comment@v3
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: github-actions[bot]
           body-includes: <!-- vercel-preview-comment -->
 
       - name: Post or update preview comment
-        uses: peter-evans/create-or-update-comment@v4
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
           edit-mode: replace
           body: |
             <!-- vercel-preview-comment -->
-            ## 🔍 Preview Deployment
+            ## Preview deployment
 
             | | |
             |---|---|
-            | **Status** | ✅ Ready |
-            | **Alias** | ${{ steps.alias.outputs.alias_url }} |
-            | **Unique URL** | ${{ steps.deploy.outputs.preview_url }} |
-            | **Branch** | `${{ github.head_ref }}` |
-            | **Commit** | `${{ github.sha }}` |
+            | **URL** | ${{ steps.deploy.outputs.preview_url }} |
+            | **Commit** | `${{ github.event.pull_request.head.sha }}` |
 
-            *Alias is stable for this PR — updates automatically on each push.*
+            This comment updates with the newest deployment on each push.

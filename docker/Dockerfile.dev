@@ -1,0 +1,10 @@
+# Development image: `next dev` with the repo bind-mounted, so edits hot-reload.
+# Used by `bun run docker:dev`; dependencies live in container volumes, not the host's node_modules.
+
+# Pinned by digest (multi-arch index of oven/bun:1.4.4-alpine, built 2026-10-22).
+FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a
+WORKDIR /repo
+ENV NEXT_TELEMETRY_DISABLED=1
+EXPOSE 3000
+# Install on start: the bind mount replaces the image's files, and the lockfile may have changed.
+CMD ["sh", "-c", "bun install --frozen-lockfile && bun run --filter @receipt-ocr/web dev --hostname 0.0.0.0"]

@@ -7,8 +7,18 @@ node_modules
 .turbo
 dist
 coverage
-drizzle
+.drizzle
 *.tsbuildinfo
 /.tmp-screens/
 .vercel
 .env*.local
+
+# Agent worktrees
+.claude/worktrees/
+
+# Test and bench output
+playwright-report/
+test-results/
+/bench/results/*
+!/bench/results/.gitkeep
+!/bench/results/*.md

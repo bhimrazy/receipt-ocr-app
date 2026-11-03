@@ -23,7 +23,7 @@ export default function PrivacyPage() {
         {
           heading: "Where your data lives",
           body: [
-            "Receipt images are stored in S3-compatible object storage (Cloudflare R2, AWS S3, or self-hosted MinIO). When you bring your own storage keys, that storage is yours to control.",
+            "Receipt images are stored in S3-compatible object storage (Cloudflare R2, AWS S3, or self-hosted RustFS). When you bring your own storage keys, that storage is yours to control.",
             "Storage and provider keys stay server-side and are never exposed to the browser.",
           ],
         },

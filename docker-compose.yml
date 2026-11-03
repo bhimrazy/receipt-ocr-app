@@ -1,0 +1,148 @@
+# Local development stack.
+#
+#   docker compose up -d          # Postgres + RustFS only (run the app with `bun dev`)
+#   docker compose --profile app up --build   # …plus the production image
+#   docker compose --profile dev up --build   # …plus `next dev` in a container
+#
+# Everything except the Gemini API key works offline. Set
+# GOOGLE_GENERATIVE_AI_API_KEY in your shell or a root .env for real OCR;
+# without it the app still runs, and uploads fail with a config error.
+
+name: receipt-ocr
+
+# No `restart:` policies on purpose: stopped containers stay stopped until you
+# bring them back with `bun run docker:up`.
+
+services:
+  postgres:
+    # Pinned by digest (multi-arch index of postgres:18.6-alpine, built 2026-10-21).
+    image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: receipt_ocr
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      # Postgres 18 keeps data in a versioned subdirectory, so mount the parent.
+      - postgres18-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d receipt_ocr"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # S3-compatible storage. The app is R2-first but speaks plain S3, so RustFS
+  # stands in locally with no code changes — only env. Pinned by digest
+  # (multi-arch index of rustfs/rustfs:1.0.0, pushed 2026-09-16).
+  rustfs:
+    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "127.0.0.1:${RUSTFS_PORT:-9000}:9000"
+      - "127.0.0.1:${RUSTFS_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: creates the bucket the app expects, then exits. The image has no
+  # S3 CLI, so this is a SigV4-signed PUT; it also succeeds on re-runs.
+  rustfs-init:
+    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        code=$$(curl -sS -o /dev/null -w '%{http_code}' --aws-sigv4 aws:amz:us-east-1:s3 \
+          --user rustfsadmin:rustfsadmin -X PUT http://rustfs:9000/receipt-ocr)
+        case "$$code" in
+          200|409) echo "bucket receipt-ocr ready" ;;
+          *) echo "bucket create failed: HTTP $$code" >&2; exit 1 ;;
+        esac
+
+  # Applies drizzle migrations, then exits. Runs automatically before `app`,
+  # or on its own: `docker compose run --rm migrate`.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prod
+      target: builder
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
+      DIRECT_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
+    command: bun run db:migrate
+
+  # The production image (`bun run docker:app`).
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prod
+    depends_on: &app-depends
+      postgres:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment: &app-env
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
+      DIRECT_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-development-secret-change-me-0000}
+      BETTER_AUTH_URL: http://localhost:${APP_PORT:-3000}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
+      S3_ENDPOINT: http://rustfs:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: receipt-ocr
+      S3_ACCESS_KEY_ID: rustfsadmin
+      S3_SECRET_ACCESS_KEY: rustfsadmin
+      S3_FORCE_PATH_STYLE: "true"
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-receiptOCR <onboarding@resend.dev>}
+
+  # `next dev` in a container with the repo bind-mounted (`bun run docker:dev`).
+  # Each workspace's node_modules is a volume so the container never uses the
+  # host's (macOS) binaries.
+  app-dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    depends_on: *app-depends
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      <<: *app-env
+      NODE_ENV: development
+    volumes:
+      - .:/repo
+      - /repo/node_modules
+      - /repo/apps/web/node_modules
+      - /repo/apps/web/.next
+      - /repo/packages/ai/node_modules
+      - /repo/packages/core/node_modules
+      - /repo/packages/db/node_modules
+      - /repo/packages/email/node_modules
+      - /repo/packages/storage/node_modules
+      - /repo/packages/ui/node_modules
+
+volumes:
+  postgres18-data:
+  rustfs-data:

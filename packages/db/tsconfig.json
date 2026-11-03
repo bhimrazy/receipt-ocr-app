@@ -1,4 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Node globals (process.env) are read for pool sizing. TypeScript 6 no
+    // longer picks up @types/node implicitly here, so name it explicitly.
+    "types": ["node"]
+  },
   "include": ["src"]
 }

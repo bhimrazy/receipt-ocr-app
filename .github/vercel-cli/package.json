@@ -1,0 +1,8 @@
+{
+  "name": "vercel-cli",
+  "private": true,
+  "description": "Pinned Vercel CLI for the deploy workflows. Kept out of the app lockfile so `bun audit` covers what ships.",
+  "devDependencies": {
+    "vercel": "65.4.0"
+  }
+}

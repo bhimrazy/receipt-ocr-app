@@ -6,30 +6,25 @@
   "exports": {
     "./styles.css": "./src/styles.css",
     "./lib/utils": "./src/lib/utils.ts",
-    "./components/accordion": "./src/components/accordion.tsx",
-    "./components/button": "./src/components/button.tsx",
-    "./components/card": "./src/components/card.tsx",
-    "./components/input": "./src/components/input.tsx",
-    "./components/badge": "./src/components/badge.tsx",
-    "./components/table": "./src/components/table.tsx"
+    "./components/*": "./src/components/*.tsx"
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@radix-ui/react-slot": "1.2.4",
+    "@base-ui/react": "1.9.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "lucide-react": "1.17.0",
-    "tailwind-merge": "3.6.0"
+    "lucide-react": "1.62.0",
+    "tailwind-merge": "3.7.0",
+    "tailwindcss": "4.3.3"
   },
   "devDependencies": {
-    "@types/react": "19.2.15",
+    "@types/react": "19.3.0",
     "typescript": "6.0.3"
   },
   "peerDependencies": {
-    "react": "19.2.6"
+    "react": "19.3.1"
   }
 }

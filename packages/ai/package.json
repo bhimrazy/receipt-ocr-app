@@ -4,20 +4,20 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./categories": "./src/categories.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/google": "3.0.80",
-    "ai": "6.0.193",
-    "effect": "3.21.2",
-    "zod": "4.4.3"
+    "@ai-sdk/google": "4.0.106",
+    "ai": "7.0.154",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@types/node": "25.9.1",
     "typescript": "6.0.3"
   }
 }

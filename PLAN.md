@@ -9,7 +9,7 @@ Build a pnpm/Turborepo monorepo for a real Receipt OCR MVP using the provided Cl
 - `apps/web`: Next.js App Router app with shadcn/ui, Tailwind v4, Clerk, and route handlers.
 - `packages/ui`: shared shadcn-style primitives, theme tokens, layout primitives.
 - `packages/db`: Drizzle schema, migrations, typed queries.
-- `packages/storage`: S3-compatible storage client, R2-first but portable to S3/MinIO.
+- `packages/storage`: S3-compatible storage client, R2-first but portable to S3/RustFS.
 - `packages/ai`: AI SDK OCR client and receipt schemas. Gemini is the initial provider.
 - `packages/core`: Effect TS domain services, config, errors, and OCR workflow.
 - Future background jobs target BullMQ + Redis; v1 stays synchronous.

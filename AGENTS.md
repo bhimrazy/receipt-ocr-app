@@ -2,12 +2,12 @@
 
 ## Architecture
 
-This repo is a pnpm/Turborepo Receipt OCR MVP.
+This repo is a Bun/Turborepo Receipt OCR MVP.
 
-- `apps/web`: Next.js App Router app with Clerk, shadcn-style UI, Tailwind v4, and route handlers.
+- `apps/web`: Next.js App Router app with Better Auth, shadcn-style UI, Tailwind v4, and route handlers.
 - `packages/ui`: shared UI primitives and global theme CSS.
 - `packages/db`: Drizzle/Postgres schema and database client.
-- `packages/storage`: S3-compatible storage helpers. Configure for Cloudflare R2 first, but keep it portable to AWS S3 or MinIO.
+- `packages/storage`: S3-compatible storage helpers. Configure for Cloudflare R2 first, but keep it portable to AWS S3 or RustFS (local).
 - `packages/ai`: AI SDK OCR extraction. Gemini is the first provider, but do not hard-code orchestration to Gemini-only concepts.
 - `packages/core`: Effect TS services and receipt processing workflow.
 
@@ -22,11 +22,12 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 
 ## Important Decisions
 
-- Package manager: pnpm.
+- Package manager and tooling: Bun (`bun install`, `bun run`), with a 7-day release cooldown in `bunfig.toml`.
+- Runtime: Next.js runs on Node on Vercel and on Bun in the Docker image (`docker/Dockerfile.prod`).
 - Monorepo: Turborepo.
 - Web framework: Next.js App Router.
 - UI: shadcn-style primitives in `packages/ui`, Tailwind v4, lucide icons.
-- Auth: Clerk with Google/GitHub.
+- Auth: Better Auth (email/password + Google/GitHub, organization + admin plugins).
 - Database: Drizzle ORM with Postgres.
 - Storage: S3-compatible API, R2-first.
 - OCR: AI SDK with Google Gemini as v1 provider.
@@ -48,11 +49,15 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 
 ## Validation
 
-Before handing off, prefer:
+Before handing off, run what CI runs:
 
 ```bash
-pnpm typecheck
-pnpm build
+bun run format:check && bun run lint && bun run check:deps && bun run knip && bun run audit
+bun run typecheck && bun run test && bun run build
+scripts/test.sh   # unit + Playwright e2e against the compose stack (when UI or API behaviour changed)
 ```
+
+Dependencies are exact pins and at least 7 days old; `bun run check:deps` enforces the pins. `bench/` holds the OCR
+benchmark (`bun run bench:ocr`) and the k6 upload test.
 
 If credentials are missing, the UI should still render with mock receipt data. Real OCR requires `apps/web/.env.local`.
