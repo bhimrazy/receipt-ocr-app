@@ -11,9 +11,9 @@ export const metadata: Metadata = { title: "Sign in" };
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirect?: string | string[] }>;
+  searchParams: Promise<{ redirect?: string | string[]; reset?: string | string[] }>;
 }) {
-  const { redirect } = await searchParams;
+  const { redirect, reset } = await searchParams;
   const redirectTo = safeRedirect(redirect);
 
   // Nothing to do here if you're already signed in.
@@ -25,9 +25,14 @@ export default async function SignInPage({
   ].filter(Boolean) as SocialProvider[];
 
   return (
-    <AuthLayout subtitle="Sign in to upload a receipt and get clean, searchable, exportable data in seconds.">
+    <AuthLayout subtitle="Sign in to upload receipts, check what was read and export a CSV.">
       {authEnabled ? (
-        <CredentialsForm mode="sign-in" providers={providers} redirectTo={redirectTo} />
+        <CredentialsForm
+          mode="sign-in"
+          notice={reset ? "Password updated. Sign in with your new password." : undefined}
+          providers={providers}
+          redirectTo={redirectTo}
+        />
       ) : (
         <AuthNotConfiguredCard />
       )}

@@ -1,12 +1,13 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Input } from "@receipt-ocr/ui/components/input";
+import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { AuthError, AuthField, AuthNotice, authCardClass, authLinkClass } from "./auth-field";
 
 export type SocialProvider = "google" | "github";
 
@@ -55,8 +56,11 @@ export function CredentialsForm({
   mode,
   providers,
   redirectTo = "/app/upload",
+  notice,
 }: {
   mode: "sign-in" | "sign-up";
+  /** Confirmation shown above the form, e.g. after a password reset. */
+  notice?: string;
   providers: SocialProvider[];
   /** Where to land after auth succeeds. Used to return to an invite accept page. */
   redirectTo?: string;
@@ -102,15 +106,16 @@ export function CredentialsForm({
   }
 
   return (
-    <div className="w-full rounded-2xl border border-white/10 bg-card/80 p-8 shadow-2xl backdrop-blur-xl">
-      <h2 className="text-2xl font-semibold tracking-tight">
+    <div className={authCardClass}>
+      <h1 className="text-2xl font-semibold tracking-tight">
         {isSignUp ? "Create your account" : "Welcome back"}
-      </h2>
+      </h1>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         {isSignUp
-          ? "Start turning receipts into structured data in seconds."
+          ? "Free plan, no card required. Your first receipt takes under a minute."
           : "Sign in to upload receipts and see your history."}
       </p>
+      {notice ? <AuthNotice>{notice}</AuthNotice> : null}
 
       {providers.length > 0 ? (
         <>
@@ -119,14 +124,14 @@ export function CredentialsForm({
               const Icon = providerIcons[provider];
               return (
                 <Button
-                  className="w-full"
+                  className="h-11 w-full"
                   disabled={pending !== null}
                   key={provider}
                   onClick={() => handleSocial(provider)}
                   type="button"
                   variant="outline"
                 >
-                  {pending === provider ? <Loader2 className="size-4 animate-spin" /> : <Icon />}
+                  {pending === provider ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <Icon />}
                   {providerLabels[provider]}
                 </Button>
               );
@@ -134,7 +139,7 @@ export function CredentialsForm({
           </div>
           <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
-            or continue with email
+            or use your email
             <span className="h-px flex-1 bg-border" />
           </div>
         </>
@@ -142,52 +147,48 @@ export function CredentialsForm({
         <div className="mt-6" />
       )}
 
-      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
         {isSignUp ? (
-          <Input
+          <AuthField
             autoComplete="name"
-            aria-label="Name"
+            id="auth-name"
+            label="Name"
             onChange={(event) => setName(event.target.value)}
-            placeholder="Your name"
             required
             value={name}
           />
         ) : null}
-        <Input
+        <AuthField
           autoComplete="email"
-          aria-label="Email"
+          id="auth-email"
+          label="Email"
           onChange={(event) => setEmail(event.target.value)}
           placeholder="you@example.com"
           required
           type="email"
           value={email}
         />
-        <div>
-          <Input
-            autoComplete={isSignUp ? "new-password" : "current-password"}
-            aria-label="Password"
-            minLength={8}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Password (min. 8 characters)"
-            required
-            type="password"
-            value={password}
-          />
-          {isSignUp ? null : (
-            <p className="mt-2 text-right text-xs">
-              <Link className="text-muted-foreground hover:text-foreground" href="/forgot-password">
+        <AuthField
+          aside={
+            isSignUp ? null : (
+              <Link className={cn(authLinkClass, "-my-3 inline-flex min-h-11 items-center text-xs text-muted-foreground hover:text-foreground")} href="/forgot-password">
                 Forgot your password?
               </Link>
-            </p>
-          )}
-        </div>
-        {error ? (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <Button className="mt-1 w-full" disabled={pending !== null} type="submit">
-          {pending === "credentials" ? <Loader2 className="size-4 animate-spin" /> : null}
+            )
+          }
+          autoComplete={isSignUp ? "new-password" : "current-password"}
+          hint={isSignUp ? "At least 8 characters." : undefined}
+          id="auth-password"
+          label="Password"
+          minLength={isSignUp ? 8 : undefined}
+          onChange={(event) => setPassword(event.target.value)}
+          required
+          type="password"
+          value={password}
+        />
+        {error ? <AuthError>{error}</AuthError> : null}
+        <Button className="mt-1 h-11 w-full" disabled={pending !== null} type="submit">
+          {pending === "credentials" ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
           {isSignUp ? "Create account" : "Sign in"}
         </Button>
       </form>
@@ -196,14 +197,14 @@ export function CredentialsForm({
         {isSignUp ? (
           <>
             Already have an account?{" "}
-            <Link className="text-primary hover:underline" href={`/sign-in${redirectQuery}`}>
+            <Link className={authLinkClass} href={`/sign-in${redirectQuery}`}>
               Sign in
             </Link>
           </>
         ) : (
           <>
             New to receiptOCR?{" "}
-            <Link className="text-primary hover:underline" href={`/sign-up${redirectQuery}`}>
+            <Link className={authLinkClass} href={`/sign-up${redirectQuery}`}>
               Create an account
             </Link>
           </>

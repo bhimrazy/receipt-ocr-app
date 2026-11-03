@@ -1,108 +1,110 @@
-import { ScanLine, ShieldCheck, Sparkles } from "lucide-react";
+import { buttonVariants } from "@receipt-ocr/ui/components/button";
+import { cn } from "@receipt-ocr/ui/lib/utils";
+import { Download, PencilLine, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
+import { PLANS } from "@/lib/plans";
+import { authCardClass } from "./auth-field";
 
 export const valueProps = [
   {
     icon: ScanLine,
-    title: "Extract in seconds",
-    desc: "Merchant, line items, tax, and totals — each with a confidence score.",
+    title: "Reads the whole receipt",
+    desc: "Merchant, date, line items, tax and total, with a confidence score.",
   },
   {
-    icon: Sparkles,
-    title: "Free to start",
-    desc: "No credit card. Bring your own keys when you outgrow the free tier.",
+    icon: PencilLine,
+    title: "You check it",
+    desc: "Fix any field it misread before it goes into your books.",
   },
   {
-    icon: ShieldCheck,
-    title: "Private by design",
-    desc: "Your receipts and storage keys stay server-side, never in the browser.",
+    icon: Download,
+    title: "Export a CSV",
+    desc: `Free plan: ${PLANS.free.receiptsPerDay} receipts a day, no card required.`,
   },
 ];
 
-export function AuthLayout({
-  children,
-  subtitle,
-}: {
-  children: React.ReactNode;
-  subtitle: string;
-}) {
+const footerLink =
+  "inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+export function AuthLayout({ children, subtitle }: { children: React.ReactNode; subtitle: string }) {
   return (
-    <main className="relative grid min-h-screen overflow-hidden bg-background lg:grid-cols-2">
-      {/* Left: value panel */}
+    <div className="relative grid min-h-screen overflow-hidden bg-background lg:grid-cols-2">
       <aside className="relative hidden flex-col justify-between border-r border-border bg-secondary/20 p-12 lg:flex">
-        <div className="grid-mask pointer-events-none absolute inset-0 opacity-30">
+        <div aria-hidden className="grid-mask pointer-events-none absolute inset-0 opacity-30">
           <div className="receipt-grid absolute -inset-1" />
         </div>
         <div className="hero-aurora pointer-events-none absolute left-1/3 top-1/2 size-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60" />
-        <Link href="/" aria-label="receiptOCR home" className="relative z-10 w-fit">
+        <Link
+          aria-label="receiptOCR home"
+          className="relative z-10 inline-flex min-h-11 w-fit items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          href="/"
+        >
           <Brand />
         </Link>
         <div className="relative z-10 max-w-md">
-          <h1 className="text-balance text-4xl font-bold leading-tight tracking-tight">
-            Turn receipts into <span className="text-gradient">structured data</span>
-          </h1>
+          {/* The form card holds the page's h1, so this stays a paragraph. */}
+          <p className="text-balance text-4xl font-bold leading-tight tracking-tight">
+            Snap a receipt. <span className="text-gradient">Get a spreadsheet.</span>
+          </p>
           <p className="mt-4 text-pretty leading-7 text-muted-foreground">{subtitle}</p>
           <ul className="mt-10 flex flex-col gap-6">
-            {valueProps.map((prop) => {
-              const Icon = prop.icon;
-              return (
-                <li className="flex items-start gap-4" key={prop.title}>
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
-                    <Icon className="size-5" />
-                  </span>
-                  <div>
-                    <p className="font-medium">{prop.title}</p>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{prop.desc}</p>
-                  </div>
-                </li>
-              );
-            })}
+            {valueProps.map(({ icon: Icon, title, desc }) => (
+              <li className="flex items-start gap-4" key={title}>
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
+                  <Icon aria-hidden className="size-5" />
+                </span>
+                <div>
+                  <p className="font-medium">{title}</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{desc}</p>
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
-        <p className="relative z-10 font-mono text-xs text-muted-foreground/70">
-          Next.js · Better Auth · Effect · AI SDK · Drizzle
-        </p>
+        <p className="relative z-10 text-xs text-muted-foreground">© {new Date().getFullYear()} receiptOCR</p>
       </aside>
 
-      {/* Right: form */}
-      <section className="relative flex items-center justify-center px-5 py-16">
+      <main className="relative flex items-center justify-center px-4 py-12 sm:px-5 sm:py-16">
         <div className="absolute left-1/2 top-[35%] size-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-[170px] lg:hidden" />
         <div className="relative z-10 flex w-full max-w-md flex-col items-center">
-          <Link href="/" aria-label="receiptOCR home" className="mb-8 lg:hidden">
+          <Link
+            aria-label="receiptOCR home"
+            className="mb-8 inline-flex min-h-11 items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+            href="/"
+          >
             <Brand />
           </Link>
           {children}
-          <div className="mt-6 flex gap-5 text-xs text-muted-foreground">
-            <Link className="hover:text-foreground" href="/">
-              Back to home
+          <nav aria-label="Legal" className="mt-4 flex gap-6 text-sm text-muted-foreground">
+            <Link className={footerLink} href="/">
+              Home
             </Link>
-            <Link className="hover:text-foreground" href="/privacy">
+            <Link className={footerLink} href="/privacy">
               Privacy
             </Link>
-            <Link className="hover:text-foreground" href="/terms">
+            <Link className={footerLink} href="/terms">
               Terms
             </Link>
-          </div>
+          </nav>
         </div>
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }
 
+/** Only reachable in a local setup without auth env vars, so it can speak to the developer. */
 export function AuthNotConfiguredCard() {
   return (
-    <div className="w-full rounded-2xl border border-white/10 bg-card/80 p-8 text-center shadow-2xl backdrop-blur-xl">
-      <h2 className="text-2xl font-semibold tracking-tight">Auth is not configured</h2>
+    <div className={cn(authCardClass, "text-center")}>
+      <h1 className="text-2xl font-semibold tracking-tight">Sign-in isn&apos;t set up</h1>
       <p className="mt-3 text-sm leading-6 text-muted-foreground">
-        Add `DATABASE_URL` and `BETTER_AUTH_SECRET` to `apps/web/.env.local` to enable
-        email/password and Google/GitHub sign-in.
+        Add <code className="font-mono text-foreground">DATABASE_URL</code> and{" "}
+        <code className="font-mono text-foreground">BETTER_AUTH_SECRET</code> to{" "}
+        <code className="font-mono text-foreground">apps/web/.env.local</code> to turn on email and social sign-in.
       </p>
-      <Link
-        className="mt-6 inline-flex h-10 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground"
-        href="/app/upload"
-      >
-        Preview app UI
+      <Link className={cn(buttonVariants(), "mt-6 h-11")} href="/app/upload">
+        Preview the app
       </Link>
     </div>
   );
