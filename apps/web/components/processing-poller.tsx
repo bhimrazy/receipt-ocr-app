@@ -61,7 +61,10 @@ export function ProcessingPoller({ id, status }: { id: string; status: string })
   if (!gaveUp) return null;
 
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning" role="status">
+    <div
+      className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
+      role="status"
+    >
       Still reading after a few minutes. Something may have gone wrong.
       <button
         className="min-h-11 rounded-md font-medium underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-0"
@@ -91,7 +94,10 @@ export function ListPoller({ active }: { active: boolean }) {
       if (Date.now() - startedAt > MAX_POLL_MS) return;
       router.refresh();
       attempt += 1;
-      timer = setTimeout(tick, Math.min(BASE_INTERVAL_MS * 2 ** Math.floor(attempt / 3), MAX_INTERVAL_MS));
+      timer = setTimeout(
+        tick,
+        Math.min(BASE_INTERVAL_MS * 2 ** Math.floor(attempt / 3), MAX_INTERVAL_MS),
+      );
     }
 
     timer = setTimeout(tick, BASE_INTERVAL_MS * 2);

@@ -5,7 +5,13 @@ import { planPolicy } from "@/lib/plans";
 import { getActiveScope, getSession, planFor } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { ChevronRight, Gauge, Users } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -52,13 +58,17 @@ export default async function SettingsPage() {
   const plan = planFor(session);
   const policy = planPolicy(plan);
   const label = planLabel(plan);
-  const [usage, workspace] = authEnabled ? await Promise.all([loadUsage(), loadWorkspace()]) : [null, null];
+  const [usage, workspace] = authEnabled
+    ? await Promise.all([loadUsage(), loadWorkspace()])
+    : [null, null];
 
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Your account, your workspace and what your plan allows.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Your account, your workspace and what your plan allows.
+        </p>
       </div>
 
       <div className="space-y-5">
@@ -91,7 +101,10 @@ export default async function SettingsPage() {
                   : "Invite teammates and manage their roles."}
               </p>
             </div>
-            <Link className={buttonVariants({ variant: "outline", size: "sm" })} href="/app/settings/members">
+            <Link
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+              href="/app/settings/members"
+            >
               Manage
               <ChevronRight aria-hidden="true" />
             </Link>
@@ -103,7 +116,8 @@ export default async function SettingsPage() {
         ) : (
           <Card>
             <CardContent className="pt-5 text-sm text-muted-foreground">
-              Account settings aren&apos;t available because sign-in isn&apos;t set up on this server.
+              Account settings aren&apos;t available because sign-in isn&apos;t set up on this
+              server.
             </CardContent>
           </Card>
         )}

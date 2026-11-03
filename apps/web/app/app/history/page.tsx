@@ -4,7 +4,14 @@ import { listReceiptSummaries } from "../_data/receipts-contract";
 
 export const metadata: Metadata = { title: "History" };
 
-type Params = { page?: string; q?: string; category?: string; status?: string; from?: string; to?: string };
+type Params = {
+  page?: string;
+  q?: string;
+  category?: string;
+  status?: string;
+  from?: string;
+  to?: string;
+};
 
 const STATUSES = ["needs-review", "failed", "processing", "completed", "uploaded"] as const;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,5 +32,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const filters = parseFilters(params);
   const { rows, total, pageSize } = await listReceiptSummaries({ ...filters, page });
-  return <HistoryTable filters={filters} page={page} pageSize={pageSize} receipts={rows} total={total} />;
+  return (
+    <HistoryTable filters={filters} page={page} pageSize={pageSize} receipts={rows} total={total} />
+  );
 }

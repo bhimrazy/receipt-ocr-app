@@ -92,14 +92,20 @@ export async function revokeUserSessionsAction(userId: string): Promise<ActionRe
  * never reach the browser (security review L1). The token is looked up here,
  * after the admin check, scoped to the given user.
  */
-export async function revokeUserSessionAction(sessionId: string, userId: string): Promise<ActionResult> {
+export async function revokeUserSessionAction(
+  sessionId: string,
+  userId: string,
+): Promise<ActionResult> {
   try {
     const requestHeaders = await adminHeaders();
     const result = await auth.api.listUserSessions({ body: { userId }, headers: requestHeaders });
     const sessions = "sessions" in result ? result.sessions : [];
     const target = sessions.find((session) => session.id === sessionId);
     if (!target) return { ok: false, error: "That session has already ended." };
-    await auth.api.revokeUserSession({ body: { sessionToken: target.token }, headers: requestHeaders });
+    await auth.api.revokeUserSession({
+      body: { sessionToken: target.token },
+      headers: requestHeaders,
+    });
     revalidatePath(`/admin/users/${userId}`);
     return { ok: true };
   } catch (error) {

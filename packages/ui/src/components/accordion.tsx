@@ -1,18 +1,21 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
-import { cn } from "@receipt-ocr/ui/lib/utils"
-import { Plus } from "lucide-react"
+import * as React from "react";
+import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion";
+import { cn } from "@receipt-ocr/ui/lib/utils";
+import { Plus } from "lucide-react";
 
 function Accordion({ className, ...props }: AccordionPrimitive.Root.Props) {
   return (
     <AccordionPrimitive.Root
       data-slot="accordion"
-      className={cn("flex w-full flex-col divide-y divide-border rounded-xl border border-border", className)}
+      className={cn(
+        "flex w-full flex-col divide-y divide-border rounded-xl border border-border",
+        className,
+      )}
       {...props}
     />
-  )
+  );
 }
 
 function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.Trigger.Props) {
@@ -22,7 +25,7 @@ function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.
         data-slot="accordion-trigger"
         className={cn(
           "group/accordion-trigger flex min-h-11 flex-1 items-center justify-between gap-4 rounded-md py-5 text-left text-sm font-medium text-foreground transition-colors outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring aria-disabled:pointer-events-none aria-disabled:opacity-50",
-          className
+          className,
         )}
         {...props}
       >
@@ -33,15 +36,19 @@ function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.
         />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
-  )
+  );
 }
 
 function AccordionContent({ className, children, ...props }: AccordionPrimitive.Panel.Props) {
   return (
-    <AccordionPrimitive.Panel data-slot="accordion-content" className="overflow-hidden text-sm" {...props}>
+    <AccordionPrimitive.Panel
+      data-slot="accordion-content"
+      className="overflow-hidden text-sm"
+      {...props}
+    >
       <div className={cn("pb-5 leading-7 text-muted-foreground", className)}>{children}</div>
     </AccordionPrimitive.Panel>
-  )
+  );
 }
 
 /**
@@ -55,7 +62,11 @@ function AccordionItem({
   ...props
 }: AccordionPrimitive.Item.Props & { question?: React.ReactNode }) {
   return (
-    <AccordionPrimitive.Item data-slot="accordion-item" className={cn("px-5", className)} {...props}>
+    <AccordionPrimitive.Item
+      data-slot="accordion-item"
+      className={cn("px-5", className)}
+      {...props}
+    >
       {question === undefined ? (
         children
       ) : (
@@ -65,7 +76,7 @@ function AccordionItem({
         </>
       )}
     </AccordionPrimitive.Item>
-  )
+  );
 }
 
-export { Accordion, AccordionItem, AccordionTrigger, AccordionContent }
+export { Accordion, AccordionItem, AccordionTrigger, AccordionContent };

@@ -31,7 +31,10 @@ export function BanDialog({
   userEmail: string;
   onOpenChange: (open: boolean) => void;
   /** Return an error message to keep the dialog open. */
-  onSubmit: (reason: string | undefined, expiresInSeconds: number | undefined) => Promise<string | void>;
+  onSubmit: (
+    reason: string | undefined,
+    expiresInSeconds: number | undefined,
+  ) => Promise<string | void>;
 }) {
   const [reason, setReason] = useState("");
   const [durationIndex, setDurationIndex] = useState(0);
@@ -104,7 +107,12 @@ export function BanDialog({
             </p>
           ) : null}
           <DialogFooter>
-            <Button disabled={pending} onClick={() => onOpenChange(false)} type="button" variant="ghost">
+            <Button
+              disabled={pending}
+              onClick={() => onOpenChange(false)}
+              type="button"
+              variant="ghost"
+            >
               Cancel
             </Button>
             <Button disabled={pending} type="submit" variant="destructive">

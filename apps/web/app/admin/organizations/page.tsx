@@ -70,8 +70,8 @@ export default async function AdminOrganizationsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Workspaces</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {organizations.length} {organizations.length === 1 ? "workspace" : "workspaces"}. Expand one to see its
-          members.
+          {organizations.length} {organizations.length === 1 ? "workspace" : "workspaces"}. Expand
+          one to see its members.
         </p>
       </div>
       <OrganizationsList organizations={organizations} />

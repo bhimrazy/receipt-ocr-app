@@ -29,7 +29,13 @@ type Confirm = Omit<ConfirmDialogProps, "open" | "onOpenChange">;
  * Per-row admin actions, each confirmed first. The server actions re-check
  * the admin role, so nothing here is trusted authorization.
  */
-export function RowActions({ user, currentUserId }: { user: AdminUser; currentUserId: string | null }) {
+export function RowActions({
+  user,
+  currentUserId,
+}: {
+  user: AdminUser;
+  currentUserId: string | null;
+}) {
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [banOpen, setBanOpen] = useState(false);
@@ -53,7 +59,9 @@ export function RowActions({ user, currentUserId }: { user: AdminUser; currentUs
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button aria-label={`Actions for ${who}`} size="icon-sm" variant="ghost" />}>
+        <DropdownMenuTrigger
+          render={<Button aria-label={`Actions for ${who}`} size="icon-sm" variant="ghost" />}
+        >
           <MoreHorizontal aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
@@ -63,10 +71,14 @@ export function RowActions({ user, currentUserId }: { user: AdminUser; currentUs
                 onClick={() =>
                   ask({
                     title: `Remove admin access for ${who}?`,
-                    description: "They lose access to the admin area. Their account and receipts stay as they are.",
+                    description:
+                      "They lose access to the admin area. Their account and receipts stay as they are.",
                     confirmLabel: "Remove admin access",
                     destructive: true,
-                    onConfirm: runner(() => setRoleAction(user.id, "user"), `${who} is no longer an admin.`),
+                    onConfirm: runner(
+                      () => setRoleAction(user.id, "user"),
+                      `${who} is no longer an admin.`,
+                    ),
                   })
                 }
               >
@@ -79,9 +91,13 @@ export function RowActions({ user, currentUserId }: { user: AdminUser; currentUs
               onClick={() =>
                 ask({
                   title: `Make ${who} an admin?`,
-                  description: "They can see every user and workspace, ban people and impersonate accounts.",
+                  description:
+                    "They can see every user and workspace, ban people and impersonate accounts.",
                   confirmLabel: "Make admin",
-                  onConfirm: runner(() => setRoleAction(user.id, "admin"), `${who} is now an admin.`),
+                  onConfirm: runner(
+                    () => setRoleAction(user.id, "admin"),
+                    `${who} is now an admin.`,
+                  ),
                 })
               }
             >
@@ -98,7 +114,10 @@ export function RowActions({ user, currentUserId }: { user: AdminUser; currentUs
                   : "This ends all their sessions. They can sign in again right away.",
                 confirmLabel: "Revoke sessions",
                 destructive: true,
-                onConfirm: runner(() => revokeUserSessionsAction(user.id), `Signed ${who} out everywhere.`),
+                onConfirm: runner(
+                  () => revokeUserSessionsAction(user.id),
+                  `Signed ${who} out everywhere.`,
+                ),
               })
             }
           >
@@ -148,7 +167,9 @@ export function RowActions({ user, currentUserId }: { user: AdminUser; currentUs
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {confirm ? <ConfirmDialog onOpenChange={setConfirmOpen} open={confirmOpen} {...confirm} /> : null}
+      {confirm ? (
+        <ConfirmDialog onOpenChange={setConfirmOpen} open={confirmOpen} {...confirm} />
+      ) : null}
 
       <BanDialog
         onOpenChange={setBanOpen}

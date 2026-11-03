@@ -31,7 +31,11 @@ export interface AdminUser {
 }
 
 function RoleBadge({ role }: { role: string }) {
-  return <Badge variant={role === "admin" ? "default" : "secondary"}>{role === "admin" ? "Admin" : "User"}</Badge>;
+  return (
+    <Badge variant={role === "admin" ? "default" : "secondary"}>
+      {role === "admin" ? "Admin" : "User"}
+    </Badge>
+  );
 }
 
 function StatusBadge({ user }: { user: AdminUser }) {
@@ -85,7 +89,10 @@ export function UsersTable({
         }}
       >
         <div className="relative flex-1">
-          <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search
+            aria-hidden="true"
+            className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
           <Input
             aria-label="Search users by email"
             className="pl-9"
@@ -102,7 +109,9 @@ export function UsersTable({
 
       <ul className="divide-y divide-border rounded-lg border border-border md:hidden">
         {users.length === 0 ? (
-          <li className="px-4 py-10 text-center text-sm text-muted-foreground">No users match that search.</li>
+          <li className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No users match that search.
+          </li>
         ) : (
           users.map((user) => (
             <li className="flex items-start gap-2 px-4 py-3" key={user.id}>
@@ -110,7 +119,9 @@ export function UsersTable({
                 className="min-w-0 flex-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 href={`/admin/users/${user.id}`}
               >
-                <span className="block truncate text-sm font-medium">{user.name || user.email}</span>
+                <span className="block truncate text-sm font-medium">
+                  {user.name || user.email}
+                </span>
                 <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
                 <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <RoleBadge role={user.role} />
@@ -152,7 +163,9 @@ export function UsersTable({
                       className="group block rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       href={`/admin/users/${user.id}`}
                     >
-                      <div className="font-medium group-hover:text-primary">{user.name || user.email}</div>
+                      <div className="font-medium group-hover:text-primary">
+                        {user.name || user.email}
+                      </div>
                       <div className="text-xs text-muted-foreground">{user.email}</div>
                     </Link>
                   </TableCell>

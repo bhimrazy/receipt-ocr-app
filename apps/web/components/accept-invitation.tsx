@@ -12,9 +12,7 @@ function roleLabel(role: string) {
   return `${/^[aeiou]/.test(lower) ? "an" : "a"} ${lower}`;
 }
 
-type InvitationDetails = Awaited<
-  ReturnType<typeof authClient.organization.getInvitation>
->["data"];
+type InvitationDetails = Awaited<ReturnType<typeof authClient.organization.getInvitation>>["data"];
 
 export function AcceptInvitation({ invitationId }: { invitationId: string }) {
   const { data: session, isPending: sessionPending } = authClient.useSession();
@@ -59,7 +57,9 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
   async function handleAccept() {
     setAction("accept");
     setError(null);
-    const { data, error: acceptError } = await authClient.organization.acceptInvitation({ invitationId });
+    const { data, error: acceptError } = await authClient.organization.acceptInvitation({
+      invitationId,
+    });
     if (acceptError || !data) {
       setError(acceptError?.message ?? "Couldn't accept the invite. Try again.");
       setAction(null);
@@ -87,7 +87,10 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
 
   if (sessionPending || !signedIn || loading) {
     return (
-      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground" role="status">
+      <div
+        className="flex items-center justify-center gap-2 text-sm text-muted-foreground"
+        role="status"
+      >
         <Loader2 aria-hidden="true" className="size-4 animate-spin" />
         {sessionPending || !signedIn ? "Checking your sign-in…" : "Loading your invite…"}
       </div>
@@ -101,7 +104,10 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           It may have expired or been cancelled. Ask the person who invited you to send a new one.
         </p>
-        <Link className={buttonVariants({ variant: "outline", className: "mt-6 w-full" })} href="/app/upload">
+        <Link
+          className={buttonVariants({ variant: "outline", className: "mt-6 w-full" })}
+          href="/app/upload"
+        >
           Go to the app
         </Link>
       </div>
@@ -110,19 +116,22 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
 
   const orgName = invitation.organizationName ?? "a workspace";
   const busy = action !== null;
-  const wrongAccount = Boolean(session?.user.email && invitation.email && session.user.email !== invitation.email);
+  const wrongAccount = Boolean(
+    session?.user.email && invitation.email && session.user.email !== invitation.email,
+  );
 
   return (
     <div className="text-center">
       <h2 className="text-2xl font-semibold tracking-tight">You&apos;re invited</h2>
       <p className="mt-3 text-sm leading-6 text-muted-foreground">
         Join <span className="font-medium text-foreground">{orgName}</span>
-        {invitation.role ? <> as {roleLabel(invitation.role)}</> : null} to see and add its receipts.
+        {invitation.role ? <> as {roleLabel(invitation.role)}</> : null} to see and add its
+        receipts.
       </p>
       {wrongAccount ? (
         <p className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-left text-sm text-warning">
-          This invite is for {invitation.email}, but you&apos;re signed in as {session?.user.email}. Sign in with the
-          invited email to accept it.
+          This invite is for {invitation.email}, but you&apos;re signed in as {session?.user.email}.
+          Sign in with the invited email to accept it.
         </p>
       ) : null}
       {error ? (
@@ -135,11 +144,19 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
       ) : null}
       <div className="mt-6 flex flex-col gap-2.5">
         <Button className="w-full" disabled={busy} onClick={handleAccept}>
-          {action === "accept" ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Check aria-hidden="true" />}
+          {action === "accept" ? (
+            <Loader2 aria-hidden="true" className="animate-spin" />
+          ) : (
+            <Check aria-hidden="true" />
+          )}
           Accept invite
         </Button>
         <Button className="w-full" disabled={busy} onClick={handleReject} variant="outline">
-          {action === "reject" ? <Loader2 aria-hidden="true" className="animate-spin" /> : <X aria-hidden="true" />}
+          {action === "reject" ? (
+            <Loader2 aria-hidden="true" className="animate-spin" />
+          ) : (
+            <X aria-hidden="true" />
+          )}
           Decline
         </Button>
       </div>

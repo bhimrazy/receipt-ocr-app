@@ -3,7 +3,13 @@ import { UserMenu } from "@/components/user-menu";
 import { authEnabled } from "@/lib/env";
 import { getSession, isAdmin } from "@/lib/session";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import { ArrowLeft, ShieldAlert, ShieldCheck } from "lucide-react";
 import Link from "next/link";
@@ -21,7 +27,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <ShieldAlert aria-hidden="true" className="size-5 text-primary" />
               Admin isn&apos;t available
             </CardTitle>
-            <CardDescription>Sign-in isn&apos;t set up on this server, so there are no admins yet.</CardDescription>
+            <CardDescription>
+              Sign-in isn&apos;t set up on this server, so there are no admins yet.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Link className={buttonVariants({ variant: "outline" })} href="/">
@@ -42,7 +50,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <Toaster>
       <div className="flex min-h-screen bg-background text-foreground">
         <aside className="hidden w-60 shrink-0 border-r border-border bg-[#0f0f11] p-5 md:flex md:flex-col">
-          <Link className="mb-8 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/app">
+          <Link
+            className="mb-8 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            href="/app"
+          >
             <Brand />
           </Link>
           <div className="mb-6 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary">

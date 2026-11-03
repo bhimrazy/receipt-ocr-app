@@ -23,7 +23,9 @@ async function loadUsage(): Promise<Usage | null> {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = authEnabled ? await getSession() : null;
-  const [allowance, usage] = authEnabled ? await Promise.all([getWorkspaceAllowance(), loadUsage()]) : [null, null];
+  const [allowance, usage] = authEnabled
+    ? await Promise.all([getWorkspaceAllowance(), loadUsage()])
+    : [null, null];
   const plan = planFor(session);
   const planLabel = `${plan.charAt(0).toUpperCase()}${plan.slice(1)} plan`;
   const showAdmin = isAdmin(session);
@@ -35,13 +37,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       Preview mode
     </span>
   );
-  const workspaceControl = authEnabled ? <WorkspaceSwitcher canCreate={allowance?.canCreate ?? false} /> : null;
+  const workspaceControl = authEnabled ? (
+    <WorkspaceSwitcher canCreate={allowance?.canCreate ?? false} />
+  ) : null;
 
   return (
     <Toaster>
       <div className="flex min-h-screen bg-background text-foreground">
         <aside className="hidden w-60 shrink-0 border-r border-border bg-[#0f0f11] p-5 md:flex md:flex-col">
-          <Link className="mb-6 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/app">
+          <Link
+            className="mb-6 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            href="/app"
+          >
             <Brand />
           </Link>
           {workspaceControl ? <div className="mb-6">{workspaceControl}</div> : null}
@@ -51,7 +58,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="flex min-w-0 flex-1 flex-col">
           {authEnabled ? <ImpersonationBanner /> : null}
           <header className="flex h-16 items-center justify-between gap-3 border-b border-border px-4 md:hidden">
-            <Link className="flex min-h-11 shrink-0 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/app">
+            <Link
+              className="flex min-h-11 shrink-0 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              href="/app"
+            >
               <Brand />
             </Link>
             <div className="flex min-w-0 items-center gap-2">

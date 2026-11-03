@@ -4,7 +4,15 @@ import { formatTime } from "@/lib/format";
 export type Usage = { used: number; limit: number; resetsAt: Date };
 
 /** Receipts used today against the plan limit. Turns amber at 80%. */
-export function UsageMeter({ usage, planLabel, className }: { usage: Usage; planLabel: string; className?: string }) {
+export function UsageMeter({
+  usage,
+  planLabel,
+  className,
+}: {
+  usage: Usage;
+  planLabel: string;
+  className?: string;
+}) {
   const { used, limit, resetsAt } = usage;
   const ratio = limit > 0 ? Math.min(1, used / limit) : 0;
   const nearLimit = ratio >= 0.8;
@@ -32,7 +40,8 @@ export function UsageMeter({ usage, planLabel, className }: { usage: Usage; plan
       </div>
       {nearLimit ? (
         <p className="mt-2 text-xs text-warning">
-          {used >= limit ? "Limit reached." : `${limit - used} left.`} Resets at {formatTime(resetsAt)}.
+          {used >= limit ? "Limit reached." : `${limit - used} left.`} Resets at{" "}
+          {formatTime(resetsAt)}.
         </p>
       ) : null}
     </div>

@@ -26,13 +26,13 @@ bun dev
 
 `docker compose` brings up everything the app needs except the OCR provider:
 
-| Service | What it is | Where |
-| --- | --- | --- |
-| `postgres` | Postgres 18 | `localhost:5433` (override with `POSTGRES_PORT`) |
-| `rustfs` | S3-compatible storage, stands in for R2 | `localhost:9000`, console on `:9001` |
-| `rustfs-init` | One-shot: creates the `receipt-ocr` bucket | exits when done |
-| `migrate` | One-shot: applies drizzle migrations | exits when done |
-| `app` | The Next.js app itself (profile `app`) | `localhost:3000` |
+| Service       | What it is                                 | Where                                            |
+| ------------- | ------------------------------------------ | ------------------------------------------------ |
+| `postgres`    | Postgres 18                                | `localhost:5433` (override with `POSTGRES_PORT`) |
+| `rustfs`      | S3-compatible storage, stands in for R2    | `localhost:9000`, console on `:9001`             |
+| `rustfs-init` | One-shot: creates the `receipt-ocr` bucket | exits when done                                  |
+| `migrate`     | One-shot: applies drizzle migrations       | exits when done                                  |
+| `app`         | The Next.js app itself (profile `app`)     | `localhost:3000`                                 |
 
 ```bash
 bun run docker:up      # infra only — run the app with `bun dev`

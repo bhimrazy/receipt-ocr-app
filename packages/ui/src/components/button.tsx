@@ -1,7 +1,7 @@
-import * as React from "react"
-import { Button as ButtonPrimitive } from "@base-ui/react/button"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@receipt-ocr/ui/lib/utils"
+import * as React from "react";
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@receipt-ocr/ui/lib/utils";
 
 // Below md every size grows to 44px so touch targets meet WCAG 2.5.5.
 const buttonVariants = cva(
@@ -33,8 +33,8 @@ const buttonVariants = cva(
       variant: "default",
       size: "default",
     },
-  }
-)
+  },
+);
 
 type ButtonProps = ButtonPrimitive.Props &
   VariantProps<typeof buttonVariants> & {
@@ -42,11 +42,18 @@ type ButtonProps = ButtonPrimitive.Props &
      * @deprecated Use `render={<Link href="…" />}` (Base UI), or `buttonVariants()` on a link.
      * Kept so existing Radix-style call sites keep working.
      */
-    asChild?: boolean
-  }
+    asChild?: boolean;
+  };
 
-function Button({ className, variant = "default", size = "default", asChild, children, ...props }: ButtonProps) {
-  const classes = cn(buttonVariants({ variant, size, className }))
+function Button({
+  className,
+  variant = "default",
+  size = "default",
+  asChild,
+  children,
+  ...props
+}: ButtonProps) {
+  const classes = cn(buttonVariants({ variant, size, className }));
 
   // Clones the child (usually a link) rather than using the Button primitive,
   // which would add role="button" to a link. Plain cloneElement stays server-safe.
@@ -55,14 +62,14 @@ function Button({ className, variant = "default", size = "default", asChild, chi
       ...(props as object),
       "data-slot": "button",
       className: cn(classes, children.props.className),
-    } as { className: string })
+    } as { className: string });
   }
 
   return (
     <ButtonPrimitive data-slot="button" className={classes} {...props}>
       {children}
     </ButtonPrimitive>
-  )
+  );
 }
 
-export { Button, buttonVariants, type ButtonProps }
+export { Button, buttonVariants, type ButtonProps };

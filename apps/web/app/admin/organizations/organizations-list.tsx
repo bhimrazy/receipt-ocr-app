@@ -2,7 +2,14 @@
 
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@receipt-ocr/ui/components/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@receipt-ocr/ui/components/table";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useState } from "react";
@@ -26,7 +33,15 @@ function memberCount(n: number) {
   return `${n} ${n === 1 ? "member" : "members"}`;
 }
 
-function ToggleButton({ org, open, onToggle }: { org: AdminOrganization; open: boolean; onToggle: () => void }) {
+function ToggleButton({
+  org,
+  open,
+  onToggle,
+}: {
+  org: AdminOrganization;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const Icon = open ? ChevronDown : ChevronRight;
   return (
     <Button
@@ -58,7 +73,9 @@ function MemberList({ org }: { org: AdminOrganization }) {
             <span className="block truncate text-sm font-medium">{entry.name || entry.email}</span>
             <span className="block truncate text-xs text-muted-foreground">{entry.email}</span>
           </Link>
-          <Badge variant={entry.role === "owner" ? "default" : "secondary"}>{roleLabel(entry.role)}</Badge>
+          <Badge variant={entry.role === "owner" ? "default" : "secondary"}>
+            {roleLabel(entry.role)}
+          </Badge>
         </li>
       ))}
     </ul>
@@ -142,8 +159,12 @@ export function OrganizationsList({ organizations }: { organizations: AdminOrgan
                         <span className="text-muted-foreground">No owner</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">{org.memberCount}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{formatDate(org.createdAt)}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {org.memberCount}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDate(org.createdAt)}
+                    </TableCell>
                   </TableRow>
                   {isOpen ? (
                     <TableRow>

@@ -16,9 +16,7 @@ function causeDetail(error: unknown): string | undefined {
   return String(inner);
 }
 
-function failureContext(
-  cause: Cause.Cause<{ readonly message: string; readonly _tag?: string }>,
-) {
+function failureContext(cause: Cause.Cause<{ readonly message: string; readonly _tag?: string }>) {
   const failure = Cause.failureOption(cause);
   if (Option.isSome(failure)) {
     return {
@@ -163,7 +161,11 @@ export async function POST(request: Request) {
         if (Exit.isFailure(extracted)) {
           const failure = failureContext(extracted.cause);
           extractEvent.outcome = "error";
-          extractEvent.error = { message: failure.message, type: failure.type, detail: failure.detail };
+          extractEvent.error = {
+            message: failure.message,
+            type: failure.type,
+            detail: failure.detail,
+          };
           logger.error(extractEvent);
           return;
         }

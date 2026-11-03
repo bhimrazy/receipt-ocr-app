@@ -3,10 +3,22 @@
 import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
 import type { ReceiptWithItems } from "@receipt-ocr/core";
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Label } from "@receipt-ocr/ui/components/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@receipt-ocr/ui/components/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@receipt-ocr/ui/components/select";
 import { Loader2, Pencil, TriangleAlert } from "lucide-react";
 import { confidenceLevel } from "@/lib/format";
 import { useRouter } from "next/navigation";
@@ -40,7 +52,10 @@ const labelClass = "mb-1.5 block text-xs font-medium text-muted-foreground";
 
 /** Canonical list, plus the stored value when it isn't in it, so what you see is what saves. */
 function categoryItems(current: string) {
-  const items: { value: string; label: string }[] = RECEIPT_CATEGORIES.map((category) => ({ value: category, label: category }));
+  const items: { value: string; label: string }[] = RECEIPT_CATEGORIES.map((category) => ({
+    value: category,
+    label: category,
+  }));
   if (current && !items.some((item) => item.value === current)) {
     items.unshift({ value: current, label: `${current} (unrecognised)` });
   }
@@ -98,13 +113,14 @@ export function ReceiptEditor({
           Correct extracted data
         </CardTitle>
         <CardDescription>
-          Fix anything that was misread. Your corrections are what gets exported. Line items can&apos;t be
-          edited yet.
+          Fix anything that was misread. Your corrections are what gets exported. Line items
+          can&apos;t be edited yet.
         </CardDescription>
         {lowConfidence === "check" || lowConfidence === "review" ? (
           <p className="mt-2 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
             <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-            Parts of this receipt were hard to read. Check the merchant, date and total against the photo first.
+            Parts of this receipt were hard to read. Check the merchant, date and total against the
+            photo first.
           </p>
         ) : null}
       </CardHeader>
@@ -139,7 +155,11 @@ export function ReceiptEditor({
             <Label className={labelClass} htmlFor="category">
               Category
             </Label>
-            <Select items={categories} onValueChange={(value) => value && set("category", value as string)} value={draft.category}>
+            <Select
+              items={categories}
+              onValueChange={(value) => value && set("category", value as string)}
+              value={draft.category}
+            >
               <SelectTrigger className="w-full" id="category">
                 <SelectValue />
               </SelectTrigger>

@@ -20,11 +20,7 @@ function toIso(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export default async function AdminUserDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function AdminUserDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireAdmin();
   const { id } = await params;
   const db = adminDb();
@@ -74,7 +70,10 @@ export default async function AdminUserDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl">
-      <Link className={buttonVariants({ variant: "ghost", size: "sm", className: "mb-6 -ml-3" })} href="/admin/users">
+      <Link
+        className={buttonVariants({ variant: "ghost", size: "sm", className: "mb-6 -ml-3" })}
+        href="/admin/users"
+      >
         <ArrowLeft aria-hidden="true" />
         Back to users
       </Link>
@@ -90,7 +89,9 @@ export default async function AdminUserDetailPage({
             )}
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{row.name || row.email}</h1>
+            <h1 className="truncate text-2xl font-semibold tracking-tight">
+              {row.name || row.email}
+            </h1>
             <p className="truncate text-sm text-muted-foreground">{row.email}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <Badge variant={adminUser.role === "admin" ? "default" : "secondary"}>
@@ -112,7 +113,9 @@ export default async function AdminUserDetailPage({
       {adminUser.banned && adminUser.banReason ? (
         <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <span className="font-medium">Ban reason:</span> {adminUser.banReason}
-          {adminUser.banExpires ? ` · Ends ${formatDateTime(adminUser.banExpires)}` : " · Permanent"}
+          {adminUser.banExpires
+            ? ` · Ends ${formatDateTime(adminUser.banExpires)}`
+            : " · Permanent"}
         </div>
       ) : null}
 
@@ -125,10 +128,7 @@ export default async function AdminUserDetailPage({
             <Row label="User ID" value={row.id} mono />
             <Row label="Plan" value={planLabel(row.plan ?? "free")} />
             <Row label="Joined" value={formatDate(adminUser.createdAt) ?? "Unknown"} />
-            <Row
-              label="Email verified"
-              value={adminUser.emailVerified ? "Yes" : "No"}
-            />
+            <Row label="Email verified" value={adminUser.emailVerified ? "Yes" : "No"} />
           </CardContent>
         </Card>
 

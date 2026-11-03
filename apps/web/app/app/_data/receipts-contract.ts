@@ -48,23 +48,23 @@ export async function listReceiptSummaries(
   const { receipts, total } = await listReceiptsForWorkspace(page);
   const q = filters.q?.toLowerCase();
   const rows = receipts
-    .map(
-      (receipt): ReceiptSummary => ({
-        id: receipt.id,
-        status: receipt.status,
-        merchant: receipt.merchant,
-        receiptDate: receipt.receiptDate,
-        category: receipt.category,
-        currency: receipt.currency ?? "USD",
-        total: receipt.total,
-        confidence: receipt.confidence === null ? null : Number(receipt.confidence),
-        fileName: (receipt.rawJson as { fileName?: string } | null)?.fileName ?? null,
-        errorMessage: receipt.errorMessage,
-        createdAt: receipt.createdAt,
-      }),
-    )
+    .map((receipt): ReceiptSummary => ({
+      id: receipt.id,
+      status: receipt.status,
+      merchant: receipt.merchant,
+      receiptDate: receipt.receiptDate,
+      category: receipt.category,
+      currency: receipt.currency ?? "USD",
+      total: receipt.total,
+      confidence: receipt.confidence === null ? null : Number(receipt.confidence),
+      fileName: (receipt.rawJson as { fileName?: string } | null)?.fileName ?? null,
+      errorMessage: receipt.errorMessage,
+      createdAt: receipt.createdAt,
+    }))
     .filter((row) => !q || (row.merchant ?? row.fileName ?? "").toLowerCase().includes(q))
-    .filter((row) => !filters.category || row.category?.toLowerCase() === filters.category.toLowerCase())
+    .filter(
+      (row) => !filters.category || row.category?.toLowerCase() === filters.category.toLowerCase(),
+    )
     .filter((row) =>
       !filters.status
         ? true
@@ -77,7 +77,12 @@ export async function listReceiptSummaries(
   return { rows, total, page, pageSize: HISTORY_PAGE_SIZE };
 }
 
-export async function getUsageSummary(): Promise<{ used: number; limit: number; window: "day"; resetsAt: Date }> {
+export async function getUsageSummary(): Promise<{
+  used: number;
+  limit: number;
+  window: "day";
+  resetsAt: Date;
+}> {
   const session = await getSession();
   if (!session) throw new Error("No session");
   const plan = planFor(session);

@@ -5,8 +5,21 @@ import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Label } from "@receipt-ocr/ui/components/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@receipt-ocr/ui/components/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@receipt-ocr/ui/components/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@receipt-ocr/ui/components/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@receipt-ocr/ui/components/table";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronLeft, ChevronRight, Download, Search, Upload, X } from "lucide-react";
 import Link from "next/link";
@@ -34,7 +47,10 @@ const STATUS_CHIPS = [
 
 const CATEGORY_ITEMS = [
   { value: null, label: "All categories" },
-  ...RECEIPT_CATEGORIES.map((category) => ({ value: category as string, label: category as string })),
+  ...RECEIPT_CATEGORIES.map((category) => ({
+    value: category as string,
+    label: category as string,
+  })),
 ];
 
 const FILTER_KEYS = ["q", "category", "status", "from", "to"] as const;
@@ -51,12 +67,14 @@ function Missing() {
 }
 
 function rowTitle(receipt: ReceiptSummary) {
-  if (receipt.status === "completed") return { text: receipt.merchant ?? "Unnamed merchant", muted: !receipt.merchant };
+  if (receipt.status === "completed")
+    return { text: receipt.merchant ?? "Unnamed merchant", muted: !receipt.merchant };
   return { text: receipt.fileName ?? "Uploaded receipt", muted: true };
 }
 
 function Amount({ receipt }: { receipt: ReceiptSummary }) {
-  const amount = receipt.status === "completed" ? formatMoney(receipt.total, receipt.currency) : null;
+  const amount =
+    receipt.status === "completed" ? formatMoney(receipt.total, receipt.currency) : null;
   return amount ? <span className="font-mono tabular-nums">{amount}</span> : <Missing />;
 }
 
@@ -126,7 +144,10 @@ export function HistoryTable({
             {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
           </p>
         </div>
-        <a className={cn(buttonVariants({ variant: "outline" }), "self-start sm:self-auto")} href={exportHref}>
+        <a
+          className={cn(buttonVariants({ variant: "outline" }), "self-start sm:self-auto")}
+          href={exportHref}
+        >
           <Download aria-hidden="true" />
           {filtered ? "Export filtered CSV" : "Export CSV"}
         </a>
@@ -233,16 +254,27 @@ export function HistoryTable({
       {receipts.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
           <span className="flex size-11 items-center justify-center rounded-full border border-border bg-secondary/40 text-muted-foreground">
-            {filtered ? <Search aria-hidden="true" className="size-5" /> : <Upload aria-hidden="true" className="size-5" />}
+            {filtered ? (
+              <Search aria-hidden="true" className="size-5" />
+            ) : (
+              <Upload aria-hidden="true" className="size-5" />
+            )}
           </span>
           <div>
-            <p className="text-sm font-medium">{filtered ? "No receipts match" : "No receipts yet"}</p>
+            <p className="text-sm font-medium">
+              {filtered ? "No receipts match" : "No receipts yet"}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {filtered ? "Try a different search, category or date range." : "Upload your first receipt to start your history."}
+              {filtered
+                ? "Try a different search, category or date range."
+                : "Upload your first receipt to start your history."}
             </p>
           </div>
           {filtered ? (
-            <Link className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-1")} href={pathname}>
+            <Link
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-1")}
+              href={pathname}
+            >
               Clear filters
             </Link>
           ) : (
@@ -288,7 +320,12 @@ export function HistoryTable({
                       <>
                         <StatusBadge status={receipt.status} />
                         {receipt.status === "failed" ? (
-                          <RetryReceiptButton className="relative z-10 ml-auto" receiptId={receipt.id} size="sm" variant="outline" />
+                          <RetryReceiptButton
+                            className="relative z-10 ml-auto"
+                            receiptId={receipt.id}
+                            size="sm"
+                            variant="outline"
+                          />
                         ) : null}
                       </>
                     )}
@@ -330,13 +367,22 @@ export function HistoryTable({
                         <DateText receipt={receipt} />
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {receipt.status === "completed" && receipt.category ? receipt.category : <Missing />}
+                        {receipt.status === "completed" && receipt.category ? (
+                          receipt.category
+                        ) : (
+                          <Missing />
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <StatusBadge status={receipt.status} />
                           {receipt.status === "failed" ? (
-                            <RetryReceiptButton className="relative z-10" receiptId={receipt.id} size="sm" variant="ghost" />
+                            <RetryReceiptButton
+                              className="relative z-10"
+                              receiptId={receipt.id}
+                              size="sm"
+                              variant="ghost"
+                            />
                           ) : null}
                         </div>
                       </TableCell>
@@ -360,19 +406,28 @@ export function HistoryTable({
       )}
 
       {totalPages > 1 ? (
-        <nav aria-label="Pagination" className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+        <nav
+          aria-label="Pagination"
+          className="mt-4 flex items-center justify-between text-sm text-muted-foreground"
+        >
           <span>
             Page {page} of {totalPages}
           </span>
           <div className="flex gap-2">
             {page > 1 ? (
-              <Link className={buttonVariants({ size: "sm", variant: "outline" })} href={hrefWith({ page: page - 1 > 1 ? String(page - 1) : undefined })}>
+              <Link
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                href={hrefWith({ page: page - 1 > 1 ? String(page - 1) : undefined })}
+              >
                 <ChevronLeft aria-hidden="true" />
                 Previous
               </Link>
             ) : null}
             {page < totalPages ? (
-              <Link className={buttonVariants({ size: "sm", variant: "outline" })} href={hrefWith({ page: String(page + 1) })}>
+              <Link
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                href={hrefWith({ page: String(page + 1) })}
+              >
                 Next
                 <ChevronRight aria-hidden="true" />
               </Link>

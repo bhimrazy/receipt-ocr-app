@@ -59,11 +59,17 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
   const [createError, setCreateError] = useState<string | null>(null);
 
   if (orgsPending) {
-    return <span aria-hidden="true" className="block h-9 w-40 animate-pulse rounded-lg border border-border bg-card max-md:h-11" />;
+    return (
+      <span
+        aria-hidden="true"
+        className="block h-9 w-40 animate-pulse rounded-lg border border-border bg-card max-md:h-11"
+      />
+    );
   }
 
   const orgs = organizations ?? [];
-  const current = activeOrg ?? orgs.find((org) => org.id === session?.session.activeOrganizationId) ?? orgs[0];
+  const current =
+    activeOrg ?? orgs.find((org) => org.id === session?.session.activeOrganizationId) ?? orgs[0];
 
   async function handleSwitch(organizationId: string) {
     if (organizationId === current?.id) {
@@ -91,9 +97,10 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
     }
     setCreateError(null);
     setCreating(true);
-    const slug = `${trimmed.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "")}-${Math.random()
-      .toString(36)
-      .slice(2, 7)}`;
+    const slug = `${trimmed
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")}-${Math.random().toString(36).slice(2, 7)}`;
     const { data, error } = await authClient.organization.create({ name: trimmed, slug });
     if (error || !data) {
       setCreating(false);
@@ -122,7 +129,9 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
           className="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-sm transition outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring max-md:h-11"
         >
           <Initial name={current?.name ?? "?"} />
-          <span className="min-w-0 flex-1 truncate font-medium">{current?.name ?? "No workspace"}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {current?.name ?? "No workspace"}
+          </span>
           <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
@@ -140,7 +149,10 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
                   <Initial name={org.name} />
                   <span className="min-w-0 flex-1 truncate">{org.name}</span>
                   {switchingTo === org.id ? (
-                    <Loader2 aria-label="Switching" className="animate-spin text-muted-foreground" />
+                    <Loader2
+                      aria-label="Switching"
+                      className="animate-spin text-muted-foreground"
+                    />
                   ) : isActive ? (
                     <Check aria-label="Current workspace" className="text-primary" />
                   ) : null}
@@ -177,7 +189,9 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
           <form className="grid gap-4" noValidate onSubmit={handleCreate}>
             <DialogHeader>
               <DialogTitle>Create a workspace</DialogTitle>
-              <DialogDescription>A separate space with its own receipts and members.</DialogDescription>
+              <DialogDescription>
+                A separate space with its own receipts and members.
+              </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="workspace-name">Workspace name</Label>
@@ -197,7 +211,12 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
               ) : null}
             </div>
             <DialogFooter>
-              <Button disabled={creating} onClick={() => setCreateOpen(false)} type="button" variant="ghost">
+              <Button
+                disabled={creating}
+                onClick={() => setCreateOpen(false)}
+                type="button"
+                variant="ghost"
+              >
                 Cancel
               </Button>
               <Button disabled={creating} type="submit">

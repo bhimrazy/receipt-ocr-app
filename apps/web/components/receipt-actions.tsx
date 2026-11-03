@@ -69,7 +69,11 @@ export function ReceiptActions({
   }
 
   function exportCsv() {
-    downloadBlob(receiptItemsToCsv(receipt), csvFilename("receipt", receipt.merchant), "text/csv;charset=utf-8");
+    downloadBlob(
+      receiptItemsToCsv(receipt),
+      csvFilename("receipt", receipt.merchant),
+      "text/csv;charset=utf-8",
+    );
   }
 
   const dialog = (
@@ -110,7 +114,9 @@ export function ReceiptActions({
         Export CSV
       </Button>
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button aria-label="More actions" size="icon" variant="outline" />}>
+        <DropdownMenuTrigger
+          render={<Button aria-label="More actions" size="icon" variant="outline" />}
+        >
           <MoreHorizontal aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
@@ -161,11 +167,19 @@ export function ReceiptWorkspace({
     <>
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
         {header}
-        <ReceiptActions editing={editing} onEdit={() => setEditing((value) => !value)} receipt={receipt} />
+        <ReceiptActions
+          editing={editing}
+          onEdit={() => setEditing((value) => !value)}
+          receipt={receipt}
+        />
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
         {image}
-        {editing ? <ReceiptEditor onClose={() => setEditing(false)} receipt={receipt} /> : extracted}
+        {editing ? (
+          <ReceiptEditor onClose={() => setEditing(false)} receipt={receipt} />
+        ) : (
+          extracted
+        )}
       </div>
     </>
   );

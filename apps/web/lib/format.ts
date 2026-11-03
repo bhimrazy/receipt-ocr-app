@@ -28,7 +28,10 @@ export function money(value?: string | number | null, currency = "USD") {
 }
 
 /** Amount with the currency symbol, or null when there is no amount to show. */
-export function formatMoney(value: string | number | null | undefined, currency = "USD"): string | null {
+export function formatMoney(
+  value: string | number | null | undefined,
+  currency = "USD",
+): string | null {
   const amount = toNumber(value);
   if (amount === null) return null;
   const formatter = currencyFormatter(currency.toUpperCase());
@@ -46,11 +49,16 @@ export function pct(value?: string | number | null) {
 export function formatDate(value: string | Date | null | undefined): string | null {
   if (!value) return null;
   const date =
-    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00Z`) : new Date(value);
+    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? new Date(`${value}T00:00:00Z`)
+      : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short", year: "numeric", timeZone: TIME_ZONE }).format(
-    date,
-  );
+  return new Intl.DateTimeFormat(LOCALE, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: TIME_ZONE,
+  }).format(date);
 }
 
 /** "27 Oct 2026, 14:05 UTC". */

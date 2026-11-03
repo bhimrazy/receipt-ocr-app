@@ -19,7 +19,12 @@ export function UserMenu() {
   const router = useRouter();
 
   if (isPending) {
-    return <span aria-hidden="true" className="block size-9 animate-pulse rounded-full border border-border bg-card max-md:size-11" />;
+    return (
+      <span
+        aria-hidden="true"
+        className="block size-9 animate-pulse rounded-full border border-border bg-card max-md:size-11"
+      />
+    );
   }
 
   if (!session) {

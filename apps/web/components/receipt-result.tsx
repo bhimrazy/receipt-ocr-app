@@ -1,10 +1,25 @@
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@receipt-ocr/ui/components/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@receipt-ocr/ui/components/table";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import type { ReceiptWithItems } from "@receipt-ocr/core";
-import { ArrowLeft, ChevronRight, CircleAlert, Loader2, ReceiptText, TriangleAlert, Upload } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  CircleAlert,
+  Loader2,
+  ReceiptText,
+  TriangleAlert,
+  Upload,
+} from "lucide-react";
 import Link from "next/link";
 import { confidenceLevel, formatDate, formatMoney } from "@/lib/format";
 import { ProcessingPoller } from "@/components/processing-poller";
@@ -44,13 +59,22 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
   const completed = receipt.status === "completed";
   const currency = receipt.currency ?? "USD";
   const fileName = fileNameOf(receipt);
-  const title = completed ? (receipt.merchant ?? "Unnamed merchant") : (fileName ?? "Uploaded receipt");
+  const title = completed
+    ? (receipt.merchant ?? "Unnamed merchant")
+    : (fileName ?? "Uploaded receipt");
   const expected = completed ? totalsMismatch(receipt) : null;
   const date = formatDate(receipt.receiptDate);
 
   const header = (
     <div className="min-w-0">
-      <h1 className={cn("text-3xl font-semibold tracking-tight wrap-break-word", !completed && "font-mono text-2xl")}>{title}</h1>
+      <h1
+        className={cn(
+          "text-3xl font-semibold tracking-tight wrap-break-word",
+          !completed && "font-mono text-2xl",
+        )}
+      >
+        {title}
+      </h1>
       {completed ? (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <span className="text-sm text-muted-foreground">{date ?? "No date found"}</span>
@@ -65,12 +89,18 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
     <Card className="flex min-h-80 flex-col items-center justify-center p-6 text-center lg:min-h-105">
       {receipt.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt={`Receipt from ${title}`} className="max-h-130 rounded-lg object-contain" src={receipt.imageUrl} />
+        <img
+          alt={`Receipt from ${title}`}
+          className="max-h-130 rounded-lg object-contain"
+          src={receipt.imageUrl}
+        />
       ) : (
         <>
           <ReceiptText aria-hidden="true" className="mb-4 size-14 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">No image preview available</p>
-          {fileName ? <p className="mt-1 font-mono text-xs break-all text-muted-foreground">{fileName}</p> : null}
+          {fileName ? (
+            <p className="mt-1 font-mono text-xs break-all text-muted-foreground">{fileName}</p>
+          ) : null}
         </>
       )}
     </Card>
@@ -107,11 +137,18 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
                   >
                     <TableCell>
                       <span className="flex items-start gap-2">
-                        {low ? <TriangleAlert aria-label="Low confidence" className="mt-0.5 size-3.5 shrink-0 text-warning" /> : null}
+                        {low ? (
+                          <TriangleAlert
+                            aria-label="Low confidence"
+                            className="mt-0.5 size-3.5 shrink-0 text-warning"
+                          />
+                        ) : null}
                         {item.name}
                       </span>
                     </TableCell>
-                    <TableCell className="text-center font-mono text-muted-foreground tabular-nums">{item.quantity}</TableCell>
+                    <TableCell className="text-center font-mono text-muted-foreground tabular-nums">
+                      {item.quantity}
+                    </TableCell>
                     <TableCell className="text-right font-mono whitespace-nowrap tabular-nums">
                       {money(item.totalPrice) ?? "—"}
                     </TableCell>
@@ -121,7 +158,9 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
             </TableBody>
           </Table>
         ) : (
-          <p className="px-3 py-6 text-center text-sm text-muted-foreground">No line items were found on this receipt.</p>
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+            No line items were found on this receipt.
+          </p>
         )}
         <span className="sr-only" id="low-confidence-hint">
           Low confidence, please verify
@@ -149,14 +188,19 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
           )}
           <div className="flex justify-between text-lg font-semibold">
             <dt>Total</dt>
-            <dd className="font-mono text-primary tabular-nums">{money(receipt.total) ?? "Not found"}</dd>
+            <dd className="font-mono text-primary tabular-nums">
+              {money(receipt.total) ?? "Not found"}
+            </dd>
           </div>
         </dl>
         {expected !== null ? (
-          <p className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning" role="note">
+          <p
+            className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+            role="note"
+          >
             <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-            The amounts add up to {money(String(expected))}, but the total says {money(receipt.total)}. Check for a
-            discount or a misread number.
+            The amounts add up to {money(String(expected))}, but the total says{" "}
+            {money(receipt.total)}. Check for a discount or a misread number.
           </p>
         ) : null}
       </div>
@@ -178,14 +222,26 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
       </div>
 
       {inFlight ? (
-        <div className="mb-6 flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm" role="status">
-          <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
+        <div
+          className="mb-6 flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm"
+          role="status"
+        >
+          <Loader2
+            aria-hidden="true"
+            className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+          />
           Reading this receipt. The page updates when it&apos;s done.
         </div>
       ) : null}
       {receipt.status === "failed" ? (
-        <div className="mb-6 flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-4 text-sm sm:flex-row sm:items-center" role="alert">
-          <CircleAlert aria-hidden="true" className="hidden size-5 shrink-0 text-destructive sm:block" />
+        <div
+          className="mb-6 flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-4 text-sm sm:flex-row sm:items-center"
+          role="alert"
+        >
+          <CircleAlert
+            aria-hidden="true"
+            className="hidden size-5 shrink-0 text-destructive sm:block"
+          />
           <div className="min-w-0 flex-1">
             <p className="font-medium text-destructive">We couldn&apos;t read this receipt</p>
             <p className="mt-1 text-muted-foreground">{receipt.errorMessage || FAILED_FALLBACK}</p>
@@ -209,7 +265,10 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
       {completed ? (
         <details className="group mt-5 rounded-lg border border-border bg-card">
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-            <ChevronRight aria-hidden="true" className="size-4 transition-transform group-open:rotate-90" />
+            <ChevronRight
+              aria-hidden="true"
+              className="size-4 transition-transform group-open:rotate-90"
+            />
             Raw extraction (JSON)
           </summary>
           <pre className="max-h-72 overflow-auto border-t border-border px-5 py-4 font-mono text-xs leading-6 whitespace-pre-wrap text-muted-foreground">

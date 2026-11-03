@@ -1,7 +1,13 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Label } from "@receipt-ocr/ui/components/label";
@@ -146,7 +152,8 @@ function PasswordCard() {
           Password
         </CardTitle>
         <CardDescription>
-          For email sign-in. If you sign in with a social account, change your password with that provider.
+          For email sign-in. If you sign in with a social account, change your password with that
+          provider.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -219,12 +226,16 @@ function DangerCard({ email }: { email: string }) {
           Delete account
         </CardTitle>
         <CardDescription>
-          Permanently removes your account, your workspaces and every receipt in them. You can&apos;t undo this.
+          Permanently removes your account, your workspaces and every receipt in them. You
+          can&apos;t undo this.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {notice ? (
-          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning" role="status">
+          <p
+            className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning"
+            role="status"
+          >
             {notice}
           </p>
         ) : null}

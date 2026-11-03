@@ -2,11 +2,23 @@
 
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Label } from "@receipt-ocr/ui/components/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@receipt-ocr/ui/components/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@receipt-ocr/ui/components/select";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { Check, Copy, Loader2, Mail, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -27,7 +39,9 @@ function roleLabel(role: string | null | undefined) {
   return ROLES.find((r) => r.value === role)?.label ?? "Member";
 }
 
-type FullOrganization = Awaited<ReturnType<typeof authClient.organization.getFullOrganization>>["data"];
+type FullOrganization = Awaited<
+  ReturnType<typeof authClient.organization.getFullOrganization>
+>["data"];
 type OrgMember = NonNullable<FullOrganization>["members"][number];
 type OrgInvitation = NonNullable<FullOrganization>["invitations"][number];
 
@@ -71,7 +85,11 @@ function RoleSelect({
       <SelectTrigger aria-label={ariaLabel} className="w-32" id={id}>
         <SelectValue />
       </SelectTrigger>
-      <SelectContent align="end" alignItemWithTrigger={false} className="w-72 max-w-[calc(100vw-2rem)]">
+      <SelectContent
+        align="end"
+        alignItemWithTrigger={false}
+        className="w-72 max-w-[calc(100vw-2rem)]"
+      >
         {ROLES.map((role) => (
           <SelectItem key={role.value} value={role.value}>
             <span className="flex flex-col gap-0.5 whitespace-normal">
@@ -128,7 +146,9 @@ export function MembersManager() {
   }, [load, activeOrgId]);
 
   const members: OrgMember[] = org?.members ?? [];
-  const invitations: OrgInvitation[] = (org?.invitations ?? []).filter((i: OrgInvitation) => i.status === "pending");
+  const invitations: OrgInvitation[] = (org?.invitations ?? []).filter(
+    (i: OrgInvitation) => i.status === "pending",
+  );
   const currentUserId = session?.user.id;
   const currentRole = (members.find((m) => m.userId === currentUserId)?.role ?? "member") as Role;
   const canManage = currentRole === "owner" || currentRole === "admin";
@@ -143,7 +163,10 @@ export function MembersManager() {
   async function changeRole(memberId: string, role: Role): Promise<string | void> {
     setBusyMemberId(memberId);
     setError(null);
-    const { error: updateError } = await authClient.organization.updateMemberRole({ memberId, role });
+    const { error: updateError } = await authClient.organization.updateMemberRole({
+      memberId,
+      role,
+    });
     setBusyMemberId(null);
     if (updateError) return updateError.message ?? "Couldn't change the role. Try again.";
     await load();
@@ -160,7 +183,9 @@ export function MembersManager() {
   }
 
   async function removeMember(memberId: string): Promise<string | void> {
-    const { error: removeError } = await authClient.organization.removeMember({ memberIdOrEmail: memberId });
+    const { error: removeError } = await authClient.organization.removeMember({
+      memberIdOrEmail: memberId,
+    });
     if (removeError) return removeError.message ?? "Couldn't remove this member. Try again.";
     await load();
   }
@@ -181,7 +206,10 @@ export function MembersManager() {
     }
     setInviteError(null);
     setInviting(true);
-    const { data, error: inviteErr } = await authClient.organization.inviteMember({ email: trimmed, role: inviteRole });
+    const { data, error: inviteErr } = await authClient.organization.inviteMember({
+      email: trimmed,
+      role: inviteRole,
+    });
     setInviting(false);
     if (inviteErr || !data) {
       setInviteError(inviteErr?.message ?? "Couldn't send the invite. Try again.");
@@ -286,13 +314,22 @@ export function MembersManager() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {m.user?.name || m.user?.email}
-                        {isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">(you)</span> : null}
+                        {isSelf ? (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            (you)
+                          </span>
+                        ) : null}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">{m.user?.email}</p>
                     </div>
                   </div>
                   <div className="ml-11 flex items-center gap-2 sm:ml-0">
-                    {busy ? <Loader2 aria-label="Saving" className="size-4 animate-spin text-muted-foreground" /> : null}
+                    {busy ? (
+                      <Loader2
+                        aria-label="Saving"
+                        className="size-4 animate-spin text-muted-foreground"
+                      />
+                    ) : null}
                     {editable ? (
                       <RoleSelect
                         ariaLabel={`Role for ${who}`}
@@ -301,7 +338,9 @@ export function MembersManager() {
                         value={m.role as Role}
                       />
                     ) : (
-                      <Badge variant={m.role === "owner" ? "default" : "secondary"}>{roleLabel(m.role)}</Badge>
+                      <Badge variant={m.role === "owner" ? "default" : "secondary"}>
+                        {roleLabel(m.role)}
+                      </Badge>
                     )}
                     {canManage && !isSelf && !isLastOwner ? (
                       <Button
@@ -329,10 +368,16 @@ export function MembersManager() {
               <Mail aria-hidden="true" className="size-5 text-primary" />
               Invite a member
             </CardTitle>
-            <CardDescription>We&apos;ll email them an invite. You can also copy the link and send it yourself.</CardDescription>
+            <CardDescription>
+              We&apos;ll email them an invite. You can also copy the link and send it yourself.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form className="flex flex-col gap-3 sm:flex-row sm:items-end" noValidate onSubmit={handleInvite}>
+            <form
+              className="flex flex-col gap-3 sm:flex-row sm:items-end"
+              noValidate
+              onSubmit={handleInvite}
+            >
               <div className="flex flex-1 flex-col gap-1.5">
                 <Label htmlFor="invite-email">Email</Label>
                 <Input
@@ -367,7 +412,11 @@ export function MembersManager() {
                     {inviteLink}
                   </code>
                   <Button onClick={() => copy("new", inviteLink)} size="sm" variant="outline">
-                    {copiedKey === "new" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                    {copiedKey === "new" ? (
+                      <Check aria-hidden="true" />
+                    ) : (
+                      <Copy aria-hidden="true" />
+                    )}
                     {copiedKey === "new" ? "Copied" : "Copy link"}
                   </Button>
                 </div>
@@ -388,7 +437,10 @@ export function MembersManager() {
               {invitations.map((inv) => {
                 const expires = formatDate(inv.expiresAt);
                 return (
-                  <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3.5" key={inv.id}>
+                  <li
+                    className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3.5"
+                    key={inv.id}
+                  >
                     <div className="min-w-48 flex-1">
                       <p className="truncate text-sm font-medium">{inv.email}</p>
                       <p className="truncate text-xs text-muted-foreground">
@@ -397,11 +449,23 @@ export function MembersManager() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button onClick={() => copy(inv.id, inviteUrl(inv.id))} size="sm" variant="outline">
-                        {copiedKey === inv.id ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                      <Button
+                        onClick={() => copy(inv.id, inviteUrl(inv.id))}
+                        size="sm"
+                        variant="outline"
+                      >
+                        {copiedKey === inv.id ? (
+                          <Check aria-hidden="true" />
+                        ) : (
+                          <Copy aria-hidden="true" />
+                        )}
                         {copiedKey === inv.id ? "Copied" : "Copy link"}
                       </Button>
-                      <Button onClick={() => ask({ kind: "cancel-invite", invitation: inv })} size="sm" variant="ghost">
+                      <Button
+                        onClick={() => ask({ kind: "cancel-invite", invitation: inv })}
+                        size="sm"
+                        variant="ghost"
+                      >
                         Cancel invite
                       </Button>
                     </div>
@@ -413,7 +477,9 @@ export function MembersManager() {
         </Card>
       ) : null}
 
-      {confirmProps ? <ConfirmDialog onOpenChange={setConfirmOpen} open={confirmOpen} {...confirmProps} /> : null}
+      {confirmProps ? (
+        <ConfirmDialog onOpenChange={setConfirmOpen} open={confirmOpen} {...confirmProps} />
+      ) : null}
     </div>
   );
 }

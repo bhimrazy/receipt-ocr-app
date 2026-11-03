@@ -34,7 +34,8 @@ export default async function AdminUsersPage({
   });
 
   const rawUsers = "users" in result ? result.users : [];
-  const total = "total" in result && typeof result.total === "number" ? result.total : rawUsers.length;
+  const total =
+    "total" in result && typeof result.total === "number" ? result.total : rawUsers.length;
 
   const users: AdminUser[] = rawUsers.map((user) => ({
     id: user.id,

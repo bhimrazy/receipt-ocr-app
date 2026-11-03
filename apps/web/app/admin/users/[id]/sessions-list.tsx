@@ -25,7 +25,7 @@ function compressIp(ip: string | null): string {
   if (!ip.includes(":") || ip.includes("::")) return ip;
   const parts = ip.split(":").map((part) => part.replace(/^0+(?=.)/, ""));
   let best = { start: -1, length: 0 };
-  for (let i = 0; i < parts.length; ) {
+  for (let i = 0; i < parts.length;) {
     if (parts[i] !== "0") {
       i++;
       continue;
@@ -92,7 +92,10 @@ export function SessionsList({
         ? await revokeUserSessionsAction(userId)
         : await revokeUserSessionAction(pending.session.id, userId);
     if (!result.ok) return result.error ?? "Couldn't revoke. Try again.";
-    toast.add({ title: pending.kind === "all" ? "All sessions revoked." : "Session revoked.", type: "success" });
+    toast.add({
+      title: pending.kind === "all" ? "All sessions revoked." : "Session revoked.",
+      type: "success",
+    });
   }
 
   const includesCurrent =
@@ -130,15 +133,24 @@ export function SessionsList({
                         {describeAgent(session.userAgent)}
                       </span>
                       {isCurrent ? <Badge>This session</Badge> : null}
-                      {session.impersonatedBy ? <Badge variant="warning">Impersonated</Badge> : null}
+                      {session.impersonatedBy ? (
+                        <Badge variant="warning">Impersonated</Badge>
+                      ) : null}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       <span className="font-mono">{compressIp(session.ipAddress)}</span> · Started{" "}
-                      <span title={`Expires ${formatDateTime(session.expiresAt)}`}>{formatDateTime(session.createdAt)}</span>
+                      <span title={`Expires ${formatDateTime(session.expiresAt)}`}>
+                        {formatDateTime(session.createdAt)}
+                      </span>
                     </div>
                   </div>
                 </div>
-                <Button className="shrink-0" onClick={() => ask({ kind: "one", session })} size="sm" variant="ghost">
+                <Button
+                  className="shrink-0"
+                  onClick={() => ask({ kind: "one", session })}
+                  size="sm"
+                  variant="ghost"
+                >
                   Revoke
                 </Button>
               </div>

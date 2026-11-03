@@ -51,7 +51,13 @@ function rejectionFor(file: File): string | null {
   return null;
 }
 
-export function UploadPanel({ remaining, limit }: { remaining: number | null; limit: number | null }) {
+export function UploadPanel({
+  remaining,
+  limit,
+}: {
+  remaining: number | null;
+  limit: number | null;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -150,8 +156,8 @@ export function UploadPanel({ remaining, limit }: { remaining: number | null; li
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Upload receipts</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Add a photo of a receipt and we&apos;ll read the merchant, date, items and total. Adding several?
-          They&apos;re read in the background while you keep working.
+          Add a photo of a receipt and we&apos;ll read the merchant, date, items and total. Adding
+          several? They&apos;re read in the background while you keep working.
         </p>
       </div>
 
@@ -267,7 +273,10 @@ export function UploadPanel({ remaining, limit }: { remaining: number | null; li
       </Card>
 
       {notice && (
-        <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning" role="status">
+        <div
+          className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
+          role="status"
+        >
           {notice}
         </div>
       )}
@@ -286,12 +295,20 @@ export function UploadPanel({ remaining, limit }: { remaining: number | null; li
           {/* One file is read right away; a mode choice only appears for a batch. */}
           {files.length === 1 ? (
             <Button disabled={processing !== null} onClick={processInstantly}>
-              {processing ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Zap aria-hidden="true" />}
+              {processing ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : (
+                <Zap aria-hidden="true" />
+              )}
               {processing === "instant" ? "Reading…" : "Read receipt"}
             </Button>
           ) : (
             <Button disabled={processing !== null} onClick={queueAll}>
-              {processing ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Layers aria-hidden="true" />}
+              {processing ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : (
+                <Layers aria-hidden="true" />
+              )}
               {processing === "queued" ? "Uploading…" : `Read ${files.length} receipts`}
             </Button>
           )}
@@ -311,7 +328,9 @@ export function UploadPanel({ remaining, limit }: { remaining: number | null; li
       )}
 
       {files.length === 0 && remaining !== null && limit !== null ? (
-        <p className="mt-3 text-right font-mono text-xs text-muted-foreground">{remaining} of {limit} receipts left today</p>
+        <p className="mt-3 text-right font-mono text-xs text-muted-foreground">
+          {remaining} of {limit} receipts left today
+        </p>
       ) : null}
 
       {/* Tips for best results */}

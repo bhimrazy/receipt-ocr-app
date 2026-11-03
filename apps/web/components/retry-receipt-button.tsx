@@ -21,12 +21,20 @@ export function RetryReceiptButton({
       const res = await fetch(`/api/receipts/${receiptId}/retry`, { method: "POST" });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        toast.add({ title: "Couldn't retry", description: body?.error ?? "Try again in a moment.", type: "error" });
+        toast.add({
+          title: "Couldn't retry",
+          description: body?.error ?? "Try again in a moment.",
+          type: "error",
+        });
         return;
       }
       router.refresh();
     } catch {
-      toast.add({ title: "Couldn't retry", description: "Check your connection and try again.", type: "error" });
+      toast.add({
+        title: "Couldn't retry",
+        description: "Check your connection and try again.",
+        type: "error",
+      });
     } finally {
       setPending(false);
     }
@@ -34,7 +42,11 @@ export function RetryReceiptButton({
 
   return (
     <Button disabled={pending} onClick={retry} {...props}>
-      {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : <RotateCw aria-hidden="true" />}
+      {pending ? (
+        <Loader2 aria-hidden="true" className="animate-spin" />
+      ) : (
+        <RotateCw aria-hidden="true" />
+      )}
       {label}
     </Button>
   );
