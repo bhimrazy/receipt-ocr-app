@@ -30,8 +30,10 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-bun
 
-      - name: Install Vercel CLI
-        run: bun add --global vercel@65.4.0
+      - name: Install Vercel CLI (pinned, own lockfile)
+        run: |
+          bun install --frozen-lockfile --cwd .github/vercel-cli
+          echo "$GITHUB_WORKSPACE/.github/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Pull Vercel environment
         env:

@@ -16,6 +16,16 @@ updates:
       dependencies:
         patterns: ["*"]
 
+  - package-ecosystem: "bun"
+    directory: "/.github/vercel-cli"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kathmandu"
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: "github-actions"
     directories: ["/", "/.github/actions/*"]
     schedule:
