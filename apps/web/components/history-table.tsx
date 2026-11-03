@@ -65,7 +65,8 @@ export function HistoryTable({
           </p>
         </div>
         <Button asChild>
-          {/* Server-rendered CSV of the whole workspace, not just this page. */}
+          {/* Server-rendered CSV of the whole workspace, not just this page. A file download, so a plain anchor. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/api/receipts/export">
             <Download className="size-4" />
             Export all

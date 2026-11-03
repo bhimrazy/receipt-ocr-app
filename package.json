@@ -9,7 +9,7 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
-    "lint": "turbo lint",
+    "lint": "eslint .",
     "typecheck": "turbo typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\"",
     "docker:up": "docker compose up -d",
@@ -25,9 +25,12 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/node": "25.9.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "eslint": "10.13.0",
+    "eslint-config-next": "16.4.3",
     "prettier": "3.9.10",
     "turbo": "2.11.10",
     "typescript": "6.0.3",

@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
-    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "db:migrate": "drizzle-kit migrate",
     "db:generate": "drizzle-kit generate",
