@@ -2,7 +2,13 @@ import { Brand } from "@/components/brand";
 import { UserMenu } from "@/components/user-menu";
 import { authEnabled } from "@/lib/env";
 import { getSession, isAdmin } from "@/lib/session";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { ArrowLeft, ShieldAlert, ShieldCheck } from "lucide-react";
 import Link from "next/link";
@@ -23,8 +29,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </CardTitle>
             <CardDescription>
               The admin panel needs Better Auth. Set <code className="font-mono">DATABASE_URL</code>{" "}
-              and <code className="font-mono">BETTER_AUTH_SECRET</code>, then bootstrap an admin with{" "}
-              <code className="font-mono">ADMIN_EMAILS</code>.
+              and <code className="font-mono">BETTER_AUTH_SECRET</code>, then bootstrap an admin
+              with <code className="font-mono">ADMIN_EMAILS</code>.
             </CardDescription>
           </CardHeader>
           <CardContent>

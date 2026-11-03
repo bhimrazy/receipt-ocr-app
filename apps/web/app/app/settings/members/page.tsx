@@ -31,8 +31,10 @@ export default function MembersPage() {
           <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
             <Users className="size-5 text-muted-foreground" />
             <span>
-              Auth is not configured, so workspaces are unavailable. Add <code className="font-mono">DATABASE_URL</code>{" "}
-              and <code className="font-mono">BETTER_AUTH_SECRET</code> to enable members and invitations.
+              Auth is not configured, so workspaces are unavailable. Add{" "}
+              <code className="font-mono">DATABASE_URL</code> and{" "}
+              <code className="font-mono">BETTER_AUTH_SECRET</code> to enable members and
+              invitations.
             </span>
           </CardContent>
         </Card>

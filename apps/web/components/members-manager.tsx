@@ -2,7 +2,13 @@
 
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Check, Copy, Loader2, Mail, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -73,7 +79,10 @@ export function MembersManager() {
   async function handleRoleChange(memberId: string, role: Role) {
     setBusyMemberId(memberId);
     setError(null);
-    const { error: updateError } = await authClient.organization.updateMemberRole({ memberId, role });
+    const { error: updateError } = await authClient.organization.updateMemberRole({
+      memberId,
+      role,
+    });
     setBusyMemberId(null);
     if (updateError) {
       setError(updateError.message ?? "Could not update role.");
@@ -85,7 +94,9 @@ export function MembersManager() {
   async function handleRemove(memberId: string) {
     setBusyMemberId(memberId);
     setError(null);
-    const { error: removeError } = await authClient.organization.removeMember({ memberIdOrEmail: memberId });
+    const { error: removeError } = await authClient.organization.removeMember({
+      memberIdOrEmail: memberId,
+    });
     setBusyMemberId(null);
     if (removeError) {
       setError(removeError.message ?? "Could not remove member.");
@@ -157,12 +168,17 @@ export function MembersManager() {
             Members
           </CardTitle>
           <CardDescription>
-            {org?.name ? `People with access to ${org.name}.` : "People with access to this workspace."}
+            {org?.name
+              ? `People with access to ${org.name}.`
+              : "People with access to this workspace."}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           {error ? (
-            <p className="mx-5 mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400" role="alert">
+            <p
+              className="mx-5 mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400"
+              role="alert"
+            >
               {error}
             </p>
           ) : null}
@@ -180,7 +196,9 @@ export function MembersManager() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
                       {m.user?.name || m.user?.email}
-                      {isSelf ? <span className="ml-2 text-xs text-muted-foreground">(you)</span> : null}
+                      {isSelf ? (
+                        <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                      ) : null}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">{m.user?.email}</p>
                   </div>
@@ -209,7 +227,11 @@ export function MembersManager() {
                       size="sm"
                       variant="ghost"
                     >
-                      {busy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                      {busy ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-4" />
+                      )}
                     </Button>
                   ) : null}
                 </li>
@@ -227,7 +249,8 @@ export function MembersManager() {
               Invite a member
             </CardTitle>
             <CardDescription>
-              Send an invite by email. Until email delivery is wired up, share the generated link below.
+              Send an invite by email. Until email delivery is wired up, share the generated link
+              below.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -257,13 +280,18 @@ export function MembersManager() {
               </Button>
             </form>
             {inviteError ? (
-              <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400" role="alert">
+              <p
+                className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400"
+                role="alert"
+              >
                 {inviteError}
               </p>
             ) : null}
             {inviteLink ? (
               <div className="rounded-lg border border-border bg-background/40 p-3">
-                <p className="mb-2 text-xs text-muted-foreground">Shareable invite link (no email sent yet):</p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Shareable invite link (no email sent yet):
+                </p>
                 <div className="flex items-center gap-2">
                   <code className="min-w-0 flex-1 truncate rounded bg-secondary px-2 py-1.5 font-mono text-xs">
                     {inviteLink}
@@ -298,14 +326,21 @@ export function MembersManager() {
                       </p>
                     </div>
                     <Button
-                      onClick={() => copyLink(`${window.location.origin}/accept-invitation/${inv.id}`)}
+                      onClick={() =>
+                        copyLink(`${window.location.origin}/accept-invitation/${inv.id}`)
+                      }
                       size="sm"
                       variant="outline"
                     >
                       <Copy className="size-4" />
                       Copy link
                     </Button>
-                    <Button disabled={busy} onClick={() => handleCancelInvite(inv.id)} size="sm" variant="ghost">
+                    <Button
+                      disabled={busy}
+                      onClick={() => handleCancelInvite(inv.id)}
+                      size="sm"
+                      variant="ghost"
+                    >
                       {busy ? <Loader2 className="size-4 animate-spin" /> : "Cancel"}
                     </Button>
                   </li>

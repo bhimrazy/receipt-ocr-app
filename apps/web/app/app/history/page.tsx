@@ -9,5 +9,7 @@ export default async function HistoryPage({
   const { page: pageParam } = await searchParams;
   const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
   const { receipts, total } = await listReceiptsForWorkspace(page);
-  return <HistoryTable page={page} pageSize={HISTORY_PAGE_SIZE} receipts={receipts} total={total} />;
+  return (
+    <HistoryTable page={page} pageSize={HISTORY_PAGE_SIZE} receipts={receipts} total={total} />
+  );
 }

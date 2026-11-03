@@ -90,7 +90,10 @@ export function UserMenu() {
             <Settings className="size-4" />
             Settings
           </Link>
-          <AdminLink className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground" onNavigate={() => setOpen(false)} />
+          <AdminLink
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground"
+            onNavigate={() => setOpen(false)}
+          />
           <button
             className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground"
             onClick={handleSignOut}

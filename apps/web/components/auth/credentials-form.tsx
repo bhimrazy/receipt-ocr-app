@@ -182,7 +182,10 @@ export function CredentialsForm({
           )}
         </div>
         {error ? (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400" role="alert">
+          <p
+            className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400"
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
