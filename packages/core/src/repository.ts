@@ -85,7 +85,11 @@ export type UsageCounts = { userMinute: number; userDay: number; globalDay: numb
 export type RetryClaim =
   | { kind: "claimed"; imageObjectKey: string | null }
   | { kind: "not-found" }
-  | { kind: "not-retryable" };
+  | { kind: "not-retryable" }
+  | { kind: "attempts-exhausted" };
+
+/** Upload plus two retries: a receipt that keeps failing can't loop provider calls. */
+export const MAX_EXTRACTION_ATTEMPTS = 3;
 
 /** Completed receipts below this overall confidence are flagged "needs review". */
 export const NEEDS_REVIEW_BELOW = 0.85;
@@ -305,17 +309,33 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
 
       claimRetry: (id, scope) =>
         use(async (db): Promise<RetryClaim> => {
+          const now = new Date();
           const [claimed] = await db
             .update(receipts)
-            .set({ status: "processing", errorMessage: null, updatedAt: new Date() })
-            .where(and(inScope(id, scope), or(eq(receipts.status, "failed"), isStale)))
+            .set({
+              status: "processing",
+              errorMessage: null,
+              attempts: sql`${receipts.attempts} + 1`,
+              lastAttemptAt: now,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                inScope(id, scope),
+                or(eq(receipts.status, "failed"), isStale),
+                lt(receipts.attempts, MAX_EXTRACTION_ATTEMPTS),
+              ),
+            )
             .returning({ imageObjectKey: receipts.imageObjectKey });
           if (claimed) return { kind: "claimed", imageObjectKey: claimed.imageObjectKey };
-          const [exists] = await db
-            .select({ id: receipts.id })
+          const [existing] = await db
+            .select({ attempts: receipts.attempts })
             .from(receipts)
             .where(inScope(id, scope));
-          return exists ? { kind: "not-retryable" } : { kind: "not-found" };
+          if (!existing) return { kind: "not-found" };
+          return existing.attempts >= MAX_EXTRACTION_ATTEMPTS
+            ? { kind: "attempts-exhausted" }
+            : { kind: "not-retryable" };
         }),
 
       get: (id, scope) =>
@@ -409,20 +429,21 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           const day = dayStart.toISOString();
           const minute = minuteStart.toISOString();
           const mine = sql`${receipts.userId} = ${userId}`;
+          const retriedSince = (at: string) => sql`${receipts.lastAttemptAt} >= ${at}::timestamptz`;
           // Failed (and stale) receipts don't count against the user's day:
           // a bad photo shouldn't cost them a slot. The burst and global
           // counts include them, since each one still called the provider.
           const [row] = await db
             .select({
-              userMinute: sql<number>`count(*) filter (where ${mine} and ${receipts.createdAt} >= ${minute}::timestamptz)::int`,
+              userMinute: sql<number>`(count(*) filter (where ${mine} and ${receipts.createdAt} >= ${minute}::timestamptz) + count(*) filter (where ${mine} and ${retriedSince(minute)}))::int`,
               userDay: sql<number>`count(*) filter (where ${mine} and ${receipts.createdAt} >= ${day}::timestamptz and ${receipts.status} <> 'failed' and not ${isStale})::int`,
-              globalDay: sql<number>`count(*) filter (where ${receipts.createdAt} >= ${day}::timestamptz)::int`,
+              globalDay: sql<number>`(count(*) filter (where ${receipts.createdAt} >= ${day}::timestamptz) + count(*) filter (where ${retriedSince(day)}))::int`,
             })
             .from(receipts)
             .where(
               includeGlobal
-                ? sql`${receipts.createdAt} >= ${since}::timestamptz`
-                : sql`${mine} and ${receipts.createdAt} >= ${since}::timestamptz`,
+                ? sql`(${receipts.createdAt} >= ${since}::timestamptz or ${retriedSince(since)})`
+                : sql`${mine} and (${receipts.createdAt} >= ${since}::timestamptz or ${retriedSince(since)})`,
             );
           return {
             userMinute: row?.userMinute ?? 0,
