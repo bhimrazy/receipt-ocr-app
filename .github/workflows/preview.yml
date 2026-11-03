@@ -17,7 +17,7 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    environment: vercel-preview
+    environment: vercel
     permissions:
       contents: read
       pull-requests: write
