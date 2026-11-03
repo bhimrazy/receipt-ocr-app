@@ -17,7 +17,7 @@ A pnpm/Turborepo Receipt OCR MVP with Next.js, Better Auth, Drizzle/Postgres, S3
 pnpm install
 cp .env.example .env                          # root env, read by docker compose
 cp apps/web/.env.example apps/web/.env.local  # app env, read by `pnpm dev`
-pnpm docker:up                                # Postgres + MinIO
+pnpm docker:up                                # Postgres + RustFS
 pnpm db:migrate
 pnpm dev
 ```
@@ -28,9 +28,9 @@ pnpm dev
 
 | Service | What it is | Where |
 | --- | --- | --- |
-| `postgres` | Postgres 17 | `localhost:5433` (override with `POSTGRES_PORT`) |
-| `minio` | S3-compatible storage, stands in for R2 | `localhost:9000`, console on `:9001` |
-| `minio-init` | One-shot: creates the `receipt-ocr` bucket | exits when done |
+| `postgres` | Postgres 18 | `localhost:5433` (override with `POSTGRES_PORT`) |
+| `rustfs` | S3-compatible storage, stands in for R2 | `localhost:9000`, console on `:9001` |
+| `rustfs-init` | One-shot: creates the `receipt-ocr` bucket | exits when done |
 | `migrate` | One-shot: applies drizzle migrations | exits when done |
 | `app` | The Next.js app itself (profile `app`) | `localhost:3000` |
 
@@ -55,8 +55,8 @@ BETTER_AUTH_SECRET=<openssl rand -base64 32>
 S3_ENDPOINT=http://localhost:9000
 S3_REGION=us-east-1
 S3_BUCKET=receipt-ocr
-S3_ACCESS_KEY_ID=minioadmin
-S3_SECRET_ACCESS_KEY=minioadmin
+S3_ACCESS_KEY_ID=rustfsadmin
+S3_SECRET_ACCESS_KEY=rustfsadmin
 S3_FORCE_PATH_STYLE=true
 GOOGLE_GENERATIVE_AI_API_KEY=<your key>
 ```

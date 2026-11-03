@@ -54,7 +54,7 @@ const features = [
   {
     icon: Globe2,
     title: "No lock-in",
-    desc: "S3-compatible from day one — Cloudflare R2, AWS S3, or self-hosted MinIO. Your data stays portable.",
+    desc: "S3-compatible from day one — Cloudflare R2, AWS S3, or self-hosted RustFS. Your data stays portable.",
   },
 ];
 
@@ -118,7 +118,7 @@ const faqs = [
   },
   {
     q: "Where is my receipt data stored?",
-    a: "In S3-compatible storage — Cloudflare R2, AWS S3, or self-hosted MinIO. Your storage keys stay server-side and your data stays portable and yours.",
+    a: "In S3-compatible storage — Cloudflare R2, AWS S3, or self-hosted RustFS. Your storage keys stay server-side and your data stays portable and yours.",
   },
   {
     q: "Is it really free to start?",

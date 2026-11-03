@@ -3,7 +3,7 @@
 # Monorepo-aware build. The whole workspace is copied because the web app
 # depends on five workspace packages that Next transpiles from source.
 
-FROM node:22-alpine AS builder
+FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS builder
 RUN corepack enable
 WORKDIR /repo
 
@@ -16,7 +16,7 @@ RUN pnpm --filter @receipt-ocr/web build
 
 # `output: "standalone"` emits a self-contained server plus only the
 # node_modules it actually reached, which keeps the runtime image small.
-FROM node:22-alpine AS runner
+FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

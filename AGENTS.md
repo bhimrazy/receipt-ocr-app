@@ -7,7 +7,7 @@ This repo is a pnpm/Turborepo Receipt OCR MVP.
 - `apps/web`: Next.js App Router app with Better Auth, shadcn-style UI, Tailwind v4, and route handlers.
 - `packages/ui`: shared UI primitives and global theme CSS.
 - `packages/db`: Drizzle/Postgres schema and database client.
-- `packages/storage`: S3-compatible storage helpers. Configure for Cloudflare R2 first, but keep it portable to AWS S3 or MinIO.
+- `packages/storage`: S3-compatible storage helpers. Configure for Cloudflare R2 first, but keep it portable to AWS S3 or RustFS (local).
 - `packages/ai`: AI SDK OCR extraction. Gemini is the first provider, but do not hard-code orchestration to Gemini-only concepts.
 - `packages/core`: Effect TS services and receipt processing workflow.
 

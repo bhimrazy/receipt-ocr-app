@@ -12,3 +12,6 @@ coverage
 /.tmp-screens/
 .vercel
 .env*.local
+
+# Agent worktrees
+.claude/worktrees/
