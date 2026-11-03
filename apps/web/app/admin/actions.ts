@@ -35,6 +35,10 @@ function toResult(error: unknown): ActionResult {
 
 export async function setRoleAction(userId: string, role: "user" | "admin"): Promise<ActionResult> {
   try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (session?.user.id === userId) {
+      return { ok: false, error: "You can't change your own role. Ask another admin." };
+    }
     await auth.api.setRole({ body: { userId, role }, headers: await adminHeaders() });
     revalidatePath("/admin/users");
     revalidatePath(`/admin/users/${userId}`);
