@@ -120,16 +120,14 @@ export const deleteReceipt = (input: { receiptId: string; scope: ReceiptScope })
     if (!removed) return yield* new NotFound({ message: "Receipt not found" });
     if (removed.imageObjectKey) {
       // The row is already gone; a leftover object is logged with its key for a sweep.
-      yield* storage
-        .remove([removed.imageObjectKey])
-        .pipe(
-          Effect.catchAll((error) =>
-            Effect.logError("receipt.object_delete_failed", {
-              key: removed.imageObjectKey,
-              error: error.message,
-            }),
-          ),
-        );
+      yield* storage.remove([removed.imageObjectKey]).pipe(
+        Effect.catchAll((error) =>
+          Effect.logError("receipt.object_delete_failed", {
+            key: removed.imageObjectKey,
+            error: error.message,
+          }),
+        ),
+      );
     }
   });
 

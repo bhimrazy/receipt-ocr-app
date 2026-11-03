@@ -1,0 +1,7 @@
+{
+  "note": "USD per 1M tokens, edited by hand from the provider's price page. null = not filled in yet, so cost shows as n/a.",
+  "updated": "2026-11-04",
+  "models": {
+    "gemini-3.7-flash": { "input": null, "output": null }
+  }
+}

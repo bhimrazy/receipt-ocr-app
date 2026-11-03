@@ -17,14 +17,13 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    environment: vercel-preview
+    environment: vercel
     permissions:
       contents: read
       pull-requests: write
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,26 +34,21 @@ jobs:
         run: bun add --global vercel@65.4.0
 
       - name: Pull Vercel environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
+      # No token for the build step: it runs repository code, which only needs the pulled settings.
       - name: Build project
-        run: vercel build --token="$VERCEL_TOKEN"
+        run: vercel build
 
       - name: Deploy to Vercel
         id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
           echo "preview_url=$url" >> "$GITHUB_OUTPUT"
-
-      - name: Alias deployment to PR number
-        id: alias
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
-        run: |
-          alias="receipt-ocr-pr-${PR_NUMBER}.vercel.app"
-          vercel alias set "$PREVIEW_URL" "$alias" --token="$VERCEL_TOKEN"
-          echo "alias_url=https://$alias" >> "$GITHUB_OUTPUT"
 
       - name: Find existing preview comment
         id: find-comment
@@ -76,8 +70,7 @@ jobs:
 
             | | |
             |---|---|
-            | **Alias** | ${{ steps.alias.outputs.alias_url }} |
-            | **Unique URL** | ${{ steps.deploy.outputs.preview_url }} |
+            | **URL** | ${{ steps.deploy.outputs.preview_url }} |
             | **Commit** | `${{ github.event.pull_request.head.sha }}` |
 
-            The alias stays the same for this PR and updates on each push.
+            This comment updates with the newest deployment on each push.

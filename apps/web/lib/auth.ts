@@ -14,7 +14,7 @@ import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
-import { authEnabled, authEnv, emailEnv, isProduction } from "./env";
+import { authEnabled, authEnv, emailEnv, isProduction, requireEmailVerification } from "./env";
 import { logger } from "./log";
 import { workspaceLimitForPlan } from "./plans";
 import { runtime } from "./runtime";
@@ -85,16 +85,15 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 128,
     revokeSessionsOnPasswordReset: true,
-    // Production requires a verified address, so nobody can squat someone
-    // else's email; local dev has no mailer, so it stays optional there.
-    requireEmailVerification: isProduction,
+    requireEmailVerification,
     sendResetPassword: async ({ user, url }) => {
       await deliver({ to: user.email, ...passwordResetEmail(url) });
     },
   },
   emailVerification: {
-    sendOnSignUp: true,
-    sendOnSignIn: isProduction,
+    // Dev logs the link; in production a send without a mailer throws, so only send when required.
+    sendOnSignUp: requireEmailVerification || !isProduction,
+    sendOnSignIn: requireEmailVerification,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       await deliver({ to: user.email, ...verificationEmail(url) });

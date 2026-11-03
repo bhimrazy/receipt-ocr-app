@@ -6,6 +6,16 @@ import "server-only";
  */
 
 export const isProduction = process.env.NODE_ENV === "production";
+
+/**
+ * Email/password sign-up needs a verified address in production, so nobody can squat someone
+ * else's email. `AUTH_REQUIRE_EMAIL_VERIFICATION=false` turns it off for CI's e2e run, which has
+ * no mailer; local dev has no mailer either, so it is off there by default.
+ */
+export const requireEmailVerification =
+  process.env.AUTH_REQUIRE_EMAIL_VERIFICATION === undefined
+    ? isProduction
+    : process.env.AUTH_REQUIRE_EMAIL_VERIFICATION !== "false";
 /** `next build` runs with NODE_ENV=production but without runtime secrets. */
 const isBuild = process.env.NEXT_PHASE === "phase-production-build";
 

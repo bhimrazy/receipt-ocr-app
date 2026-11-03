@@ -63,3 +63,28 @@ GOOGLE_GENERATIVE_AI_API_KEY=<your key>
 ```
 
 The UI renders without backend credentials. Real upload/OCR requires Better Auth (`BETTER_AUTH_SECRET`), Postgres (`DATABASE_URL`), S3/R2, and Gemini env vars. Apply migrations with `bun run db:migrate` — against Supabase, that means the **session** pooler on port 5432 (set `DIRECT_URL`), not the transaction pooler.
+
+## Testing & benchmarks
+
+```bash
+bun run test            # unit tests (Vitest)
+bun run test:e2e        # Playwright smoke suite; needs a built app and the stack (below)
+scripts/test.sh         # compose Postgres + RustFS, fresh test database, unit + e2e
+bun run bench:ocr       # OCR accuracy/latency/cost on bench/fixtures (needs a Gemini key)
+```
+
+The e2e suite (`apps/web/e2e`) drives the built app through the UI, with receipts seeded in SQL rather than
+through OCR. First run: `bunx playwright install chromium`. The upload spec stays skipped until the fixture OCR
+provider (`OCR_PROVIDER=fixture`) exists; set `E2E_UPLOAD=1` to run it. Benchmark details and the k6 upload load
+test are in [`bench/README.md`](bench/README.md).
+
+CI (`.github/workflows/ci.yml`) runs the checks below, which you can run locally too:
+
+| Script                 | Checks                                                  |
+| ---------------------- | ------------------------------------------------------- |
+| `bun run format:check` | Prettier (`bun run format` to fix)                      |
+| `bun run lint`         | ESLint with `eslint-config-next`                        |
+| `bun run check:deps`   | One version per package, exact pins, `bun.lock` in sync |
+| `bun run knip`         | Unused files and dependencies                           |
+| `bun run audit`        | `bun audit`, failing on high or critical                |
+| `bun run typecheck`    | `tsc` in every package and in `bench/`                  |
