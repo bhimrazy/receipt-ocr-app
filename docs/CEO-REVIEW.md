@@ -98,13 +98,13 @@ distribution and trust-building matter more than feature count.**
 
 ## 6. Monetization path
 
-| Stage | Offer | Price signal |
-|---|---|---|
-| Now | Free tier (managed keys, capped) | $0 — acquisition |
-| Next | **Pro**: managed keys, higher caps, bulk upload, email-in, integrations | ~$9–15/mo (undercuts Expensify ~$20+/seat) |
-| Next | **BYOK**: unlimited on your keys, flat platform fee | ~$5–9/mo flat — "we never mark up your AI" |
-| Later | **API/dev plan**: metered per document | $0.005–0.01/receipt (10–50× under Veryfi-class pricing) |
-| Later | **Teams**: shared workspace, roles, audit export | per-workspace pricing |
+| Stage | Offer                                                                   | Price signal                                            |
+| ----- | ----------------------------------------------------------------------- | ------------------------------------------------------- |
+| Now   | Free tier (managed keys, capped)                                        | $0 — acquisition                                        |
+| Next  | **Pro**: managed keys, higher caps, bulk upload, email-in, integrations | ~$9–15/mo (undercuts Expensify ~$20+/seat)              |
+| Next  | **BYOK**: unlimited on your keys, flat platform fee                     | ~$5–9/mo flat — "we never mark up your AI"              |
+| Later | **API/dev plan**: metered per document                                  | $0.005–0.01/receipt (10–50× under Veryfi-class pricing) |
+| Later | **Teams**: shared workspace, roles, audit export                        | per-workspace pricing                                   |
 
 Keep the promise: never mark up provider costs on BYOK. That asymmetry is the moat story.
 

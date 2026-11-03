@@ -40,7 +40,9 @@ function receipt(overrides: Partial<ReceiptWithItems> = {}): ReceiptWithItems {
 
 describe("receiptsToCsv", () => {
   it("emits a header plus one row per receipt", () => {
-    const lines = receiptsToCsv([receipt(), receipt({ id: "r2" })]).trimEnd().split("\n");
+    const lines = receiptsToCsv([receipt(), receipt({ id: "r2" })])
+      .trimEnd()
+      .split("\n");
     expect(lines).toHaveLength(3);
     expect(lines[0]).toContain("receipt_id");
     expect(lines[1]).toContain("Corner Store");

@@ -107,7 +107,11 @@ export function ReceiptActions({
           </p>
           <div className="mt-3 flex gap-2">
             <Button disabled={deleting} onClick={remove} size="sm" variant="destructive">
-              {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              {deleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
               Delete
             </Button>
             <Button
@@ -149,7 +153,11 @@ export function ReceiptToolbar({
     <>
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
         {children}
-        <ReceiptActions editing={editing} onEdit={() => setEditing((value) => !value)} receipt={receipt} />
+        <ReceiptActions
+          editing={editing}
+          onEdit={() => setEditing((value) => !value)}
+          receipt={receipt}
+        />
       </div>
       {editing ? <ReceiptEditor onClose={() => setEditing(false)} receipt={receipt} /> : null}
     </>

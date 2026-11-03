@@ -41,8 +41,14 @@
   inset: 0;
   border-radius: inherit;
   padding-top: 1px;
-  background: linear-gradient(to bottom, color-mix(in oklab, white 8%, transparent), transparent 40%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, white 8%, transparent),
+    transparent 40%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
@@ -93,8 +99,16 @@
       color-mix(in oklab, var(--primary) 24%, transparent),
       transparent 72%
     ),
-    radial-gradient(36% 46% at 68% 58%, color-mix(in oklab, #2dd4bf 20%, transparent), transparent 72%),
-    radial-gradient(34% 44% at 54% 34%, color-mix(in oklab, #22d3ee 16%, transparent), transparent 72%);
+    radial-gradient(
+      36% 46% at 68% 58%,
+      color-mix(in oklab, #2dd4bf 20%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      34% 44% at 54% 34%,
+      color-mix(in oklab, #22d3ee 16%, transparent),
+      transparent 72%
+    );
   filter: blur(56px);
   opacity: 0.9;
 }

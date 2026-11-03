@@ -116,9 +116,7 @@ export function UsersTable({
                 <TableRow key={user.id}>
                   <TableCell>
                     <Link className="group block" href={`/admin/users/${user.id}`}>
-                      <div className="font-medium group-hover:text-primary">
-                        {user.name || "—"}
-                      </div>
+                      <div className="font-medium group-hover:text-primary">{user.name || "—"}</div>
                       <div className="text-xs text-muted-foreground">{user.email}</div>
                     </Link>
                   </TableCell>

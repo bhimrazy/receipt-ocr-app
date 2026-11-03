@@ -3,7 +3,13 @@
 import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
 import type { ReceiptWithItems } from "@receipt-ocr/core";
 import { Button } from "@receipt-ocr/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Loader2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";

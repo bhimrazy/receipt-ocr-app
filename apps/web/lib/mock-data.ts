@@ -9,9 +9,30 @@ export const mockReceipts = [
     status: "completed",
     confidence: "0.96",
     items: [
-      { id: "i1", name: "Organic Bananas", quantity: 1, unitPrice: "2.49", totalPrice: "2.49", confidence: "0.98" },
-      { id: "i2", name: "Almond Milk", quantity: 2, unitPrice: "4.99", totalPrice: "9.98", confidence: "0.95" },
-      { id: "i3", name: "Sourdough Bread", quantity: 1, unitPrice: "5.49", totalPrice: "5.49", confidence: "0.94" },
+      {
+        id: "i1",
+        name: "Organic Bananas",
+        quantity: 1,
+        unitPrice: "2.49",
+        totalPrice: "2.49",
+        confidence: "0.98",
+      },
+      {
+        id: "i2",
+        name: "Almond Milk",
+        quantity: 2,
+        unitPrice: "4.99",
+        totalPrice: "9.98",
+        confidence: "0.95",
+      },
+      {
+        id: "i3",
+        name: "Sourdough Bread",
+        quantity: 1,
+        unitPrice: "5.49",
+        totalPrice: "5.49",
+        confidence: "0.94",
+      },
     ],
   },
   {
@@ -24,8 +45,22 @@ export const mockReceipts = [
     status: "completed",
     confidence: "0.99",
     items: [
-      { id: "i4", name: "Regular Unleaded", quantity: 1, unitPrice: "48.36", totalPrice: "48.36", confidence: "0.99" },
-      { id: "i5", name: "Car Wash", quantity: 1, unitPrice: "3.82", totalPrice: "3.82", confidence: "0.93" },
+      {
+        id: "i4",
+        name: "Regular Unleaded",
+        quantity: 1,
+        unitPrice: "48.36",
+        totalPrice: "48.36",
+        confidence: "0.99",
+      },
+      {
+        id: "i5",
+        name: "Car Wash",
+        quantity: 1,
+        unitPrice: "3.82",
+        totalPrice: "3.82",
+        confidence: "0.93",
+      },
     ],
   },
   {

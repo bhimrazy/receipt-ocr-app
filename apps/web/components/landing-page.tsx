@@ -17,7 +17,6 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { Brand } from "@/components/brand";
 import { ContactButton } from "@/components/contact-button";
 import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
 import { ProductPreview } from "@/components/product-preview";
@@ -157,9 +156,7 @@ const faqJsonLd = {
 };
 
 function SectionLabel({ children }: { children: string }) {
-  return (
-    <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">{children}</p>
-  );
+  return <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">{children}</p>;
 }
 
 function PlanCard({
@@ -234,8 +231,8 @@ export function LandingPage() {
             <span className="text-gradient block">structured data</span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-8 text-foreground/80 md:text-lg">
-            Snap or upload any receipt and get clean, structured data — merchant, line items,
-            tax, and totals — ready to search, review, and export.
+            Snap or upload any receipt and get clean, structured data — merchant, line items, tax,
+            and totals — ready to search, review, and export.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Button asChild size="lg">
@@ -382,8 +379,8 @@ export function LandingPage() {
               Start free, scale when you need
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              No credit card to begin. When you outgrow the free tier, bring your own keys —
-              or talk to us about higher volume.
+              No credit card to begin. When you outgrow the free tier, bring your own keys — or talk
+              to us about higher volume.
             </p>
           </div>
           <div className="mx-auto grid max-w-3xl items-stretch gap-5 md:grid-cols-2">
@@ -452,7 +449,7 @@ export function LandingPage() {
               Start turning receipts into data
             </h2>
             <p className="mx-auto mt-4 max-w-md text-pretty text-muted-foreground">
-              Free to start, no card required. Bring your own keys when you're ready to scale —
+              Free to start, no card required. Bring your own keys when you&apos;re ready to scale —
               your data, your costs, no lock-in.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
