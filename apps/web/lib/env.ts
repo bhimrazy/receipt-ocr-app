@@ -116,3 +116,15 @@ if (authEnv.betterAuthSecret && authEnv.betterAuthSecret.length < 32) {
     "BETTER_AUTH_SECRET is shorter than 32 characters; generate a stronger one with `openssl rand -base64 32`.",
   );
 }
+
+// Misconfigurations that fail open quietly; say so once at startup.
+if (isProduction && authEnabled && !process.env.VERCEL && authEnv.trustedIpHeaders.length === 0) {
+  console.warn(
+    "TRUSTED_IP_HEADERS is unset: auth rate limits share one bucket for every client, so a few bad sign-ins lock everyone out. Set it to the header your proxy overwrites (e.g. x-forwarded-for).",
+  );
+}
+if (isProduction && !requireEmailVerification) {
+  console.warn(
+    "AUTH_REQUIRE_EMAIL_VERIFICATION=false in production: anyone can register an address they don't own.",
+  );
+}
