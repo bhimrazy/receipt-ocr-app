@@ -50,17 +50,6 @@ jobs:
           url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
           echo "preview_url=$url" >> "$GITHUB_OUTPUT"
 
-      - name: Alias deployment to PR number
-        id: alias
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
-        run: |
-          alias="receipt-ocr-pr-${PR_NUMBER}.vercel.app"
-          vercel alias set "$PREVIEW_URL" "$alias" --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"
-          echo "alias_url=https://$alias" >> "$GITHUB_OUTPUT"
-
       - name: Find existing preview comment
         id: find-comment
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
@@ -81,8 +70,7 @@ jobs:
 
             | | |
             |---|---|
-            | **Alias** | ${{ steps.alias.outputs.alias_url }} |
-            | **Unique URL** | ${{ steps.deploy.outputs.preview_url }} |
+            | **URL** | ${{ steps.deploy.outputs.preview_url }} |
             | **Commit** | `${{ github.event.pull_request.head.sha }}` |
 
-            The alias stays the same for this PR and updates on each push.
+            This comment updates with the newest deployment on each push.
