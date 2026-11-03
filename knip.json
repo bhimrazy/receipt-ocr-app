@@ -1,27 +1,13 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "include": [
-    "files",
-    "dependencies",
-    "unlisted",
-    "unresolved",
-    "binaries",
-    "duplicates"
-  ],
+  "include": ["files", "dependencies", "unlisted", "unresolved", "binaries", "duplicates"],
   "workspaces": {
     ".": {
-      "entry": [
-        "scripts/*.{ts,mjs}",
-        "bench/*.{ts,js}"
-      ],
-      "ignoreDependencies": [
-        "@types/react-dom"
-      ]
+      "entry": ["scripts/*.{ts,mjs}", "bench/*.{ts,js}"],
+      "ignoreDependencies": ["@types/react-dom"]
     },
     "apps/web": {
-      "ignoreDependencies": [
-        "tailwindcss"
-      ]
+      "ignoreDependencies": ["tailwindcss"]
     }
   }
 }
