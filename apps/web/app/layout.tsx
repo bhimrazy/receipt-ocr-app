@@ -15,9 +15,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-const title = "receiptOCR — Turn receipts into structured data";
+const title = "receiptOCR: snap a receipt, get a spreadsheet";
 const description =
-  "Snap or upload any receipt and get clean, structured data — merchant, line items, tax, and totals — each with a confidence score, ready to search, review, and export. Free to start, bring your own keys when you scale.";
+  "Photograph any receipt. receiptOCR reads the merchant, items, tax and total so you can check it and export a CSV. Free plan, no card required.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -31,8 +31,9 @@ export const metadata: Metadata = {
     "receipt OCR",
     "receipt scanner",
     "extract receipt data",
-    "receipt to JSON",
-    "expense tracking",
+    "receipt to CSV",
+    "receipts to spreadsheet",
+    "expense tracking for freelancers",
     "line item extraction",
   ],
   openGraph: {
