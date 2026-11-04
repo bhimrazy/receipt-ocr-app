@@ -19,8 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@receipt-ocr/ui/components/select";
-import { Loader2, Pencil, TriangleAlert } from "lucide-react";
-import { confidenceLevel } from "@/lib/format";
+import { Loader2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -80,7 +79,6 @@ export function ReceiptEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [categories] = useState(() => categoryItems(receipt.category ?? "Other"));
-  const lowConfidence = confidenceLevel(receipt.confidence);
 
   function set<K extends keyof Draft>(key: K, value: string) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -110,19 +108,12 @@ export function ReceiptEditor({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Pencil aria-hidden="true" className="size-5 text-primary" />
-          Correct extracted data
+          Correct the details
         </CardTitle>
         <CardDescription>
           Fix anything that was misread. Your corrections are what gets exported. Line items
           can&apos;t be edited yet.
         </CardDescription>
-        {lowConfidence === "check" || lowConfidence === "review" ? (
-          <p className="mt-2 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-            <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-            Parts of this receipt were hard to read. Check the merchant, date and total against the
-            photo first.
-          </p>
-        ) : null}
       </CardHeader>
       <CardContent>
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={save}>

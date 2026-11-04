@@ -1,34 +1,39 @@
+import {
+  EXTRACTION_FAILED_MESSAGE,
+  MAX_EXTRACTION_ATTEMPTS,
+  type ReceiptWithItems,
+} from "@receipt-ocr/core";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@receipt-ocr/ui/components/table";
+import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import type { ReceiptWithItems } from "@receipt-ocr/core";
 import {
   ArrowLeft,
   ChevronRight,
   CircleAlert,
+  ExternalLink,
   Loader2,
   ReceiptText,
   TriangleAlert,
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { confidenceLevel, formatDate, formatMoney } from "@/lib/format";
+import {
+  confidenceLevel,
+  formatConfidence,
+  formatDate,
+  formatDateTime,
+  formatMoney,
+} from "@/lib/format";
 import { ProcessingPoller } from "@/components/processing-poller";
 import { ReceiptActions, ReceiptWorkspace } from "@/components/receipt-actions";
-import { ConfidenceBadge, isInFlight } from "@/components/receipt-status";
+import { receiptTitle } from "@/components/receipt-list";
+import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 
 const FAILED_FALLBACK =
-  "The photo may be blurry, cropped or too dark. Retake it in good light with the whole receipt in frame.";
+  "The photo may be blurry, cropped or too dark. Try again, or upload a clearer photo.";
 
 function toNumber(value: string | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
@@ -49,233 +54,380 @@ function totalsMismatch(receipt: ReceiptWithItems) {
   return Math.abs(expected - total) > 0.01 ? expected : null;
 }
 
-function fileNameOf(receipt: ReceiptWithItems) {
-  return (receipt.rawJson as { fileName?: string } | null)?.fileName ?? null;
+/** Everything a person should look at before trusting this receipt, in plain words. */
+function checksFor(receipt: ReceiptWithItems, money: (value: string | null) => string | null) {
+  const checks: string[] = [];
+  const level = confidenceLevel(receipt.confidence);
+  if (level === "review" || level === "check") {
+    checks.push(
+      `Overall confidence is ${formatConfidence(receipt.confidence)}. Compare the merchant, date and total with the photo.`,
+    );
+  }
+  const lowLines = receipt.items.filter((item) => confidenceLevel(item.confidence) === "review");
+  if (lowLines.length > 0) {
+    checks.push(
+      lowLines.length === 1
+        ? "1 line was hard to read. It's marked in Line items."
+        : `${lowLines.length} lines were hard to read. They're marked in Line items.`,
+    );
+  }
+  const expected = totalsMismatch(receipt);
+  if (expected !== null) {
+    checks.push(
+      `The amounts add up to ${money(String(expected))}, but the total says ${money(receipt.total)}. Check for a discount or a misread number.`,
+    );
+  }
+  if (!receipt.merchant) checks.push("No merchant name was found.");
+  if (!receipt.receiptDate) checks.push("No date was found.");
+  if (toNumber(receipt.total) === null) checks.push("No total was found.");
+  return checks;
+}
+
+function NotFound() {
+  return <span className="text-muted-foreground">Not found</span>;
+}
+
+/** Subtotal, tax and tip are often absent from a receipt; a dash, not a warning. */
+function None() {
+  return (
+    <>
+      <span aria-hidden="true" className="text-muted-foreground">
+        —
+      </span>
+      <span className="sr-only">None</span>
+    </>
+  );
+}
+
+function Field({
+  label,
+  children,
+  mono,
+}: {
+  label: string;
+  children: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className={cn("mt-1 text-sm break-words", mono && "font-mono tabular-nums")}>
+        {children}
+      </dd>
+    </div>
+  );
 }
 
 export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
-  const json = JSON.stringify(receipt.rawJson ?? receipt, null, 2);
   const inFlight = isInFlight(receipt.status);
   const completed = receipt.status === "completed";
+  const failed = receipt.status === "failed";
   const currency = receipt.currency ?? "USD";
-  const fileName = fileNameOf(receipt);
-  const title = completed
-    ? (receipt.merchant ?? "Unnamed merchant")
-    : (fileName ?? "Uploaded receipt");
-  const expected = completed ? totalsMismatch(receipt) : null;
-  const date = formatDate(receipt.receiptDate);
+  const title = receiptTitle(receipt);
+  const money = (value: string | null) => formatMoney(value, currency);
+  const triesLeft = Math.max(0, MAX_EXTRACTION_ATTEMPTS - receipt.attempts);
 
   const header = (
-    <div className="min-w-0">
-      <h1
-        className={cn(
-          "text-3xl font-semibold tracking-tight wrap-break-word",
-          !completed && "font-mono text-2xl",
-        )}
-      >
-        {title}
-      </h1>
-      {completed ? (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <span className="text-sm text-muted-foreground">{date ?? "No date found"}</span>
-          {receipt.category ? <Badge variant="secondary">{receipt.category}</Badge> : null}
-          <ConfidenceBadge value={receipt.confidence} />
+    <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
+      <div className="min-w-0">
+        <h1
+          className={cn(
+            "font-semibold tracking-tight wrap-break-word",
+            title.isFile ? "font-mono text-xl md:text-2xl" : "text-2xl md:text-3xl",
+          )}
+        >
+          {title.text}
+        </h1>
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+          {completed ? (
+            <>
+              <span>{formatDate(receipt.receiptDate) ?? "No date found"}</span>
+              {receipt.category ? <Badge variant="secondary">{receipt.category}</Badge> : null}
+              <ConfidenceBadge value={receipt.confidence} />
+            </>
+          ) : (
+            <>
+              <StatusBadge status={receipt.status} />
+              <span>Uploaded {formatDateTime(receipt.createdAt)}</span>
+            </>
+          )}
         </div>
-      ) : null}
+      </div>
+      <ReceiptActions receipt={receipt} />
     </div>
   );
 
   const image = (
-    <Card className="flex min-h-80 flex-col items-center justify-center p-6 text-center lg:min-h-105">
-      {receipt.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          alt={`Receipt from ${title}`}
-          className="max-h-130 rounded-lg object-contain"
-          src={receipt.imageUrl}
-        />
-      ) : (
-        <>
-          <ReceiptText aria-hidden="true" className="mb-4 size-14 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No image preview available</p>
-          {fileName ? (
-            <p className="mt-1 font-mono text-xs break-all text-muted-foreground">{fileName}</p>
-          ) : null}
-        </>
-      )}
+    <Card className="flex flex-col overflow-hidden lg:sticky lg:top-6">
+      <div
+        className={cn(
+          "flex flex-1 items-center justify-center bg-background/40 p-4",
+          receipt.imageUrl ? "min-h-72 lg:min-h-96" : "min-h-40",
+        )}
+      >
+        {receipt.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            alt={`Photo of the receipt${completed && receipt.merchant ? ` from ${receipt.merchant}` : ""}`}
+            // On phones only the top of a long receipt shows (merchant and date); "Open full size" has the rest.
+            className="max-h-80 w-full rounded-md object-cover object-top sm:w-auto sm:object-contain lg:max-h-[70vh]"
+            src={receipt.imageUrl}
+          />
+        ) : (
+          <div className="flex flex-col items-center text-center">
+            <ReceiptText aria-hidden="true" className="mb-3 size-12 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">The photo isn&apos;t available.</p>
+          </div>
+        )}
+      </div>
+      <div className="flex min-h-11 items-center justify-between gap-3 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+        <span className="min-w-0 truncate font-mono">{receipt.fileName ?? "Photo"}</span>
+        {receipt.imageUrl ? (
+          <a
+            className="inline-flex shrink-0 items-center gap-1 rounded-md font-medium text-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
+            href={receipt.imageUrl}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Open full size
+            <ExternalLink aria-hidden="true" className="size-3.5" />
+          </a>
+        ) : null}
+      </div>
     </Card>
   );
 
-  const money = (value: string | null) => formatMoney(value, currency);
+  const back = (
+    <div className="mb-4 flex items-center justify-between gap-2">
+      <Link
+        className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-ml-3")}
+        href="/app/history"
+      >
+        <ArrowLeft aria-hidden="true" />
+        History
+      </Link>
+      <Link className={buttonVariants({ variant: "ghost", size: "sm" })} href="/app">
+        <Upload aria-hidden="true" />
+        Upload another
+      </Link>
+    </div>
+  );
 
-  const extracted = completed ? (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
-        <h2 className="text-sm font-medium">Extracted data</h2>
-        <span className="font-mono text-xs text-muted-foreground">
-          {receipt.items.length} {receipt.items.length === 1 ? "item" : "items"}
-        </span>
-      </div>
-      <div className="p-2 sm:p-4">
-        {receipt.items.length > 0 ? (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Item</TableHead>
-                <TableHead className="text-center">Qty</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {receipt.items.map((item) => {
-                const low = confidenceLevel(item.confidence) === "review";
-                return (
-                  <TableRow
-                    aria-describedby={low ? "low-confidence-hint" : undefined}
-                    className={cn(low && "bg-warning/5 shadow-[inset_3px_0_0_var(--warning)]")}
-                    key={item.id}
-                  >
-                    <TableCell>
-                      <span className="flex items-start gap-2">
-                        {low ? (
-                          <TriangleAlert
-                            aria-label="Low confidence"
-                            className="mt-0.5 size-3.5 shrink-0 text-warning"
-                          />
-                        ) : null}
-                        {item.name}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center font-mono text-muted-foreground tabular-nums">
-                      {item.quantity}
-                    </TableCell>
-                    <TableCell className="text-right font-mono whitespace-nowrap tabular-nums">
-                      {money(item.totalPrice) ?? "—"}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        ) : (
-          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-            No line items were found on this receipt.
-          </p>
-        )}
-        <span className="sr-only" id="low-confidence-hint">
-          Low confidence, please verify
-        </span>
-        {receipt.items.some((item) => confidenceLevel(item.confidence) === "review") ? (
-          <p className="mx-3 mt-3 flex items-center gap-2 text-xs text-warning">
-            <TriangleAlert aria-hidden="true" className="size-3.5" />
-            Highlighted items were hard to read. Check them against the photo.
-          </p>
-        ) : null}
-        <dl className="mx-3 mt-4 flex flex-col gap-2 border-t border-border pt-4 text-sm">
-          {(
-            [
-              ["Subtotal", receipt.subtotal],
-              ["Tax", receipt.tax],
-              ["Tip", receipt.tip],
-            ] as const
-          ).map(([label, value]) =>
-            money(value) ? (
-              <div className="flex justify-between text-muted-foreground" key={label}>
-                <dt>{label}</dt>
-                <dd className="font-mono tabular-nums">{money(value)}</dd>
-              </div>
-            ) : null,
-          )}
-          <div className="flex justify-between text-lg font-semibold">
-            <dt>Total</dt>
-            <dd className="font-mono text-primary tabular-nums">
-              {money(receipt.total) ?? "Not found"}
-            </dd>
-          </div>
-        </dl>
-        {expected !== null ? (
-          <p
-            className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
-            role="note"
+  if (!completed) {
+    return (
+      <div className="mx-auto max-w-6xl">
+        <ProcessingPoller id={receipt.id} status={receipt.status} />
+        {back}
+        {header}
+        {inFlight ? (
+          <div
+            className="mb-6 flex items-start gap-3 rounded-lg border border-primary/25 bg-primary/10 p-4 text-sm"
+            role="status"
           >
-            <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-            The amounts add up to {money(String(expected))}, but the total says{" "}
-            {money(receipt.total)}. Check for a discount or a misread number.
-          </p>
+            <Loader2
+              aria-hidden="true"
+              className="mt-0.5 size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+            />
+            <div>
+              <p className="font-medium">Reading this receipt</p>
+              <p className="mt-1 text-muted-foreground">
+                This usually takes a few seconds and the page updates by itself. You can leave; the
+                result is saved to History.
+              </p>
+            </div>
+          </div>
         ) : null}
+        {failed ? (
+          <div
+            className="mb-6 flex flex-col gap-4 rounded-lg border border-destructive/30 bg-destructive/[0.08] p-4 text-sm sm:flex-row sm:items-start"
+            role="alert"
+          >
+            <CircleAlert
+              aria-hidden="true"
+              className="size-5 shrink-0 text-destructive max-sm:hidden"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-destructive">This receipt couldn&apos;t be read</p>
+              <p className="mt-1 text-muted-foreground">
+                {/* The generic message repeats the heading, so say only the useful part. */}
+                {!receipt.errorMessage || receipt.errorMessage === EXTRACTION_FAILED_MESSAGE
+                  ? FAILED_FALLBACK
+                  : receipt.errorMessage}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {triesLeft > 0
+                  ? `${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left for this photo. Failed receipts don't count toward your daily limit.`
+                  : `This photo was tried ${MAX_EXTRACTION_ATTEMPTS} times. Upload a clearer photo instead.`}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+              {triesLeft > 0 ? <RetryReceiptButton receiptId={receipt.id} /> : null}
+              <Link
+                className={buttonVariants({ variant: triesLeft > 0 ? "outline" : "default" })}
+                href="/app"
+              >
+                <Upload aria-hidden="true" />
+                Upload a new photo
+              </Link>
+            </div>
+          </div>
+        ) : null}
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          {image}
+          {failed ? (
+            <Card className="p-5">
+              <h2 className="text-sm font-medium">For a clearer photo</h2>
+              <ul className="mt-3 flex list-disc flex-col gap-1.5 pl-4 text-sm text-muted-foreground marker:text-primary">
+                <li>Lay the receipt flat, without folds.</li>
+                <li>Use even light and avoid glare and shadows.</li>
+                <li>Keep the whole receipt in the frame, including the total.</li>
+                <li>Hold the phone still so the text is sharp.</li>
+              </ul>
+            </Card>
+          ) : null}
+          {inFlight ? (
+            <Card aria-hidden="true" className="p-5">
+              <p className="mb-4 text-sm text-muted-foreground">
+                The merchant, date, line items and totals appear here.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <div className="space-y-2" key={i}>
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  const lowLines = receipt.items.filter((item) => confidenceLevel(item.confidence) === "review");
+
+  const details = (
+    <Card>
+      <div className="border-b border-border py-4 pr-28 pl-5">
+        <h2 className="text-sm font-medium">Details</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          These are the values that go in the CSV.
+        </p>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 p-5 sm:grid-cols-4">
+        <div className="col-span-2">
+          <Field label="Merchant">{receipt.merchant ?? <NotFound />}</Field>
+        </div>
+        <Field label="Date">{formatDate(receipt.receiptDate) ?? <NotFound />}</Field>
+        <Field label="Category">{receipt.category ?? <NotFound />}</Field>
+        <Field label="Currency" mono>
+          {currency}
+        </Field>
+        <Field label="Subtotal" mono>
+          {money(receipt.subtotal) ?? <None />}
+        </Field>
+        <Field label="Tax" mono>
+          {money(receipt.tax) ?? <None />}
+        </Field>
+        <Field label="Tip" mono>
+          {money(receipt.tip) ?? <None />}
+        </Field>
+      </dl>
+      <div className="flex items-baseline justify-between gap-3 border-t border-border px-5 py-4">
+        <span className="text-sm font-medium">Total</span>
+        <span className="font-mono text-xl font-semibold text-primary tabular-nums">
+          {money(receipt.total) ?? <NotFound />}
+        </span>
       </div>
     </Card>
-  ) : null;
+  );
+
+  const items = (
+    <Card className="overflow-hidden">
+      <div className="flex items-baseline justify-between gap-3 border-b border-border px-5 py-4">
+        <h2 className="text-sm font-medium">Line items</h2>
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+          {receipt.items.length} {receipt.items.length === 1 ? "line" : "lines"}
+        </span>
+      </div>
+      {receipt.items.length > 0 ? (
+        <table className="w-full text-sm">
+          <thead className="sr-only">
+            <tr>
+              <th scope="col">Item</th>
+              <th scope="col">Quantity</th>
+              <th scope="col">Price</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {receipt.items.map((item) => {
+              const low = confidenceLevel(item.confidence) === "review";
+              return (
+                <tr
+                  className={cn(low && "bg-warning/[0.06] shadow-[inset_3px_0_0_var(--warning)]")}
+                  key={item.id}
+                >
+                  <td className="py-3 pr-3 pl-5 align-top">
+                    <span className="block break-words">{item.name}</span>
+                    {low ? (
+                      <span className="mt-1 flex items-center gap-1 text-xs text-warning">
+                        <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0" />
+                        Check this line against the photo
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-3 text-right align-top font-mono whitespace-nowrap text-muted-foreground tabular-nums">
+                    × {item.quantity}
+                  </td>
+                  <td className="py-3 pr-5 pl-3 text-right align-top font-mono whitespace-nowrap tabular-nums">
+                    {money(item.totalPrice) ?? "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : (
+        <p className="px-5 py-6 text-sm text-muted-foreground">
+          No line items were found on this receipt. The totals above can still be corrected.
+        </p>
+      )}
+      <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
+        {lowLines.length > 0 ? "Marked lines were hard to read. " : null}
+        Line items can&apos;t be edited yet.
+      </p>
+    </Card>
+  );
+
+  const json = JSON.stringify(receipt.rawJson ?? receipt, null, 2);
+  const footer = (
+    <details className="group rounded-lg border border-border bg-card">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          aria-hidden="true"
+          className="size-4 transition-transform group-open:rotate-90"
+        />
+        Raw extraction (JSON)
+      </summary>
+      <pre className="max-h-72 overflow-auto border-t border-border px-5 py-4 font-mono text-xs leading-6 whitespace-pre-wrap text-muted-foreground">
+        {json}
+      </pre>
+    </details>
+  );
 
   return (
     <div className="mx-auto max-w-6xl">
-      <ProcessingPoller id={receipt.id} status={receipt.status} />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
-        <Link className={cn(buttonVariants({ variant: "ghost" }), "-ml-3")} href="/app/history">
-          <ArrowLeft aria-hidden="true" />
-          Back to history
-        </Link>
-        <Link className={buttonVariants({ variant: "outline" })} href="/app/upload">
-          <Upload aria-hidden="true" />
-          Upload another
-        </Link>
-      </div>
-
-      {inFlight ? (
-        <div
-          className="mb-6 flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm"
-          role="status"
-        >
-          <Loader2
-            aria-hidden="true"
-            className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
-          />
-          Reading this receipt. The page updates when it&apos;s done.
-        </div>
-      ) : null}
-      {receipt.status === "failed" ? (
-        <div
-          className="mb-6 flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-4 text-sm sm:flex-row sm:items-center"
-          role="alert"
-        >
-          <CircleAlert
-            aria-hidden="true"
-            className="hidden size-5 shrink-0 text-destructive sm:block"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-destructive">We couldn&apos;t read this receipt</p>
-            <p className="mt-1 text-muted-foreground">{receipt.errorMessage || FAILED_FALLBACK}</p>
-          </div>
-          <RetryReceiptButton className="shrink-0" receiptId={receipt.id} />
-        </div>
-      ) : null}
-
-      {completed ? (
-        <ReceiptWorkspace extracted={extracted} header={header} image={image} receipt={receipt} />
-      ) : (
-        <>
-          <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
-            {header}
-            <ReceiptActions receipt={receipt} />
-          </div>
-          <div className="max-w-xl">{image}</div>
-        </>
-      )}
-
-      {completed ? (
-        <details className="group mt-5 rounded-lg border border-border bg-card">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-            <ChevronRight
-              aria-hidden="true"
-              className="size-4 transition-transform group-open:rotate-90"
-            />
-            Raw extraction (JSON)
-          </summary>
-          <pre className="max-h-72 overflow-auto border-t border-border px-5 py-4 font-mono text-xs leading-6 whitespace-pre-wrap text-muted-foreground">
-            {json}
-          </pre>
-        </details>
-      ) : null}
+      {back}
+      {header}
+      <ReceiptWorkspace
+        checks={checksFor(receipt, money)}
+        details={details}
+        footer={footer}
+        image={image}
+        items={items}
+        receipt={receipt}
+      />
     </div>
   );
 }
