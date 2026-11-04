@@ -1,0 +1,140 @@
+/*
+ * Final · Classic: the app's own dark theme (packages/ui tokens), so nothing is redefined here.
+ * Only page-specific effects live in this file, all scoped to .fc and all still under reduced motion.
+ */
+.fc {
+  overflow-x: clip;
+}
+
+.fc .fc-display {
+  font-family: var(--font-fc-display), var(--font-sans);
+  font-optical-sizing: auto;
+  letter-spacing: -0.025em;
+}
+
+.fc .fc-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hero backdrop: the original 64px grid, faded out from the top-left where the headline sits. */
+.fc .fc-grid {
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-position: -1px -1px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 10%, transparent 75%);
+  opacity: 0.55;
+}
+
+/* One static emerald glow behind the demo; the shared .hero-aurora drifts, this one does not. */
+.fc .fc-glow {
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--primary) 20%, transparent),
+    color-mix(in oklab, #2dd4bf 8%, transparent) 55%,
+    transparent
+  );
+  filter: blur(40px);
+}
+
+/* The receipt photo: a dark scan with a torn bottom edge. */
+.fc .fc-paper {
+  --tooth: 6px;
+  background: linear-gradient(180deg, #1d1d21, #17171a);
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% /
+    calc(var(--tooth) * 2) 100%;
+  padding-bottom: calc(var(--tooth) + 1rem);
+}
+
+.fc .fc-dashed {
+  border-top: 1px dashed color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+
+/* Scan line: an emerald rule with a faint wash trailing above it, swept top to bottom. */
+.fc .fc-scan {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 56px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in oklab, var(--primary) 16%, transparent)
+  );
+  border-bottom: 1.5px solid var(--primary);
+  box-shadow: 0 8px 18px -6px color-mix(in oklab, var(--primary) 60%, transparent);
+  opacity: 0;
+  translate: 0 -100%;
+}
+.fc .fc-scanning .fc-scan {
+  animation: fc-sweep 1200ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+@keyframes fc-sweep {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+  10%,
+  90% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+/* The paper line being read right now, and the flagged line once the read is done. */
+.fc .fc-reading {
+  background: color-mix(in oklab, var(--primary) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 16%, transparent);
+  color: var(--foreground);
+}
+.fc .fc-flagged {
+  background: color-mix(in oklab, var(--warning) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--warning) 14%, transparent);
+}
+
+/* Faded thermal print. Still 5:1 on the paper. */
+.fc .fc-smudged {
+  color: #8f8f98;
+  text-shadow: 0 0 1.5px rgb(143 143 152 / 0.7);
+}
+
+/* Holds a value's place until it is read, so nothing shifts. */
+.fc .fc-slot {
+  display: inline-block;
+  height: 0.7em;
+  vertical-align: middle;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 9%, transparent);
+}
+.fc .fc-in {
+  animation: fc-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes fc-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+/* A new CSV row flashes once as it lands. */
+.fc .fc-land {
+  animation: fc-land 2.2s ease-out both;
+}
+@keyframes fc-land {
+  from {
+    background: color-mix(in oklab, var(--primary) 18%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fc .fc-scanning .fc-scan,
+  .fc .fc-in,
+  .fc .fc-land {
+    animation: none;
+  }
+}
