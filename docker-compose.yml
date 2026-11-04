@@ -34,7 +34,7 @@ services:
 
   # S3-compatible storage. The app is R2-first but speaks plain S3, so RustFS
   # stands in locally with no code changes — only env. Pinned by digest
-  # (multi-arch index of rustfs/rustfs:1.0.0, pushed 2026-09-16).
+  # (multi-arch index of rustfs/rustfs:1.0.4, pushed 2026-10-25).
   rustfs:
     image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
     environment:
