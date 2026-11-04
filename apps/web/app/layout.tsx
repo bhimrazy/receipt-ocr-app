@@ -1,9 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
+import { siteDescription, siteTitle, siteUrl } from "@/lib/site";
 import "./globals.css";
 
+// The opsz axis gives large headings the tighter display cut; one font load serves both.
 const dmSans = DM_Sans({
   subsets: ["latin"],
+  axes: ["opsz"],
   variable: "--font-dm-sans",
   display: "swap",
 });
@@ -14,39 +17,25 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-const title = "receiptOCR: snap a receipt, get a spreadsheet";
-const description =
-  "Photograph any receipt. receiptOCR reads the merchant, items, tax and total so you can check it and export a CSV. Free plan, no card required.";
-
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: title,
+    default: siteTitle,
     template: "%s · receiptOCR",
   },
-  description,
+  description: siteDescription,
   applicationName: "receiptOCR",
-  keywords: [
-    "receipt OCR",
-    "receipt scanner",
-    "extract receipt data",
-    "receipt to CSV",
-    "receipts to spreadsheet",
-    "expense tracking for freelancers",
-    "line item extraction",
-  ],
   openGraph: {
     type: "website",
-    url: siteUrl,
+    url: "/",
     siteName: "receiptOCR",
-    title,
-    description,
+    title: siteTitle,
+    description: siteDescription,
   },
   twitter: {
     card: "summary_large_image",
-    title,
-    description,
+    title: siteTitle,
+    description: siteDescription,
   },
   robots: { index: true, follow: true },
   appleWebApp: {
