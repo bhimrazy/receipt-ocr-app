@@ -34,7 +34,7 @@ export function FaqPaper() {
           className="lg:sticky lg:top-28 lg:self-start"
           eyebrow="FAQ"
           id="faq"
-          lead="The things people ask before handing over a shoebox."
+          lead="What people usually ask before they upload their first receipt."
           title="Fair questions."
         />
         <div className="border-b border-[var(--input)]/60">
@@ -73,7 +73,7 @@ export function FinalCtaPaper() {
             className="pp-display mt-6 text-[2.6rem] leading-[1.02] text-balance sm:text-6xl"
             id="pp-final"
           >
-            Your shoebox can <span className="pp-wonk">retire.</span>
+            Your receipts, <span className="pp-wonk">done.</span>
           </h2>
           <p className="mx-auto mt-5 max-w-md text-lg leading-relaxed text-muted-foreground">
             Start with this month&apos;s receipts. It&apos;s free, and everything you put in can

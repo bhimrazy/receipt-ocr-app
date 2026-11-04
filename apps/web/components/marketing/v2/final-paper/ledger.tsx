@@ -42,7 +42,7 @@ export function LedgerPaper() {
             eyebrow="What you get"
             id="output"
             lead="One row per receipt, with the date, merchant, category, tax and total already filled in."
-            title="A spreadsheet, not a shoebox."
+            title="A spreadsheet, not a pile of paper."
           />
           <ul className="mt-8 space-y-3">
             {points.map((point) => (

@@ -169,7 +169,7 @@ export function FinalCta() {
               className="max-w-[16ch] text-[40px] font-semibold leading-[1.0] tracking-[-0.04em] text-balance sm:text-[64px]"
               id="fl-cta"
             >
-              Your shoebox, as a spreadsheet.
+              Every receipt, ready for your books.
             </h2>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link className={ctaClass} href="/sign-up">
