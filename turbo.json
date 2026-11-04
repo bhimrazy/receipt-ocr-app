@@ -19,6 +19,7 @@
         "OCR_*",
         "RESEND_API_KEY",
         "S3_*",
+        "SUPPORT_EMAIL",
         "TRUSTED_IP_HEADERS",
         "VERCEL",
         "VERCEL_*"

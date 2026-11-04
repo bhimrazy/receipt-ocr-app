@@ -19,7 +19,7 @@ export const freePlan = {
     `${free.workspaces} workspace, with teammates you invite`,
     "Merchant, date, line items, tax and total",
     "Confidence score per receipt and per line item",
-    "Edit merchant, date, category and amounts",
+    "Edit merchant, date, category, currency and amounts",
     "CSV export, per receipt or everything at once",
   ],
 };
@@ -68,7 +68,7 @@ export const faqs = [
   },
   {
     q: "How accurate is it?",
-    a: "Each receipt gets an overall confidence score, and each line item gets its own. Low scores show you what to check, and anything wrong takes a few seconds to fix before you export.",
+    a: "Each receipt gets an overall confidence score, and each line item gets its own. Low scores show you what to check, and you can correct the merchant, date, category, currency and amounts before you export. Line items can't be edited yet.",
   },
   {
     q: "What are the limits on the free plan?",
@@ -80,7 +80,7 @@ export const faqs = [
   },
   {
     q: "Who can see my receipts?",
-    a: "Only you and the people you invite to your workspace. Images are read by Google's Gemini AI to extract the data. You can delete any receipt, or your whole account, from Settings.",
+    a: "Only you and the people you invite to your workspace. receiptOCR admins can access an account only to handle a support request. Images are read by Google's Gemini AI to extract the data. You can delete any receipt, or your whole account, from Settings.",
   },
   {
     q: "Can I get my data out?",
@@ -95,7 +95,7 @@ export const demoReceipt = {
   date: "Oct 28, 2026",
   isoDate: "2026-10-28",
   time: "14:06",
-  category: "Shopping",
+  category: "Office",
   currency: "USD",
   confidence: 96,
   items: [
@@ -110,7 +110,10 @@ export const demoReceipt = {
   total: "$86.85",
 };
 
-/** Rows for the CSV export preview; columns mirror lib/csv.ts receiptsToCsv. */
+/**
+ * Illustrative rows for the CSV export preview, never real data: caption it as a preview wherever
+ * it renders. Columns use the real headers from lib/csv.ts receiptsToCsv, with plain numbers.
+ */
 export const demoExport: Array<{
   date: string;
   merchant: string;
@@ -121,14 +124,14 @@ export const demoExport: Array<{
   {
     date: "2026-10-28",
     merchant: "Paper & Co.",
-    category: "Shopping",
+    category: "Office",
     tax: "7.08",
     total: "86.85",
   },
   {
     date: "2026-10-26",
     merchant: "Bluebird Café",
-    category: "Restaurant",
+    category: "Meals",
     tax: "2.31",
     total: "28.41",
   },
@@ -139,6 +142,6 @@ export const demoExport: Array<{
     tax: "0.00",
     total: "45.00",
   },
-  { date: "2026-10-21", merchant: "Shell", category: "Gas", tax: "4.12", total: "61.30" },
+  { date: "2026-10-21", merchant: "Shell", category: "Fuel", tax: "4.12", total: "61.30" },
   { date: "2026-10-19", merchant: "Fiber Net", category: "Utilities", tax: "6.40", total: "79.99" },
 ];

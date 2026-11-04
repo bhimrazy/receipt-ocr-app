@@ -72,7 +72,9 @@ export default function TermsPage() {
         },
         {
           heading: "Contact",
-          body: ["Questions about these terms? Contact us through the support form on our site."],
+          body: [
+            "Questions about these terms? Use the support button at the bottom right of this page.",
+          ],
         },
       ]}
     />

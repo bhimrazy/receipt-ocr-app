@@ -148,12 +148,12 @@ export function CsvSheet({ className }: { className?: string }) {
   return (
     <div
       role="img"
-      aria-label={`Spreadsheet preview of a CSV export with ${demoExport.length} receipts: date, merchant, category, tax and total columns`}
+      aria-label={`Example preview of a CSV export with ${demoExport.length} receipts: date, merchant, category, tax and total columns`}
       className={cn("overflow-hidden rounded-xl bg-card ring-1 ring-white/10", className)}
     >
       <div aria-hidden>
         <div className="flex items-center justify-between border-b border-border bg-secondary/60 px-4 py-2.5 font-mono text-xs text-muted-foreground">
-          <span className="truncate">receipts-2026-10.csv</span>
+          <span className="truncate">Preview · receipts.csv</span>
           <span className="shrink-0">{demoExport.length} rows</span>
         </div>
         <div className="grid grid-cols-[7.25rem_minmax(0,1fr)_4.5rem] font-mono text-xs tabular-nums sm:grid-cols-[7.25rem_minmax(0,1fr)_6rem_4rem_4.5rem]">

@@ -1,0 +1,98 @@
+/*
+ * Direction G: a light theme scoped to this page. The app is dark-only, so the shared tokens are
+ * redefined on the wrapper; packages/ui primitives inside it pick them up unchanged.
+ */
+.g-root {
+  /* Canvas and ink. Every text colour below is >= 4.5:1 on --background and --card. */
+  --background: #f6f7f9;
+  --foreground: #0b1220;
+  --card: #ffffff;
+  --card-foreground: #0b1220;
+  --popover: #ffffff;
+  --popover-foreground: #0b1220;
+  --secondary: #ffffff;
+  --secondary-foreground: #0b1220;
+  --muted: #eef0f4;
+  --muted-foreground: #5b6474;
+  --accent: #eef0f4;
+  --accent-foreground: #0b1220;
+
+  /* Ledger blue: 7.2:1 on white, so it works as text, links and the focus ring. */
+  --primary: #2b44d6;
+  --primary-foreground: #ffffff;
+  --ring: #2b44d6;
+
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --warning: #b54708;
+  --warning-foreground: #ffffff;
+
+  --border: #e3e6eb;
+  /* Form-control edge, 3.1:1 on white (WCAG 1.4.11). */
+  --input: #8a93a3;
+
+  /* Page-only tokens. */
+  --g-ink-2: #3b4556;
+  --g-rule-strong: #c9ced6;
+  --g-primary-hover: #1f37c4;
+  --g-primary-tint: #eef1fd;
+  --g-good: #067647;
+  --g-good-tint: #ecfdf3;
+  --g-warn-tint: #fffaeb;
+  --g-crit-tint: #fef3f2;
+  --g-paper: #fffefa;
+  --g-paper-ink: #2a2a2a;
+  --g-shadow: 0 1px 2px rgb(11 18 32 / 0.06), 0 24px 48px -28px rgb(11 18 32 / 0.28);
+
+  color-scheme: light;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-g-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.g-root ::selection {
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+}
+
+/* Tabular figures for every number on the page, mono or not. */
+.g-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings:
+    "tnum",
+    "zero" 0;
+}
+
+.g-mono {
+  font-family: var(--font-g-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Thermal-paper tear along the bottom of the drawn receipt. */
+.g-paper {
+  background: var(--g-paper);
+  color: var(--g-paper-ink);
+  --tear: 7px;
+  mask:
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom /
+      calc(var(--tear) * 2) var(--tear) repeat-x,
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--tear) + 0.5px) no-repeat;
+}
+
+/* Faint 12-column guides behind the hero, the one decorative move on the page.
+   One period is a column plus its 24px gutter; a 1px line marks each column's left edge. */
+.g-guides {
+  --period: calc((100% + 24px) / 12);
+  background-image: repeating-linear-gradient(
+    to right,
+    color-mix(in oklab, var(--border) 60%, transparent) 0 1px,
+    transparent 1px var(--period)
+  );
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 80%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .g-root {
+    scroll-behavior: smooth;
+  }
+}

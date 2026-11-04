@@ -21,7 +21,7 @@ export default function PrivacyPage() {
             "Account details: your name, email address and password (stored only as a hash). If you sign in with Google or GitHub, we receive your name, email address and profile picture from that provider.",
             "Receipts: the images you upload and the data we extract from them, such as merchant, date, line items, tax, total, category and a confidence score, plus any corrections you make.",
             "Workspace details: the workspaces you create or join, their members and the invitations you send.",
-            "Messages: if you contact us through the support form, your email address and your message.",
+            "Messages: if you write to us through the support button, your email address and your message.",
             "Technical data: a session cookie that keeps you signed in, and server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors.",
           ],
         },
@@ -41,24 +41,23 @@ export default function PrivacyPage() {
             "Hosting, database and file storage providers store your account details, receipt data and images on our behalf.",
             "An email delivery provider sends account emails such as password resets and invitations.",
             "Google and GitHub, only if you choose to sign in with them.",
-            "Members of your workspace can see the receipts in that workspace. Nobody outside it can.",
+            "Only you and the people you invite to your workspace can see its receipts. receiptOCR administrators can access an account only to handle a support request.",
           ],
         },
         {
           heading: "How long we keep it",
           body: [
             "We keep your account and receipts until you delete them.",
-            "Deleting a receipt removes it and its extracted data from your history. Deleting your account from Settings removes your account and the receipts you uploaded.",
-            "The original image files are not yet removed from file storage automatically when you delete a receipt or your account. We're fixing this. Until then, contact us through the support form and we'll remove them for you.",
+            "Deleting a receipt removes it, its extracted data and its original image file. Deleting your account from Settings removes your account, the receipts you uploaded and their image files.",
           ],
         },
         {
           heading: "Your choices",
           body: [
             "Export: download any receipt, or everything in your workspace, as a CSV at any time.",
-            "Correct: edit the merchant, date, category and amounts on any receipt.",
+            "Correct: edit the merchant, date, category, currency and amounts on any receipt.",
             "Delete: remove any receipt, or your whole account, from the app.",
-            "Ask: contact us through the support form to request a copy of your data or to ask about anything in this policy.",
+            "Ask: use the support button at the bottom right of this page to request a copy of your data or to ask about anything in this policy.",
           ],
         },
         {

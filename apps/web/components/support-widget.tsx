@@ -99,7 +99,7 @@ export function SupportWidget() {
   const activeTopic = TOPICS.find((t) => t.id === topic) ?? TOPICS[0];
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-3 sm:bottom-5 sm:right-5">
+    <div className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] right-[max(0.5rem,env(safe-area-inset-right))] z-40 flex flex-col items-end gap-3 sm:bottom-5 sm:right-5">
       {open && (
         <div
           role="dialog"
@@ -231,7 +231,8 @@ export function SupportWidget() {
         onClick={() => (open ? close() : openWidget())}
         aria-label={open ? "Close support" : "Contact support"}
         aria-expanded={open}
-        className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_0_30px_color-mix(in_oklab,var(--primary)_30%,transparent)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-safe:hover:-translate-y-0.5"
+        // Fixed colours, not theme tokens: it must stay legible over any page background.
+        className="flex size-11 items-center justify-center rounded-full bg-[#047857] text-white shadow-lg shadow-black/40 ring-2 ring-white/80 transition hover:bg-[#065f46] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#34d399] sm:size-12 motion-safe:hover:-translate-y-0.5"
       >
         {open ? (
           <X aria-hidden className="size-5" />

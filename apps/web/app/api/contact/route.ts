@@ -1,10 +1,18 @@
 import { hitRateLimit } from "@receipt-ocr/core";
+import { sendEmail } from "@receipt-ocr/email";
 import { NextResponse } from "next/server";
+import { contactEmail, isTopic } from "@/lib/contact-mail";
+import { emailEnv, isProduction, supportEmail } from "@/lib/env";
 import { clientIp, crossOriginResponse } from "@/lib/http";
 import { logger, type WideEvent } from "@/lib/log";
 import { runtime } from "@/lib/runtime";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const mailer = {
+  apiKey: emailEnv.resendApiKey,
+  from: emailEnv.from,
+  logUndelivered: process.env.NODE_ENV === "development",
+};
 const MAX_MESSAGE = 2000;
 /** Per client IP; without a trusted IP header everyone shares one bucket. */
 const RATE_LIMIT = { windowMs: 10 * 60_000, max: 5 };
@@ -67,7 +75,8 @@ export async function POST(request: Request) {
 
     const email = typeof data.email === "string" ? data.email.trim() : "";
     const message = typeof data.message === "string" ? data.message.trim() : "";
-    const topic = typeof data.topic === "string" ? data.topic.trim() : "general";
+    const rawTopic = typeof data.topic === "string" ? data.topic.trim() : "";
+    const topic = isTopic(rawTopic) ? rawTopic : "getting-started";
     event.topic = topic;
     event.message_length = message.length;
 
@@ -87,9 +96,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Message is too long" }, { status: 400 });
     }
 
-    // TODO(resend): deliver this to the support inbox. The address and
-    // message are personal data, so the log line carries only their shape.
-    event.email_domain = email.split("@")[1]?.toLowerCase();
+    // Like auth mail: without a mailer, dev and CI simulate (and log) delivery, but production
+    // must not tell a visitor their message arrived when it didn't.
+    const delivered = supportEmail
+      ? (await sendEmail(mailer, contactEmail({ to: supportEmail, from: email, topic, message })))
+          .delivered
+      : false;
+    if (!delivered && isProduction) {
+      event.status_code = 503;
+      event.outcome = supportEmail ? "delivery_failed" : "support_email_not_configured";
+      return NextResponse.json(
+        { error: "We couldn't send your message right now. Please try again in a few minutes." },
+        { status: 503 },
+      );
+    }
+    event.delivered = delivered;
     event.status_code = 200;
     event.outcome = "success";
     return NextResponse.json({ ok: true });

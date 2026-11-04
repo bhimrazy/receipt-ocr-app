@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { SiteFooter } from "@/components/site-footer";
+import { SupportWidget } from "@/components/support-widget";
 
 export type LegalSection = { heading: string; body: string[] };
 
@@ -73,6 +74,7 @@ export function LegalPage({
         </article>
       </main>
       <SiteFooter narrow />
+      <SupportWidget />
     </>
   );
 }

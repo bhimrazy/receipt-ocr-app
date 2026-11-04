@@ -1,0 +1,436 @@
+/* Direction H. Every rule is scoped to .h-root, so the app theme and other directions are untouched. */
+
+.h-root {
+  /* Theme tokens, re-pointed for this page only. Near-black with a cool cast; emerald stays the
+     one accent so the hand-off into the app (same --primary) feels continuous. */
+  --background: #08090a;
+  --foreground: #ededef;
+  --card: #0e0f11;
+  --card-foreground: #ededef;
+  --popover: #0e0f11;
+  --secondary: #131417;
+  --muted: #131417;
+  --muted-foreground: #8a8f98;
+  --accent: #1a1b1f;
+  --border: #1d1e22;
+  --primary: #34d399;
+  --primary-foreground: #04110b;
+  --ring: #34d399;
+  --warning: #f5b84a;
+
+  --h-surface-2: #121316;
+  --h-hairline: rgb(255 255 255 / 0.06);
+  --h-highlight: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  --h-paper: #eeebe4;
+  --h-paper-ink: #292721;
+  --h-paper-muted: #5c584f;
+
+  /* next/font sets --font-h-*; pointing the theme's font vars at them re-skins font-sans/font-mono. */
+  --font-dm-sans: var(--font-h-sans);
+  --font-jetbrains-mono: var(--font-h-mono);
+  font-family: var(--font-h-sans), ui-sans-serif, system-ui, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "ss01", "cv11";
+}
+
+/* ---------- Hero light and grid ---------- */
+
+.h-hero {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Fine grid, only around the receipt, fading out well before the copy. */
+.h-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: center top;
+  mask: radial-gradient(ellipse 38% 52% at 72% 42%, #000 20%, transparent 75%);
+}
+
+/* A single overhead light, the way a product shot is lit. */
+.h-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse 34% 46% at 72% 0%, rgb(255 255 255 / 0.075), transparent 70%);
+  pointer-events: none;
+}
+
+@media (max-width: 1023px) {
+  .h-hero::before {
+    mask: radial-gradient(ellipse 80% 34% at 50% 72%, #000 20%, transparent 75%);
+  }
+  .h-hero::after {
+    background: radial-gradient(
+      ellipse 90% 30% at 50% 52%,
+      rgb(255 255 255 / 0.06),
+      transparent 70%
+    );
+  }
+}
+
+/* ---------- The receipt ---------- */
+
+@property --scan-load {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 63.5%;
+}
+
+@property --scan-scroll {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 0%;
+}
+
+.h-receipt-stage {
+  --scan: max(var(--scan-load), var(--scan-scroll));
+  position: relative;
+  width: min(100%, 372px);
+  margin-inline: auto;
+  filter: drop-shadow(0 40px 50px rgb(0 0 0 / 0.55)) drop-shadow(0 2px 2px rgb(0 0 0 / 0.5));
+}
+
+.h-receipt {
+  display: grid;
+  /* Torn bottom edge. */
+  mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 12px 7px
+      repeat-x;
+  border-radius: 3px 3px 0 0;
+}
+
+.h-receipt-layer {
+  grid-area: 1 / 1;
+  isolation: isolate;
+  padding: 26px 24px 30px;
+  font-family: var(--font-h-mono), ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.h-paper {
+  color: var(--h-paper-ink);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #f3f1eb 0%, var(--h-paper) 40%, #e3dfd5 100%);
+}
+
+.h-data {
+  color: var(--foreground);
+  background:
+    linear-gradient(180deg, rgb(52 211 153 / 0.05), transparent 30%),
+    linear-gradient(180deg, #0f1211, #0b0d0c);
+  box-shadow: inset 0 0 0 1px rgb(52 211 153 / 0.14);
+  clip-path: inset(0 0 calc(100% - var(--scan)) 0);
+}
+
+.h-row-flag {
+  position: relative;
+}
+
+.h-row-flag::before {
+  content: "";
+  position: absolute;
+  inset: -4px -24px;
+  z-index: -1;
+  background: color-mix(in oklab, var(--warning) 10%, transparent);
+  border-left: 2px solid var(--warning);
+}
+
+.h-receipt-barcode {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--h-paper-ink) 0 2px,
+    transparent 2px 3px,
+    var(--h-paper-ink) 3px 4px,
+    transparent 4px 6px,
+    var(--h-paper-ink) 6px 9px,
+    transparent 9px 10px,
+    var(--h-paper-ink) 10px 11px,
+    transparent 11px 14px
+  );
+  opacity: 0.85;
+}
+
+/* The scan line: the page's one light source. */
+.h-scan {
+  position: absolute;
+  left: -56px;
+  right: -56px;
+  top: var(--scan);
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--primary) 22%,
+    #c9f7e3 50%,
+    var(--primary) 78%,
+    transparent
+  );
+  box-shadow:
+    0 0 8px 0 rgb(52 211 153 / 0.7),
+    0 0 32px 2px rgb(52 211 153 / 0.25);
+}
+
+/* Light the line throws onto the paper just below it. */
+.h-scan::after {
+  content: "";
+  position: absolute;
+  left: 56px;
+  right: 56px;
+  top: 1px;
+  height: 56px;
+  background: linear-gradient(180deg, rgb(52 211 153 / 0.16), transparent);
+  mix-blend-mode: multiply;
+}
+
+@media (max-width: 480px) {
+  .h-scan {
+    left: -16px;
+    right: -16px;
+  }
+  .h-scan::after {
+    left: 16px;
+    right: 16px;
+  }
+}
+
+.h-corner {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  color: rgb(255 255 255 / 0.22);
+  background:
+    linear-gradient(currentColor 0 0) center / 100% 1px no-repeat,
+    linear-gradient(currentColor 0 0) center / 1px 100% no-repeat;
+}
+
+/* ---------- Surfaces ---------- */
+
+.h-panel {
+  background: linear-gradient(180deg, #101114, #0c0d0f);
+  border: 1px solid var(--h-hairline);
+  border-radius: 14px;
+  box-shadow:
+    var(--h-highlight),
+    0 24px 48px -24px rgb(0 0 0 / 0.6);
+}
+
+/* Section rule: a hairline with a short scan stub that sweeps across once in view. */
+.h-rule {
+  position: relative;
+  height: 1px;
+  background: var(--h-hairline);
+}
+
+.h-rule::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 96px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  box-shadow: 0 0 10px rgb(52 211 153 / 0.5);
+}
+
+.h-leader {
+  flex: 1;
+  min-width: 1.5rem;
+  height: 1px;
+  align-self: center;
+  background-image: linear-gradient(90deg, rgb(255 255 255 / 0.18) 1px, transparent 1px);
+  background-size: 5px 1px;
+}
+
+/* Data-flow wire between the four stops. */
+.h-wire {
+  position: absolute;
+  background: var(--h-hairline);
+  overflow: hidden;
+}
+
+.h-wire::after {
+  content: "";
+  position: absolute;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+}
+
+@media (min-width: 768px) {
+  .h-wire {
+    left: 0;
+    right: 0;
+    top: 4px;
+    height: 1px;
+  }
+  .h-wire::after {
+    inset-block: 0;
+    left: 50%;
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  .h-wire {
+    left: 4px;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+  }
+  .h-wire::after {
+    inset-inline: 0;
+    top: 50%;
+    height: 25%;
+    background: linear-gradient(180deg, transparent, var(--primary), transparent);
+  }
+}
+
+.h-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+/* ---------- Motion (all optional; the static state is the designed one) ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .h-receipt-stage {
+    animation: h-scan-load 2.2s cubic-bezier(0.65, 0, 0.25, 1) 0.35s both;
+  }
+
+  /* Where supported, scrolling finishes the read: the line carries on to the bottom. */
+  @supports (animation-timeline: view()) {
+    .h-receipt-stage {
+      animation:
+        h-scan-load 2.2s cubic-bezier(0.65, 0, 0.25, 1) 0.35s both,
+        h-scan-scroll linear both;
+      animation-timeline: auto, view();
+      animation-range:
+        normal,
+        cover 48% cover 82%;
+    }
+
+    .h-rule::after {
+      animation: h-rule-sweep linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 45%;
+    }
+  }
+
+  .h-wire::after {
+    animation: h-wire-x 5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+
+  @media (max-width: 767px) {
+    .h-wire::after {
+      animation-name: h-wire-y;
+    }
+  }
+
+  .h-reveal {
+    animation: h-fade-up 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .h-reveal-2 {
+    animation-delay: 90ms;
+  }
+  .h-reveal-3 {
+    animation-delay: 180ms;
+  }
+}
+
+@keyframes h-scan-load {
+  from {
+    --scan-load: 0%;
+  }
+  to {
+    --scan-load: 63.5%;
+  }
+}
+
+@keyframes h-scan-scroll {
+  from {
+    --scan-scroll: 30%;
+  }
+  /* Stops just above the torn edge so a sliver of paper stays, and the light stays on the receipt. */
+  to {
+    --scan-scroll: 96.5%;
+  }
+}
+
+@keyframes h-rule-sweep {
+  from {
+    left: 0;
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    left: calc(100% - 96px);
+    opacity: 1;
+  }
+}
+
+@keyframes h-wire-x {
+  from {
+    left: -25%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+@keyframes h-wire-y {
+  from {
+    top: -25%;
+  }
+  to {
+    top: 100%;
+  }
+}
+
+@keyframes h-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Closing line: the scan line again, at full width, lighting the headline beneath it. */
+.h-cta-line {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--primary) 30%,
+    #c9f7e3 50%,
+    var(--primary) 70%,
+    transparent
+  );
+  box-shadow: 0 0 18px 1px rgb(52 211 153 / 0.45);
+}
+
+.h-cta-line::after {
+  content: "";
+  position: absolute;
+  inset-inline: 10%;
+  top: 1px;
+  height: 260px;
+  background: radial-gradient(ellipse 50% 100% at 50% 0%, rgb(52 211 153 / 0.1), transparent 75%);
+}

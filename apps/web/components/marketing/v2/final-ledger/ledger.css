@@ -1,0 +1,226 @@
+/*
+ * Final · Ledger: a light theme scoped to this page. The app is dark-only, so the shared tokens
+ * are redefined on the wrapper; packages/ui primitives inside it pick them up unchanged.
+ * Ink-green after the green-ruled columnar ledger pad; red pencil for the bookkeeper's marks.
+ */
+.fl-root {
+  /* Ledger paper and ink. Every text colour is >= 4.5:1 on --background and --card. */
+  --background: #f6f5f0;
+  --foreground: #111614;
+  --card: #ffffff;
+  --card-foreground: #111614;
+  --popover: #ffffff;
+  --popover-foreground: #111614;
+  --secondary: #ffffff;
+  --secondary-foreground: #111614;
+  --muted: #edebe4;
+  --muted-foreground: #5a6160;
+  --accent: #edebe4;
+  --accent-foreground: #111614;
+
+  /* Ink-green: 7.0:1 on the canvas, 7.7:1 on white, so it serves as text, links and focus. */
+  --primary: #155e4b;
+  --primary-foreground: #ffffff;
+  --ring: #155e4b;
+
+  /* Red pencil: flags and the margin note. 6.0:1 on its tint. */
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  /* Amber for "Check" scores: 4.7:1 on its tint. */
+  --warning: #a15c07;
+  --warning-foreground: #ffffff;
+
+  --border: #e2e0d8;
+  /* Form-control edge, 3.2:1 on white (WCAG 1.4.11). */
+  --input: #8a918f;
+
+  --fl-ink-2: #3a403f;
+  --fl-rule-strong: #c8c5bb;
+  --fl-primary-hover: #0f4a3b;
+  --fl-primary-tint: #e6efea;
+  --fl-ledger-rule: color-mix(in oklab, var(--primary) 9%, transparent);
+  --fl-warn-tint: #fbf3e4;
+  --fl-crit-tint: #fdf1ef;
+  --fl-paper: #fdfcf7;
+  --fl-paper-ink: #2c2b29;
+  /* Blue ballpoint, for amounts written on the paper by hand. */
+  --fl-pen: #23409a;
+  --fl-shadow: 0 1px 2px rgb(17 22 20 / 0.06), 0 24px 48px -28px rgb(17 22 20 / 0.28);
+
+  color-scheme: light;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-fl-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.fl-root ::selection {
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+}
+
+.fl-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.fl-mono {
+  font-family: var(--font-fl-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.fl-hand {
+  font-family: var(--font-fl-hand), cursive;
+}
+
+/*
+ * Thermal paper: a faint fibre grain, a slight shade at the edges where the roll curls, and torn
+ * edges top and bottom.
+ */
+.fl-paper {
+  --tear: 6px;
+  background:
+    linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.03),
+      transparent 18%,
+      transparent 82%,
+      rgb(0 0 0 / 0.035)
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.18 0 0 0 0 0.12 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    var(--fl-paper);
+  color: var(--fl-paper-ink);
+  font-family: var(--font-fl-mono), ui-monospace, monospace;
+  mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top /
+      calc(var(--tear) * 2) var(--tear) repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - var(--tear) * 2 + 1px) no-repeat,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom /
+      calc(var(--tear) * 2) var(--tear) repeat-x;
+}
+.fl-paper-shadow {
+  filter: drop-shadow(0 1px 1px rgb(17 22 20 / 0.08)) drop-shadow(0 12px 16px rgb(17 22 20 / 0.12));
+}
+.fl-rule {
+  border-top: 1px dashed color-mix(in oklab, var(--fl-paper-ink) 40%, transparent);
+}
+/* Worn thermal print: the line the model is least sure of. */
+.fl-faded {
+  opacity: 0.45;
+  filter: blur(0.3px);
+}
+.fl-line {
+  margin-inline: -4px;
+  padding-inline: 4px;
+  border-radius: 2px;
+  transition: background-color 0.2s ease;
+}
+.fl-line[data-active] {
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+}
+.fl-barcode {
+  background: repeating-linear-gradient(
+    to right,
+    var(--fl-paper-ink) 0 1px,
+    transparent 1px 3px,
+    var(--fl-paper-ink) 3px 5px,
+    transparent 5px 6px,
+    var(--fl-paper-ink) 6px 7px,
+    transparent 7px 10px
+  );
+  opacity: 0.75;
+}
+
+/* The reading sweep: a soft ink-green band with a sharp leading edge. */
+.fl-scan {
+  position: absolute;
+  inset-inline: 0;
+  top: -24%;
+  height: 24%;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in oklab, var(--primary) 12%, transparent) 85%,
+    color-mix(in oklab, var(--primary) 70%, transparent) 100%
+  );
+  animation: fl-scan 1.3s cubic-bezier(0.45, 0, 0.25, 1) forwards;
+}
+@keyframes fl-scan {
+  to {
+    top: 100%;
+  }
+}
+
+/* A value's reserved space until it is read, so nothing shifts. */
+.fl-slot {
+  display: inline-block;
+  height: 0.75em;
+  vertical-align: middle;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.fl-in {
+  animation: fl-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes fl-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+.fl-land {
+  animation: fl-land 2.4s ease-out both;
+}
+@keyframes fl-land {
+  0% {
+    background: color-mix(in oklab, var(--primary) 16%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+/* The pencil ring draws on once the read finishes. */
+.fl-pencil {
+  stroke-dasharray: 1;
+  animation: fl-draw 0.7s ease-out 0.1s both;
+}
+@keyframes fl-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Ledger columns: faint green rules down the full height of the hero. */
+.fl-ledger {
+  /* Four columns on phones, twelve from lg, matching the layout grid. */
+  --period: calc((100% + 16px) / 4);
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--fl-ledger-rule) 0 1px,
+    transparent 1px var(--period)
+  );
+}
+
+@media (min-width: 64rem) {
+  .fl-ledger {
+    --period: calc((100% + 24px) / 12);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fl-root {
+    scroll-behavior: smooth;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fl-root .fl-scan,
+  .fl-root .fl-in,
+  .fl-root .fl-land,
+  .fl-root .fl-pencil {
+    animation: none;
+  }
+  .fl-root .fl-line {
+    transition: none;
+  }
+}
