@@ -54,7 +54,7 @@ export function AuthLayout({
         <div className="relative z-10 max-w-md">
           {/* The form card holds the page's h1, so this stays a paragraph. */}
           <p className="text-balance text-4xl font-bold leading-tight tracking-tight">
-            Snap a receipt. <span className="text-gradient">Get a spreadsheet.</span>
+            Turn receipt photos into <span className="text-gradient">spreadsheet rows</span>
           </p>
           <p className="mt-4 text-pretty leading-7 text-muted-foreground">{subtitle}</p>
           <ul className="mt-10 flex flex-col gap-6">

@@ -43,6 +43,8 @@ export BETTER_AUTH_SECRET="local-test-secret-not-for-production-000000"
 export GOOGLE_GENERATIVE_AI_API_KEY="dummy-local"
 export S3_ENDPOINT="http://localhost:$s3_port" S3_REGION=us-east-1 S3_BUCKET=receipt-ocr
 export S3_ACCESS_KEY_ID=rustfsadmin S3_SECRET_ACCESS_KEY=rustfsadmin S3_FORCE_PATH_STYLE=true
+# Match CI's e2e env: no mailer locally, fixture OCR, per-client rate limits.
+export AUTH_REQUIRE_EMAIL_VERIFICATION=false OCR_PROVIDER=fixture E2E_UPLOAD=1 TRUSTED_IP_HEADERS=x-forwarded-for
 export PORT="$port"
 # Playwright reads its target from here, not from PORT.
 export E2E_BASE_URL="http://localhost:$port"
