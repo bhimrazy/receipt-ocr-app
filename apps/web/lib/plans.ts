@@ -27,3 +27,8 @@ export function planPolicy(plan: string | undefined): PlanPolicy {
 export function workspaceLimitForPlan(plan: string | undefined): number {
   return planPolicy(plan).workspaces;
 }
+
+/** "Free plan", "Pro plan". */
+export function planLabel(plan: string): string {
+  return `${plan.charAt(0).toUpperCase()}${plan.slice(1)} plan`;
+}

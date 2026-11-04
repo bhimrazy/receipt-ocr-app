@@ -31,20 +31,23 @@ export function ImpersonationBanner() {
   }
 
   return (
-    <div
-      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-warning/30 bg-warning/10 px-5 py-2 text-sm text-warning"
-      role="status"
-    >
-      <div className="flex min-w-0 items-start gap-2">
-        <UserCog aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        <span className="min-w-0 break-words">
-          Signed in as <span className="font-medium break-all">{session?.user?.email}</span>.
-          Everything you do runs as this user.
-        </span>
+    // Opaque outer layer so the tinted banner stays readable while content scrolls under it.
+    <div className="sticky top-0 z-50 bg-background">
+      <div
+        className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm text-warning md:px-5"
+        role="status"
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <UserCog aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0 break-words">
+            Signed in as <span className="font-medium break-all">{session?.user?.email}</span>.
+            Everything you do runs as this user.
+          </span>
+        </div>
+        <Button disabled={pending} onClick={stop} size="sm" variant="outline">
+          {pending ? "Stopping…" : "Stop impersonating"}
+        </Button>
       </div>
-      <Button disabled={pending} onClick={stop} size="sm" variant="outline">
-        {pending ? "Stopping…" : "Stop impersonating"}
-      </Button>
     </div>
   );
 }
