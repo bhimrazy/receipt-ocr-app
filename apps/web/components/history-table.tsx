@@ -1,7 +1,7 @@
 "use client";
 
 import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
-import { buttonVariants } from "@receipt-ocr/ui/components/button";
+import { Button, buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Label } from "@receipt-ocr/ui/components/label";
@@ -21,12 +21,21 @@ import {
   TableRow,
 } from "@receipt-ocr/ui/components/table";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { ChevronLeft, ChevronRight, Download, Search, Upload, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Search,
+  SlidersHorizontal,
+  Upload,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { ReceiptSummary } from "@/app/app/_data/receipts-contract";
 import { ListPoller } from "@/components/processing-poller";
+import { ReceiptList, receiptTitle } from "@/components/receipt-list";
 import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -43,6 +52,7 @@ const STATUS_CHIPS = [
   { value: undefined, label: "All" },
   { value: "needs-review", label: "Needs review" },
   { value: "failed", label: "Couldn't read" },
+  { value: "processing", label: "Reading" },
 ] as const;
 
 const CATEGORY_ITEMS = [
@@ -64,12 +74,6 @@ function Missing() {
       <span className="sr-only">Not available</span>
     </>
   );
-}
-
-function rowTitle(receipt: ReceiptSummary) {
-  if (receipt.status === "completed")
-    return { text: receipt.merchant ?? "Unnamed merchant", muted: !receipt.merchant };
-  return { text: receipt.fileName ?? "Uploaded receipt", muted: true };
 }
 
 function Amount({ receipt }: { receipt: ReceiptSummary }) {
@@ -112,6 +116,8 @@ export function HistoryTable({
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const filtered = FILTER_KEYS.some((key) => filters[key]);
+  const extraFilters = [filters.category, filters.from, filters.to].filter(Boolean).length;
+  const [filtersOpen, setFiltersOpen] = useState(extraFilters > 0);
   const anyInFlight = receipts.some((receipt) => isInFlight(receipt.status));
 
   function hrefWith(patch: Record<string, string | undefined>, keepPage = false) {
@@ -160,7 +166,7 @@ export function HistoryTable({
       <ListPoller active={anyInFlight} />
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">History</h1>
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">History</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {total} {total === 1 ? "receipt" : "receipts"} in this workspace
             {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
@@ -214,7 +220,24 @@ export function HistoryTable({
             })}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
+        <Button
+          aria-controls="history-more-filters"
+          aria-expanded={filtersOpen}
+          className="self-start lg:hidden"
+          onClick={() => setFiltersOpen((open) => !open)}
+          size="sm"
+          variant="outline"
+        >
+          <SlidersHorizontal aria-hidden="true" />
+          {extraFilters > 0 ? `Category and dates (${extraFilters})` : "Category and dates"}
+        </Button>
+        <div
+          className={cn(
+            "grid-cols-2 gap-3 sm:flex-wrap sm:items-end lg:flex",
+            filtersOpen ? "grid sm:flex" : "hidden",
+          )}
+          id="history-more-filters"
+        >
           <div className="col-span-2 flex flex-col gap-1.5 sm:w-52">
             <Label className="text-xs text-muted-foreground" htmlFor="history-category">
               Category
@@ -289,7 +312,7 @@ export function HistoryTable({
             <p className="mt-1 text-sm text-muted-foreground">
               {filtered
                 ? "Try a different search, category or date range."
-                : "Upload your first receipt to start your history."}
+                : "Receipts uploaded to this workspace appear here, newest first."}
             </p>
           </div>
           {filtered ? (
@@ -301,7 +324,7 @@ export function HistoryTable({
               Clear filters
             </Link>
           ) : (
-            <Link className={cn(buttonVariants({ size: "sm" }), "mt-1")} href="/app/upload">
+            <Link className={cn(buttonVariants({ size: "sm" }), "mt-1")} href="/app">
               <Upload aria-hidden="true" />
               Upload a receipt
             </Link>
@@ -309,54 +332,10 @@ export function HistoryTable({
         </Card>
       ) : (
         <>
-          {/* Cards below lg: the table needs more width than the sidebar leaves. */}
-          <ul className="flex flex-col gap-2 lg:hidden">
-            {receipts.map((receipt) => {
-              const title = rowTitle(receipt);
-              return (
-                <li
-                  className="relative rounded-lg border border-border bg-card p-4 transition-colors focus-within:ring-2 focus-within:ring-ring hover:bg-muted/40"
-                  key={receipt.id}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <Link
-                      className={cn(
-                        "min-w-0 truncate font-medium outline-none after:absolute after:inset-0 after:content-['']",
-                        title.muted && "font-mono text-sm text-muted-foreground",
-                      )}
-                      href={`/app/receipts/${receipt.id}`}
-                    >
-                      {title.text}
-                    </Link>
-                    <span className="shrink-0 text-right">
-                      <Amount receipt={receipt} />
-                    </span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
-                    {receipt.status === "completed" ? (
-                      <>
-                        <DateText receipt={receipt} />
-                        {receipt.category ? <span>{receipt.category}</span> : null}
-                        <ConfidenceBadge value={receipt.confidence} />
-                      </>
-                    ) : (
-                      <>
-                        <StatusBadge status={receipt.status} />
-                        {receipt.status === "failed" ? (
-                          <RetryReceiptButton
-                            className="relative z-10 ml-auto"
-                            receiptId={receipt.id}
-                            size="sm"
-                            variant="outline"
-                          />
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          {/* Stacked rows below lg: the table needs more width than the sidebar leaves. */}
+          <Card className="overflow-hidden lg:hidden">
+            <ReceiptList receipts={receipts} />
+          </Card>
 
           <Card className="hidden overflow-hidden lg:block">
             <Table>
@@ -372,14 +351,14 @@ export function HistoryTable({
               </TableHeader>
               <TableBody>
                 {receipts.map((receipt) => {
-                  const title = rowTitle(receipt);
+                  const title = receiptTitle(receipt);
                   return (
                     <TableRow className="relative focus-within:bg-muted/40" key={receipt.id}>
                       <TableCell className="max-w-72">
                         <Link
                           className={cn(
                             "block truncate font-medium outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline",
-                            title.muted && "font-mono text-xs text-muted-foreground",
+                            title.isFile && "font-mono text-xs text-muted-foreground",
                           )}
                           href={`/app/receipts/${receipt.id}`}
                         >
