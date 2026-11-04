@@ -2,16 +2,28 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import Link from "next/link";
 import { ContactButton } from "@/components/contact-button";
 import { faqs as sharedFaqs } from "@/components/marketing/content";
+import { PLANS } from "@/lib/plans";
 import { Ctas, SectionHead, Wordmark, focusRing } from "./primitives";
 
-// The shared answer on access predates the admin plugin; this page states it exactly.
+// Three shared answers are stated more exactly here: what can be edited, when the daily count
+// resets, and who can access an account.
 const faqs = sharedFaqs.map((faq) =>
-  faq.q === "Who can see my receipts?"
+  faq.q === "How accurate is it?"
     ? {
         ...faq,
-        a: "Only you and the people you invite to your workspace. receiptOCR admins can access an account only to handle a support request. Images are read by Google's Gemini AI to extract the data. Deleting a receipt, or your account, deletes the stored images too.",
+        a: "Each receipt gets an overall confidence score, and each line item gets its own. Low scores show you what to check against the photo. You can fix the merchant, date, category, currency and totals before you export; line items are read and scored but not editable yet.",
       }
-    : faq,
+    : faq.q === "What are the limits on the free plan?"
+      ? {
+          ...faq,
+          a: `Up to ${PLANS.free.receiptsPerDay} receipts a day, counted from 00:00 UTC, and ${PLANS.free.workspaces} workspace. A service-wide daily cap can apply first on busy days. Need more? Use Contact us and tell us what you need.`,
+        }
+      : faq.q === "Who can see my receipts?"
+        ? {
+            ...faq,
+            a: "Only you and the people you invite to your workspace. receiptOCR admins can access an account only to handle a support request. Images are read by Google's Gemini AI to extract the data. Deleting a receipt, or your account, deletes the stored images too.",
+          }
+        : faq,
 );
 
 export function FaqPaper() {

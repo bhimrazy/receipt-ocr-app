@@ -27,6 +27,12 @@
   --pp-accent: #b23a1e;
   --pp-highlight: #f3dc6b;
   --pp-greenbar: #e3efd9;
+  /* Thermal print, smudged print (5.7:1 on the sheet), and pen ink for a handwritten tip. */
+  --pp-print: #2a2620;
+  --pp-smudge: #6b6154;
+  --pp-pen: #1d3a8a;
+  /* The highlighter at half strength, for marks that sit on printed paper. */
+  --pp-highlight-soft: rgb(243 220 107 / 0.55);
   --pp-shadow: 31 27 22;
 
   background: var(--background);
@@ -229,9 +235,10 @@
 }
 
 /* The paper line being read right now. */
-.paper-pp .pp-reading {
-  background: rgb(243 220 107 / 0.55);
-  box-shadow: 0 0 0 3px rgb(243 220 107 / 0.55);
+.paper-pp .pp-reading,
+.paper-pp .pp-flagged {
+  background: var(--pp-highlight-soft);
+  box-shadow: 0 0 0 3px var(--pp-highlight-soft);
 }
 
 /* Holds a value's place until it is read, so nothing shifts. */
@@ -252,10 +259,20 @@
   }
 }
 
-/* A faded patch of thermal print: blurred but still AA (#6b6154 on the sheet is 5.6:1). */
+/* A faded patch of thermal print: blurred but still AA. */
 .paper-pp .pp-smudged {
-  color: #6b6154;
-  text-shadow: 0 0 1.5px rgb(107 97 84 / 0.7);
+  color: var(--pp-smudge);
+  text-shadow: 0 0 1.5px color-mix(in oklab, var(--pp-smudge) 70%, transparent);
+}
+
+/* A new export row flashes once as it lands. */
+.paper-pp .pp-land {
+  animation: pp-land 2.2s ease-out both;
+}
+@keyframes pp-land {
+  from {
+    background: var(--pp-highlight-soft);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -268,7 +285,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .paper-pp .pp-scanning .pp-scan,
-  .paper-pp .pp-in {
+  .paper-pp .pp-in,
+  .paper-pp .pp-land {
     animation: none;
   }
 }

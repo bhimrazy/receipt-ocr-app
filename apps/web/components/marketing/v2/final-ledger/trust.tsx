@@ -2,7 +2,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, Clock, Minus } from "lucide-react";
 import Link from "next/link";
 import { comingSoon } from "../../content";
-import { ComingTag, SectionHead, container } from "./parts";
+import { ComingTag, Fig, SectionHead, container } from "./parts";
 
 const flow = [
   {
@@ -32,7 +32,7 @@ const flow = [
 ];
 
 const enforced = [
-  "Each receipt belongs to one workspace and is shown only to its members. receiptOCR admins can access an account only to handle a support request.",
+  "Every receipt request is checked against workspace membership.",
   "Image links are signed and expire after 10 minutes.",
   "Deleting a receipt deletes its stored image.",
   "Deleting your account deletes the image files you stored.",
@@ -41,6 +41,7 @@ const enforced = [
 
 const promised = [
   "We don't sell your data or use it for advertising.",
+  "receiptOCR admins access an account only to handle a support request.",
   "Export everything as CSV whenever you like, with no export fees.",
 ];
 
@@ -78,26 +79,34 @@ export function Trust() {
         title="Where every receipt goes, in four stops."
       />
 
-      <ol className="mt-12 grid gap-px overflow-hidden rounded-xl border border-(--fl-rule-strong) bg-(--fl-rule-strong) sm:grid-cols-2 lg:grid-cols-4">
+      <ol className="mt-12 grid border-t border-foreground sm:grid-cols-2 lg:grid-cols-4">
         {flow.map((stop, i) => (
-          <li className="relative flex flex-col bg-card p-5 sm:p-6" key={stop.n}>
-            <div className="flex items-center gap-3">
-              <span className="fl-mono flex size-7 items-center justify-center rounded-full border border-primary text-xs text-primary">
-                {stop.n}
-              </span>
+          <li
+            className={cn(
+              "flex flex-col border-b border-border py-5 sm:pr-5 lg:border-b-0 lg:pb-2",
+              i % 2 === 1 && "sm:border-l sm:pl-5",
+              i === 2 && "lg:border-l lg:pl-5",
+            )}
+            key={stop.n}
+          >
+            <p className="flex items-center gap-3">
+              <span className="fl-mono text-sm text-primary">{stop.n}</span>
               {i < flow.length - 1 ? (
                 <span
                   aria-hidden="true"
                   className="h-px flex-1 bg-[repeating-linear-gradient(to_right,var(--fl-rule-strong)_0_4px,transparent_4px_8px)]"
                 />
               ) : null}
-            </div>
-            <h3 className="mt-5 text-lg font-semibold tracking-[-0.01em]">{stop.where}</h3>
+            </p>
+            <h3 className="mt-4 text-lg font-semibold tracking-[-0.01em]">{stop.where}</h3>
             <p className="mt-2 text-[15px] leading-6 text-(--fl-ink-2)">{stop.what}</p>
-            <p className="fl-mono mt-auto pt-6 text-xs text-muted-foreground">{stop.spec}</p>
+            <p className="fl-mono mt-auto pt-5 text-xs text-muted-foreground">{stop.spec}</p>
           </li>
         ))}
       </ol>
+      <div className="mt-4 border-t border-border pt-3">
+        <Fig n="4">The path of one image, from your phone to your workspace.</Fig>
+      </div>
 
       <div className="mt-14 grid gap-x-6 gap-y-12 lg:grid-cols-12">
         <div className="lg:col-span-5">

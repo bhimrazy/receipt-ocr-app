@@ -10,7 +10,11 @@ const free = PLANS.free;
 
 /** The free plan, itemised like a fee schedule (after v2/g). Numbers come from lib/plans.ts. */
 const schedule = [
-  { what: "Receipts", condition: "Rolling 24 hours", value: `${free.receiptsPerDay} a day` },
+  {
+    what: "Receipts",
+    condition: "Resets daily at 00:00 UTC, subject to a service-wide daily cap",
+    value: `${free.receiptsPerDay} a day`,
+  },
   { what: "Burst", condition: "Per rolling minute", value: `${free.receiptsPerMinute} a minute` },
   { what: "Workspaces", condition: "With teammates you invite", value: String(free.workspaces) },
   { what: "Files", condition: "PNG, JPG or HEIC, 20 per batch", value: "10 MB each" },
@@ -22,9 +26,10 @@ const schedule = [
   { what: "Confidence scores", condition: "Per receipt and per line item", value: "Included" },
   {
     what: "Corrections",
-    condition: "Merchant, date, category, currency and amounts",
+    condition: "Merchant, date, category, currency and totals",
     value: "Included",
   },
+  { what: "Line items", condition: "Read and scored", value: "Not editable yet" },
   { what: "CSV and JSON export", condition: "One receipt or the whole workspace", value: "$0" },
   { what: "Card on file", condition: "Not asked for", value: "None" },
 ];

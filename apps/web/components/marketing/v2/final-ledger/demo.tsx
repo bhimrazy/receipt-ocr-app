@@ -4,7 +4,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronDown, CircleCheck, Loader2, RotateCcw, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { earlierRows, MAX_ITEMS, type Sample, samples, stepsFor, tier, usd } from "./data";
-import { Confidence, LineFlag } from "./parts";
+import { LineFlag, ReceiptBadge } from "./parts";
 
 type SampleId = Sample["id"];
 
@@ -359,9 +359,10 @@ export function HeroDemo() {
             <div className="flex min-h-6 items-center justify-between gap-3">
               <p className="text-sm font-semibold">Extracted record</p>
               {done ? (
-                <span className="inline-flex items-center gap-2">
-                  <Confidence score={sample.confidence} />
-                </span>
+                <ReceiptBadge
+                  confidence={sample.confidence}
+                  toCheck={sample.items.filter((i) => tier(i.confidence) === "review").length}
+                />
               ) : (
                 <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Loader2
@@ -530,11 +531,11 @@ export function HeroDemo() {
             <caption className="sr-only">Rows in the sample export</caption>
             <thead>
               <tr className="text-left text-muted-foreground">
-                <th className="w-[6.75rem] py-1.5 pl-4 font-normal" scope="col">
-                  receipt_date
-                </th>
-                <th className="py-1.5 pl-2 font-normal" scope="col">
+                <th className="py-1.5 pl-4 font-normal" scope="col">
                   merchant
+                </th>
+                <th className="w-[6.75rem] py-1.5 pl-2 font-normal" scope="col">
+                  receipt_date
                 </th>
                 <th className="hidden w-24 py-1.5 pl-2 font-normal sm:table-cell" scope="col">
                   category
@@ -548,10 +549,10 @@ export function HeroDemo() {
               {pending ? (
                 <tr aria-hidden="true" className="border-t border-border">
                   <td className="py-1.5 pl-4">
-                    <span className="fl-slot w-20" />
+                    <span className="fl-slot w-28" />
                   </td>
                   <td className="py-1.5 pl-2">
-                    <span className="fl-slot w-28" />
+                    <span className="fl-slot w-20" />
                   </td>
                   <td className="hidden py-1.5 pl-2 sm:table-cell">
                     <span className="fl-slot w-14" />
@@ -566,8 +567,8 @@ export function HeroDemo() {
                   className={cn("border-t border-border", r.id === landed && "fl-land")}
                   key={r.id}
                 >
-                  <td className="py-1.5 pl-4 whitespace-nowrap">{r.isoDate}</td>
-                  <td className="truncate py-1.5 pl-2">{r.merchant}</td>
+                  <td className="truncate py-1.5 pl-4">{r.merchant}</td>
+                  <td className="py-1.5 pl-2 whitespace-nowrap">{r.isoDate}</td>
                   <td className="hidden py-1.5 pl-2 sm:table-cell">{r.category}</td>
                   <td className="py-1.5 pr-4 pl-2 text-right">{amount(r.total)}</td>
                 </tr>

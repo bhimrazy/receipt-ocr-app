@@ -4,7 +4,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { confidenceLevel, formatConfidence, formatDate, formatMoney } from "@/lib/format";
-import { type Sample, samples, stepsFor } from "./fixtures";
+import { earlierRows, type Sample, samples, stepsFor } from "./fixtures";
 import { focusRing } from "./primitives";
 
 type SampleId = Sample["id"];
@@ -15,7 +15,7 @@ const STEP_MS = 240;
 const byId = (id: SampleId) => samples.find((s) => s.id === id) ?? samples[0];
 const usd = (value: number) => formatMoney(value, "USD");
 const isLow = (confidence: number) => confidenceLevel(confidence) === "review";
-// "row" is E's export step; this demo stops at the read.
+// "row" is E's export step; here the row lands in the CSV strip once the read finishes.
 const readSteps = (sample: Sample) => stepsFor(sample).filter((key) => key !== "row");
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -35,11 +35,13 @@ function Paper({
   sample,
   reading,
   scanning,
+  done,
   run,
 }: {
   sample: Sample;
   reading: string | null;
   scanning: boolean;
+  done: boolean;
   run: number;
 }) {
   const [y, m, d] = sample.receiptDate.split("-");
@@ -57,7 +59,7 @@ function Paper({
       <div
         aria-hidden
         className={cn(
-          "pp-mono relative overflow-hidden px-4 pt-5 pb-8 text-[0.75rem] leading-[1.6] text-[#2a2620] uppercase",
+          "pp-mono relative overflow-hidden px-4 pt-5 pb-8 text-[0.75rem] leading-[1.6] text-[var(--pp-print)] uppercase",
           scanning && "pp-scanning",
         )}
         key={run}
@@ -72,7 +74,7 @@ function Paper({
           {sample.merchant}
         </p>
         {sample.address.map((text) => (
-          <p className="text-center text-[#5c5347] max-sm:hidden" key={text}>
+          <p className="text-center text-muted-foreground max-sm:hidden" key={text}>
             {text}
           </p>
         ))}
@@ -85,7 +87,12 @@ function Paper({
         <div className="pp-dashed my-2" />
         {sample.items.map((item, i) => (
           <p
-            className={cn(line(`item-${i}`), isLow(item.confidence) && "pp-smudged")}
+            className={cn(
+              line(`item-${i}`),
+              isLow(item.confidence) && "pp-smudged",
+              // Once read, the flagged line stays marked on the paper too.
+              done && isLow(item.confidence) && "pp-flagged",
+            )}
             key={item.name}
           >
             <span className="truncate">{item.printed}</span>
@@ -93,35 +100,106 @@ function Paper({
           </p>
         ))}
         <div className="pp-dashed my-2" />
-        <p className={line("subtotal")}>
-          <span>Subtotal</span>
-          <span>{sample.subtotal.toFixed(2)}</span>
-        </p>
-        <p className={line("tax")}>
-          <span>Tax</span>
-          <span>{sample.tax.toFixed(2)}</span>
-        </p>
-        {sample.tip !== null && (
-          <p className={line("tip")}>
-            <span>Tip</span>
-            <span
-              className={cn(
-                sample.handwrittenTip &&
-                  "pp-display pp-wonk text-[1.05rem] leading-none text-[#1d3a8a] normal-case",
-              )}
-            >
-              {sample.tip.toFixed(2)}
-            </span>
+        {/* Below sm the paper is cropped here, just after the line items. */}
+        <div className="max-sm:hidden">
+          <p className={line("subtotal")}>
+            <span>Subtotal</span>
+            <span>{sample.subtotal.toFixed(2)}</span>
           </p>
-        )}
-        <p className={cn(line("total"), "mt-1 text-[0.85rem] font-medium")}>
-          <span>Total</span>
-          <span>{sample.total.toFixed(2)}</span>
-        </p>
-        <div className="pp-barcode mx-auto mt-4 h-7 w-4/5 opacity-85" />
-        <p className="mt-2 text-center text-[#5c5347]">{sample.footer}</p>
+          <p className={line("tax")}>
+            <span>Tax</span>
+            <span>{sample.tax.toFixed(2)}</span>
+          </p>
+          {sample.tip !== null && (
+            <p className={line("tip")}>
+              <span>Tip</span>
+              <span
+                className={cn(
+                  sample.handwrittenTip &&
+                    "pp-display pp-wonk text-[1.05rem] leading-none text-[var(--pp-pen)] normal-case",
+                )}
+              >
+                {sample.tip.toFixed(2)}
+              </span>
+            </p>
+          )}
+          <p className={cn(line("total"), "mt-1 text-[0.85rem] font-medium")}>
+            <span>Total</span>
+            <span>{sample.total.toFixed(2)}</span>
+          </p>
+          <div className="pp-barcode mx-auto mt-4 h-7 w-4/5 opacity-85" />
+          <p className="mt-2 text-center text-muted-foreground">{sample.footer}</p>
+        </div>
       </div>
     </div>
+  );
+}
+
+/** The export the read lands in. Always two rows tall, so finishing a read shifts nothing. */
+function CsvStrip({ sample, done, run }: { sample: Sample; done: boolean; run: number }) {
+  const earlier = earlierRows[0];
+  const cell = "py-1.5 pl-3 first:pl-4 last:pr-4";
+  return (
+    <figure className="pp-sheet mt-4 overflow-hidden rounded-lg">
+      <figcaption className="pp-mono flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-4 pt-2.5 pb-1 text-xs text-muted-foreground">
+        <span>
+          <span className="font-medium text-foreground">receipts.csv</span> · preview
+        </span>
+        <span>A scripted sample, played in your browser</span>
+      </figcaption>
+      <table className="pp-mono w-full table-fixed text-xs">
+        <caption className="sr-only">The sample row in the export</caption>
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th className={cn(cell, "font-normal")} scope="col">
+              merchant
+            </th>
+            <th className={cn(cell, "w-[6.75rem] font-normal")} scope="col">
+              receipt_date
+            </th>
+            <th className={cn(cell, "hidden w-24 font-normal sm:table-cell")} scope="col">
+              category
+            </th>
+            <th className={cn(cell, "w-16 text-right font-normal")} scope="col">
+              total
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            className={cn("border-t border-border", done && "pp-land")}
+            key={`${sample.id}-${run}`}
+          >
+            <td className={cn(cell, "truncate")}>
+              <Slot shown={done} w="w-24">
+                {sample.merchant}
+              </Slot>
+            </td>
+            <td className={cell}>
+              <Slot shown={done} w="w-20">
+                {sample.receiptDate}
+              </Slot>
+            </td>
+            <td className={cn(cell, "hidden sm:table-cell")}>
+              <Slot shown={done} w="w-14">
+                {sample.category}
+              </Slot>
+            </td>
+            <td className={cn(cell, "text-right")}>
+              <Slot shown={done} w="w-10">
+                {sample.total.toFixed(2)}
+              </Slot>
+            </td>
+          </tr>
+          <tr className="border-t border-border text-muted-foreground">
+            <td className={cn(cell, "truncate")}>{earlier.merchant}</td>
+            <td className={cell}>{earlier.receiptDate}</td>
+            <td className={cn(cell, "hidden sm:table-cell")}>{earlier.category}</td>
+            <td className={cn(cell, "text-right")}>{earlier.total.toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </figure>
   );
 }
 
@@ -225,8 +303,8 @@ export function HeroDemo() {
       </div>
 
       <div className="mt-3 grid gap-4 sm:mt-4 sm:grid-cols-[13.5rem_minmax(0,1fr)] sm:grid-rows-[auto_1fr] sm:gap-x-5">
-        <div className="max-sm:mx-auto max-sm:max-h-[9.5rem] max-sm:w-[15rem] max-sm:overflow-hidden max-sm:[mask-image:linear-gradient(#000_75%,transparent)] max-sm:pt-1">
-          <Paper reading={reading} run={run} sample={sample} scanning={scanning} />
+        <div className="max-sm:mx-auto max-sm:w-[16rem] max-sm:pt-1">
+          <Paper done={done} reading={reading} run={run} sample={sample} scanning={scanning} />
         </div>
 
         <figure className="pp-sheet min-w-0 rounded-xl p-4 max-sm:-mt-3 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:self-start sm:p-5">
@@ -324,14 +402,15 @@ export function HeroDemo() {
               [
                 ["Subtotal", "subtotal", sample.subtotal],
                 ["Tax", "tax", sample.tax],
-                ...(sample.tip === null ? [] : ([["Tip", "tip", sample.tip]] as const)),
+                ["Tip", "tip", sample.tip],
               ] as const
             ).map(([label, key, value]) => (
               <div className="flex justify-between text-muted-foreground" key={key}>
                 <dt>{label}</dt>
-                <dd className="pp-mono">
-                  <Slot shown={shown(key)} w="w-12">
-                    {usd(value)}
+                <dd className={cn(value !== null && "pp-mono")}>
+                  {/* A blank field stays blank: no tip on the paper means none is guessed. */}
+                  <Slot shown={shown(value === null ? "tax" : key)} w="w-12">
+                    {value === null ? "Not on receipt" : usd(value)}
                   </Slot>
                 </dd>
               </div>
@@ -375,6 +454,9 @@ export function HeroDemo() {
           </svg>
         </p>
       </div>
+
+      <CsvStrip done={done} run={run} sample={sample} />
+
       <p aria-live="polite" className="sr-only">
         {announce}
       </p>

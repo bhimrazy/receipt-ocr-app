@@ -163,19 +163,25 @@ export type HistoryRow =
       date: string;
       category: string;
       confidence: number;
+      /** Line items in the review tier. */
+      toCheck?: number;
       total: string;
+      /** Also shown in the shorter phone list. */
+      mobile?: boolean;
     }
-  | { status: "reading" | "failed"; file: string; uploaded: string };
+  | { status: "reading" | "failed"; file: string; uploaded: string; mobile?: boolean };
 
 export const history: HistoryRow[] = [
-  { status: "reading", file: "IMG_2047.jpg", uploaded: "Just now" },
+  { status: "reading", file: "IMG_2047.jpg", uploaded: "Just now", mobile: true },
   {
     status: "done",
     merchant: "Paper & Co. Office Supply",
     date: "Oct 28, 2026",
     category: "Office",
     confidence: 92,
+    toCheck: 1,
     total: "$86.85",
+    mobile: true,
   },
   {
     status: "done",
@@ -193,7 +199,7 @@ export const history: HistoryRow[] = [
     confidence: 99,
     total: "$45.00",
   },
-  { status: "failed", file: "IMG_2039.heic", uploaded: "Oct 23, 2026" },
+  { status: "failed", file: "IMG_2039.heic", uploaded: "Oct 23, 2026", mobile: true },
   {
     status: "done",
     merchant: "Osteria Lume",
@@ -220,12 +226,12 @@ export const faqs = sharedFaqs.map((faq) =>
   faq.q === "Who can see my receipts?"
     ? {
         q: faq.q,
-        a: "You and the people you invite to your workspace. receiptOCR admins can access an account only to handle a support request. Images are read by Google's Gemini AI to extract the data. You can delete any receipt, or your whole account, from Settings.",
+        a: "You and the people you invite to your workspace. receiptOCR admins access an account only to handle a support request. Images are read by Google's Gemini AI to extract the data. You can delete any receipt, or your whole account, from Settings.",
       }
     : faq.q === "What are the limits on the free plan?"
       ? {
           q: faq.q,
-          a: `Up to ${freePlan.receiptsPerDay} receipts a day, subject to a service-wide daily cap, and ${freePlan.workspaces} workspace. Need more? Contact us and we'll set you up.`,
+          a: `Up to ${freePlan.receiptsPerDay} receipts a day, resetting at 00:00 UTC and subject to a service-wide daily cap, and ${freePlan.workspaces} workspace. Need more? Contact us and we'll set you up.`,
         }
       : faq,
 );

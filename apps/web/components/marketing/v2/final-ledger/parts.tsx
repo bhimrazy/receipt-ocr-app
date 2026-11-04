@@ -30,6 +30,20 @@ export function Confidence({ score }: { score: number }) {
 }
 
 /**
+ * Receipt-level badge. A receipt with any line in the review tier leads with the work left
+ * ("1 line to check") rather than a reassuring overall score.
+ */
+export function ReceiptBadge({ confidence, toCheck }: { confidence: number; toCheck: number }) {
+  if (toCheck === 0) return <Confidence score={confidence} />;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-[5px] bg-(--fl-warn-tint) px-1.5 py-0.5 text-xs font-medium leading-4 whitespace-nowrap text-warning">
+      <Eye aria-hidden="true" className="size-3" />
+      {toCheck} {toCheck === 1 ? "line" : "lines"} to check
+    </span>
+  );
+}
+
+/**
  * Line-item confidence. Sure lines get a quiet tick and score; a low line leads with the plain
  * instruction and keeps the score secondary.
  */

@@ -11,7 +11,7 @@ import { ComingTag, SectionHead, container } from "./parts";
 const schedule = [
   {
     item: "Receipts",
-    note: "Rolling 24 hours, subject to a service-wide daily cap",
+    note: "Resets daily at 00:00 UTC, subject to a service-wide daily cap",
     value: `Up to ${plan.receiptsPerDay} / day`,
   },
   { item: "Burst", note: "Per rolling minute", value: "10 / min" },
@@ -153,39 +153,34 @@ export function Faq() {
 
 export function FinalCta() {
   return (
-    <section aria-labelledby="fl-cta" className="relative overflow-hidden bg-primary text-white">
-      {/* The ledger columns again, in white on the green. */}
+    <section aria-labelledby="fl-cta" className="relative">
+      {/* Back on the ledger columns the hero opened with. */}
       <div aria-hidden="true" className={cn(container, "pointer-events-none absolute inset-0")}>
-        <div className="h-full w-full bg-[repeating-linear-gradient(to_right,rgb(255_255_255/0.08)_0_1px,transparent_1px_calc((100%+24px)/12))]" />
+        <div className="fl-ledger h-full w-full" />
       </div>
-      <div
-        className={cn(container, "relative grid gap-8 py-16 lg:grid-cols-12 lg:items-end lg:py-24")}
-      >
-        <div className="lg:col-span-8">
-          <h2
-            className="max-w-[18ch] text-[38px] font-semibold leading-[1.02] tracking-[-0.035em] text-balance sm:text-[56px]"
-            id="fl-cta"
-          >
-            Your shoebox, as a spreadsheet.
-          </h2>
-          <p className="mt-5 text-[17px] text-white/85">Free to start · no card</p>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4 lg:justify-end">
-          <Link
-            className={cn(
-              ctaClass,
-              "bg-white text-primary hover:bg-(--fl-primary-tint) focus-visible:ring-white focus-visible:ring-offset-primary",
-            )}
-            href="/sign-up"
-          >
-            Start free
-          </Link>
-          <Link
-            className="inline-flex h-12 items-center justify-center rounded-lg border border-white/40 px-5 text-[15px] font-medium outline-none hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white"
-            href="/sign-in"
-          >
-            Sign in
-          </Link>
+      <div className={cn(container, "relative pt-16 pb-16 lg:pt-24 lg:pb-24")}>
+        <div className="grid gap-x-6 gap-y-6 border-t border-foreground pt-5 lg:grid-cols-12">
+          <p className="flex gap-3 text-sm text-muted-foreground lg:col-span-3">
+            <span className="fl-mono text-foreground">06</span>
+            Start
+          </p>
+          <div className="lg:col-span-9">
+            <h2
+              className="max-w-[16ch] text-[40px] font-semibold leading-[1.0] tracking-[-0.04em] text-balance sm:text-[64px]"
+              id="fl-cta"
+            >
+              Your shoebox, as a spreadsheet.
+            </h2>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link className={ctaClass} href="/sign-up">
+                Start free
+              </Link>
+              <Link className={ghostClass} href="/sign-in">
+                Sign in
+              </Link>
+              <p className="text-sm text-(--fl-ink-2) sm:ml-3">Free to start · no card</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>

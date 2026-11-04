@@ -2,25 +2,25 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { exportRows } from "./ledger";
 import { SectionHead } from "./primitives";
 
+/** A slice of history with the app's real status words (components/receipt-status.tsx). */
 function Files() {
-  // Names and sizes of the three hero samples; tilt stays at or under 1deg so text stays crisp.
   const files = [
-    { name: "scan-0193.png", size: "812 KB", tilt: "-rotate-1" },
-    { name: "IMG_2041.jpg", size: "2.4 MB", tilt: "rotate-[0.6deg] ml-4" },
-    { name: "dinner-friday.heic", size: "1.1 MB", tilt: "ml-1" },
+    { name: "scan-0193.png", status: "Read", tone: "text-foreground" },
+    { name: "IMG_2041.jpg", status: "Reading…", tone: "text-muted-foreground" },
+    { name: "lunch.jpg", status: "Couldn't read · Retry", tone: "text-[var(--pp-accent)]" },
   ];
   return (
-    <ul aria-label="Example uploads" className="space-y-2.5">
+    <ul
+      aria-label="Example uploads and their status"
+      className="pp-sheet divide-y divide-border rounded-md"
+    >
       {files.map((file) => (
         <li
-          className={cn(
-            "pp-sheet pp-mono flex items-center justify-between gap-3 rounded-md px-3.5 py-2.5 text-xs",
-            file.tilt,
-          )}
+          className="pp-mono flex items-center justify-between gap-3 px-3.5 py-2.5 text-xs"
           key={file.name}
         >
           <span className="truncate font-medium">{file.name}</span>
-          <span className="text-muted-foreground">{file.size}</span>
+          <span className={cn("shrink-0", file.tone)}>{file.status}</span>
         </li>
       ))}
     </ul>
@@ -76,10 +76,10 @@ function Export() {
         <thead>
           <tr className="border-b border-[var(--input)] text-muted-foreground">
             <th className="py-1 text-left font-normal" scope="col">
-              receipt_date
+              merchant
             </th>
             <th className="py-1 pl-2 text-left font-normal" scope="col">
-              merchant
+              receipt_date
             </th>
             <th className="py-1 text-right font-normal" scope="col">
               total
@@ -89,8 +89,8 @@ function Export() {
         <tbody>
           {rows.map((row) => (
             <tr className="border-b border-border/70 last:border-0" key={row.merchant}>
-              <td className="py-1.5 whitespace-nowrap">{row.receipt_date}</td>
-              <td className="max-w-0 truncate py-1.5 pl-2 sm:max-w-none">{row.merchant}</td>
+              <td className="max-w-0 truncate py-1.5 sm:max-w-none">{row.merchant}</td>
+              <td className="py-1.5 pl-2 whitespace-nowrap">{row.receipt_date}</td>
               <td className="py-1.5 text-right">{row.total}</td>
             </tr>
           ))}
@@ -103,12 +103,12 @@ function Export() {
 const steps = [
   {
     title: "Drop them in.",
-    body: "Phone photos or scans: PNG, JPG or HEIC, up to 10 MB each and 20 at a time. They're read one after another, so put the kettle on.",
+    body: "Phone photos or scans: PNG, JPG or HEIC, up to 10 MB each and 20 at a time. They're read one after another, and anything that can't be read says so, with a retry.",
     visual: <Files />,
   },
   {
     title: "Check the bits it flags.",
-    body: 'Every receipt, and every line on it, gets a confidence score. Low ones say "check this line", so you know what to compare with the photo. Fix the merchant, date, category, currency or amounts right there.',
+    body: 'Every receipt, and every line on it, gets a confidence score. Low ones say "check this line", so you know what to compare with the photo. Fix the merchant, date, category, currency or totals right there. Line items are read and scored, but not editable yet.',
     visual: <Fix />,
   },
   {

@@ -69,24 +69,30 @@ export function Hero() {
           </div>
         </div>
 
-        {/* Opaque, so the ledger columns stop at the rule above the outcomes. */}
-        <dl className="grid border-t border-foreground bg-background pb-4 sm:grid-cols-2 lg:col-span-12 lg:grid-cols-4">
-          {outcomes.map((o, i) => (
-            <div
-              className={cn(
-                "border-border py-5 sm:pr-5",
-                i > 0 && "border-t sm:border-t-0",
-                i % 2 === 1 && "sm:border-l sm:pl-5",
-                i >= 2 && "sm:border-t lg:border-t-0",
-                i === 2 && "lg:border-l lg:pl-5",
-              )}
-              key={o.head}
-            >
-              <dt className="text-[19px] font-semibold tracking-[-0.015em]">{o.head}</dt>
-              <dd className="mt-1.5 text-[15px] leading-6 text-(--fl-ink-2)">{o.body}</dd>
-            </div>
-          ))}
-        </dl>
+        {/*
+          Opaque, so the ledger columns stop at the rule. Set as ruled ledger entries on the page
+          grid rather than a row of tiles.
+        */}
+        <div className="grid gap-x-6 border-t border-foreground bg-background pt-5 pb-6 lg:col-span-12 lg:grid-cols-12">
+          <p className="flex gap-3 text-sm text-muted-foreground lg:col-span-3">
+            <span className="fl-mono text-foreground">00</span>
+            In short
+          </p>
+          <dl className="mt-4 border-t border-border lg:col-span-9 lg:mt-0 lg:border-t-0">
+            {outcomes.map((o, i) => (
+              <div
+                className="grid gap-x-6 gap-y-1 border-b border-border py-3.5 first:lg:pt-0 sm:grid-cols-[2.5rem_minmax(0,15rem)_1fr]"
+                key={o.head}
+              >
+                <span aria-hidden="true" className="fl-mono text-xs leading-6 text-primary">
+                  {String.fromCharCode(97 + i)}.
+                </span>
+                <dt className="text-[17px] font-semibold tracking-[-0.01em]">{o.head}</dt>
+                <dd className="text-[15px] leading-6 text-(--fl-ink-2)">{o.body}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       </div>
     </section>
   );

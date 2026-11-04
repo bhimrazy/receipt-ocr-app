@@ -1,7 +1,7 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { RotateCw } from "lucide-react";
 import { csvHeader, csvRows, history } from "./data";
-import { Confidence, Fig, SectionHead, Status, container } from "./parts";
+import { Fig, ReceiptBadge, SectionHead, Status, container } from "./parts";
 
 const steps = [
   {
@@ -74,7 +74,10 @@ function HistoryTable() {
     <div className="overflow-hidden rounded-xl border border-(--fl-rule-strong) bg-card shadow-(--fl-shadow)">
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <p className="text-sm font-semibold">History</p>
-        <p className="text-xs text-muted-foreground">6 receipts · Oct 2026</p>
+        <p className="text-xs text-muted-foreground">
+          <span className="sm:hidden">3 of 6 shown</span>
+          <span className="hidden sm:inline">6 receipts · Oct 2026</span>
+        </p>
       </div>
 
       {/* Desktop: the table, columns as in components/history-table.tsx. */}
@@ -113,7 +116,7 @@ function HistoryTable() {
                   <Status status="done" />
                 </td>
                 <td className="px-4 py-3">
-                  <Confidence score={row.confidence} />
+                  <ReceiptBadge confidence={row.confidence} toCheck={row.toCheck ?? 0} />
                 </td>
                 <td className="fl-mono px-4 py-3 text-right">{row.total}</td>
               </tr>
@@ -146,42 +149,44 @@ function HistoryTable() {
 
       {/* Mobile: one row per receipt, total on the right, like the app's list view. */}
       <ul className="divide-y divide-border sm:hidden">
-        {history.map((row) =>
-          row.status === "done" ? (
-            <li className="flex items-start justify-between gap-4 px-4 py-3" key={row.merchant}>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{row.merchant}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {row.date} · {row.category}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className="fl-mono text-sm">{row.total}</span>
-                <Confidence score={row.confidence} />
-              </div>
-            </li>
-          ) : (
-            <li className="flex items-start justify-between gap-4 px-4 py-3" key={row.file}>
-              <div className="min-w-0">
-                <p className="fl-mono truncate text-[13px] text-(--fl-ink-2)">{row.file}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {row.status === "reading"
-                    ? "Updates on its own when it's done."
-                    : "Retry, or upload a clearer photo."}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <Status status={row.status} />
-                {row.status === "failed" ? (
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-                    <RotateCw aria-hidden="true" className="size-3" />
-                    Retry
-                  </span>
-                ) : null}
-              </div>
-            </li>
-          ),
-        )}
+        {history
+          .filter((row) => row.mobile)
+          .map((row) =>
+            row.status === "done" ? (
+              <li className="flex items-start justify-between gap-4 px-4 py-3" key={row.merchant}>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{row.merchant}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {row.date} · {row.category}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="fl-mono text-sm">{row.total}</span>
+                  <ReceiptBadge confidence={row.confidence} toCheck={row.toCheck ?? 0} />
+                </div>
+              </li>
+            ) : (
+              <li className="flex items-start justify-between gap-4 px-4 py-3" key={row.file}>
+                <div className="min-w-0">
+                  <p className="fl-mono truncate text-[13px] text-(--fl-ink-2)">{row.file}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {row.status === "reading"
+                      ? "Updates on its own when it's done."
+                      : "Retry, or upload a clearer photo."}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <Status status={row.status} />
+                  {row.status === "failed" ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                      <RotateCw aria-hidden="true" className="size-3" />
+                      Retry
+                    </span>
+                  ) : null}
+                </div>
+              </li>
+            ),
+          )}
       </ul>
     </div>
   );

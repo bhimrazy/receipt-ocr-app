@@ -31,7 +31,7 @@ const enforced = [
   "Image links are signed and expire after 10 minutes.",
   "Deleting a receipt deletes its stored image.",
   "Deleting your account deletes every file you stored.",
-  `Uploads are capped: 10 MB an image, 20 a batch, ${free.receiptsPerDay} a day.`,
+  `Uploads are capped: 10 MB an image, 20 a batch, ${free.receiptsPerDay} a day. The count resets at 00:00 UTC, and a service-wide daily cap can apply first.`,
 ];
 
 const promised = [
