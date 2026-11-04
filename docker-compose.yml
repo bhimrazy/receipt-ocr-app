@@ -34,9 +34,9 @@ services:
 
   # S3-compatible storage. The app is R2-first but speaks plain S3, so RustFS
   # stands in locally with no code changes — only env. Pinned by digest
-  # (multi-arch index of rustfs/rustfs:1.0.0, pushed 2026-09-16).
+  # (multi-arch index of rustfs/rustfs:1.0.4, pushed 2026-10-25).
   rustfs:
-    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
     environment:
       RUSTFS_ACCESS_KEY: rustfsadmin
       RUSTFS_SECRET_KEY: rustfsadmin
@@ -55,7 +55,7 @@ services:
   # One-shot: creates the bucket the app expects, then exits. The image has no
   # S3 CLI, so this is a SigV4-signed PUT; it also succeeds on re-runs.
   rustfs-init:
-    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
     depends_on:
       rustfs:
         condition: service_healthy
