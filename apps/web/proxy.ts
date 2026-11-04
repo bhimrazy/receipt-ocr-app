@@ -20,6 +20,9 @@ export default function proxy(request: NextRequest) {
     const sessionCookie = getSessionCookie(request);
     if (!sessionCookie) {
       const signInUrl = new URL("/sign-in", request.url);
+      // Only the guarded path itself, so it is always a same-origin relative path;
+      // the sign-in page still runs it through safeRedirect().
+      signInUrl.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`);
       return NextResponse.redirect(signInUrl);
     }
   }
