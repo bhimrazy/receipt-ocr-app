@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { money, pct } from "./format";
+import { formatTimeUntil, money, pct } from "./format";
 
 describe("money", () => {
   it("formats decimal strings from numeric columns", () => {
@@ -28,5 +28,17 @@ describe("pct", () => {
   it("treats missing confidence as zero", () => {
     expect(pct(null)).toBe("0%");
     expect(pct(undefined)).toBe("0%");
+  });
+});
+
+describe("formatTimeUntil", () => {
+  const now = new Date("2026-11-04T17:30:00Z");
+  it("uses minutes under an hour and whole hours above", () => {
+    expect(formatTimeUntil(new Date("2026-11-04T17:31:00Z"), now)).toBe("in 1 minute");
+    expect(formatTimeUntil(new Date("2026-11-04T18:15:00Z"), now)).toBe("in 45 minutes");
+    expect(formatTimeUntil(new Date("2026-11-05T00:00:00Z"), now)).toBe("in 6 hours");
+  });
+  it("never says zero or a past time", () => {
+    expect(formatTimeUntil(new Date("2026-11-04T17:00:00Z"), now)).toBe("in 1 minute");
   });
 });

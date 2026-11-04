@@ -1,5 +1,5 @@
 /** Where to land after auth when no safe redirect was requested. */
-export const DEFAULT_REDIRECT = "/app/upload";
+export const DEFAULT_REDIRECT = "/app";
 
 const PROBE_ORIGIN = "http://redirect.invalid";
 
