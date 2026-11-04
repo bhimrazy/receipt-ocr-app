@@ -9,15 +9,15 @@ import { runtime } from "./runtime";
 
 /**
  * Single place for server-side session lookups, deduplicated per request.
- * Returns null when auth is not configured (preview mode) or there is no
- * valid session.
+ * Returns null when there is no valid session, including when auth isn't
+ * configured: then nobody can be signed in and /app sends visitors to /sign-in.
  */
 export const getSession = cache(async (): Promise<Session | null> => {
   if (!authEnabled) return null;
   return auth.api.getSession({ headers: await headers() });
 });
 
-/** Session user id, or null when signed out / auth not configured. */
+/** Session user id, or null when signed out. */
 export async function getCurrentUserId(): Promise<string | null> {
   const session = await getSession();
   return session?.user.id ?? null;
@@ -44,8 +44,7 @@ export function isAdmin(session: Session | null): boolean {
 /**
  * For admin pages and server actions: requires a signed-in admin. Redirects
  * anonymous visitors to /sign-in and 404s non-admins (avoids leaking that the
- * admin area exists). Callers must still gate on `authEnabled` for the
- * "not configured" state — this throws/redirects rather than degrading.
+ * admin area exists).
  */
 export async function requireAdmin(): Promise<Session> {
   const session = await requireSession();
