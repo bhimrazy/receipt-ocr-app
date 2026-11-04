@@ -3,15 +3,8 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { MobileMenu } from "./mobile-menu";
-import { focusRing } from "./primitives";
-
-const navLinks = [
-  { href: "#output", label: "What you get" },
-  { href: "#how", label: "How it works" },
-  { href: "#data", label: "Your data" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#faq", label: "FAQ" },
-];
+import { focusRing, sectionLinks } from "./primitives";
+import { SectionNav } from "./section-nav";
 
 export function Header() {
   return (
@@ -25,21 +18,7 @@ export function Header() {
           <Brand />
         </Link>
         <nav aria-label="Main" className="hidden lg:block">
-          <ul className="flex items-center gap-1">
-            {navLinks.map((link) => (
-              <li key={link.href}>
-                <a
-                  className={cn(
-                    "inline-flex min-h-11 items-center rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground",
-                    focusRing,
-                  )}
-                  href={link.href}
-                >
-                  {link.label}
-                </a>
-              </li>
-            ))}
-          </ul>
+          <SectionNav links={sectionLinks} />
         </nav>
         <div className="flex items-center gap-1">
           <Link
@@ -54,7 +33,7 @@ export function Header() {
           <Link className={cn(buttonVariants(), "h-11 px-4")} href="/sign-up">
             Start free
           </Link>
-          <MobileMenu links={navLinks} />
+          <MobileMenu links={sectionLinks} />
         </div>
       </div>
     </header>

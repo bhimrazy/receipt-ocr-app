@@ -1,19 +1,18 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, CircleAlert, CircleCheck, Download, Loader2, RotateCcw } from "lucide-react";
-import { earlierRows, samples } from "./fixtures";
-import { Section, SectionHead } from "./primitives";
+import { Section, SectionHead, focusRing } from "./primitives";
+import { sampleExportRows } from "./sample-export";
 
 /** Sample rows in the export's own shape: lib/csv.ts column names, plain numbers. */
-const exportRows = [...samples, ...earlierRows]
-  .map((r) => ({
-    merchant: r.merchant,
-    receipt_date: r.receiptDate,
-    category: r.category,
-    currency: "USD",
-    tax: r.tax.toFixed(2),
-    total: r.total.toFixed(2),
-  }))
-  .sort((a, b) => b.receipt_date.localeCompare(a.receipt_date));
+const exportRows = sampleExportRows.map((r) => ({
+  id: r.id,
+  merchant: r.merchant,
+  receipt_date: r.receiptDate,
+  category: r.category,
+  currency: r.currency,
+  tax: r.tax,
+  total: r.total,
+}));
 
 const sum = exportRows.reduce((total, row) => total + Number(row.total), 0).toFixed(2);
 
@@ -28,7 +27,6 @@ const columns: Array<{ key: keyof (typeof exportRows)[number]; num?: boolean; wi
 ];
 
 const points = [
-  "Opens in Excel and Google Sheets. Imports into QuickBooks or Xero.",
   "Export one receipt, or everything in your workspace.",
   "Amounts are plain numbers, so a spreadsheet can add them up.",
   "Need it in code? Copy any receipt as JSON.",
@@ -41,9 +39,9 @@ export function Output() {
         <div>
           <SectionHead
             id="output"
-            label="What you get"
-            lead="One row per receipt, with the merchant, date, category, tax and total filled in."
-            title="A spreadsheet you can use right away."
+            label="Export"
+            lead="Merchant, date, category, currency, tax and total, with amounts as plain numbers. Opens in Excel, Google Sheets and Numbers."
+            title="One row per receipt"
           />
           <ul className="mt-8 space-y-3">
             {points.map((point) => (
@@ -86,7 +84,7 @@ export function Output() {
                 {exportRows.map((row) => (
                   <tr
                     className="border-b border-border/60 last:border-0 hover:bg-foreground/[0.02]"
-                    key={row.receipt_date + row.merchant}
+                    key={row.id}
                   >
                     {columns.map((c) => (
                       <td
@@ -125,7 +123,17 @@ export function Output() {
             </table>
           </div>
           <figcaption className="mt-3 font-mono text-xs text-muted-foreground">
-            Sample data. The real file also has subtotal, tip, confidence, item count and more.
+            Sample data. The real file also has subtotal, tip, confidence, item count and more.{" "}
+            <a
+              className={cn(
+                "rounded-sm text-foreground underline decoration-input underline-offset-4 hover:decoration-primary",
+                focusRing,
+              )}
+              download
+              href="/sample-receipts.csv"
+            >
+              Download sample CSV
+            </a>
           </figcaption>
         </figure>
       </div>
@@ -229,8 +237,8 @@ export function How() {
       <SectionHead
         id="how"
         label="How it works"
-        lead="receiptOCR does the reading. You decide what goes into your records."
-        title="Upload, check, export."
+        lead="receiptOCR reads each receipt. You check the result and decide what goes into your records."
+        title="Upload, check, export"
       />
       <ol className="mt-14 grid gap-5 md:grid-cols-3">
         {steps.map((step, index) => (

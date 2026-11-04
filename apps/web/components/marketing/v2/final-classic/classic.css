@@ -6,8 +6,12 @@
   overflow-x: clip;
 }
 
+/* Anchor jumps land below the sticky 4rem header. */
+html:has(.fc) {
+  scroll-padding-top: 5rem;
+}
+
 .fc .fc-display {
-  font-family: var(--font-fc-display), var(--font-sans);
   font-optical-sizing: auto;
   letter-spacing: -0.025em;
 }
@@ -51,16 +55,20 @@
   border-top: 1px dashed color-mix(in oklab, var(--foreground) 22%, transparent);
 }
 
+/*
+ * Hero demo. DemoPlayer sets data-state on .fc-demo ("done" by default, so the first paint and
+ * reduced motion show the finished read) plus --scan and --step. Each field carries --i, its
+ * place in the reveal order.
+ */
+
 /* Scan line: an emerald rule with a faint wash trailing above it, swept top to bottom. */
 .fc .fc-scan {
   position: absolute;
-  inset-inline: 0;
-  top: 0;
-  height: 56px;
+  inset: 0;
   pointer-events: none;
   background: linear-gradient(
     to bottom,
-    transparent,
+    transparent calc(100% - 56px),
     color-mix(in oklab, var(--primary) 16%, transparent)
   );
   border-bottom: 1.5px solid var(--primary);
@@ -68,12 +76,12 @@
   opacity: 0;
   translate: 0 -100%;
 }
-.fc .fc-scanning .fc-scan {
-  animation: fc-sweep 1200ms cubic-bezier(0.45, 0, 0.55, 1) both;
+.fc [data-state="scanning"] .fc-scan {
+  animation: fc-sweep var(--scan) cubic-bezier(0.45, 0, 0.55, 1) both;
 }
 @keyframes fc-sweep {
   0% {
-    top: 0;
+    translate: 0 -100%;
     opacity: 0;
   }
   10%,
@@ -81,18 +89,24 @@
     opacity: 1;
   }
   100% {
-    top: 100%;
+    translate: 0 0;
     opacity: 0;
   }
 }
 
-/* The paper line being read right now, and the flagged line once the read is done. */
-.fc .fc-reading {
-  background: color-mix(in oklab, var(--primary) 16%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 16%, transparent);
-  color: var(--foreground);
+/* The paper line being read right now, and the hard-to-read line once the read is done. */
+.fc [data-state="filling"] .fc-line {
+  animation: fc-read var(--step) calc((var(--i) + 1) * var(--step));
 }
-.fc .fc-flagged {
+@keyframes fc-read {
+  0%,
+  100% {
+    background: color-mix(in oklab, var(--primary) 16%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 16%, transparent);
+    color: var(--foreground);
+  }
+}
+.fc [data-state="done"] .fc-flag {
   background: color-mix(in oklab, var(--warning) 14%, transparent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--warning) 14%, transparent);
 }
@@ -103,26 +117,72 @@
   text-shadow: 0 0 1.5px rgb(143 143 152 / 0.7);
 }
 
-/* Holds a value's place until it is read, so nothing shifts. */
+/*
+ * A placeholder pill over each value. The value keeps its place in the layout and only turns
+ * transparent while unread, so filling it in shifts nothing.
+ */
 .fc .fc-slot {
-  display: inline-block;
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  max-width: 8rem;
   height: 0.7em;
-  vertical-align: middle;
+  translate: 0 -50%;
   border-radius: 999px;
   background: color-mix(in oklab, var(--foreground) 9%, transparent);
+  opacity: 0;
+  pointer-events: none;
 }
-.fc .fc-in {
-  animation: fc-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+.fc [data-state="scanning"] .fc-v {
+  opacity: 0;
 }
-@keyframes fc-in {
+.fc [data-state="scanning"] .fc-slot {
+  opacity: 1;
+}
+/* Replaying the receipt already on screen fades it out under the scan instead of blanking it. */
+.fc [data-state="scanning"][data-fade] .fc-v {
+  animation: fc-out 250ms ease-out both;
+}
+.fc [data-state="scanning"][data-fade] .fc-slot {
+  animation: fc-out 250ms ease-out reverse both;
+}
+.fc [data-state="filling"] .fc-v {
+  animation: fc-out 300ms cubic-bezier(0.16, 1, 0.3, 1) reverse both;
+  animation-delay: calc((var(--i) + 1) * var(--step));
+}
+.fc [data-state="filling"] .fc-slot {
+  animation: fc-out 150ms ease-out both;
+  animation-delay: calc((var(--i) + 1) * var(--step));
+}
+@keyframes fc-out {
   from {
+    opacity: 1;
+  }
+  to {
     opacity: 0;
-    transform: translateY(3px);
   }
 }
 
-/* A new CSV row flashes once as it lands. */
-.fc .fc-land {
+/* Status text and badges for one state only. */
+.fc .fc-when-scanning,
+.fc .fc-when-filling,
+.fc [data-state="scanning"] .fc-when-done,
+.fc [data-state="filling"] .fc-when-done {
+  display: none;
+}
+.fc [data-state="scanning"] .fc-when-scanning,
+.fc [data-state="filling"] .fc-when-filling {
+  display: inline;
+}
+.fc .fc-hard {
+  transition: opacity 300ms;
+}
+.fc .fc-demo:not([data-state="done"]) .fc-hard {
+  opacity: 0;
+}
+
+/* The new CSV row flashes once as it lands. */
+.fc [data-played][data-state="done"] .fc-land {
   animation: fc-land 2.2s ease-out both;
 }
 @keyframes fc-land {
@@ -132,9 +192,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fc .fc-scanning .fc-scan,
-  .fc .fc-in,
-  .fc .fc-land {
-    animation: none;
+  .fc .fc-demo *,
+  .fc .fc-hard {
+    animation: none !important;
+    transition: none;
   }
 }

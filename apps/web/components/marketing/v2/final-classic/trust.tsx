@@ -3,10 +3,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, Circle } from "lucide-react";
 import Link from "next/link";
 import { comingSoon } from "@/components/marketing/content";
-import { PLANS } from "@/lib/plans";
 import { Section, SectionHead, focusRing } from "./primitives";
-
-const free = PLANS.free;
 
 /** Where one image goes, in order. Grounded in packages/storage (signed URLs) and packages/ai. */
 const stops = [
@@ -16,8 +13,8 @@ const stops = [
     what: "Stored under your workspace. It opens only through a signed link that expires after 10 minutes.",
   },
   {
-    where: "Google Gemini",
-    what: "Reads the image and returns the merchant, date, items, tax and total.",
+    where: "Google Gemini AI",
+    what: "Google's Gemini AI reads the image and returns the merchant, date, line items, tax and total.",
   },
   {
     where: "Your workspace",
@@ -30,7 +27,6 @@ const enforced = [
   "Image links are signed and expire after 10 minutes.",
   "Deleting a receipt deletes its stored image.",
   "Deleting your account deletes every file you stored.",
-  `Uploads are limited: 10 MB an image, 20 a batch, ${free.receiptsPerDay} a day. The count resets at 00:00 UTC. A service-wide daily cap can apply first.`,
 ];
 
 const promised = [
@@ -81,9 +77,9 @@ export function Trust() {
     <Section id="data">
       <SectionHead
         id="data"
-        label="Your data"
+        label="Privacy"
         lead="Receipts say a lot about a business. Here is where an image goes, what the code enforces today, and what we have not done yet."
-        title="Where your receipts go."
+        title="Where your receipts go"
       />
 
       <ol className="mt-12 grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
@@ -99,7 +95,7 @@ export function Trust() {
       </ol>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1.25fr_1fr_1fr]">
-        <Column title="Enforced in code today" tone="primary">
+        <Column title="What the app does today" tone="primary">
           <ul className="mt-2 divide-y divide-border">
             {enforced.map((text) => (
               <li className={item} key={text}>
@@ -109,7 +105,7 @@ export function Trust() {
             ))}
           </ul>
         </Column>
-        <Column title="Our commitments" tone="primary">
+        <Column title="What we promise" tone="primary">
           <ul className="mt-2 divide-y divide-border">
             {promised.map((text) => (
               <li className={item} key={text}>
@@ -132,7 +128,7 @@ export function Trust() {
             .
           </p>
         </Column>
-        <Column title="Not yet" tone="muted">
+        <Column title="Not done yet" tone="muted">
           <ul className="mt-2 divide-y divide-border">
             {notYet.map((entry) => (
               <li className={item} key={entry.title}>

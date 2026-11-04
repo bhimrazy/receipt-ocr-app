@@ -3,21 +3,49 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { focusRing } from "./primitives";
 
-/** A <details> menu below lg: works without JS. JS closes it on a link tap or a tap on the scrim. */
+/**
+ * A <details> menu below lg: works without JS. JS closes it on a link tap, a tap on the scrim or
+ * Escape (focus goes back to the toggle), and locks page scroll while it is open.
+ */
 export function MobileMenu({ links }: { links: Array<{ href: string; label: string }> }) {
   const ref = useRef<HTMLDetailsElement>(null);
+  const toggle = useRef<HTMLElement>(null);
+  const [open, setOpen] = useState(false);
   const close = () => ref.current?.removeAttribute("open");
+
+  useEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    const overflow = root.style.overflow;
+    root.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      ref.current?.removeAttribute("open");
+      toggle.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      root.style.overflow = overflow;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <details className="group lg:hidden" ref={ref}>
+    <details
+      className="group lg:hidden"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      ref={ref}
+    >
       <summary
         aria-label="Menu"
         className={cn(
           "flex size-11 cursor-pointer list-none items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground [&::-webkit-details-marker]:hidden",
           focusRing,
         )}
+        ref={toggle}
       >
         <Menu aria-hidden className="size-5 group-open:hidden" />
         <X aria-hidden className="hidden size-5 group-open:block" />

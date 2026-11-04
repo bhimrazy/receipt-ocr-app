@@ -149,15 +149,33 @@ export const samples: Sample[] = [
   },
 ];
 
-/** Rows already in the sample workspace. */
+/** Rows already in the sample workspace. Each adds up: subtotal + tax = total. */
 export const earlierRows = [
-  { merchant: "Metro Transit", receiptDate: "2026-10-20", category: "Travel", tax: 0, total: 45 },
+  {
+    merchant: "Metro Transit",
+    receiptDate: "2026-10-20",
+    time: "07:55",
+    category: "Travel",
+    fileName: "transit-pass.jpg",
+    itemCount: 1,
+    subtotal: 45,
+    tax: 0,
+    tip: null,
+    total: 45,
+    confidence: 0.97,
+  },
   {
     merchant: "Fiber Net",
     receiptDate: "2026-10-18",
+    time: "12:03",
     category: "Utilities",
+    fileName: "fiber-net-oct.png",
+    itemCount: 1,
+    subtotal: 73.59,
     tax: 6.4,
+    tip: null,
     total: 79.99,
+    confidence: 0.95,
   },
 ] as const;
 

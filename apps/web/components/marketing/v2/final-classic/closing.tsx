@@ -5,18 +5,28 @@ import { Brand } from "@/components/brand";
 import { ContactButton } from "@/components/contact-button";
 import { faqs as sharedFaqs } from "@/components/marketing/content";
 import { PLANS } from "@/lib/plans";
-import { Ctas, Label, Section, SectionHead, focusRing } from "./primitives";
+import { Ctas, Label, Section, SectionHead, focusRing, sectionLinks } from "./primitives";
 
-// Three shared answers are stated more exactly here: what can be edited, when the daily count
-// resets, and who can access an account.
+// Some shared answers are stated more exactly here: what can be edited, when the daily count
+// resets, who can access an account, and how export works.
 const answers: Record<string, string> = {
   "How accurate is it?":
-    "Each receipt gets an overall confidence score, and each line item gets its own. Low scores show you what to check against the photo. You can fix the merchant, date, category, currency and totals before you export. Line items are read and scored, but you can't edit them yet.",
+    "receiptOCR uses Google's Gemini AI to extract data from receipts. Each receipt gets an overall confidence score, and each line item gets its own. Low scores show you what to check against the photo. You can fix the merchant, date, category, currency and totals before you export. Line items are read and scored, but you can't edit them yet.",
   "What are the limits on the free plan?": `Up to ${PLANS.free.receiptsPerDay} receipts a day, counted from 00:00 UTC, and ${PLANS.free.workspaces} workspace. On busy days a service-wide daily cap can apply first. Need more? Use Contact us and tell us what you need.`,
   "Who can see my receipts?":
     "Only you and the people you invite to your workspace. receiptOCR admins can access a workspace to handle a support request. Google's Gemini AI reads the images to extract the data. Deleting a receipt, or your account, also deletes the stored images.",
+  "Can I get my data out?":
+    "Yes, at any time. You can export one receipt to CSV, or all the receipts in your workspace, or copy a receipt's data as JSON. There are no export fees.",
 };
-const faqs = sharedFaqs.map((faq) => ({ ...faq, a: answers[faq.q] ?? faq.a }));
+
+/** Rendered by Faq and reused for the FAQPage JSON-LD, so the two never differ. */
+export const faqs = [
+  {
+    q: "What is receiptOCR?",
+    a: "receiptOCR is a web app that reads receipt photos and exports the data as CSV or JSON. Upload a photo or a scan, check what it read, and fix anything that is wrong before you export.",
+  },
+  ...sharedFaqs.map((faq) => ({ ...faq, a: answers[faq.q] ?? faq.a })),
+];
 
 export function Faq() {
   return (
@@ -34,7 +44,7 @@ export function Faq() {
                 topic="getting-started"
                 variant="ghost"
               >
-                Ask us
+                Contact us
               </ContactButton>
               .
             </>
@@ -71,10 +81,10 @@ export function FinalCta() {
           className="fc-display mx-auto mt-4 max-w-2xl text-[2.1rem] leading-[1.08] font-bold text-balance sm:text-5xl"
           id="fc-final"
         >
-          Try it with your next receipt.
+          Try it with your next receipt
         </h2>
         <p className="mx-auto mt-4 max-w-md text-lg text-pretty text-muted-foreground">
-          Everything you put in can come back out as a CSV.
+          You can export everything you upload as a CSV, at any time.
         </p>
         <Ctas
           className="mx-auto mt-9 max-w-sm justify-center sm:max-w-none"
@@ -87,11 +97,10 @@ export function FinalCta() {
 }
 
 const footerLinks = [
-  { label: "Pricing", href: "#pricing" },
-  { label: "Your data", href: "#data" },
-  { label: "Create a free account", href: "/sign-up" },
+  ...sectionLinks,
   { label: "Sign in", href: "/sign-in" },
-  { label: "Privacy", href: "/privacy" },
+  { label: "Start free", href: "/sign-up" },
+  { label: "Privacy policy", href: "/privacy" },
   { label: "Terms", href: "/terms" },
 ];
 
@@ -108,7 +117,7 @@ export function Footer() {
             <Brand />
           </Link>
           <p className="mt-1 text-sm text-muted-foreground">
-            Receipts in, spreadsheet out. You check every number.
+            Receipt photos to spreadsheet rows. You check the numbers before you export.
           </p>
         </div>
         <nav aria-label="Footer">

@@ -11,17 +11,21 @@ import { Section, SectionHead } from "./primitives";
 const free = PLANS.free;
 
 /** The free plan's limits, exactly as lib/plans.ts and packages/core/src/quota.ts enforce them. */
-const limits = [
+const limits: Array<{ what: string; condition?: string; value: string }> = [
   {
     what: "Receipts",
-    condition: "Resets daily at 00:00 UTC. A service-wide daily cap can apply first.",
+    condition: "Resets daily at 00:00 UTC, subject to a service-wide daily cap",
     value: `${free.receiptsPerDay} a day`,
   },
-  { what: "Burst", condition: "In any one minute", value: `${free.receiptsPerMinute} a minute` },
+  {
+    what: "Per minute",
+    condition: "In any one minute",
+    value: `${free.receiptsPerMinute} a minute`,
+  },
   { what: "Workspaces", condition: "With teammates you invite", value: String(free.workspaces) },
   { what: "Files", condition: "PNG, JPG or HEIC, 20 per batch", value: "10 MB each" },
   {
-    what: "Extraction",
+    what: "Fields read",
     condition: "Merchant, date, items, tax, total, category",
     value: "Included",
   },
@@ -33,7 +37,7 @@ const limits = [
   },
   { what: "Line items", condition: "Read and scored", value: "Not editable yet" },
   { what: "CSV and JSON export", condition: "One receipt or the whole workspace", value: "$0" },
-  { what: "Card on file", condition: "Not asked for", value: "None" },
+  { what: "Payment card", value: "Not needed" },
 ];
 
 export function Pricing() {
@@ -42,8 +46,8 @@ export function Pricing() {
       <SectionHead
         id="pricing"
         label="Pricing"
-        lead="No trial period and no card. These are the limits, exactly as the code enforces them."
-        title="One plan, and it is free."
+        lead="No card and no time limit. These limits apply to every free account."
+        title="One free plan, with clear limits"
       />
 
       <div className="mt-12 grid items-start gap-8 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] lg:gap-10">
@@ -71,7 +75,7 @@ export function Pricing() {
               className={cn(buttonVariants({ size: "lg" }), "mt-8 w-full text-[0.95rem]")}
               href="/sign-up"
             >
-              Create a free account
+              Start free
               <ArrowRight aria-hidden />
             </Link>
           </div>
@@ -99,9 +103,11 @@ export function Pricing() {
                   <tr className="border-b border-border/60 last:border-0" key={row.what}>
                     <th className="py-3 pr-4 pl-5 text-left align-top font-medium" scope="row">
                       {row.what}
-                      <span className="mt-0.5 block text-sm font-normal text-muted-foreground sm:hidden">
-                        {row.condition}
-                      </span>
+                      {row.condition && (
+                        <span className="mt-0.5 block text-sm font-normal text-muted-foreground sm:hidden">
+                          {row.condition}
+                        </span>
+                      )}
                     </th>
                     <td className="hidden py-3 pr-4 align-top text-sm leading-6 text-muted-foreground sm:table-cell">
                       {row.condition}
