@@ -80,6 +80,14 @@ export type ReceiptPatch = {
   total?: string | null;
 };
 
+/** Workspace-wide counts for the home screen; `needsReview` and `failed` are what to act on. */
+export type ReceiptCounts = {
+  total: number;
+  needsReview: number;
+  failed: number;
+  inFlight: number;
+};
+
 export type UsageCounts = { userMinute: number; userDay: number; globalDay: number | null };
 
 export type RetryClaim =
@@ -207,6 +215,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       filters: ReceiptFilters,
       page: { limit: number; offset: number },
     ) => Effect.Effect<{ rows: ReceiptSummary[]; total: number }, DbError>;
+    readonly counts: (scope: ReceiptScope) => Effect.Effect<ReceiptCounts, DbError>;
     readonly exportRows: (
       scope: ReceiptScope,
       filters: ReceiptFilters,
@@ -364,6 +373,25 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             db.select({ value: count() }).from(receipts).where(where),
           ]);
           return { rows: rows.map(toSummary), total: totals[0]?.value ?? 0 };
+        }),
+
+      counts: (scope) =>
+        use(async (db) => {
+          const [row] = await db
+            .select({
+              total: sql<number>`count(*)::int`,
+              needsReview: sql<number>`(count(*) filter (where ${receipts.status} = 'completed' and ${receipts.confidence} < ${String(NEEDS_REVIEW_BELOW)}))::int`,
+              failed: sql<number>`(count(*) filter (where ${effectiveStatus} = 'failed'))::int`,
+              inFlight: sql<number>`(count(*) filter (where ${effectiveStatus} in ('uploaded', 'processing')))::int`,
+            })
+            .from(receipts)
+            .where(eq(receipts.organizationId, scope.organizationId));
+          return {
+            total: row?.total ?? 0,
+            needsReview: row?.needsReview ?? 0,
+            failed: row?.failed ?? 0,
+            inFlight: row?.inFlight ?? 0,
+          };
         }),
 
       exportRows: (scope, filters, limit) =>

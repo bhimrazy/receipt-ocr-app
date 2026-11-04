@@ -140,6 +140,9 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect((await list({ from: "2099-01-01" })).total).toBe(0);
     const needsReview = Number(receipt!.confidence) < 0.9 ? 1 : 0;
     expect((await list({ status: "needs-review" })).total).toBe(needsReview);
+    const counts = await run(Effect.flatMap(ReceiptRepo, (r) => r.counts(a)));
+    expect(counts.needsReview).toBe(needsReview);
+    expect(counts.total).toBe((await list({})).total);
   });
 
   it("U2: a receipt stuck in processing reads as failed and stops counting against quota", async () => {

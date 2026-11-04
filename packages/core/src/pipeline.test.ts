@@ -58,6 +58,7 @@ function harness(options: { storagePut?: "fail"; ocr?: "fixture" | "fail" | "unc
       }),
     get: (id) => Effect.sync(() => rows.get(id) ?? null),
     list: () => Effect.die("unused"),
+    counts: () => Effect.die("unused"),
     exportRows: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
     remove: (id) =>
