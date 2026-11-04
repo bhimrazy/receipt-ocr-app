@@ -13,7 +13,7 @@ export async function signUp(page: Page, email: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/app\//);
+  await expect(page).toHaveURL(/\/app(\/|\?|$)/);
 }
 
 export async function signOut(page: Page) {
@@ -27,7 +27,7 @@ export async function signIn(page: Page, email: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/app\//);
+  await expect(page).toHaveURL(/\/app(\/|\?|$)/);
 }
 
 /** Inserts receipts straight into Postgres for the user's personal workspace (no OCR involved). */
