@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  PageHeader,
+  PageHeaderActions,
+  PageHeaderContent,
+  PageHeaderDescription,
+  PageHeaderTitle,
+} from "@/components/page-header";
 import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
 import { Button, buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
@@ -156,22 +163,21 @@ export function HistoryTable({
   return (
     <div className="mx-auto max-w-6xl">
       <ListPoller active={anyInFlight} />
-      <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">History</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+      <PageHeader>
+        <PageHeaderContent>
+          <PageHeaderTitle>History</PageHeaderTitle>
+          <PageHeaderDescription>
             {total} {total === 1 ? "receipt" : "receipts"} in this workspace
             {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
-          </p>
-        </div>
-        <a
-          className={cn(buttonVariants({ variant: "outline" }), "self-start sm:self-auto")}
-          href={exportHref}
-        >
-          <Download aria-hidden="true" />
-          {filtered ? "Export filtered CSV" : "Export CSV"}
-        </a>
-      </div>
+          </PageHeaderDescription>
+        </PageHeaderContent>
+        <PageHeaderActions>
+          <a className={buttonVariants({ variant: "outline" })} href={exportHref}>
+            <Download aria-hidden="true" />
+            {filtered ? "Export filtered CSV" : "Export CSV"}
+          </a>
+        </PageHeaderActions>
+      </PageHeader>
 
       <div aria-busy={pending} className="mb-5 flex flex-col gap-3" role="search">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">

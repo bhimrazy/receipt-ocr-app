@@ -1,3 +1,9 @@
+import {
+  PageHeader,
+  PageHeaderContent,
+  PageHeaderDescription,
+  PageHeaderTitle,
+} from "@/components/page-header";
 import { ListPoller } from "@/components/processing-poller";
 import { ReceiptList } from "@/components/receipt-list";
 import { UploadPanel } from "@/components/upload-panel";
@@ -170,15 +176,17 @@ export default async function HomePage() {
   return (
     <div className="mx-auto max-w-6xl">
       <ListPoller active={counts.inFlight > 0} />
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          {firstRun ? "Read your first receipt" : "Upload receipts"}
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Add a photo of a receipt and we read the merchant, date, items and total. Several photos
-          are read in the background while you keep working.
-        </p>
-      </div>
+      <PageHeader>
+        <PageHeaderContent>
+          <PageHeaderTitle>
+            {firstRun ? "Read your first receipt" : "Upload receipts"}
+          </PageHeaderTitle>
+          <PageHeaderDescription>
+            Add a photo of a receipt and we read the merchant, date, items and total. Several photos
+            are read in the background while you keep working.
+          </PageHeaderDescription>
+        </PageHeaderContent>
+      </PageHeader>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section aria-label="Upload">

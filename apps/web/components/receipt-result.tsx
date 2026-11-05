@@ -1,4 +1,10 @@
 import {
+  PageHeader,
+  PageHeaderContent,
+  PageHeaderDescription,
+  PageHeaderTitle,
+} from "@/components/page-header";
+import {
   EXTRACTION_FAILED_MESSAGE,
   MAX_EXTRACTION_ATTEMPTS,
   type ReceiptWithItems,
@@ -129,17 +135,12 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
   const triesLeft = Math.max(0, MAX_EXTRACTION_ATTEMPTS - receipt.attempts);
 
   const header = (
-    <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
-      <div className="min-w-0">
-        <h1
-          className={cn(
-            "font-semibold tracking-tight wrap-break-word",
-            title.isFile ? "font-mono text-xl md:text-2xl" : "text-2xl md:text-3xl",
-          )}
-        >
+    <PageHeader className="sm:flex-col sm:items-stretch md:flex-row md:items-start">
+      <PageHeaderContent>
+        <PageHeaderTitle className={cn(title.isFile && "font-mono text-xl md:text-2xl")}>
           {title.text}
-        </h1>
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+        </PageHeaderTitle>
+        <PageHeaderDescription className="mt-2.5 flex max-w-none flex-wrap items-center gap-x-3 gap-y-2">
           {completed ? (
             <>
               <span>{formatDate(receipt.receiptDate) ?? "No date found"}</span>
@@ -152,10 +153,10 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
               <span>Uploaded {formatDateTime(receipt.createdAt)}</span>
             </>
           )}
-        </div>
-      </div>
+        </PageHeaderDescription>
+      </PageHeaderContent>
       <ReceiptActions receipt={receipt} />
-    </div>
+    </PageHeader>
   );
 
   const image = (
