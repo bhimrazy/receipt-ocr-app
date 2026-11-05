@@ -128,11 +128,7 @@ export const auth = betterAuth({
     },
   },
   advanced: {
-    ipAddress: {
-      // Only headers a trusted proxy sets (TRUSTED_IP_HEADERS). Trusting a
-      // client-supplied X-Forwarded-For lets anyone rotate it past the limits.
-      ipAddressHeaders: authEnv.trustedIpHeaders,
-    },
+    ipAddress: authEnv.ipAddress,
   },
   user: {
     deleteUser: {

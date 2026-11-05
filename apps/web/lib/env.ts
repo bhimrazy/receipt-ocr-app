@@ -1,4 +1,5 @@
 import "server-only";
+import { isIP } from "node:net";
 
 /**
  * Centralized env parsing for auth + database configuration. Receipt
@@ -78,19 +79,48 @@ function betterAuthUrl(): string {
   return "http://localhost:3000";
 }
 
+function list(name: string): string[] | undefined {
+  const raw = optional(name);
+  if (!raw) return undefined;
+  const values = raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return values.length ? values : undefined;
+}
+
 /**
  * Headers that carry the client IP, comma-separated, e.g. `x-forwarded-for`.
- * Only set this behind a proxy that overwrites them: otherwise clients can
- * spoof the header and dodge rate limits. On Vercel the platform sets
- * x-forwarded-for, so it is the default there.
+ * Only set this behind a proxy that overwrites them, or that appends to them
+ * and is listed in TRUSTED_PROXIES: otherwise clients can spoof the header and
+ * dodge rate limits. On Vercel the platform sets x-forwarded-for, so it is the
+ * default there. Never `[]`: Better Auth would then read no header at all.
  */
-function trustedIpHeaders(): string[] {
-  const raw = process.env.TRUSTED_IP_HEADERS;
-  if (raw === undefined) return process.env.VERCEL ? ["x-forwarded-for"] : [];
-  return raw
-    .split(",")
-    .map((header) => header.trim().toLowerCase())
-    .filter(Boolean);
+function trustedIpHeaders(): string[] | undefined {
+  const headers = list("TRUSTED_IP_HEADERS")?.map((header) => header.toLowerCase());
+  return headers ?? (process.env.VERCEL ? ["x-forwarded-for"] : undefined);
+}
+
+function isIpOrCidr(value: string): boolean {
+  const [address = "", prefix, ...rest] = value.split("/");
+  const family = isIP(address);
+  if (!family || rest.length) return false;
+  if (prefix === undefined) return true;
+  return /^\d+$/.test(prefix) && Number(prefix) <= (family === 4 ? 32 : 128);
+}
+
+/**
+ * IPs or CIDR ranges of reverse proxies that append to the IP header, e.g.
+ * `10.0.0.5,10.1.0.0/24`. The client IP is then the right-most hop not in this
+ * list, instead of a single-value header.
+ */
+function trustedProxies(): string[] | undefined {
+  const proxies = list("TRUSTED_PROXIES");
+  const invalid = proxies?.filter((proxy) => !isIpOrCidr(proxy));
+  if (invalid?.length) {
+    throw new Error(`TRUSTED_PROXIES has invalid IPs or CIDR ranges: ${invalid.join(", ")}`);
+  }
+  return proxies;
 }
 
 export const authEnv = {
@@ -100,7 +130,8 @@ export const authEnv = {
   betterAuthSecret: optional("BETTER_AUTH_SECRET"),
   /** Canonical app origin, e.g. https://receiptocr.example.com. Defaults to localhost in dev. */
   betterAuthUrl: betterAuthUrl(),
-  trustedIpHeaders: trustedIpHeaders(),
+  /** Client-IP resolution shared by Better Auth's limiter and `clientIp()`. */
+  ipAddress: { ipAddressHeaders: trustedIpHeaders(), trustedProxies: trustedProxies() },
   /** Emails auto-promoted to the `admin` role when they sign up. */
   adminEmails: adminEmailList(),
   google: socialProvider("GOOGLE"),
@@ -120,10 +151,17 @@ if (authEnv.betterAuthSecret && authEnv.betterAuthSecret.length < 32) {
   );
 }
 
-// Misconfigurations that fail open quietly; say so once at startup.
-if (isProduction && authEnabled && !process.env.VERCEL && authEnv.trustedIpHeaders.length === 0) {
-  console.warn(
-    "TRUSTED_IP_HEADERS is unset: auth rate limits share one bucket for every client, so a few bad sign-ins lock everyone out. Set it to the header your proxy overwrites (e.g. x-forwarded-for).",
+// Without a trusted IP header every client shares one rate-limit bucket, so a
+// few bad sign-ins from anyone lock everybody out. Refuse to start instead.
+if (
+  isProduction &&
+  !isBuild &&
+  authEnabled &&
+  !process.env.VERCEL &&
+  !authEnv.ipAddress.ipAddressHeaders
+) {
+  throw new Error(
+    "TRUSTED_IP_HEADERS must be set in production off Vercel: name the header your reverse proxy sets to the client IP (e.g. x-forwarded-for), and set TRUSTED_PROXIES if the proxy appends to it.",
   );
 }
 if (isProduction && !requireEmailVerification) {

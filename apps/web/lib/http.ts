@@ -1,5 +1,6 @@
 import "server-only";
 import type { AppError, AppServices } from "@receipt-ocr/core";
+import { getIP } from "better-auth/api";
 import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
 import { authEnv } from "./env";
@@ -115,13 +116,14 @@ export function crossOriginResponse(request: Request): Response | null {
   return jsonError(403, "Cross-origin request rejected");
 }
 
-/** The client IP from a trusted proxy header, or null when none is configured. */
+/**
+ * The client IP by Better Auth's own rule, so app limiters and auth limiters
+ * agree: a configured header with one value, or the right-most hop not in
+ * TRUSTED_PROXIES. Never the first X-Forwarded-For entry, which the client
+ * controls. Null when no trustworthy IP is available.
+ */
 export function clientIp(request: Request): string | null {
-  for (const header of authEnv.trustedIpHeaders) {
-    const value = request.headers.get(header)?.split(",")[0]?.trim();
-    if (value) return value;
-  }
-  return null;
+  return getIP(request, { advanced: { ipAddress: authEnv.ipAddress } });
 }
 
 /** Room for multipart boundaries and the other form fields. */

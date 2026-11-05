@@ -116,6 +116,11 @@ services:
       S3_FORCE_PATH_STYLE: "true"
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-receiptOCR <onboarding@resend.dev>}
+      # Required in production off Vercel. Locally nothing sits in front of the
+      # app, so the header is client-set; behind a real proxy use the header it
+      # overwrites, or list the proxy in TRUSTED_PROXIES if it appends.
+      TRUSTED_IP_HEADERS: ${TRUSTED_IP_HEADERS:-x-forwarded-for}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
 
   # `next dev` in a container with the repo bind-mounted (`bun run docker:dev`).
   # Each workspace's node_modules is a volume so the container never uses the
