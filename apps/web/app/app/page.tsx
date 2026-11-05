@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "./_data/receipts-contract";
+import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "@/lib/receipts";
 
 export const metadata: Metadata = { title: "Home" };
 

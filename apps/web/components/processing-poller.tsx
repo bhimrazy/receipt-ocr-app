@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { ReceiptStatus } from "@/lib/receipts";
 
 /** Give up after this long; background extraction should never take longer. */
 const MAX_POLL_MS = 3 * 60 * 1000;
@@ -16,7 +17,7 @@ const MAX_INTERVAL_MS = 15000;
  * previous version hammered the API every 2.5s forever if the background job
  * died, which is a request per user per 2.5s with nothing to show for it.
  */
-export function ProcessingPoller({ id, status }: { id: string; status: string }) {
+export function ProcessingPoller({ id, status }: { id: string; status: ReceiptStatus }) {
   const router = useRouter();
   const [gaveUp, setGaveUp] = useState(false);
 

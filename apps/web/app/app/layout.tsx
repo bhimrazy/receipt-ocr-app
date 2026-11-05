@@ -11,7 +11,7 @@ import { getWorkspaceAllowance } from "@/lib/workspaces";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getUsageSummary } from "./_data/receipts-contract";
+import { getUsageSummary } from "@/lib/receipts";
 
 async function loadUsage(): Promise<Usage | null> {
   try {

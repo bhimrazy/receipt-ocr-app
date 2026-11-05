@@ -10,7 +10,7 @@ import { Card } from "@receipt-ocr/ui/components/card";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getUsageSummary } from "../_data/receipts-contract";
+import { getUsageSummary } from "@/lib/receipts";
 
 export const metadata: Metadata = { title: "Settings" };
 

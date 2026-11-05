@@ -33,20 +33,12 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import type { ReceiptSummary } from "@/app/app/_data/receipts-contract";
+import type { HistoryFilters, ReceiptSummary } from "@/lib/receipts";
 import { ListPoller } from "@/components/processing-poller";
 import { ReceiptList, receiptTitle } from "@/components/receipt-list";
 import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 import { formatDate, formatMoney } from "@/lib/format";
-
-export type HistoryFilters = {
-  q?: string;
-  category?: string;
-  status?: ReceiptSummary["status"] | "needs-review";
-  from?: string;
-  to?: string;
-};
 
 const STATUS_CHIPS = [
   { value: undefined, label: "All" },

@@ -13,18 +13,15 @@ import { Effect } from "effect";
 import { runtime } from "./runtime";
 import { requireActiveScope } from "./session";
 
-export { RECEIPT_CATEGORIES, type ReceiptCategory } from "@receipt-ocr/ai/categories";
+export type { ReceiptStatus } from "@receipt-ocr/core";
 export { getUsageSummary, type UsageSummary } from "./quota";
 
 export type ReceiptSummary = CoreReceiptSummary;
 
-export type ReceiptListFilters = {
-  q?: string;
-  category?: string;
-  status?: ReceiptSummary["status"] | "needs-review";
-  /** Inclusive receipt-date bounds, YYYY-MM-DD. */
-  from?: string;
-  to?: string;
+/** The History search and filters, as they appear in the URL and the toolbar. */
+export type HistoryFilters = ReceiptFilters;
+
+export type ReceiptListFilters = HistoryFilters & {
   page?: number;
   pageSize?: number;
 };

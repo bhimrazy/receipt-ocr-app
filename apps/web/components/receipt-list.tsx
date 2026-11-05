@@ -1,7 +1,7 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import type { ReceiptSummary } from "@/app/app/_data/receipts-contract";
+import type { ReceiptSummary } from "@/lib/receipts";
 import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 import { confidenceLevel, formatDate, formatMoney } from "@/lib/format";
