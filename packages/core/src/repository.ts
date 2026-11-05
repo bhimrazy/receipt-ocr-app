@@ -29,7 +29,10 @@ export type ReceiptStatus = Receipt["status"];
 export type ReceiptScope = {
   organizationId: string;
   userId: string;
-  /** Workspace role. Plain members may delete only receipts they uploaded. */
+  /**
+   * Workspace role. Plain members may delete only receipts they uploaded; one
+   * whose uploader was deleted (null `userId`) only an owner or admin can.
+   */
   role?: string;
 };
 
@@ -193,11 +196,12 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       fileName: string;
       imageObjectKey: string;
     }) => Effect.Effect<Receipt, DbError>;
-    /** Persists an extraction and its items; null when the receipt no longer exists. */
+    /** Persists an extraction, its items and the model that produced it; null when the receipt no longer exists. */
     readonly complete: (
       id: string,
       scope: ReceiptScope,
       extraction: ReceiptExtraction,
+      model: string,
     ) => Effect.Effect<ReceiptWithItems | null, DbError>;
     readonly fail: (
       id: string,
@@ -264,7 +268,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           return row;
         }),
 
-      complete: (id, scope, extraction) =>
+      complete: (id, scope, extraction, model) =>
         use((db) =>
           db.transaction(async (tx) => {
             const [row] = await tx
@@ -281,6 +285,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 total: String(extraction.total),
                 confidence: String(extraction.confidence),
                 rawJson: extraction,
+                model,
                 errorMessage: null,
                 updatedAt: new Date(),
               })

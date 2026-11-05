@@ -1,4 +1,3 @@
-import type { ModelId } from "@receipt-ocr/ai";
 import type { S3StorageConfig } from "@receipt-ocr/storage";
 import { Config, Effect, Option, Redacted } from "effect";
 import { NotConfigured } from "./errors";
@@ -34,37 +33,6 @@ export const loadStorageConfig: Effect.Effect<S3StorageConfig, NotConfigured> = 
   Effect.map((c) => ({ ...c, secretAccessKey: Redacted.value(c.secretAccessKey) })),
   Effect.mapError(
     (cause) => new NotConfigured({ message: "Receipt storage is not configured", cause }),
-  ),
-);
-
-export type OcrSettings = {
-  model: ModelId;
-  googleApiKey?: string;
-  timeoutMs: number;
-};
-
-const ocrProvider = Config.literal(
-  "google",
-  "fixture",
-)("OCR_PROVIDER").pipe(Config.withDefault("google" as const));
-
-const googleConfig = Config.all({
-  model: Config.string("GEMINI_MODEL").pipe(Config.withDefault("gemini-3.7-flash")),
-  apiKey: Config.redacted(required("GOOGLE_GENERATIVE_AI_API_KEY")),
-  timeoutMs: Config.integer("GEMINI_TIMEOUT_MS").pipe(Config.withDefault(45_000)),
-});
-
-export const loadOcrConfig: Effect.Effect<OcrSettings, NotConfigured> = Effect.gen(function* () {
-  if ((yield* ocrProvider) === "fixture") return { model: "fixture", timeoutMs: 0 } as const;
-  const google = yield* googleConfig;
-  return {
-    model: `google:${google.model}`,
-    googleApiKey: Redacted.value(google.apiKey),
-    timeoutMs: google.timeoutMs,
-  } satisfies OcrSettings;
-}).pipe(
-  Effect.mapError(
-    (cause) => new NotConfigured({ message: "Receipt extraction is not configured", cause }),
   ),
 );
 

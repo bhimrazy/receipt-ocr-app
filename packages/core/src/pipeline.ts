@@ -8,7 +8,8 @@ import {
   ReceiptRepo,
   type ReceiptScope,
 } from "./repository";
-import { Ocr, Storage } from "./services";
+import { Ocr } from "./ocr";
+import { Storage } from "./services";
 
 export type StepTiming = { step: string; ms: number };
 
@@ -71,10 +72,16 @@ export const extractStored = (input: {
     const receipt = yield* timed(
       timings,
       "db.complete",
-      repo.complete(input.receiptId, input.scope, result.extraction),
+      repo.complete(input.receiptId, input.scope, result.extraction, result.model),
     );
     if (!receipt) return yield* new NotFound({ message: "Receipt was deleted during extraction" });
-    return { receipt, usage: result.usage, model: result.model, timings };
+    return {
+      receipt,
+      usage: result.usage,
+      model: result.model,
+      attempts: result.attempts,
+      timings,
+    };
   }).pipe(Effect.tapError(() => markFailed(input.receiptId, input.scope)));
 
 const markFailed = (receiptId: string, scope: ReceiptScope) =>

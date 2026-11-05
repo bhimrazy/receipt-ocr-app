@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { NotConfigured, OcrError, StorageError } from "./errors";
 import { claimRetry, deleteReceipt, extractStored, ingestUpload } from "./pipeline";
 import { EXTRACTION_FAILED_MESSAGE, ReceiptRepo, type ReceiptWithItems } from "./repository";
-import { Ocr, Storage } from "./services";
+import { Ocr } from "./ocr";
+import { Storage } from "./services";
 
 const scope = { organizationId: "org-a", userId: "user-a" };
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
@@ -32,13 +33,14 @@ function harness(options: { storagePut?: "fail"; ocr?: "fixture" | "fail" | "unc
         rows.set(id, row);
         return row as Receipt;
       }),
-    complete: (id, _scope, extraction) =>
+    complete: (id, _scope, extraction, model) =>
       Effect.sync(() => {
         const row = rows.get(id);
         if (!row) return null;
         Object.assign(row, {
           status: "completed",
           merchant: extraction.merchant,
+          model,
           errorMessage: null,
         });
         return row;
@@ -85,17 +87,25 @@ function harness(options: { storagePut?: "fail"; ocr?: "fixture" | "fail" | "unc
   });
 
   const ocr = Layer.succeed(Ocr, {
+    ready: Effect.void,
     extract: (file) => {
       if (options.ocr === "unconfigured")
         return Effect.fail(new NotConfigured({ message: "no key" }));
       const text = new TextDecoder().decode(file.data);
       if (options.ocr === "fail" || text.includes(FIXTURE_FAIL_MARKER)) {
-        return Effect.fail(new OcrError({ message: "Receipt extraction failed" }));
+        return Effect.fail(
+          new OcrError({
+            message: "Receipt extraction failed",
+            kind: "provider-error",
+            attempts: [{ model: "fixture", kind: "provider-error", ms: 1 }],
+          }),
+        );
       }
       return Effect.succeed({
         extraction: FIXTURE_RECEIPTS[0]!,
         usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
         model: "fixture" as const,
+        attempts: [{ model: "fixture", kind: "ok" as const, ms: 1 }],
       });
     },
   });
@@ -143,11 +153,11 @@ describe("extractStored", () => {
     };
   };
 
-  it("completes the receipt on success", async () => {
+  it("completes the receipt on success and records the model that read it", async () => {
     const h = harness();
     const { id, exit } = await ingestAndExtract(h);
     expect(Exit.isSuccess(exit)).toBe(true);
-    expect(h.rows.get(id)?.status).toBe("completed");
+    expect(h.rows.get(id)).toMatchObject({ status: "completed", model: "fixture" });
   });
 
   it("marks the receipt failed with a user-facing message when OCR fails", async () => {

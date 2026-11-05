@@ -2,14 +2,16 @@ import { createGoogle } from "@ai-sdk/google";
 import { createProviderRegistry, generateText, Output } from "ai";
 import { CATEGORY_DESCRIPTIONS, RECEIPT_CATEGORIES } from "./categories";
 import { fixtureExtraction } from "./fixture";
+import type { OcrProviderId } from "./models";
 import { receiptExtractionSchema, type ReceiptExtraction } from "./schema";
 
-/** `provider:model`, e.g. `google:gemini-3.7-flash`, or `fixture` for the offline provider. */
-export type ModelId = `${string}:${string}` | "fixture";
+/** Providers reached through the AI SDK registry; `fixture` is handled locally. */
+type RegistryProviderId = Exclude<OcrProviderId, "fixture">;
 
-export type ProviderKeys = {
-  google?: string;
-};
+/** `provider:model`, e.g. `google:gemini-3.7-flash`, or `fixture` for the offline provider. */
+export type ModelId = `${RegistryProviderId}:${string}` | "fixture";
+
+export type ProviderKeys = Partial<Record<RegistryProviderId, string>>;
 
 export type ExtractReceiptInput = {
   model: ModelId;
@@ -17,7 +19,7 @@ export type ExtractReceiptInput = {
   keys?: ProviderKeys;
   /** Wall-clock budget for the whole call, retries included. */
   timeoutMs?: number;
-  /** Retry attempts on transient provider errors. */
+  /** Retries on transient provider errors within this one call. */
   maxRetries?: number;
   abortSignal?: AbortSignal;
 };
@@ -55,7 +57,9 @@ const PROMPT = [
 const registries = new Map<string, ReturnType<typeof buildRegistry>>();
 
 function buildRegistry(keys: ProviderKeys) {
-  return createProviderRegistry({ google: createGoogle({ apiKey: keys.google }) });
+  return createProviderRegistry({
+    google: createGoogle({ apiKey: keys.google }),
+  } satisfies Record<RegistryProviderId, unknown>);
 }
 
 /** One registry per key set, so provider clients are reused across calls. */
@@ -71,6 +75,10 @@ function registryFor(keys: ProviderKeys) {
 
 const NO_USAGE: ExtractionUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
+/**
+ * One extraction with one model: no fallback here, the caller owns routing.
+ * Failures are the AI SDK's errors; `classifyOcrError` says what kind.
+ */
 export async function extractReceipt(input: ExtractReceiptInput): Promise<ExtractReceiptResult> {
   if (input.model === "fixture") {
     return { extraction: fixtureExtraction(input.file.data), usage: NO_USAGE, model: input.model };
@@ -78,7 +86,7 @@ export async function extractReceipt(input: ExtractReceiptInput): Promise<Extrac
 
   const registry = registryFor(input.keys ?? {});
   const result = await generateText({
-    model: registry.languageModel(input.model as `google:${string}`),
+    model: registry.languageModel(input.model),
     output: Output.object({ schema: receiptExtractionSchema }),
     timeout: { totalMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS },
     maxRetries: input.maxRetries ?? DEFAULT_MAX_RETRIES,
