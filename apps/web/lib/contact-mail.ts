@@ -1,4 +1,4 @@
-import type { SendEmailInput } from "@receipt-ocr/email";
+import { escapeHtml, type SendEmailInput } from "@receipt-ocr/email";
 
 const TOPIC_LABELS = {
   "getting-started": "Question",
@@ -8,14 +8,6 @@ const TOPIC_LABELS = {
 
 export function isTopic(value: string): value is keyof typeof TOPIC_LABELS {
   return value in TOPIC_LABELS;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 /** Support-inbox message; replies go to the visitor. The subject uses a fixed label, never user text. */

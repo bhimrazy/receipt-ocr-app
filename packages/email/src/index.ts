@@ -17,6 +17,12 @@ export type SendEmailResult =
 
 let client: Resend | null = null;
 
+/** Logs carry the recipient's domain only: addresses are personal data and logs outlive mail. */
+function recipientDomain(to: string): string {
+  const at = to.lastIndexOf("@");
+  return at === -1 ? "unknown" : to.slice(at + 1).toLowerCase();
+}
+
 function resend(apiKey: string): Resend {
   if (!client) client = new Resend(apiKey);
   return client;
@@ -70,7 +76,7 @@ export async function sendEmail(
         JSON.stringify({
           level: "error",
           event: "email.send_failed",
-          to: input.to,
+          to_domain: recipientDomain(input.to),
           subject: input.subject,
           error: error.message,
         }),
@@ -81,7 +87,7 @@ export async function sendEmail(
       JSON.stringify({
         level: "info",
         event: "email.sent",
-        to: input.to,
+        to_domain: recipientDomain(input.to),
         subject: input.subject,
         id: data?.id,
       }),
@@ -93,7 +99,7 @@ export async function sendEmail(
       JSON.stringify({
         level: "error",
         event: "email.send_failed",
-        to: input.to,
+        to_domain: recipientDomain(input.to),
         subject: input.subject,
         error: message,
       }),
