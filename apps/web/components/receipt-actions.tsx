@@ -160,7 +160,7 @@ export function ReceiptWorkspace({
       {checks.length > 0 ? (
         <section
           aria-labelledby="checks-heading"
-          className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/[0.07] p-4 sm:flex-row sm:items-start"
+          className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-start"
         >
           <TriangleAlert
             aria-hidden="true"

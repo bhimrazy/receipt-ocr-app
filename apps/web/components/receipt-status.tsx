@@ -6,7 +6,7 @@ import { confidenceLevel, formatConfidence, type ConfidenceLevel } from "@/lib/f
 export type ReceiptStatus = "uploaded" | "processing" | "completed" | "failed";
 
 const STATUS = {
-  completed: { label: "Done", variant: "default", icon: CircleCheck },
+  completed: { label: "Done", variant: "success", icon: CircleCheck },
   processing: { label: "Reading…", variant: "secondary", icon: Loader2 },
   uploaded: { label: "Reading…", variant: "secondary", icon: Loader2 },
   failed: { label: "Couldn't read", variant: "destructive", icon: CircleAlert },
@@ -31,7 +31,7 @@ export function StatusBadge({ status, className }: { status: ReceiptStatus; clas
 }
 
 export const CONFIDENCE = {
-  high: { label: "High", variant: "default", icon: CircleCheck, hint: "High confidence" },
+  high: { label: "High", variant: "success", icon: CircleCheck, hint: "High confidence" },
   check: {
     label: "Check",
     variant: "warning",

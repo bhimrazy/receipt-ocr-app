@@ -239,7 +239,7 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
         ) : null}
         {failed ? (
           <div
-            className="mb-6 flex flex-col gap-4 rounded-lg border border-destructive/30 bg-destructive/[0.08] p-4 text-sm sm:flex-row sm:items-start"
+            className="mb-6 flex flex-col gap-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm sm:flex-row sm:items-start"
             role="alert"
           >
             <CircleAlert
@@ -365,7 +365,7 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
               const low = confidenceLevel(item.confidence) === "review";
               return (
                 <tr
-                  className={cn(low && "bg-warning/[0.06] shadow-[inset_3px_0_0_var(--warning)]")}
+                  className={cn(low && "bg-warning/5 shadow-[inset_3px_0_0_var(--warning)]")}
                   key={item.id}
                 >
                   <td className="py-3 pr-3 pl-5 align-top">

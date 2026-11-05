@@ -36,7 +36,7 @@ export function ReceiptList({
         const level = completed ? confidenceLevel(receipt.confidence) : null;
         return (
           <li
-            className="group relative flex items-center gap-3 px-4 py-3 transition-colors focus-within:bg-foreground/[0.04] hover:bg-foreground/[0.04]"
+            className="group relative flex items-center gap-3 px-4 py-3 transition-colors focus-within:bg-wash-subtle hover:bg-wash-subtle"
             key={receipt.id}
           >
             <div className="min-w-0 flex-1">

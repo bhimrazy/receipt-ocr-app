@@ -121,7 +121,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
           {open.map((item) => (
             <li className="relative" key={item.href}>
               <Link
-                className="group flex items-start gap-3 px-4 py-3.5 outline-none hover:bg-foreground/[0.04] focus-visible:bg-foreground/[0.04] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                className="group flex items-start gap-3 px-4 py-3.5 outline-none hover:bg-wash-subtle focus-visible:bg-wash-subtle focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 href={item.href}
               >
                 <span

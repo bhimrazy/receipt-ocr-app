@@ -126,7 +126,7 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
       >
         <DropdownMenuTrigger
           aria-label={`Workspace: ${current?.name ?? "none"}. Switch workspace`}
-          className="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-sm transition outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring max-md:h-11"
+          className="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-sm transition outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring max-md:h-11"
         >
           <Initial name={current?.name ?? "?"} />
           <span className="min-w-0 flex-1 truncate font-medium">
