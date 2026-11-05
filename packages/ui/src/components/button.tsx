@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 
 // Below md every size grows to 44px so touch targets meet WCAG 2.5.5.
-const buttonVariants = cva(
+const buttonCva = cva(
   "group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
@@ -36,8 +36,13 @@ const buttonVariants = cva(
   },
 );
 
+/** Merged, so a variant's border/background beats the base's when used without cn(). */
+function buttonVariants(props?: Parameters<typeof buttonCva>[0]) {
+  return cn(buttonCva(props));
+}
+
 type ButtonProps = ButtonPrimitive.Props &
-  VariantProps<typeof buttonVariants> & {
+  VariantProps<typeof buttonCva> & {
     /**
      * @deprecated Use `render={<Link href="…" />}` (Base UI), or `buttonVariants()` on a link.
      * Kept so existing Radix-style call sites keep working.

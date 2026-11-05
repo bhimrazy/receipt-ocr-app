@@ -241,7 +241,7 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
         ) : null}
         {failed ? (
           <Alert
-            className="mb-6 flex flex-col gap-4 p-4 sm:flex-row sm:items-start"
+            className="mb-6 flex flex-col gap-4 p-4 has-[>svg]:gap-x-4 sm:flex-row sm:items-start"
             variant="destructive"
           >
             <CircleAlert aria-hidden="true" className="size-5 shrink-0 max-sm:hidden" />

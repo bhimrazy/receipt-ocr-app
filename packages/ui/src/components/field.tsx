@@ -50,7 +50,7 @@ function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>)
   return (
     <Label
       data-slot="field-label"
-      className={cn("w-fit leading-snug group-data-[disabled=true]/field:opacity-50", className)}
+      className={cn("w-fit group-data-[disabled=true]/field:opacity-50", className)}
       {...props}
     />
   );
@@ -61,7 +61,7 @@ function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
     <p
       data-slot="field-description"
       className={cn(
-        "text-xs leading-normal font-normal text-muted-foreground [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary",
+        "text-xs font-normal text-muted-foreground [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary",
         className,
       )}
       {...props}
