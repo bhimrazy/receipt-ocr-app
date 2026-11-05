@@ -8,7 +8,7 @@ vi.mock("./runtime", () => ({ runtime: {} }));
 vi.mock("./log", () => ({ logger: { error: vi.fn(), info: vi.fn() } }));
 vi.mock("./env", () => ({ authEnv: { betterAuthUrl: "https://app.example", ipAddress } }));
 
-const { clientIp } = await import("./http");
+const { causeDetail, clientIp, crossOriginResponse } = await import("./http");
 
 const request = (headers: Record<string, string>) =>
   new Request("https://app.example/api/contact", { method: "POST", headers });
@@ -34,5 +34,31 @@ describe("clientIp (P2-6)", () => {
     expect(clientIp(request({ "x-real-ip": "203.0.113.9", "x-forwarded-for": "6.6.6.6" }))).toBe(
       "203.0.113.9",
     );
+  });
+});
+
+describe("crossOriginResponse (L4)", () => {
+  const mutation = (headers: Record<string, string>) =>
+    new Request("https://app.example/api/receipts/x", { method: "DELETE", headers });
+
+  it("allows the app's own origin", () => {
+    expect(crossOriginResponse(mutation({ origin: "https://app.example" }))).toBeNull();
+  });
+
+  it("rejects another origin and a missing one", () => {
+    expect(crossOriginResponse(mutation({ origin: "https://evil.example" }))?.status).toBe(403);
+    expect(crossOriginResponse(mutation({ "sec-fetch-site": "cross-site" }))?.status).toBe(403);
+    expect(crossOriginResponse(mutation({}))?.status).toBe(403);
+  });
+});
+
+describe("causeDetail (L2)", () => {
+  it("keeps the failed SQL but drops its bound params", () => {
+    const cause = new Error(
+      'Failed query: update "receipts" set "merchant" = $1 where "id" = $2\nparams: Jane Doe Pharmacy,0f8f',
+    );
+    const detail = causeDetail({ cause });
+    expect(detail).toContain('update "receipts"');
+    expect(detail).not.toContain("Jane Doe");
   });
 });

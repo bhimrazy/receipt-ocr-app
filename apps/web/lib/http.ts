@@ -24,11 +24,16 @@ const PUBLIC = new Set<AppError["_tag"]>(["InvalidInput", "NotFound", "Conflict"
 export const jsonError = (status: number, error: string, headers?: HeadersInit) =>
   NextResponse.json({ error }, { status, headers });
 
-/** The wrapped provider/driver error, which says why (bad key, timeout, SQL). */
-function causeDetail(error: { cause?: unknown }): string | undefined {
+/**
+ * The wrapped provider/driver error, which says why (bad key, timeout, SQL).
+ * Drizzle appends the bound `params:` (user text such as merchant names) to a
+ * failed query's message; those stay out of logs.
+ */
+export function causeDetail(error: { cause?: unknown }): string | undefined {
   const inner = error.cause;
   if (!inner) return undefined;
-  return (inner instanceof Error ? `${inner.name}: ${inner.message}` : String(inner)).slice(0, 500);
+  const detail = inner instanceof Error ? `${inner.name}: ${inner.message}` : String(inner);
+  return detail.replace(/\s*params:[\s\S]*$/, " params: [redacted]").slice(0, 500);
 }
 
 /** Records a failure on the wide event and returns its HTTP response. */
@@ -106,13 +111,12 @@ function logFailure(cause: Cause.Cause<AppError>) {
 const appOrigin = new URL(authEnv.betterAuthUrl).origin;
 
 /**
- * Rejects cross-site mutations. Browsers always send Origin on cross-origin
- * POST/PATCH/DELETE, so a mismatch is a forged request; a missing Origin is a
- * non-browser client, which still needs the session cookie.
+ * Rejects cross-site mutations. Browsers send Origin on every POST, PATCH and
+ * DELETE, so these routes require it to be the app's own; a request without
+ * one is refused rather than assumed to be same-site.
  */
 export function crossOriginResponse(request: Request): Response | null {
-  const origin = request.headers.get("origin");
-  if (!origin || origin === appOrigin) return null;
+  if (request.headers.get("origin") === appOrigin) return null;
   return jsonError(403, "Cross-origin request rejected");
 }
 
