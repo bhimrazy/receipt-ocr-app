@@ -1,8 +1,4 @@
-"use client";
-
-import { Badge } from "@receipt-ocr/ui/components/badge";
-import { Button } from "@receipt-ocr/ui/components/button";
-import { Input } from "@receipt-ocr/ui/components/input";
+import type { AdminUserRow } from "@receipt-ocr/core";
 import {
   Table,
   TableBody,
@@ -11,175 +7,132 @@ import {
   TableHeader,
   TableRow,
 } from "@receipt-ocr/ui/components/table";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Meter } from "@/components/admin/meter";
+import { Initial, UserBadges } from "@/components/admin/user-badges";
 import { formatDate } from "@/lib/format";
-import { RowActions } from "./row-actions";
+import { planLabel } from "@/lib/plans";
 
-export interface AdminUser {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  banned: boolean;
-  banReason: string | null;
-  banExpires: string | null;
-  emailVerified: boolean;
-  createdAt: string;
-}
+type Row = AdminUserRow & { limit: number };
 
-function RoleBadge({ role }: { role: string }) {
+const linkClass =
+  "rounded-md outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-ring";
+
+function Empty({ filtered }: { filtered: boolean }) {
   return (
-    <Badge variant={role === "admin" ? "default" : "secondary"}>
-      {role === "admin" ? "Admin" : "User"}
-    </Badge>
+    <p className="px-4 py-12 text-center text-sm text-muted-foreground">
+      {filtered ? "No users match this search or these filters." : "No users yet."}
+    </p>
   );
 }
 
-function StatusBadge({ user }: { user: AdminUser }) {
-  if (user.banned) return <Badge variant="destructive">Banned</Badge>;
-  return <Badge variant="secondary">{user.emailVerified ? "Active" : "Unverified"}</Badge>;
-}
-
+/** Each row links to the user's page, where every action lives. */
 export function UsersTable({
   users,
-  total,
-  page,
-  pageSize,
-  search,
   currentUserId,
+  filtered,
 }: {
-  users: AdminUser[];
-  total: number;
-  page: number;
-  pageSize: number;
-  search: string;
-  currentUserId: string | null;
+  users: Row[];
+  currentUserId: string;
+  filtered: boolean;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [query, setQuery] = useState(search);
-
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-  function pushParams(next: { q?: string; page?: number }) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (next.q !== undefined) {
-      if (next.q) params.set("q", next.q);
-      else params.delete("q");
-    }
-    if (next.page !== undefined) {
-      if (next.page > 1) params.set("page", String(next.page));
-      else params.delete("page");
-    }
-    router.push(`${pathname}?${params.toString()}`);
-  }
+  const you = (id: string) =>
+    id === currentUserId ? <span className="text-muted-foreground"> (you)</span> : null;
 
   return (
-    <div>
-      <form
-        className="mb-5 flex max-w-sm items-center gap-2"
-        role="search"
-        onSubmit={(event) => {
-          event.preventDefault();
-          pushParams({ q: query.trim(), page: 1 });
-        }}
-      >
-        <div className="relative flex-1">
-          <Search
-            aria-hidden="true"
-            className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            aria-label="Search users by email"
-            className="pl-9"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by email"
-            type="search"
-            value={query}
-          />
-        </div>
-        <Button size="sm" type="submit" variant="outline">
-          Search
-        </Button>
-      </form>
-
-      <ul className="divide-y divide-border rounded-lg border border-border md:hidden">
+    <>
+      <ul className="divide-y divide-border rounded-lg border border-border bg-card md:hidden">
         {users.length === 0 ? (
-          <li className="px-4 py-10 text-center text-sm text-muted-foreground">
-            No users match that search.
+          <li>
+            <Empty filtered={filtered} />
           </li>
         ) : (
           users.map((user) => (
-            <li className="flex items-start gap-2 px-4 py-3" key={user.id}>
-              <Link
-                className="min-w-0 flex-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                href={`/admin/users/${user.id}`}
-              >
-                <span className="block truncate text-sm font-medium">
-                  {user.name || user.email}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
-                <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <RoleBadge role={user.role} />
-                  <StatusBadge user={user} />
-                  <span>Joined {formatDate(user.createdAt)}</span>
-                </span>
-              </Link>
-              <RowActions currentUserId={currentUserId} user={user} />
+            <li className="relative px-4 py-3.5 hover:bg-foreground/[0.03]" key={user.id}>
+              <div className="flex items-start gap-3">
+                <Initial email={user.email} name={user.name} />
+                <div className="min-w-0 flex-1">
+                  <Link className={linkClass} href={`/admin/users/${user.id}`}>
+                    <span className="block truncate text-sm font-medium">
+                      {user.name || user.email}
+                      {you(user.id)}
+                    </span>
+                  </Link>
+                  <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+                  <div className="mt-2">
+                    <UserBadges {...user} />
+                  </div>
+                  <div className="mt-2.5 flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="shrink-0">{planLabel(user.plan)}</span>
+                    <Meter
+                      className="flex-1"
+                      label={`Receipts used today by ${user.email}`}
+                      limit={user.limit}
+                      used={user.usedToday}
+                    />
+                  </div>
+                </div>
+              </div>
             </li>
           ))
         )}
       </ul>
 
-      <div className="hidden rounded-lg border border-border md:block">
+      <div className="hidden overflow-hidden rounded-lg border border-border bg-card md:block">
         <Table>
+          <caption className="sr-only">Users</caption>
           <TableHeader>
             <TableRow>
               <TableHead>User</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Joined</TableHead>
-              <TableHead className="text-right">
-                <span className="sr-only">Actions</span>
-              </TableHead>
+              <TableHead>Plan</TableHead>
+              <TableHead className="w-48">Used today</TableHead>
+              <TableHead className="text-right">Workspaces</TableHead>
+              <TableHead className="text-right">Joined</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell className="py-10 text-center text-sm text-muted-foreground" colSpan={5}>
-                  No users match that search.
+                <TableCell colSpan={5}>
+                  <Empty filtered={filtered} />
                 </TableCell>
               </TableRow>
             ) : (
               users.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow className="relative hover:bg-foreground/[0.03]" key={user.id}>
                   <TableCell>
-                    <Link
-                      className="group block rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      href={`/admin/users/${user.id}`}
-                    >
-                      <div className="font-medium group-hover:text-primary">
-                        {user.name || user.email}
+                    <div className="flex items-center gap-3">
+                      <Initial email={user.email} name={user.name} />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            className={`${linkClass} font-medium`}
+                            href={`/admin/users/${user.id}`}
+                          >
+                            {user.name || user.email}
+                            {you(user.id)}
+                          </Link>
+                          <UserBadges {...user} />
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground">{user.email}</div>
                       </div>
-                      <div className="text-xs text-muted-foreground">{user.email}</div>
-                    </Link>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {planLabel(user.plan).replace(" plan", "")}
                   </TableCell>
                   <TableCell>
-                    <RoleBadge role={user.role} />
+                    <Meter
+                      label={`Receipts used today by ${user.email}`}
+                      limit={user.limit}
+                      used={user.usedToday}
+                    />
                   </TableCell>
-                  <TableCell>
-                    <StatusBadge user={user} />
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {user.workspaces}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
+                  <TableCell className="text-right font-mono text-xs text-muted-foreground tabular-nums">
                     {formatDate(user.createdAt)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <RowActions currentUserId={currentUserId} user={user} />
                   </TableCell>
                 </TableRow>
               ))
@@ -187,32 +140,6 @@ export function UsersTable({
           </TableBody>
         </Table>
       </div>
-
-      <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-        <span className="font-mono tabular-nums">
-          Page {page} of {totalPages}
-        </span>
-        <div className="flex gap-2">
-          <Button
-            disabled={page <= 1}
-            onClick={() => pushParams({ page: page - 1 })}
-            size="sm"
-            variant="outline"
-          >
-            <ChevronLeft aria-hidden="true" />
-            Previous
-          </Button>
-          <Button
-            disabled={page >= totalPages}
-            onClick={() => pushParams({ page: page + 1 })}
-            size="sm"
-            variant="outline"
-          >
-            Next
-            <ChevronRight aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }

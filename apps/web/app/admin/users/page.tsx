@@ -1,70 +1,108 @@
-import { auth } from "@/lib/auth";
+import { listUsers, policyFor, type UserSort } from "@receipt-ocr/core";
+import type { Metadata } from "next";
+import { AdminPageHeader } from "@/components/admin/page-header";
+import { ListToolbar } from "@/components/admin/list-toolbar";
+import { Pager } from "@/components/admin/pager";
+import { getPlanTable } from "@/lib/plan-limits";
+import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
-import { headers } from "next/headers";
-import { UsersTable, type AdminUser } from "./users-table";
+import { one, PAGE_SIZE, pageOf, pick, type SearchParams } from "../params";
+import { UsersTable } from "./users-table";
 
-const PAGE_SIZE = 20;
+export const metadata: Metadata = { title: "Users" };
 
-function toIso(value: unknown): string | null {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value as string);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
+const SORTS = ["newest", "oldest", "name", "usage"] as const;
+const SORT_MAP: Record<(typeof SORTS)[number], { sort: UserSort; dir: "asc" | "desc" }> = {
+  newest: { sort: "joined", dir: "desc" },
+  oldest: { sort: "joined", dir: "asc" },
+  name: { sort: "name", dir: "asc" },
+  usage: { sort: "usage", dir: "desc" },
+};
 
-export default async function AdminUsersPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; page?: string }>;
-}) {
+export default async function AdminUsersPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireAdmin();
   const params = await searchParams;
-  const search = (params.q ?? "").trim();
-  const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
-  const offset = (page - 1) * PAGE_SIZE;
-
-  const result = await auth.api.listUsers({
-    query: {
-      limit: PAGE_SIZE,
-      offset,
-      sortBy: "createdAt",
-      sortDirection: "desc",
-      ...(search ? { searchField: "email", searchOperator: "contains", searchValue: search } : {}),
-    },
-    headers: await headers(),
-  });
-
-  const rawUsers = "users" in result ? result.users : [];
-  const total =
-    "total" in result && typeof result.total === "number" ? result.total : rawUsers.length;
-
-  const users: AdminUser[] = rawUsers.map((user) => ({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: (user.role as string | null) ?? "user",
-    banned: Boolean(user.banned),
-    banReason: (user.banReason as string | null) ?? null,
-    banExpires: toIso(user.banExpires),
-    emailVerified: Boolean(user.emailVerified),
-    createdAt: toIso(user.createdAt) ?? new Date().toISOString(),
-  }));
+  const filters = {
+    q: one(params.q),
+    role: pick(params.role, ["admin", "user"] as const),
+    plan: pick(params.plan, ["free", "pro"] as const),
+    status: pick(params.status, ["active", "banned", "unverified"] as const),
+  };
+  const sortKey = pick(params.sort, SORTS) ?? "newest";
+  const page = pageOf(params.page);
+  const [plans, result] = await Promise.all([
+    getPlanTable(),
+    runtime.runPromise(
+      listUsers({ ...filters, ...SORT_MAP[sortKey] }, { page, pageSize: PAGE_SIZE }),
+    ),
+  ]);
+  const filtered = Object.values(filters).some(Boolean);
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Users</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {total} {total === 1 ? "user" : "users"}. Manage roles, bans and sessions.
-        </p>
-      </div>
+    <>
+      <AdminPageHeader
+        description="Search by name or email, or filter by role, plan and status. Open a user to change their plan or role, ban them, or sign in as them."
+        title="Users"
+      />
+      <ListToolbar
+        searchLabel="Search users by name or email"
+        searchPlaceholder="Name or email"
+        selects={[
+          {
+            name: "status",
+            label: "Status",
+            options: [
+              { value: "any", label: "Any status" },
+              { value: "active", label: "Active" },
+              { value: "banned", label: "Banned" },
+              { value: "unverified", label: "Email not verified" },
+            ],
+          },
+          {
+            name: "plan",
+            label: "Plan",
+            options: [
+              { value: "any", label: "Any plan" },
+              { value: "free", label: "Free" },
+              { value: "pro", label: "Pro" },
+            ],
+          },
+          {
+            name: "role",
+            label: "Role",
+            options: [
+              { value: "any", label: "Any role" },
+              { value: "admin", label: "Admin" },
+              { value: "user", label: "User" },
+            ],
+          },
+          {
+            name: "sort",
+            label: "Sort",
+            options: [
+              { value: "newest", label: "Newest first" },
+              { value: "oldest", label: "Oldest first" },
+              { value: "name", label: "Name A–Z" },
+              { value: "usage", label: "Most used today" },
+            ],
+          },
+        ]}
+      />
       <UsersTable
+        currentUserId={session.user.id}
+        filtered={filtered}
+        users={result.rows.map((row) => ({
+          ...row,
+          limit: policyFor(plans, row.plan).receiptsPerDay,
+        }))}
+      />
+      <Pager
+        noun="users"
         page={page}
         pageSize={PAGE_SIZE}
-        search={search}
-        currentUserId={session.user.id}
-        total={total}
-        users={users}
+        params={{ ...filters, sort: sortKey === "newest" ? undefined : sortKey }}
+        total={result.total}
       />
-    </div>
+    </>
   );
 }
