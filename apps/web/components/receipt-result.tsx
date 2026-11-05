@@ -125,7 +125,14 @@ function Field({
   );
 }
 
-export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
+export function ReceiptResult({
+  receipt,
+  canEdit,
+}: {
+  receipt: ReceiptWithItems;
+  /** False for members viewing someone else's receipt: no edit or delete controls. */
+  canEdit: boolean;
+}) {
   const inFlight = isInFlight(receipt.status);
   const completed = receipt.status === "completed";
   const failed = receipt.status === "failed";
@@ -155,7 +162,7 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
           )}
         </PageHeaderDescription>
       </PageHeaderContent>
-      <ReceiptActions receipt={receipt} />
+      <ReceiptActions canEdit={canEdit} receipt={receipt} />
     </PageHeader>
   );
 
@@ -420,6 +427,7 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
       {back}
       {header}
       <ReceiptWorkspace
+        canEdit={canEdit}
         checks={checksFor(receipt, money)}
         details={details}
         footer={footer}
