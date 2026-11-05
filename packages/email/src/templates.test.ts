@@ -12,7 +12,7 @@ describe("invitationEmail", () => {
   });
 
   it("escapes the workspace name and inviter in the HTML body", () => {
-    expect(mail.html).not.toContain("<h1 style=\"color:red\">");
+    expect(mail.html).not.toContain('<h1 style="color:red">');
     expect(mail.html).not.toContain('href="https://evil.example');
     expect(mail.html).toContain("&lt;h1 style=&quot;color:red&quot;&gt;");
     expect(mail.html).toContain("b&lt;script&gt;@example.com");

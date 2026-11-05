@@ -14,6 +14,7 @@ import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
+import { limitInvitations, validateWorkspaceName } from "./auth-guards";
 import { authEnabled, authEnv, emailEnv, isProduction, requireEmailVerification } from "./env";
 import { logger } from "./log";
 import { workspaceLimitForPlan } from "./plans";
@@ -114,6 +115,8 @@ export const auth = betterAuth({
     customRules: {
       "/sign-in/email": { window: 60, max: 5 },
       "/sign-up/email": { window: 60, max: 3 },
+      // Per IP; auth-guards also caps each inviter.
+      "/organization/invite-member": { window: 60 * 60, max: 20 },
     },
   },
   session: {
@@ -199,6 +202,11 @@ export const auth = betterAuth({
         });
       },
       organizationHooks: {
+        beforeCreateOrganization: ({ organization }) =>
+          validateWorkspaceName(organization, { required: true }),
+        beforeUpdateOrganization: ({ organization }) =>
+          validateWorkspaceName(organization, { required: false }),
+        beforeCreateInvitation: ({ inviter }) => limitInvitations(inviter.id),
         beforeDeleteOrganization: async ({ organization }) => {
           await purgeFiles({ organizationId: organization.id });
         },

@@ -2,6 +2,7 @@ import { asc, desc, eq, member, organization, rateLimit, sql } from "@receipt-oc
 import { Effect } from "effect";
 import type { ReceiptScope } from "./repository";
 import { Db } from "./services";
+import { personalWorkspaceName } from "./workspace-name";
 
 /**
  * The workspace a request acts in, resolved through `member` on every call.
@@ -28,9 +29,6 @@ export const resolveScope = (userId: string, preferredOrganizationId?: string | 
 
 const slugFor = (userId: string) => userId.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
-const nameFor = (user: { name?: string | null; email: string }) =>
-  `${user.name?.trim() || user.email.split("@")[0] || "Personal"}'s Workspace`;
-
 /**
  * Creates the user's personal workspace and owner membership in one
  * transaction, so a failure can't leave an org without its owner. Idempotent:
@@ -49,7 +47,7 @@ export const ensurePersonalWorkspace = (user: {
           .insert(organization)
           .values({
             id: crypto.randomUUID(),
-            name: nameFor(user),
+            name: personalWorkspaceName(user),
             slug: slugFor(user.id),
             createdAt: now,
           })
