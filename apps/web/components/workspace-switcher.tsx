@@ -19,11 +19,19 @@ import {
   DropdownMenuTrigger,
 } from "@receipt-ocr/ui/components/dropdown-menu";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Field, FieldError, FieldLabel } from "@receipt-ocr/ui/components/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+
+// Matches the server rule for workspace names (length and characters).
+const WORKSPACE_NAME_MAX = 80;
+const WORKSPACE_NAME_RULE = "Up to 80 characters, without < > or /.";
+
+function isValidWorkspaceName(name: string) {
+  return name.length <= WORKSPACE_NAME_MAX && !/[<>/\u0000-\u001f\u007f]/.test(name);
+}
 
 function initialFor(name: string) {
   return (name.trim() || "?").charAt(0).toUpperCase();
@@ -93,6 +101,10 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
     const trimmed = name.trim();
     if (!trimmed) {
       setCreateError("Enter a name for the workspace.");
+      return;
+    }
+    if (!isValidWorkspaceName(trimmed)) {
+      setCreateError("Remove < > and / from the name.");
       return;
     }
     setCreateError(null);
@@ -196,14 +208,18 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
             <Field data-invalid={createError ? true : undefined}>
               <FieldLabel htmlFor="workspace-name">Workspace name</FieldLabel>
               <Input
-                aria-describedby={createError ? "workspace-name-error" : undefined}
+                aria-describedby={
+                  createError ? "workspace-name-error workspace-name-hint" : "workspace-name-hint"
+                }
                 aria-invalid={createError ? true : undefined}
                 autoComplete="off"
                 id="workspace-name"
+                maxLength={WORKSPACE_NAME_MAX}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="e.g. Household"
                 value={name}
               />
+              <FieldDescription id="workspace-name-hint">{WORKSPACE_NAME_RULE}</FieldDescription>
               <FieldError id="workspace-name-error">{createError}</FieldError>
             </Field>
             <DialogFooter>
