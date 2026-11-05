@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
+import { Alert } from "@receipt-ocr/ui/components/alert";
+import { Field, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, MessageCircle, Send, X } from "lucide-react";
@@ -163,8 +165,10 @@ export function SupportWidget() {
                   </div>
                 </fieldset>
 
-                <label className="flex flex-col gap-1.5" htmlFor={`${ids}-email`}>
-                  <span className="text-xs font-medium text-muted-foreground">Your email</span>
+                <Field>
+                  <FieldLabel className="text-xs text-muted-foreground" htmlFor={`${ids}-email`}>
+                    Your email
+                  </FieldLabel>
                   <Input
                     ref={emailRef}
                     id={`${ids}-email`}
@@ -176,10 +180,12 @@ export function SupportWidget() {
                     autoComplete="email"
                     className={cn("h-11", fieldClass)}
                   />
-                </label>
+                </Field>
 
-                <label className="flex flex-col gap-1.5" htmlFor={`${ids}-message`}>
-                  <span className="text-xs font-medium text-muted-foreground">Message</span>
+                <Field>
+                  <FieldLabel className="text-xs text-muted-foreground" htmlFor={`${ids}-message`}>
+                    Message
+                  </FieldLabel>
                   <textarea
                     id={`${ids}-message`}
                     required
@@ -192,7 +198,7 @@ export function SupportWidget() {
                       fieldClass,
                     )}
                   />
-                </label>
+                </Field>
 
                 {/* Honeypot: off-screen and out of the tab order. */}
                 <input
@@ -204,11 +210,11 @@ export function SupportWidget() {
                   className="pointer-events-none absolute -left-[9999px] h-0 w-0 opacity-0"
                 />
 
-                {error && (
-                  <p className="text-xs text-destructive" role="alert">
+                {error ? (
+                  <Alert className="text-xs" variant="destructive">
                     {error}
-                  </p>
-                )}
+                  </Alert>
+                ) : null}
 
                 <Button type="submit" disabled={status === "sending"} className="h-11 w-full">
                   {status === "sending" ? (

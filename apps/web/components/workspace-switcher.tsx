@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@receipt-ocr/ui/components/dropdown-menu";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Label } from "@receipt-ocr/ui/components/label";
+import { Field, FieldError, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -193,8 +193,8 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
                 A separate space with its own receipts and members.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="workspace-name">Workspace name</Label>
+            <Field data-invalid={createError ? true : undefined}>
+              <FieldLabel htmlFor="workspace-name">Workspace name</FieldLabel>
               <Input
                 aria-describedby={createError ? "workspace-name-error" : undefined}
                 aria-invalid={createError ? true : undefined}
@@ -204,12 +204,8 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
                 placeholder="e.g. Household"
                 value={name}
               />
-              {createError ? (
-                <p className="text-sm text-destructive" id="workspace-name-error" role="alert">
-                  {createError}
-                </p>
-              ) : null}
-            </div>
+              <FieldError id="workspace-name-error">{createError}</FieldError>
+            </Field>
             <DialogFooter>
               <Button
                 disabled={creating}

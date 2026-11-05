@@ -11,7 +11,8 @@ import {
 } from "@receipt-ocr/ui/components/card";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Label } from "@receipt-ocr/ui/components/label";
+import { Alert } from "@receipt-ocr/ui/components/alert";
+import { Field, FieldLabel } from "@receipt-ocr/ui/components/field";
 import {
   Select,
   SelectContent,
@@ -49,18 +50,6 @@ type PendingConfirm =
   | { kind: "remove"; member: OrgMember }
   | { kind: "demote-self"; member: OrgMember; role: Role }
   | { kind: "cancel-invite"; invitation: OrgInvitation };
-
-function ErrorText({ children, id }: { children: React.ReactNode; id?: string }) {
-  return (
-    <p
-      className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-      id={id}
-      role="alert"
-    >
-      {children}
-    </p>
-  );
-}
 
 function RoleSelect({
   value,
@@ -291,9 +280,9 @@ export function MembersManager() {
         </CardHeader>
         <CardContent className="p-0">
           {error ? (
-            <div className="mx-5 mb-4">
-              <ErrorText>{error}</ErrorText>
-            </div>
+            <Alert className="mx-5 mb-4 w-auto" variant="destructive">
+              {error}
+            </Alert>
           ) : null}
           <ul className="divide-y divide-border border-t border-border">
             {members.map((m) => {
@@ -378,8 +367,8 @@ export function MembersManager() {
               noValidate
               onSubmit={handleInvite}
             >
-              <div className="flex flex-1 flex-col gap-1.5">
-                <Label htmlFor="invite-email">Email</Label>
+              <Field className="flex-1" data-invalid={inviteError ? true : undefined}>
+                <FieldLabel htmlFor="invite-email">Email</FieldLabel>
                 <Input
                   aria-describedby={inviteError ? "invite-error" : undefined}
                   aria-invalid={inviteError ? true : undefined}
@@ -390,24 +379,26 @@ export function MembersManager() {
                   type="email"
                   value={email}
                 />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invite-role">Role</Label>
+              </Field>
+              <Field className="sm:w-32">
+                <FieldLabel htmlFor="invite-role">Role</FieldLabel>
                 <RoleSelect id="invite-role" onChange={setInviteRole} value={inviteRole} />
-              </div>
+              </Field>
               <Button disabled={inviting} type="submit">
                 {inviting ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
                 Send invite
               </Button>
             </form>
-            {inviteError ? <ErrorText id="invite-error">{inviteError}</ErrorText> : null}
+            {inviteError ? (
+              <Alert id="invite-error" variant="destructive">
+                {inviteError}
+              </Alert>
+            ) : null}
             {inviteLink ? (
-              <div className="rounded-lg border border-border bg-background/40 p-3" role="status">
-                <p className="mb-2 flex items-center gap-1.5 text-sm">
-                  <Check aria-hidden="true" className="size-4 text-primary" />
-                  Invite sent. Or share this link:
-                </p>
-                <div className="flex items-center gap-2">
+              <Alert className="p-3" variant="success">
+                <Check aria-hidden="true" />
+                <p>Invite sent. Or share this link:</p>
+                <div className="mt-2 flex items-center gap-2">
                   <code className="min-w-0 flex-1 truncate rounded bg-secondary px-2 py-1.5 font-mono text-xs">
                     {inviteLink}
                   </code>
@@ -420,7 +411,7 @@ export function MembersManager() {
                     {copiedKey === "new" ? "Copied" : "Copy link"}
                   </Button>
                 </div>
-              </div>
+              </Alert>
             ) : null}
           </CardContent>
         </Card>

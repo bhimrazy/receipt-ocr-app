@@ -5,6 +5,7 @@ import {
 } from "@receipt-ocr/core";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
+import { Alert, AlertDescription, AlertTitle } from "@receipt-ocr/ui/components/alert";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { cn } from "@receipt-ocr/ui/lib/utils";
@@ -238,22 +239,19 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
           </div>
         ) : null}
         {failed ? (
-          <div
-            className="mb-6 flex flex-col gap-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm sm:flex-row sm:items-start"
-            role="alert"
+          <Alert
+            className="mb-6 flex flex-col gap-4 p-4 sm:flex-row sm:items-start"
+            variant="destructive"
           >
-            <CircleAlert
-              aria-hidden="true"
-              className="size-5 shrink-0 text-destructive max-sm:hidden"
-            />
+            <CircleAlert aria-hidden="true" className="size-5 shrink-0 max-sm:hidden" />
             <div className="min-w-0 flex-1">
-              <p className="font-medium text-destructive">This receipt couldn&apos;t be read</p>
-              <p className="mt-1 text-muted-foreground">
+              <AlertTitle>This receipt couldn&apos;t be read</AlertTitle>
+              <AlertDescription className="mt-1">
                 {/* The generic message repeats the heading, so say only the useful part. */}
                 {!receipt.errorMessage || receipt.errorMessage === EXTRACTION_FAILED_MESSAGE
                   ? FAILED_FALLBACK
                   : receipt.errorMessage}
-              </p>
+              </AlertDescription>
               <p className="mt-2 text-xs text-muted-foreground">
                 {triesLeft > 0
                   ? `${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left for this photo. Failed receipts don't count toward your daily limit.`
@@ -270,7 +268,7 @@ export function ReceiptResult({ receipt }: { receipt: ReceiptWithItems }) {
                 Upload a new photo
               </Link>
             </div>
-          </div>
+          </Alert>
         ) : null}
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
           {image}
