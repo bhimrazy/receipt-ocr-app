@@ -11,12 +11,14 @@
   background-size: 64px 64px;
 }
 
-.glow-orb {
-  animation: orb-float 8s ease-in-out infinite;
-}
+@media (prefers-reduced-motion: no-preference) {
+  .glow-orb {
+    animation: orb-float 8s ease-in-out infinite;
+  }
 
-.floating-receipt {
-  animation: card-float 6s ease-in-out infinite;
+  .floating-receipt {
+    animation: card-float 6s ease-in-out infinite;
+  }
 }
 
 .text-gradient {
@@ -132,4 +134,39 @@
     transform: translate3d(-2%, 3%, 0) scale(1.04);
     opacity: 0.8;
   }
+}
+
+@keyframes orb-float {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -52%) scale(1.08);
+  }
+}
+
+@keyframes card-float {
+  0%,
+  100% {
+    transform: rotate(var(--r, 0deg)) translateY(0);
+  }
+  50% {
+    transform: rotate(var(--r, 0deg)) translateY(-12px);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
