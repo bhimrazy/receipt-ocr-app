@@ -18,7 +18,6 @@ export function escapeHtml(value: string): string {
 
 /** Collapses control characters and runs of whitespace, so text can't add lines to a plain-text mail. */
 function oneLine(value: string): string {
-  // eslint-disable-next-line no-control-regex
   return value.replace(/[\u0000-\u001f\u007f\s]+/g, " ").trim();
 }
 

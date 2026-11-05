@@ -1,6 +1,5 @@
 export const WORKSPACE_NAME_MAX_LENGTH = 80;
 
-// eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
 /**
@@ -32,7 +31,6 @@ export function personalWorkspaceName(user: { name?: string | null; email: strin
   const source = user.name?.trim() || user.email.split("@")[0] || "Personal";
   const owner =
     source
-      // eslint-disable-next-line no-control-regex
       .replace(/[<>\u0000-\u001f\u007f-\u009f]/g, "")
       .trim()
       .slice(0, WORKSPACE_NAME_MAX_LENGTH - SUFFIX.length)

@@ -3,16 +3,7 @@
  * `bun run --filter @receipt-ocr/web test:int` after `bun run db:migrate`,
  * with DATABASE_URL and BETTER_AUTH_SECRET set.
  */
-import {
-  account,
-  createDb,
-  eq,
-  like,
-  organization,
-  sql,
-  user,
-  verification,
-} from "@receipt-ocr/db";
+import { account, createDb, eq, organization, sql, user, verification } from "@receipt-ocr/db";
 import type { SendEmailInput } from "@receipt-ocr/email";
 import { APIError } from "better-auth/api";
 import { decryptOAuthToken, setTokenUtil } from "better-auth/oauth2";
@@ -124,7 +115,8 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
   });
 
   it("P2-4: seals new OAuth tokens and still reads plaintext rows from before", async () => {
-    const context = await auth.$context;
+    // The inferred plugin context is narrower than the helpers' AuthContext parameter.
+    const context = (await auth.$context) as unknown as Parameters<typeof setTokenUtil>[1];
     const sealed = await setTokenUtil("ya29.new-access-token", context);
     expect(sealed).not.toContain("ya29");
     expect(await decryptOAuthToken(sealed!, context)).toBe("ya29.new-access-token");
