@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { authErrorMessage } from "@/lib/auth-errors";
 import { AuthError, AuthField, AuthNotice, authCardClass, authLinkClass } from "./auth-field";
 
 export type SocialProvider = "google" | "github";
@@ -57,8 +58,11 @@ export function CredentialsForm({
   providers,
   redirectTo = "/app/upload",
   notice,
+  initialError = null,
 }: {
   mode: "sign-in" | "sign-up";
+  /** An error a social sign-in came back with (`?error=`). */
+  initialError?: string | null;
   /** Confirmation shown above the form, e.g. after a password reset. */
   notice?: string;
   providers: SocialProvider[];
@@ -69,7 +73,7 @@ export function CredentialsForm({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [pending, setPending] = useState<"credentials" | SocialProvider | null>(null);
 
   const isSignUp = mode === "sign-up";
@@ -84,7 +88,7 @@ export function CredentialsForm({
       ? await authClient.signUp.email({ name, email, password })
       : await authClient.signIn.email({ email, password });
     if (authError) {
-      setError(authError.message ?? "Something went wrong. Please try again.");
+      setError(authErrorMessage(authError));
       setPending(null);
       return;
     }
@@ -98,9 +102,11 @@ export function CredentialsForm({
     const { error: authError } = await authClient.signIn.social({
       provider,
       callbackURL: redirectTo,
+      // Errors (a suspended account, a cancelled consent) come back to this page as ?error=.
+      errorCallbackURL: `/${mode}${redirectQuery}`,
     });
     if (authError) {
-      setError(authError.message ?? "Something went wrong. Please try again.");
+      setError(authErrorMessage(authError));
       setPending(null);
     }
   }

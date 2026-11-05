@@ -1,17 +1,18 @@
 import "server-only";
-import { checkQuota, enforceQuota, type QuotaLimits } from "@receipt-ocr/core";
-import { planPolicy } from "./plans";
+import { checkQuota, enforceQuota, quotaLimits, userPlan } from "@receipt-ocr/core";
+import { Effect } from "effect";
+import { getCurrentPlan } from "./plan-limits";
 import { runtime } from "./runtime";
-import { planFor, requireSession } from "./session";
+import { requireSession } from "./session";
 
-export function quotaLimitsFor(plan: string | undefined): QuotaLimits {
-  const policy = planPolicy(plan);
-  return { perMinute: policy.receiptsPerMinute, perDay: policy.receiptsPerDay };
-}
-
-/** Effect for routes: fails with QuotaExceeded when the user or the service is out of room. */
-export const enforceUploadQuota = (userId: string, plan: string | undefined) =>
-  enforceQuota(userId, quotaLimitsFor(plan));
+/**
+ * Effect for routes: fails with QuotaExceeded when the user or the service is
+ * out of room. Reads the plan fresh from the database; returns its id for logs.
+ */
+export const enforceUploadQuota = (userId: string) =>
+  Effect.flatMap(userPlan(userId), ({ plan, policy }) =>
+    enforceQuota(userId, quotaLimits(policy)).pipe(Effect.as(plan)),
+  );
 
 export type UsageSummary = {
   used: number;
@@ -32,9 +33,8 @@ export type UsageSummary = {
  */
 export async function getUsageSummary(): Promise<UsageSummary> {
   const session = await requireSession();
-  const verdict = await runtime.runPromise(
-    checkQuota(session.user.id, quotaLimitsFor(planFor(session))),
-  );
+  const { policy } = await getCurrentPlan();
+  const verdict = await runtime.runPromise(checkQuota(session.user.id, quotaLimits(policy)));
   const blocked = verdict.allowed || verdict.window === "minute" ? null : (verdict.window ?? "day");
   return {
     used: verdict.used,

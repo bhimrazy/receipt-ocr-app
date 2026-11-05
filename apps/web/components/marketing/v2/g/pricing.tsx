@@ -9,7 +9,7 @@ import { SectionHead, container } from "./parts";
 
 /** Itemised like a fee schedule: what it is, the condition, the number. */
 const schedule = [
-  { item: "Receipts", note: "Rolling 24 hours", value: `${plan.receiptsPerDay} / day` },
+  { item: "Receipts", note: "Resets at 00:00 UTC", value: `${plan.receiptsPerDay} / day` },
   { item: "Burst", note: "Per rolling minute", value: "10 / min" },
   { item: "Workspaces", note: "With teammates you invite", value: String(plan.workspaces) },
   { item: "Extraction", note: "Merchant, date, items, tax, total, category", value: "Included" },

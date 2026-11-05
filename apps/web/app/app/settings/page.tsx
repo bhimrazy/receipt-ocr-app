@@ -2,8 +2,9 @@ import { AccountSettings } from "@/components/account-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
 import { authEnv } from "@/lib/env";
-import { planLabel, planPolicy } from "@/lib/plans";
-import { planFor, requireActiveScope, requireSession } from "@/lib/session";
+import { getCurrentPlan } from "@/lib/plan-limits";
+import { planLabel } from "@/lib/plans";
+import { requireActiveScope } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
@@ -28,10 +29,9 @@ async function loadWorkspace(organizationId: string) {
 }
 
 export default async function SettingsPage() {
-  const [session, scope] = await Promise.all([requireSession(), requireActiveScope()]);
-  const plan = planFor(session);
-  const policy = planPolicy(plan);
-  const [usage, workspace] = await Promise.all([
+  const scope = await requireActiveScope();
+  const [{ plan, policy }, usage, workspace] = await Promise.all([
+    getCurrentPlan(),
     getUsageSummary(),
     loadWorkspace(scope.organizationId),
   ]);

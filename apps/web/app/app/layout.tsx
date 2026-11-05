@@ -5,8 +5,9 @@ import { UsageMeter, type Usage } from "@/components/usage-meter";
 import { UserMenu, type MenuUser } from "@/components/user-menu";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { logger } from "@/lib/log";
+import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
-import { isAdmin, planFor, requireSession } from "@/lib/session";
+import { isAdmin, requireSession } from "@/lib/session";
 import { getWorkspaceAllowance } from "@/lib/workspaces";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
@@ -29,8 +30,12 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Every /app page needs a real session; with auth unconfigured this sends everyone to /sign-in.
   const session = await requireSession();
-  const [allowance, usage] = await Promise.all([getWorkspaceAllowance(), loadUsage()]);
-  const label = planLabel(planFor(session));
+  const [allowance, usage, { plan }] = await Promise.all([
+    getWorkspaceAllowance(),
+    loadUsage(),
+    getCurrentPlan(),
+  ]);
+  const label = planLabel(plan);
   const showAdmin = isAdmin(session);
   const user: MenuUser = {
     name: session.user.name ?? null,

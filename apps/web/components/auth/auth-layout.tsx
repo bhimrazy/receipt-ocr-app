@@ -3,10 +3,10 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Download, PencilLine, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
-import { PLANS } from "@/lib/plans";
+import { getPlanTable } from "@/lib/plan-limits";
 import { authCardClass } from "./auth-field";
 
-export const valueProps = [
+const valueProps = (freePerDay: number) => [
   {
     icon: ScanLine,
     title: "Reads the whole receipt",
@@ -20,20 +20,22 @@ export const valueProps = [
   {
     icon: Download,
     title: "Export a CSV",
-    desc: `Free plan: ${PLANS.free.receiptsPerDay} receipts a day, no card required.`,
+    desc: `Free plan: ${freePerDay} receipts a day, no card required.`,
   },
 ];
 
 const footerLink =
   "inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-export function AuthLayout({
+/** Shows the free plan's saved daily limit; pages using it revalidate hourly or on save. */
+export async function AuthLayout({
   children,
   subtitle,
 }: {
   children: React.ReactNode;
   subtitle: string;
 }) {
+  const plans = await getPlanTable();
   return (
     <div className="relative grid min-h-screen overflow-hidden bg-background lg:grid-cols-2">
       <aside className="relative hidden flex-col justify-between border-r border-border bg-secondary/20 p-12 lg:flex">
@@ -55,7 +57,7 @@ export function AuthLayout({
           </p>
           <p className="mt-4 text-pretty leading-7 text-muted-foreground">{subtitle}</p>
           <ul className="mt-10 flex flex-col gap-6">
-            {valueProps.map(({ icon: Icon, title, desc }) => (
+            {valueProps(plans.free.receiptsPerDay).map(({ icon: Icon, title, desc }) => (
               <li className="flex items-start gap-4" key={title}>
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
                   <Icon aria-hidden className="size-5" />

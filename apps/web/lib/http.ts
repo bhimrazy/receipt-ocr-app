@@ -1,5 +1,5 @@
 import "server-only";
-import type { AppError, AppServices } from "@receipt-ocr/core";
+import type { AppError, AppServices, OcrAttempt } from "@receipt-ocr/core";
 import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
 import { authEnv } from "./env";
@@ -47,6 +47,7 @@ export function failureResponse(cause: Cause.Cause<AppError>, event?: WideEvent)
     event.status_code = status;
     event.outcome = status >= 500 ? "error" : error._tag;
     event.error = { type: error._tag, message: error.message, detail: causeDetail(error) };
+    if (error._tag === "OcrError") event.ocr = { kind: error.kind, attempts: error.attempts };
   }
   const headers =
     error._tag === "QuotaExceeded" ? { "Retry-After": String(error.retryAfterSeconds) } : undefined;
@@ -78,20 +79,29 @@ export async function runRoute<A>(
 export async function runBackground<A>(
   program: Effect.Effect<A, AppError, AppServices>,
   event: WideEvent,
-  onSuccess?: (value: A) => void,
+  onSuccess?: (value: A, event: WideEvent) => void,
 ): Promise<void> {
   const startedAt = Date.now();
   const exit = await runtime.runPromiseExit(program);
   event.duration_ms = Date.now() - startedAt;
   if (Exit.isSuccess(exit)) {
     event.outcome = "success";
-    onSuccess?.(exit.value);
+    onSuccess?.(exit.value, event);
     logger.info(event);
     return;
   }
   failureResponse(exit.cause, event);
   event.outcome = "error";
   logger.error(event);
+}
+
+/** Which model read the receipt, and every model tried, for an extraction's wide event. */
+export function recordOcr(
+  result: { model: string; attempts: readonly OcrAttempt[] },
+  event: WideEvent,
+): void {
+  event.model = result.model;
+  event.ocr = { attempts: result.attempts };
 }
 
 function logFailure(cause: Cause.Cause<AppError>) {

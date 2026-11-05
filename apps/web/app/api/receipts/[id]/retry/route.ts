@@ -1,10 +1,10 @@
-import { claimRetry, extractStored, loadOcrConfig } from "@receipt-ocr/core";
+import { claimRetry, extractStored, Ocr } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
-import { crossOriginResponse, jsonError, runBackground, runRoute } from "@/lib/http";
+import { crossOriginResponse, jsonError, recordOcr, runBackground, runRoute } from "@/lib/http";
 import { logger, type WideEvent } from "@/lib/log";
 import { enforceUploadQuota } from "@/lib/quota";
-import { getActiveScope, getSession, planFor } from "@/lib/session";
+import { getActiveScope, getSession } from "@/lib/session";
 
 export const maxDuration = 60;
 
@@ -24,23 +24,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     request_id: requestId,
     receipt_id: id,
     user_id: scope.userId,
+    ...(session.session.impersonatedBy ? { impersonated_by: session.session.impersonatedBy } : {}),
   };
 
   const response = await runRoute(
-    enforceUploadQuota(session.user.id, planFor(session)).pipe(
-      Effect.zipRight(loadOcrConfig),
+    enforceUploadQuota(session.user.id).pipe(
+      Effect.tap((plan) => void (event.plan = plan)),
+      Effect.zipRight(Effect.flatMap(Ocr, (ocr) => ocr.ready)),
       Effect.zipRight(claimRetry({ receiptId: id, scope })),
     ),
     (file) => {
       event.outcome = "queued";
       after(() =>
-        runBackground(extractStored({ receiptId: id, scope, file }), {
-          event: "receipt.extract.background",
-          request_id: requestId,
-          receipt_id: id,
-          user_id: scope.userId,
-          retry: true,
-        }),
+        runBackground(
+          extractStored({ receiptId: id, scope, file }),
+          {
+            event: "receipt.extract.background",
+            request_id: requestId,
+            receipt_id: id,
+            user_id: scope.userId,
+            retry: true,
+          },
+          recordOcr,
+        ),
       );
       return NextResponse.json({ receiptId: id, status: "processing", requestId }, { status: 202 });
     },
