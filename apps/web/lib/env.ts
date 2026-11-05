@@ -123,11 +123,37 @@ function trustedProxies(): string[] | undefined {
   return proxies;
 }
 
+/**
+ * `BETTER_AUTH_SECRETS=2:<new>,1:<old>`: versioned secrets, current first.
+ * Older versions still decrypt stored OAuth tokens, so the secret can rotate
+ * without losing them. Session cookies are signed with the current one only,
+ * so rotating still signs everyone out.
+ */
+function betterAuthSecrets(): { version: number; value: string }[] | undefined {
+  const entries = list("BETTER_AUTH_SECRETS");
+  if (!entries) return undefined;
+  const secrets = entries.map((entry) => {
+    const colon = entry.indexOf(":");
+    const version = entry.slice(0, colon).trim();
+    const value = entry.slice(colon + 1).trim();
+    if (colon === -1 || !/^\d+$/.test(version) || !value) {
+      throw new Error('BETTER_AUTH_SECRETS entries must look like "<version>:<secret>".');
+    }
+    return { version: Number(version), value };
+  });
+  if (new Set(secrets.map((s) => s.version)).size !== secrets.length) {
+    throw new Error("BETTER_AUTH_SECRETS has a duplicate version.");
+  }
+  return secrets;
+}
+
 export const authEnv = {
   /** Supabase transaction-pooler (port 6543) URL works here; postgres-js runs with prepare:false. */
   databaseUrl: optional("DATABASE_URL"),
   /** Min 32 chars. Generate with `openssl rand -base64 32`. */
   betterAuthSecret: optional("BETTER_AUTH_SECRET"),
+  /** Versioned secrets for rotation; when set, BETTER_AUTH_SECRET only decrypts older payloads. */
+  betterAuthSecrets: betterAuthSecrets(),
   /** Canonical app origin, e.g. https://receiptocr.example.com. Defaults to localhost in dev. */
   betterAuthUrl: betterAuthUrl(),
   /** Client-IP resolution shared by Better Auth's limiter and `clientIp()`. */
@@ -139,15 +165,18 @@ export const authEnv = {
 };
 
 /**
- * Auth requires a database and a signing secret. When either is missing the
+ * Auth requires a database and a signing secret (BETTER_AUTH_SECRET or BETTER_AUTH_SECRETS). When either is missing the
  * app degrades gracefully: auth endpoints return 503 and the sign-in/up pages
  * render a "not configured" card instead of crashing.
  */
-export const authEnabled = Boolean(authEnv.databaseUrl && authEnv.betterAuthSecret);
+export const authEnabled = Boolean(
+  authEnv.databaseUrl && (authEnv.betterAuthSecret || authEnv.betterAuthSecrets),
+);
 
-if (authEnv.betterAuthSecret && authEnv.betterAuthSecret.length < 32) {
+const currentSecret = authEnv.betterAuthSecrets?.[0]?.value ?? authEnv.betterAuthSecret;
+if (currentSecret && currentSecret.length < 32) {
   console.warn(
-    "BETTER_AUTH_SECRET is shorter than 32 characters; generate a stronger one with `openssl rand -base64 32`.",
+    "The current auth secret is shorter than 32 characters; generate a stronger one with `openssl rand -base64 32`.",
   );
 }
 

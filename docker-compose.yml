@@ -104,6 +104,7 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
       DIRECT_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-development-secret-change-me-0000}
+      BETTER_AUTH_SECRETS: ${BETTER_AUTH_SECRETS:-}
       BETTER_AUTH_URL: http://localhost:${APP_PORT:-3000}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}

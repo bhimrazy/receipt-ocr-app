@@ -75,7 +75,9 @@ async function purgeFiles(owner: { organizationId: string } | { userId: string }
 export const auth = betterAuth({
   appName: "receiptOCR",
   baseURL: authEnv.betterAuthUrl,
-  secret: authEnv.betterAuthSecret ?? PLACEHOLDER_SECRET,
+  // With BETTER_AUTH_SECRETS set, `secret` is only the legacy key for payloads sealed before it.
+  secret: authEnv.betterAuthSecret ?? (authEnv.betterAuthSecrets ? undefined : PLACEHOLDER_SECRET),
+  secrets: authEnv.betterAuthSecrets,
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
@@ -119,6 +121,11 @@ export const auth = betterAuth({
       "/organization/invite-member": { window: 60 * 60, max: 20 },
     },
   },
+  // Reset and verification tokens are stored as hashes: a database read alone can't use them.
+  verification: { storeIdentifier: "hashed" },
+  // Rows sealed before this was on stay readable: Better Auth passes non-hex
+  // (plaintext) tokens through and seals them on the user's next sign-in.
+  account: { encryptOAuthTokens: true },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily

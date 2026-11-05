@@ -100,7 +100,7 @@ jobs:
           case "$code" in 200|409) ;; *) echo "bucket create failed: HTTP $code" >&2; exit 1 ;; esac
       - run: bun run db:migrate
       - name: Integration tests (Postgres + RustFS)
-        run: bun run --filter @receipt-ocr/core test:int
+        run: bun run --filter @receipt-ocr/core test:int && bun run --filter @receipt-ocr/web test:int
         env:
           INTEGRATION: "1"
       - run: bun run build

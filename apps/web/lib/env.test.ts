@@ -75,3 +75,31 @@ describe("trusted IP config (P1-2)", () => {
     }
   });
 });
+
+describe("versioned auth secrets", () => {
+  const dev = { NODE_ENV: "development", DATABASE_URL: production.DATABASE_URL };
+
+  it("enables auth with BETTER_AUTH_SECRETS alone, current version first", async () => {
+    const env = await loadEnv({
+      ...dev,
+      BETTER_AUTH_SECRETS: `2:${"n".repeat(40)}, 1:${"o".repeat(40)}`,
+    });
+    expect(env.authEnabled).toBe(true);
+    expect(env.authEnv.betterAuthSecrets).toEqual([
+      { version: 2, value: "n".repeat(40) },
+      { version: 1, value: "o".repeat(40) },
+    ]);
+  });
+
+  it("keeps the single BETTER_AUTH_SECRET working", async () => {
+    const env = await loadEnv({ ...dev, BETTER_AUTH_SECRET: "s".repeat(40) });
+    expect(env.authEnabled).toBe(true);
+    expect(env.authEnv.betterAuthSecrets).toBeUndefined();
+  });
+
+  it.each(["no-version", "x:secret", "1:", "1:a,1:b"])("rejects %s", async (value) => {
+    await expect(loadEnv({ ...dev, BETTER_AUTH_SECRETS: value })).rejects.toThrow(
+      /BETTER_AUTH_SECRETS/,
+    );
+  });
+});
