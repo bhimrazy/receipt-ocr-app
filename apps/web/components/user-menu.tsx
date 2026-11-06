@@ -7,11 +7,24 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@receipt-ocr/ui/components/dropdown-menu";
+import {
+  Drawer,
+  DrawerAction,
+  DrawerContent,
+  DrawerDescription,
+  DrawerGroup,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@receipt-ocr/ui/components/drawer";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronsUpDown, LogOut, Settings, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { signOutAndClearHint } from "@/lib/auth-client";
+import { CreateWorkspaceDialog, WorkspaceList } from "@/components/workspace-switcher";
+import type { WorkspaceOption } from "@/lib/workspaces";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
 
@@ -35,57 +48,36 @@ function Avatar({ user, className }: { user: MenuUser; className?: string }) {
   );
 }
 
-/**
- * Account menu. The server layout passes the user, so there's no loading flash.
- * `row` is the sidebar version (avatar, name and email); `avatar` is the compact
- * one in the phone header.
- */
-export function UserMenu({
-  user,
-  showAdmin,
-  variant = "avatar",
-}: {
-  user: MenuUser;
-  showAdmin: boolean;
-  variant?: "avatar" | "row";
-}) {
+function useSignOut() {
   const router = useRouter();
-
-  async function handleSignOut() {
+  return async () => {
     await signOutAndClearHint();
     router.push("/");
     router.refresh();
-  }
+  };
+}
+
+/**
+ * Desktop account menu at the foot of the sidebar. The server layout passes the user, so
+ * there's no loading flash.
+ */
+export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boolean }) {
+  const handleSignOut = useSignOut();
 
   return (
     <DropdownMenu>
-      {variant === "row" ? (
-        <DropdownMenuTrigger
-          aria-label="Account menu"
-          className="flex min-h-12 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-wash"
-        >
-          <Avatar className="size-8" user={user} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium">
-              {user.name || "Your account"}
-            </span>
-            <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
-          </span>
-          <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-        </DropdownMenuTrigger>
-      ) : (
-        <DropdownMenuTrigger
-          aria-label="Account menu"
-          className="flex size-11 items-center justify-center rounded-full border border-border transition outline-none hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
-          <Avatar className="size-full" user={user} />
-        </DropdownMenuTrigger>
-      )}
-      <DropdownMenuContent
-        align={variant === "row" ? "start" : "end"}
-        className="w-60 max-w-[calc(100vw-2rem)]"
-        side={variant === "row" ? "top" : "bottom"}
+      <DropdownMenuTrigger
+        aria-label="Account menu"
+        className="flex min-h-12 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-wash"
       >
+        <Avatar className="size-8" user={user} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{user.name || "Your account"}</span>
+          <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+        </span>
+        <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-60 max-w-[calc(100vw-2rem)]" side="top">
         <div className="px-2.5 py-2">
           <p className="truncate text-sm font-medium">{user.name || "Your account"}</p>
           <p className="truncate text-xs text-muted-foreground">{user.email}</p>
@@ -108,5 +100,75 @@ export function UserMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * The phone account sheet behind the avatar in the top bar: who's signed in, the workspace
+ * (switch or create), today's usage, Admin for platform admins, and sign out. A sheet rather
+ * than a dropdown so every row is a full-width thumb target.
+ */
+export function AccountSheet({
+  user,
+  showAdmin,
+  workspace,
+  usage,
+}: {
+  user: MenuUser;
+  showAdmin: boolean;
+  /** Omitted in the admin shell, which has no active workspace of its own. */
+  workspace?: { activeId: string; canCreate: boolean; workspaces: WorkspaceOption[] };
+  /** The usage meter, rendered by the server layout. */
+  usage?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const handleSignOut = useSignOut();
+  const close = () => setOpen(false);
+
+  return (
+    <>
+      <Drawer onOpenChange={setOpen} open={open}>
+        <DrawerTrigger
+          aria-label="Account and workspace"
+          className="flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:opacity-80"
+        >
+          <Avatar className="size-9 border border-border" user={user} />
+        </DrawerTrigger>
+        <DrawerContent>
+          <DrawerHeader className="flex-row items-center gap-3">
+            <Avatar className="size-10" user={user} />
+            <div className="min-w-0">
+              <DrawerTitle className="truncate">{user.name || "Your account"}</DrawerTitle>
+              <DrawerDescription className="truncate">{user.email}</DrawerDescription>
+            </div>
+          </DrawerHeader>
+          {workspace ? (
+            <WorkspaceList
+              {...workspace}
+              onCreate={() => {
+                close();
+                setCreateOpen(true);
+              }}
+              onSwitched={close}
+            />
+          ) : null}
+          {usage ? <div className="border-t border-border px-4 py-3">{usage}</div> : null}
+          <DrawerGroup>
+            {showAdmin ? (
+              <DrawerAction onClick={close} render={<Link href="/admin" />}>
+                <ShieldCheck aria-hidden="true" />
+                Admin
+              </DrawerAction>
+            ) : null}
+            <DrawerAction onClick={handleSignOut}>
+              <LogOut aria-hidden="true" />
+              Sign out
+            </DrawerAction>
+          </DrawerGroup>
+        </DrawerContent>
+      </Drawer>
+      {workspace ? <CreateWorkspaceDialog onOpenChange={setCreateOpen} open={createOpen} /> : null}
+    </>
   );
 }

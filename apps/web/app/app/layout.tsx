@@ -1,10 +1,10 @@
-import { AppSidebarNav, AppTabBar } from "@/components/app-nav";
+import { AppSidebarNav, AppTabBar, MobileTopBar } from "@/components/app-nav";
 import { SkipLink } from "@/components/skip-link";
 import { Brand } from "@/components/brand";
 import { NoWorkspace } from "@/components/no-workspace";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { UsageMeter, type Usage } from "@/components/usage-meter";
-import { UserMenu, type MenuUser } from "@/components/user-menu";
+import { AccountSheet, UserMenu, type MenuUser } from "@/components/user-menu";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { logger } from "@/lib/log";
 import { getCurrentPlan } from "@/lib/plan-limits";
@@ -49,59 +49,60 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     email: session.user.email,
     image: session.user.image ?? null,
   };
-  const switcher = (
-    <WorkspaceSwitcher
-      activeId={scope.organizationId}
-      canCreate={allowance.canCreate}
-      workspaces={workspaces}
-    />
-  );
+  const workspace = { activeId: scope.organizationId, canCreate: allowance.canCreate, workspaces };
+  const meter = usage ? <UsageMeter planLabel={label} usage={usage} /> : null;
 
   return (
     <Toaster>
       <SkipLink />
-      <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <div className="flex min-h-dvh flex-col bg-background text-foreground">
         {session.session.impersonatedBy ? <ImpersonationBanner email={session.user.email} /> : null}
         <div className="flex min-h-0 flex-1">
           <div className="hidden w-64 shrink-0 border-r border-border bg-sidebar md:block">
-            <aside className="sticky top-0 flex h-screen flex-col gap-6 p-4">
+            <aside className="sticky top-0 flex h-dvh flex-col gap-6 overflow-y-auto p-4">
               <Link
                 className="flex min-h-11 items-center rounded-md px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 href="/app"
               >
                 <Brand />
               </Link>
-              {switcher}
+              <WorkspaceSwitcher {...workspace} />
               <AppSidebarNav showAdmin={showAdmin} />
               <div className="mt-auto flex flex-col gap-3">
-                {usage ? <UsageMeter planLabel={label} usage={usage} /> : null}
-                <UserMenu showAdmin={showAdmin} user={user} variant="row" />
+                {meter}
+                <UserMenu showAdmin={showAdmin} user={user} />
               </div>
             </aside>
           </div>
           <div className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-16 items-center justify-between gap-3 border-b border-border px-4 md:hidden">
-              <Link
-                className="flex min-h-11 shrink-0 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                href="/app"
-              >
-                <Brand />
-              </Link>
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="min-w-0 max-w-44">{switcher}</div>
-                <UserMenu showAdmin={showAdmin} user={user} />
-              </div>
-            </header>
+            <MobileTopBar
+              context={
+                <>
+                  <span className="sr-only">Workspace: </span>
+                  {workspaces.find((w) => w.id === scope.organizationId)?.name}
+                </>
+              }
+              home="/app"
+              leading={<Brand compact />}
+              trailing={
+                <AccountSheet
+                  showAdmin={showAdmin}
+                  usage={meter}
+                  user={user}
+                  workspace={workspace}
+                />
+              }
+            />
             <main
               id="main-content"
               tabIndex={-1}
-              className="min-w-0 flex-1 px-4 pt-6 pb-28 md:px-10 md:py-10"
+              className="min-w-0 flex-1 px-4 pt-5 pb-[calc(2rem+var(--app-bottom-inset,0px))] md:px-10 md:py-10"
             >
               {children}
             </main>
           </div>
         </div>
-        <AppTabBar showAdmin={showAdmin} />
+        <AppTabBar />
       </div>
     </Toaster>
   );

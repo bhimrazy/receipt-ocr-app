@@ -7,11 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 /** Re-runs extraction on the stored image (POST /api/receipts/<id>/retry). */
-export function RetryReceiptButton({
-  receiptId,
-  label = "Try again",
-  ...props
-}: { receiptId: string; label?: string } & Omit<ButtonProps, "onClick" | "children">) {
+export function useRetryReceipt(receiptId: string) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
@@ -39,6 +35,16 @@ export function RetryReceiptButton({
       setPending(false);
     }
   }
+
+  return { retry, pending };
+}
+
+export function RetryReceiptButton({
+  receiptId,
+  label = "Try again",
+  ...props
+}: { receiptId: string; label?: string } & Omit<ButtonProps, "onClick" | "children">) {
+  const { retry, pending } = useRetryReceipt(receiptId);
 
   return (
     <Button disabled={pending} onClick={retry} {...props}>

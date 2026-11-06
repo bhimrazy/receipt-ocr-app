@@ -1,6 +1,7 @@
 import { SkipLink } from "@/components/skip-link";
 import { Brand } from "@/components/brand";
-import { UserMenu, type MenuUser } from "@/components/user-menu";
+import { MobileTopBar } from "@/components/app-nav";
+import { AccountSheet, UserMenu, type MenuUser } from "@/components/user-menu";
 import { requireAdmin } from "@/lib/session";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
@@ -50,10 +51,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <Toaster>
       <SkipLink />
-      <div className="flex min-h-screen flex-col border-t-2 border-primary bg-background text-foreground">
+      <div className="flex min-h-dvh flex-col border-t-2 border-primary bg-background text-foreground">
         <div className="flex min-h-0 flex-1">
           <div className="hidden w-64 shrink-0 border-r border-border bg-card/40 md:block">
-            <aside className="sticky top-0 flex h-screen flex-col gap-6 p-4">
+            <aside className="sticky top-0 flex h-dvh flex-col gap-6 overflow-y-auto p-4">
               <div className="flex min-h-11 items-center justify-between gap-2 px-1">
                 <Link
                   className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -66,37 +67,29 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <AdminSidebarNav />
               <div className="mt-auto flex flex-col gap-3">
                 {backToApp}
-                <UserMenu showAdmin user={user} variant="row" />
+                <UserMenu showAdmin user={user} />
               </div>
             </aside>
           </div>
           <div className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-16 items-center justify-between gap-3 border-b border-border px-4 md:hidden">
-              <div className="flex min-w-0 items-center gap-2">
-                <Link
-                  className="flex min-h-11 shrink-0 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  href="/admin"
-                >
-                  <Brand />
-                </Link>
-                <AdminMark />
-              </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  aria-label="Back to app"
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
-                  href="/app"
-                >
-                  <ArrowLeft aria-hidden="true" />
-                  App
-                </Link>
-                <UserMenu showAdmin user={user} />
-              </div>
-            </header>
+            <MobileTopBar
+              context={<AdminMark />}
+              home="/admin"
+              leading={<Brand compact />}
+              trailing={
+                <>
+                  <Link className={buttonVariants({ variant: "outline", size: "sm" })} href="/app">
+                    <ArrowLeft aria-hidden="true" />
+                    App
+                  </Link>
+                  <AccountSheet showAdmin={false} user={user} />
+                </>
+              }
+            />
             <main
               id="main-content"
               tabIndex={-1}
-              className="min-w-0 flex-1 px-4 pt-6 pb-28 md:px-10 md:py-10"
+              className="min-w-0 flex-1 px-4 pt-5 pb-[calc(2rem+var(--app-bottom-inset,0px))] md:px-10 md:py-10"
             >
               <div className="mx-auto max-w-6xl">{children}</div>
             </main>

@@ -124,6 +124,29 @@
   }
 }
 
+/* Taps fire at once (no double-tap-zoom wait); controls draw their own pressed state. */
+html {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Installed, there's no browser chrome to pull: no rubber band, no pull-to-refresh. */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+/* The phone tab bar: --tabbar-h is its height above the home indicator, --app-bottom-inset
+   all the room it takes. Pages, toasts and floating cards clear it with these. */
+@media (width < 48rem) {
+  :root:has([data-slot="tab-bar"]) {
+    --tabbar-h: 4rem;
+    --app-bottom-inset: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  }
+}
+
 body {
   min-height: 100vh;
   background: var(--background);
