@@ -4,6 +4,7 @@ import {
   PageHeaderDescription,
   PageHeaderTitle,
 } from "@/components/page-header";
+import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { AccountSettings } from "@/components/account-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
@@ -52,7 +53,7 @@ export default async function SettingsPage() {
       </PageHeader>
 
       <SettingsSection
-        description="Receipts reset at 00:00 UTC every day. Receipts that couldn't be read don't count."
+        description={`Receipts reset at 00:00 UTC every day. Your first ${FREE_FAILED_ROUNDS} receipts a day that couldn't be read don't count.`}
         id="plan-heading"
         title="Plan and usage"
       >
