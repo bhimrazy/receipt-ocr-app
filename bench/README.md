@@ -22,6 +22,15 @@ Real provider calls, billed to the key. Without the key the script exits with a 
   `n/a` when no call reported usage.
 - The only call into `packages/ai` is `extract()` in `ocr.ts`; change that one function if the export is renamed.
 
+## Image shrinker
+
+```bash
+bun run bench:encode
+```
+
+Runs `apps/web/lib/upload-prep.ts` in headless Chromium over the fixture PNGs and synthetic noisy photos (a 12 MP
+photo, tall 1:4 and 1:6 receipts) and prints dimensions, bytes, final quality and encode attempts. No model calls.
+
 ## Upload load test
 
 k6 is a standalone binary (not installed by this repo): https://grafana.com/docs/k6/latest/set-up/install-k6/
