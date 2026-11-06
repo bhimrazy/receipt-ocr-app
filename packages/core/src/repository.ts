@@ -508,7 +508,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                   updatedAt: now,
                 })
                 .where(
-                  // Overdue ones included: they are not live, but still hold the unique index.
+                  // The claim above only matched a failed or stale receipt, so by
+                  // `liveReceiptJob` none of these is live any more (an orphan, or an
+                  // older round's leftover); they still hold the unique index.
                   sql`${jobs.receiptId} = ${id} and jobs.kind like 'receipt.%' and jobs.state in ('queued', 'running')`,
                 );
               const job = await enqueueJob(

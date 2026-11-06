@@ -1,10 +1,11 @@
 import { Cause, Clock, Duration, Effect, Exit, Option } from "effect";
 import { backoffMs } from "./backoff";
 import type { AnyJobDefinition, Job, JobErrorKind, JobFailure, JobRegistry } from "./definition";
-import { JobQueue, type JobOutcome } from "./queue";
+import { DEFAULT_OWNER_CAP, JobQueue, type JobOutcome } from "./queue";
 
-/** Default per-user running cap: one user's bulk import can't take every slot. */
-export const DEFAULT_OWNER_CAP = 2;
+/** How often one process records that it ticked; often enough for the 5-minute orphan rule, rare enough not to be a hot write. */
+const MARK_TICK_EVERY_MS = 30_000;
+let lastTickMark = Number.NEGATIVE_INFINITY;
 
 /** Longest idle sleep before looking for new work again. */
 const IDLE_POLL_MS = 5_000;
@@ -74,6 +75,11 @@ export const tick = <R>(options: TickOptions<R>) =>
       options.onRun?.(run);
     };
 
+    const beganAt = yield* Clock.currentTimeMillis;
+    if (beganAt - lastTickMark >= MARK_TICK_EVERY_MS) {
+      lastTickMark = beganAt;
+      yield* queue.markTick.pipe(Effect.ignore);
+    }
     const reaped = yield* queue.reap().pipe(
       Effect.tapError((error) => Effect.logError("jobs.reap_failed", { error: error.message })),
       Effect.orElseSucceed((): Job[] => []),

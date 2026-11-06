@@ -52,8 +52,10 @@ const noCalls = sql`not exists (select 1 from ocr_calls c where c.receipt_id = r
 /**
  * The round's own job is queued or running (waiting, or between automatic
  * retries): in flight whatever calls it has made, so neither a backlog nor a
- * failed first attempt makes room in the quota. A long-overdue job stops
- * counting (see `liveReceiptJob`), so an orphaned one can't hold quota.
+ * failed first attempt makes room in the quota. Only an orphaned job (nothing
+ * has drained the queue for 5 minutes, or its lease expired 5 minutes ago,
+ * see `liveReceiptJob`) stops counting; a job waiting behind a backlog, its
+ * owner's cap or a pause keeps holding quota.
  */
 const liveJobForRound = sql`exists (select 1 from jobs j where j.receipt_id = r.receipt_id and ${liveReceiptJob("j")} and (j.payload->>'round')::int = r.round)`;
 /** The round is over, called a model and none succeeded: paid for, nothing read. */

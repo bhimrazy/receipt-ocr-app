@@ -8,6 +8,7 @@ import {
   and,
   eq,
   inArray,
+  ne,
   jobControls,
   jobs,
   ocrCalls,
@@ -37,6 +38,7 @@ import { Settings } from "../settings";
 import { ensurePersonalWorkspace } from "../workspace";
 import type { JobDefinition } from "./definition";
 import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
+import { TICK_SCOPE } from "./live";
 import { JobQueue } from "./queue";
 import { cancelJob, tick } from "./runner";
 
@@ -131,6 +133,29 @@ const callsOf = (receiptId: string) =>
 
 type Scope = { userId: string; organizationId: string; role: string };
 
+/** When some process last ran a tick, as the orphan rule sees it. */
+const setLastTick = (msAgo: number) =>
+  db((d) =>
+    d
+      .insert(jobControls)
+      .values({ scope: TICK_SCOPE, updatedAt: new Date(Date.now() - msAgo) })
+      .onConflictDoUpdate({
+        target: jobControls.scope,
+        set: { updatedAt: new Date(Date.now() - msAgo) },
+      }),
+  );
+const SIX_MINUTES = 6 * 60_000;
+
+/** Ages a receipt, its round and its queued job as if it had waited six minutes. */
+const age = async (receiptId: string, jobId: string) => {
+  const longAgo = new Date(Date.now() - SIX_MINUTES);
+  await db((d) => d.update(receipts).set({ updatedAt: longAgo }).where(eq(receipts.id, receiptId)));
+  await db((d) =>
+    d.update(ocrRounds).set({ createdAt: longAgo }).where(eq(ocrRounds.receiptId, receiptId)),
+  );
+  await db((d) => d.update(jobs).set({ runAt: longAgo }).where(eq(jobs.id, jobId)));
+};
+
 async function createUser(name: string): Promise<Scope> {
   const id = `${tag}-${name}`;
   await db((d) =>
@@ -199,7 +224,8 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   afterEach(async () => {
     script = [];
     calls = 0;
-    await db((d) => d.delete(jobControls));
+    await db((d) => d.delete(jobControls).where(ne(jobControls.scope, TICK_SCOPE)));
+    await setLastTick(0);
   });
 
   afterAll(async () => {
@@ -241,6 +267,11 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     await drain([jobId]);
     expect((await receiptOf(receipt.id, a))?.status).toBe("completed");
     expect((await jobsOf(receipt.id))[0]).toMatchObject({ state: "succeeded", attempts: 1 });
+    // The tick recorded that the queue is being drained.
+    const [mark] = await db((d) =>
+      d.select().from(jobControls).where(eq(jobControls.scope, TICK_SCOPE)),
+    );
+    expect(Date.now() - mark!.updatedAt.getTime()).toBeLessThan(60_000);
   });
 
   it("concurrent workers never run a job twice", async () => {
@@ -820,6 +851,8 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
           )
           .where(eq(jobs.id, jobId)),
       );
+      // And, for a queued job, nothing has drained the queue for as long.
+      if (state === "queued") await setLastTick(SIX_MINUTES);
       expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
       expect((await usage()).userDay).toBe(start);
       const retried = await run(claimRetry({ receiptId: receipt.id, scope: c, limits }));
@@ -831,6 +864,60 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       expect((await receiptOf(receipt.id, c))?.status).toBe("completed");
     },
   );
+
+  it("a job waiting behind its owner's cap stays live while ticks run, and ages out once none do", async () => {
+    const c = await createUser("capped");
+    const usage = () =>
+      run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))));
+    const start = (await usage()).userDay;
+    // Two jobs already running for this user: the running cap.
+    await db((d) =>
+      d.insert(jobs).values(
+        [1, 2].map((n) => ({
+          kind: COUNT,
+          payload: { n },
+          maxAttempts: 1,
+          userId: c.userId,
+          state: "running" as const,
+          lockedBy: `${tag}-busy`,
+          lockedUntil: new Date(Date.now() + 60_000),
+        })),
+      ),
+    );
+    const { receipt, jobId } = await upload(c);
+    await age(receipt.id, jobId);
+    expect((await receiptOf(receipt.id, c))?.status).toBe("processing");
+    expect((await usage()).userDay).toBe(start + 1);
+    // Not claimable, so a poll doesn't kick it.
+    expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBeNull();
+    // Nothing has drained the queue for six minutes: now it is orphaned.
+    await setLastTick(SIX_MINUTES);
+    expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
+    expect((await usage()).userDay).toBe(start);
+    await db((d) => d.delete(jobs).where(eq(jobs.userId, c.userId)));
+  });
+
+  it("a pause longer than five minutes keeps receipts processing, and a poll doesn't kick them", async () => {
+    await queue((q) => q.pause("queue", { reason: "test" }));
+    const { receipt, jobId } = await upload(b);
+    await age(receipt.id, jobId);
+    // Ticks keep running (and recording) while the queue is paused.
+    await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: receiptRegistry,
+        budgetMs: 5_000,
+        ids: [jobId],
+        waitForRetries: false,
+      }),
+    );
+    expect((await receiptOf(receipt.id, b))?.status).toBe("processing");
+    expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBeNull();
+    await queue((q) => q.resume("queue"));
+    expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBe(jobId);
+    await drain([jobId]);
+    expect((await receiptOf(receipt.id, b))?.status).toBe("completed");
+  });
 
   it("one 429 cools the provider for every job, not just the one that hit it", async () => {
     script = [{ kind: "rate-limited", retryAfterMs: 60_000 }];

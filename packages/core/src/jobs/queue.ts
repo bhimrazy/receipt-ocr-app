@@ -5,6 +5,7 @@ import type { DbError } from "../errors";
 import { Db } from "../services";
 import type { Queryable } from "../usage";
 import type { Job, JobErrorKind, JobState, NewJob } from "./definition";
+import { TICK_SCOPE } from "./live";
 
 /**
  * The Postgres job store. Every statement is a single plain query or a
@@ -16,6 +17,9 @@ import type { Job, JobErrorKind, JobState, NewJob } from "./definition";
  * lease expired (even if the same worker id claimed the job again), or whose
  * job was cancelled, matches no row and changes nothing.
  */
+
+/** Default per-user running cap: one user's bulk import can't take every slot. */
+export const DEFAULT_OWNER_CAP = 2;
 
 export type EnqueueResult = { id: string } | { duplicate: true };
 
@@ -184,10 +188,17 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
     /** Starts or extends `provider:<id>`'s cooldown by `ms` from now; never shortens one in force. */
     readonly coolDown: (provider: string, ms: number) => Effect.Effect<void, DbError>;
     /**
-     * The receipt's job when it is due but nothing is running it: queued and
-     * runnable, or running with an expired lease. Null otherwise.
+     * The receipt's job when it is due and claimable but nothing is running
+     * it: queued and runnable, or running with an expired lease. Null when
+     * there is none, or when a pause or its owner's running cap would stop a
+     * claim anyway.
      */
-    readonly dueReceiptJob: (receiptId: string) => Effect.Effect<string | null, DbError>;
+    readonly dueReceiptJob: (
+      receiptId: string,
+      ownerCap?: number,
+    ) => Effect.Effect<string | null, DbError>;
+    /** Records that a tick ran now: queued jobs stay live while anything drains the queue. */
+    readonly markTick: Effect.Effect<void, DbError>;
   }
 >() {
   static readonly Live = Layer.effect(
@@ -353,16 +364,25 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
               set until = greatest(job_controls.until, excluded.until), updated_at = now()`),
         ).pipe(Effect.asVoid),
 
-      dueReceiptJob: (receiptId) =>
+      dueReceiptJob: (receiptId, ownerCap = DEFAULT_OWNER_CAP) =>
         use(async (db) => {
           const [row] = await db.execute<{ id: string }>(sql`select j.id from jobs j
             where j.receipt_id = ${receiptId} and j.kind like 'receipt.%'
               and j.state in ('queued', 'running')
               and ((j.state = 'queued' and j.run_at <= now())
                 or (j.state = 'running' and j.locked_until < now()))
+              and not exists (select 1 from job_controls c
+                where c.scope in ('queue', 'kind:' || j.kind) and ${inForce})
+              and (j.user_id is null or (select count(*) from jobs o
+                where o.user_id = j.user_id and o.state = 'running' and o.id <> j.id) < ${ownerCap})
             limit 1`);
           return row?.id ?? null;
         }),
+
+      markTick: use((db) =>
+        db.execute(sql`insert into job_controls (scope) values (${TICK_SCOPE})
+          on conflict (scope) do update set updated_at = now()`),
+      ).pipe(Effect.asVoid),
     })),
   );
 }
