@@ -131,7 +131,7 @@ Follow repo conventions: snake_case, timestamptz, explicit indexes, cascade dele
 | new `two_factor` | `id text pk`, `secret text not null`, `backup_codes text not null`, `user_id text not null → user.id on delete cascade`, `verified boolean not null default true`, `failed_verification_count integer not null default 0`, `locked_until timestamptz`; **unique** index on `user_id`                                                                      |
 | new `passkey`    | `id text pk`, `name text`, `public_key text not null`, `user_id text not null → user.id cascade`, `credential_id text not null`, `counter bigint(mode number) not null`, `device_type text not null`, `backed_up boolean not null`, `transports text`, `created_at timestamptz default now()`, `aaguid text`; index `user_id`, **unique** `credential_id` |
 
-Migrations: `0007_two_factor.sql` (PR A: user column, session column, `two_factor`) and `0008_passkey.sql` (PR B).
+Migrations: Two migrations, numbered after the latest one when each PR is written (`0007` is the usage ledger and `0008` the job queue): `two_factor` (PR A: user column, session column, `two_factor`) and `passkey` (PR B).
 Create them with `bun run db:generate`. They only add tables and nullable or defaulted columns, so there's no backfill
 and they're safe to run before the deploy. Running them against production needs the owner's go (DB migration).
 
@@ -283,7 +283,7 @@ isUserVerified: true, automaticPresenceSimulation: true }`.
 
 **PR A — Two-factor (TOTP + backup codes)**. Can ship alone.
 
-- twoFactor plugin plus client plugin; migration 0007 (user, session `auth_method`, `two_factor`)
+- twoFactor plugin plus client plugin; first migration (user, session `auth_method`, `two_factor`)
 - `authMethod` session hook; impersonation guard for `/two-factor/*`
 - the `/sign-in/two-factor` step and the `CredentialsForm` redirect
 - the Security page: authenticator card and devices card
@@ -295,7 +295,7 @@ isUserVerified: true, automaticPresenceSimulation: true }`.
 
 **PR B — Passkeys + admin enforcement** (after A)
 
-- `@better-auth/passkey@1.7.14` with rpID, origin, UV required and rate limits; migration 0008
+- `@better-auth/passkey@1.7.14` with rpID, origin, UV required and rate limits; second migration
 - the Passkeys card; the sign-in button and autofill
 - the impersonation guard for `/passkey/*`; passkey emails
 - the admin "Remove passkeys" action and admin detail row
@@ -320,4 +320,4 @@ Validation for each PR: the full CI chain from `AGENTS.md` plus `scripts/test.sh
 4. **Email OTP as a 2FA method**: recommend **no**.
 5. **Trusted-device default**: 30 days, opt-in checkbox (recommended). Or shorter, or not offered to admins.
 6. **Nudges**: is the Settings card plus a one-time `/app` callout enough, or should we skip the callout?
-7. **Migrations against production** (0007, 0008): need your go when they run.
+7. **Migrations against production** (both): need your go when they run.

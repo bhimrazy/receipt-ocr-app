@@ -1,27 +1,33 @@
 # Status and handoff
 
 Where the project stands, what is in flight, and what needs a decision. Read this first when picking the work up on a
-new machine; keep it current when something merges or a decision is made. Last updated 2026-11-06 (after #32).
+new machine; keep it current when something merges or a decision is made. Last updated 2026-11-06 (after #36).
 
 How the system is built (every app and package, the main flows and the data model) is in
 [architecture](architecture/README.md).
 
 ## Shipped to `main` (2026-11-06)
 
-| PR       | What                                                                                                                                                                                                                   |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #13      | Classic landing lab (`/final-classic`, noindex), SEO plumbing (site URL, robots, sitemap), Vercel `--archive=tgz` deploys                                                                                              |
-| #17      | Redesigned sign-in, sign-up, verification, reset and invite flows                                                                                                                                                      |
-| #18      | Signed-in app redesign; preview/mock-data flow removed; no-workspace state                                                                                                                                             |
-| #19      | Security hardening: email escaping, workspace-name rules, trusted IP headers, hashed tokens, encrypted OAuth tokens, versioned secrets, receipt write policy                                                           |
-| #20      | UI foundations: design tokens, Alert/Field, history and members split                                                                                                                                                  |
-| #21      | Admin panel: overview, users, workspaces, audit log, settings (plan limits, OCR model chain); migration `0006`                                                                                                         |
-| #22      | Receipt completion guarded by attempt; OCR loads receipts by id                                                                                                                                                        |
-| #23      | [Deployment guide](deployment.md)                                                                                                                                                                                      |
-| #24      | Default model `gemini-3.8-flash`, `gemini-3.5-flash-lite` offered (`gemini-3.7-flash` doesn't exist)                                                                                                                   |
-| #25      | Photos shrunk and re-encoded in the browser (fixes Vercel 4.5 MB 413s, strips camera metadata); PDFs accepted                                                                                                          |
-| #26, #28 | Handoff docs: this page, plans and reviews; parser/benchmark/open-model survey                                                                                                                                         |
-| #27      | OCR usage ledger: `ocr_rounds` + `ocr_calls` with per-call tokens, cost and latency; quota counted from the ledger under a per-user lock (deletes no longer refund; first 5 failed reads a day free); migration `0007` |
+| PR            | What                                                                                                                                                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #13           | Classic landing lab (`/final-classic`, noindex), SEO plumbing (site URL, robots, sitemap), Vercel `--archive=tgz` deploys                                                                                              |
+| #17           | Redesigned sign-in, sign-up, verification, reset and invite flows                                                                                                                                                      |
+| #18           | Signed-in app redesign; preview/mock-data flow removed; no-workspace state                                                                                                                                             |
+| #19           | Security hardening: email escaping, workspace-name rules, trusted IP headers, hashed tokens, encrypted OAuth tokens, versioned secrets, receipt write policy                                                           |
+| #20           | UI foundations: design tokens, Alert/Field, history and members split                                                                                                                                                  |
+| #21           | Admin panel: overview, users, workspaces, audit log, settings (plan limits, OCR model chain); migration `0006`                                                                                                         |
+| #22           | Receipt completion guarded by attempt; OCR loads receipts by id                                                                                                                                                        |
+| #23           | [Deployment guide](deployment.md)                                                                                                                                                                                      |
+| #24           | Default model `gemini-3.8-flash`, `gemini-3.5-flash-lite` offered (`gemini-3.7-flash` doesn't exist)                                                                                                                   |
+| #25           | Photos shrunk and re-encoded in the browser (fixes Vercel 4.5 MB 413s, strips camera metadata); PDFs accepted                                                                                                          |
+| #26, #28      | Handoff docs: this page, plans and reviews; parser/benchmark/open-model survey                                                                                                                                         |
+| #27           | OCR usage ledger: `ocr_rounds` + `ocr_calls` with per-call tokens, cost and latency; quota counted from the ledger under a per-user lock (deletes no longer refund; first 5 failed reads a day free); migration `0007` |
+| #29, #30, #33 | Status updates, working principles, Next.js/React/shadcn reviews, job queue plan, security audit                                                                                                                       |
+| #31           | Streaming app pages, fewer client auth fetches, polling paused while hidden, lab pages hidden in production, skip link, global error page                                                                              |
+| #32           | Better Auth mitigations: exact workspace roles (GHSA-c85h), cookie cache off (revoked sessions stop at once), manual deploys only from `main`                                                                          |
+| #34           | [Architecture guide](architecture/README.md) with per-package pages, flows and diagrams                                                                                                                                |
+| #35           | Optional Cloudflare Turnstile on sign-up, sign-in, password reset, resend verification and the support form, with hostname pinning                                                                                     |
+| #36           | UX sweep: honest landing copy, no sideways scroll at 390 px, quota wording that matches the ledger                                                                                                                     |
 
 ## Production to-dos (owner)
 
@@ -37,16 +43,14 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-- **Durable job queue, Track A** (`feat/jobs-core`, [plan](plans/2026-11-06-jobs-queue.md)). Migration `0008` adds
-  `jobs`, `job_controls` and `ocr_calls.job_attempt`, and backfills a job for every receipt still processing. Each
-  upload or retry enqueues a `receipt.extract` job in the transaction that takes the quota; failed attempts retry with
-  backoff (4 attempts) and only a dead job fails the receipt. Until Track B (worker and drain route) lands, the upload
-  and retry routes run the queue themselves (instant upload: first attempt in the request; everything else in `after()`,
-  `maxDuration` 300). The receipt page's poll drains its job if it is due and nobody is running it; a job nothing runs
-  for 5 minutes past due stops holding the receipt and its quota. See [Background jobs](architecture/flows/jobs.md).
-  Production needs `0008` applied before this deploys.
-- Next: Track B (`apps/worker`, `POST /api/jobs/drain`, `pg_cron` trigger, poller shows job state), Track C
-  (`/admin/jobs`), then Track 3, the usage screens ([usage design](plans/2026-11-06-usage-design.md)).
+| PR                   | Work                                                                                                                                                                                                  |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #37                  | Job queue Track A: Postgres `jobs` queue and core job service (migration `0008`, apply before deploying); routes run it in `after()` until Track B ([flow](architecture/flows/jobs.md)), under review |
+| #38                  | Hardening: session check before upload body, PDF page cap, per-email limits, CSP reports, health endpoints, SECURITY.md, runbook, under review                                                        |
+| (branch `test/load`) | Load test suite on a 1 vCPU / 1 GB server                                                                                                                                                             |
+
+Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
+[Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
 
 ## Decisions waiting on the owner
 
@@ -85,7 +89,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    models: no.
 5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
-   Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations will be `0008`, `0009`.
+   Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations take the next free numbers after `0008` (job queue).
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
 8. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
 
@@ -100,7 +104,6 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Best-practice reviews ([Next.js](reviews/2026-11-06-nextjs.md), [React](reviews/2026-11-06-react.md),
   [shadcn/UI](reviews/2026-11-06-shadcn-ui.md)): quick wins in progress; later, shared primitives (Spinner, Meter,
   Checkbox, Avatar, Empty, Pagination), Button aligned with base-nova, one form system on `Field`.
-
 - Admin Settings shows "Last saved by…" for a saved OCR chain that was discarded as invalid.
 - HEIC conversion untested (no fixture or Safari in CI); add a WebKit e2e project later.
 - Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.
