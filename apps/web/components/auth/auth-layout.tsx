@@ -112,7 +112,7 @@ export function AuthNotConfiguredCard() {
         <code className="font-mono text-foreground">apps/web/.env.local</code> to turn on email and
         social sign-in.
       </p>
-      <Link className={cn(buttonVariants(), "mt-6 h-11")} href="/app/upload">
+      <Link className={cn(buttonVariants(), "mt-6 h-11")} href="/app">
         Preview the app
       </Link>
     </div>

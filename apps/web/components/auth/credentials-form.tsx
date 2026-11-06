@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { DEFAULT_REDIRECT } from "@/lib/redirect";
 import { AuthError, AuthField, AuthNotice, authCardClass, authLinkClass } from "./auth-field";
 
 export type SocialProvider = "google" | "github";
@@ -55,7 +56,7 @@ const providerIcons: Record<SocialProvider, () => React.ReactNode> = {
 export function CredentialsForm({
   mode,
   providers,
-  redirectTo = "/app/upload",
+  redirectTo = DEFAULT_REDIRECT,
   notice,
 }: {
   mode: "sign-in" | "sign-up";
@@ -74,7 +75,7 @@ export function CredentialsForm({
 
   const isSignUp = mode === "sign-up";
   const redirectQuery =
-    redirectTo === "/app/upload" ? "" : `?redirect=${encodeURIComponent(redirectTo)}`;
+    redirectTo === DEFAULT_REDIRECT ? "" : `?redirect=${encodeURIComponent(redirectTo)}`;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

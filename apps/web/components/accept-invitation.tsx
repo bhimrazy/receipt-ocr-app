@@ -69,7 +69,7 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
     if (data.invitation?.organizationId) {
       await authClient.organization.setActive({ organizationId: data.invitation.organizationId });
     }
-    router.push("/app/upload");
+    router.push("/app");
     router.refresh();
   }
 
@@ -82,7 +82,7 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
       setAction(null);
       return;
     }
-    router.push("/app/upload");
+    router.push("/app");
   }
 
   if (sessionPending || !signedIn || loading) {
@@ -106,7 +106,7 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
         </p>
         <Link
           className={buttonVariants({ variant: "outline", className: "mt-6 w-full" })}
-          href="/app/upload"
+          href="/app"
         >
           Go to the app
         </Link>

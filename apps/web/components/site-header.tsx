@@ -96,7 +96,7 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
               className="h-11 w-28 animate-pulse rounded-full bg-foreground/[0.06] lg:h-10"
             />
           ) : session ? (
-            <Link className={cn(buttonVariants(), "h-11 lg:h-10")} href="/app/upload">
+            <Link className={cn(buttonVariants(), "h-11 lg:h-10")} href="/app">
               Open the app <ArrowRight aria-hidden className="size-4" />
             </Link>
           ) : (
