@@ -104,6 +104,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Image shrinking (browser, `apps/web/lib/upload-prep.ts`): decode large photos at reduced size
+  (`createImageBitmap` `resizeWidth`/`resizeHeight`, after reading the dimensions from the header) to cut peak memory
+  on phones; and strip metadata on the server for files the browser couldn't decode or encode (for example HEIC
+  outside Safari, or a canvas memory error), which still upload with their EXIF.
 - Zod at every boundary: `PATCH /api/receipts/[id]` validates by hand and drops bad values; history/export query
   params, `apps/web/lib/env.ts` and customer forms should share Zod schemas (today Zod covers only the AI output
   schema, admin settings and admin actions).
