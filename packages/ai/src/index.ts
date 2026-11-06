@@ -1,5 +1,11 @@
 export * from "./categories";
-export { classifyOcrError, OCR_FAILURE_KINDS, OcrCallError, type OcrFailureKind } from "./errors";
+export {
+  classifyOcrError,
+  OCR_FAILURE_KINDS,
+  OcrCallError,
+  retryAfterMs,
+  type OcrFailureKind,
+} from "./errors";
 export * from "./models";
 export {
   extractReceipt,

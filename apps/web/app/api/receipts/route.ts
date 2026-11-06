@@ -1,28 +1,26 @@
 import {
   EXTRACTION_FAILED_MESSAGE,
-  extractStored,
   ingestUpload,
   MAX_UPLOAD_BYTES,
   Ocr,
+  PRIORITY_BULK,
+  PRIORITY_INTERACTIVE,
+  type ReceiptExtractResult,
 } from "@receipt-ocr/core";
-import { Cause, Effect } from "effect";
+import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
-import {
-  crossOriginResponse,
-  discardBody,
-  failureResponse,
-  jsonError,
-  readFormData,
-  recordOcr,
-  runBackground,
-  runRoute,
-} from "@/lib/http";
+import { crossOriginResponse, discardBody, jsonError, readFormData, runRoute } from "@/lib/http";
+import { drainJobs, ROUTE_BUDGET_MS, runJobNow } from "@/lib/jobs";
 import { logger, type WideEvent } from "@/lib/log";
 import { enforceUploadQuota } from "@/lib/quota";
 import { getActiveScope, getSession } from "@/lib/session";
 
-/** The OCR chain shares a 50 s deadline (OCR_DEADLINE_MS); this leaves room for upload and persistence. */
-export const maxDuration = 60;
+/**
+ * Long enough for `after()` to run the queue through a receipt's automatic
+ * retries (about 10 s, 20 s, 40 s of backoff). Until a worker or drain route
+ * exists, this request is what runs the job.
+ */
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
@@ -73,8 +71,21 @@ export async function POST(request: Request) {
   const ingest = enforceUploadQuota(session.user.id).pipe(
     Effect.tap(({ plan }) => void (event.plan = plan)),
     Effect.tap(() => Effect.flatMap(Ocr, (ocr) => ocr.ready)),
-    Effect.flatMap(({ limits }) => ingestUpload({ scope, fileName: file.name, body, limits })),
+    Effect.flatMap(({ limits }) =>
+      ingestUpload({
+        scope,
+        fileName: file.name,
+        body,
+        limits,
+        // A batch shouldn't hold up anyone's single upload.
+        priority: mode === "queued" ? PRIORITY_BULK : PRIORITY_INTERACTIVE,
+      }),
+    ),
   );
+  const jobContext = { request_id: requestId, user_id: scope.userId };
+  // Runs queued work (this upload, its retries, anything else due) after the response.
+  const drainAfter = (jobId: string) =>
+    after(() => drainJobs(startedAt + ROUTE_BUDGET_MS, jobContext, [jobId]));
 
   if (mode === "queued") {
     const response = await runRoute(
@@ -84,19 +95,9 @@ export async function POST(request: Request) {
         event.receipt_id = receiptId;
         event.timings = ingested.timings;
         event.outcome = "queued";
-        // Extraction continues after the response; the client polls GET /api/receipts/:id.
-        after(() =>
-          runBackground(
-            extractStored({ receiptId, scope }),
-            {
-              event: "receipt.extract.background",
-              request_id: requestId,
-              receipt_id: receiptId,
-              user_id: scope.userId,
-            },
-            recordOcr,
-          ),
-        );
+        event.job_id = ingested.jobId;
+        // The job runs after the response; the client polls GET /api/receipts/:id.
+        drainAfter(ingested.jobId);
         return NextResponse.json(
           { receiptId, status: "processing", requestId, timings: ingested.timings },
           { status: 202 },
@@ -111,18 +112,34 @@ export async function POST(request: Request) {
     Effect.gen(function* () {
       const ingested = yield* ingest;
       event.receipt_id = ingested.receipt.id;
+      event.job_id = ingested.jobId;
+      // The first attempt runs in the request; retries, if it needs any, after the response.
+      const run = yield* runJobNow(ingested.jobId, jobContext);
+      return { receiptId: ingested.receipt.id, ingested, run };
+    }),
+    ({ receiptId, ingested, run }) => {
+      event.timings = ingested.timings;
+      const result = run?.result as ReceiptExtractResult | undefined;
+      if (run?.outcome === "succeeded" && result?.kind === "completed") {
+        event.outcome = "success";
+        event.status_code = 200;
+        event.model = result.model;
+        event.cost_micro_usd = result.costMicroUsd;
+        event.confidence = result.confidence;
+        event.items_count = result.itemsCount;
+        return NextResponse.json({
+          receiptId,
+          status: "completed",
+          requestId,
+          timings: ingested.timings,
+        });
+      }
       // The upload itself succeeded: an extraction failure is reported as the
       // receipt's state (failed, retryable), not as a failed request.
-      const extracted = yield* extractStored({ receiptId: ingested.receipt.id, scope }).pipe(
-        Effect.either,
-      );
-      return { receiptId: ingested.receipt.id, ingested, extracted };
-    }),
-    ({ receiptId, ingested, extracted }) => {
-      if (extracted._tag === "Left") {
-        failureResponse(Cause.fail(extracted.left), event);
+      if (run?.outcome === "dead") {
         event.outcome = "error";
         event.status_code = 200;
+        event.error = { type: "ExtractionFailed", kind: run.errorKind };
         return NextResponse.json({
           receiptId,
           status: "failed",
@@ -130,16 +147,15 @@ export async function POST(request: Request) {
           message: EXTRACTION_FAILED_MESSAGE,
         });
       }
-      const result = extracted.right;
-      const timings = [...ingested.timings, ...result.timings];
-      event.outcome = "success";
-      event.status_code = 200;
-      event.timings = timings;
-      recordOcr(result, event);
-      event.usage = result.usage;
-      event.confidence = result.receipt.confidence;
-      event.items_count = result.receipt.items.length;
-      return NextResponse.json({ receiptId, status: "completed", requestId, timings });
+      // Retrying after backoff, or not claimable yet: the client polls.
+      event.outcome = "queued";
+      event.status_code = 202;
+      if (run?.errorKind) event.error = { type: "ExtractionRetrying", kind: run.errorKind };
+      drainAfter(ingested.jobId);
+      return NextResponse.json(
+        { receiptId, status: "processing", requestId, timings: ingested.timings },
+        { status: 202 },
+      );
     },
     event,
   );

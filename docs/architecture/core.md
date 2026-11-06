@@ -65,7 +65,8 @@ Everything is exported from `@receipt-ocr/core`. Two import-free entry points ex
 
 | Area        | Exports                                                                                                                     |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Pipeline    | `ingestUpload`, `extractStored`, `claimRetry`, `deleteReceipt`, `purgeReceiptFiles`, `getReceiptWithImage`                  |
+| Pipeline    | `ingestUpload`, `runExtraction`, `settleFailure`, `claimRetry`, `deleteReceipt`, `purgeReceiptFiles`, `getReceiptWithImage` |
+| Jobs        | `JobQueue`, `enqueueJob`, `tick`, `cancelJob`, `JOB_REGISTRY`, `receiptExtract`, `backoffMs`, job errors                    |
 | Quota       | `userPlan`, `quotaLimits`, `checkQuota`, `enforceQuota`, `quotaGate`, `decideQuota`, `quotaMessage`                         |
 | Usage       | `countUsage`, `lockUserQuota`, `usageByDay`, `usageByModel`, `usageByWorkspace`, `receiptCalls`, `receiptsReadSince`        |
 | Workspace   | `resolveScope`, `ensurePersonalWorkspace`, `hitRateLimit`, `parseWorkspaceName`, `personalWorkspaceName`                    |
@@ -76,20 +77,21 @@ Everything is exported from `@receipt-ocr/core`. Two import-free entry points ex
 
 ## Key modules
 
-| File                                                                                           | What it holds                                                                                         |
-| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [`pipeline.ts`](../../packages/core/src/pipeline.ts)                                           | The two stages (ingest, extract), retry claim, delete, and building `ocr_calls` rows                  |
-| [`repository.ts`](../../packages/core/src/repository.ts)                                       | `ReceiptRepo`: scoped reads, insert under quota, complete and fail under the attempt guard, staleness |
-| [`ocr.ts`](../../packages/core/src/ocr.ts)                                                     | `runChain`: shared deadline, per-step timeout, which failures fall back                               |
-| [`quota.ts`](../../packages/core/src/quota.ts)                                                 | Turning usage counts into a verdict and a user-facing message                                         |
-| [`usage.ts`](../../packages/core/src/usage.ts)                                                 | The ledger's counting rules in SQL, the per-user advisory lock, rollups for usage pages               |
-| [`settings.ts`](../../packages/core/src/settings.ts)                                           | Zod schemas for plan limits and the chain, the cached loader, `save`                                  |
-| [`plans.ts`](../../packages/core/src/plans.ts)                                                 | Plan defaults (Free 20 a day, Pro 1,000), `FREE_FAILED_ROUNDS = 5`                                    |
-| [`files.ts`](../../packages/core/src/files.ts)                                                 | Magic-byte sniffing and upload validation                                                             |
-| [`workspace.ts`](../../packages/core/src/workspace.ts)                                         | Scope resolution, personal workspace creation, a fixed-window rate limiter                            |
-| [`admin.ts`](../../packages/core/src/admin.ts), [`audit.ts`](../../packages/core/src/audit.ts) | Admin writes with their audit row in one transaction                                                  |
-| [`admin-queries.ts`](../../packages/core/src/admin-queries.ts)                                 | Reads for the admin pages                                                                             |
-| [`config.ts`](../../packages/core/src/config.ts)                                               | `DATABASE_URL`, `S3_*`, `OCR_DAILY_CAP` via Effect `Config`                                           |
+| File                                                                                           | What it holds                                                                                             |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| [`pipeline.ts`](../../packages/core/src/pipeline.ts)                                           | The two stages (ingest, extract), retry claim, delete, and building `ocr_calls` rows                      |
+| [`repository.ts`](../../packages/core/src/repository.ts)                                       | `ReceiptRepo`: scoped reads, insert under quota, complete and fail under the attempt guard, staleness     |
+| [`jobs/`](../../packages/core/src/jobs)                                                        | The job queue: store and claim SQL, `tick`, the `receipt.extract` kind ([Background jobs](flows/jobs.md)) |
+| [`ocr.ts`](../../packages/core/src/ocr.ts)                                                     | `runChain`: shared deadline, per-step timeout, which failures fall back                                   |
+| [`quota.ts`](../../packages/core/src/quota.ts)                                                 | Turning usage counts into a verdict and a user-facing message                                             |
+| [`usage.ts`](../../packages/core/src/usage.ts)                                                 | The ledger's counting rules in SQL, the per-user advisory lock, rollups for usage pages                   |
+| [`settings.ts`](../../packages/core/src/settings.ts)                                           | Zod schemas for plan limits and the chain, the cached loader, `save`                                      |
+| [`plans.ts`](../../packages/core/src/plans.ts)                                                 | Plan defaults (Free 20 a day, Pro 1,000), `FREE_FAILED_ROUNDS = 5`                                        |
+| [`files.ts`](../../packages/core/src/files.ts)                                                 | Magic-byte sniffing and upload validation                                                                 |
+| [`workspace.ts`](../../packages/core/src/workspace.ts)                                         | Scope resolution, personal workspace creation, a fixed-window rate limiter                                |
+| [`admin.ts`](../../packages/core/src/admin.ts), [`audit.ts`](../../packages/core/src/audit.ts) | Admin writes with their audit row in one transaction                                                      |
+| [`admin-queries.ts`](../../packages/core/src/admin-queries.ts)                                 | Reads for the admin pages                                                                                 |
+| [`config.ts`](../../packages/core/src/config.ts)                                               | `DATABASE_URL`, `S3_*`, `OCR_DAILY_CAP` via Effect `Config`                                               |
 
 ## Data flow
 
@@ -100,16 +102,17 @@ in the enum but the current code never writes it.
 stateDiagram-v2
   [*] --> processing: ingestUpload (round 1)
   processing --> completed: complete() by the current attempt
-  processing --> failed: fail() by the current attempt
-  processing --> failed: no final state after 5 min (read as stale)
+  processing --> failed: its job is dead or cancelled (settleFailure)
+  processing --> failed: no live job after 5 min (read as stale)
   failed --> processing: claimRetry (round 2 or 3)
   completed --> [*]
   failed --> [*]: 3 rounds used
 ```
 
-"Stale" is computed when reading, not written: a row still `processing` five minutes after `updated_at` is shown as
-`failed` with a "took too long" message and can be retried (`STALE_AFTER_MS` in
-[`repository.ts`](../../packages/core/src/repository.ts)).
+"Stale" is computed when reading, not written: a row still `processing` five minutes after `updated_at` with no live
+job (none, or an orphaned one, see [Background jobs](flows/jobs.md#orphaned-jobs)) is shown as `failed` with a "took
+too long" message and can be retried (`STALE_AFTER_MS` in [`jobs/live.ts`](../../packages/core/src/jobs/live.ts)).
+While its job is queued or running, a receipt reads as `processing` however long it waits.
 
 The full sequences are in [Upload, extraction and result](flows/upload-and-extraction.md) and [Retry](flows/retry.md).
 
@@ -123,9 +126,11 @@ write in Better Auth). A receipt whose uploader was
 deleted (`user_id` null) can only be changed by an owner or admin. Non-UUID ids return "not found" before reaching
 Postgres.
 
-**Two stages, the second by id only.** `ingestUpload` validates, stores and inserts. `extractStored` takes only a
-receipt id and scope and loads everything else from the database and the bucket, so it can run in the request, in
-`after()`, or in a worker.
+**Two stages, the second by id only.** `ingestUpload` validates, stores, inserts and enqueues the `receipt.extract`
+job in the same transaction. `runExtraction` (one attempt) takes only a receipt id, scope and round and loads
+everything else from the database and the bucket, so any runner of the [job queue](flows/jobs.md) can call it. It
+records each attempt's calls and never marks the receipt failed; the job's final-failure hook does that through
+`settleFailure`.
 
 **The attempt guard.** `complete` and `fail` update only where `status = 'processing'` and `attempts` equals the round
 that started the work (`currentAttempt`). A run that lost a race (the receipt was retried, deleted, or already
@@ -134,18 +139,19 @@ finished) matches no row and writes nothing to `receipts`.
 **Quota ledger semantics.** In plain terms: each user may read a set number of receipts per UTC day and per minute,
 and the count comes from a log of every attempt that is never edited or deleted. Usage is counted from `ocr_rounds` and `ocr_calls` ([`usage.ts`](../../packages/core/src/usage.ts)):
 
-| Window                           | Counts                                                                                                                                                      |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A user's UTC day                 | Distinct receipts with a successful call today, plus rounds still in flight (no calls yet, under 5 minutes old), plus failed paid rounds beyond the first 5 |
-| A user's last 60 seconds         | Every round started, failed or not                                                                                                                          |
-| Global UTC day (`OCR_DAILY_CAP`) | Every round started by anyone; only counted when the cap is set                                                                                             |
+| Window                           | Counts                                                                                                                                                                                        |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A user's UTC day                 | Distinct receipts with a successful call today, plus rounds still in flight (their job is live, or no calls yet and under 5 minutes old), plus finished failed paid rounds beyond the first 5 |
+| A user's last 60 seconds         | Every round started, failed or not                                                                                                                                                            |
+| Global UTC day (`OCR_DAILY_CAP`) | Every round started by anyone, plus every automatic retry attempt that called a model; only counted when the cap is set                                                                       |
 
 - A round row is written when the upload or retry is accepted, in the same transaction as the quota check, under
   `pg_advisory_xact_lock(7301, hashtext(user_id))`. Parallel uploads by one user queue on that lock, so a burst can't
   all pass the check.
-- Call rows are written when the round ends, in the same transaction as `complete` or `fail`, priced at write time
-  and never recomputed. A round that failed before any model ran gets one row with a null model and zero cost, so it
-  stops counting as in flight.
+- Call rows are written when each attempt ends (with `complete` on success, on their own after a failed attempt),
+  priced at write time and never recomputed. An attempt that failed before any model ran gets one row with a null
+  model and zero cost.
+- Automatic retries reuse their round: they add `ocr_calls` rows (`job_attempt` 2 to 4), never `ocr_rounds` rows.
 - Deleting a receipt does not delete ledger rows (no foreign key on `receipt_id`). Deleting a workspace or user sets
   their ids to null. Nothing refunds quota.
 - The route also runs a read-only check (`enforceQuota`) before storing the file, to refuse early. The check under the
@@ -155,7 +161,7 @@ and the count comes from a log of every attempt that is never edited or deleted.
 **Chain and fallback.** `runChain` in [`ocr.ts`](../../packages/core/src/ocr.ts):
 
 - The active chain is the saved chain filtered to steps that are enabled and whose provider has a key.
-- All steps share a 50 s deadline (`OCR_DEADLINE_MS`), under the routes' 60 s `maxDuration`. Each step gets
+- All steps share a 50 s deadline (`OCR_DEADLINE_MS`), well under the receipt job's 90 s lease. Each step gets
   `min(step.timeoutMs, time left)`, and no step starts with under 2 s left.
 - Inside one step the AI SDK retries once (`STEP_MAX_RETRIES = 1`).
 - `timeout`, `rate-limited`, `provider-error` and `not-configured` fall through to the next model. `invalid-output`

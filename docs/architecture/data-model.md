@@ -122,6 +122,7 @@ erDiagram
     uuid id PK
     uuid receipt_id "no FK"
     smallint round
+    smallint job_attempt "automatic attempt, 1 = first"
     smallint step "0 = primary"
     text model "null if no model ran"
     text status "CHECK, see below"
@@ -178,13 +179,48 @@ deleted. `target_id` is not a foreign key for the same reason.
 `user_credentials` (and `receipts.storage_source`) exist for a bring-your-own-key feature that is not built; nothing
 reads or writes them.
 
+## Background jobs
+
+```mermaid
+erDiagram
+  receipts ||..o{ jobs : "receipt_id, no FK; one live at a time"
+  user |o--o{ jobs : "user_id, set null"
+  jobs {
+    uuid id PK
+    text kind "receipt.extract"
+    job_state state "queued, running, succeeded, dead, cancelled"
+    smallint priority "0 interactive, 5 batch"
+    jsonb payload "ids and round only"
+    text idempotency_key "receipt:{id}:round:{n}"
+    smallint attempts "incremented at claim"
+    smallint max_attempts "4"
+    timestamptz run_at
+    text locked_by
+    timestamptz locked_until "lease, unindexed"
+    text last_error_kind "CHECK: a short code"
+    jsonb attempt_log "last 5 attempts"
+  }
+  job_controls {
+    text scope PK "queue, kind:<kind>, provider:<id>"
+    boolean paused
+    timestamptz until "cooldown end"
+  }
+```
+
+- `jobs` has storage parameters set by hand in 0008: `fillfactor = 80` (room for HOT heartbeats) and aggressive
+  per-table autovacuum.
+- `organization_id` and `receipt_id` are plain values: the job record outlives a deleted receipt or workspace.
+  `user_id` is set to null when the account is deleted; the payload keeps the id until a retention purge (planned,
+  Track D of the [jobs plan](../plans/2026-11-06-jobs-queue.md)).
+- How the queue uses them: [Background jobs](flows/jobs.md).
+
 ## What happens on delete
 
-| When this is deleted | Rows that cascade (are deleted)                                            | Rows that stay with the id set to null                                                                               |
-| -------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials` | `receipts.user_id`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `admin_audit_log.actor_id`, `app_settings.updated_by` |
-| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`)      | `ocr_rounds.organization_id`, `ocr_calls.organization_id`                                                            |
-| A receipt            | `receipt_items`                                                            | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                              |
+| When this is deleted | Rows that cascade (are deleted)                                            | Rows that stay with the id set to null                                                                                               |
+| -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials` | `receipts.user_id`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `admin_audit_log.actor_id`, `app_settings.updated_by` |
+| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`)      | `ocr_rounds.organization_id`, `ocr_calls.organization_id`                                                                            |
+| A receipt            | `receipt_items`                                                            | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                              |
 
 Two rules sit on top of the cascades, in [packages/core](core.md):
 
@@ -195,16 +231,19 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 
 ## Unique indexes and checks
 
-| Table          | Constraint                                                        | Why                                                                                                                          |
-| -------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `user`         | `user_email_idx` on `email`                                       | One account per address                                                                                                      |
-| `session`      | `session_token_idx` on `token`                                    | Session lookup                                                                                                               |
-| `organization` | `organization_slug_idx` on `slug`                                 | Personal workspaces use the user id as slug, with a random suffix on collision                                               |
-| `member`       | `member_org_user_idx` on `(organization_id, user_id)`             | One membership per user per workspace                                                                                        |
-| `ocr_rounds`   | `ocr_rounds_receipt_round_idx` on `(receipt_id, round)`           | A round is recorded once                                                                                                     |
-| `ocr_calls`    | `ocr_calls_receipt_round_step_idx` on `(receipt_id, round, step)` | A round's calls written twice (a lost commit acknowledgement, then the failure path) are billed once (`onConflictDoNothing`) |
-| `ocr_calls`    | `ocr_calls_status_check`: `status in (...)`                       | Only `ok`, the six AI failure kinds and `storage-error`                                                                      |
-| `app_settings` | Primary key on `key`                                              | One row per setting, upserted on save                                                                                        |
+| Table          | Constraint                                                                                   | Why                                                                                                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user`         | `user_email_idx` on `email`                                                                  | One account per address                                                                                                                                             |
+| `session`      | `session_token_idx` on `token`                                                               | Session lookup                                                                                                                                                      |
+| `organization` | `organization_slug_idx` on `slug`                                                            | Personal workspaces use the user id as slug, with a random suffix on collision                                                                                      |
+| `member`       | `member_org_user_idx` on `(organization_id, user_id)`                                        | One membership per user per workspace                                                                                                                               |
+| `ocr_rounds`   | `ocr_rounds_receipt_round_idx` on `(receipt_id, round)`                                      | A round is recorded once                                                                                                                                            |
+| `ocr_calls`    | `ocr_calls_receipt_round_attempt_step_idx` on `(receipt_id, round, job_attempt, step)`       | An attempt's calls written twice (a lost commit acknowledgement, then the failure path) are billed once (`onConflictDoNothing`); each automatic retry keeps its own |
+| `jobs`         | `jobs_idempotency_idx` on `idempotency_key`, where queued or running                         | A replayed upload or double-clicked retry enqueues nothing                                                                                                          |
+| `jobs`         | `jobs_receipt_live_idx` on `receipt_id`, where queued or running and `kind like 'receipt.%'` | At most one live job per receipt; also serves every live-job lookup by receipt                                                                                      |
+| `jobs`         | `jobs_last_error_kind_check`: `~ '^[a-z0-9.-]{1,40}$'`                                       | Error codes only, never a message that could hold receipt contents                                                                                                  |
+| `ocr_calls`    | `ocr_calls_status_check`: `status in (...)`                                                  | Only `ok`, the six AI failure kinds and `storage-error`                                                                                                             |
+| `app_settings` | Primary key on `key`                                                                         | One row per setting, upserted on save                                                                                                                               |
 
 ## Other indexes
 
@@ -216,5 +255,8 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `ocr_rounds_user_created_at_idx`                                                          | Per-user quota windows                                                               |
 | `ocr_rounds_created_at_idx`                                                               | Global daily cap                                                                     |
 | `ocr_calls_org_created_at_idx`                                                            | Workspace usage rollups                                                              |
-| `ocr_calls_created_at_idx`                                                                | Platform-wide usage rollups                                                          |
+| `ocr_calls_created_at_idx`                                                                | Platform-wide usage rollups, retry attempts for the global cap                       |
+| `jobs_runnable_idx` (`priority, run_at` where queued)                                     | The claim                                                                            |
+| `jobs_running_idx` (`user_id` where running)                                              | Per-user running cap, reaper                                                         |
+| `jobs_state_finished_idx`, `jobs_org_created_idx`                                         | Admin lists and retention (planned)                                                  |
 | `admin_audit_log_created_at_idx`, `admin_audit_log_target_idx`                            | Audit log, newest first and per target                                               |

@@ -10,9 +10,11 @@ The receipt page shows **Try again** when the receipt is `failed` (or stale, see
 ([`receipt-result.tsx`](../../../apps/web/components/receipt-result.tsx)). The server checks the same rules again; the
 button is only a hint.
 
-A receipt is **stale** when it is still `uploaded` or `processing` five minutes after its last update
-(`STALE_AFTER_MS`). That happens when the function was killed mid-extraction. Stale is computed on read: lists, counts
-and the detail page show it as `failed` with "Reading this receipt took too long", and a retry may claim it.
+A receipt is **stale** when it is still `uploaded` or `processing` five minutes after its last update and has no live
+job (`STALE_AFTER_MS`): no job at all, or an orphaned one that nothing has run
+([orphaned jobs](jobs.md#orphaned-jobs)). Stale is computed on read: lists, counts and the detail page show it as
+`failed` with "Reading this receipt took too long", and a retry may claim it. While a job is queued or retrying, the
+receipt reads as `processing`.
 
 ## Sequence
 
@@ -32,9 +34,10 @@ sequenceDiagram
   Note over DB: set status processing, attempts + 1
   Note over DB: only if in scope, failed or stale, attempts under 3
   Note over DB: INSERT ocr_rounds (round = new attempts)
+  Note over DB: cancel any job left for an older round, enqueue this round's job
   R-->>B: 202 { status: processing }
-  R->>A: extractStored(id)
-  A->>DB: complete or fail, only if attempts still matches
+  R->>A: drainJobs (waits for this job's backoff)
+  A->>DB: complete, or retry, or settle failed when dead; only if attempts still matches
   B->>R: poll GET /api/receipts/{id}
 ```
 
@@ -79,6 +82,6 @@ sequenceDiagram
 
 ## Ledger effect
 
-A retry adds one `ocr_rounds` row. Whether it counts against the daily limit depends on its outcome: a receipt read
+A user retry adds one `ocr_rounds` row; the job's automatic retries inside it add none. Whether it counts against the daily limit depends on its outcome: a receipt read
 successfully counts once per day however many rounds it took, and a failed round counts only beyond the first five
-failed rounds of the day. While it runs, the round counts as in flight. See [core: quota ledger semantics](../core.md#design-principles-and-invariants).
+failed rounds of the day. While its job is live (running, or waiting to retry), the round counts as in flight. See [core: quota ledger semantics](../core.md#design-principles-and-invariants).

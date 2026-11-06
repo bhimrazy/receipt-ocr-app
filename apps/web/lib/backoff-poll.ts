@@ -1,5 +1,9 @@
-/** Give up after this much polling time; background extraction should never take longer. */
-export const MAX_POLL_MS = 3 * 60 * 1000;
+/**
+ * Give up after this much visible polling. A receipt job's worst case (four
+ * attempts of up to 50 s each, with about 10 s, 20 s and 40 s of backoff
+ * between them) is about 4 minutes, so this leaves room past it.
+ */
+export const MAX_POLL_MS = 6 * 60 * 1000;
 export const BASE_INTERVAL_MS = 2000;
 export const MAX_INTERVAL_MS = 15000;
 

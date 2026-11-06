@@ -12,6 +12,7 @@ vi.mock("next/server", async (importOriginal) => ({
   after: vi.fn(),
 }));
 vi.mock("@receipt-ocr/core", () => ({ MAX_UPLOAD_BYTES: 10 * 1024 * 1024 }));
+vi.mock("@/lib/jobs", () => ({ drainJobs: vi.fn(), ROUTE_BUDGET_MS: 1, runJobNow: vi.fn() }));
 vi.mock("@/lib/quota", () => ({ enforceUploadQuota: vi.fn() }));
 vi.mock("@/lib/log", () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/session", () => ({
@@ -28,9 +29,6 @@ vi.mock("@/lib/http", async () => {
     },
     jsonError: (status: number, error: string) => NextResponse.json({ error }, { status }),
     readFormData,
-    failureResponse: vi.fn(),
-    recordOcr: vi.fn(),
-    runBackground: vi.fn(),
     runRoute: vi.fn(),
   };
 });

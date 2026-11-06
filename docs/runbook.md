@@ -110,7 +110,7 @@ Symptoms: OCR spend rising, one user or workspace uploading far more than usual.
 
 2. Ban the account in **Admin, Users**. Banning revokes its sessions.
 3. Set or lower `OCR_DAILY_CAP` and redeploy. It counts OCR rounds per UTC day across all users: each upload or
-   retry is one round. #37 will also count each provider attempt within a round. Lower plan limits in
+   retry is one round, and each provider attempt within a round counts too. Lower plan limits in
    **Admin, Settings** for a quicker change.
 4. Set a Gemini project spend cap and a Google Cloud budget alert if they aren't already.
 
