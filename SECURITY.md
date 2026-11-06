@@ -8,8 +8,6 @@ Please report security problems privately. Do not open a public issue, pull requ
   **Report a vulnerability**, or go to
   <https://github.com/bhimrazy/receipt-ocr-app/security/advisories/new>.
 
-The maintainer can add a contact email address here later.
-
 Include what you found, how to reproduce it, and what an attacker could do with it. A proof of concept helps, but
 keep it minimal.
 
