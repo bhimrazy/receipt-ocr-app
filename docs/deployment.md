@@ -74,6 +74,7 @@ Set these in Vercel (Project → Settings → Environment Variables, Production)
 | `TRUSTED_PROXIES`                          | No                | Required if your proxy appends to that header rather than overwriting it (nginx's default). Otherwise every client shares one rate-limit bucket, and the app logs `http.client_ip_unresolved`.       |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`           | No                | Cloudflare Turnstile site key. Set with `TURNSTILE_SECRET_KEY` to turn bot protection on; see [Bot protection](#bot-protection-turnstile). Baked in at build time.                                   |
 | `TURNSTILE_SECRET_KEY`                     | No                | Turnstile secret key. Server only.                                                                                                                                                                   |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID`            | No                | GA4 id (`G-…`): cookie banner, then GA after consent; see [Analytics and cookie consent](#analytics-and-cookie-consent). Build time; an invalid value leaves GA off.                                 |
 | `AUTH_REQUIRE_EMAIL_VERIFICATION`          | No                | Defaults to `true` in production. Set `false` only for tests.                                                                                                                                        |
 | `OCR_PROVIDER`                             | No                | `fixture` returns canned results. Tests only.                                                                                                                                                        |
 
@@ -95,6 +96,25 @@ If Cloudflare cannot be reached when a form is submitted, the request is refused
 and test runs, Cloudflare's [test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/) work
 on any host: site `1x00000000000000000000AA` with secret `1x0000000000000000000000000000000AA` always passes; secret
 `2x0000000000000000000000000000000AA` always fails. Their siteverify reports the hostname `example.com`, so set `TURNSTILE_ALLOWED_HOSTNAMES=example.com` with them. `scripts/test.sh --turnstile` does that.
+
+### Analytics and cookie consent
+
+Analytics runs only on public pages (`/`, `/sign-in`, `/sign-up`, `/privacy`, `/terms`, `/cookies`), never in `/app`
+or `/admin`, and page addresses are sent without their query string.
+
+- **Vercel Web Analytics** (cookie-free page counts) is on in every Vercel build. Turn it on for the project in the
+  Vercel dashboard (**Analytics → Enable**); no env var is needed. Visitors can switch it off in Cookie settings, and
+  Do Not Track turns it off. Docker images run no analytics.
+- **Google Analytics 4** is optional. Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` and rebuild. The site then shows a cookie
+  banner, and gtag.js loads only after a visitor accepts, with Consent Mode v2 signals denied by default and only
+  `analytics_storage` ever granted. The CSP adds Google's origins only when the id is set. In the GA property:
+  - Admin → Data streams → Enhanced measurement: turn off **Page changes based on browser history events**. The app
+    sends its own page views with stripped URLs; GA's history events would send the full URL.
+  - Leave Google signals and ads links off. Nothing in the app asks for advertising consent.
+
+To ask everyone again after changing what an optional tool does, bump `CONSENT_VERSION` in
+`apps/web/lib/consent/config.ts`. New cookies or storage keys need an entry in `apps/web/lib/consent/cookies.ts`
+(a unit test fails otherwise), which also updates `/cookies`.
 
 ### 5. Deploy
 
