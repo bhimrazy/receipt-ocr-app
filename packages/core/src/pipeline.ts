@@ -13,8 +13,6 @@ import { Storage } from "./services";
 
 export type StepTiming = { step: string; ms: number };
 
-export type StoredFile = { data: Uint8Array; mediaType: string };
-
 /**
  * Records a step's duration. Timings go back to the caller so the request
  * emits one wide event instead of scattered per-step logs.
@@ -51,42 +49,62 @@ export const ingestUpload = (input: { scope: ReceiptScope; fileName: string; bod
       // No row means nothing would ever delete the object.
       Effect.tapError(() => storage.remove([imageObjectKey]).pipe(Effect.ignore)),
     );
-    return { receipt, file: { data: input.body, mediaType } satisfies StoredFile, timings };
+    return { receipt, timings };
   });
 
 /**
- * Stage 2: run OCR and persist the result. Any failure marks the receipt
- * failed (retryable) with a message fit for the UI; the cause stays in the
- * typed error for logs.
+ * Stage 2: load the receipt and its stored file by id, run OCR and persist the
+ * result. Nothing about the receipt comes from the caller, so a queue worker
+ * can call this with an id. The result is written only if this is still the
+ * current attempt. Any failure marks the receipt failed (retryable) with a
+ * message fit for the UI; the cause stays in the typed error for logs.
  */
-export const extractStored = (input: {
-  receiptId: string;
-  scope: ReceiptScope;
-  file: StoredFile;
-}) =>
+export const extractStored = (input: { receiptId: string; scope: ReceiptScope }) =>
   Effect.gen(function* () {
     const repo = yield* ReceiptRepo;
+    const storage = yield* Storage;
     const ocr = yield* Ocr;
     const timings: StepTiming[] = [];
-    const result = yield* timed(timings, "ai.extract", ocr.extract(input.file));
-    const receipt = yield* timed(
-      timings,
-      "db.complete",
-      repo.complete(input.receiptId, input.scope, result.extraction, result.model),
-    );
-    if (!receipt) return yield* new NotFound({ message: "Receipt was deleted during extraction" });
-    return {
-      receipt,
-      usage: result.usage,
-      model: result.model,
-      attempts: result.attempts,
-      timings,
-    };
-  }).pipe(Effect.tapError(() => markFailed(input.receiptId, input.scope)));
 
-const markFailed = (receiptId: string, scope: ReceiptScope) =>
+    const row = yield* repo.get(input.receiptId, input.scope);
+    if (!row) return yield* new NotFound({ message: "Receipt not found" });
+    if (row.status !== "processing") {
+      return yield* new Conflict({ message: "Only a receipt being processed can be extracted" });
+    }
+    const attempt = row.attempts;
+    const key = row.imageObjectKey;
+
+    return yield* Effect.gen(function* () {
+      if (!key) return yield* new StorageError({ message: "This receipt has no stored file" });
+      const data = yield* timed(timings, "storage.get", storage.get(key));
+      const mediaType = sniffMediaType(data);
+      if (!mediaType) {
+        return yield* new StorageError({ message: "The stored file is not a supported type" });
+      }
+      const result = yield* timed(timings, "ai.extract", ocr.extract({ data, mediaType }));
+      const receipt = yield* timed(
+        timings,
+        "db.complete",
+        repo.complete(input.receiptId, input.scope, attempt, result.extraction, result.model),
+      );
+      if (!receipt) {
+        return yield* new NotFound({
+          message: "Receipt was deleted or superseded during extraction",
+        });
+      }
+      return {
+        receipt,
+        usage: result.usage,
+        model: result.model,
+        attempts: result.attempts,
+        timings,
+      };
+    }).pipe(Effect.tapError(() => markFailed(input.receiptId, input.scope, attempt)));
+  });
+
+const markFailed = (receiptId: string, scope: ReceiptScope, attempt: number) =>
   Effect.flatMap(ReceiptRepo, (repo) =>
-    repo.fail(receiptId, scope, EXTRACTION_FAILED_MESSAGE),
+    repo.fail(receiptId, scope, attempt, EXTRACTION_FAILED_MESSAGE),
   ).pipe(
     Effect.catchAll((error) =>
       Effect.logError("receipt.fail_not_recorded", { receiptId, error: error.message }),
@@ -94,13 +112,12 @@ const markFailed = (receiptId: string, scope: ReceiptScope) =>
   );
 
 /**
- * Claims a failed receipt for another extraction and loads its stored file.
- * The caller runs `extractStored` with the result (in the background).
+ * Atomically moves a failed receipt back to `processing` under a new attempt.
+ * The caller then runs `extractStored` (in the background).
  */
 export const claimRetry = (input: { receiptId: string; scope: ReceiptScope }) =>
   Effect.gen(function* () {
     const repo = yield* ReceiptRepo;
-    const storage = yield* Storage;
     const claim = yield* repo.claimRetry(input.receiptId, input.scope);
     if (claim.kind === "not-found") return yield* new NotFound({ message: "Receipt not found" });
     if (claim.kind === "not-retryable") {
@@ -111,22 +128,7 @@ export const claimRetry = (input: { receiptId: string; scope: ReceiptScope }) =>
         message: `This receipt was tried ${MAX_EXTRACTION_ATTEMPTS} times. Upload a clearer photo instead.`,
       });
     }
-    if (!claim.imageObjectKey) {
-      return yield* new StorageError({ message: "This receipt has no stored file to retry" });
-    }
-    const data = yield* storage.get(claim.imageObjectKey);
-    const mediaType = sniffMediaType(data);
-    if (!mediaType)
-      return yield* new StorageError({ message: "The stored file is not a supported type" });
-    return { data, mediaType } satisfies StoredFile;
-  }).pipe(
-    // Claimed but unreadable: put it back to failed rather than leave it processing.
-    Effect.tapError((error) =>
-      error._tag === "StorageError" || error._tag === "NotConfigured"
-        ? markFailed(input.receiptId, input.scope)
-        : Effect.void,
-    ),
-  );
+  });
 
 /** Deletes the row, then its stored file. */
 export const deleteReceipt = (input: { receiptId: string; scope: ReceiptScope }) =>

@@ -33,11 +33,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       Effect.zipRight(Effect.flatMap(Ocr, (ocr) => ocr.ready)),
       Effect.zipRight(claimRetry({ receiptId: id, scope })),
     ),
-    (file) => {
+    () => {
       event.outcome = "queued";
       after(() =>
         runBackground(
-          extractStored({ receiptId: id, scope, file }),
+          extractStored({ receiptId: id, scope }),
           {
             event: "receipt.extract.background",
             request_id: requestId,
