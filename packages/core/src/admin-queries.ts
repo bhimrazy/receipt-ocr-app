@@ -19,7 +19,7 @@ import { Effect } from "effect";
 import { policyFor, type PlanId, type PlanTable } from "./plans";
 import { utcDayStart } from "./quota";
 import { Db } from "./services";
-import { readOkSql, receiptsReadSince, roundsSince } from "./usage";
+import { receiptsReadSince, roundsSince } from "./usage";
 
 /**
  * Reads for the admin pages. Every list is offset-paged with a total, and its
@@ -121,14 +121,14 @@ export const adminOverview = (plans: PlanTable, now = new Date()) =>
         email: string;
         plan: string;
         used: number;
-      }>(sql`select u.id, u.name, u.email, u.plan, count(distinct r.receipt_id)::int as used
-        from ocr_rounds r join "user" u on u.id = r.user_id
-        where r.created_at >= ${ts(today)} and ${readOkSql}
-        group by u.id
-        having count(distinct r.receipt_id) >= ${threshold}
-        order by used desc
+      }>(sql`select * from (
+          select u.id, u.name, u.email, u.plan, ${usedSince(sql.raw("u.id"), today)} as used
+          from "user" u
+          where u.id in (select r.user_id from ocr_rounds r where r.created_at >= ${ts(today)})
+        ) t
+        where t.used >= ${threshold}
+        order by t.used desc
         limit 50`);
-
       const nearLimit = heavy
         .map((row) => ({ ...row, limit: policyFor(plans, row.plan).receiptsPerDay }))
         .filter((row) => row.used >= row.limit * 0.8)

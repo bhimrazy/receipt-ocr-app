@@ -15,6 +15,7 @@ import {
   receiptItems,
   receipts,
   sql,
+  OCR_CALL_STATUSES,
   type DbClient,
   type NewOcrCall,
   type Receipt,
@@ -109,7 +110,11 @@ export type ReceiptCounts = {
 };
 
 /** One `ocr_calls` row, built by the pipeline. */
-export type OcrCallRow = Omit<NewOcrCall, "id"> & { userId: string | null; organizationId: string };
+export type OcrCallRow = Omit<NewOcrCall, "id" | "status"> & {
+  userId: string | null;
+  organizationId: string;
+  status: (typeof OCR_CALL_STATUSES)[number];
+};
 
 /**
  * The quota check run under the user's lock, in the same transaction that
@@ -240,16 +245,20 @@ async function recordCalls(
   calls: readonly OcrCallRow[],
 ) {
   if (calls.length === 0) return;
-  await tx.insert(ocrCalls).values(
-    calls.map((call) => ({
-      ...call,
-      organizationId: sql`(select ${organization.id} from ${organization} where ${organization.id} = ${call.organizationId})`,
-      userId:
-        call.userId === null
-          ? null
-          : sql`(select ${user.id} from ${user} where ${user.id} = ${call.userId})`,
-    })),
-  );
+  await tx
+    .insert(ocrCalls)
+    .values(
+      calls.map((call) => ({
+        ...call,
+        organizationId: sql`(select ${organization.id} from ${organization} where ${organization.id} = ${call.organizationId})`,
+        userId:
+          call.userId === null
+            ? null
+            : sql`(select ${user.id} from ${user} where ${user.id} = ${call.userId})`,
+      })),
+    )
+    // A round's calls written twice (a lost COMMIT ack, then the failure path) count once.
+    .onConflictDoNothing();
 }
 
 export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<

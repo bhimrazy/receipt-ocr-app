@@ -25,6 +25,7 @@ import {
   ingestUpload,
   purgeReceiptFiles,
 } from "./pipeline";
+import { FREE_FAILED_ROUNDS } from "./plans";
 import { checkQuota, quotaGate, usageWindow } from "./quota";
 import { ReceiptRepo, STALE_AFTER_MS } from "./repository";
 import { Db, Storage } from "./services";
@@ -326,7 +327,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       step: 0,
       model: "fixture",
       provider: "fixture",
-      status: "ok",
+      status: "ok" as const,
       latencyMs: 5,
       inputTokens: 0,
       cachedInputTokens: 0,
@@ -357,6 +358,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       status: "completed",
       merchant: extraction.merchant,
     });
+    // The same round's calls written again (a lost COMMIT ack, then the failure path) count once.
+    expect(await repo((r) => r.fail(id, a, 2, "again", [call(2)]))).toBe(false);
     const calls = await run(receiptCalls(id, a.organizationId));
     expect(calls.map((c) => c.round)).toEqual([1, 2]);
   });
@@ -412,6 +415,62 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       ]);
     });
 
+    it("M1: failed reads past the free allowance count toward the day", async () => {
+      const c = await createUser("junk");
+      const tight = { perMinute: 1000, perDay: 20 };
+      const upload = () =>
+        runExit(ingestUpload({ scope: c, fileName: "j.jpg", body: FAILING_JPEG, limits: tight }));
+      // used = max(0, failed − FREE_FAILED_ROUNDS): 25 failures fit under 20, the 26th upload doesn't.
+      for (let i = 0; i < 20 + FREE_FAILED_ROUNDS; i++) {
+        const exit = await upload();
+        if (!Exit.isSuccess(exit)) throw new Error(`upload ${i + 1} was refused`);
+        await runExit(extractStored({ receiptId: exit.value.receipt.id, scope: c }));
+      }
+      expect(await usedToday(c.userId, tight)).toBe(20);
+      const refused = await upload();
+      expect(Exit.isFailure(refused) && JSON.stringify(refused.cause)).toContain("QuotaExceeded");
+    });
+
+    it("M1: successful and failed reads together", async () => {
+      const c = await createUser("mixed");
+      const tight = { perMinute: 1000, perDay: 3 };
+      const read = async (body: Uint8Array) => {
+        const exit = await runExit(
+          ingestUpload({ scope: c, fileName: "m.jpg", body, limits: tight }),
+        );
+        if (Exit.isSuccess(exit))
+          await runExit(extractStored({ receiptId: exit.value.receipt.id, scope: c }));
+        return exit;
+      };
+      for (const body of [JPEG, JPEG]) expect(Exit.isSuccess(await read(body))).toBe(true);
+      // The free failures leave the day at 2; the sixth failure makes it 3.
+      for (let i = 0; i < FREE_FAILED_ROUNDS + 1; i++) {
+        expect(Exit.isSuccess(await read(FAILING_JPEG))).toBe(true);
+      }
+      expect(await usedToday(c.userId, tight)).toBe(3);
+      expect(Exit.isFailure(await read(JPEG))).toBe(true);
+    });
+
+    it("P2-3: a round that fails before any model call is recorded and stops reading as in flight", async () => {
+      const c = await createUser("no-file");
+      const { receipt } = await run(
+        ingestUpload({ scope: c, fileName: "n.jpg", body: JPEG, limits }),
+      );
+      expect(await usedToday(c.userId)).toBe(1); // in flight
+      await run(Effect.flatMap(Storage, (s) => s.remove([receipt.imageObjectKey!])));
+      await runExit(extractStored({ receiptId: receipt.id, scope: c }));
+      expect(await usedToday(c.userId)).toBe(0);
+      const rows = await db((d) =>
+        d.select().from(ocrCalls).where(eq(ocrCalls.receiptId, receipt.id)),
+      );
+      expect(rows).toMatchObject([{ model: null, status: "storage-error", costMicroUsd: 0 }]);
+      // Not a model call: rollups leave it out.
+      const days = await run(
+        usageByDay({ organizationId: c.organizationId }, new Date(Date.now() - 60_000)),
+      );
+      expect(days).toEqual([]);
+    });
+
     it("B4: deleting the workspace keeps its usage, unlinked, and the user's quota stays used", async () => {
       const c = await createUser("ws-deleter");
       const id = await readAndExtract(c);
@@ -457,6 +516,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
           failedCalls: 1,
           inputTokens: 0,
           cachedInputTokens: 0,
+          cacheWriteTokens: 0,
           outputTokens: 0,
           reasoningTokens: 0,
           costMicroUsd: 0,

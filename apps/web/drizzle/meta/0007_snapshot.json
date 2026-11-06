@@ -1,5 +1,5 @@
 {
-  "id": "9b430801-a3c1-4a3c-8340-825d5fea9c0d",
+  "id": "f71059a6-8bf2-484b-8e62-25c282ecf62b",
   "prevId": "f615e529-79a9-4f2c-92ca-b8bf6f4a69d6",
   "version": "7",
   "dialect": "postgresql",
@@ -239,13 +239,13 @@
           "name": "model",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "provider": {
           "name": "provider",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -267,6 +267,12 @@
         },
         "cached_input_tokens": {
           "name": "cached_input_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cache_write_tokens": {
+          "name": "cache_write_tokens",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -340,8 +346,8 @@
           "method": "btree",
           "with": {}
         },
-        "ocr_calls_receipt_round_idx": {
-          "name": "ocr_calls_receipt_round_idx",
+        "ocr_calls_receipt_round_step_idx": {
+          "name": "ocr_calls_receipt_round_step_idx",
           "columns": [
             {
               "expression": "receipt_id",
@@ -354,9 +360,15 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "step",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -393,7 +405,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "ocr_calls_status_check": {
+          "name": "ocr_calls_status_check",
+          "value": "status in ('ok', 'timeout', 'rate-limited', 'provider-error', 'invalid-output', 'bad-image', 'not-configured', 'storage-error')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.ocr_rounds": {

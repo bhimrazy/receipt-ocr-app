@@ -234,6 +234,7 @@ describe("extractStored", () => {
         status: "ok",
         latencyMs: 2,
         inputTokens: 1000,
+        cacheWriteTokens: 0,
         outputTokens: 100,
         reasoningTokens: 40,
         // 1000 × 0.75 + 100 × 3.75; reasoning is inside output.
@@ -282,6 +283,27 @@ describe("extractStored", () => {
     const h = harness({ ocr: "unconfigured" });
     const { id } = await ingestAndExtract(h);
     expect(h.rows.get(id)?.status).toBe("failed");
+    // One row with no model, so the round doesn't read as in flight.
+    expect(h.calls).toEqual([
+      expect.objectContaining({
+        with: "fail",
+        receiptId: id,
+        model: null,
+        status: "not-configured",
+        costMicroUsd: 0,
+      }),
+    ]);
+  });
+
+  it("records a no-model row when the stored file is gone", async () => {
+    const h = harness();
+    const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits }));
+    if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
+    h.objects.clear();
+    await h.run(extractStored({ receiptId: ingested.value.receipt.id, scope }));
+    expect(h.calls.map((c) => [c.with, c.model, c.status])).toEqual([
+      ["fail", null, "storage-error"],
+    ]);
   });
 });
 

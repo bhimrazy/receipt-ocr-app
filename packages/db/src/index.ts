@@ -1,6 +1,7 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
+  check,
   index,
   integer,
   jsonb,
@@ -154,7 +155,27 @@ export const ocrRounds = pgTable(
   ],
 );
 
-/** One row per model call, success or failure, written when its round ends. */
+/**
+ * Allowed `ocr_calls.status` values: "ok", the AI failure kinds (kept in step
+ * with `OCR_FAILURE_KINDS` in packages/ai by a core test), and
+ * "storage-error" for a round that failed before any model was called.
+ */
+export const OCR_CALL_STATUSES = [
+  "ok",
+  "timeout",
+  "rate-limited",
+  "provider-error",
+  "invalid-output",
+  "bad-image",
+  "not-configured",
+  "storage-error",
+] as const;
+
+/**
+ * One row per model call, success or failure, written when its round ends. A
+ * round that failed before calling any model gets one row with a null model,
+ * so it stops reading as in flight.
+ */
 export const ocrCalls = pgTable(
   "ocr_calls",
   {
@@ -169,15 +190,16 @@ export const ocrCalls = pgTable(
     round: smallint("round").notNull(),
     /** Position in the chain: 0 = primary, >0 = a fallback. */
     step: smallint("step").notNull(),
-    /** `provider:model`. */
-    model: text("model").notNull(),
-    provider: text("provider").notNull(),
-    /** "ok" or the failure kind (`OcrFailureKind`). */
+    /** `provider:model`; null when the round failed before calling a model. */
+    model: text("model"),
+    provider: text("provider"),
+    /** One of `OCR_CALL_STATUSES`. */
     status: text("status").notNull(),
     latencyMs: integer("latency_ms").notNull(),
     // Null = the provider didn't report it (timeout, API error), not zero.
     inputTokens: integer("input_tokens"),
     cachedInputTokens: integer("cached_input_tokens"),
+    cacheWriteTokens: integer("cache_write_tokens"),
     /** Includes reasoning tokens. */
     outputTokens: integer("output_tokens"),
     reasoningTokens: integer("reasoning_tokens"),
@@ -192,8 +214,14 @@ export const ocrCalls = pgTable(
     index("ocr_calls_org_created_at_idx").on(table.organizationId, table.createdAt),
     // Admin windows.
     index("ocr_calls_created_at_idx").on(table.createdAt),
-    // A receipt's calls; the quota's "was this round read" lookup.
-    index("ocr_calls_receipt_round_idx").on(table.receiptId, table.round),
+    // A receipt's calls and the quota's "was this round read" lookup. Unique, so
+    // a round's calls written twice (e.g. a lost COMMIT ack, then the failure
+    // path) are billed once.
+    uniqueIndex("ocr_calls_receipt_round_step_idx").on(table.receiptId, table.round, table.step),
+    check(
+      "ocr_calls_status_check",
+      sql.raw(`status in (${OCR_CALL_STATUSES.map((s) => `'${s}'`).join(", ")})`),
+    ),
   ],
 );
 

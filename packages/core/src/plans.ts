@@ -14,6 +14,13 @@ export interface PlanPolicy {
   receiptsPerMinute: number;
 }
 
+/**
+ * Failed reads per user per UTC day that don't count toward the daily limit.
+ * Past this, each failed round counts like a receipt: every one is a paid
+ * model call, so endless junk uploads can't run up cost for free.
+ */
+export const FREE_FAILED_ROUNDS = 5;
+
 export const PLAN_IDS = ["free", "pro"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
 export type PlanTable = Record<PlanId, PlanPolicy>;

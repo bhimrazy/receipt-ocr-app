@@ -3,6 +3,7 @@ import {
   desc,
   eq,
   gte,
+  isNotNull,
   ocrCalls,
   organization,
   sql,
@@ -10,6 +11,7 @@ import {
   type SQL,
 } from "@receipt-ocr/db";
 import { Effect } from "effect";
+import { FREE_FAILED_ROUNDS } from "./plans";
 import { isReceiptId } from "./repository";
 import { Db } from "./services";
 
@@ -19,8 +21,9 @@ import { Db } from "./services";
  *
  * - A round is one upload or one retry, recorded when it is accepted.
  * - A user's day: receipts read successfully that day, counted once, plus
- *   rounds still in flight. Failed reads, and the retries of a receipt that
- *   never succeeds, don't count.
+ *   rounds still in flight, plus failed rounds beyond the first
+ *   `FREE_FAILED_ROUNDS` of the day. A few bad photos are free; a stream of
+ *   them (each one a paid model call) is not.
  * - The burst limit and the global cap count rounds, failed ones included:
  *   each one called (or is calling) a model.
  */
@@ -41,9 +44,23 @@ export type Queryable = Pick<DbClient, "execute">;
 const ts = (date: Date) => sql`${date.toISOString()}::timestamptz`;
 
 /** The round (aliased `r`) has at least one successful call. */
-export const readOkSql = sql`exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round and c.status = 'ok')`;
+const readOk = sql`exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round and c.status = 'ok')`;
 /** The round has no calls yet: still running (or died, until it ages out). */
 const noCalls = sql`not exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round)`;
+/** The round called a model and none succeeded: paid for, nothing read. */
+const failedPaid = sql`(not ${readOk} and exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round and c.model is not null))`;
+
+/**
+ * A user's "used today" (see the rules above) as a scalar subquery.
+ * `pendingSince` null leaves rounds in flight out (admin lists).
+ */
+export const usedSinceSql = (userId: SQL | string, since: Date, pendingSince: Date | null) => {
+  const inFlight =
+    pendingSince === null ? sql`false` : sql`(r.created_at >= ${ts(pendingSince)} and ${noCalls})`;
+  const mine = sql`r.user_id = ${userId} and r.created_at >= ${ts(since)}`;
+  return sql<number>`((select count(distinct r.receipt_id) from ocr_rounds r where ${mine} and (${readOk} or ${inFlight}))
+    + greatest(0, (select count(*) from ocr_rounds r where ${mine} and ${failedPaid}) - ${FREE_FAILED_ROUNDS}))::int`;
+};
 
 export async function countUsage(
   db: Queryable,
@@ -60,9 +77,7 @@ export async function countUsage(
   }>(sql`select
     (select count(*)::int from ocr_rounds r
       where r.user_id = ${userId} and r.created_at >= ${ts(window.minuteStart)}) as user_minute,
-    (select count(distinct r.receipt_id)::int from ocr_rounds r
-      where r.user_id = ${userId} and r.created_at >= ${ts(window.dayStart)}
-        and (${readOkSql} or (r.created_at >= ${ts(window.pendingSince)} and ${noCalls}))) as user_day,
+    ${usedSinceSql(userId, window.dayStart, window.pendingSince)} as user_day,
     ${global} as global_day`);
   const row = rows[0];
   return {
@@ -79,12 +94,9 @@ export const lockUserQuota = (db: Queryable, userId: string) =>
 /** First key of the two-key advisory lock, so these locks can't collide with others. */
 const QUOTA_LOCK_NAMESPACE = 7_301;
 
-/**
- * Per-user "used today" as a correlated subquery, for admin lists. Same rule
- * as `countUsage` without the in-flight part.
- */
+/** Per-user "used today" for admin lists: the quota's rule without rounds in flight. */
 export const receiptsReadSince = (userColumn: SQL, since: Date) =>
-  sql<number>`(select count(distinct r.receipt_id)::int from ocr_rounds r where r.user_id = ${userColumn} and r.created_at >= ${ts(since)} and ${readOkSql})`;
+  usedSinceSql(userColumn, since, null);
 
 /** Rounds started since `since`, all users: what OCR_DAILY_CAP is checked against. */
 export const roundsSince = (since: Date) =>
@@ -105,6 +117,7 @@ export type UsageTotals = {
   failedCalls: number;
   inputTokens: number;
   cachedInputTokens: number;
+  cacheWriteTokens: number;
   outputTokens: number;
   reasoningTokens: number;
   /** Sum of known costs, micro-USD. */
@@ -123,15 +136,18 @@ const totals = {
   failedCalls: num(sql`count(*) filter (where ${ocrCalls.status} <> 'ok')`),
   inputTokens: num(sql`coalesce(sum(${ocrCalls.inputTokens}), 0)::bigint`),
   cachedInputTokens: num(sql`coalesce(sum(${ocrCalls.cachedInputTokens}), 0)::bigint`),
+  cacheWriteTokens: num(sql`coalesce(sum(${ocrCalls.cacheWriteTokens}), 0)::bigint`),
   outputTokens: num(sql`coalesce(sum(${ocrCalls.outputTokens}), 0)::bigint`),
   reasoningTokens: num(sql`coalesce(sum(${ocrCalls.reasoningTokens}), 0)::bigint`),
   costMicroUsd: num(sql`coalesce(sum(${ocrCalls.costMicroUsd}), 0)::bigint`),
   unpricedCalls: num(sql`count(*) filter (where ${ocrCalls.costMicroUsd} is null)`),
 };
 
+/** Model calls only: rounds that failed before calling a model cost nothing. */
 const scoped = (scope: UsageScope, since: Date) =>
   and(
     gte(ocrCalls.createdAt, since),
+    isNotNull(ocrCalls.model),
     scope === "all" ? undefined : eq(ocrCalls.organizationId, scope.organizationId),
   );
 
@@ -173,8 +189,9 @@ export const usageByModel = (scope: UsageScope, since: Date) =>
     use((db): Promise<ModelUsage[]> =>
       db
         .select({
-          model: ocrCalls.model,
-          provider: ocrCalls.provider,
+          // Never null here: `scoped` keeps model calls only.
+          model: sql<string>`${ocrCalls.model}`,
+          provider: sql<string>`${ocrCalls.provider}`,
           ...totals,
           fallbackCalls: num(
             sql`count(*) filter (where ${ocrCalls.status} = 'ok' and ${ocrCalls.step} > 0)`,
@@ -203,7 +220,7 @@ export const usageByWorkspace = (since: Date, limit = 50) =>
         .select({ organizationId: ocrCalls.organizationId, name: organization.name, ...totals })
         .from(ocrCalls)
         .leftJoin(organization, eq(organization.id, ocrCalls.organizationId))
-        .where(gte(ocrCalls.createdAt, since))
+        .where(scoped("all", since))
         .groupBy(ocrCalls.organizationId, organization.name)
         .orderBy(desc(totals.costMicroUsd))
         .limit(limit),

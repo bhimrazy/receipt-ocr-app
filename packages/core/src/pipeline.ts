@@ -47,6 +47,7 @@ export function ocrCallRows(
       latencyMs: Math.round(attempt.ms),
       inputTokens: attempt.usage?.inputTokens ?? null,
       cachedInputTokens: attempt.usage?.cachedInputTokens ?? null,
+      cacheWriteTokens: attempt.usage?.cacheWriteTokens ?? null,
       outputTokens: attempt.usage?.outputTokens ?? null,
       reasoningTokens: attempt.usage?.reasoningTokens ?? null,
       costMicroUsd: cost.microUsd,
@@ -54,6 +55,35 @@ export function ocrCallRows(
       createdAt: context.at,
     };
   });
+}
+
+/**
+ * The one row for a round that failed before any model was called (no stored
+ * file, nothing configured), so it stops reading as in flight. It cost nothing.
+ */
+export function noCallRow(
+  status: OcrCallRow["status"],
+  context: { receiptId: string; scope: ReceiptScope; round: number; at: Date },
+): OcrCallRow {
+  return {
+    receiptId: context.receiptId,
+    organizationId: context.scope.organizationId,
+    userId: context.scope.userId,
+    round: context.round,
+    step: 0,
+    model: null,
+    provider: null,
+    status,
+    latencyMs: 0,
+    inputTokens: null,
+    cachedInputTokens: null,
+    cacheWriteTokens: null,
+    outputTokens: null,
+    reasoningTokens: null,
+    costMicroUsd: 0,
+    priceFrom: null,
+    createdAt: context.at,
+  };
 }
 
 /** Total of the known costs; null when no call has one. */
@@ -127,13 +157,26 @@ export const extractStored = (input: { receiptId: string; scope: ReceiptScope })
     // Calls made so far. Written with whichever outcome is recorded, so every
     // call is billed and counted even when the receipt is gone or superseded.
     let calls: OcrCallRow[] = [];
-    const rowsFor = (attempts: readonly OcrAttempt[]) =>
-      ocrCallRows(attempts, {
-        receiptId: input.receiptId,
-        scope: input.scope,
-        round: attempt,
-        at: new Date(),
-      });
+    let recorded = false;
+    const context = () => ({
+      receiptId: input.receiptId,
+      scope: input.scope,
+      round: attempt,
+      at: new Date(),
+    });
+    const rowsFor = (attempts: readonly OcrAttempt[]) => ocrCallRows(attempts, context());
+    /** What the failure path writes: the calls made, or one row saying none was. */
+    const failedCalls = (error: { _tag: string; kind?: OcrCallRow["status"] }) => {
+      if (recorded) return [];
+      if (calls.length > 0) return calls;
+      const status =
+        error._tag === "OcrError" && error.kind
+          ? error.kind
+          : error._tag === "NotConfigured"
+            ? "not-configured"
+            : "storage-error";
+      return [noCallRow(status, context())];
+    };
 
     return yield* Effect.gen(function* () {
       if (!key) return yield* new StorageError({ message: "This receipt has no stored file" });
@@ -168,7 +211,7 @@ export const extractStored = (input: { receiptId: string; scope: ReceiptScope })
         ),
       );
       // Written with the completion; the failure path must not write them again.
-      calls = [];
+      recorded = true;
       if (!receipt) {
         return yield* new NotFound({
           message: "Receipt was deleted or superseded during extraction",
@@ -182,7 +225,11 @@ export const extractStored = (input: { receiptId: string; scope: ReceiptScope })
         costMicroUsd: totalCost(written),
         timings,
       };
-    }).pipe(Effect.tapError(() => markFailed(input.receiptId, input.scope, attempt, calls)));
+    }).pipe(
+      Effect.tapError((error) =>
+        markFailed(input.receiptId, input.scope, attempt, failedCalls(error)),
+      ),
+    );
   });
 
 const markFailed = (

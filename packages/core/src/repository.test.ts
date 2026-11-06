@@ -1,5 +1,15 @@
+import { OCR_FAILURE_KINDS } from "@receipt-ocr/ai";
+import { OCR_CALL_STATUSES } from "@receipt-ocr/db";
 import { describe, expect, it } from "vitest";
 import { canManageAnyReceipt, isReceiptId } from "./repository";
+
+describe("OCR_CALL_STATUSES", () => {
+  it("is the CHECK constraint's list: ok, every AI failure kind, and storage-error", () => {
+    expect([...OCR_CALL_STATUSES].sort()).toEqual(
+      ["ok", ...OCR_FAILURE_KINDS, "storage-error"].sort(),
+    );
+  });
+});
 
 describe("canManageAnyReceipt (P2-5)", () => {
   it.each([
