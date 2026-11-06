@@ -11,7 +11,8 @@ import {
   CardTitle,
 } from "@receipt-ocr/ui/components/card";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Label } from "@receipt-ocr/ui/components/label";
+import { Alert } from "@receipt-ocr/ui/components/alert";
+import { Field, FieldLabel } from "@receipt-ocr/ui/components/field";
 import {
   Select,
   SelectContent,
@@ -47,7 +48,7 @@ function draftFrom(receipt: ReceiptWithItems): Draft {
   };
 }
 
-const labelClass = "mb-1.5 block text-xs font-medium text-muted-foreground";
+const labelClass = "text-xs text-muted-foreground";
 
 /** Canonical list, plus the stored value when it isn't in it, so what you see is what saves. */
 function categoryItems(current: string) {
@@ -117,22 +118,22 @@ export function ReceiptEditor({
       </CardHeader>
       <CardContent>
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={save}>
-          <div className="sm:col-span-2">
-            <Label className={labelClass} htmlFor="merchant">
+          <Field className="sm:col-span-2">
+            <FieldLabel className={labelClass} htmlFor="merchant">
               Merchant
-            </Label>
+            </FieldLabel>
             <Input
               id="merchant"
               onChange={(event) => set("merchant", event.target.value)}
               placeholder="Merchant name"
               value={draft.merchant}
             />
-          </div>
+          </Field>
 
-          <div>
-            <Label className={labelClass} htmlFor="receiptDate">
+          <Field>
+            <FieldLabel className={labelClass} htmlFor="receiptDate">
               Date
-            </Label>
+            </FieldLabel>
             <Input
               id="receiptDate"
               onChange={(event) => set("receiptDate", event.target.value)}
@@ -140,12 +141,12 @@ export function ReceiptEditor({
               type="date"
               value={draft.receiptDate}
             />
-          </div>
+          </Field>
 
-          <div>
-            <Label className={labelClass} htmlFor="category">
+          <Field>
+            <FieldLabel className={labelClass} htmlFor="category">
               Category
-            </Label>
+            </FieldLabel>
             <Select
               items={categories}
               onValueChange={(value) => value && set("category", value as string)}
@@ -162,12 +163,12 @@ export function ReceiptEditor({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          <div>
-            <Label className={labelClass} htmlFor="currency">
+          <Field>
+            <FieldLabel className={labelClass} htmlFor="currency">
               Currency
-            </Label>
+            </FieldLabel>
             <Input
               id="currency"
               maxLength={3}
@@ -175,12 +176,12 @@ export function ReceiptEditor({
               placeholder="USD"
               value={draft.currency}
             />
-          </div>
+          </Field>
 
-          <div>
-            <Label className={labelClass} htmlFor="subtotal">
+          <Field>
+            <FieldLabel className={labelClass} htmlFor="subtotal">
               Subtotal
-            </Label>
+            </FieldLabel>
             <Input
               id="subtotal"
               inputMode="decimal"
@@ -188,12 +189,12 @@ export function ReceiptEditor({
               placeholder="0.00"
               value={draft.subtotal}
             />
-          </div>
+          </Field>
 
-          <div>
-            <Label className={labelClass} htmlFor="tax">
+          <Field>
+            <FieldLabel className={labelClass} htmlFor="tax">
               Tax
-            </Label>
+            </FieldLabel>
             <Input
               id="tax"
               inputMode="decimal"
@@ -201,12 +202,12 @@ export function ReceiptEditor({
               placeholder="0.00"
               value={draft.tax}
             />
-          </div>
+          </Field>
 
-          <div>
-            <Label className={labelClass} htmlFor="tip">
+          <Field>
+            <FieldLabel className={labelClass} htmlFor="tip">
               Tip
-            </Label>
+            </FieldLabel>
             <Input
               id="tip"
               inputMode="decimal"
@@ -214,12 +215,12 @@ export function ReceiptEditor({
               placeholder="0.00"
               value={draft.tip}
             />
-          </div>
+          </Field>
 
-          <div>
-            <Label className={labelClass} htmlFor="total">
+          <Field>
+            <FieldLabel className={labelClass} htmlFor="total">
               Total
-            </Label>
+            </FieldLabel>
             <Input
               id="total"
               inputMode="decimal"
@@ -227,15 +228,12 @@ export function ReceiptEditor({
               placeholder="0.00"
               value={draft.total}
             />
-          </div>
+          </Field>
 
           {error ? (
-            <p
-              className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:col-span-2"
-              role="alert"
-            >
+            <Alert className="sm:col-span-2" variant="destructive">
               {error}
-            </p>
+            </Alert>
           ) : null}
 
           <div className="flex gap-2 sm:col-span-2">

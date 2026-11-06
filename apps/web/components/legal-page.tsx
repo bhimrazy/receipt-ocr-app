@@ -53,7 +53,7 @@ export function LegalPage({
           <p className="mt-6 text-pretty leading-7 text-foreground/85">{intro}</p>
 
           {process.env.NODE_ENV !== "production" && (
-            <p className="mt-8 rounded-xl bg-amber-400/10 p-4 text-sm leading-6 text-amber-200 ring-1 ring-inset ring-amber-400/30">
+            <p className="mt-8 rounded-xl bg-warning/10 p-4 text-sm leading-6 text-warning ring-1 ring-inset ring-warning/30">
               Development only: this copy has not had legal review yet. This note is hidden in
               production.
             </p>

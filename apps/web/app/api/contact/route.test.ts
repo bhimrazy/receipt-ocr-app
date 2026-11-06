@@ -6,7 +6,10 @@ const env = vi.hoisted(() => ({
   supportEmail: "help@example.com" as string | undefined,
 }));
 
-vi.mock("@receipt-ocr/email", () => ({ sendEmail }));
+vi.mock("@receipt-ocr/email", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
+  sendEmail,
+}));
 vi.mock("@receipt-ocr/core", () => ({ hitRateLimit: () => ({}) }));
 vi.mock("@/lib/runtime", () => ({
   runtime: { runPromise: async () => ({ allowed: true, retryAfterSeconds: 0 }) },

@@ -1,7 +1,7 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import type { ReceiptSummary } from "@/app/app/_data/receipts-contract";
+import type { ReceiptSummary } from "@/lib/receipts";
 import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 import { confidenceLevel, formatDate, formatMoney } from "@/lib/format";
@@ -36,7 +36,7 @@ export function ReceiptList({
         const level = completed ? confidenceLevel(receipt.confidence) : null;
         return (
           <li
-            className="group relative flex items-center gap-3 px-4 py-3 transition-colors focus-within:bg-foreground/[0.04] hover:bg-foreground/[0.04]"
+            className="group relative flex items-center gap-3 px-4 py-3 transition-colors focus-within:bg-wash-subtle hover:bg-wash-subtle"
             key={receipt.id}
           >
             <div className="min-w-0 flex-1">

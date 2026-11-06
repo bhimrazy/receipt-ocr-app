@@ -19,11 +19,19 @@ import {
   DropdownMenuTrigger,
 } from "@receipt-ocr/ui/components/dropdown-menu";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Label } from "@receipt-ocr/ui/components/label";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+
+// Same rule as packages/core workspace-name.ts: 1–80 characters, no angle brackets or control characters.
+const WORKSPACE_NAME_MAX = 80;
+const WORKSPACE_NAME_RULE = "Up to 80 characters, without < or >.";
+
+function isValidWorkspaceName(name: string) {
+  return name.length <= WORKSPACE_NAME_MAX && !/[<>\u0000-\u001f\u007f-\u009f]/.test(name);
+}
 
 function initialFor(name: string) {
   return (name.trim() || "?").charAt(0).toUpperCase();
@@ -95,6 +103,10 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
       setCreateError("Enter a name for the workspace.");
       return;
     }
+    if (!isValidWorkspaceName(trimmed)) {
+      setCreateError("Remove < and > from the name.");
+      return;
+    }
     setCreateError(null);
     setCreating(true);
     const slug = `${trimmed
@@ -126,7 +138,7 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
       >
         <DropdownMenuTrigger
           aria-label={`Workspace: ${current?.name ?? "none"}. Switch workspace`}
-          className="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-sm transition outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring max-md:h-11"
+          className="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-sm transition outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring max-md:h-11"
         >
           <Initial name={current?.name ?? "?"} />
           <span className="min-w-0 flex-1 truncate font-medium">
@@ -193,23 +205,23 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
                 A separate space with its own receipts and members.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="workspace-name">Workspace name</Label>
+            <Field data-invalid={createError ? true : undefined}>
+              <FieldLabel htmlFor="workspace-name">Workspace name</FieldLabel>
               <Input
-                aria-describedby={createError ? "workspace-name-error" : undefined}
+                aria-describedby={
+                  createError ? "workspace-name-error workspace-name-hint" : "workspace-name-hint"
+                }
                 aria-invalid={createError ? true : undefined}
                 autoComplete="off"
                 id="workspace-name"
+                maxLength={WORKSPACE_NAME_MAX}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="e.g. Household"
                 value={name}
               />
-              {createError ? (
-                <p className="text-sm text-destructive" id="workspace-name-error" role="alert">
-                  {createError}
-                </p>
-              ) : null}
-            </div>
+              <FieldDescription id="workspace-name-hint">{WORKSPACE_NAME_RULE}</FieldDescription>
+              <FieldError id="workspace-name-error">{createError}</FieldError>
+            </Field>
             <DialogFooter>
               <Button
                 disabled={creating}

@@ -124,7 +124,8 @@ export function AuthNotConfiguredCard() {
     >
       <p>
         Add <code className="font-mono text-foreground">DATABASE_URL</code> and{" "}
-        <code className="font-mono text-foreground">BETTER_AUTH_SECRET</code> to{" "}
+        <code className="font-mono text-foreground">BETTER_AUTH_SECRET</code> (or{" "}
+        <code className="font-mono text-foreground">BETTER_AUTH_SECRETS</code>) to{" "}
         <code className="font-mono text-foreground">apps/web/.env.local</code> to turn on email and
         social sign-in.
       </p>

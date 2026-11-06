@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
+import { Alert } from "@receipt-ocr/ui/components/alert";
+import { Field, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, MessageCircle, Send, X } from "lucide-react";
@@ -104,7 +106,7 @@ export function SupportWidget() {
         <div
           role="dialog"
           aria-labelledby={`${ids}-title`}
-          className="w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-card/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 backdrop-blur-xl motion-safe:animate-fade-up"
+          className="w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-card/95 shadow-2xl shadow-black/50 ring-1 ring-hairline backdrop-blur-xl motion-safe:animate-fade-up"
         >
           <div className="relative border-b border-border bg-secondary/30 p-4 pr-14">
             <p className="text-sm font-semibold" id={`${ids}-title`}>
@@ -115,7 +117,7 @@ export function SupportWidget() {
               type="button"
               onClick={close}
               aria-label="Close"
-              className="absolute right-1.5 top-1.5 flex size-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="absolute right-1.5 top-1.5 flex size-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-wash hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X aria-hidden className="size-4" />
             </button>
@@ -163,8 +165,10 @@ export function SupportWidget() {
                   </div>
                 </fieldset>
 
-                <label className="flex flex-col gap-1.5" htmlFor={`${ids}-email`}>
-                  <span className="text-xs font-medium text-muted-foreground">Your email</span>
+                <Field>
+                  <FieldLabel className="text-xs text-muted-foreground" htmlFor={`${ids}-email`}>
+                    Your email
+                  </FieldLabel>
                   <Input
                     ref={emailRef}
                     id={`${ids}-email`}
@@ -176,10 +180,12 @@ export function SupportWidget() {
                     autoComplete="email"
                     className={cn("h-11", fieldClass)}
                   />
-                </label>
+                </Field>
 
-                <label className="flex flex-col gap-1.5" htmlFor={`${ids}-message`}>
-                  <span className="text-xs font-medium text-muted-foreground">Message</span>
+                <Field>
+                  <FieldLabel className="text-xs text-muted-foreground" htmlFor={`${ids}-message`}>
+                    Message
+                  </FieldLabel>
                   <textarea
                     id={`${ids}-message`}
                     required
@@ -192,7 +198,7 @@ export function SupportWidget() {
                       fieldClass,
                     )}
                   />
-                </label>
+                </Field>
 
                 {/* Honeypot: off-screen and out of the tab order. */}
                 <input
@@ -204,11 +210,11 @@ export function SupportWidget() {
                   className="pointer-events-none absolute -left-[9999px] h-0 w-0 opacity-0"
                 />
 
-                {error && (
-                  <p className="text-xs text-red-300" role="alert">
+                {error ? (
+                  <Alert className="text-xs" variant="destructive">
                     {error}
-                  </p>
-                )}
+                  </Alert>
+                ) : null}
 
                 <Button type="submit" disabled={status === "sending"} className="h-11 w-full">
                   {status === "sending" ? (
@@ -231,8 +237,8 @@ export function SupportWidget() {
         onClick={() => (open ? close() : openWidget())}
         aria-label={open ? "Close support" : "Contact support"}
         aria-expanded={open}
-        // Fixed colours, not theme tokens: it must stay legible over any page background.
-        className="flex size-11 items-center justify-center rounded-full bg-[#047857] text-white shadow-lg shadow-black/40 ring-2 ring-white/80 transition hover:bg-[#065f46] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#34d399] sm:size-12 motion-safe:hover:-translate-y-0.5"
+        // The cta tokens keep white text legible over any page background.
+        className="flex size-11 items-center justify-center rounded-full bg-cta text-cta-foreground shadow-lg shadow-black/40 ring-2 ring-cta-foreground/80 transition hover:bg-cta-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring sm:size-12 motion-safe:hover:-translate-y-0.5"
       >
         {open ? (
           <X aria-hidden className="size-5" />

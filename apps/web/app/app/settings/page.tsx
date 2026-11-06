@@ -1,3 +1,9 @@
+import {
+  PageHeader,
+  PageHeaderContent,
+  PageHeaderDescription,
+  PageHeaderTitle,
+} from "@/components/page-header";
 import { AccountSettings } from "@/components/account-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
@@ -11,7 +17,7 @@ import { Card } from "@receipt-ocr/ui/components/card";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getUsageSummary } from "../_data/receipts-contract";
+import { getUsageSummary } from "@/lib/receipts";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -38,12 +44,12 @@ export default async function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Settings</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Your plan, your workspace and your account.
-        </p>
-      </div>
+      <PageHeader className="mb-8">
+        <PageHeaderContent>
+          <PageHeaderTitle>Settings</PageHeaderTitle>
+          <PageHeaderDescription>Your plan, your workspace and your account.</PageHeaderDescription>
+        </PageHeaderContent>
+      </PageHeader>
 
       <SettingsSection
         description="Receipts reset at 00:00 UTC every day. Receipts that couldn't be read don't count."

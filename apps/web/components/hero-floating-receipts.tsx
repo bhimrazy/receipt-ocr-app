@@ -81,11 +81,11 @@ export function HeroFloatingReceipts() {
           className={`absolute transition-transform duration-300 ease-out will-change-transform ${card.wrapperClass}`}
         >
           <div
-            className={`floating-receipt flex h-[182px] w-[212px] flex-col rounded-xl border border-white/10 bg-card/80 p-4 font-mono text-[11px] opacity-90 shadow-2xl shadow-black/40 backdrop-blur-xl ${card.cardClass}`}
+            className={`floating-receipt flex h-[182px] w-[212px] flex-col rounded-xl border border-hairline bg-card/80 p-4 font-mono text-2xs opacity-90 shadow-2xl shadow-black/40 backdrop-blur-xl ${card.cardClass}`}
           >
             <div className="mb-3 flex items-center justify-between text-xs font-semibold text-foreground">
               <span>{card.merchant}</span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-2xs font-medium text-primary">
                 <Check className="size-2.5" /> parsed
               </span>
             </div>
@@ -97,7 +97,7 @@ export function HeroFloatingReceipts() {
                 </div>
               ))}
             </div>
-            <div className="mt-2 flex justify-between border-t border-dashed border-white/10 pt-2 font-semibold text-primary">
+            <div className="mt-2 flex justify-between border-t border-dashed border-hairline pt-2 font-semibold text-primary">
               <span>Total</span>
               <span>{card.total}</span>
             </div>
