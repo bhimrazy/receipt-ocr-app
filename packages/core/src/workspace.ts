@@ -1,4 +1,4 @@
-import { asc, desc, eq, member, organization, rateLimit, sql } from "@receipt-ocr/db";
+import { and, asc, desc, eq, member, organization, rateLimit, sql } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import type { ReceiptScope } from "./repository";
 import { Db } from "./services";
@@ -34,7 +34,9 @@ const nameFor = (user: { name?: string | null; email: string }) =>
 /**
  * Creates the user's personal workspace and owner membership in one
  * transaction, so a failure can't leave an org without its owner. Idempotent:
- * returns null when the personal workspace already exists.
+ * returns null when the user already belongs to the workspace on their
+ * id-based slug. If that slug is held by an org the user is not in, a random
+ * suffix keeps self-heal from failing forever.
  */
 export const ensurePersonalWorkspace = (user: {
   id: string;
@@ -45,14 +47,21 @@ export const ensurePersonalWorkspace = (user: {
     use((db) =>
       db.transaction(async (tx) => {
         const now = new Date();
+        const base = slugFor(user.id);
+        const [taken] = await tx
+          .select({ userId: member.userId })
+          .from(organization)
+          .leftJoin(
+            member,
+            and(eq(member.organizationId, organization.id), eq(member.userId, user.id)),
+          )
+          .where(eq(organization.slug, base))
+          .limit(1);
+        if (taken?.userId) return null;
+        const slug = taken ? `${base}-${crypto.randomUUID().slice(0, 8)}` : base;
         const [org] = await tx
           .insert(organization)
-          .values({
-            id: crypto.randomUUID(),
-            name: nameFor(user),
-            slug: slugFor(user.id),
-            createdAt: now,
-          })
+          .values({ id: crypto.randomUUID(), name: nameFor(user), slug, createdAt: now })
           .onConflictDoNothing({ target: organization.slug })
           .returning({ id: organization.id });
         if (!org) return null;
