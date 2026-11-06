@@ -1,40 +1,80 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+import { canonicalFor } from "@/lib/site";
+import { PLANS } from "@/lib/plans";
 
 export const metadata: Metadata = {
-  title: "Terms of Service",
-  description: "The terms for using receiptOCR.",
+  title: "Terms of service",
+  description: "The terms for using receiptOCR, including the free plan and AI-extracted data.",
+  alternates: canonicalFor("/terms"),
 };
 
 export default function TermsPage() {
   return (
     <LegalPage
-      title="Terms of Service"
-      updated="June 2026"
-      intro="By using receiptOCR you agree to these terms. They cover what you can expect from us and what we expect from you while the product is in early access."
+      title="Terms of service"
+      updated="November 4, 2026"
+      intro="These terms apply when you use receiptOCR. By creating an account or using the service, you agree to them. receiptOCR is in early access, so some features may change."
       sections={[
         {
-          heading: "Using the service",
+          heading: "The service",
           body: [
-            "receiptOCR extracts structured data from receipt images you upload. You're responsible for having the right to upload and process the receipts you submit.",
+            "receiptOCR reads receipt images you upload and extracts data such as merchant, date, line items, tax and total, which you can review, edit and export.",
+            "Extraction uses Google's Gemini AI model. AI extraction can misread or miss information. Check the extracted data before you rely on it for accounting, tax or any other purpose. The confidence score is a guide, not a guarantee.",
           ],
         },
         {
-          heading: "Free tier and your own keys",
+          heading: "Your account",
           body: [
-            "The free tier is offered as-is with usage limits. When you bring your own AI and storage keys, you pay those providers directly and are bound by their terms in addition to ours.",
+            "Give accurate details when you sign up and keep your password secure. You're responsible for activity in your account and in workspaces you own.",
+            "When you invite people to a workspace, they can see and change the receipts in it.",
           ],
         },
         {
-          heading: "Early access",
+          heading: "Your content",
           body: [
-            "The product is under active development. Features may change, and we provide the service without warranties of uninterrupted or error-free operation.",
+            "You keep ownership of the receipts you upload and the data extracted from them.",
+            "You give us permission to store, process and display that content, and to send it to the processors listed in our Privacy policy, only as needed to provide the service to you.",
+            "Upload only receipts you have the right to share. Don't upload content that is unlawful or that contains other people's personal information without a lawful reason.",
           ],
         },
         {
-          heading: "Your data",
+          heading: "Plans and limits",
           body: [
-            "You retain ownership of your receipts and extracted data. You can export or request deletion at any time, as described in our Privacy Policy.",
+            `The free plan currently includes up to ${PLANS.free.receiptsPerDay} receipts a day and ${PLANS.free.workspaces} workspace, with no card required. We may change these limits, and we'll update the site when we do.`,
+            "Paid plans aren't available yet. If we introduce them, we'll show the price and what it includes before you're asked to pay anything.",
+          ],
+        },
+        {
+          heading: "Acceptable use",
+          body: [
+            "Don't try to get around usage limits, disrupt or overload the service, access other people's data, or use the service to build a competing product by copying it.",
+            "We may suspend accounts that break these terms or put the service or other users at risk.",
+          ],
+        },
+        {
+          heading: "Early access and availability",
+          body: [
+            "The service is provided as it is and as available. We work to keep it running and accurate, but we don't promise it will be uninterrupted, error-free or that extraction will be correct.",
+            "Export anything you need to keep. We may change or stop features during early access.",
+          ],
+        },
+        {
+          heading: "Ending your use",
+          body: [
+            "You can stop using receiptOCR and delete your account from Settings at any time. Our Privacy policy explains what deletion removes.",
+          ],
+        },
+        {
+          heading: "Changes to these terms",
+          body: [
+            "If we change these terms, we'll update the date at the top of this page. For significant changes, we'll tell you by email before they take effect.",
+          ],
+        },
+        {
+          heading: "Contact",
+          body: [
+            "Questions about these terms? Use the support button at the bottom right of this page.",
           ],
         },
       ]}

@@ -7,6 +7,8 @@ export interface SendEmailInput {
   subject: string;
   html: string;
   text: string;
+  /** Where replies go, e.g. the sender of a contact-form message. */
+  replyTo?: string;
 }
 
 export type SendEmailResult =
@@ -61,6 +63,7 @@ export async function sendEmail(
       subject: input.subject,
       html: input.html,
       text: input.text,
+      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     });
     if (error) {
       console.error(

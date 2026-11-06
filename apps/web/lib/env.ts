@@ -62,6 +62,9 @@ export const emailEnv = {
   from: optional("EMAIL_FROM"),
 };
 
+/** Inbox for support-form messages. Unset means the form can't deliver. */
+export const supportEmail = optional("SUPPORT_EMAIL");
+
 export const emailEnabled = Boolean(emailEnv.resendApiKey && emailEnv.from);
 
 function betterAuthUrl(): string {

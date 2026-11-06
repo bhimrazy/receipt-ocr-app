@@ -15,6 +15,8 @@ it here in the same session, with the date. `product-reviewer` checks every line
 
 - The site never claims a feature, number or guarantee the product can't back up today. Planned features are labelled
   as coming, not presented as shipped. (2026-11-04)
+- Copy is plain and literal for an international reader: no idioms or regional references that need explaining
+  ("shoebox", "tax season", "April"). (2026-11-04)
 
 ## Data display
 

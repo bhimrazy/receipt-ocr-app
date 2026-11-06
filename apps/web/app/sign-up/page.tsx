@@ -24,7 +24,7 @@ export default async function SignUpPage({
   ) as SocialProvider[];
 
   return (
-    <AuthLayout subtitle="Create a free account and turn your first receipt into structured data in seconds.">
+    <AuthLayout subtitle="Create a free account. Photograph a receipt, check what was read, export a CSV.">
       {authEnabled ? (
         <CredentialsForm mode="sign-up" providers={providers} redirectTo={redirectTo} />
       ) : (

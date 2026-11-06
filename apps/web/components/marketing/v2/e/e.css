@@ -1,0 +1,221 @@
+/*
+ * Direction E: light paper and graphite with one cobalt accent. Every token is set on the page
+ * wrapper, so packages/ui primitives inside it pick the theme up without touching global CSS.
+ * Text pairs are WCAG AA on --card and --background (ratios noted where they are tight).
+ */
+.landing-e {
+  --background: #f5f4f0;
+  --foreground: #141417;
+  --card: #ffffff;
+  --card-foreground: #141417;
+  --popover: #ffffff;
+  --popover-foreground: #141417;
+  /* 7.1:1 on white, 6.5:1 on --background. */
+  --primary: #2c3fe5;
+  --primary-foreground: #ffffff;
+  --secondary: #efede8;
+  --secondary-foreground: #141417;
+  --muted: #efede8;
+  /* 6.1:1 on --background, 5.7:1 on --secondary. */
+  --muted-foreground: #55555d;
+  --accent: #e9e7e1;
+  --accent-foreground: #141417;
+  --destructive: #b4321a;
+  --destructive-foreground: #ffffff;
+  /* 5.4:1 on white. */
+  --warning: #9a5b00;
+  --warning-foreground: #ffffff;
+  --border: #e3e0d9;
+  /* Form-control edge, 3.6:1 on white (WCAG 1.4.11). */
+  --input: #8a877f;
+  --ring: #2c3fe5;
+
+  --e-paper: #fffdf7;
+  --e-paper-ink: #2b2a2e;
+  --e-pen: #23409a;
+
+  background: var(--background);
+  color: var(--foreground);
+  color-scheme: light;
+}
+
+/* The app shell paints body dark; match it to this page so overscroll isn't black. */
+body:has(.landing-e) {
+  background: #f5f4f0;
+}
+
+.landing-e ::selection {
+  background: color-mix(in oklab, var(--primary) 22%, transparent);
+}
+
+/* Dot grid behind the hero, faded toward the edges. */
+.e-dots {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    color-mix(in oklab, var(--foreground) 16%, transparent) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 65% 35%, #000 20%, transparent 75%);
+}
+
+.e-window {
+  box-shadow:
+    0 1px 0 color-mix(in oklab, var(--foreground) 4%, transparent),
+    0 40px 80px -40px color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+
+.e-stage {
+  background:
+    radial-gradient(
+        circle at 1px 1px,
+        color-mix(in oklab, var(--foreground) 9%, transparent) 1px,
+        transparent 0
+      )
+      0 0 / 14px 14px,
+    var(--secondary);
+}
+
+/* Thermal paper with a torn zig-zag bottom edge. */
+.e-paper-shadow {
+  filter: drop-shadow(0 1px 1px rgb(20 20 23 / 0.08)) drop-shadow(0 12px 18px rgb(20 20 23 / 0.12));
+}
+.e-paper {
+  background: var(--e-paper);
+  color: var(--e-paper-ink);
+  font-family: var(--e-font-paper), ui-monospace, monospace;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
+}
+.e-rule {
+  border-top: 1px dashed color-mix(in oklab, var(--e-paper-ink) 45%, transparent);
+}
+.e-line {
+  margin-inline: -4px;
+  padding-inline: 4px;
+  border-radius: 3px;
+  transition:
+    background-color 0.15s,
+    box-shadow 0.15s;
+}
+.e-hl {
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  box-shadow: 0 0 0 1.5px var(--primary);
+}
+.e-faded {
+  opacity: 0.42;
+  filter: blur(0.35px);
+}
+.e-ink {
+  color: var(--e-pen);
+  font-family: var(--e-font-hand), cursive;
+  font-size: 1.35em;
+  line-height: 1;
+  display: inline-block;
+  transform: rotate(-4deg);
+}
+.e-barcode {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--e-paper-ink) 0 1px,
+    transparent 1px 3px,
+    var(--e-paper-ink) 3px 5px,
+    transparent 5px 6px,
+    var(--e-paper-ink) 6px 7px,
+    transparent 7px 10px
+  );
+  opacity: 0.8;
+}
+
+/* The scan pass: a soft band with a bright leading edge travelling down the paper. */
+.e-scanbar {
+  position: absolute;
+  inset-inline: -10px;
+  top: -30%;
+  height: 30%;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in oklab, var(--primary) 16%, transparent) 85%,
+    var(--primary) 98%,
+    transparent
+  );
+  animation: e-scan 1.3s cubic-bezier(0.45, 0, 0.25, 1) forwards;
+}
+@keyframes e-scan {
+  to {
+    top: 100%;
+  }
+}
+
+.e-slot {
+  display: inline-block;
+  height: 0.8em;
+  vertical-align: middle;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 9%, transparent);
+}
+
+.e-in {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  animation: e-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes e-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+.e-land {
+  animation: e-land 2.4s ease-out both;
+}
+@keyframes e-land {
+  0% {
+    background: color-mix(in oklab, var(--primary) 18%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.e-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent);
+}
+
+.e-caret {
+  display: inline-block;
+  width: 1px;
+  height: 1.1em;
+  margin-left: 1px;
+  background: var(--foreground);
+  animation: e-blink 1.1s steps(1) infinite;
+}
+@keyframes e-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-e .e-caret {
+    animation: none;
+  }
+  .landing-e .e-scanbar,
+  .landing-e .e-in,
+  .landing-e .e-land {
+    animation: none;
+  }
+  .landing-e .e-line {
+    transition: none;
+  }
+}

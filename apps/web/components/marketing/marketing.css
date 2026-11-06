@@ -1,0 +1,68 @@
+/* Marketing-only styles. Imported by marketing components, so app screens never load them. */
+
+:root {
+  /* Receipt paper is the one light surface on the site: it reads as a physical object. */
+  --paper: #ececea;
+  --paper-ink: #27272a;
+  --paper-muted: #5f5f66;
+}
+
+/* Torn-paper bottom edge for receipt illustrations. */
+.receipt-edge {
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+}
+
+.dot-leader {
+  background-image: radial-gradient(circle, currentColor 1px, transparent 1.2px);
+  background-size: 6px 6px;
+  background-position: 0 70%;
+  background-repeat: repeat-x;
+  opacity: 0.35;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-up {
+    animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .reveal-delay-1 {
+    animation-delay: 120ms;
+  }
+  .reveal-delay-2 {
+    animation-delay: 240ms;
+  }
+  .scan-x {
+    animation: scan-x 4.5s ease-in-out infinite;
+  }
+}
+
+@keyframes scan-x {
+  0%,
+  15% {
+    transform: translateX(-10%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  85%,
+  100% {
+    transform: translateX(110%);
+    opacity: 0;
+  }
+}
+
+/* The shared theme animates these unconditionally; honour the user's setting on public pages. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .glow-orb,
+  .floating-receipt,
+  .animate-fade-up,
+  .hero-aurora {
+    animation: none !important;
+  }
+}

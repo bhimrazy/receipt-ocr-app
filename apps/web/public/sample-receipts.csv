@@ -1,0 +1,6 @@
+receipt_id,status,merchant,receipt_date,category,currency,subtotal,tax,tip,total,confidence,items,file_name,created_at
+sample-01,completed,Bluebird Café,2026-10-26,Meals,USD,14.50,1.29,2.00,17.79,0.96,3,IMG_2041.jpg,2026-10-26T08:12:00.000Z
+sample-02,completed,Hartley Hardware,2026-10-24,Equipment,USD,122.97,10.15,,133.12,0.84,4,scan-0193.png,2026-10-24T16:47:00.000Z
+sample-03,completed,Osteria Lume,2026-10-22,Meals,USD,107.00,9.50,21.40,137.90,0.91,4,dinner-friday.heic,2026-10-22T21:30:00.000Z
+sample-04,completed,Metro Transit,2026-10-20,Travel,USD,45.00,0.00,,45.00,0.97,1,transit-pass.jpg,2026-10-20T07:55:00.000Z
+sample-05,completed,Fiber Net,2026-10-18,Utilities,USD,73.59,6.40,,79.99,0.95,1,fiber-net-oct.png,2026-10-18T12:03:00.000Z
