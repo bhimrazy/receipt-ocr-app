@@ -45,8 +45,11 @@ export async function enqueueJob(db: Pick<Tx, "insert">, job: NewJob): Promise<E
 /** How a run ended, as recorded on the job. */
 export type JobOutcome =
   | { type: "succeeded" }
-  /** Back to `queued` at `at`; the attempt counts. */
-  | { type: "retry"; at: Date; errorKind: JobErrorKind }
+  /**
+   * Back to `queued` after `delayMs`; the attempt counts. Relative, so the
+   * database's clock decides when it is due, not this process's.
+   */
+  | { type: "retry"; delayMs: number; errorKind: JobErrorKind }
   /** Back to `queued` at `at` without spending the attempt. */
   | { type: "deferred"; at: Date; errorKind: JobErrorKind }
   | { type: "dead"; errorKind: JobErrorKind };
@@ -161,11 +164,14 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
     /** Cancels a queued or running job; returns it, or null when it had already finished. */
     readonly cancel: (id: string) => Effect.Effect<Job | null, DbError>;
     readonly get: (id: string) => Effect.Effect<Job | null, DbError>;
-    /** When the next queued job of these kinds becomes runnable; null when none is queued. */
-    readonly nextRunAt: (
+    /**
+     * Milliseconds until the next queued job of these kinds is runnable, by
+     * the database's clock (0 or less: due now); null when none is queued.
+     */
+    readonly nextRunIn: (
       kinds: readonly string[],
       ids?: readonly string[],
-    ) => Effect.Effect<Date | null, DbError>;
+    ) => Effect.Effect<number | null, DbError>;
     /** Pauses `queue` or `kind:<kind>` until resumed (or until `until`). */
     readonly pause: (
       scope: string,
@@ -174,8 +180,8 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
     readonly resume: (scope: string) => Effect.Effect<void, DbError>;
     /** Providers cooling down after a 429, keyed by provider id. */
     readonly cooldowns: Effect.Effect<Map<string, Date>, DbError>;
-    /** Starts or extends `provider:<id>`'s cooldown; never shortens one in force. */
-    readonly coolDown: (provider: string, until: Date) => Effect.Effect<void, DbError>;
+    /** Starts or extends `provider:<id>`'s cooldown by `ms` from now; never shortens one in force. */
+    readonly coolDown: (provider: string, ms: number) => Effect.Effect<void, DbError>;
     /**
      * Takes one slot of `key`'s per-minute window, shared by every process;
      * false when the window is full. One atomic statement.
@@ -200,21 +206,33 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
                 db,
                 sql`with stopped as (
                   select exists (select 1 from job_controls c where c.scope = 'queue' and ${inForce}) as yes
-                ), busy as (
-                  select user_id from jobs
+                ), running as (
+                  select user_id, count(*) as n from jobs
                   where state = 'running' and user_id is not null
-                  group by user_id having count(*) >= ${ownerCap}
-                ), picked as (
-                  select j.id from jobs j
+                  group by user_id
+                ), candidates as (
+                  -- Locks more than n, so the per-user cap below can skip
+                  -- over one user's backlog; the extra locks end with this statement.
+                  select j.id, j.user_id, j.priority, j.run_at from jobs j
                   where j.state = 'queued' and j.run_at <= now()
                     and j.kind in (${list(kinds.map((k) => k.kind))})
                     ${ids ? sql`and j.id in (${list(ids)})` : sql``}
                     and not (select yes from stopped)
                     and not exists (select 1 from job_controls c where c.scope = 'kind:' || j.kind and ${inForce})
-                    and (j.user_id is null or j.user_id not in (select user_id from busy))
+                    and (j.user_id is null
+                      or j.user_id not in (select user_id from running where n >= ${ownerCap}))
                   order by j.priority, j.run_at
-                  limit ${n}
+                  limit ${n * 4}
                   for update of j skip locked
+                ), picked as (
+                  select id from (
+                    select c.id, c.user_id, c.priority, c.run_at,
+                      row_number() over (partition by c.user_id order by c.priority, c.run_at) as k,
+                      coalesce((select r.n from running r where r.user_id = c.user_id), 0) as already
+                    from candidates c) ranked
+                  where user_id is null or already + k <= ${ownerCap}
+                  order by priority, run_at
+                  limit ${n}
                 )
                 update jobs j set state = 'running', attempts = j.attempts + 1, locked_by = ${worker},
                   locked_until = now() + make_interval(secs => ${lease}),
@@ -243,7 +261,7 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
               : outcome.type === "dead"
                 ? sql`state = 'dead', finished_at = now()`
                 : outcome.type === "retry"
-                  ? sql`state = 'queued', run_at = ${ts(outcome.at)}`
+                  ? sql`state = 'queued', run_at = now() + make_interval(secs => ${outcome.delayMs / 1000}::float8)`
                   : sql`state = 'queued', run_at = ${ts(outcome.at)}, attempts = greatest(0, j.attempts - 1)`;
           const errorSet =
             kind === null ? sql`` : sql`, last_error_kind = ${kind}, last_error_at = now()`;
@@ -292,15 +310,15 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
           return job ?? null;
         }),
 
-      nextRunAt: (kinds, ids) =>
+      nextRunIn: (kinds, ids) =>
         kinds.length === 0 || ids?.length === 0
           ? Effect.succeed(null)
           : use(async (db) => {
-              const [row] = await db.execute<{ at: string | Date | null }>(sql`
-                select min(run_at) as at from jobs j
+              const [row] = await db.execute<{ ms: string | number | null }>(sql`
+                select extract(epoch from min(run_at) - now()) * 1000 as ms from jobs j
                 where j.state = 'queued' and j.kind in (${list(kinds)})
                   ${ids ? sql`and j.id in (${list(ids)})` : sql``}`);
-              return row?.at ? toDate(row.at) : null;
+              return row?.ms == null ? null : Number(row.ms);
             }),
 
       pause: (scope, input) =>
@@ -324,10 +342,10 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
         return new Map(result.map((r) => [r.scope.slice("provider:".length), toDate(r.until)]));
       }),
 
-      coolDown: (provider, until) =>
+      coolDown: (provider, ms) =>
         use((db) =>
           db.execute(sql`insert into job_controls (scope, until, reason)
-            values (${`provider:${provider}`}, ${ts(until)}, 'rate-limited')
+            values (${`provider:${provider}`}, now() + make_interval(secs => ${ms / 1000}::float8), 'rate-limited')
             on conflict (scope) do update
               set until = greatest(job_controls.until, excluded.until), updated_at = now()`),
         ).pipe(Effect.asVoid),

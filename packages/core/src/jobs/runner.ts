@@ -96,12 +96,12 @@ export const tick = <R>(options: TickOptions<R>) =>
           continue;
         }
         if (options.waitForRetries === false) return;
-        const next = yield* queue.nextRunAt(kindNames, options.ids);
+        const waitMs = yield* queue.nextRunIn(kindNames, options.ids);
         const now = yield* Clock.currentTimeMillis;
         // Nothing queued, nothing due before claiming stops, or something due
         // that we may not claim (paused, user at the cap, another worker has it).
-        if (!next || next.getTime() >= stopClaimingAt || next.getTime() <= now) return;
-        yield* Effect.sleep(Duration.millis(Math.min(next.getTime() - now, IDLE_POLL_MS)));
+        if (waitMs === null || waitMs <= 0 || now + waitMs >= stopClaimingAt) return;
+        yield* Effect.sleep(Duration.millis(Math.min(waitMs, IDLE_POLL_MS)));
       }
     }).pipe(
       Effect.catchAll((error) => Effect.logError("jobs.tick_failed", { error: error.message })),
@@ -139,7 +139,11 @@ const runClaimed = <R>(registry: JobRegistry<R>, job: Job, worker: string) =>
         const ms = (yield* Clock.currentTimeMillis) - startedAt;
         const errorKind = outcome.type === "succeeded" ? undefined : outcome.errorKind;
         const runAt =
-          outcome.type === "retry" || outcome.type === "deferred" ? outcome.at : undefined;
+          outcome.type === "retry"
+            ? new Date(startedAt + ms + outcome.delayMs)
+            : outcome.type === "deferred"
+              ? outcome.at
+              : undefined;
         return { settled, ms, errorKind, runAt };
       });
 
@@ -187,7 +191,6 @@ const decide = <R>(
 ) =>
   Effect.gen(function* () {
     if (Exit.isSuccess(exit)) return { type: "succeeded" } as JobOutcome;
-    const now = yield* Clock.currentTimeMillis;
     const failure = Cause.failureOption(exit.cause);
     if (Option.isNone(failure)) {
       // A defect (a bug, or an interruption we didn't ask for): retry, so a
@@ -197,14 +200,14 @@ const decide = <R>(
         kind: job.kind,
         cause: Cause.pretty(exit.cause).slice(0, 500),
       });
-      return retryOrDead(definition, job, "internal", now, undefined);
+      return retryOrDead(definition, job, "internal", undefined);
     }
     const error = failure.value;
     switch (error._tag) {
       case "JobDeferred":
         return { type: "deferred", at: error.until, errorKind: error.kind } as JobOutcome;
       case "RetryableJobError":
-        return retryOrDead(definition, job, error.kind, now, error.retryAfterMs);
+        return retryOrDead(definition, job, error.kind, error.retryAfterMs);
       case "NonRetryableJobError":
         return { type: "dead", errorKind: error.kind } as JobOutcome;
     }
@@ -214,7 +217,6 @@ const retryOrDead = <R>(
   definition: AnyJobDefinition<R>,
   job: Job,
   errorKind: JobErrorKind,
-  now: number,
   retryAfterMs: number | undefined,
 ): JobOutcome =>
   job.attempts >= job.maxAttempts
@@ -222,7 +224,7 @@ const retryOrDead = <R>(
     : {
         type: "retry",
         errorKind,
-        at: new Date(now + backoffMs(job.attempts, definition.backoff, retryAfterMs)),
+        delayMs: backoffMs(job.attempts, definition.backoff, retryAfterMs),
       };
 
 /**

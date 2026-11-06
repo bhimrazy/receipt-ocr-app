@@ -1,0 +1,710 @@
+/**
+ * Job queue against real Postgres and S3 (RustFS locally). Skipped unless
+ * INTEGRATION=1; run with `bun run --filter @receipt-ocr/core test:int` after
+ * `bun run db:migrate`, with DATABASE_URL and S3_* set and OCR_PROVIDER=fixture.
+ */
+import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, type OcrFailureKind } from "@receipt-ocr/ai";
+import {
+  and,
+  eq,
+  jobControls,
+  jobs,
+  ocrCalls,
+  ocrRounds,
+  organization,
+  rateWindows,
+  receipts,
+  sql,
+  user,
+} from "@receipt-ocr/db";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { z } from "zod";
+import { AppLayer } from "../index";
+import { OcrError } from "../errors";
+import { Ocr, withoutCooling } from "../ocr";
+import {
+  claimRetry,
+  ingestUpload,
+  purgeReceiptFiles,
+  runExtraction,
+  settleFailure,
+} from "../pipeline";
+import { checkQuota, usageWindow } from "../quota";
+import { EXTRACTION_FAILED_MESSAGE, ReceiptRepo } from "../repository";
+import { Db, Storage } from "../services";
+import { Settings } from "../settings";
+import { ensurePersonalWorkspace } from "../workspace";
+import type { JobDefinition } from "./definition";
+import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
+import { JobQueue } from "./queue";
+import { cancelJob, tick } from "./runner";
+
+const enabled = process.env.INTEGRATION === "1";
+const tag = `jobs-${Date.now()}`;
+const limits = { perMinute: 1000, perDay: 1000 };
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new TextEncoder().encode(tag)]);
+
+// ---------- A scriptable OCR provider ----------
+
+type Step = "ok" | { kind: OcrFailureKind; retryAfterMs?: number };
+/** What each successive model call does; past the end, it succeeds. */
+let script: Step[] = [];
+let calls = 0;
+const MODEL = "google:gemini-3.8-flash" as const;
+const ZERO = {
+  inputTokens: 0,
+  cachedInputTokens: 0,
+  cacheWriteTokens: 0,
+  outputTokens: 0,
+  reasoningTokens: 0,
+};
+
+const ScriptedOcr = Layer.succeed(Ocr, {
+  ready: Effect.void,
+  extract: (_file, options) =>
+    Effect.gen(function* () {
+      yield* withoutCooling(
+        [{ model: MODEL, enabled: true, timeoutMs: 30_000 }],
+        options?.cooling ?? new Map(),
+        Date.now(),
+      );
+      const step = script[calls++] ?? "ok";
+      if (step === "ok") {
+        return {
+          extraction: FIXTURE_RECEIPTS[0]!,
+          usage: ZERO,
+          model: MODEL,
+          attempts: [{ model: MODEL, step: 0, kind: "ok" as const, ms: 1, usage: ZERO }],
+        };
+      }
+      return yield* new OcrError({
+        message: "Receipt extraction failed",
+        kind: step.kind,
+        attempts: [
+          {
+            model: MODEL,
+            step: 0,
+            kind: step.kind,
+            ms: 1,
+            usage: null,
+            retryAfterMs: step.retryAfterMs,
+          },
+        ],
+      });
+    }),
+});
+
+const scriptedLayer = Layer.mergeAll(
+  ReceiptRepo.Live,
+  Storage.Live,
+  ScriptedOcr,
+  JobQueue.Live,
+).pipe(Layer.provideMerge(Settings.Live), Layer.provideMerge(Db.Live));
+type Services = Layer.Layer.Success<typeof scriptedLayer>;
+const scripted = ManagedRuntime.make(scriptedLayer);
+/** The real fixture provider, for reads that always fail (FIXTURE_FAIL). */
+const fixture = ManagedRuntime.make(AppLayer);
+const run = <A, E>(effect: Effect.Effect<A, E, Services>) => scripted.runPromise(effect);
+
+const db = <A>(f: (d: Parameters<Parameters<typeof Db.Service.use>[0]>[0]) => Promise<A>) =>
+  run(Effect.flatMap(Db, ({ use }) => use(f)));
+const queue = <A, E>(f: (q: typeof JobQueue.Service) => Effect.Effect<A, E>) =>
+  run(Effect.flatMap(JobQueue, f));
+
+/** receipt.extract with millisecond backoff, so retries run inside one test. */
+const fastExtract = { ...receiptExtract, backoff: { baseMs: 100, capMs: 400 } };
+const receiptRegistry = { [fastExtract.kind]: fastExtract };
+
+const jobsOf = (receiptId: string) =>
+  db((d) => d.select().from(jobs).where(eq(jobs.receiptId, receiptId)).orderBy(jobs.createdAt));
+const receiptOf = (id: string, scope: Scope) =>
+  run(Effect.flatMap(ReceiptRepo, (r) => r.get(id, scope)));
+const callsOf = (receiptId: string) =>
+  db((d) =>
+    d
+      .select({ round: ocrCalls.round, jobAttempt: ocrCalls.jobAttempt, status: ocrCalls.status })
+      .from(ocrCalls)
+      .where(eq(ocrCalls.receiptId, receiptId))
+      .orderBy(ocrCalls.round, ocrCalls.jobAttempt, ocrCalls.step),
+  );
+
+type Scope = { userId: string; organizationId: string; role: string };
+
+async function createUser(name: string): Promise<Scope> {
+  const id = `${tag}-${name}`;
+  await db((d) =>
+    d.insert(user).values({ id, name, email: `${id}@example.com`, emailVerified: true }),
+  );
+  const orgId = await run(ensurePersonalWorkspace({ id, name, email: `${id}@example.com` }));
+  if (!orgId) throw new Error("no workspace");
+  return { userId: id, organizationId: orgId, role: "owner" };
+}
+
+const upload = (scope: Scope, body = JPEG) =>
+  run(ingestUpload({ scope, fileName: "r.jpg", body, limits }));
+
+/** Runs the given jobs, waiting out backoff, until nothing is left to run. */
+const drain = (ids: readonly string[], worker = `${tag}-w`, budgetMs = 20_000) =>
+  run(
+    tick({
+      worker,
+      registry: receiptRegistry,
+      budgetMs,
+      stopClaimingBeforeMs: 2_000,
+      ids,
+    }),
+  );
+
+// ---------- Test-only kinds ----------
+
+const counts = new Map<string, number>();
+const COUNT = `test.count.${tag}`;
+const countKind: JobDefinition<{ n: number }, never> = {
+  kind: COUNT,
+  payload: z.object({ n: z.number() }),
+  maxAttempts: 3,
+  leaseSeconds: 30,
+  backoff: { baseMs: 10, capMs: 10 },
+  run: (_payload, { job }) =>
+    Effect.sync(() => void counts.set(job.id, (counts.get(job.id) ?? 0) + 1)).pipe(
+      Effect.zipRight(Effect.sleep("2 millis")),
+    ),
+};
+const SLOW = `test.slow.${tag}`;
+let slowInterrupted = 0;
+const slowKind: JobDefinition<{ ms: number }, never> = {
+  kind: SLOW,
+  payload: z.object({ ms: z.number() }),
+  maxAttempts: 2,
+  // Heartbeats every 333 ms keep this alive however long the run takes.
+  leaseSeconds: 1,
+  backoff: { baseMs: 10, capMs: 10 },
+  run: ({ ms }) =>
+    Effect.sleep(`${ms} millis`).pipe(
+      Effect.onInterrupt(() => Effect.sync(() => void slowInterrupted++)),
+    ),
+};
+const testRegistry = { [COUNT]: countKind, [SLOW]: slowKind };
+
+describe.skipIf(!enabled)("job queue against Postgres", () => {
+  let a: Scope;
+  let b: Scope;
+
+  beforeAll(async () => {
+    a = await createUser("a");
+    b = await createUser("b");
+  });
+
+  afterEach(async () => {
+    script = [];
+    calls = 0;
+    await db((d) => d.delete(jobControls));
+  });
+
+  afterAll(async () => {
+    for (const owner of [a, b])
+      await run(purgeReceiptFiles({ organizationId: owner.organizationId }));
+    await db(async (d) => {
+      await d
+        .delete(jobs)
+        .where(sql`${jobs.kind} like ${`test.%.${tag}`} or ${jobs.userId} like ${`${tag}%`}`);
+      await d.delete(ocrCalls).where(sql`${ocrCalls.userId} like ${`${tag}%`}`);
+      await d.delete(ocrRounds).where(sql`${ocrRounds.userId} like ${`${tag}%`}`);
+      await d.delete(rateWindows).where(sql`${rateWindows.key} like ${`${tag}%`}`);
+      await d.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
+      await d.delete(user).where(sql`${user.id} like ${`${tag}%`}`);
+    });
+    await scripted.dispose();
+    await fixture.dispose();
+  });
+
+  it("enqueues the job with the receipt and its round, in one transaction", async () => {
+    const { receipt, jobId } = await upload(a);
+    const [job] = await jobsOf(receipt.id);
+    expect(job).toMatchObject({
+      id: jobId,
+      kind: "receipt.extract",
+      state: "queued",
+      attempts: 0,
+      maxAttempts: 4,
+      userId: a.userId,
+      idempotencyKey: `receipt:${receipt.id}:round:1`,
+      payload: {
+        receiptId: receipt.id,
+        organizationId: a.organizationId,
+        userId: a.userId,
+        round: 1,
+      },
+    });
+    // Waiting in the queue, the round counts as in flight.
+    expect((await run(checkQuota(a.userId, limits))).used).toBeGreaterThanOrEqual(1);
+    await drain([jobId]);
+    expect((await receiptOf(receipt.id, a))?.status).toBe("completed");
+    expect((await jobsOf(receipt.id))[0]).toMatchObject({ state: "succeeded", attempts: 1 });
+  });
+
+  it("concurrent workers never run a job twice", async () => {
+    const ids = await db(async (d) => {
+      const rows = await d
+        .insert(jobs)
+        .values(
+          Array.from({ length: 200 }, (_, n) => ({ kind: COUNT, payload: { n }, maxAttempts: 3 })),
+        )
+        .returning({ id: jobs.id });
+      return rows.map((r) => r.id);
+    });
+    const ticks = Array.from({ length: 5 }, (_, w) =>
+      run(
+        tick({
+          worker: `${tag}-claimer-${w}`,
+          registry: testRegistry,
+          budgetMs: 30_000,
+          stopClaimingBeforeMs: 1_000,
+          concurrency: 3,
+          waitForRetries: false,
+        }),
+      ),
+    );
+    const stats = await Promise.all(ticks);
+    expect(stats.reduce((sum, s) => sum + s.runs.length, 0)).toBe(200);
+    expect(ids.every((id) => counts.get(id) === 1)).toBe(true);
+    // Every worker got some of the work.
+    expect(stats.filter((s) => s.runs.length > 0).length).toBeGreaterThan(1);
+    const states = await db((d) =>
+      d
+        .select({ state: jobs.state, attempts: jobs.attempts, n: sql<number>`count(*)::int` })
+        .from(jobs)
+        .where(eq(jobs.kind, COUNT))
+        .groupBy(jobs.state, jobs.attempts),
+    );
+    expect(states).toEqual([{ state: "succeeded", attempts: 1, n: 200 }]);
+  });
+
+  it("a crashed worker's job is reaped and resumed; its late writes change nothing", async () => {
+    const { receipt, jobId } = await upload(a);
+    const lease = [{ kind: "receipt.extract", leaseSeconds: 90 }];
+    const [claimed] = await queue((q) =>
+      q.claim({ worker: "crashed", kinds: lease, n: 1, ownerCap: 9, ids: [jobId] }),
+    );
+    expect(claimed).toMatchObject({
+      id: jobId,
+      state: "running",
+      attempts: 1,
+      lockedBy: "crashed",
+    });
+    // The worker dies: nothing renews the lease.
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ lockedUntil: new Date(Date.now() - 1000) })
+        .where(eq(jobs.id, jobId)),
+    );
+
+    const stats = await drain([jobId], "rescuer");
+    expect(stats.reaped).toBeGreaterThanOrEqual(1);
+    expect(stats.runs).toMatchObject([{ jobId, attempt: 2, outcome: "succeeded" }]);
+    const done = await receiptOf(receipt.id, a);
+    expect(done?.status).toBe("completed");
+
+    // The crashed worker comes back: its heartbeat, settle and write are fenced off.
+    expect(await queue((q) => q.heartbeat(claimed!, "crashed", 90))).toBe(false);
+    expect(
+      await queue((q) => q.settle(claimed!, "crashed", { type: "dead", errorKind: "timeout" })),
+    ).toBe(false);
+    const late = { ...FIXTURE_RECEIPTS[1]!, merchant: "Zombie" };
+    expect(
+      await run(
+        Effect.flatMap(ReceiptRepo, (r) => r.complete(receipt.id, a, 1, late, "fixture", [])),
+      ),
+    ).toBeNull();
+    expect(await receiptOf(receipt.id, a)).toMatchObject({
+      status: "completed",
+      merchant: done?.merchant,
+    });
+    expect((await jobsOf(receipt.id))[0]).toMatchObject({ state: "succeeded", attempts: 2 });
+  });
+
+  it("a lease that expires on the last attempt kills the job and settles the receipt", async () => {
+    const { receipt, jobId } = await upload(a);
+    await db((d) => d.update(jobs).set({ attempts: 3 }).where(eq(jobs.id, jobId)));
+    await queue((q) =>
+      q.claim({
+        worker: "crashed",
+        kinds: [{ kind: "receipt.extract", leaseSeconds: 90 }],
+        n: 1,
+        ownerCap: 9,
+        ids: [jobId],
+      }),
+    );
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ lockedUntil: new Date(Date.now() - 1000) })
+        .where(eq(jobs.id, jobId)),
+    );
+    await drain([jobId]);
+    expect((await jobsOf(receipt.id))[0]).toMatchObject({
+      state: "dead",
+      lastErrorKind: "lease-expired",
+    });
+    expect(await receiptOf(receipt.id, a)).toMatchObject({
+      status: "failed",
+      errorMessage: EXTRACTION_FAILED_MESSAGE,
+    });
+    // One row closes the attempt that never reported, so the round stops reading as in flight.
+    expect(await callsOf(receipt.id)).toEqual([{ round: 1, jobAttempt: 4, status: "timeout" }]);
+  });
+
+  it("retries with backoff, records every attempt's calls, and reserves quota once per round", async () => {
+    const c = await createUser("retry");
+    const before = await run(
+      Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+    );
+    script = [{ kind: "provider-error" }, { kind: "timeout" }];
+    const { receipt, jobId } = await upload(c);
+    const ended: number[] = [];
+    const stats = await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: receiptRegistry,
+        budgetMs: 20_000,
+        stopClaimingBeforeMs: 2_000,
+        ids: [jobId],
+        onRun: () => void ended.push(Date.now()),
+      }),
+    );
+
+    expect(stats.runs.map((r) => [r.attempt, r.outcome, r.errorKind])).toEqual([
+      [1, "retry", "provider-error"],
+      [2, "retry", "timeout"],
+      [3, "succeeded", undefined],
+    ]);
+    // Each retry waited out its backoff: at least half of 100 ms, then of 200 ms.
+    expect(ended[1]! - ended[0]!).toBeGreaterThanOrEqual(50);
+    expect(ended[2]! - ended[1]!).toBeGreaterThanOrEqual(100);
+    expect((await receiptOf(receipt.id, c))?.status).toBe("completed");
+    expect(await callsOf(receipt.id)).toEqual([
+      { round: 1, jobAttempt: 1, status: "provider-error" },
+      { round: 1, jobAttempt: 2, status: "timeout" },
+      { round: 1, jobAttempt: 3, status: "ok" },
+    ]);
+    const [job] = await jobsOf(receipt.id);
+    expect(job).toMatchObject({ state: "succeeded", attempts: 3 });
+    expect((job!.attemptLog as { outcome: string }[]).map((e) => e.outcome)).toEqual([
+      "retry",
+      "retry",
+      "succeeded",
+    ]);
+    // One round, one receipt read: the automatic retries cost the user nothing extra.
+    const after = await run(
+      Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+    );
+    expect(after.userMinute - before.userMinute).toBe(1);
+    expect(after.userDay - before.userDay).toBe(1);
+    expect(
+      await db((d) => d.select().from(ocrRounds).where(eq(ocrRounds.receiptId, receipt.id))),
+    ).toHaveLength(1);
+  });
+
+  it("goes dead after its attempts, fails the receipt, and the user's retry is a new round", async () => {
+    const c = await createUser("dead");
+    const body = new Uint8Array([...JPEG, ...new TextEncoder().encode(FIXTURE_FAIL_MARKER)]);
+    const { receipt, jobId } = await fixture.runPromise(
+      ingestUpload({ scope: c, fileName: "f.jpg", body, limits }),
+    );
+    const stats = await fixture.runPromise(
+      tick({
+        worker: `${tag}-w`,
+        registry: receiptRegistry,
+        budgetMs: 20_000,
+        stopClaimingBeforeMs: 2_000,
+        ids: [jobId],
+      }),
+    );
+    expect(stats.runs.map((r) => r.outcome)).toEqual(["retry", "retry", "retry", "dead"]);
+    expect(await receiptOf(receipt.id, c)).toMatchObject({
+      status: "failed",
+      errorMessage: EXTRACTION_FAILED_MESSAGE,
+    });
+    expect((await callsOf(receipt.id)).map((r) => r.jobAttempt)).toEqual([1, 2, 3, 4]);
+    expect((await jobsOf(receipt.id))[0]).toMatchObject({
+      state: "dead",
+      attempts: 4,
+      lastErrorKind: "provider-error",
+    });
+
+    const retried = await run(claimRetry({ receiptId: receipt.id, scope: c, limits }));
+    expect(retried.round).toBe(2);
+    const all = await jobsOf(receipt.id);
+    expect(all.map((j) => [j.state, (j.payload as { round: number }).round])).toEqual([
+      ["dead", 1],
+      ["queued", 2],
+    ]);
+    await drain([retried.jobId]);
+    expect((await receiptOf(receipt.id, c))?.status).toBe("completed");
+  });
+
+  it("does not retry what another attempt won't fix", async () => {
+    script = [{ kind: "bad-image" }];
+    const { receipt, jobId } = await upload(a);
+    const stats = await drain([jobId]);
+    expect(stats.runs.map((r) => [r.outcome, r.errorKind])).toEqual([["dead", "bad-image"]]);
+    expect((await receiptOf(receipt.id, a))?.status).toBe("failed");
+  });
+
+  it("a 429 cools the provider down: the next attempt waits without spending one", async () => {
+    script = [{ kind: "rate-limited", retryAfterMs: 1_500 }];
+    const { receipt, jobId } = await upload(a);
+    const first = await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: receiptRegistry,
+        budgetMs: 10_000,
+        ids: [jobId],
+        waitForRetries: false,
+      }),
+    );
+    expect(first.runs.map((r) => [r.outcome, r.errorKind])).toEqual([["retry", "rate-limited"]]);
+    const cooldowns = await queue((q) => q.cooldowns);
+    const until = cooldowns.get("google")!;
+    expect(until.getTime()).toBeGreaterThan(Date.now() + 500);
+    // Due again before the cooldown ends (e.g. an admin re-ran it): deferred, not spent.
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ runAt: new Date(0) })
+        .where(eq(jobs.id, jobId)),
+    );
+    const second = await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: receiptRegistry,
+        budgetMs: 10_000,
+        ids: [jobId],
+        waitForRetries: false,
+      }),
+    );
+    expect(second.runs.map((r) => [r.outcome, r.errorKind])).toEqual([
+      ["deferred", "providers-cooling"],
+    ]);
+    const [waiting] = await jobsOf(receipt.id);
+    expect(waiting).toMatchObject({ state: "queued", attempts: 1 });
+    expect(Math.abs(waiting!.runAt.getTime() - until.getTime())).toBeLessThan(5);
+    // Once it ends, the job runs on its second attempt.
+    const third = await drain([jobId]);
+    expect(third.runs.map((r) => [r.attempt, r.outcome])).toEqual([[2, "succeeded"]]);
+    expect((await receiptOf(receipt.id, a))?.status).toBe("completed");
+  });
+
+  it("dedupes on the idempotency key while a job is live, and on one live job per receipt", async () => {
+    const key = `${tag}:once`;
+    const job = { kind: COUNT, payload: { n: 1 }, maxAttempts: 1, idempotencyKey: key };
+    const first = await queue((q) => q.enqueue(job));
+    expect(first).toHaveProperty("id");
+    expect(await queue((q) => q.enqueue(job))).toEqual({ duplicate: true });
+    await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: testRegistry,
+        budgetMs: 5_000,
+        ids: ["id" in first ? first.id : ""],
+        waitForRetries: false,
+      }),
+    );
+    // A finished job frees its key.
+    expect(await queue((q) => q.enqueue(job))).toHaveProperty("id");
+
+    const { receipt } = await upload(a);
+    const second = await queue((q) =>
+      q.enqueue({
+        kind: "receipt.extract",
+        payload: {},
+        maxAttempts: 1,
+        receiptId: receipt.id,
+        idempotencyKey: `${tag}:other`,
+      }),
+    );
+    expect(second).toEqual({ duplicate: true });
+  });
+
+  it("caps each user's running jobs, so one user's batch can't starve another's upload", async () => {
+    const heavy = `${tag}-heavy`;
+    const light = `${tag}-light`;
+    await db((d) =>
+      d.insert(jobs).values([
+        ...Array.from({ length: 10 }, (_, n) => ({
+          kind: COUNT,
+          payload: { n },
+          maxAttempts: 1,
+          userId: heavy,
+          runAt: new Date(Date.now() - 60_000 + n),
+        })),
+        { kind: COUNT, payload: { n: 99 }, maxAttempts: 1, userId: light },
+      ]),
+    );
+    const kinds = [{ kind: COUNT, leaseSeconds: 30 }];
+    const claimed = await queue((q) =>
+      q.claim({ worker: `${tag}-fair`, kinds, n: 5, ownerCap: 2 }),
+    );
+    expect(claimed.filter((j) => j.userId === heavy)).toHaveLength(2);
+    expect(claimed.filter((j) => j.userId === light)).toHaveLength(1);
+    // The heavy user stays at the cap until one finishes.
+    expect(
+      await queue((q) => q.claim({ worker: `${tag}-fair`, kinds, n: 5, ownerCap: 2 })),
+    ).toEqual([]);
+    await queue((q) => q.settle(claimed[0]!, `${tag}-fair`, { type: "succeeded" }));
+    const next = await queue((q) => q.claim({ worker: `${tag}-fair`, kinds, n: 5, ownerCap: 2 }));
+    expect(next.map((j) => j.userId)).toEqual([heavy]);
+    await db((d) => d.delete(jobs).where(sql`${jobs.userId} in (${heavy}, ${light})`));
+  });
+
+  it("a stale or zombie attempt can't overwrite a newer round", async () => {
+    script = [{ kind: "bad-image" }];
+    const { receipt, jobId } = await upload(a);
+    await drain([jobId]);
+    const retried = await run(claimRetry({ receiptId: receipt.id, scope: a, limits }));
+    // Round 1's handler running late finds a newer round and leaves it alone.
+    expect(
+      await run(runExtraction({ receiptId: receipt.id, scope: a, round: 1, jobAttempt: 2 })),
+    ).toEqual({ kind: "skipped", reason: "superseded" });
+    expect(await run(settleFailure({ receiptId: receipt.id, scope: a, round: 1 }))).toBe(false);
+    expect((await receiptOf(receipt.id, a))?.status).toBe("processing");
+    await drain([retried.jobId]);
+    expect((await receiptOf(receipt.id, a))?.status).toBe("completed");
+  });
+
+  it("a user retry supersedes a job left live for an older round", async () => {
+    const { receipt, jobId } = await upload(a);
+    await run(Effect.flatMap(ReceiptRepo, (r) => r.fail(receipt.id, a, 1, "x", [])));
+    const retried = await run(claimRetry({ receiptId: receipt.id, scope: a, limits }));
+    expect(await queue((q) => q.get(jobId))).toMatchObject({
+      state: "cancelled",
+      lastErrorKind: "superseded",
+    });
+    expect(await queue((q) => q.get(retried.jobId))).toMatchObject({ state: "queued" });
+  });
+
+  it("heartbeats hold a long job's lease; losing it (a cancel) interrupts the handler", async () => {
+    const [{ id: longId }] = await db((d) =>
+      d
+        .insert(jobs)
+        .values({ kind: SLOW, payload: { ms: 2_500 }, maxAttempts: 2 })
+        .returning({ id: jobs.id }),
+    );
+    // A second worker reaps every 200 ms while the job runs for 2.5 lease lengths.
+    let reaping = true;
+    const reaper = (async () => {
+      let reaped = 0;
+      while (reaping) {
+        reaped += (await queue((q) => q.reap())).filter((j) => j.id === longId).length;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      return reaped;
+    })();
+    const stats = await run(
+      tick({
+        worker: `${tag}-long`,
+        registry: testRegistry,
+        budgetMs: 10_000,
+        ids: [longId!],
+        waitForRetries: false,
+      }),
+    );
+    reaping = false;
+    expect(await reaper).toBe(0);
+    expect(stats.runs).toMatchObject([{ outcome: "succeeded", attempt: 1 }]);
+
+    const [{ id: cancelled }] = await db((d) =>
+      d
+        .insert(jobs)
+        .values({ kind: SLOW, payload: { ms: 10_000 }, maxAttempts: 2 })
+        .returning({ id: jobs.id }),
+    );
+    const running = run(
+      tick({
+        worker: `${tag}-long`,
+        registry: testRegistry,
+        budgetMs: 15_000,
+        ids: [cancelled!],
+        waitForRetries: false,
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await run(cancelJob(testRegistry, cancelled!))).toBe(true);
+    const lost = await running;
+    expect(lost.runs).toMatchObject([{ outcome: "lost" }]);
+    expect(lost.runs[0]!.ms).toBeLessThan(2_000);
+    expect(slowInterrupted).toBe(1);
+    expect(await queue((q) => q.get(cancelled!))).toMatchObject({ state: "cancelled" });
+  });
+
+  it("cancelling a receipt's job settles the receipt", async () => {
+    const { receipt, jobId } = await upload(a);
+    expect(await run(cancelJob(receiptRegistry, jobId))).toBe(true);
+    expect(await receiptOf(receipt.id, a)).toMatchObject({
+      status: "failed",
+      errorMessage: EXTRACTION_CANCELLED_MESSAGE,
+    });
+    expect(await run(cancelJob(receiptRegistry, jobId))).toBe(false);
+  });
+
+  it("a paused kind is not claimed until resumed", async () => {
+    const result = await queue((q) =>
+      q.enqueue({ kind: COUNT, payload: { n: 7 }, maxAttempts: 1 }),
+    );
+    const id = "id" in result ? result.id : "";
+    const kinds = [{ kind: COUNT, leaseSeconds: 30 }];
+    await queue((q) => q.pause(`kind:${COUNT}`, { reason: "test" }));
+    expect(
+      await queue((q) => q.claim({ worker: `${tag}-p`, kinds, n: 1, ownerCap: 9, ids: [id] })),
+    ).toEqual([]);
+    await queue((q) => q.resume(`kind:${COUNT}`));
+    expect(
+      await queue((q) => q.claim({ worker: `${tag}-p`, kinds, n: 1, ownerCap: 9, ids: [id] })),
+    ).toHaveLength(1);
+  });
+
+  it("a malformed payload goes straight to dead", async () => {
+    const result = await queue((q) =>
+      q.enqueue({ kind: COUNT, payload: { n: "x" }, maxAttempts: 3 }),
+    );
+    const id = "id" in result ? result.id : "";
+    const stats = await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: testRegistry,
+        budgetMs: 5_000,
+        ids: [id],
+        waitForRetries: false,
+      }),
+    );
+    expect(stats.runs).toMatchObject([{ outcome: "dead", errorKind: "invalid-payload" }]);
+    expect(await queue((q) => q.get(id))).toMatchObject({ state: "dead", attempts: 1 });
+  });
+
+  it("rate windows admit a fixed number of calls per minute across processes", async () => {
+    const key = `${tag}:model`;
+    const taken = await Promise.all(
+      Array.from({ length: 5 }, () => queue((q) => q.takeRateSlot(key, 3))),
+    );
+    expect(taken.filter(Boolean)).toHaveLength(3);
+  });
+
+  it("a stuck receipt with a live job keeps reading as processing", async () => {
+    const { receipt } = await upload(b);
+    await db((d) =>
+      d
+        .update(receipts)
+        .set({ updatedAt: new Date(Date.now() - 60 * 60_000) })
+        .where(eq(receipts.id, receipt.id)),
+    );
+    expect((await receiptOf(receipt.id, b))?.status).toBe("processing");
+    const listed = await run(
+      Effect.flatMap(ReceiptRepo, (r) => r.list(b, { status: "failed" }, { limit: 10, offset: 0 })),
+    );
+    expect(listed.rows.map((r) => r.id)).not.toContain(receipt.id);
+    await db((d) => d.delete(jobs).where(and(eq(jobs.receiptId, receipt.id))));
+    expect((await receiptOf(receipt.id, b))?.status).toBe("failed");
+  });
+});

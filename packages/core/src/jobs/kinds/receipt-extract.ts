@@ -1,5 +1,5 @@
 import type { ModelId, OcrFailureKind } from "@receipt-ocr/ai";
-import { Clock, Effect } from "effect";
+import { Effect } from "effect";
 import type { OcrAttempt } from "../../errors";
 import { providerOf, type Ocr, type ProviderCooldowns } from "../../ocr";
 import { noCallRow, runExtraction, settleFailure, type ExtractionError } from "../../pipeline";
@@ -67,18 +67,17 @@ export function classifyExtractionError(error: ExtractionError): JobFailure {
   }
 }
 
-/** Providers that answered 429, and until when to leave them alone. */
-export function cooldownsFrom(error: ExtractionError, now: number): Map<string, Date> {
-  const until = new Map<string, Date>();
-  if (error._tag !== "OcrError") return until;
+/** Providers that answered 429, and how long (ms) to leave each alone. */
+export function cooldownsFrom(error: ExtractionError): Map<string, number> {
+  const cooling = new Map<string, number>();
+  if (error._tag !== "OcrError") return cooling;
   for (const attempt of error.attempts) {
     if (attempt.kind !== "rate-limited") continue;
     const ms = Math.min(attempt.retryAfterMs ?? DEFAULT_COOLDOWN_MS, MAX_COOLDOWN_MS);
     const provider = providerOf(attempt.model as ModelId);
-    const at = new Date(now + ms);
-    if ((until.get(provider)?.getTime() ?? 0) < at.getTime()) until.set(provider, at);
+    cooling.set(provider, Math.max(cooling.get(provider) ?? 0, ms));
   }
-  return until;
+  return cooling;
 }
 
 const scopeOf = (payload: ReceiptExtractPayload) => ({
@@ -125,12 +124,9 @@ export const receiptExtract: JobDefinition<
         cooling,
       }).pipe(
         Effect.tapError((error) =>
-          Effect.gen(function* () {
-            const now = yield* Clock.currentTimeMillis;
-            for (const [provider, until] of cooldownsFrom(error, now)) {
-              yield* queue.coolDown(provider, until).pipe(Effect.ignore);
-            }
-          }),
+          Effect.forEach(cooldownsFrom(error), ([provider, ms]) =>
+            queue.coolDown(provider, ms).pipe(Effect.ignore),
+          ),
         ),
         Effect.mapError(classifyExtractionError),
       );

@@ -104,13 +104,11 @@ describe("provider cooldowns", () => {
 
   it("cools a provider that answered 429, for its Retry-After or a default, capped", () => {
     const error = ocrError("rate-limited", [attempt("rate-limited", 20_000)]);
-    expect(cooldownsFrom(error, now)).toEqual(new Map([["google", new Date(now + 20_000)]]));
-    expect(cooldownsFrom(ocrError("rate-limited"), now).get("google")).toEqual(
-      new Date(now + 30_000),
-    );
+    expect(cooldownsFrom(error)).toEqual(new Map([["google", 20_000]]));
+    expect(cooldownsFrom(ocrError("rate-limited")).get("google")).toBe(30_000);
     const long = ocrError("rate-limited", [attempt("rate-limited", 86_400_000)]);
-    expect(cooldownsFrom(long, now).get("google")).toEqual(new Date(now + 600_000));
-    expect(cooldownsFrom(ocrError("timeout"), now).size).toBe(0);
+    expect(cooldownsFrom(long).get("google")).toBe(600_000);
+    expect(cooldownsFrom(ocrError("timeout")).size).toBe(0);
   });
 
   const chain: OcrStep[] = [
