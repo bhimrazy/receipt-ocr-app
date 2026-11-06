@@ -20,6 +20,19 @@ export async function validateWorkspaceName<T extends { name?: string }>(
   return { data: { ...organization, name: parsed.name } };
 }
 
+const WORKSPACE_ROLES = new Set(["member", "admin", "owner"]);
+
+/**
+ * Better Auth organization hook: a membership or invitation role must be exactly
+ * one of our roles. Better Auth 1.7.14 accepts comma lists with padding such as
+ * "admin, owner" (GHSA-c85h), which would let a workspace admin mint an owner.
+ */
+export function assertWorkspaceRole(role: unknown): void {
+  if (typeof role !== "string" || !WORKSPACE_ROLES.has(role)) {
+    throw new APIError("BAD_REQUEST", { message: "Choose member, admin or owner." });
+  }
+}
+
 /**
  * Per-inviter cap on invitations. Better Auth's own limiter keys on IP only,
  * so without this one account could mail hundreds of addresses from rotating IPs.
