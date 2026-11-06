@@ -27,10 +27,7 @@ const EXCLUDED = [/^app\/\(lab\)\//, /^components\/marketing\//, /opengraph-imag
 
 // Existing literals in files other open PRs own (auth flow, admin panel). Remove an entry once
 // that file uses tokens; new files are always checked.
-const PENDING = new Set([
-  "app/admin/layout.tsx",
-  "app/admin/admin-nav.tsx",
-]);
+const PENDING = new Set(["app/admin/layout.tsx", "app/admin/admin-nav.tsx"]);
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(path.join(webRoot, dir), { withFileTypes: true, recursive: true })
