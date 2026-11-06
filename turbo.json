@@ -21,6 +21,7 @@
         "S3_*",
         "SUPPORT_EMAIL",
         "TRUSTED_IP_HEADERS",
+        "TRUSTED_PROXIES",
         "VERCEL",
         "VERCEL_*"
       ]
