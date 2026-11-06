@@ -89,7 +89,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    models: no.
 5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
-   Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations will be `0008`, `0009`.
+   Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations take the next free numbers after `0008` (job queue).
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
 8. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
 
@@ -104,7 +104,6 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Best-practice reviews ([Next.js](reviews/2026-11-06-nextjs.md), [React](reviews/2026-11-06-react.md),
   [shadcn/UI](reviews/2026-11-06-shadcn-ui.md)): quick wins in progress; later, shared primitives (Spinner, Meter,
   Checkbox, Avatar, Empty, Pagination), Button aligned with base-nova, one form system on `Field`.
-
 - Admin Settings shows "Last saved by…" for a saved OCR chain that was discarded as invalid.
 - HEIC conversion untested (no fixture or Safari in CI); add a WebKit e2e project later.
 - Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.

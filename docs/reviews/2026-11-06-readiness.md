@@ -108,7 +108,7 @@ correct.
 
 - Zod only at some boundaries (STATUS "Known follow-ups"). Billing webhooks will add more untrusted input; fix the
   pattern first.
-- Docs drift: STATUS says "last updated after #27" while #28 to #33 have merged and seven tracks are running.
+- Docs drift (at time of audit; fixed in #39): STATUS said "last updated after #27" while #28 to #33 have merged and seven tracks are running.
   `AGENTS.md` still says "Future jobs: BullMQ + Redis later" (jobs plan decision 7).
 - No owner-visible record of security events (sign-in, password change, session revoke). The admin audit log covers
   admin actions only. Adding this after billing means backfilling nothing, but support cases will need it.
