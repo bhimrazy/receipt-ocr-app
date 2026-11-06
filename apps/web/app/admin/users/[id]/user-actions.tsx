@@ -319,8 +319,8 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
                 confirmLabel: "Delete user",
                 confirmText: who,
                 destructive: true,
-                onConfirm: () =>
-                  settle(deleteUserAction({ userId: user.id, confirm: who }), "User deleted."),
+                onConfirm: (typed) =>
+                  settle(deleteUserAction({ userId: user.id, confirm: typed }), "User deleted."),
               })
             }
             size="sm"

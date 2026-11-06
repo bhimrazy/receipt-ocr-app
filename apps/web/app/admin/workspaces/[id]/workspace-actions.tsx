@@ -259,9 +259,9 @@ export function DeleteWorkspace({
             confirmLabel: "Delete workspace",
             confirmText: name,
             destructive: true,
-            onConfirm: () =>
+            onConfirm: (typed) =>
               settle(
-                deleteWorkspaceAction({ organizationId, confirm: name }),
+                deleteWorkspaceAction({ organizationId, confirm: typed }),
                 "Workspace deleted.",
               ),
           })
