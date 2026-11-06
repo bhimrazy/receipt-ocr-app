@@ -43,7 +43,7 @@ export function RetryReceiptButton({
   return (
     <Button disabled={pending} onClick={retry} {...props}>
       {pending ? (
-        <Loader2 aria-hidden="true" className="animate-spin" />
+        <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
       ) : (
         <RotateCw aria-hidden="true" />
       )}

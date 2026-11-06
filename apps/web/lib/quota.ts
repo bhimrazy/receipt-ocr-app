@@ -1,6 +1,7 @@
 import "server-only";
 import { checkQuota, enforceQuota, quotaLimits, userPlan } from "@receipt-ocr/core";
 import { Effect } from "effect";
+import { cache } from "react";
 import { getCurrentPlan } from "./plan-limits";
 import { runtime } from "./runtime";
 import { requireSession } from "./session";
@@ -31,10 +32,10 @@ export type UsageSummary = {
 };
 
 /**
- * Today's receipts for the signed-in user, for the usage meter. Failed
+ * Today's receipts for the signed-in user, for the usage meter. Deduplicated per request. Failed
  * receipts don't count. The window is the UTC day.
  */
-export async function getUsageSummary(): Promise<UsageSummary> {
+export const getUsageSummary = cache(async (): Promise<UsageSummary> => {
   const session = await requireSession();
   const { policy } = await getCurrentPlan();
   const verdict = await runtime.runPromise(checkQuota(session.user.id, quotaLimits(policy)));
@@ -46,4 +47,4 @@ export async function getUsageSummary(): Promise<UsageSummary> {
     resetsAt: verdict.resetsAt,
     blocked,
   };
-}
+});

@@ -10,6 +10,7 @@ import {
   type ReceiptWithItems,
 } from "@receipt-ocr/core";
 import { Effect } from "effect";
+import { cache } from "react";
 import { runtime } from "./runtime";
 import { requireActiveScope } from "./session";
 
@@ -111,8 +112,8 @@ export async function getReceiptForWorkspace(id: string): Promise<ReceiptWithIte
   return runtime.runPromise(getReceiptWithImage({ receiptId: id, scope }));
 }
 
-/** Counts for the home screen, across the whole workspace. */
-export async function getReceiptCounts(): Promise<ReceiptCounts> {
+/** Counts across the whole workspace, deduplicated per request. */
+export const getReceiptCounts = cache(async (): Promise<ReceiptCounts> => {
   const scope = await requireActiveScope();
   return runtime.runPromise(Effect.flatMap(ReceiptRepo, (repo) => repo.counts(scope)));
-}
+});

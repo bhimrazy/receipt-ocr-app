@@ -11,7 +11,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronsUpDown, LogOut, Settings, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { authClient } from "@/lib/auth-client";
+import { signOutAndClearHint } from "@/lib/auth-client";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
 
@@ -52,7 +52,7 @@ export function UserMenu({
   const router = useRouter();
 
   async function handleSignOut() {
-    await authClient.signOut();
+    await signOutAndClearHint();
     router.push("/");
     router.refresh();
   }
