@@ -91,12 +91,12 @@ function GoogleAnalytics({
   const [loaded, setLoaded] = useState(false);
   const active = on && pathname !== null;
 
-  useEffect(() => {
-    if (active && !loaded) {
-      initGtag(id);
-      setLoaded(true);
-    }
-  }, [active, loaded, id]);
+  // Once loaded, gtag.js stays. The queue is set up during render because <Script> injects the
+  // tag from its own effect, which runs before any effect here; initGtag runs once per page.
+  if (active && !loaded) {
+    initGtag(id);
+    setLoaded(true);
+  }
 
   useEffect(() => {
     if (!loaded) return;

@@ -10,7 +10,11 @@ const w = () => window as unknown as GtagWindow;
  * starts denied before any config. Only analytics_storage is ever granted; the three ads
  * signals stay denied because nothing here is marketing.
  */
+let initialised = false;
+
 export function initGtag(id: string) {
+  if (initialised) return;
+  initialised = true;
   const win = w();
   win.dataLayer = win.dataLayer ?? [];
   if (!win.gtag) {
