@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
+import { ConsentManager } from "@/components/consent/consent-manager";
+import { gaMeasurementId } from "@/lib/consent/env";
 import { siteDescription, siteTitle, siteUrl } from "@/lib/site";
 import "./globals.css";
 
@@ -57,7 +59,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${dmSans.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        {children}
+        {/* VERCEL is set in Vercel builds only; Docker images run no page counts. */}
+        <ConsentManager
+          gaMeasurementId={gaMeasurementId}
+          vercelAnalytics={process.env.VERCEL === "1"}
+        />
+      </body>
     </html>
   );
 }
