@@ -6,7 +6,7 @@ import {
   TypeValidationError,
 } from "ai";
 import { describe, expect, it } from "vitest";
-import { classifyOcrError } from "./errors";
+import { classifyOcrError, OcrCallError, retryAfterMs } from "./errors";
 import { extractReceipt } from "./extract";
 import { FIXTURE_FAIL_MARKER } from "./fixture";
 
@@ -76,5 +76,35 @@ describe("classifyOcrError", () => {
       file: { data: new TextEncoder().encode(FIXTURE_FAIL_MARKER), mediaType: "image/jpeg" },
     }).catch((error: unknown) => error);
     expect(classifyOcrError(failure)).toBe("provider-error");
+  });
+});
+
+describe("retryAfterMs", () => {
+  const limited = (headers: Record<string, string>) =>
+    new APICallError({
+      message: "429",
+      url: "https://provider.test",
+      requestBodyValues: {},
+      statusCode: 429,
+      responseHeaders: headers,
+    });
+
+  it("reads seconds or an HTTP date, through the SDK's wrappers", () => {
+    const wrapped = new OcrCallError("rate-limited", null, limited({ "Retry-After": "7" }));
+    expect(retryAfterMs(wrapped)).toBe(7000);
+    const now = Date.parse("2026-11-06T10:00:00Z");
+    const dated = limited({ "retry-after": "Fri, 06 Nov 2026 10:00:30 GMT" });
+    expect(
+      retryAfterMs(
+        new RetryError({ message: "x", reason: "maxRetriesExceeded", errors: [dated] }),
+        now,
+      ),
+    ).toBe(30_000);
+  });
+
+  it("is undefined when the provider gave no usable hint", () => {
+    expect(retryAfterMs(limited({}))).toBeUndefined();
+    expect(retryAfterMs(limited({ "retry-after": "soon" }))).toBeUndefined();
+    expect(retryAfterMs(new Error("x"))).toBeUndefined();
   });
 });

@@ -61,6 +61,23 @@ function statusOf(error: unknown): number | undefined {
   return APICallError.isInstance(error) ? error.statusCode : undefined;
 }
 
+/**
+ * How long the provider asked us to wait (`Retry-After`, seconds or an HTTP
+ * date), in ms; undefined when it didn't say. Read from the wrapped SDK error.
+ */
+export function retryAfterMs(error: unknown, now = Date.now()): number | undefined {
+  if (error instanceof OcrCallError) return retryAfterMs(error.cause, now);
+  if (RetryError.isInstance(error)) return retryAfterMs(error.lastError, now);
+  if (!APICallError.isInstance(error)) return undefined;
+  const headers = error.responseHeaders ?? {};
+  const value = Object.entries(headers).find(([name]) => name.toLowerCase() === "retry-after")?.[1];
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return seconds >= 0 ? seconds * 1000 : undefined;
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - now);
+}
+
 export function classifyOcrError(error: unknown): OcrFailureKind {
   if (error instanceof OcrCallError) return error.kind;
   // With retries, the SDK wraps the last attempt's error.
