@@ -73,6 +73,9 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
 11. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): passkey rpID (host or apex via
     `PASSKEY_RP_ID`), require passkey or password+TOTP for platform admins, `session.freshAge` 24 h → 1 h, no email
     OTP, trusted-device length, nudges.
+12. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
+    `numeric(19,4)` amounts, Frankfurter as the rate source with ECB and pegs as fallback, backfill depth, which
+    amounts are converted, sign-up default from country.
 
 ## Roadmap (order)
 
@@ -92,6 +95,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations take the next free numbers after `0008` (job queue).
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
 8. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
+   Currency correctness (no USD default, 3-decimal amounts) and conversion to a home currency:
+   [currencies and FX](plans/2026-11-06-currencies-fx.md).
 
 ## Known follow-ups
 
