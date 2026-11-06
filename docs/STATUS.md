@@ -80,8 +80,8 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
     `PASSKEY_RP_ID`), require passkey or password+TOTP for platform admins, `session.freshAge` 24 h → 1 h, no email
     OTP, trusted-device length, nudges.
 12. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
-    `numeric(19,4)` amounts, Frankfurter as the rate source with ECB and pegs as fallback, backfill depth, which
-    amounts are converted, sign-up default from country.
+    `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
+    which amounts are converted, sign-up default from country.
 
 ## Roadmap (order)
 
