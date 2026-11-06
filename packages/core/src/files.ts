@@ -57,12 +57,23 @@ export const validateUpload = (
       }),
     );
   }
-  if (mediaType === "application/pdf" && countPdfPages(bytes) > MAX_PDF_PAGES) {
-    return Effect.fail(
-      new InvalidInput({
-        message: `PDFs can have up to ${MAX_PDF_PAGES} pages. Upload only the pages with the receipt.`,
-      }),
-    );
+  if (mediaType === "application/pdf") {
+    const count = countPdfPages(bytes);
+    if ("tooComplex" in count) {
+      return Effect.fail(
+        new InvalidInput({
+          message:
+            "We couldn't check this PDF's pages. Export only the receipt pages to a new PDF and try again.",
+        }),
+      );
+    }
+    if (count.pages > MAX_PDF_PAGES) {
+      return Effect.fail(
+        new InvalidInput({
+          message: `PDFs can have up to ${MAX_PDF_PAGES} pages. Export only the receipt pages to a new PDF and try again.`,
+        }),
+      );
+    }
   }
   return Effect.succeed(mediaType);
 };

@@ -1,23 +1,26 @@
 import { inflateSync } from "node:zlib";
 
+export type PageCount = { pages: number } | { tooComplex: true };
+
 /**
  * A conservative page count for an uploaded PDF, read without a PDF library.
  *
- * Preferred answer: the pages reachable from the `/Kids` of the catalog's page tree, using
- * only the newest definition of each object, so an incremental save that deleted pages
- * counts what a reader renders. When the tree can't be followed (no catalog, indirect or
- * missing `/Kids`), it falls back to the larger of two signals over every definition in the
- * file, so a file can't pass by lying in one of them:
- * - distinct objects with `/Type /Page`, by object number;
+ * It takes the larger of two signals, so a file can't pass by lying in one of them:
+ * - distinct objects with `/Type /Page`, by object number (a page rewritten by an
+ *   incremental update counts once; orphaned pages from earlier revisions still count);
  * - the largest `/Count` on a `/Type /Pages` node, or `/N` in a linearization dictionary.
+ *
+ * It errs toward overcounting on purpose: a PDF whose pages were deleted by an incremental
+ * save still counts the deleted ones, and may be rejected. Following the page tree safely
+ * would need a real parser.
  *
  * Objects are read both from the file body and from Flate-compressed object streams
  * (`/Type /ObjStm`, PDF 1.5+), where most modern writers put page objects. What it
  * can't see: object streams with other filters or encryption. Those PDFs count only
  * what is in plain text, which may be fewer pages than they have. A file that exceeds the
- * inflate or work budgets counts as Infinity (rejected as too large or complex).
+ * inflate or work budgets is reported as `tooComplex`.
  */
-export function countPdfPages(bytes: Uint8Array): number {
+export function countPdfPages(bytes: Uint8Array): PageCount {
   const text = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("latin1");
   const tally: Tally = {
     pages: new Set(),
@@ -25,24 +28,14 @@ export function countPdfPages(bytes: Uint8Array): number {
     inflated: 0,
     work: 0,
     objects: 0,
-    newest: new Map(),
-    roots: [],
   };
   for (const { id, dict, streamStart } of topLevelObjects(text)) {
-    if (!classify(tally, id, dict)) return Number.POSITIVE_INFINITY;
+    if (!classify(tally, id, dict)) return { tooComplex: true };
     if (OBJ_STM.test(dict) && !readObjectStream(tally, bytes, text, dict, streamStart)) {
-      return Number.POSITIVE_INFINITY;
+      return { tooComplex: true };
     }
   }
-  for (const match of text.matchAll(ROOT)) tally.roots.push(match[1]);
-  const reachable = reachablePages(tally);
-  return reachable ?? Math.max(tally.pages.size, tally.maxCount);
-}
-
-interface Node {
-  kind: "page" | "pages" | "catalog" | "other";
-  /** Referenced object ids; null when `/Kids` or `/Pages` isn't a direct value. */
-  refs: string[] | null;
+  return { pages: Math.max(tally.pages.size, tally.maxCount) };
 }
 
 interface Tally {
@@ -52,19 +45,11 @@ interface Tally {
   /** Characters classified, across all objects and object-stream entries. */
   work: number;
   objects: number;
-  /** The last definition of each relevant object id, in file order. */
-  newest: Map<string, Node>;
-  roots: string[];
 }
 
 const PAGE = /\/Type\s*\/Page(?![A-Za-z0-9])/;
 const PAGES = /\/Type\s*\/Pages(?![A-Za-z0-9])/;
-const CATALOG = /\/Type\s*\/Catalog(?![A-Za-z0-9])/;
 const COUNT = /\/Count\s+(\d+)/;
-const KIDS = /\/Kids\s*\[([^\]]*)\]/;
-const PAGES_REF = /\/Pages\s+(\d{1,10})\s{1,16}\d{1,10}\s{1,16}R\b/;
-const ROOT = /\/Root\s+(\d{1,10})\s{1,16}\d{1,10}\s{1,16}R\b/g;
-const REF = /(?<![0-9])(\d{1,10})\s{1,16}\d{1,10}\s{1,16}R\b/g;
 const LINEARIZED_N = /\/N\s+(\d+)/;
 const OBJ_STM = /\/Type\s*\/ObjStm(?![A-Za-z0-9])/;
 // Bounded and anchored so no match can start inside a digit run: linear on hostile input.
@@ -81,8 +66,9 @@ const MAX_DICT_CHARS = 64 * 1024;
 /** Total characters classified and objects visited: a hard stop on CPU per upload. */
 const MAX_WORK_CHARS = 32 * 1024 * 1024;
 const MAX_OBJECTS = 200_000;
-/** The linearization dictionary must be among the first bytes of the file. */
+/** Entries read from one object stream; real writers put a few hundred at most. */
 const MAX_OBJSTM_ENTRIES = 65_536;
+/** The linearization dictionary must be among the first bytes of the file. */
 const LINEARIZED_WINDOW = 1024;
 
 function linearizedPages(text: string): number {
@@ -98,72 +84,32 @@ function classify(tally: Tally, id: string, span: string): boolean {
   const dict = span.slice(0, MAX_DICT_CHARS);
   tally.work += dict.length + 64;
   if (++tally.objects > MAX_OBJECTS || tally.work > MAX_WORK_CHARS) return false;
-
-  let node: Node = { kind: "other", refs: [] };
   if (PAGES.test(dict)) {
     const count = COUNT.exec(dict);
     if (count) tally.maxCount = Math.max(tally.maxCount, Number(count[1]));
-    node = { kind: "pages", refs: refsIn(KIDS.exec(dict)?.[1]) };
   } else if (PAGE.test(dict)) {
     tally.pages.add(id);
-    node = { kind: "page", refs: [] };
-  } else if (CATALOG.test(dict)) {
-    const ref = PAGES_REF.exec(dict);
-    node = { kind: "catalog", refs: ref ? [ref[1]] : null };
-  } else if (KIDS.test(dict)) {
-    // A page-tree node missing its /Type: readers still follow it.
-    node = { kind: "pages", refs: refsIn(KIDS.exec(dict)?.[1]) };
   }
-  if (node.kind === "other") tally.newest.delete(id);
-  else tally.newest.set(id, node);
   return true;
-}
-
-function refsIn(array: string | undefined): string[] | null {
-  if (array === undefined) return null;
-  return Array.from(array.matchAll(REF), (m) => m[1]);
-}
-
-/**
- * Distinct page objects reachable from the page tree of any `/Root` catalog (the largest
- * wins, so a decoy trailer can't hide pages). Null when a tree can't be followed.
- */
-function reachablePages(tally: Tally): number | null {
-  let best: number | null = null;
-  for (const root of new Set(tally.roots)) {
-    const catalog = tally.newest.get(root);
-    if (catalog?.kind !== "catalog" || !catalog.refs) continue;
-    const found = new Set<string>();
-    const seen = new Set<string>();
-    const stack = [...catalog.refs];
-    let ok = true;
-    for (let id = stack.pop(); id !== undefined && ok; id = stack.pop()) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const node = tally.newest.get(id);
-      if (!node || node.kind === "catalog" || !node.refs) ok = false;
-      else if (node.kind === "page") found.add(id);
-      else stack.push(...node.refs);
-    }
-    if (ok) best = Math.max(best ?? 0, found.size);
-  }
-  return best;
 }
 
 /**
  * `N G obj ... endobj` spans, each ending at the next object if `endobj` is missing.
- * `dict` stops at `stream` so binary data isn't matched. Linear in the file size.
+ * `dict` stops at `stream` so binary data isn't matched. Matches are found lazily, one
+ * ahead, so memory doesn't grow with the number of objects. Linear in the file size.
  */
 function* topLevelObjects(text: string) {
-  const starts = [...text.matchAll(OBJ_START)];
+  const re = new RegExp(OBJ_START);
+  let match = re.exec(text);
   let endobj = -1;
-  for (const [i, match] of starts.entries()) {
+  while (match) {
+    const next = re.exec(text);
     const start = match.index + match[0].length;
     if (endobj !== Infinity && endobj < start) {
       const found = text.indexOf("endobj", start);
       endobj = found === -1 ? Infinity : found;
     }
-    const end = Math.min(endobj, starts[i + 1]?.index ?? text.length);
+    const end = Math.min(endobj, next?.index ?? text.length);
     const body = text.slice(start, end);
     const stream = /\bstream\r?\n/.exec(body);
     yield {
@@ -171,6 +117,7 @@ function* topLevelObjects(text: string) {
       dict: stream ? body.slice(0, stream.index) : body,
       streamStart: stream ? start + stream.index + stream[0].length : -1,
     };
+    match = next;
   }
 }
 

@@ -4,6 +4,11 @@ import { describe, expect, it } from "vitest";
 import { MAX_PDF_PAGES, validateUpload } from "./files";
 import { countPdfPages } from "./pdf-pages";
 
+/** Page count, or "tooComplex" when the scan gave up. */
+const count = (bytes: Uint8Array) => {
+  const result = countPdfPages(bytes);
+  return "tooComplex" in result ? "tooComplex" : result.pages;
+};
 const enc = (s: string) => new TextEncoder().encode(s);
 const concat = (...parts: Uint8Array[]) => {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
@@ -60,67 +65,50 @@ function compressedPdf(pages: number, count = pages, { indirectLength = false } 
 
 describe("countPdfPages", () => {
   it.each([1, 3, 10, 50])("counts a plain %i-page PDF", (pages) => {
-    expect(countPdfPages(plainPdf(pages))).toBe(pages);
+    expect(count(plainPdf(pages))).toBe(pages);
   });
 
   it.each([1, 10, 50])("counts a %i-page PDF whose pages sit in an object stream", (pages) => {
-    expect(countPdfPages(compressedPdf(pages))).toBe(pages);
+    expect(count(compressedPdf(pages))).toBe(pages);
   });
 
   it("reads an object stream whose /Length is an indirect reference", () => {
-    expect(countPdfPages(compressedPdf(12, 12, { indirectLength: true }))).toBe(12);
+    expect(count(compressedPdf(12, 12, { indirectLength: true }))).toBe(12);
   });
 
   it("can't be fooled by a page tree that under-reports /Count", () => {
-    expect(countPdfPages(plainPdf(50, 1))).toBe(50);
-    expect(countPdfPages(compressedPdf(50, 1))).toBe(50);
+    expect(count(plainPdf(50, 1))).toBe(50);
+    expect(count(compressedPdf(50, 1))).toBe(50);
   });
 
-  it("counts the pages a reader renders when /Count overstates them", () => {
-    expect(countPdfPages(plainPdf(1, 40))).toBe(1);
+  it("counts a /Count larger than the visible pages", () => {
+    expect(count(plainPdf(1, 40))).toBe(40);
   });
 
-  it("falls back to the largest /Count when there is no followable page tree", () => {
-    const pdf = enc(
-      `%PDF-1.4\n2 0 obj\n${treeDict(40, [])}\nendobj\n3 0 obj\n${pageDict()}\nendobj\n`,
-    );
-    expect(countPdfPages(pdf)).toBe(40);
-  });
-
-  it("counts only the pages left after an incremental save deleted some", () => {
+  it("overcounts pages deleted by an incremental save (known, safe direction)", () => {
+    // The update rewrites the page tree to keep 4 of 12 pages, but the 8 dropped page
+    // objects are still in the file. Without a real parser we can't tell they are
+    // unreachable, so the file counts 12 and may be rejected. Never undercounting
+    // matters more than accepting such files; the error message tells the user to export.
     const kept = pageIds(12).slice(0, 4);
     const update = enc(
       `2 0 obj\n${treeDict(4, kept)}\nendobj\ntrailer\n<< /Root 1 0 R /Prev 0 >>\n%%EOF\n`,
     );
-    expect(countPdfPages(concat(plainPdf(12), update))).toBe(4);
-  });
-
-  it("still counts every page when an incremental save adds some", () => {
-    const update = enc(
-      `2 0 obj\n${treeDict(14, pageIds(14))}\nendobj\n${[13, 14].map((id) => `${id + 2} 0 obj\n${pageDict()}\nendobj\n`).join("")}trailer\n<< /Root 1 0 R >>\n%%EOF\n`,
-    );
-    expect(countPdfPages(concat(plainPdf(12), update))).toBe(14);
-  });
-
-  it("can't be hidden by a decoy trailer pointing at a small catalog", () => {
-    const decoy = enc(
-      `901 0 obj\n<< /Type /Catalog /Pages 900 0 R >>\nendobj\n900 0 obj\n${treeDict(1, [3])}\nendobj\ntrailer\n<< /Root 901 0 R >>\n%%EOF\n`,
-    );
-    expect(countPdfPages(concat(plainPdf(30), decoy))).toBe(30);
+    expect(count(concat(plainPdf(12), update))).toBe(12);
   });
 
   it("counts a page rewritten by an incremental update once", () => {
     const update = enc(`3 0 obj\n${pageDict()}\nendobj\ntrailer\n<< /Prev 0 >>\n%%EOF\n`);
-    expect(countPdfPages(concat(plainPdf(3), update))).toBe(3);
+    expect(count(concat(plainPdf(3), update))).toBe(3);
   });
 
   it("reads the linearization page count", () => {
     const pdf = enc(`%PDF-1.6\n9 0 obj\n<< /Linearized 1 /L 1000 /N 25 /T 900 >>\nendobj\n%%EOF`);
-    expect(countPdfPages(pdf)).toBe(25);
+    expect(count(pdf)).toBe(25);
   });
 
   it("returns 0 for a PDF with no readable page objects", () => {
-    expect(countPdfPages(enc("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"))).toBe(0);
+    expect(count(enc("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"))).toBe(0);
   });
 
   it("ignores an object stream that won't inflate (e.g. encrypted)", () => {
@@ -130,7 +118,7 @@ describe("countPdfPages", () => {
       enc("garbage!"),
       enc("\nendstream\nendobj\n"),
     );
-    expect(countPdfPages(pdf)).toBe(2);
+    expect(count(pdf)).toBe(2);
   });
 
   it("refuses an object stream that inflates past the budget", () => {
@@ -142,13 +130,13 @@ describe("countPdfPages", () => {
       bomb,
       enc("\nendstream\nendobj\n"),
     );
-    expect(countPdfPages(pdf)).toBe(Number.POSITIVE_INFINITY);
+    expect(count(pdf)).toBe("tooComplex");
   });
 
   it("stays fast on a large file of unterminated objects", () => {
     const junk = enc("%PDF-1.4\n" + "1 0 obj /Linearized ".repeat(200_000));
     const startedAt = performance.now();
-    countPdfPages(junk);
+    count(junk);
     expect(performance.now() - startedAt).toBeLessThan(2000);
   });
 });
@@ -166,6 +154,31 @@ describe("validateUpload PDF page cap (audit L2)", () => {
     }
   });
 
+  it("tells the user what to do when a PDF is too complex to check", () => {
+    const exit = Effect.runSyncExit(
+      validateUpload(enc("%PDF-1.4\n" + "1 0 obj<<>>endobj\n".repeat(210_000))),
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(String(exit.cause)).toContain("Export only the receipt pages");
+    }
+  });
+
+  it("stays fast and light on 10 MB adversarial files", () => {
+    const MB10 = 10 * 1024 * 1024;
+    const trailers = `%PDF-1.4\n${"trailer << /Root 1 0 R >>\n".repeat(MB10 / 27)}`;
+    const kids = `1 0 obj << /Type /Pages /Kids [ ${"2 0 R ".repeat(MB10 / 6)}`;
+    const nested = `1 0 obj ${"<< /Kids [ ".repeat(MB10 / 11)}`;
+    const header = `1 0 obj << /Type /ObjStm /N 9999999 /First 9999999 >> stream\n${"1 0 ".repeat(MB10 / 4)}`;
+    const heapBefore = process.memoryUsage().heapUsed;
+    for (const [name, text] of Object.entries({ trailers, kids, nested, header })) {
+      const started = performance.now();
+      count(enc(text));
+      expect(performance.now() - started, name).toBeLessThan(1000);
+    }
+    expect(process.memoryUsage().heapUsed - heapBefore).toBeLessThan(200 * 1024 * 1024);
+  });
+
   it("stays fast on overlapping object-stream offsets", () => {
     const pairs = 40_000;
     const header = `${Array.from({ length: pairs }, (_, i) => `${i + 1} ${i % 2 ? 65_536 : 0}`).join(" ")}\n`;
@@ -178,7 +191,7 @@ describe("validateUpload PDF page cap (audit L2)", () => {
       enc("\nendstream\nendobj\n"),
     );
     const started = performance.now();
-    expect(countPdfPages(pdf)).toBe(0);
+    expect(count(pdf)).toBe(0);
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
@@ -186,18 +199,18 @@ describe("validateUpload PDF page cap (audit L2)", () => {
     const filler = "/Linearized ".repeat(5400);
     const big = Array.from({ length: 70 }, (_, i) => `${i + 1} 0 obj ${filler} endobj\n`).join("");
     let started = performance.now();
-    expect(countPdfPages(enc(`%PDF-1.4\n${big}`))).toBe(0);
+    expect(count(enc(`%PDF-1.4\n${big}`))).toBe(0);
     expect(performance.now() - started).toBeLessThan(1000);
 
     const flood = "1 0 obj<<>>endobj\n".repeat(210_000);
     started = performance.now();
-    expect(countPdfPages(enc(flood))).toBe(Number.POSITIVE_INFINITY);
+    expect(count(enc(flood))).toBe("tooComplex");
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("ignores /Linearized outside the first 1024 bytes", () => {
     const pdf = enc(`%PDF-1.6\n${" ".repeat(1100)}9 0 obj\n<< /Linearized 1 /N 25 >>\nendobj\n`);
-    expect(countPdfPages(pdf)).toBe(0);
+    expect(count(pdf)).toBe(0);
   });
 
   it("scans ~1 MB of adversarial input in linear time", () => {
@@ -212,7 +225,7 @@ describe("validateUpload PDF page cap (audit L2)", () => {
     };
     for (const [name, text] of Object.entries(inputs)) {
       const started = performance.now();
-      expect(countPdfPages(enc(text)), name).toBe(0);
+      expect(count(enc(text)), name).toBe(0);
       expect(performance.now() - started, name).toBeLessThan(1000);
     }
   });
