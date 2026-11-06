@@ -42,10 +42,14 @@ export type TickOptions<R> = {
   /** Only these jobs. */
   ids?: readonly string[];
   /**
-   * Wait for queued jobs that become runnable before claiming stops (retries
-   * in backoff). Off: return as soon as nothing is runnable now. Default on.
+   * When nothing is runnable, sleep until a queued job becomes runnable
+   * (retries in backoff) before claiming stops: `true` for any job, a list to
+   * wait only for those (a request waits for its own job, not the whole
+   * queue's). `false`: return at once. Default `true`.
    */
-  waitForRetries?: boolean;
+  waitForRetries?: boolean | readonly string[];
+  /** Never sleep for a job due later than this long after the tick started. Default: no cap. */
+  maxWaitMs?: number;
   /** Called as each run ends, e.g. to log one wide event per attempt. */
   onRun?: (record: JobRunRecord) => void;
 };
@@ -61,9 +65,6 @@ export type TickStats = { reaped: number; runs: JobRunRecord[] };
 export const tick = <R>(options: TickOptions<R>) =>
   Effect.gen(function* () {
     const queue = yield* JobQueue;
-    const start = yield* Clock.currentTimeMillis;
-    const stopClaimingAt =
-      start + options.budgetMs - (options.stopClaimingBeforeMs ?? options.budgetMs / 4);
     const definitions = Object.values(options.registry);
     const kinds = definitions.map((d) => ({ kind: d.kind, leaseSeconds: d.leaseSeconds }));
     const kindNames = kinds.map((k) => k.kind);
@@ -81,6 +82,12 @@ export const tick = <R>(options: TickOptions<R>) =>
       if (job.state === "dead")
         yield* finalFailure(options.registry[job.kind], job, "lease-expired");
     }
+    // After the reap, so a slow one can't eat the claim window.
+    const start = yield* Clock.currentTimeMillis;
+    const stopClaimingAt =
+      start + options.budgetMs - (options.stopClaimingBeforeMs ?? options.budgetMs / 4);
+    const waitUntil = Math.min(stopClaimingAt, start + (options.maxWaitMs ?? Infinity));
+    const waitFor = options.waitForRetries ?? true;
 
     const slot = Effect.gen(function* () {
       while ((yield* Clock.currentTimeMillis) < stopClaimingAt) {
@@ -95,12 +102,12 @@ export const tick = <R>(options: TickOptions<R>) =>
           record(yield* runClaimed(options.registry, job, options.worker));
           continue;
         }
-        if (options.waitForRetries === false) return;
-        const waitMs = yield* queue.nextRunIn(kindNames, options.ids);
+        if (waitFor === false) return;
+        const waitMs = yield* queue.nextRunIn(kindNames, waitFor === true ? options.ids : waitFor);
         const now = yield* Clock.currentTimeMillis;
-        // Nothing queued, nothing due before claiming stops, or something due
-        // that we may not claim (paused, user at the cap, another worker has it).
-        if (waitMs === null || waitMs <= 0 || now + waitMs >= stopClaimingAt) return;
+        // Nothing to wait for, not due in time, or due but not ours to claim
+        // (paused, user at the cap, another worker has it).
+        if (waitMs === null || waitMs <= 0 || now + waitMs >= waitUntil) return;
         yield* Effect.sleep(Duration.millis(Math.min(waitMs, IDLE_POLL_MS)));
       }
     }).pipe(
@@ -195,10 +202,12 @@ const decide = <R>(
     if (Option.isNone(failure)) {
       // A defect (a bug, or an interruption we didn't ask for): retry, so a
       // poison job still dies after its attempts.
+      // The error's class only: its message or stack can hold receipt contents.
+      const error = Cause.squash(exit.cause);
       yield* Effect.logError("jobs.defect", {
         jobId: job.id,
         kind: job.kind,
-        cause: Cause.pretty(exit.cause).slice(0, 500),
+        error: error instanceof Error ? error.constructor.name : typeof error,
       });
       return retryOrDead(definition, job, "internal", undefined);
     }

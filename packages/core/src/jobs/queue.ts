@@ -12,8 +12,9 @@ import type { Job, JobErrorKind, JobState, NewJob } from "./definition";
  * so it all works through Supabase's transaction pooler.
  *
  * Fencing: after a claim, every write is `where id = $1 and locked_by =
- * $worker and state = 'running'`. A worker whose lease expired, or whose job
- * was cancelled, matches no row and changes nothing.
+ * $worker and attempts = $claimed and state = 'running'`. A worker whose
+ * lease expired (even if the same worker id claimed the job again), or whose
+ * job was cancelled, matches no row and changes nothing.
  */
 
 export type EnqueueResult = { id: string } | { duplicate: true };
@@ -183,10 +184,10 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
     /** Starts or extends `provider:<id>`'s cooldown by `ms` from now; never shortens one in force. */
     readonly coolDown: (provider: string, ms: number) => Effect.Effect<void, DbError>;
     /**
-     * Takes one slot of `key`'s per-minute window, shared by every process;
-     * false when the window is full. One atomic statement.
+     * The receipt's job when it is due but nothing is running it: queued and
+     * runnable, or running with an expired lease. Null otherwise.
      */
-    readonly takeRateSlot: (key: string, perMinute: number) => Effect.Effect<boolean, DbError>;
+    readonly dueReceiptJob: (receiptId: string) => Effect.Effect<string | null, DbError>;
   }
 >() {
   static readonly Live = Layer.effect(
@@ -247,7 +248,8 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
           // Touches no indexed column, so it is a HOT update.
           const result = await db.execute(sql`update jobs
             set locked_until = now() + make_interval(secs => ${leaseSeconds}::int)
-            where id = ${job.id} and locked_by = ${worker} and state = 'running'
+            where id = ${job.id} and locked_by = ${worker} and attempts = ${job.attempts}
+              and state = 'running'
             returning id`);
           return result.length > 0;
         }),
@@ -268,7 +270,8 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
           const result = await db.execute(sql`update jobs j set ${set}${errorSet},
               attempt_log = ${appendLog(logEntry(outcome.type, kind))},
               locked_by = null, locked_until = null, updated_at = now()
-            where j.id = ${job.id} and j.locked_by = ${worker} and j.state = 'running'
+            where j.id = ${job.id} and j.locked_by = ${worker} and j.attempts = ${job.attempts}
+              and j.state = 'running'
             returning j.id`);
           return result.length > 0;
         }),
@@ -350,14 +353,15 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
               set until = greatest(job_controls.until, excluded.until), updated_at = now()`),
         ).pipe(Effect.asVoid),
 
-      takeRateSlot: (key, perMinute) =>
+      dueReceiptJob: (receiptId) =>
         use(async (db) => {
-          const result = await db.execute(sql`insert into rate_windows (key, window_start, count)
-            values (${key}, date_trunc('minute', now()), 1)
-            on conflict (key, window_start) do update set count = rate_windows.count + 1
-              where rate_windows.count < ${perMinute}
-            returning count`);
-          return result.length > 0;
+          const [row] = await db.execute<{ id: string }>(sql`select j.id from jobs j
+            where j.receipt_id = ${receiptId} and j.kind like 'receipt.%'
+              and j.state in ('queued', 'running')
+              and ((j.state = 'queued' and j.run_at <= now())
+                or (j.state = 'running' and j.locked_until < now()))
+            limit 1`);
+          return row?.id ?? null;
         }),
     })),
   );

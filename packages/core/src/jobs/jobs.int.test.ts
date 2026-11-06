@@ -7,12 +7,12 @@ import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, type OcrFailureKind } from "@rec
 import {
   and,
   eq,
+  inArray,
   jobControls,
   jobs,
   ocrCalls,
   ocrRounds,
   organization,
-  rateWindows,
   receipts,
   sql,
   user,
@@ -30,7 +30,7 @@ import {
   runExtraction,
   settleFailure,
 } from "../pipeline";
-import { checkQuota, usageWindow } from "../quota";
+import { checkQuota, quotaGate, usageWindow } from "../quota";
 import { EXTRACTION_FAILED_MESSAGE, ReceiptRepo } from "../repository";
 import { Db, Storage } from "../services";
 import { Settings } from "../settings";
@@ -211,7 +211,6 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
         .where(sql`${jobs.kind} like ${`test.%.${tag}`} or ${jobs.userId} like ${`${tag}%`}`);
       await d.delete(ocrCalls).where(sql`${ocrCalls.userId} like ${`${tag}%`}`);
       await d.delete(ocrRounds).where(sql`${ocrRounds.userId} like ${`${tag}%`}`);
-      await d.delete(rateWindows).where(sql`${rateWindows.key} like ${`${tag}%`}`);
       await d.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
       await d.delete(user).where(sql`${user.id} like ${`${tag}%`}`);
     });
@@ -529,8 +528,9 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   });
 
   it("caps each user's running jobs, so one user's batch can't starve another's upload", async () => {
-    const heavy = `${tag}-heavy`;
-    const light = `${tag}-light`;
+    // Real accounts: jobs.user_id references the user.
+    const heavy = (await createUser("heavy")).userId;
+    const light = (await createUser("light")).userId;
     await db((d) =>
       d.insert(jobs).values([
         ...Array.from({ length: 10 }, (_, n) => ({
@@ -556,7 +556,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     await queue((q) => q.settle(claimed[0]!, `${tag}-fair`, { type: "succeeded" }));
     const next = await queue((q) => q.claim({ worker: `${tag}-fair`, kinds, n: 5, ownerCap: 2 }));
     expect(next.map((j) => j.userId)).toEqual([heavy]);
-    await db((d) => d.delete(jobs).where(sql`${jobs.userId} in (${heavy}, ${light})`));
+    await db((d) => d.delete(jobs).where(inArray(jobs.userId, [heavy, light])));
   });
 
   it("a stale or zombie attempt can't overwrite a newer round", async () => {
@@ -683,12 +683,190 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     expect(await queue((q) => q.get(id))).toMatchObject({ state: "dead", attempts: 1 });
   });
 
-  it("rate windows admit a fixed number of calls per minute across processes", async () => {
-    const key = `${tag}:model`;
-    const taken = await Promise.all(
-      Array.from({ length: 5 }, () => queue((q) => q.takeRateSlot(key, 3))),
+  it("a round between automatic retries keeps holding the user's quota", async () => {
+    const c = await createUser("between");
+    const usage = () =>
+      run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))));
+    const start = (await usage()).userDay;
+    script = Array.from({ length: 4 }, () => ({ kind: "provider-error" as const }));
+    const { receipt, jobId } = await upload(c);
+    expect((await usage()).userDay).toBe(start + 1);
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      await db((d) =>
+        d
+          .update(jobs)
+          .set({ runAt: new Date(0) })
+          .where(eq(jobs.id, jobId)),
+      );
+      const { runs } = await run(
+        tick({
+          worker: `${tag}-w`,
+          registry: receiptRegistry,
+          budgetMs: 10_000,
+          ids: [jobId],
+          waitForRetries: false,
+        }),
+      );
+      expect(runs.map((r) => r.outcome)).toEqual([attempt < 4 ? "retry" : "dead"]);
+      // Its calls failed, but its job is live: still in flight, not a free failure.
+      if (attempt < 4) expect((await usage()).userDay).toBe(start + 1);
+    }
+    expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
+    // Settled: now one failed round, inside the day's free allowance, counted once.
+    expect((await usage()).userDay).toBe(start);
+    const failedRounds = await db((d) =>
+      d.select().from(ocrRounds).where(eq(ocrRounds.receiptId, receipt.id)),
     );
-    expect(taken.filter(Boolean)).toHaveLength(3);
+    expect(failedRounds).toHaveLength(1);
+  });
+
+  it("each model-calling retry attempt counts toward the global daily cap", async () => {
+    const c = await createUser("global");
+    const usage = () =>
+      run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))));
+    const before = (await usage()).globalDay!;
+    script = [{ kind: "timeout" }, { kind: "timeout" }];
+    const { jobId } = await upload(c);
+    await drain([jobId]);
+    // One round, three attempts that each called a model.
+    expect((await usage()).globalDay! - before).toBe(3);
+    // A cap that the retries filled refuses the next upload.
+    process.env.OCR_DAILY_CAP = String((await usage()).globalDay);
+    try {
+      const gate = await run(quotaGate(limits));
+      expect(gate.decide(await usage())).toMatchObject({ allowed: false, window: "global" });
+    } finally {
+      delete process.env.OCR_DAILY_CAP;
+    }
+  });
+
+  it("a reaped job re-claimed by the same worker id fences off the first claim", async () => {
+    const result = await queue((q) =>
+      q.enqueue({ kind: COUNT, payload: { n: 3 }, maxAttempts: 3 }),
+    );
+    const id = "id" in result ? result.id : "";
+    const kinds = [{ kind: COUNT, leaseSeconds: 30 }];
+    const claim = () =>
+      queue((q) => q.claim({ worker: "same", kinds, n: 1, ownerCap: 9, ids: [id] }));
+    const [first] = await claim();
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ lockedUntil: new Date(Date.now() - 1000) })
+        .where(eq(jobs.id, id)),
+    );
+    await queue((q) => q.reap());
+    const [second] = await claim();
+    expect(second).toMatchObject({ attempts: 2, lockedBy: "same" });
+    expect(await queue((q) => q.heartbeat(first!, "same", 30))).toBe(false);
+    expect(await queue((q) => q.settle(first!, "same", { type: "succeeded" }))).toBe(false);
+    expect(await queue((q) => q.heartbeat(second!, "same", 30))).toBe(true);
+  });
+
+  it("finds a receipt's job that is due but not running, for the poll to kick", async () => {
+    const { receipt, jobId } = await upload(a);
+    expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBe(jobId);
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ runAt: new Date(Date.now() + 60_000) })
+        .where(eq(jobs.id, jobId)),
+    );
+    expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBeNull();
+    // Running under a live lease: someone has it.
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ runAt: new Date(0) })
+        .where(eq(jobs.id, jobId)),
+    );
+    const kinds = [{ kind: "receipt.extract", leaseSeconds: 90 }];
+    await queue((q) => q.claim({ worker: `${tag}-k`, kinds, n: 1, ownerCap: 9, ids: [jobId] }));
+    expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBeNull();
+    // Its worker died.
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ lockedUntil: new Date(Date.now() - 1000) })
+        .where(eq(jobs.id, jobId)),
+    );
+    expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBe(jobId);
+    await drain([jobId]);
+    expect((await receiptOf(receipt.id, a))?.status).toBe("completed");
+  });
+
+  it.each(["queued", "running"] as const)(
+    "a long-overdue %s job stops holding the receipt and its quota; a retry cancels it",
+    async (state) => {
+      const c = await createUser(`overdue-${state}`);
+      const usage = () =>
+        run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))));
+      const start = (await usage()).userDay;
+      const { receipt, jobId } = await upload(c);
+      const longAgo = new Date(Date.now() - 6 * 60_000);
+      await db((d) =>
+        d.update(receipts).set({ updatedAt: longAgo }).where(eq(receipts.id, receipt.id)),
+      );
+      await db((d) =>
+        d.update(ocrRounds).set({ createdAt: longAgo }).where(eq(ocrRounds.receiptId, receipt.id)),
+      );
+      await db((d) =>
+        d
+          .update(jobs)
+          .set(
+            state === "queued"
+              ? { runAt: longAgo }
+              : { state: "running", lockedBy: "gone", lockedUntil: longAgo },
+          )
+          .where(eq(jobs.id, jobId)),
+      );
+      expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
+      expect((await usage()).userDay).toBe(start);
+      const retried = await run(claimRetry({ receiptId: receipt.id, scope: c, limits }));
+      expect(await queue((q) => q.get(jobId))).toMatchObject({
+        state: "cancelled",
+        lastErrorKind: "superseded",
+      });
+      await drain([retried.jobId]);
+      expect((await receiptOf(receipt.id, c))?.status).toBe("completed");
+    },
+  );
+
+  it("one 429 cools the provider for every job, not just the one that hit it", async () => {
+    script = [{ kind: "rate-limited", retryAfterMs: 60_000 }];
+    const first = await upload(a);
+    const other = await upload(b, new Uint8Array([...JPEG, 9]));
+    await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: receiptRegistry,
+        budgetMs: 10_000,
+        ids: [first.jobId],
+        waitForRetries: false,
+      }),
+    );
+    const { runs } = await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: receiptRegistry,
+        budgetMs: 10_000,
+        ids: [other.jobId],
+        waitForRetries: false,
+      }),
+    );
+    // Another user's job never called the provider and spent no attempt.
+    expect(runs.map((r) => [r.outcome, r.errorKind])).toEqual([["deferred", "providers-cooling"]]);
+    expect(calls).toBe(1);
+    expect(await queue((q) => q.get(other.jobId))).toMatchObject({ state: "queued", attempts: 0 });
+    for (const { jobId } of [first, other]) await run(cancelJob(receiptRegistry, jobId));
+  });
+
+  it("deleting an account unlinks its jobs", async () => {
+    const c = await createUser("leaver");
+    const { jobId } = await upload(c);
+    await run(cancelJob(receiptRegistry, jobId));
+    await db((d) => d.delete(user).where(eq(user.id, c.userId)));
+    expect(await queue((q) => q.get(jobId))).toMatchObject({ userId: null });
   });
 
   it("a stuck receipt with a live job keeps reading as processing", async () => {

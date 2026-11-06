@@ -6,7 +6,6 @@ import {
   eq,
   gte,
   ilike,
-  inArray,
   jobs,
   lt,
   lte,
@@ -27,6 +26,7 @@ import {
 } from "@receipt-ocr/db";
 import { Context, Effect, Layer } from "effect";
 import type { DbError } from "./errors";
+import { liveReceiptJob, STALE_AFTER_MS } from "./jobs/live";
 import { enqueueJob } from "./jobs/queue";
 import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-job";
 import type { QuotaVerdict } from "./quota";
@@ -146,12 +146,12 @@ export const MAX_EXTRACTION_ATTEMPTS = 3;
 export const NEEDS_REVIEW_BELOW = 0.9;
 
 /**
- * Legacy safety net. Every round now has a job, and while the job is queued
- * or running the receipt reads as processing however long it waits. A
- * `processing` receipt with no live job (one whose final-failure write was
- * lost) reads as failed past this age, and can be retried.
+ * A `processing` receipt whose job is gone or long overdue (nothing ran the
+ * queue, or a final-failure write was lost) reads as failed past this age, and
+ * can be retried. While its job is live it reads as processing however long
+ * it waits.
  */
-export const STALE_AFTER_MS = 5 * 60_000;
+export { STALE_AFTER_MS } from "./jobs/live";
 export const STALE_MESSAGE = "Reading this receipt took too long. Try again.";
 export const EXTRACTION_FAILED_MESSAGE =
   "We couldn't read this receipt. It may be blurry, cropped or too dark. Try again, or upload a clearer copy.";
@@ -159,7 +159,7 @@ export const EXTRACTION_FAILED_MESSAGE =
 const staleInterval = sql.raw(`interval '${STALE_AFTER_MS / 1000} seconds'`);
 // Qualified by hand: Drizzle renders columns unqualified in a single-table
 // select, and a bare `id` here would resolve to `jobs.id`.
-const hasLiveJob = sql`exists (select 1 from jobs j where j.receipt_id = receipts.id and j.state in ('queued', 'running'))`;
+const hasLiveJob = sql`exists (select 1 from jobs j where j.receipt_id = receipts.id and ${liveReceiptJob("j")})`;
 const isStale = sql`(${receipts.status} in ('uploaded', 'processing') and ${receipts.updatedAt} < now() - ${staleInterval} and not ${hasLiveJob})`;
 const effectiveStatus = sql<ReceiptStatus>`case when ${isStale} then 'failed' else ${receipts.status}::text end`;
 const effectiveError = sql<
@@ -507,7 +507,10 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                   lockedUntil: null,
                   updatedAt: now,
                 })
-                .where(and(eq(jobs.receiptId, id), inArray(jobs.state, ["queued", "running"])));
+                .where(
+                  // Overdue ones included: they are not live, but still hold the unique index.
+                  sql`${jobs.receiptId} = ${id} and jobs.kind like 'receipt.%' and jobs.state in ('queued', 'running')`,
+                );
               const job = await enqueueJob(
                 tx,
                 receiptExtractJob(
@@ -545,7 +548,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           const [live] = await db
             .select({ id: jobs.id })
             .from(jobs)
-            .where(and(eq(jobs.receiptId, id), inArray(jobs.state, ["queued", "running"])))
+            .where(and(eq(jobs.receiptId, id), liveReceiptJob("jobs")))
             .limit(1);
           return live ? row : { ...row, status: "failed" as const, errorMessage: STALE_MESSAGE };
         }),
