@@ -6,16 +6,25 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
-import { AuthError, AuthField, AuthNotice, authCardClass, authLinkClass } from "./auth-field";
+import { authClient } from "@/lib/auth-client";
+import { DEFAULT_REDIRECT } from "@/lib/redirect";
+import {
+  AuthDivider,
+  AuthError,
+  AuthField,
+  AuthHeading,
+  AuthNotice,
+  EmailField,
+  authCardClass,
+  authLinkClass,
+} from "./auth-field";
+import { CheckEmail } from "./check-email";
+import { PasswordField } from "./password-field";
 
 export type SocialProvider = "google" | "github";
 
-const providerLabels: Record<SocialProvider, string> = {
-  google: "Continue with Google",
-  github: "Continue with GitHub",
-};
+const providerNames: Record<SocialProvider, string> = { google: "Google", github: "GitHub" };
 
 function GoogleIcon() {
   return (
@@ -53,44 +62,89 @@ const providerIcons: Record<SocialProvider, () => React.ReactNode> = {
   github: GitHubIcon,
 };
 
+type FormError = { message: string; signInInstead?: boolean };
+
 export function CredentialsForm({
   mode,
   providers,
-  redirectTo = "/app/upload",
+  redirectTo = DEFAULT_REDIRECT,
   notice,
-  initialError = null,
+  initialError,
+  freeReceiptsPerDay,
 }: {
   mode: "sign-in" | "sign-up";
-  /** An error a social sign-in came back with (`?error=`). */
-  initialError?: string | null;
-  /** Confirmation shown above the form, e.g. after a password reset. */
-  notice?: string;
+  /** The free plan's saved daily limit, shown on sign-up. */
+  freeReceiptsPerDay?: number;
   providers: SocialProvider[];
-  /** Where to land after auth succeeds. Used to return to an invite accept page. */
+  /** Where to land after auth succeeds, e.g. back to an invite accept page. */
   redirectTo?: string;
+  /** Shown above the form: a confirmation (password reset) or context (invitation). */
+  notice?: { message: string; kind: "success" | "info" };
+  /** Error carried in the URL from an OAuth or email-confirmation redirect. */
+  initialError?: string;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(initialError);
+  const [error, setError] = useState<FormError | null>(null);
+  const [callbackError, setCallbackError] = useState(initialError);
   const [pending, setPending] = useState<"credentials" | SocialProvider | null>(null);
+  const [checkEmail, setCheckEmail] = useState<"sign-up" | "sign-in" | null>(null);
 
   const isSignUp = mode === "sign-up";
   const redirectQuery =
-    redirectTo === "/app/upload" ? "" : `?redirect=${encodeURIComponent(redirectTo)}`;
+    redirectTo === DEFAULT_REDIRECT ? "" : `?redirect=${encodeURIComponent(redirectTo)}`;
+  // Confirmation links and OAuth failures return through /sign-in: it forwards a signed-in user
+  // to `redirectTo` and shows any `?error=` code Better Auth appends.
+  const callbackURL = `/sign-in${redirectQuery}`;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setCallbackError(undefined);
     setPending("credentials");
-    const { error: authError } = isSignUp
-      ? await authClient.signUp.email({ name, email, password })
-      : await authClient.signIn.email({ email, password });
-    if (authError) {
-      setError(authErrorMessage(authError));
-      setPending(null);
-      return;
+    const trimmedEmail = email.trim();
+    if (isSignUp) {
+      const { data, error: authError } = await authClient.signUp.email({
+        name: name.trim(),
+        email: trimmedEmail,
+        password,
+        callbackURL,
+      });
+      if (authError) {
+        setError({
+          message: authErrorMessage(authError),
+          signInInstead: authError.code?.startsWith("USER_ALREADY_EXISTS"),
+        });
+        setPending(null);
+        return;
+      }
+      // No session token: the address has to be confirmed first (production).
+      if (!data?.token) {
+        setPending(null);
+        setCheckEmail("sign-up");
+        return;
+      }
+    } else {
+      const { data, error: authError } = await authClient.signIn.email({
+        email: trimmedEmail,
+        password,
+        // Also the target of the confirmation link Better Auth emails to unconfirmed accounts.
+        callbackURL,
+      });
+      if (authError) {
+        setPending(null);
+        // Better Auth has already emailed a fresh confirmation link (sendOnSignIn).
+        if (authError.code === "EMAIL_NOT_VERIFIED") {
+          setCheckEmail("sign-in");
+          return;
+        }
+        setError({ message: authErrorMessage(authError) });
+        return;
+      }
+      // With a callbackURL, Better Auth's client navigates there itself (a full page load).
+      if (data?.redirect) return;
     }
     router.push(redirectTo);
     router.refresh();
@@ -98,30 +152,49 @@ export function CredentialsForm({
 
   async function handleSocial(provider: SocialProvider) {
     setError(null);
+    setCallbackError(undefined);
     setPending(provider);
     const { error: authError } = await authClient.signIn.social({
       provider,
       callbackURL: redirectTo,
-      // Errors (a suspended account, a cancelled consent) come back to this page as ?error=.
-      errorCallbackURL: `/${mode}${redirectQuery}`,
+      errorCallbackURL: callbackURL,
     });
     if (authError) {
-      setError(authErrorMessage(authError));
+      setError({ message: authErrorMessage(authError) });
       setPending(null);
     }
   }
 
+  if (checkEmail) {
+    return (
+      <CheckEmail
+        callbackURL={callbackURL}
+        email={email.trim()}
+        onBack={() => {
+          setCheckEmail(null);
+          setPassword("");
+        }}
+        reason={checkEmail}
+      />
+    );
+  }
+
+  const busy = pending !== null;
+  const switchHref = isSignUp ? `/sign-in${redirectQuery}` : `/sign-up${redirectQuery}`;
+
   return (
     <div className={authCardClass}>
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {isSignUp ? "Create your account" : "Welcome back"}
-      </h1>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        {isSignUp
-          ? "Free plan, no card required. Your first receipt takes under a minute."
-          : "Sign in to upload receipts and see your history."}
-      </p>
-      {notice ? <AuthNotice>{notice}</AuthNotice> : null}
+      <AuthHeading title={isSignUp ? "Create your account" : "Sign in to receiptOCR"}>
+        {isSignUp && freeReceiptsPerDay !== undefined
+          ? `Free plan: ${freeReceiptsPerDay} receipts a day. No card required.`
+          : undefined}
+      </AuthHeading>
+      {notice ? (
+        <AuthNotice className="mt-5" kind={notice.kind}>
+          {notice.message}
+        </AuthNotice>
+      ) : null}
+      {callbackError ? <AuthError className="mt-5">{callbackError}</AuthError> : null}
 
       {providers.length > 0 ? (
         <>
@@ -131,7 +204,7 @@ export function CredentialsForm({
               return (
                 <Button
                   className="h-11 w-full"
-                  disabled={pending !== null}
+                  disabled={busy}
                   key={provider}
                   onClick={() => handleSocial(provider)}
                   type="button"
@@ -142,16 +215,12 @@ export function CredentialsForm({
                   ) : (
                     <Icon />
                   )}
-                  {providerLabels[provider]}
+                  Continue with {providerNames[provider]}
                 </Button>
               );
             })}
           </div>
-          <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            or use your email
-            <span className="h-px flex-1 bg-border" />
-          </div>
+          <AuthDivider>or with email</AuthDivider>
         </>
       ) : (
         <div className="mt-6" />
@@ -163,70 +232,90 @@ export function CredentialsForm({
             autoComplete="name"
             id="auth-name"
             label="Name"
+            maxLength={100}
             onChange={(event) => setName(event.target.value)}
             required
             value={name}
           />
         ) : null}
-        <AuthField
-          autoComplete="email"
+        <EmailField
           id="auth-email"
           label="Email"
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="you@example.com"
+          placeholder="name@example.com"
           required
-          type="email"
           value={email}
         />
-        <AuthField
-          aside={
-            isSignUp ? null : (
-              <Link
-                className={cn(
-                  authLinkClass,
-                  "-my-3 inline-flex min-h-11 items-center text-xs text-muted-foreground hover:text-foreground",
-                )}
-                href="/forgot-password"
-              >
-                Forgot your password?
-              </Link>
-            )
-          }
+        <PasswordField
           autoComplete={isSignUp ? "new-password" : "current-password"}
-          hint={isSignUp ? "At least 8 characters." : undefined}
           id="auth-password"
           label="Password"
+          maxLength={128}
           minLength={isSignUp ? 8 : undefined}
           onChange={(event) => setPassword(event.target.value)}
           required
-          type="password"
           value={password}
         />
-        {error ? <AuthError>{error}</AuthError> : null}
-        <Button className="mt-1 h-11 w-full" disabled={pending !== null} type="submit">
+        {error ? (
+          <AuthError>
+            {error.signInInstead ? (
+              <>
+                An account with this email already exists.{" "}
+                <Link className={cn(authLinkClass, "text-destructive underline")} href={switchHref}>
+                  Sign in instead
+                </Link>
+              </>
+            ) : (
+              error.message
+            )}
+          </AuthError>
+        ) : null}
+        <Button className="mt-1 h-11 w-full" disabled={busy} type="submit">
           {pending === "credentials" ? (
-            <Loader2 aria-hidden className="size-4 animate-spin" />
-          ) : null}
-          {isSignUp ? "Create account" : "Sign in"}
+            <>
+              <Loader2 aria-hidden className="size-4 animate-spin" />
+              {isSignUp ? "Creating account…" : "Signing in…"}
+            </>
+          ) : isSignUp ? (
+            "Create account"
+          ) : (
+            "Sign in"
+          )}
         </Button>
+        {isSignUp ? null : (
+          <Link
+            className={cn(
+              authLinkClass,
+              "-mt-2 inline-flex min-h-11 items-center justify-center self-center font-normal text-muted-foreground hover:text-foreground",
+            )}
+            href="/forgot-password"
+          >
+            Forgot your password?
+          </Link>
+        )}
+        {isSignUp ? (
+          <p className="text-center text-xs leading-5 text-muted-foreground">
+            By creating an account you agree to the{" "}
+            <Link className={cn(authLinkClass, "font-normal text-foreground")} href="/terms">
+              Terms
+            </Link>{" "}
+            and the{" "}
+            <Link className={cn(authLinkClass, "font-normal text-foreground")} href="/privacy">
+              Privacy Policy
+            </Link>
+            .
+          </p>
+        ) : null}
       </form>
 
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        {isSignUp ? (
-          <>
-            Already have an account?{" "}
-            <Link className={authLinkClass} href={`/sign-in${redirectQuery}`}>
-              Sign in
-            </Link>
-          </>
-        ) : (
-          <>
-            New to receiptOCR?{" "}
-            <Link className={authLinkClass} href={`/sign-up${redirectQuery}`}>
-              Create an account
-            </Link>
-          </>
-        )}
+      <p className="mt-6 border-t border-border pt-5 text-center text-sm text-muted-foreground">
+        {isSignUp ? "Already have an account?" : "New to receiptOCR?"}{" "}
+        <Link
+          className={cn(authLinkClass, "inline-flex min-h-11 min-w-11 items-center justify-center")}
+          href={switchHref}
+        >
+          {isSignUp ? "Sign in" : "Create an account"}
+        </Link>
       </p>
     </div>
   );

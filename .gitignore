@@ -22,4 +22,3 @@ test-results/
 /bench/results/*
 !/bench/results/.gitkeep
 !/bench/results/*.md
-apps/web/AGENTS.md
