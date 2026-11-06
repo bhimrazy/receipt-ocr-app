@@ -61,7 +61,9 @@ export function CheckEmail({
               onClick={resend}
               variant="outline"
             >
-              {sending ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
+              {sending ? (
+                <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
+              ) : null}
               {cooldown > 0 ? (
                 <span>
                   Send the link again in <span className="font-mono tabular-nums">{cooldown}s</span>

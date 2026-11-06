@@ -87,7 +87,9 @@ export function InviteForm({ organizationId }: { organizationId: string }) {
             <RoleSelect id="invite-role" onChange={setRole} value={role} />
           </Field>
           <Button disabled={inviting} type="submit">
-            {inviting ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+            {inviting ? (
+              <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+            ) : null}
             Send invite
           </Button>
         </form>
