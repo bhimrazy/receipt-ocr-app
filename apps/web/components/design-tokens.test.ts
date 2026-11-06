@@ -25,9 +25,9 @@ const RULES: { name: string; pattern: RegExp }[] = [
 // Not checked: lab directions (deleted once one is picked) and Satori images (no CSS variables).
 const EXCLUDED = [/^app\/\(lab\)\//, /^components\/marketing\//, /opengraph-image\.tsx$/];
 
-// Existing literals in files other open PRs own (auth flow, admin panel). Remove an entry once
-// that file uses tokens; new files are always checked.
-const PENDING = new Set(["app/admin/layout.tsx", "app/admin/admin-nav.tsx"]);
+// Existing literals in files other open PRs own. Remove an entry once that file uses tokens;
+// new files are always checked.
+const PENDING = new Set<string>([]);
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(path.join(webRoot, dir), { withFileTypes: true, recursive: true })

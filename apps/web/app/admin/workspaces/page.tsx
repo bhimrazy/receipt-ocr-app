@@ -86,7 +86,7 @@ export default async function AdminWorkspacesPage({
           <li>{empty}</li>
         ) : (
           rows.map((row) => (
-            <li className="relative px-4 py-3.5 hover:bg-foreground/[0.03]" key={row.id}>
+            <li className="relative px-4 py-3.5 hover:bg-wash-subtle" key={row.id}>
               <Link
                 className={`${linkClass} block truncate text-sm`}
                 href={`/admin/workspaces/${row.id}`}
@@ -122,7 +122,7 @@ export default async function AdminWorkspacesPage({
               </TableRow>
             ) : (
               rows.map((row) => (
-                <TableRow className="relative hover:bg-foreground/[0.03]" key={row.id}>
+                <TableRow className="relative hover:bg-wash-subtle" key={row.id}>
                   <TableCell className="max-w-0 w-1/2">
                     <Link
                       className={`${linkClass} block truncate`}
