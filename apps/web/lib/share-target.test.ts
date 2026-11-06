@@ -8,6 +8,9 @@ import {
   SHARED_CACHE,
   SHARED_NAME_HEADER,
   SHARED_TTL_MS,
+  SHARED_TYPE_HEADER,
+  clearSharedFiles,
+  fileName,
   takeSharedFiles,
 } from "./share-target";
 
@@ -36,7 +39,7 @@ function fakeCaches() {
 function shared(body: string, name: string, type: string, sharedAt: number) {
   return new Response(body, {
     headers: {
-      "content-type": type,
+      [SHARED_TYPE_HEADER]: type,
       [SHARED_NAME_HEADER]: encodeURIComponent(name),
       [SHARED_AT_HEADER]: String(sharedAt),
     },
@@ -64,6 +67,15 @@ describe("takeSharedFiles", () => {
     expect(await takeSharedFiles(now + 2000)).toEqual([]);
   });
 
+  it("keeps an empty type empty, so the upload panel goes by the extension", async () => {
+    const fake = fakeCaches();
+    vi.stubGlobal("caches", fake.api);
+    const cache = await fake.api.open(SHARED_CACHE);
+    await cache.put("/share-target/file/0", shared("img", "scan.heic", "", 5));
+    const [file] = await takeSharedFiles(10);
+    expect([file!.name, file!.type]).toEqual(["scan.heic", ""]);
+  });
+
   it("drops shares older than ten minutes but still deletes them", async () => {
     const fake = fakeCaches();
     vi.stubGlobal("caches", fake.api);
@@ -82,6 +94,31 @@ describe("takeSharedFiles", () => {
   });
 });
 
+describe("fileName", () => {
+  it("decodes the shared name", () => {
+    expect(fileName(encodeURIComponent("Café 1.jpg"), "image/jpeg")).toBe("Café 1.jpg");
+  });
+
+  it("falls back to shared-receipt with an extension from the type, or none", () => {
+    expect(fileName(null, "image/jpeg")).toBe("shared-receipt.jpg");
+    expect(fileName("", "application/pdf")).toBe("shared-receipt.pdf");
+    expect(fileName("%E0%A4%A", "image/png")).toBe("shared-receipt.png");
+    expect(fileName(null, "")).toBe("shared-receipt");
+    expect(fileName(null, "image/x-unknown")).toBe("shared-receipt");
+  });
+});
+
+describe("clearSharedFiles", () => {
+  it("deletes the share cache, and is a no-op without Cache Storage", async () => {
+    await expect(clearSharedFiles()).resolves.toBeUndefined();
+    const fake = fakeCaches();
+    vi.stubGlobal("caches", fake.api);
+    await fake.api.open(SHARED_CACHE);
+    await clearSharedFiles();
+    expect(fake.stores.has(SHARED_CACHE)).toBe(false);
+  });
+});
+
 describe("public/sw.js", () => {
   const sw = readFileSync(path.join(import.meta.dirname, "../public/sw.js"), "utf8");
 
@@ -91,6 +128,7 @@ describe("public/sw.js", () => {
       SHARE_TARGET_FIELD,
       SHARED_CACHE,
       SHARED_NAME_HEADER,
+      SHARED_TYPE_HEADER,
       SHARED_AT_HEADER,
     })) {
       expect(sw).toContain(`const ${name} = "${value}";`);
@@ -101,6 +139,28 @@ describe("public/sw.js", () => {
     // Guards the privacy rule: any new respondWith or cache.put needs a deliberate test change.
     expect(sw.match(/respondWith\(/g)).toHaveLength(3);
     expect(sw.match(/cache\.put\(/g)).toHaveLength(1);
-    expect(sw).toContain('const PRECACHE = [OFFLINE_URL, "/icon.svg", "/icons/icon-192.png"];');
+    expect(sw).toContain(
+      'const PRECACHE = [OFFLINE_URL, "/offline.js", "/icon.svg", "/icons/icon-192.png"];',
+    );
+  });
+
+  it("drops shares posted from another site and files that aren't images or PDFs", () => {
+    expect(sw).toContain("new URL(request.referrer).origin !== self.location.origin");
+    expect(sw).toContain('type === "" || type.startsWith("image/") || type === "application/pdf"');
+    expect(sw).toContain("const MAX_SHARED_BYTES = 25 * 1024 * 1024;");
+    expect(sw).toContain(`const SHARED_TTL_MS = ${SHARED_TTL_MS / 60_000} * 60 * 1000;`);
+  });
+});
+
+describe("public/sw-killswitch.js", () => {
+  const killswitch = readFileSync(
+    path.join(import.meta.dirname, "../public/sw-killswitch.js"),
+    "utf8",
+  );
+
+  it("activates at once, deletes every receiptocr cache and unregisters", () => {
+    expect(killswitch).toContain("self.skipWaiting()");
+    expect(killswitch).toContain('name.startsWith("receiptocr-")');
+    expect(killswitch).toContain("self.registration.unregister()");
   });
 });

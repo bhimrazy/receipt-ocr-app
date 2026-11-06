@@ -7,6 +7,8 @@ export const SHARE_TARGET_PATH = "/share-target";
 export const SHARE_TARGET_FIELD = "receipts";
 export const SHARED_CACHE = "receiptocr-shared";
 export const SHARED_NAME_HEADER = "x-shared-name";
+/** The file's own type, which may be empty; the upload panel then goes by the extension. */
+export const SHARED_TYPE_HEADER = "x-shared-type";
 export const SHARED_AT_HEADER = "x-shared-at";
 /** Long enough to sign in first; after that a forgotten share is dropped, not uploaded. */
 export const SHARED_TTL_MS = 10 * 60 * 1000;
@@ -26,12 +28,9 @@ export async function takeSharedFiles(now = Date.now()): Promise<File[]> {
       const response = await cache.match(request);
       const sharedAt = Number(response?.headers.get(SHARED_AT_HEADER));
       if (!response || !(now - sharedAt <= SHARED_TTL_MS)) continue;
-      const blob = await response.blob();
-      files.push(
-        new File([blob], fileName(response.headers.get(SHARED_NAME_HEADER)), {
-          type: blob.type,
-        }),
-      );
+      const type = response.headers.get(SHARED_TYPE_HEADER) ?? "";
+      const name = fileName(response.headers.get(SHARED_NAME_HEADER), type);
+      files.push(new File([await response.arrayBuffer()], name, { type }));
     }
     await caches.delete(SHARED_CACHE);
     return files;
@@ -40,10 +39,27 @@ export async function takeSharedFiles(now = Date.now()): Promise<File[]> {
   }
 }
 
-function fileName(encoded: string | null): string {
+const EXTENSIONS: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "image/heic": ".heic",
+  "image/heif": ".heif",
+  "application/pdf": ".pdf",
+};
+
+/** The shared name, or "shared-receipt" with an extension guessed from the type (or none). */
+export function fileName(encoded: string | null, type: string): string {
   try {
-    return encoded ? decodeURIComponent(encoded) : "shared receipt";
+    if (encoded) return decodeURIComponent(encoded);
   } catch {
-    return "shared receipt";
+    // Malformed: fall through to the default.
   }
+  return `shared-receipt${EXTENSIONS[type.toLowerCase()] ?? ""}`;
+}
+
+/** Deletes any stored share; called on sign-out so the next account never sees it. */
+export async function clearSharedFiles(): Promise<void> {
+  if (typeof caches === "undefined") return;
+  await caches.delete(SHARED_CACHE).catch(() => false);
 }

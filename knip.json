@@ -10,5 +10,5 @@
       "ignoreDependencies": ["tailwindcss"]
     }
   },
-  "ignore": ["bench/load/*.js", "apps/web/public/sw.js"]
+  "ignore": ["bench/load/*.js", "apps/web/public/*.js"]
 }

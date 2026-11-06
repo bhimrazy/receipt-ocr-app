@@ -26,9 +26,9 @@ async function controlledBySw(page: Page) {
 }
 
 /** What the Android share sheet sends: a multipart POST navigation to the manifest's action. */
-async function shareFile(page: Page, name: string) {
+async function shareFile(page: Page, name: string, type = "image/png") {
   await page.evaluate(
-    ({ bytes, name }) => {
+    ({ bytes, name, type }) => {
       const form = Object.assign(document.createElement("form"), {
         method: "post",
         action: "/share-target",
@@ -39,17 +39,28 @@ async function shareFile(page: Page, name: string) {
         name: "receipts",
       });
       const transfer = new DataTransfer();
-      transfer.items.add(new File([new Uint8Array(bytes)], name, { type: "image/png" }));
+      transfer.items.add(new File([new Uint8Array(bytes)], name, { type }));
       input.files = transfer.files;
       form.append(input);
       document.body.append(form);
       form.submit();
     },
-    { bytes: [...RECEIPT], name },
+    { bytes: [...RECEIPT], name, type },
   );
 }
 
 const queued = (page: Page) => page.getByRole("list", { name: "Receipts to read" });
+const sharedNotice = (page: Page) => page.getByRole("status", { name: "Shared files" });
+
+/** Counts receipt uploads, to prove a share never uploads on its own. */
+function countUploads(page: Page) {
+  const uploads = { count: 0 };
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/receipts")
+      uploads.count += 1;
+  });
+  return uploads;
+}
 
 test("the manifest is installable and every icon resolves at its declared size", async ({
   page,
@@ -63,7 +74,7 @@ test("the manifest is installable and every icon resolves at its declared size",
     display: "standalone",
     theme_color: "#0a0a0b",
     background_color: "#0a0a0b",
-    shortcuts: [{ name: "Scan receipt", url: "/app/upload?capture=1" }],
+    shortcuts: [{ name: "Add receipt", url: "/app/upload?capture=1" }],
     share_target: { action: "/share-target", method: "POST", enctype: "multipart/form-data" },
   });
   expect(manifest.icons.some((icon: { purpose: string }) => icon.purpose === "maskable")).toBe(
@@ -130,7 +141,7 @@ test("the worker registers in the app, never stores API or page responses, and s
     }
     return urls.sort();
   });
-  expect(stored).toEqual(["/icon.svg", "/icons/icon-192.png", "/offline.html"]);
+  expect(stored).toEqual(["/icon.svg", "/icons/icon-192.png", "/offline.html", "/offline.js"]);
 
   await context.setOffline(true);
   await page.goto("/app/history").catch(() => null);
@@ -141,21 +152,74 @@ test("the worker registers in the app, never stores API or page responses, and s
   await expect(page.getByRole("heading", { level: 1, name: "History" })).toBeVisible();
 });
 
-test("a receipt shared to the app is queued on the upload page", async ({ page }) => {
+test("a shared receipt waits for Keep, then for Read, and is never uploaded on its own", async ({
+  page,
+}) => {
   await signUp(page, uniqueEmail("share"));
   await controlledBySw(page);
+  const uploads = countUploads(page);
 
-  await shareFile(page, "shared-receipt.png");
+  // No type, as some Android apps send: the extension decides, as for a picked file.
+  await shareFile(page, "shared-receipt.png", "");
   await expect(page).toHaveURL(/\/app(\/upload)?(\?|$)/);
-  await expect(queued(page)).toContainText("shared-receipt.");
+  await expect(sharedNotice(page)).toContainText("1 file shared from another app");
+  await expect(sharedNotice(page)).toContainText("shared-receipt.png");
+  await expect(sharedNotice(page)).toContainText("possibly before you signed in");
+  await expect(queued(page)).toHaveCount(0);
 
-  // Taken once: a reload doesn't queue it again.
+  await page.getByRole("button", { name: "Keep" }).click();
+  await expect(queued(page)).toContainText("shared-receipt.");
+  await expect(sharedNotice(page)).toHaveCount(0);
+  await page.waitForTimeout(500);
+  expect(uploads.count).toBe(0);
+
+  // Taken once: a reload shows neither the notice nor the file.
   await page.reload();
   await expect(page.getByRole("button", { name: "Add receipt photos or PDFs" })).toBeVisible();
+  await expect(sharedNotice(page)).toHaveCount(0);
   await expect(queued(page)).toHaveCount(0);
 });
 
-test("a share made while signed out waits for sign-in", async ({ page }) => {
+test("Discard drops a shared receipt without queueing it", async ({ page }) => {
+  await signUp(page, uniqueEmail("discard"));
+  await controlledBySw(page);
+  await shareFile(page, "unwanted.png");
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(sharedNotice(page)).toHaveCount(0);
+  await expect(queued(page)).toHaveCount(0);
+});
+
+test("a share posted by another site is dropped by the worker", async ({ page }) => {
+  await signUp(page, uniqueEmail("xsite"));
+  await controlledBySw(page);
+  const appOrigin = new URL(page.url()).origin;
+  const uploads = countUploads(page);
+
+  await page.route("http://attacker.test/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<form method="post" action="${appOrigin}/share-target" enctype="multipart/form-data">
+        <input type="file" name="receipts"></form>
+        <script>
+          const t = new DataTransfer();
+          t.items.add(new File(["x"], "planted.png", { type: "image/png" }));
+          const f = document.forms[0];
+          f.receipts.files = t.files;
+          f.submit();
+        </script>`,
+    }),
+  );
+  await page.goto("http://attacker.test/");
+  await expect(page).toHaveURL(new RegExp(`^${appOrigin}/app`));
+  await expect(page.getByRole("button", { name: "Add receipt photos or PDFs" })).toBeVisible();
+  await expect(sharedNotice(page)).toHaveCount(0);
+  expect(await page.evaluate(() => caches.has("receiptocr-shared"))).toBe(false);
+  expect(uploads.count).toBe(0);
+});
+
+test("a share made while signed out waits for sign-in, and sign-out clears a waiting share", async ({
+  page,
+}) => {
   const email = uniqueEmail("share-out");
   await signUp(page, email);
   await controlledBySw(page);
@@ -166,5 +230,29 @@ test("a share made while signed out waits for sign-in", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(sharedNotice(page)).toContainText("after-sign-in.png");
+  await page.getByRole("button", { name: "Keep" }).click();
   await expect(queued(page)).toContainText("after-sign-in.");
+
+  // A share nobody picked up must not survive into the next account.
+  await page.evaluate(async () => {
+    const cache = await caches.open("receiptocr-shared");
+    await cache.put(
+      "/share-target/file/0",
+      new Response("x", { headers: { "x-shared-at": String(Date.now()) } }),
+    );
+  });
+  await signOut(page);
+  expect(await page.evaluate(() => caches.has("receiptocr-shared"))).toBe(false);
+});
+
+test("the upload page explains a share that didn't come through", async ({ page }) => {
+  await signUp(page, uniqueEmail("share-failed"));
+  await page.goto("/app?shared=unavailable");
+  await expect(
+    page.getByText("Sharing to receiptOCR isn't ready on this device yet"),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.goto("/app?shared=failed");
+  await expect(page.getByText("The shared files didn't come through")).toBeVisible();
 });

@@ -90,10 +90,9 @@
         receiptOCR needs an internet connection to read and show your receipts. Check your
         connection, then try again.
       </p>
-      <button type="button" onclick="location.reload()">Try again</button>
+      <button id="retry" type="button">Try again</button>
     </main>
-    <script>
-      window.addEventListener("online", () => location.reload());
-    </script>
+    <!-- A file, not inline, so it still runs once the CSP is enforced with nonces. -->
+    <script src="/offline.js"></script>
   </body>
 </html>
