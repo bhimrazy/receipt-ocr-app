@@ -1,4 +1,4 @@
-import { ocrModel, type ModelId, type OcrProviderId } from "@receipt-ocr/ai";
+import { OCR_MODELS, ocrModel, type ModelId, type OcrProviderId } from "@receipt-ocr/ai";
 import { appSettings, eq, type DbClient } from "@receipt-ocr/db";
 import { Config, Context, Effect, Layer, Option } from "effect";
 import { z } from "zod";
@@ -60,6 +60,11 @@ export type SettingsSnapshot = {
   saved: Partial<Record<SettingKey, { updatedAt: Date; updatedBy: string | null }>>;
 };
 
+/** The first allowlisted Gemini model: the fallback when GEMINI_MODEL isn't on the list. */
+const DEFAULT_GOOGLE_MODEL = OCR_MODELS.find((m) => m.provider === "google")!.id.slice(
+  "google:".length,
+);
+
 const nonEmpty = (name: string) =>
   Config.option(Config.string(name)).pipe(
     Config.map((value) => Option.isSome(value) && value.value.trim() !== ""),
@@ -77,17 +82,21 @@ export const providerAvailability: Effect.Effect<Record<OcrProviderId, boolean>>
 /** The chain used until an admin saves one: whatever env configures, as before. */
 const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
   provider: Config.string("OCR_PROVIDER").pipe(Config.withDefault("google")),
-  model: Config.string("GEMINI_MODEL").pipe(Config.withDefault("gemini-3.7-flash")),
+  model: Config.string("GEMINI_MODEL").pipe(Config.withDefault(DEFAULT_GOOGLE_MODEL)),
 }).pipe(
-  Effect.orElseSucceed(() => ({ provider: "google", model: "gemini-3.7-flash" })),
-  Effect.map(({ provider, model }) => ({
-    chain: [
-      {
-        model: provider === "fixture" ? ("fixture" as const) : (`google:${model}` as const),
-        enabled: true,
-        timeoutMs: DEFAULT_STEP_TIMEOUT_MS,
-      },
-    ],
+  Effect.orElseSucceed(() => ({ provider: "google", model: DEFAULT_GOOGLE_MODEL })),
+  Effect.flatMap(({ provider, model }) => {
+    if (provider === "fixture") return Effect.succeed("fixture" as const);
+    const wanted = `google:${model}`;
+    if (ocrModel(wanted)) return Effect.succeed(wanted as ModelId);
+    // An unlisted model would leave the settings page with nothing that can run.
+    return Effect.logWarning("settings.unlisted_model", {
+      model: wanted,
+      using: `google:${DEFAULT_GOOGLE_MODEL}`,
+    }).pipe(Effect.as(`google:${DEFAULT_GOOGLE_MODEL}` as ModelId));
+  }),
+  Effect.map((model) => ({
+    chain: [{ model, enabled: true, timeoutMs: DEFAULT_STEP_TIMEOUT_MS }],
   })),
 );
 
