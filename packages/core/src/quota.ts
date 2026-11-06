@@ -111,7 +111,7 @@ export function quotaMessage(verdict: QuotaVerdict): string {
     case "global":
       return "Receipt reading is at capacity for today. Try again after 00:00 UTC.";
     default:
-      return `You've used all ${verdict.limit} receipts for today. You can upload again after 00:00 UTC.`;
+      return `You've used all ${verdict.limit} ${verdict.limit === 1 ? "receipt" : "receipts"} for today. You can upload again after 00:00 UTC.`;
   }
 }
 

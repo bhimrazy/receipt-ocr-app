@@ -11,6 +11,13 @@ describe("authErrorMessage", () => {
     );
   });
 
+  it("explains captcha failures by code", () => {
+    expect(authErrorMessage({ code: "MISSING_RESPONSE", status: 400 })).toMatch(/security check/);
+    expect(authErrorMessage({ code: "VERIFICATION_FAILED", status: 403 })).toMatch(
+      /security check failed/,
+    );
+  });
+
   it("explains rate limits whatever the code", () => {
     expect(authErrorMessage({ status: 429, message: "Too many requests." })).toBe(
       "Too many attempts. Wait 1 minute and try again.",

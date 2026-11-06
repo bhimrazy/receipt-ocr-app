@@ -34,3 +34,5 @@ k6 run -e BASE_URL=http://localhost:3004 bench/upload.k6.js
 Ramps 0 to 20 virtual users posting a ~80 KB receipt to `POST /api/receipts`. Thresholds: under 1% failed requests,
 p95 under 3 s. While it runs, watch Postgres connections to validate the pool size:
 `select count(*) from pg_stat_activity where datname = current_database();`
+
+How the benchmark and tooling fit the rest of the repo: [docs/architecture/tooling.md](../docs/architecture/tooling.md).
