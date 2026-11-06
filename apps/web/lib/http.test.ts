@@ -5,7 +5,10 @@ const ipAddress = vi.hoisted(
 );
 vi.mock("server-only", () => ({}));
 vi.mock("./runtime", () => ({ runtime: {} }));
-vi.mock("./log", () => ({ logger: { error: vi.fn(), info: vi.fn() } }));
+vi.mock("./log", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./log")>()),
+  logger: { error: vi.fn(), info: vi.fn() },
+}));
 vi.mock("./env", () => ({ authEnv: { betterAuthUrl: "https://app.example", ipAddress } }));
 
 const { causeDetail, clientIp, crossOriginResponse } = await import("./http");

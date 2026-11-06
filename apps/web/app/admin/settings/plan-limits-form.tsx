@@ -151,7 +151,9 @@ export function PlanLimitsForm({ current, defaults }: { current: PlanTable; defa
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button disabled={!dirty || pending} type="submit">
-          {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+          {pending ? (
+            <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+          ) : null}
           Save limits
         </Button>
         {dirty ? (

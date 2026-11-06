@@ -1,4 +1,5 @@
 import { AppSidebarNav, AppTabBar } from "@/components/app-nav";
+import { SkipLink } from "@/components/skip-link";
 import { Brand } from "@/components/brand";
 import { NoWorkspace } from "@/components/no-workspace";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
@@ -9,7 +10,7 @@ import { logger } from "@/lib/log";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
 import { getActiveScope, isAdmin, requireSession } from "@/lib/session";
-import { getWorkspaceAllowance } from "@/lib/workspaces";
+import { getWorkspaceAllowance, listWorkspaces } from "@/lib/workspaces";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -32,9 +33,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Every /app page needs a real session; with auth unconfigured this sends everyone to /sign-in.
   const session = await requireSession();
   // Redirecting to /sign-in here would loop: signed-in visitors are sent back to /app.
-  if (!(await getActiveScope())) return <NoWorkspace email={session.user.email} />;
-  const [allowance, usage, { plan }] = await Promise.all([
+  // First, alone: it may create the personal workspace, which the reads below count.
+  const scope = await getActiveScope();
+  if (!scope) return <NoWorkspace email={session.user.email} />;
+  const [allowance, workspaces, usage, { plan }] = await Promise.all([
     getWorkspaceAllowance(),
+    listWorkspaces(),
     loadUsage(),
     getCurrentPlan(),
   ]);
@@ -45,12 +49,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     email: session.user.email,
     image: session.user.image ?? null,
   };
-  const switcher = <WorkspaceSwitcher canCreate={allowance.canCreate} />;
+  const switcher = (
+    <WorkspaceSwitcher
+      activeId={scope.organizationId}
+      canCreate={allowance.canCreate}
+      workspaces={workspaces}
+    />
+  );
 
   return (
     <Toaster>
+      <SkipLink />
       <div className="flex min-h-screen flex-col bg-background text-foreground">
-        <ImpersonationBanner />
+        {session.session.impersonatedBy ? <ImpersonationBanner email={session.user.email} /> : null}
         <div className="flex min-h-0 flex-1">
           <div className="hidden w-64 shrink-0 border-r border-border bg-sidebar md:block">
             <aside className="sticky top-0 flex h-screen flex-col gap-6 p-4">
@@ -81,7 +92,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <UserMenu showAdmin={showAdmin} user={user} />
               </div>
             </header>
-            <main className="min-w-0 flex-1 px-4 pt-6 pb-28 md:px-10 md:py-10">{children}</main>
+            <main
+              id="main-content"
+              tabIndex={-1}
+              className="min-w-0 flex-1 px-4 pt-6 pb-28 md:px-10 md:py-10"
+            >
+              {children}
+            </main>
           </div>
         </div>
         <AppTabBar showAdmin={showAdmin} />

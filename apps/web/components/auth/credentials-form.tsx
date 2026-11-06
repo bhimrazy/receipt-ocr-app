@@ -211,7 +211,10 @@ export function CredentialsForm({
                   variant="outline"
                 >
                   {pending === provider ? (
-                    <Loader2 aria-hidden className="size-4 animate-spin" />
+                    <Loader2
+                      aria-hidden
+                      className="size-4 animate-spin motion-reduce:animate-none"
+                    />
                   ) : (
                     <Icon />
                   )}
@@ -273,7 +276,7 @@ export function CredentialsForm({
         <Button className="mt-1 h-11 w-full" disabled={busy} type="submit">
           {pending === "credentials" ? (
             <>
-              <Loader2 aria-hidden className="size-4 animate-spin" />
+              <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
               {isSignUp ? "Creating account…" : "Signing in…"}
             </>
           ) : isSignUp ? (

@@ -3,7 +3,16 @@
  * `bun run --filter @receipt-ocr/web test:int` after `bun run db:migrate`,
  * with DATABASE_URL and BETTER_AUTH_SECRET set.
  */
-import { account, createDb, eq, organization, sql, user, verification } from "@receipt-ocr/db";
+import {
+  account,
+  createDb,
+  eq,
+  organization,
+  session,
+  sql,
+  user,
+  verification,
+} from "@receipt-ocr/db";
 import type { SendEmailInput } from "@receipt-ocr/email";
 import { APIError } from "better-auth/api";
 import { decryptOAuthToken, setTokenUtil } from "better-auth/oauth2";
@@ -38,7 +47,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       returnHeaders: true,
     });
     userId = signUp.response.user.id;
-    // Only the session token: the cookie cache would carry the plan from before the update below.
+    // Only the session token is needed; the cookie cache is off.
     cookie = signUp.headers
       .getSetCookie()
       .map((c) => c.split(";")[0])
@@ -137,5 +146,39 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       .where(eq(account.id, `${tag}-acct`));
     expect(await decryptOAuthToken(legacy!.accessToken!, context)).toBe("ya29.legacy-plaintext");
     expect(await decryptOAuthToken(legacy!.refreshToken!, context)).toBe("1//legacy-refresh");
+  });
+
+  it("GHSA-c85h: refuses padded owner roles on invite and role change", async () => {
+    // The reset above revoked earlier sessions; sign in with the new password.
+    const signIn = await auth.api.signInEmail({
+      body: { email, password: `${password}-2` },
+      returnHeaders: true,
+    });
+    cookie = signIn.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .filter((c) => c?.includes("session_token="))
+      .join("; ");
+    const headers = new Headers({ cookie });
+    const org = await auth.api.createOrganization({
+      headers,
+      body: { name: "Roles", slug: `${tag}-roles` },
+    });
+    const invite = (role: string) =>
+      auth.api.createInvitation({
+        headers,
+        body: { organizationId: org!.id, email: `${tag}-x@example.com`, role: role as "member" },
+      });
+    expect(await status(invite("admin, owner"))).toBe(400);
+    expect(await status(invite(" owner"))).toBe(400);
+    expect(await status(invite("member"))).toBe(200);
+  });
+
+  // Last: it deletes this user's sessions.
+  it("a revoked session stops working on auth endpoints at once (cookie cache off)", async () => {
+    await db.delete(session).where(eq(session.userId, userId));
+    const headers = new Headers({ cookie });
+    expect(await auth.api.getSession({ headers })).toBeNull();
+    expect(await status(auth.api.listOrganizations({ headers }))).toBe(401);
   });
 });

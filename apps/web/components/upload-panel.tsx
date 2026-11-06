@@ -482,7 +482,7 @@ export function UploadPanel({
               onClick={() => (single ? readOne(waiting[0]!) : readAll())}
             >
               {busy ? (
-                <Loader2 aria-hidden="true" className="animate-spin" />
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
               ) : (
                 <ScanText aria-hidden="true" />
               )}

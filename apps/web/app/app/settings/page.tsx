@@ -11,7 +11,7 @@ import { UsageMeter } from "@/components/usage-meter";
 import { authEnv } from "@/lib/env";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
-import { requireActiveScope } from "@/lib/session";
+import { requireActiveScope, requireSession } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
@@ -36,7 +36,7 @@ async function loadWorkspace(organizationId: string) {
 }
 
 export default async function SettingsPage() {
-  const scope = await requireActiveScope();
+  const [scope, session] = await Promise.all([requireActiveScope(), requireSession()]);
   const [{ plan, policy }, usage, workspace] = await Promise.all([
     getCurrentPlan(),
     getUsageSummary(),
@@ -102,7 +102,7 @@ export default async function SettingsPage() {
         </Card>
       </SettingsSection>
 
-      <AccountSettings />
+      <AccountSettings email={session.user.email} name={session.user.name ?? ""} />
     </div>
   );
 }

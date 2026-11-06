@@ -188,3 +188,9 @@ Steps specific to one release, newest first.
   `http.client_ip_unresolved`; it should never appear.
 - **After deploy:** the Free plan default drops to 20 receipts a day. Change it in **Admin → Settings** if you want
   something else.
+
+## Lab design pages
+
+The `(lab)` design directions (`/landing-a` to `/landing-h`, `/final-*`) return 404 in production builds. They are
+prerendered, so set `LAB_PAGES=1` for the build, not just the runtime, to show them. The variable is listed in
+`turbo.json` under `tasks.build.env`, so Turbo passes it through.

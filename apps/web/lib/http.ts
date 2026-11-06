@@ -4,7 +4,7 @@ import { getIP } from "better-auth/api";
 import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
 import { authEnv } from "./env";
-import { logger, type WideEvent } from "./log";
+import { logger, redactDbMessage, type WideEvent } from "./log";
 import { runtime } from "./runtime";
 
 const STATUS: Record<AppError["_tag"], number> = {
@@ -33,7 +33,7 @@ export function causeDetail(error: { cause?: unknown }): string | undefined {
   const inner = error.cause;
   if (!inner) return undefined;
   const detail = inner instanceof Error ? `${inner.name}: ${inner.message}` : String(inner);
-  return detail.replace(/\s*params:[\s\S]*$/, " params: [redacted]").slice(0, 500);
+  return redactDbMessage(detail);
 }
 
 /** Records a failure on the wide event and returns its HTTP response. */

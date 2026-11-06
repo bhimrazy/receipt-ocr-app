@@ -118,7 +118,9 @@ export function ReasonDialog({
               type="submit"
               variant={destructive ? "destructive" : "default"}
             >
-              {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+              {pending ? (
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : null}
               {confirmLabel}
             </Button>
           </DialogFooter>

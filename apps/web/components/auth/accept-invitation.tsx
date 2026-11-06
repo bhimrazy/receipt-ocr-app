@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { authErrorMessage } from "@/lib/auth-errors";
-import { authClient } from "@/lib/auth-client";
+import { authClient, signOutAndClearHint } from "@/lib/auth-client";
 import { DEFAULT_REDIRECT } from "@/lib/redirect";
 import { AuthError, AuthMessage, AuthNotice, authCardClass } from "./auth-field";
 import { FocusHeading } from "./focus-heading";
@@ -99,7 +99,7 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
 
   async function switchAccount() {
     setAction("sign-out");
-    await authClient.signOut();
+    await signOutAndClearHint();
     router.replace(`/sign-in?redirect=${encodeURIComponent(returnPath)}`);
     router.refresh();
   }
@@ -122,7 +122,7 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
       <div className={authCardClass}>
         <h1 className="text-2xl font-semibold tracking-tight">Workspace invitation</h1>
         <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground" role="status">
-          <Loader2 aria-hidden className="size-4 animate-spin" />
+          <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
           {signedIn ? "Loading your invitation…" : "Checking your sign-in…"}
         </p>
       </div>
@@ -140,7 +140,7 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
             <>
               <Button className="h-11 w-full" disabled={busy} onClick={switchAccount}>
                 {action === "sign-out" ? (
-                  <Loader2 aria-hidden className="size-4 animate-spin" />
+                  <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
                 ) : null}
                 Sign out and switch account
               </Button>
@@ -171,7 +171,7 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
             verificationSent ? undefined : (
               <Button className="h-11 w-full" disabled={busy} onClick={sendVerification}>
                 {action === "verify" ? (
-                  <Loader2 aria-hidden className="size-4 animate-spin" />
+                  <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
                 ) : null}
                 Send confirmation link
               </Button>
@@ -234,14 +234,16 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
           <>
             <Button className="h-11 w-full" disabled={busy} onClick={handleAccept}>
               {action === "accept" ? (
-                <Loader2 aria-hidden className="size-4 animate-spin" />
+                <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
               ) : (
                 <Check aria-hidden className="size-4" />
               )}
               Join {invitation.organizationName}
             </Button>
             <Button className="h-11 w-full" disabled={busy} onClick={handleReject} variant="ghost">
-              {action === "reject" ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
+              {action === "reject" ? (
+                <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
+              ) : null}
               Decline invitation
             </Button>
           </>
