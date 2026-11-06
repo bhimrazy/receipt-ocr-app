@@ -20,7 +20,7 @@ export default function PrivacyPage() {
           heading: "What we collect",
           body: [
             "Account details: your name, email address and password (stored only as a hash). If you sign in with Google or GitHub, we receive your name, email address and profile picture from that provider.",
-            "Receipts: the images you upload and the data we extract from them, such as merchant, date, line items, tax, total, category and a confidence score, plus any corrections you make.",
+            "Receipts: the photos and PDFs you upload and the data we extract from them, such as merchant, date, line items, tax, total, category and a confidence score, plus any corrections you make.",
             "Workspace details: the workspaces you create or join, their members and the invitations you send.",
             "Messages: if you write to us through the support button, your email address and your message.",
             "Technical data: a session cookie that keeps you signed in, and server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors.",
@@ -38,8 +38,8 @@ export default function PrivacyPage() {
         {
           heading: "Who processes your data",
           body: [
-            "Google (Gemini API): every receipt image you upload is sent to Google's Gemini AI model, which reads it and returns the extracted data. Google processes the image under its terms for the Gemini API.",
-            "Hosting, database and file storage providers store your account details, receipt data and images on our behalf.",
+            "Google (Gemini API): every receipt file you upload is sent to Google's Gemini AI model, which reads it and returns the extracted data. Google processes the file under its terms for the Gemini API.",
+            "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
             "An email delivery provider sends account emails such as password resets and invitations.",
             "Google and GitHub, only if you choose to sign in with them.",
             "Only you and the people you invite to your workspace can see its receipts. receiptOCR administrators can access an account only to handle a support request.",
@@ -49,7 +49,7 @@ export default function PrivacyPage() {
           heading: "How long we keep it",
           body: [
             "We keep your account and receipts until you delete them.",
-            "Deleting a receipt removes it, its extracted data and its original image file. Deleting your account from Settings removes your account, the receipts you uploaded and their image files.",
+            "Deleting a receipt removes it, its extracted data and its original file. Deleting your account from Settings removes your account, the receipts you uploaded and their files.",
           ],
         },
         {

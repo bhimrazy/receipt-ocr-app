@@ -67,7 +67,7 @@ const stats: Array<[string, string]> = [
 const steps = [
   {
     title: "Upload a receipt",
-    desc: "Snap a photo or drop in an image. Uploads are handled server-side, so storage keys never touch the browser.",
+    desc: "Snap a photo or drop in a photo or PDF. Uploads are handled server-side, so storage keys never touch the browser.",
   },
   {
     title: "Get structured data",
@@ -104,8 +104,8 @@ const useCases = [
 
 const faqs = [
   {
-    q: "What image formats can I upload?",
-    a: "PNG, JPG, and HEIC images up to 10MB. Snap a photo on your phone or drop in a scan — both work.",
+    q: "What file formats can I upload?",
+    a: "JPEG, PNG, WebP, HEIC or PDF. Phone photos are shrunk in your browser before upload; PDFs up to 4 MB.",
   },
   {
     q: "How accurate is the extraction?",

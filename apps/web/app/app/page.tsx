@@ -33,8 +33,8 @@ const RECENT = 6;
 const STEPS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: Upload,
-    title: "Add photos",
-    body: "Take a photo with your phone, or drop image files here. Up to 20 at a time.",
+    title: "Add receipts",
+    body: "Take a photo with your phone, or drop photos or PDFs here. Up to 20 at a time.",
   },
   {
     icon: ScanText,
