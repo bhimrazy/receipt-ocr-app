@@ -108,12 +108,13 @@ export function AuthNotConfiguredCard() {
       <h1 className="text-2xl font-semibold tracking-tight">Sign-in isn&apos;t set up</h1>
       <p className="mt-3 text-sm leading-6 text-muted-foreground">
         Add <code className="font-mono text-foreground">DATABASE_URL</code> and{" "}
-        <code className="font-mono text-foreground">BETTER_AUTH_SECRET</code> to{" "}
+        <code className="font-mono text-foreground">BETTER_AUTH_SECRET</code> (or{" "}
+        <code className="font-mono text-foreground">BETTER_AUTH_SECRETS</code>) to{" "}
         <code className="font-mono text-foreground">apps/web/.env.local</code> to turn on email and
         social sign-in.
       </p>
-      <Link className={cn(buttonVariants(), "mt-6 h-11")} href="/app/upload">
-        Preview the app
+      <Link className={cn(buttonVariants(), "mt-6 h-11")} href="/">
+        Back to home
       </Link>
     </div>
   );
