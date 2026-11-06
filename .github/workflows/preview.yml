@@ -1,8 +1,8 @@
 name: Vercel Preview Deployment
 
 on:
+  # Every PR, including stacked ones whose base isn't main.
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions: {}
@@ -38,7 +38,7 @@ jobs:
       - name: Pull Vercel environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+        run: vercel pull --yes --environment=preview
 
       # No token for the build step: it runs repository code, which only needs the pulled settings.
       - name: Build project
@@ -49,7 +49,8 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          # One archive upload instead of one request per build file (free plan: 5000 uploads/day).
+          url=$(vercel deploy --prebuilt --archive=tgz)
           echo "preview_url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Find existing preview comment

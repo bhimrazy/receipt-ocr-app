@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+import { canonicalFor } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
   description:
     "What receiptOCR collects, who processes it, including Google's Gemini AI, and how to delete it.",
-  alternates: { canonical: "/privacy" },
+  alternates: canonicalFor("/privacy"),
 };
 
 export default function PrivacyPage() {
