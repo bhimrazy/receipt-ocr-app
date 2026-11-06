@@ -356,34 +356,24 @@ export function UploadPanel({
             </p>
           </div>
         </div>
-        {empty ? (
-          <div className="mt-6 flex w-full flex-col gap-2 md:hidden">
-            <Button
-              disabled={locked}
-              onClick={(event) => {
-                event.stopPropagation();
-                cameraRef.current?.click();
-              }}
-              type="button"
-            >
-              <Camera aria-hidden="true" />
-              Take a photo
-            </Button>
-            <Button
-              disabled={locked}
-              onClick={(event) => {
-                event.stopPropagation();
-                inputRef.current?.click();
-              }}
-              type="button"
-              variant="outline"
-            >
-              <ImageUp aria-hidden="true" />
-              Choose files
-            </Button>
-          </div>
-        ) : null}
       </Card>
+      {empty ? (
+        <div className="flex w-full flex-col gap-2 md:hidden">
+          <Button disabled={locked} onClick={() => cameraRef.current?.click()} type="button">
+            <Camera aria-hidden="true" />
+            Take a photo
+          </Button>
+          <Button
+            disabled={locked}
+            onClick={() => inputRef.current?.click()}
+            type="button"
+            variant="outline"
+          >
+            <ImageUp aria-hidden="true" />
+            Choose files
+          </Button>
+        </div>
+      ) : null}
 
       {notice ? (
         <Alert className="px-4 py-3" variant="warning">
@@ -479,7 +469,7 @@ export function UploadPanel({
               {busy
                 ? single
                   ? "Uploading and reading. This takes a few seconds."
-                  : "Uploading one at a time. Reading carries on if you leave this page."
+                  : "Uploading one at a time. Keep this page open until every file is uploaded; reading carries on after that."
                 : overLimit
                   ? `You have ${plural(remaining, "receipt")} left today, so only the first ${remaining} will be read.`
                   : usage
