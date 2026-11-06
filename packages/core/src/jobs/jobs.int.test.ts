@@ -8,7 +8,6 @@ import {
   and,
   eq,
   inArray,
-  ne,
   jobControls,
   jobs,
   ocrCalls,
@@ -38,9 +37,9 @@ import { Settings } from "../settings";
 import { ensurePersonalWorkspace } from "../workspace";
 import type { JobDefinition } from "./definition";
 import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
-import { TICK_SCOPE } from "./live";
+import { tickScope } from "./live";
 import { JobQueue } from "./queue";
-import { cancelJob, tick } from "./runner";
+import { cancelJob, resetTickMarks, tick } from "./runner";
 
 const enabled = process.env.INTEGRATION === "1";
 const tag = `jobs-${Date.now()}`;
@@ -133,12 +132,14 @@ const callsOf = (receiptId: string) =>
 
 type Scope = { userId: string; organizationId: string; role: string };
 
-/** When some process last ran a tick, as the orphan rule sees it. */
+const EXTRACT_TICK = tickScope("receipt.extract");
+
+/** When some process last ran a tick serving receipt.extract, as the orphan rule sees it. */
 const setLastTick = (msAgo: number) =>
   db((d) =>
     d
       .insert(jobControls)
-      .values({ scope: TICK_SCOPE, updatedAt: new Date(Date.now() - msAgo) })
+      .values({ scope: EXTRACT_TICK, updatedAt: new Date(Date.now() - msAgo) })
       .onConflictDoUpdate({
         target: jobControls.scope,
         set: { updatedAt: new Date(Date.now() - msAgo) },
@@ -224,7 +225,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   afterEach(async () => {
     script = [];
     calls = 0;
-    await db((d) => d.delete(jobControls).where(ne(jobControls.scope, TICK_SCOPE)));
+    await db((d) => d.delete(jobControls).where(sql`${jobControls.scope} not like 'tick:%'`));
     await setLastTick(0);
   });
 
@@ -267,11 +268,6 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     await drain([jobId]);
     expect((await receiptOf(receipt.id, a))?.status).toBe("completed");
     expect((await jobsOf(receipt.id))[0]).toMatchObject({ state: "succeeded", attempts: 1 });
-    // The tick recorded that the queue is being drained.
-    const [mark] = await db((d) =>
-      d.select().from(jobControls).where(eq(jobControls.scope, TICK_SCOPE)),
-    );
-    expect(Date.now() - mark!.updatedAt.getTime()).toBeLessThan(60_000);
   });
 
   it("concurrent workers never run a job twice", async () => {
@@ -890,6 +886,14 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     expect((await usage()).userDay).toBe(start + 1);
     // Not claimable, so a poll doesn't kick it.
     expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBeNull();
+    // Running jobs whose lease ran out don't hold the cap: then the poll may kick it.
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ lockedUntil: new Date(Date.now() - 1000) })
+        .where(and(eq(jobs.userId, c.userId), eq(jobs.kind, COUNT))),
+    );
+    expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBe(jobId);
     // Nothing has drained the queue for six minutes: now it is orphaned.
     await setLastTick(SIX_MINUTES);
     expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
@@ -901,13 +905,14 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     await queue((q) => q.pause("queue", { reason: "test" }));
     const { receipt, jobId } = await upload(b);
     await age(receipt.id, jobId);
-    // Ticks keep running (and recording) while the queue is paused.
+    // Ticks keep running, and recording, while the queue is paused.
+    await setLastTick(SIX_MINUTES);
+    resetTickMarks();
     await run(
       tick({
         worker: `${tag}-w`,
         registry: receiptRegistry,
         budgetMs: 5_000,
-        ids: [jobId],
         waitForRetries: false,
       }),
     );
@@ -917,6 +922,54 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBe(jobId);
     await drain([jobId]);
     expect((await receiptOf(receipt.id, b))?.status).toBe("completed");
+  });
+
+  it("only an unfiltered tick proves a kind is drained: a request running its own job doesn't", async () => {
+    const c = await createUser("orphan");
+    const { receipt, jobId } = await upload(c);
+    await age(receipt.id, jobId);
+    await setLastTick(SIX_MINUTES);
+    expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
+    // Another upload's first attempt, run in its request (filtered to its id).
+    resetTickMarks();
+    const other = await upload(c, new Uint8Array([...JPEG, 7]));
+    const ran = await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: receiptRegistry,
+        budgetMs: 5_000,
+        ids: [other.jobId],
+        waitForRetries: false,
+      }),
+    );
+    expect(ran.runs).toMatchObject([{ jobId: other.jobId, outcome: "succeeded" }]);
+    expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
+    // A real drain records the kind, and runs the orphan.
+    const drained = await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: receiptRegistry,
+        budgetMs: 5_000,
+        waitForRetries: false,
+      }),
+    );
+    expect(drained.runs.map((r) => r.jobId)).toContain(jobId);
+    const [mark] = await db((d) =>
+      d.select().from(jobControls).where(eq(jobControls.scope, EXTRACT_TICK)),
+    );
+    expect(Date.now() - mark!.updatedAt.getTime()).toBeLessThan(60_000);
+    expect((await receiptOf(receipt.id, c))?.status).toBe("completed");
+  });
+
+  it("a receipt job of a kind no tick serves ages out while other kinds are drained", async () => {
+    const c = await createUser("unserved");
+    const { receipt, jobId } = await upload(c);
+    await db((d) => d.update(jobs).set({ kind: "receipt.unserved" }).where(eq(jobs.id, jobId)));
+    await age(receipt.id, jobId);
+    // receipt.extract is being drained right now.
+    await setLastTick(0);
+    expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
+    await db((d) => d.delete(jobs).where(eq(jobs.id, jobId)));
   });
 
   it("one 429 cools the provider for every job, not just the one that hit it", async () => {

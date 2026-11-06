@@ -49,8 +49,10 @@ jobs until nothing is runnable or the budget says stop. Every runner calls it; n
 | `kickJob` in `after()` of `GET /api/receipts/:id` | A poll finds the receipt's job due, claimable and not running | That one job only, no waiting; returns at once if it can't claim it                        |
 
 Upload and retry drains also run anyone else's due jobs; the poll kick never does, so poll traffic can't become
-queue concurrency. Every tick records the time in `job_controls` (scope `tick`, at most every 30 s per process),
-which the orphan rule below reads. A worker app and a cron-triggered drain route come next (Track B of the
+queue concurrency. Every unfiltered tick (one that may claim any job of its kinds, such as a drain)
+records the time per kind it serves in `job_controls` (scope `tick:<kind>`, at most every 30 s per process per kind),
+which the orphan rule below reads. Ticks filtered to a few ids (`runJobNow`, the poll kick) record nothing: they
+don't drain anyone else's jobs. A worker app and a cron-triggered drain route come next (Track B of the
 plan); they call the same `tick`.
 
 ```mermaid
@@ -131,8 +133,8 @@ killed at its time limit. Two things cover that until a worker or cron drain exi
    claim anyway. A job nobody polls for waits for the next drain.
 2. A job stops counting as live (`liveReceiptJob` in [`live.ts`](../../../packages/core/src/jobs/live.ts), one SQL
    fragment for the stale rule, the quota rule and receipt lookups) only when it is really orphaned:
-   - queued, past its `run_at` by more than 5 minutes, **and** no tick has run anywhere for 5 minutes, so nothing is
-     draining the queue at all; or
+   - queued, past its `run_at` by more than 5 minutes, **and** no unfiltered tick serving its kind has run anywhere for
+     5 minutes, so nothing is draining that kind at all (a kind no handler serves ages out this way too); or
    - running with its lease expired more than 5 minutes ago.
 
    A job that is only waiting its turn (a backlog, its owner at the running cap, a pause) stays live, because ticks

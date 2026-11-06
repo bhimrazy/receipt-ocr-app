@@ -53,7 +53,7 @@ const noCalls = sql`not exists (select 1 from ocr_calls c where c.receipt_id = r
  * The round's own job is queued or running (waiting, or between automatic
  * retries): in flight whatever calls it has made, so neither a backlog nor a
  * failed first attempt makes room in the quota. Only an orphaned job (nothing
- * has drained the queue for 5 minutes, or its lease expired 5 minutes ago,
+ * has drained its kind for 5 minutes, or its lease expired 5 minutes ago,
  * see `liveReceiptJob`) stops counting; a job waiting behind a backlog, its
  * owner's cap or a pause keeps holding quota.
  */

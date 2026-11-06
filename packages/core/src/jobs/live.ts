@@ -3,16 +3,19 @@ import { sql } from "@receipt-ocr/db";
 /**
  * How long nothing may happen before a receipt job stops counting as live:
  * running with its lease expired this long (nothing reaped it), or queued
- * past its `run_at` this long while no tick has run anywhere for this long
- * (nothing is draining the queue at all). A job that is only waiting its turn
- * (a backlog, its owner at the running cap, a pause) stays live, because
- * ticks keep running. An orphaned job's receipt reads as failed and frees its
+ * past its `run_at` this long while no tick serving its kind has run anywhere
+ * for this long (nothing is draining that kind at all). A job that is only
+ * waiting its turn (a backlog, its owner at the running cap, a pause) stays
+ * live, because those ticks keep running. An orphaned job's receipt reads as failed and frees its
  * quota, and the user's retry cancels the job.
  */
 export const STALE_AFTER_MS = 5 * 60_000;
 
-/** `job_controls` row whose `updated_at` is the last time any process ran `tick`. */
-export const TICK_SCOPE = "tick";
+/**
+ * `job_controls` rows `tick:<kind>` whose `updated_at` is the last time any
+ * process ran an unfiltered tick serving that kind.
+ */
+export const tickScope = (kind: string) => `tick:${kind}`;
 
 const overdue = sql.raw(`interval '${STALE_AFTER_MS / 1000} seconds'`);
 
@@ -27,6 +30,6 @@ export const liveReceiptJob = (alias: string) => {
   return sql`(${j}.kind like 'receipt.%' and ${j}.state in ('queued', 'running')
     and ((${j}.state = 'queued' and (${j}.run_at >= now() - ${overdue}
         or exists (select 1 from job_controls t
-          where t.scope = ${TICK_SCOPE} and t.updated_at >= now() - ${overdue})))
+          where t.scope = 'tick:' || ${j}.kind and t.updated_at >= now() - ${overdue})))
       or (${j}.state = 'running' and ${j}.locked_until >= now() - ${overdue})))`;
 };

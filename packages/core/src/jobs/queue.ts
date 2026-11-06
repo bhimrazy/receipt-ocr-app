@@ -5,7 +5,7 @@ import type { DbError } from "../errors";
 import { Db } from "../services";
 import type { Queryable } from "../usage";
 import type { Job, JobErrorKind, JobState, NewJob } from "./definition";
-import { TICK_SCOPE } from "./live";
+import { tickScope } from "./live";
 
 /**
  * The Postgres job store. Every statement is a single plain query or a
@@ -197,8 +197,8 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
       receiptId: string,
       ownerCap?: number,
     ) => Effect.Effect<string | null, DbError>;
-    /** Records that a tick ran now: queued jobs stay live while anything drains the queue. */
-    readonly markTick: Effect.Effect<void, DbError>;
+    /** Records that a tick serving these kinds ran now: their queued jobs stay live while they are drained. */
+    readonly markTick: (kinds: readonly string[]) => Effect.Effect<void, DbError>;
   }
 >() {
   static readonly Live = Layer.effect(
@@ -374,15 +374,23 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
               and not exists (select 1 from job_controls c
                 where c.scope in ('queue', 'kind:' || j.kind) and ${inForce})
               and (j.user_id is null or (select count(*) from jobs o
-                where o.user_id = j.user_id and o.state = 'running' and o.id <> j.id) < ${ownerCap})
+                where o.user_id = j.user_id and o.state = 'running' and o.locked_until >= now()
+                  and o.id <> j.id) < ${ownerCap})
             limit 1`);
           return row?.id ?? null;
         }),
 
-      markTick: use((db) =>
-        db.execute(sql`insert into job_controls (scope) values (${TICK_SCOPE})
-          on conflict (scope) do update set updated_at = now()`),
-      ).pipe(Effect.asVoid),
+      markTick: (kinds) =>
+        kinds.length === 0
+          ? Effect.void
+          : use((db) =>
+              db.execute(sql`insert into job_controls (scope)
+                values ${sql.join(
+                  kinds.map((kind) => sql`(${tickScope(kind)})`),
+                  sql`, `,
+                )}
+                on conflict (scope) do update set updated_at = now()`),
+            ).pipe(Effect.asVoid),
     })),
   );
 }

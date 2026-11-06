@@ -3,9 +3,15 @@ import { backoffMs } from "./backoff";
 import type { AnyJobDefinition, Job, JobErrorKind, JobFailure, JobRegistry } from "./definition";
 import { DEFAULT_OWNER_CAP, JobQueue, type JobOutcome } from "./queue";
 
-/** How often one process records that it ticked; often enough for the 5-minute orphan rule, rare enough not to be a hot write. */
+/**
+ * How often one process records, per kind, that it ticked: often enough for
+ * the 5-minute orphan rule, rare enough not to be a hot write.
+ */
 const MARK_TICK_EVERY_MS = 30_000;
-let lastTickMark = Number.NEGATIVE_INFINITY;
+const lastTickMark = new Map<string, number>();
+
+/** Forgets this process's tick marks, so the next tick writes them (tests). */
+export const resetTickMarks = () => lastTickMark.clear();
 
 /** Longest idle sleep before looking for new work again. */
 const IDLE_POLL_MS = 5_000;
@@ -75,10 +81,15 @@ export const tick = <R>(options: TickOptions<R>) =>
       options.onRun?.(run);
     };
 
-    const beganAt = yield* Clock.currentTimeMillis;
-    if (beganAt - lastTickMark >= MARK_TICK_EVERY_MS) {
-      lastTickMark = beganAt;
-      yield* queue.markTick.pipe(Effect.ignore);
+    // Only a tick that can claim any job of a kind proves that kind is being
+    // drained; one filtered to a few ids (a request running its own job) doesn't.
+    if (!options.ids) {
+      const beganAt = yield* Clock.currentTimeMillis;
+      const due = kindNames.filter(
+        (kind) => beganAt - (lastTickMark.get(kind) ?? -Infinity) >= MARK_TICK_EVERY_MS,
+      );
+      for (const kind of due) lastTickMark.set(kind, beganAt);
+      yield* queue.markTick(due).pipe(Effect.ignore);
     }
     const reaped = yield* queue.reap().pipe(
       Effect.tapError((error) => Effect.logError("jobs.reap_failed", { error: error.message })),
