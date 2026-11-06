@@ -10,6 +10,7 @@ HTTP.
 - [Public API](#public-api)
 - [How a request reaches core](#how-a-request-reaches-core)
 - [Key modules](#key-modules)
+- [Installable app (PWA)](#installable-app-pwa)
 - [Design principles and invariants](#design-principles-and-invariants)
 - [How to test it](#how-to-test-it)
 - [Common changes](#common-changes)
@@ -38,17 +39,18 @@ HTTP.
 
 ### Route handlers
 
-| Method and path                | File                                                                                      | Does                                                                                         |
-| ------------------------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `GET, POST /api/auth/*`        | [`api/auth/[...all]/route.ts`](../../apps/web/app/api/auth/[...all]/route.ts)             | Better Auth. `503` when auth is not configured.                                              |
-| `POST /api/receipts`           | [`api/receipts/route.ts`](../../apps/web/app/api/receipts/route.ts)                       | Upload one file. `mode=instant` reads it in the request; `mode=queued` returns `202`.        |
-| `GET /api/receipts/status`     | [`api/receipts/status/route.ts`](../../apps/web/app/api/receipts/status/route.ts)         | Workspace receipt counts, so list pollers refresh only when something changed                |
-| `GET /api/receipts/:id`        | [`api/receipts/[id]/route.ts`](../../apps/web/app/api/receipts/[id]/route.ts)             | Status for the polling client; drains the receipt's job if it is due and not running         |
-| `PATCH /api/receipts/:id`      | same file                                                                                 | User corrections to merchant, date, category, currency and amounts                           |
-| `DELETE /api/receipts/:id`     | same file                                                                                 | Delete the row, then the stored file                                                         |
-| `POST /api/receipts/:id/retry` | [`api/receipts/[id]/retry/route.ts`](../../apps/web/app/api/receipts/[id]/retry/route.ts) | Claim a failed receipt for another round and enqueue its job; `202`, then drain in `after()` |
-| `GET /api/receipts/export`     | [`api/receipts/export/route.ts`](../../apps/web/app/api/receipts/export/route.ts)         | CSV with the History filters, up to 5,000 rows                                               |
-| `POST /api/contact`            | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts)                         | Support form: origin check, honeypot, per-IP rate limit, mail to `SUPPORT_EMAIL`             |
+| Method and path                | File                                                                                      | Does                                                                                               |
+| ------------------------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `GET, POST /api/auth/*`        | [`api/auth/[...all]/route.ts`](../../apps/web/app/api/auth/[...all]/route.ts)             | Better Auth. `503` when auth is not configured.                                                    |
+| `POST /api/receipts`           | [`api/receipts/route.ts`](../../apps/web/app/api/receipts/route.ts)                       | Upload one file. `mode=instant` reads it in the request; `mode=queued` returns `202`.              |
+| `GET /api/receipts/status`     | [`api/receipts/status/route.ts`](../../apps/web/app/api/receipts/status/route.ts)         | Workspace receipt counts, so list pollers refresh only when something changed                      |
+| `GET /api/receipts/:id`        | [`api/receipts/[id]/route.ts`](../../apps/web/app/api/receipts/[id]/route.ts)             | Status for the polling client; drains the receipt's job if it is due and not running               |
+| `PATCH /api/receipts/:id`      | same file                                                                                 | User corrections to merchant, date, category, currency and amounts                                 |
+| `DELETE /api/receipts/:id`     | same file                                                                                 | Delete the row, then the stored file                                                               |
+| `POST /api/receipts/:id/retry` | [`api/receipts/[id]/retry/route.ts`](../../apps/web/app/api/receipts/[id]/retry/route.ts) | Claim a failed receipt for another round and enqueue its job; `202`, then drain in `after()`       |
+| `GET /api/receipts/export`     | [`api/receipts/export/route.ts`](../../apps/web/app/api/receipts/export/route.ts)         | CSV with the History filters, up to 5,000 rows                                                     |
+| `POST /api/contact`            | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts)                         | Support form: origin check, honeypot, per-IP rate limit, mail to `SUPPORT_EMAIL`                   |
+| `POST /share-target`           | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                       | Share target fallback when no service worker took the share: `303` to the upload page, body unread |
 
 Status codes come from one table in [`lib/http.ts`](../../apps/web/lib/http.ts):
 
@@ -136,6 +138,60 @@ Pages follow the same path without the HTTP mapping: server components call help
 | [`components/processing-poller.tsx`](../../apps/web/components/processing-poller.tsx) | Polls one receipt's status, or the workspace counts (`/api/receipts/status`) for a list, on the schedule in [`lib/backoff-poll.ts`](../../apps/web/lib/backoff-poll.ts): backs off from 2 s to 15 s, pauses while the tab is hidden, gives up after 6 minutes of visible polling (a receipt job's retries can take about 4) |
 | [`lib/signed-in-hint.ts`](../../apps/web/lib/signed-in-hint.ts)                       | The `signed_in_hint` cookie name and browser helpers to read and clear it                                                                                                                                                                                                                                                   |
 
+## Installable app (PWA)
+
+The app installs to a home screen or desktop and opens `/app` in its own window.
+
+| Piece                                                               | What it does                                                                                                                                                                                       |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`app/manifest.ts`](../../apps/web/app/manifest.ts)                 | Name, `id` and `start_url` `/app`, standalone display, colours from the theme tokens, PNG and maskable icons, a "Scan receipt" shortcut (`/app/upload?capture=1`) and the Android share target     |
+| [`public/sw.js`](../../apps/web/public/sw.js)                       | Hand-written service worker, about 100 lines: offline fallback, share target handoff. Served with `Cache-Control: no-cache` from [`next.config.ts`](../../apps/web/next.config.ts)                 |
+| [`public/offline.html`](../../apps/web/public/offline.html)         | Self-contained page shown when a page load fails offline; reloads itself when the connection returns                                                                                               |
+| [`components/pwa.tsx`](../../apps/web/components/pwa.tsx)           | Registers the worker (production builds, `/app` routes only) and shows the install card: `beforeinstallprompt` on Android and desktop, a one-time Share then Add to Home Screen hint on iOS Safari |
+| [`lib/share-target.ts`](../../apps/web/lib/share-target.ts)         | `takeSharedFiles()`: reads the shared files from Cache Storage and deletes them                                                                                                                    |
+| [`lib/use-shared-files.ts`](../../apps/web/lib/use-shared-files.ts) | Upload panel hook: puts shared files into the panel's file input, so they are prepared and checked like picked files                                                                               |
+| [`scripts/pwa-icons.ts`](../../scripts/pwa-icons.ts)                | Renders the PNG icons and `app/apple-icon.png` from `app/icon.svg` with Playwright's Chromium                                                                                                      |
+
+How the worker routes a request:
+
+```mermaid
+flowchart TD
+  R[Request from a page in scope /] --> O{Same origin?}
+  O -- no --> N[Browser default, not handled]
+  O -- yes --> S{POST /share-target?}
+  S -- yes --> F[Read the multipart body, store up to 20 files in the receiptocr-shared cache]
+  F --> U[303 to /app/upload?shared=1]
+  S -- no --> G{GET?}
+  G -- no --> N
+  G -- yes --> M{Page navigation?}
+  M -- yes --> W[Network, with navigation preload]
+  W -- fails --> X[Precached /offline.html]
+  M -- no --> P{Precached file?}
+  P -- yes --> C[Cache, then network]
+  P -- no --> N
+```
+
+- **Nothing user-specific is cached.** Receipts are financial data, so the worker never stores API responses,
+  signed-in HTML, RSC payloads or receipt images; those requests go straight to the network. The static cache holds
+  only `offline.html`, `icon.svg` and one icon. `VERSION` in `sw.js` names the cache; `activate` deletes older ones.
+- **Shared files are short-lived.** The Android share sheet posts the files to `/share-target`. The worker keeps them
+  in Cache Storage and redirects to the upload page. A signed-out visitor goes through sign-in first; the files wait
+  there for up to 10 minutes. The upload panel takes them on its next mount and deletes the cache, stale entries
+  included. A new share replaces an earlier one.
+- **Without a worker** (first launch before it installed, or a browser without one) the share reaches the
+  [route handler](../../apps/web/app/share-target/route.ts), which redirects to the upload page without reading the
+  body. On Vercel a share larger than 4.5 MB is refused with a 413 in that case.
+- **Only the app registers it.** The landing, auth and lab pages never register the worker. Once installed it
+  controls every same-origin page (scope `/`), which only matters for offline page loads and the share target.
+- **iOS** has no install prompt or share target; the hint covers installing. The status bar style is `black`, so
+  pages start below it and need no top safe-area inset; the root `body` pads for side insets
+  (`viewport-fit=cover`).
+
+The CSP allows `worker-src 'self'` and `manifest-src 'self'` ([`lib/csp.ts`](../../apps/web/lib/csp.ts)).
+[`e2e/pwa.spec.ts`](../../apps/web/e2e/pwa.spec.ts) checks installability (Chromium's own check), the icons, the
+worker's headers, registration, the offline page, that nothing but the precached files is ever cached, and the share
+flow signed in and signed out.
+
 ## Design principles and invariants
 
 - **Thin adapters.** A route handler checks origin, session and input shape, then runs one core program. If a
@@ -185,6 +241,13 @@ The e2e specs ([`e2e/`](../../apps/web/e2e)) cover auth, upload, admin, smoke pa
 ### Add an admin action
 
 See [Admin actions](flows/admin-actions.md#add-an-admin-action).
+
+### Change the service worker
+
+Edit [`public/sw.js`](../../apps/web/public/sw.js) and bump `VERSION`, so browsers drop the old static cache. If a
+share target name changes, change [`lib/share-target.ts`](../../apps/web/lib/share-target.ts) too;
+`share-target.test.ts` fails until both match. After changing `app/icon.svg`, run `bun scripts/pwa-icons.ts` and
+commit the PNGs.
 
 ### Add an environment variable
 

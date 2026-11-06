@@ -136,6 +136,12 @@ deployment without that proxy limit can raise `DEPLOYMENT_BODY_LIMIT_BYTES` up t
 On Docker, also cap request bodies in the reverse proxy in front of the image (for example nginx
 `client_max_body_size 11m;`), so oversized requests are refused before they reach the app.
 
+### Installable app (PWA)
+
+Nothing to configure. `next.config.ts` serves `/sw.js` with `Cache-Control: no-cache`, on Vercel and in Docker, so
+browsers pick up a new worker on their next visit. If a CDN or proxy sits in front of a Docker deployment, make sure
+it does not cache `/sw.js` either. The service worker needs HTTPS (or `localhost`).
+
 ## Every release
 
 Code that needs a new migration will fail against the old schema, while the old code keeps working against the new
