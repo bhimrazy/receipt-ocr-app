@@ -1,10 +1,10 @@
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { Download, PencilLine, ScanLine } from "lucide-react";
+import { Download, KeyRound, PencilLine, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { PLANS } from "@/lib/plans";
-import { authCardClass } from "./auth-field";
+import { AuthMessage } from "./auth-field";
 
 export const valueProps = [
   {
@@ -25,7 +25,7 @@ export const valueProps = [
 ];
 
 const footerLink =
-  "inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function AuthLayout({
   children,
@@ -40,7 +40,10 @@ export function AuthLayout({
         <div aria-hidden className="grid-mask pointer-events-none absolute inset-0 opacity-30">
           <div className="receipt-grid absolute -inset-1" />
         </div>
-        <div className="hero-aurora pointer-events-none absolute left-1/3 top-1/2 size-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60" />
+        <div
+          aria-hidden
+          className="hero-aurora pointer-events-none absolute left-1/3 top-1/2 size-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60"
+        />
         <Link
           aria-label="receiptOCR home"
           className="relative z-10 inline-flex min-h-11 w-fit items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -51,7 +54,7 @@ export function AuthLayout({
         <div className="relative z-10 max-w-md">
           {/* The form card holds the page's h1, so this stays a paragraph. */}
           <p className="text-balance text-4xl font-bold leading-tight tracking-tight">
-            Snap a receipt. <span className="text-gradient">Get a spreadsheet.</span>
+            Turn receipt photos into <span className="text-gradient">spreadsheet rows</span>
           </p>
           <p className="mt-4 text-pretty leading-7 text-muted-foreground">{subtitle}</p>
           <ul className="mt-10 flex flex-col gap-6">
@@ -74,7 +77,10 @@ export function AuthLayout({
       </aside>
 
       <main className="relative flex items-center justify-center px-4 py-12 sm:px-5 sm:py-16">
-        <div className="absolute left-1/2 top-[35%] size-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-[170px] lg:hidden" />
+        <div
+          aria-hidden
+          className="absolute left-1/2 top-[35%] size-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-[170px] lg:hidden"
+        />
         <div className="relative z-10 flex w-full max-w-md flex-col items-center">
           <Link
             aria-label="receiptOCR home"
@@ -104,17 +110,22 @@ export function AuthLayout({
 /** Only reachable in a local setup without auth env vars, so it can speak to the developer. */
 export function AuthNotConfiguredCard() {
   return (
-    <div className={cn(authCardClass, "text-center")}>
-      <h1 className="text-2xl font-semibold tracking-tight">Sign-in isn&apos;t set up</h1>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">
+    <AuthMessage
+      actions={
+        <Link className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full")} href="/">
+          Go to the home page
+        </Link>
+      }
+      icon={KeyRound}
+      title="Sign-in isn't set up"
+      tone="warning"
+    >
+      <p>
         Add <code className="font-mono text-foreground">DATABASE_URL</code> and{" "}
         <code className="font-mono text-foreground">BETTER_AUTH_SECRET</code> to{" "}
         <code className="font-mono text-foreground">apps/web/.env.local</code> to turn on email and
         social sign-in.
       </p>
-      <Link className={cn(buttonVariants(), "mt-6 h-11")} href="/app/upload">
-        Preview the app
-      </Link>
-    </div>
+    </AuthMessage>
   );
 }
