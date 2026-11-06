@@ -1,0 +1,171 @@
+# Deployment
+
+How to set up a new environment, and what to do on every release after that. Local development is in the
+[README](../README.md).
+
+Production runs on Vercel with Supabase Postgres and Cloudflare R2. The Docker image (`docker/Dockerfile.prod`) runs
+the same app on Bun anywhere else.
+
+## What you need
+
+| Piece    | Production choice            | Alternatives                               |
+| -------- | ---------------------------- | ------------------------------------------ |
+| App host | Vercel                       | Any Docker host (`docker/Dockerfile.prod`) |
+| Database | Supabase Postgres            | Any Postgres 15+                           |
+| Storage  | Cloudflare R2                | AWS S3, RustFS, any S3-compatible store    |
+| OCR      | Google Gemini API key        | —                                          |
+| Email    | Resend                       | None: mail is logged instead of sent       |
+| Sign-in  | Google and GitHub OAuth apps | Email and password only                    |
+
+## First-time setup
+
+### 1. Database
+
+Create the Postgres database. On Supabase, note both connection strings:
+
+- **Transaction pooler (port 6543)** for the app: `DATABASE_URL`.
+- **Session pooler (port 5432)** for migrations: `DIRECT_URL`. Schema changes fail on the transaction pooler.
+
+Apply every migration from your machine:
+
+```bash
+DIRECT_URL='<session pooler URL>' bun run db:migrate
+```
+
+`drizzle-kit` records what it applied in `drizzle.__drizzle_migrations`, so running it again only applies new files.
+
+### 2. Storage
+
+Create a private bucket (for example `receipt-ocr`) and an API token with read and write access to it. Receipt
+images are served through short-lived signed URLs, so the bucket stays private.
+
+### 3. OAuth apps (optional)
+
+Each provider turns on only when both its ID and secret are set. Use these callback URLs:
+
+- Google: `https://<your domain>/api/auth/callback/google`
+- GitHub: `https://<your domain>/api/auth/callback/github`
+
+### 4. Environment variables
+
+Set these in Vercel (Project → Settings → Environment Variables, Production) or in the container's environment.
+`apps/web/.env.example` explains each one.
+
+| Variable                                   | Required          | Notes                                                                                                                                                                                                |
+| ------------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                             | Yes               | Transaction pooler URL on Supabase.                                                                                                                                                                  |
+| `DIRECT_URL`                               | For migrations    | Session pooler URL. Not needed by the running app.                                                                                                                                                   |
+| `BETTER_AUTH_SECRET`                       | Yes               | `openssl rand -base64 32`. See [Rotating the auth secret](#rotating-the-auth-secret).                                                                                                                |
+| `BETTER_AUTH_SECRETS`                      | No                | Versioned secrets for rotation, current first: `2:<new>,1:<old>`.                                                                                                                                    |
+| `BETTER_AUTH_URL`                          | Yes               | The public origin, e.g. `https://receiptocr.example.com`.                                                                                                                                            |
+| `NEXT_PUBLIC_SITE_URL`                     | Yes               | Same origin. Used for canonical URLs, the sitemap and social cards.                                                                                                                                  |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`    | Yes               | For R2, `S3_REGION=auto`.                                                                                                                                                                            |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Yes               |                                                                                                                                                                                                      |
+| `S3_FORCE_PATH_STYLE`                      | No                | `true` for RustFS and other self-hosted stores.                                                                                                                                                      |
+| `GOOGLE_GENERATIVE_AI_API_KEY`             | Yes               | Gemini key.                                                                                                                                                                                          |
+| `GEMINI_MODEL`                             | No                | First-run default model. After that, choose models in **Admin → Settings**.                                                                                                                          |
+| `OCR_DAILY_CAP`                            | No                | Spend guard: receipts read per UTC day across all users.                                                                                                                                             |
+| `RESEND_API_KEY`, `EMAIL_FROM`             | Yes in production | Without them, verification and reset links are only logged.                                                                                                                                          |
+| `SUPPORT_EMAIL`                            | Yes in production | Inbox for support-form messages.                                                                                                                                                                     |
+| `ADMIN_EMAILS`                             | Recommended       | Comma-separated emails made admin when they sign up.                                                                                                                                                 |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | No                | Google sign-in.                                                                                                                                                                                      |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | No                | GitHub sign-in.                                                                                                                                                                                      |
+| `TRUSTED_IP_HEADERS`                       | Off Vercel only   | The header your proxy sets to the client IP, e.g. `x-forwarded-for`. The app refuses to start in production without it, because rate limits would otherwise share one bucket. Leave unset on Vercel. |
+| `TRUSTED_PROXIES`                          | No                | Proxy IPs or CIDRs that append to that header rather than overwrite it.                                                                                                                              |
+| `AUTH_REQUIRE_EMAIL_VERIFICATION`          | No                | Defaults to `true` in production. Set `false` only for tests.                                                                                                                                        |
+| `OCR_PROVIDER`                             | No                | `fixture` returns canned results. Tests only.                                                                                                                                                        |
+
+### 5. Deploy
+
+**Vercel.** `.github/workflows/production.yml` deploys `main` after CI passes on a push. It needs these secrets in
+the repository's `vercel` environment: `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`. Pull requests get a
+preview deploy from `.github/workflows/preview.yml`. To deploy by hand, run the **Vercel Production Deployment**
+workflow from the Actions tab.
+
+**Docker.** Build `docker/Dockerfile.prod`, run migrations once with the `builder` stage
+(`bun run db:migrate`, as the `migrate` service in `docker-compose.yml` does), then start the image with the
+variables above, `TRUSTED_IP_HEADERS` included.
+
+### 6. First admin
+
+Put your email in `ADMIN_EMAILS` before you sign up. For an account that already exists:
+
+```sql
+UPDATE "user" SET role = 'admin' WHERE email = 'you@example.com';
+```
+
+Then open `/admin/settings` and check the plan limits and the OCR model chain. Until something is saved there, the
+app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day) and `GEMINI_MODEL`.
+
+### 7. Check it works
+
+- Sign up with email and confirm the verification email arrives.
+- Upload a receipt and confirm it is read, appears in History and exports to CSV.
+- Open `/admin` and confirm the receipt shows on the overview.
+
+## Every release
+
+Code that needs a new migration will fail against the old schema, while the old code keeps working against the new
+schema. So **apply migrations first, then deploy**.
+
+1. **See what's new since the last deploy.** Replace `<deployed>` with the commit currently live (shown in the
+   Vercel deployment):
+
+   ```bash
+   git fetch origin
+   git diff --name-only <deployed> origin/main -- apps/web/drizzle '*.env.example'
+   ```
+
+   New files in `apps/web/drizzle/` are migrations. Changes to an `.env.example` mean new or changed variables.
+
+2. **Read each new migration.** They are plain SQL files. Look for anything that rewrites or drops data.
+
+3. **Back up.** On Supabase, check point-in-time recovery or take a backup from the dashboard. Elsewhere:
+
+   ```bash
+   pg_dump "$DIRECT_URL" --format=custom --file=backup-$(date +%F).dump
+   ```
+
+4. **Add new environment variables** in Vercel or the container before the deploy that needs them.
+
+5. **Apply migrations:**
+
+   ```bash
+   DIRECT_URL='<session pooler URL>' bun run db:migrate
+   ```
+
+6. **Deploy.** Merge to `main` (Vercel deploys after CI) or roll out the new image.
+
+7. **Smoke test.** Run the checks from [step 7](#7-check-it-works).
+
+### Rolling back
+
+- **Code:** in Vercel, open Deployments and promote the previous production deployment. On Docker, run the previous
+  image tag.
+- **Database:** migrations only go forward. Old code runs against the newer schema, so a code rollback normally
+  needs nothing else. If a migration damaged data, restore the backup from step 3.
+
+### Rotating the auth secret
+
+The auth secret signs sessions and encrypts stored OAuth tokens.
+
+1. Keep `BETTER_AUTH_SECRET` as it is, and add `BETTER_AUTH_SECRETS=2:<new secret>,1:<current secret>`.
+2. Deploy. New sessions and tokens use version 2, and version 1 still decrypts older tokens.
+3. Remove old versions only once nothing sealed under them is still needed.
+
+Changing the current version signs everyone out. Losing every secret makes stored OAuth tokens unreadable, so users
+have to sign in with their provider again.
+
+## Release notes
+
+Steps specific to one release, newest first.
+
+### Admin panel (migration `0006_admin_audit_settings`)
+
+- **Migration:** adds the `admin_audit_log` and `app_settings` tables and the `receipts.model` column. It also makes
+  `receipts.user_id` nullable with `ON DELETE SET NULL`, so receipts outlive a deleted uploader, and adds an index
+  on `receipts.last_attempt_at`. It doesn't rewrite existing rows.
+- **New variables:** `SUPPORT_EMAIL`, plus `TRUSTED_IP_HEADERS` (and optionally `TRUSTED_PROXIES`) on Docker hosts.
+  `BETTER_AUTH_SECRETS` is optional.
+- **After deploy:** the Free plan default drops to 20 receipts a day. Change it in **Admin → Settings** if you want
+  something else.
