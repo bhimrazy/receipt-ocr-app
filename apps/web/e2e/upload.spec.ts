@@ -57,9 +57,8 @@ test("a phone-sized photo is shrunk in the browser, then uploads", async ({ page
       mimeType: "image/jpeg",
       buffer: Buffer.from(original),
     });
-  await expect(page.getByRole("list", { name: "Receipts to read" })).toContainText(
-    "phone-photo.jpg",
-  );
+  // Photos open in review first; its button uploads.
+  await expect(page.getByRole("dialog", { name: "Review photos" })).toBeVisible();
   const requests: number[] = [];
   page.on("request", (r) => {
     if (r.url().endsWith("/api/receipts") && r.method() === "POST") {

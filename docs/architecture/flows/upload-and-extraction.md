@@ -29,23 +29,53 @@ The two upload modes differ only in when the job first runs.
 | Mode      | Used by                                     | First attempt runs                                           | Response                                                           |
 | --------- | ------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `instant` | "Read" on a single file in the upload panel | In the request, before responding (priority 0)               | `200` `completed` or `failed`; `202` `processing` while it retries |
-| `queued`  | "Read all" on several files                 | In Next.js `after()`, once the response is sent (priority 5) | `202` with `status: processing`                                    |
+| `queued`  | "Read N receipts" on several files          | In Next.js `after()`, once the response is sent (priority 5) | `202` with `status: processing`                                    |
 
 The route has `maxDuration = 300` so its `after()` drain can wait out the job's backoff. A worker app and a cron drain
 are planned ([jobs plan](../../plans/2026-11-06-jobs-queue.md), Track B); they run the same job.
 
 ## 1. In the browser
 
-[`components/upload-panel.tsx`](../../../apps/web/components/upload-panel.tsx) and
+[`components/upload-panel.tsx`](../../../apps/web/components/upload-panel.tsx), the capture modules in
+[`components/capture`](../../../apps/web/components/capture) and [`lib/capture`](../../../apps/web/lib/capture), and
 [`lib/upload-prep.ts`](../../../apps/web/lib/upload-prep.ts):
 
-- Files are checked for an accepted type (JPEG, PNG, WebP, HEIC/HEIF, PDF). Up to 20 can be queued at once.
-- Every image the browser can decode is oriented, scaled to a 2,000 px long edge and re-encoded as JPEG at quality
-  0.85. This removes camera metadata (including GPS) and keeps the body under Vercel's 4.5 MB limit. PDFs and images
-  the browser can't decode (HEIC outside Safari) are sent unchanged.
+```mermaid
+flowchart LR
+  cam["In-app camera<br/>(getUserMedia)"] --> tray[Thumbnail tray]
+  fallback["Camera app<br/>(input capture)"] --> review
+  pick["File picker,<br/>drop, share"] -->|photos| review
+  pick -->|PDFs| prep
+  tray -->|Done| review["Review: corners (auto-detected),<br/>rotate, filter, delete"]
+  review -->|"canvas, JPEG 0.92"| prep["prepareFile<br/>(size target)"]
+  prep --> queue["Batch queue<br/>2 at a time"]
+  queue -->|"POST /api/receipts"| server[(Server)]
+```
+
+- Files are checked for an accepted type (JPEG, PNG, WebP, HEIC/HEIF, PDF). One batch (camera tray plus picked
+  files) holds up to the plan's `batchMax` (10 by default, set in Admin → Settings); picking more keeps the first ones
+  and says so. The server still applies the per-minute and daily limits to each upload.
+- **Camera.** The back camera at the highest resolution it offers, full screen, with a torch toggle when the track
+  supports one. A small copy of the frame is checked for the receipt outline four times a second and drawn over the
+  viewfinder. The stream stops on close, when the page is hidden and when the panel unmounts. Without getUserMedia
+  (plain HTTP, old browsers) or when access is blocked, "Take photos" falls back to the phone's camera app through
+  `<input capture>`. Desktop shows the button only when a camera exists.
+- **Review.** Every photo opens here before upload. `detect-quad.ts` finds the receipt on a 256 px greyscale copy
+  (Otsu threshold, largest component, convex hull, four corners) and places the corners there; when it isn't
+  confident, the crop is the whole image. Corners drag with pointer events or move with arrow keys; rotation is in
+  quarter turns. `geometry.ts` solves the homography from the four corners and warps the crop straight on a canvas.
+  Filters (Original, Enhance, Greyscale, B&W) apply after the warp; Enhance is the default when a receipt was found,
+  and the last choice is remembered for the session. The expected upload size comes from encoding the edit for real.
+- Each edited photo becomes a JPEG at quality 0.92 from the canvas, so it carries no EXIF, then goes through
+  `prepareFile` like any picked image. Photos and frames stay on the device until upload.
+- Every image the browser can decode is oriented, scaled and re-encoded as JPEG by `prepareFile`. This removes camera
+  metadata (including GPS) and keeps the body under Vercel's 4.5 MB limit. PDFs and images the browser can't decode
+  (HEIC outside Safari) are sent unchanged.
 - A file still over 4 MB (`DEPLOYMENT_BODY_LIMIT_BYTES` in
   [`upload-limits.ts`](../../../packages/core/src/upload-limits.ts)) is refused before upload.
-- "Read all" posts files one at a time and stops at the first error (usually the quota).
+- **Upload.** One file uses instant mode and opens its receipt. Several upload two at a time in queued mode, each with
+  its own progress, status and Retry. A `429` with a short `Retry-After` (the per-minute limit) pauses the queue and
+  resumes on its own; a long one (the daily limit) stops it and keeps the rest waiting.
 
 ## 2. Instant mode
 

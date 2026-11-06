@@ -12,44 +12,34 @@ import {
   FileText,
   ImageUp,
   Loader2,
+  RotateCcw,
   ScanText,
   Upload,
   X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
+import type { ReviewImage } from "@/components/capture/review-sheet";
 import { formatTime } from "@/lib/format";
 import { usageNote, type Usage } from "@/components/usage-meter";
+import { fitBatch } from "@/lib/capture/batch-limit";
+import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
+import { browserCameraSupport, hasCamera, type CameraSupport } from "@/lib/capture/camera";
+import { postReceipt } from "@/lib/capture/upload-request";
 import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
 
-type UploadResponse = { receiptId?: string; error?: string };
+// Loaded on first use, so the camera and editor don't weigh on the upload page.
+const loadCamera = () => import("@/components/capture/camera-sheet");
+const CameraSheet = dynamic(loadCamera, { ssr: false });
+const ReviewSheet = dynamic(() => import("@/components/capture/review-sheet"), { ssr: false });
 
-const MAX_FILES = 20;
+const noSubscription = () => () => {};
 
-/** Per-file state so a partly failed batch says exactly which files failed. */
-type Queued = {
-  id: string;
-  file: File;
-  preview: string;
-  state: "waiting" | "uploading" | "done" | "error";
-  error?: string;
-};
-
-async function postReceipt(file: File, mode: "instant" | "queued"): Promise<UploadResponse> {
-  const form = new FormData();
-  form.set("file", file);
-  form.set("mode", mode);
-  try {
-    const res = await fetch("/api/receipts", { method: "POST", body: form });
-    const body = (await res.json().catch(() => null)) as UploadResponse | null;
-    if (!res.ok) return { error: body?.error ?? "The upload failed. Try again." };
-    return body ?? {};
-  } catch {
-    return { error: "The upload didn't reach the server. Check your connection and try again." };
-  }
-}
+/** A file ready to upload, carried by its queue item. */
+type Queued = { file: File; preview: string };
 
 function formatSize(bytes: number) {
   return bytes < 1024 * 1024
@@ -102,28 +92,114 @@ function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
   );
 }
 
+/** Seconds until `until`, ticking while it's set. */
+function useCountdown(until: number | null) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (until === null) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [until]);
+  return until === null ? 0 : Math.max(0, Math.ceil((until - now) / 1000));
+}
+
+function ItemProgress({ item, onRetry }: { item: QueueItem; onRetry: () => void }) {
+  if (item.status === "uploading") {
+    const pct = Math.round(item.progress * 100);
+    return (
+      <>
+        <Loader2
+          aria-hidden="true"
+          className="size-3 shrink-0 animate-spin motion-reduce:animate-none"
+        />
+        <span>{pct < 100 ? "Uploading…" : "Saving…"}</span>
+        <span
+          aria-label="Upload progress"
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={pct}
+          className="h-1 w-16 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+        >
+          <span
+            className="block h-full bg-primary transition-[width] motion-reduce:transition-none"
+            style={{ width: `${pct}%` }}
+          />
+        </span>
+      </>
+    );
+  }
+  if (item.status === "done") {
+    return (
+      <>
+        <Check aria-hidden="true" className="size-3 text-primary" />
+        Uploaded
+      </>
+    );
+  }
+  return (
+    <>
+      <CircleAlert aria-hidden="true" className="size-3 shrink-0" />
+      <span className="min-w-0 truncate">{item.error ?? "Upload failed"}</span>
+      <button
+        className="inline-flex shrink-0 items-center gap-1 font-medium text-foreground underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
+        onClick={onRetry}
+        type="button"
+      >
+        <RotateCcw aria-hidden="true" className="size-3" />
+        Retry
+      </button>
+    </>
+  );
+}
+
 export function UploadPanel({
   usage,
   resetsIn,
+  batchMax,
+  startCamera = false,
 }: {
   usage: Usage | null;
   /** "in 6 hours", computed on the server so it matches what was rendered. */
   resetsIn: string;
+  /** Images in one batch (camera plus picked files), from the plan. */
+  batchMax: number;
+  /** Open the camera on arrival (the home-screen shortcut), when this device has one. */
+  startCamera?: boolean;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
-  const [queue, setQueue] = useState<Queued[]>([]);
+  const [reviewing, setReviewing] = useState<ReviewImage[]>([]);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraFound, setCameraFound] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [preparing, setPreparing] = useState(false);
-  const queueRef = useRef<Queued[]>([]);
-  useEffect(() => {
-    queueRef.current = queue;
-  }, [queue]);
-  const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // The queue owns the list: each row's file, preview and upload state.
+  const [queue] = useState(() =>
+    createBatchQueue<Queued, "instant" | "queued">({
+      mode: "queued",
+      upload: (item, mode, onProgress) => postReceipt(item.file, mode, onProgress),
+    }),
+  );
+  const snapshot = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
+  useEffect(() => () => queue.dispose(), [queue]);
+  const pausedFor = useCountdown(snapshot.pausedUntil);
+
+  const support = useSyncExternalStore<CameraSupport>(
+    noSubscription,
+    browserCameraSupport,
+    () => "unsupported",
+  );
+  useEffect(() => {
+    if (support !== "ok") return;
+    void hasCamera().then((found) => {
+      setCameraFound(found);
+      if (found && startCamera) setCameraOpen(true);
+    });
+  }, [support, startCamera]);
 
   // Object URLs for the thumbnails live until their row goes away.
   const previews = useRef(new Set<string>());
@@ -132,19 +208,62 @@ export function UploadPanel({
     return () => urls.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
-  function release(items: Queued[]) {
-    for (const item of items) {
-      if (!item.preview) continue;
-      URL.revokeObjectURL(item.preview);
-      previews.current.delete(item.preview);
+  const release = useCallback((gone: Queued[]) => {
+    for (const { preview } of gone) {
+      if (!preview) continue;
+      URL.revokeObjectURL(preview);
+      previews.current.delete(preview);
     }
-  }
+  }, []);
+
+  const items = snapshot.items;
+
+  // When a run settles: a single instant upload opens its receipt; a batch clears what landed.
+  useEffect(
+    () =>
+      queue.onSettle(() => {
+        const done = queue.getSnapshot().items.filter((i) => i.status === "done");
+        if (done.length === 0) return;
+        if (queue.getMode() === "instant") {
+          if (done[0]?.receiptId) router.push(`/app/receipts/${done[0].receiptId}`);
+          return;
+        }
+        release(queue.clearDone().map((i) => i.payload));
+        setSuccess(
+          done.length === 1
+            ? "1 receipt uploaded. It's being read now and shows up in Recent receipts below."
+            : `${done.length} receipts uploaded. They're being read now and show up in Recent receipts below.`,
+        );
+        router.refresh();
+      }),
+    [queue, router, release],
+  );
 
   if (usage?.blocked) return <LimitReached resetsIn={resetsIn} usage={usage} />;
 
+  const busy = snapshot.running;
   const remaining = usage ? Math.max(0, usage.limit - usage.used) : null;
-  const waiting = queue.filter((item) => item.state === "waiting" || item.state === "error");
+  const inBatch = items.length + reviewing.length;
+  const room = Math.max(0, batchMax - inBatch);
 
+  /** Adds prepared files to the queue; returns how many were accepted. */
+  function enqueue(files: File[], rejected: string[]) {
+    const accepted: { id: string; payload: Queued }[] = [];
+    for (const file of files) {
+      const rejection = sizeRejection(file);
+      if (rejection) {
+        rejected.push(rejection);
+        continue;
+      }
+      const preview = acceptedType(file) === "application/pdf" ? "" : URL.createObjectURL(file);
+      if (preview) previews.current.add(preview);
+      accepted.push({ id: crypto.randomUUID(), payload: { file, preview } });
+    }
+    queue.add(accepted);
+    return accepted.length;
+  }
+
+  /** Photos go to review first; PDFs can't be edited, so they join the list directly. */
   async function addFiles(list: FileList | File[]) {
     const rejected: string[] = [];
     const candidates: File[] = [];
@@ -153,109 +272,85 @@ export function UploadPanel({
       if (rejection) rejected.push(rejection);
       else candidates.push(file);
     }
-    const initialRoom = Math.max(0, MAX_FILES - queue.length);
-    if (candidates.length > initialRoom)
-      rejected.push(`you can add ${MAX_FILES} receipts at a time`);
-    setNotice(null);
+    const fit = fitBatch(candidates, inBatch, batchMax);
     setSuccess(null);
-    setError(null);
-    setPreparing(true);
-    const accepted: Queued[] = [];
-    for (const original of candidates.slice(0, initialRoom)) {
-      const file = await prepareFile(original);
-      const rejection = sizeRejection(file);
-      if (rejection) {
-        rejected.push(rejection);
-        continue;
-      }
-      const preview = acceptedType(file) === "application/pdf" ? "" : URL.createObjectURL(file);
-      if (preview) previews.current.add(preview);
-      accepted.push({ id: crypto.randomUUID(), file, preview, state: "waiting" });
+    const isPdf = (f: File) => acceptedType(f) === "application/pdf";
+    const pdfs = fit.kept.filter(isPdf);
+    const photos = fit.kept.filter((f) => !isPdf(f));
+    if (pdfs.length > 0) {
+      setPreparing(true);
+      enqueue(await Promise.all(pdfs.map(prepareFile)), rejected);
+      setPreparing(false);
     }
-    setPreparing(false);
-    const room = Math.max(0, MAX_FILES - queueRef.current.length);
-    release(accepted.slice(room));
-    if (accepted.length > room && !rejected.some((r) => r.startsWith("you can add"))) {
-      rejected.push(`you can add ${MAX_FILES} receipts at a time`);
+    if (photos.length > 0) {
+      setReviewing((current) => [
+        ...current,
+        ...photos.map((file) => ({ id: crypto.randomUUID(), blob: file, name: file.name })),
+      ]);
     }
-    setQueue((current) => [
+    const parts = [rejected.length > 0 ? `Not added: ${rejected.join("; ")}.` : null, fit.notice];
+    setNotice(parts.filter(Boolean).join(" ") || null);
+  }
+
+  function addShots(blobs: Blob[]) {
+    setCameraOpen(false);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
+    const fit = fitBatch(blobs, inBatch, batchMax);
+    setNotice(fit.notice);
+    setSuccess(null);
+    setReviewing((current) => [
       ...current,
-      ...accepted.slice(0, Math.max(0, MAX_FILES - current.length)),
+      ...fit.kept.map((blob, i) => ({
+        id: crypto.randomUUID(),
+        blob,
+        name: `photo-${stamp}-${current.length + i + 1}.jpg`,
+      })),
     ]);
+  }
+
+  /** One file reads in the request and opens; more upload two at a time and read in the background. */
+  function read() {
+    setSuccess(null);
+    queue.start(queue.getSnapshot().items.length === 1 ? "instant" : "queued");
+  }
+
+  function reviewed(files: File[]) {
+    setReviewing([]);
+    const rejected: string[] = [];
+    const added = enqueue(files, rejected);
     setNotice(rejected.length > 0 ? `Not added: ${rejected.join("; ")}.` : null);
+    if (added > 0) read();
+  }
+
+  function openCamera() {
+    if (room === 0) {
+      setNotice(fitBatch([null], inBatch, batchMax).notice);
+      return;
+    }
+    if (support === "ok") setCameraOpen(true);
+    else cameraRef.current?.click();
   }
 
   function remove(id: string) {
-    release(queue.filter((item) => item.id === id));
-    setQueue((current) => current.filter((item) => item.id !== id));
+    release(items.filter((item) => item.id === id).map((i) => i.payload));
+    queue.remove(id);
   }
 
   function clear() {
-    release(queue);
-    setQueue([]);
+    release(items.map((i) => i.payload));
+    for (const item of items) queue.remove(item.id);
     setNotice(null);
-    setError(null);
-  }
-
-  function mark(id: string, patch: Partial<Queued>) {
-    setQueue((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-  }
-
-  async function readOne(item: Queued) {
-    setBusy(true);
-    setError(null);
-    mark(item.id, { state: "uploading", error: undefined });
-    const result = await postReceipt(item.file, "instant");
-    if (result.error || !result.receiptId) {
-      const message = result.error ?? "The upload failed. Try again.";
-      mark(item.id, { state: "error", error: message });
-      setError(message);
-      setBusy(false);
-      return;
-    }
-    router.push(`/app/receipts/${result.receiptId}`);
-  }
-
-  async function readAll() {
-    setBusy(true);
-    setError(null);
-    let uploaded = 0;
-    // One at a time: firing 20 uploads at once trips the burst limit and hides which ones landed.
-    for (const item of waiting) {
-      mark(item.id, { state: "uploading", error: undefined });
-      const result = await postReceipt(item.file, "queued");
-      if (result.error) {
-        mark(item.id, { state: "error", error: result.error });
-        setError(
-          uploaded > 0
-            ? `${result.error} ${plural(uploaded, "receipt")} uploaded before this one stopped.`
-            : result.error,
-        );
-        break; // usually the quota; keep the rest waiting
-      }
-      uploaded += 1;
-      mark(item.id, { state: "done" });
-    }
-    setBusy(false);
-    if (uploaded > 0) {
-      setQueue((current) => {
-        release(current.filter((item) => item.state === "done"));
-        return current.filter((item) => item.state !== "done");
-      });
-      setSuccess(
-        uploaded === 1
-          ? "1 receipt uploaded. It's being read now and shows up in Recent receipts below."
-          : `${uploaded} receipts uploaded. They're being read now and show up in Recent receipts below.`,
-      );
-      router.refresh();
-    }
   }
 
   const locked = busy || preparing;
-  const empty = queue.length === 0;
-  const count = waiting.length;
+  const empty = items.length === 0;
+  const count = snapshot.items.filter((i) => i.status === "waiting" || i.status === "error").length;
   const overLimit = remaining !== null && count > remaining;
-  const single = queue.length === 1 && count === 1;
+  const single = items.length === 1;
+  // Desktop offers the camera only when one exists; phones always get the button, falling
+  // back to the camera app when the in-app camera can't run.
+  const cameraOnDesktop = support === "ok" && cameraFound;
+  const prefetchCamera = () => void loadCamera();
 
   return (
     <div className="flex flex-col gap-4">
@@ -304,6 +399,7 @@ export function UploadPanel({
           ref={inputRef}
           type="file"
         />
+        {/* The phone's own camera app: the fallback when the in-app camera can't run. */}
         <input
           accept={ACCEPT}
           capture="environment"
@@ -332,16 +428,15 @@ export function UploadPanel({
                   <span className="max-md:hidden">
                     Drop receipt photos or PDFs here, or click to choose
                   </span>
-                  <span className="md:hidden">Take a photo or choose a file</span>
+                  <span className="md:hidden">Take photos or choose files</span>
                 </>
               ) : (
                 "Add more receipts"
               )}
             </p>
             <p className="mt-1 text-sm text-muted-foreground" id="upload-hint">
-              JPEG, PNG, WebP or HEIC photos of any size, which are shrunk before they upload, or
-              PDFs up to {formatSize(UPLOAD_LIMIT_BYTES)}.
-              {empty ? ` Up to ${MAX_FILES} at a time.` : null}
+              Photos of any size, which you can crop before they are shrunk and uploaded, or PDFs up
+              to {formatSize(UPLOAD_LIMIT_BYTES)}. Up to {batchMax} at a time.
             </p>
             <p aria-live="polite" className="mt-1 text-sm text-muted-foreground">
               {preparing ? (
@@ -357,33 +452,39 @@ export function UploadPanel({
           </div>
         </div>
       </Card>
-      {empty ? (
-        <div className="flex w-full flex-col gap-2 md:hidden">
-          <Button disabled={locked} onClick={() => cameraRef.current?.click()} type="button">
-            <Camera aria-hidden="true" />
-            Take a photo
-          </Button>
-          <Button
-            disabled={locked}
-            onClick={() => inputRef.current?.click()}
-            type="button"
-            variant="outline"
-          >
-            <ImageUp aria-hidden="true" />
-            Choose files
-          </Button>
-        </div>
-      ) : null}
+
+      <div className={cn("flex w-full gap-2 max-md:flex-col", !cameraOnDesktop && "md:hidden")}>
+        <Button
+          disabled={locked}
+          onClick={openCamera}
+          onFocus={prefetchCamera}
+          onPointerEnter={prefetchCamera}
+          type="button"
+        >
+          <Camera aria-hidden="true" />
+          Take photos
+        </Button>
+        <Button
+          className="md:hidden"
+          disabled={locked}
+          onClick={() => inputRef.current?.click()}
+          type="button"
+          variant="outline"
+        >
+          <ImageUp aria-hidden="true" />
+          Choose files
+        </Button>
+      </div>
 
       {notice ? (
         <Alert className="px-4 py-3" variant="warning">
           {notice}
         </Alert>
       ) : null}
-      {error ? (
+      {snapshot.stopped ? (
         <Alert className="px-4 py-3" variant="destructive">
           <CircleAlert aria-hidden="true" />
-          <p>{error}</p>
+          <p>{snapshot.stopped} The rest are still here; read them when your limit resets.</p>
         </Alert>
       ) : null}
       {success ? (
@@ -399,7 +500,7 @@ export function UploadPanel({
             <h2 className="text-sm font-medium">
               Ready to read{" "}
               <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                {queue.length}
+                {items.length}
               </span>
             </h2>
             <Button disabled={busy} onClick={clear} size="sm" variant="ghost">
@@ -407,80 +508,66 @@ export function UploadPanel({
             </Button>
           </div>
           <ul aria-label="Receipts to read" className="divide-y divide-border">
-            {queue.map((item) => (
-              <li className="flex items-center gap-3 py-2 pr-2 pl-4" key={item.id}>
-                {item.preview ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    alt=""
-                    className="size-11 shrink-0 rounded-md border border-border bg-muted object-cover"
-                    src={item.preview}
-                  />
-                ) : (
-                  <span className="flex size-11 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
-                    <FileText aria-hidden="true" className="size-5" />
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-xs">{item.file.name}</p>
-                  <p
-                    className={cn(
-                      "mt-0.5 flex items-center gap-1.5 text-xs",
-                      item.state === "error" ? "text-destructive" : "text-muted-foreground",
-                    )}
+            {items.map((item) => {
+              return (
+                <li className="flex items-center gap-3 py-2 pr-2 pl-4" key={item.id}>
+                  {item.payload.preview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      alt=""
+                      className="size-11 shrink-0 rounded-md border border-border bg-muted object-cover"
+                      src={item.payload.preview}
+                    />
+                  ) : (
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
+                      <FileText aria-hidden="true" className="size-5" />
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-mono text-xs">{item.payload.file.name}</p>
+                    <p
+                      className={cn(
+                        "mt-0.5 flex items-center gap-1.5 text-xs",
+                        item.status === "error" ? "text-destructive" : "text-muted-foreground",
+                      )}
+                    >
+                      {item.status !== "waiting" ? (
+                        <ItemProgress item={item} onRetry={() => queue.retry(item.id)} />
+                      ) : (
+                        <span className="font-mono tabular-nums">
+                          {formatSize(item.payload.file.size)}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    aria-label={`Remove ${item.payload.file.name}`}
+                    disabled={item.status === "uploading"}
+                    onClick={() => remove(item.id)}
+                    size="icon-sm"
+                    variant="ghost"
                   >
-                    {item.state === "uploading" ? (
-                      <>
-                        <Loader2
-                          aria-hidden="true"
-                          className="size-3 animate-spin motion-reduce:animate-none"
-                        />
-                        Uploading…
-                      </>
-                    ) : item.state === "done" ? (
-                      <>
-                        <Check aria-hidden="true" className="size-3 text-primary" />
-                        Uploaded
-                      </>
-                    ) : item.state === "error" ? (
-                      <>
-                        <CircleAlert aria-hidden="true" className="size-3 shrink-0" />
-                        <span className="min-w-0 truncate">{item.error ?? "Upload failed"}</span>
-                      </>
-                    ) : (
-                      <span className="font-mono tabular-nums">{formatSize(item.file.size)}</span>
-                    )}
-                  </p>
-                </div>
-                <Button
-                  aria-label={`Remove ${item.file.name}`}
-                  disabled={busy}
-                  onClick={() => remove(item.id)}
-                  size="icon-sm"
-                  variant="ghost"
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              </li>
-            ))}
+                    <X aria-hidden="true" />
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
           <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
             <p aria-live="polite" className="text-xs text-muted-foreground">
-              {busy
-                ? single
-                  ? "Uploading and reading. This takes a few seconds."
-                  : "Uploading one at a time. Keep this page open until every file is uploaded; reading carries on after that."
-                : overLimit
-                  ? `You have ${plural(remaining, "receipt")} left today, so only the first ${remaining} will be read.`
-                  : usage
-                    ? usageNote(usage)
-                    : null}
+              {snapshot.pausedUntil !== null
+                ? `Paused for your plan's per-minute limit. Carrying on in ${pausedFor} s.`
+                : busy
+                  ? single
+                    ? "Uploading and reading. This takes a few seconds."
+                    : "Uploading two at a time. Keep this page open until every file is uploaded; reading carries on after that."
+                  : overLimit
+                    ? `You have ${plural(remaining, "receipt")} left today, so only the first ${remaining} will be read.`
+                    : usage
+                      ? usageNote(usage)
+                      : null}
             </p>
-            <Button
-              className="max-sm:w-full"
-              disabled={busy || count === 0}
-              onClick={() => (single ? readOne(waiting[0]!) : readAll())}
-            >
+            <Button className="max-sm:w-full" disabled={busy || count === 0} onClick={read}>
               {busy ? (
                 <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
               ) : (
@@ -496,6 +583,28 @@ export function UploadPanel({
             </Button>
           </div>
         </Card>
+      ) : null}
+
+      {cameraOpen ? (
+        <CameraSheet
+          batchMax={batchMax}
+          onClose={() => setCameraOpen(false)}
+          onDone={addShots}
+          onFallback={() => {
+            setCameraOpen(false);
+            cameraRef.current?.click();
+          }}
+          open
+          room={room}
+        />
+      ) : null}
+      {reviewing.length > 0 && !cameraOpen ? (
+        <ReviewSheet
+          images={reviewing}
+          key={reviewing.map((r) => r.id).join()}
+          onCancel={() => setReviewing([])}
+          onUpload={reviewed}
+        />
       ) : null}
     </div>
   );
