@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { getPlanTable } from "@/lib/plan-limits";
+import { canonicalFor } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Terms of service",
   description: "The terms for using receiptOCR, including the free plan and AI-extracted data.",
-  alternates: { canonical: "/terms" },
+  alternates: canonicalFor("/terms"),
 };
 
 // Shows the free plan's limits; an admin save also revalidates (revalidatePlanCopy).

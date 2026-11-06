@@ -96,8 +96,27 @@ export async function deleteObjects(
   }
 }
 
+const TYPES = Object.fromEntries(Object.entries(EXTENSIONS).map(([type, ext]) => [ext, type]));
+
+/**
+ * Short-lived read URL. The response type is pinned from the key's (sniffed)
+ * extension, so a changed object's metadata can't turn it into HTML, and PDFs
+ * download instead of rendering on the bucket's origin.
+ */
 export async function signedGetUrl(config: S3StorageConfig, key: string, expiresIn = 60 * 10) {
-  return getSignedUrl(s3Client(config), new GetObjectCommand({ Bucket: config.bucket, Key: key }), {
-    expiresIn,
-  });
+  const ext = key.slice(key.lastIndexOf(".") + 1);
+  const type = TYPES[ext] ?? "application/octet-stream";
+  const inline = type.startsWith("image/");
+  return getSignedUrl(
+    s3Client(config),
+    new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      ResponseContentType: type,
+      ResponseContentDisposition: inline
+        ? "inline"
+        : `attachment; filename="receipt.${TYPES[ext] ? ext : "bin"}"`,
+    }),
+    { expiresIn },
+  );
 }

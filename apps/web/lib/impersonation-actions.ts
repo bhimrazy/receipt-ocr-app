@@ -1,13 +1,11 @@
 "use server";
 
-import { recordAudit } from "@receipt-ocr/core";
-import { createDb, eq, user as userTable } from "@receipt-ocr/db";
+import { findUser, recordAudit } from "@receipt-ocr/core";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "./auth";
 import { logger } from "./log";
 import { runtime } from "./runtime";
-import { authEnv } from "./env";
 import { getSession } from "./session";
 
 /**
@@ -18,14 +16,10 @@ import { getSession } from "./session";
 export async function stopImpersonatingAction(): Promise<{ ok: false; error: string } | void> {
   const session = await getSession();
   const adminId = session?.session.impersonatedBy;
-  if (!session || !adminId || !authEnv.databaseUrl) {
+  if (!session || !adminId) {
     return { ok: false, error: "You aren't signed in as another user." };
   }
-  const [admin] = await createDb(authEnv.databaseUrl)
-    .select({ email: userTable.email })
-    .from(userTable)
-    .where(eq(userTable.id, adminId))
-    .limit(1);
+  const admin = await runtime.runPromise(findUser(adminId));
   await auth.api.stopImpersonating({ headers: await headers() });
   await runtime
     .runPromise(

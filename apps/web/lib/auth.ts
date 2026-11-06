@@ -22,6 +22,7 @@ import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
+import { limitInvitations, validateWorkspaceName } from "./auth-guards";
 import { authEnabled, authEnv, emailEnv, isProduction, requireEmailVerification } from "./env";
 import { logger } from "./log";
 import { runtime } from "./runtime";
@@ -97,7 +98,9 @@ export async function deleteOwnData(userId: string) {
 export const auth = betterAuth({
   appName: "receiptOCR",
   baseURL: authEnv.betterAuthUrl,
-  secret: authEnv.betterAuthSecret ?? PLACEHOLDER_SECRET,
+  // With BETTER_AUTH_SECRETS set, `secret` is only the legacy key for payloads sealed before it.
+  secret: authEnv.betterAuthSecret ?? (authEnv.betterAuthSecrets ? undefined : PLACEHOLDER_SECRET),
+  secrets: authEnv.betterAuthSecrets,
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
@@ -137,8 +140,15 @@ export const auth = betterAuth({
     customRules: {
       "/sign-in/email": { window: 60, max: 5 },
       "/sign-up/email": { window: 60, max: 3 },
+      // Per IP; auth-guards also caps each inviter.
+      "/organization/invite-member": { window: 60 * 60, max: 20 },
     },
   },
+  // Reset and verification tokens are stored as hashes: a database read alone can't use them.
+  verification: { storeIdentifier: "hashed" },
+  // Rows sealed before this was on stay readable: Better Auth passes non-hex
+  // (plaintext) tokens through and seals them on the user's next sign-in.
+  account: { encryptOAuthTokens: true },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
@@ -148,11 +158,7 @@ export const auth = betterAuth({
     },
   },
   advanced: {
-    ipAddress: {
-      // Only headers a trusted proxy sets (TRUSTED_IP_HEADERS). Trusting a
-      // client-supplied X-Forwarded-For lets anyone rotate it past the limits.
-      ipAddressHeaders: authEnv.trustedIpHeaders,
-    },
+    ipAddress: authEnv.ipAddress,
   },
   user: {
     deleteUser: {
@@ -222,6 +228,11 @@ export const auth = betterAuth({
         });
       },
       organizationHooks: {
+        beforeCreateOrganization: ({ organization }) =>
+          validateWorkspaceName(organization, { required: true }),
+        beforeUpdateOrganization: ({ organization }) =>
+          validateWorkspaceName(organization, { required: false }),
+        beforeCreateInvitation: ({ inviter }) => limitInvitations(inviter.id),
         beforeDeleteOrganization: async ({ organization }) => {
           await purgeFiles({ organizationId: organization.id });
         },

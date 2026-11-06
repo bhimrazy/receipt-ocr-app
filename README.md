@@ -67,6 +67,24 @@ GOOGLE_GENERATIVE_AI_API_KEY=<your key>
 
 The UI renders without backend credentials. Real upload/OCR requires Better Auth (`BETTER_AUTH_SECRET`), Postgres (`DATABASE_URL`), S3/R2, and Gemini env vars. Apply migrations with `bun run db:migrate` — against Supabase, that means the **session** pooler on port 5432 (set `DIRECT_URL`), not the transaction pooler.
 
+### Self-hosting behind a proxy
+
+Auth and contact-form rate limits key on the client IP. In production off Vercel the app refuses to start
+unless `TRUSTED_IP_HEADERS` names the header your reverse proxy sets to the client IP (for example
+`x-real-ip` or `x-forwarded-for`). If the proxy appends to `X-Forwarded-For` instead of overwriting it
+(nginx `$proxy_add_x_forwarded_for`), also list the proxy's IPs or CIDR ranges in `TRUSTED_PROXIES`: the
+client IP is then the right-most address not in that list. Only do this when clients can't reach the app
+except through those proxies. On Vercel, leave both unset.
+
+### Auth secret and stored tokens
+
+Better Auth stores password-reset and verification tokens as hashes and seals OAuth tokens with the auth
+secret, so the secret now protects stored data as well as sessions. To rotate it, set
+`BETTER_AUTH_SECRETS=2:<new>,1:<old>` (current first) and keep `BETTER_AUTH_SECRET` set to the original
+value until no token sealed under it remains. Older versions still decrypt; new data uses the first. Rotating
+the current version signs everyone out. Keep every retired secret as long as you keep database backups made
+under it.
+
 ## Testing & benchmarks
 
 ```bash

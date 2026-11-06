@@ -73,7 +73,7 @@ export function DailyChart({ days }: { days: Day[] }) {
       </div>
       <div
         aria-hidden="true"
-        className="mt-1.5 flex justify-between font-mono text-[11px] text-muted-foreground"
+        className="mt-1.5 flex justify-between font-mono text-2xs text-muted-foreground"
       >
         <span>{short(days[0]!.day)}</span>
         <span>Today</span>

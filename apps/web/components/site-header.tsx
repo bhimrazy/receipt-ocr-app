@@ -78,7 +78,7 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
           {links.map((link) => (
             <a
               className={cn(
-                "rounded-full px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground",
+                "rounded-full px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-wash hover:text-foreground",
                 focusRing,
               )}
               href={link.href}
@@ -91,12 +91,9 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
 
         <div className="flex items-center gap-1.5">
           {isPending ? (
-            <span
-              aria-hidden
-              className="h-11 w-28 animate-pulse rounded-full bg-foreground/[0.06] lg:h-10"
-            />
+            <span aria-hidden className="h-11 w-28 animate-pulse rounded-full bg-wash lg:h-10" />
           ) : session ? (
-            <Link className={cn(buttonVariants(), "h-11 lg:h-10")} href="/app/upload">
+            <Link className={cn(buttonVariants(), "h-11 lg:h-10")} href="/app">
               Open the app <ArrowRight aria-hidden className="size-4" />
             </Link>
           ) : (

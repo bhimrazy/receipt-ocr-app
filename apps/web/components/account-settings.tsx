@@ -4,7 +4,8 @@ import { Button } from "@receipt-ocr/ui/components/button";
 import { Card, CardContent } from "@receipt-ocr/ui/components/card";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Label } from "@receipt-ocr/ui/components/label";
+import { Alert } from "@receipt-ocr/ui/components/alert";
+import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -15,18 +16,14 @@ import { authClient } from "@/lib/auth-client";
 function Status({ ok, error, id }: { ok: string | null; error: string | null; id?: string }) {
   if (error) {
     return (
-      <p
-        className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        id={id}
-        role="alert"
-      >
+      <Alert id={id} variant="destructive">
         {error}
-      </p>
+      </Alert>
     );
   }
   if (ok) {
     return (
-      <p className="flex items-center gap-1.5 text-sm text-primary" role="status">
+      <p className="flex items-center gap-1.5 text-sm text-success" role="status">
         <Check aria-hidden="true" className="size-4" />
         {ok}
       </p>
@@ -71,8 +68,8 @@ function ProfileCard({ initialName }: { initialName: string }) {
     <Card>
       <CardContent className="pt-5">
         <form className="flex flex-col gap-3" noValidate onSubmit={save}>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="name">Name</Label>
+          <Field data-invalid={error ? true : undefined}>
+            <FieldLabel htmlFor="name">Name</FieldLabel>
             <Input
               aria-describedby={error ? "name-error" : undefined}
               aria-invalid={error ? true : undefined}
@@ -82,7 +79,7 @@ function ProfileCard({ initialName }: { initialName: string }) {
               placeholder="Your name"
               value={name}
             />
-          </div>
+          </Field>
           <Status error={error} id="name-error" ok={ok} />
           <div>
             <Button disabled={pending} type="submit">
@@ -136,8 +133,8 @@ function PasswordCard() {
     <Card>
       <CardContent className="pt-5">
         <form className="flex flex-col gap-3" noValidate onSubmit={save}>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="current-password">Current password</Label>
+          <Field>
+            <FieldLabel htmlFor="current-password">Current password</FieldLabel>
             <Input
               aria-describedby={error ? "password-error" : undefined}
               autoComplete="current-password"
@@ -146,9 +143,9 @@ function PasswordCard() {
               type="password"
               value={current}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="new-password">New password</Label>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="new-password">New password</FieldLabel>
             <Input
               aria-describedby={error ? "password-error new-password-hint" : "new-password-hint"}
               autoComplete="new-password"
@@ -157,10 +154,8 @@ function PasswordCard() {
               type="password"
               value={next}
             />
-            <p className="text-xs text-muted-foreground" id="new-password-hint">
-              At least 8 characters.
-            </p>
-          </div>
+            <FieldDescription id="new-password-hint">At least 8 characters.</FieldDescription>
+          </Field>
           <label className="flex items-center gap-2 text-sm text-muted-foreground max-md:min-h-11">
             <input
               checked={revokeOthers}
@@ -203,14 +198,7 @@ function DangerCard({ email }: { email: string }) {
           Permanently removes your account, your workspaces and every receipt in them. You
           can&apos;t undo this.
         </p>
-        {notice ? (
-          <p
-            className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning"
-            role="status"
-          >
-            {notice}
-          </p>
-        ) : null}
+        {notice ? <Alert variant="warning">{notice}</Alert> : null}
         <div>
           <Button onClick={() => setOpen(true)} variant="destructive">
             <Trash2 aria-hidden="true" />

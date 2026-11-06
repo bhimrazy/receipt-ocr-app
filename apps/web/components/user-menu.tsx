@@ -62,7 +62,7 @@ export function UserMenu({
       {variant === "row" ? (
         <DropdownMenuTrigger
           aria-label="Account menu"
-          className="flex min-h-12 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-foreground/[0.06]"
+          className="flex min-h-12 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-wash"
         >
           <Avatar className="size-8" user={user} />
           <span className="min-w-0 flex-1">

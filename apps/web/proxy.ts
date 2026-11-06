@@ -1,4 +1,5 @@
 import { getSessionCookie } from "better-auth/cookies";
+import { REQUESTED_PATH_HEADER } from "@/lib/redirect";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
@@ -16,7 +17,10 @@ export default function proxy(request: NextRequest) {
     pathname.startsWith("/app/") ||
     pathname === "/admin" ||
     pathname.startsWith("/admin/");
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete(REQUESTED_PATH_HEADER);
   if (isGuarded) {
+    requestHeaders.set(REQUESTED_PATH_HEADER, `${pathname}${request.nextUrl.search}`);
     const sessionCookie = getSessionCookie(request);
     if (!sessionCookie) {
       const signInUrl = new URL("/sign-in", request.url);
@@ -29,7 +33,7 @@ export default function proxy(request: NextRequest) {
 
   // The /admin role check is enforced server-side in app/admin/layout.tsx via
   // requireAdmin(); the cookie check here only weeds out signed-out visitors.
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

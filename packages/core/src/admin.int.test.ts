@@ -2,10 +2,29 @@
  * Admin deletion paths against real Postgres and S3. Skipped unless
  * INTEGRATION=1 (see receipts.int.test.ts for the setup).
  */
-import { member, organization, receipts, sql, user } from "@receipt-ocr/db";
+import {
+  adminAuditLog,
+  appSettings,
+  eq,
+  invitation,
+  member,
+  organization,
+  receipts,
+  sql,
+  user,
+} from "@receipt-ocr/db";
 import { Effect, Exit, ManagedRuntime } from "effect";
-import { afterAll, describe, expect, it } from "vitest";
-import { deleteWorkspace, prepareUserDeletion } from "./admin";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  cancelInvitation,
+  deleteWorkspace,
+  prepareUserDeletion,
+  removeMember,
+  setMemberRole,
+  setUserPlan,
+} from "./admin";
+import { DEFAULT_PLANS } from "./plans";
+import { Settings } from "./settings";
 import { AppLayer, type AppServices } from "./index";
 import { ingestUpload, purgeReceiptFiles } from "./pipeline";
 import { Db, Storage } from "./services";
@@ -33,11 +52,12 @@ async function createUser(name: string) {
 }
 
 async function join(userId: string, organizationId: string, role = "member") {
+  const id = `${tag}-m-${userId}-${organizationId}`;
   await run(
     Effect.flatMap(Db, ({ use }) =>
       use((d) =>
         d.insert(member).values({
-          id: `${tag}-m-${userId}-${organizationId}`,
+          id,
           userId,
           organizationId,
           role,
@@ -46,6 +66,7 @@ async function join(userId: string, organizationId: string, role = "member") {
       ),
     ),
   );
+  return id;
 }
 
 const upload = (scope: { userId: string; organizationId: string; role: string }) =>
@@ -54,26 +75,64 @@ const upload = (scope: { userId: string; organizationId: string; role: string })
 const objectExists = async (key: string) =>
   Exit.isSuccess(await runExit(Effect.flatMap(Storage, (s) => s.get(key))));
 
-describe.skipIf(!enabled)("admin deletion against Postgres + S3", () => {
-  afterAll(async () => {
-    await run(
-      Effect.flatMap(Db, ({ use }) =>
-        use(async (d) => {
-          const orgs = await d
-            .select({ id: organization.id })
-            .from(organization)
-            .where(sql`${organization.slug} like ${`${tag}%`}`);
-          for (const org of orgs) {
-            await runtime.runPromise(purgeReceiptFiles({ organizationId: org.id }));
-          }
-          await d.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
-          await d.delete(user).where(sql`${user.id} like ${`${tag}%`}`);
-        }),
+const workspaceExists = (organizationId: string) =>
+  run(
+    Effect.flatMap(Db, ({ use }) =>
+      use((d) =>
+        d
+          .select({ id: organization.id })
+          .from(organization)
+          .where(eq(organization.id, organizationId)),
       ),
-    );
-    await runtime.dispose();
-  });
+    ),
+  ).then((rows) => rows.length === 1);
 
+const auditRows = (action: string, targetId: string) =>
+  run(
+    Effect.flatMap(Db, ({ use }) =>
+      use((d) =>
+        d
+          .select()
+          .from(adminAuditLog)
+          .where(
+            sql`${adminAuditLog.action} = ${action} and ${adminAuditLog.targetId} = ${targetId}`,
+          ),
+      ),
+    ),
+  );
+
+/** An admin to attribute changes to: actor_id must reference a real user. */
+let auditor: { actor: { id: string; email: string }; ip: string };
+beforeAll(async () => {
+  if (!enabled) return;
+  const admin = await createUser("auditor");
+  auditor = {
+    actor: { id: admin.userId, email: `${admin.userId}@example.com` },
+    ip: "203.0.113.9",
+  };
+});
+
+afterAll(async () => {
+  if (!enabled) return;
+  await run(
+    Effect.flatMap(Db, ({ use }) =>
+      use(async (d) => {
+        const orgs = await d
+          .select({ id: organization.id })
+          .from(organization)
+          .where(sql`${organization.slug} like ${`${tag}%`}`);
+        for (const org of orgs) {
+          await runtime.runPromise(purgeReceiptFiles({ organizationId: org.id }));
+        }
+        await d.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
+        await d.delete(user).where(sql`${user.id} like ${`${tag}%`}`);
+      }),
+    ),
+  );
+  await runtime.dispose();
+});
+
+describe.skipIf(!enabled)("admin deletion against Postgres + S3", () => {
   it("P0-2: deleting a user removes their solo workspace and its files, but keeps receipts they added to a shared one", async () => {
     const carol = await createUser("carol");
     const dave = await createUser("dave");
@@ -112,11 +171,197 @@ describe.skipIf(!enabled)("admin deletion against Postgres + S3", () => {
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("Conflict");
   });
 
-  it("deleting a workspace deletes its stored files first", async () => {
+  it("deletes a user who co-owns a shared workspace with another owner, and keeps that workspace", async () => {
+    const hana = await createUser("hana");
+    const ivan = await createUser("ivan");
+    await join(hana.userId, ivan.organizationId, "owner");
+    const result = await run(prepareUserDeletion(hana.userId));
+    expect(result.workspacesDeleted).toBe(1);
+    expect(await workspaceExists(ivan.organizationId)).toBe(true);
+    expect(await workspaceExists(hana.organizationId)).toBe(false);
+  });
+
+  it("deleting a workspace removes its rows, writes the audit row, then deletes its files", async () => {
     const gina = await createUser("gina");
     const receipt = await upload(gina);
-    const { files } = await run(deleteWorkspace(gina.organizationId));
+    const { files } = await run(deleteWorkspace(gina.organizationId, auditor));
     expect(files).toBe(1);
+    expect(await workspaceExists(gina.organizationId)).toBe(false);
     expect(await objectExists(receipt.imageObjectKey!)).toBe(false);
+    expect(await auditRows("workspace.delete", gina.organizationId)).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!enabled)("admin workspace changes against Postgres", () => {
+  const memberRole = (memberId: string) =>
+    run(
+      Effect.flatMap(Db, ({ use }) =>
+        use((d) => d.select({ role: member.role }).from(member).where(eq(member.id, memberId))),
+      ),
+    ).then((rows) => rows[0]?.role);
+
+  /** The membership `ensurePersonalWorkspace` created for the workspace's owner. */
+  const ownerMemberId = (owner: { userId: string; organizationId: string }) =>
+    run(
+      Effect.flatMap(Db, ({ use }) =>
+        use((d) =>
+          d
+            .select({ id: member.id })
+            .from(member)
+            .where(
+              sql`${member.organizationId} = ${owner.organizationId} and ${member.userId} = ${owner.userId}`,
+            ),
+        ),
+      ),
+    ).then((rows) => rows[0]!.id);
+
+  it("refuses to demote or remove the only owner, and writes no audit row", async () => {
+    const jack = await createUser("jack");
+    await join((await createUser("kim")).userId, jack.organizationId);
+    const owner = await ownerMemberId(jack);
+
+    const demote = await runExit(setMemberRole(jack.organizationId, owner, "member", auditor));
+    expect(Exit.isFailure(demote) && JSON.stringify(demote.cause)).toContain("only owner");
+    const remove = await runExit(removeMember(jack.organizationId, owner, auditor));
+    expect(Exit.isFailure(remove) && JSON.stringify(remove.cause)).toContain("only owner");
+
+    expect(await memberRole(owner)).toBe("owner");
+    expect(await auditRows("workspace.member_role", jack.organizationId)).toHaveLength(0);
+    expect(await auditRows("workspace.member_remove", jack.organizationId)).toHaveLength(0);
+  });
+
+  it("lets only one of two concurrent demotions of the last two owners through", async () => {
+    const lena = await createUser("lena");
+    const second = await join((await createUser("milo")).userId, lena.organizationId, "owner");
+    const first = await ownerMemberId(lena);
+    const results = await Promise.all([
+      runExit(setMemberRole(lena.organizationId, first, "member", auditor)),
+      runExit(setMemberRole(lena.organizationId, second, "member", auditor)),
+    ]);
+    expect(results.filter(Exit.isSuccess)).toHaveLength(1);
+    const roles = [await memberRole(first), await memberRole(second)];
+    expect(roles.filter((r) => r === "owner")).toHaveLength(1);
+    expect(await auditRows("workspace.member_role", lena.organizationId)).toHaveLength(1);
+  });
+
+  it("changes a role with its audit row, labelled with the member's email", async () => {
+    const nora = await createUser("nora");
+    const otto = await createUser("otto");
+    const memberId = await join(otto.userId, nora.organizationId);
+    await run(setMemberRole(nora.organizationId, memberId, "admin", auditor));
+    expect(await memberRole(memberId)).toBe("admin");
+    const [row] = await auditRows("workspace.member_role", nora.organizationId);
+    expect(row?.metadata).toEqual({
+      member: `${otto.userId}@example.com`,
+      from: "member",
+      to: "admin",
+    });
+    expect(row?.ip).toBe("203.0.113.9");
+  });
+
+  it("only cancels an invitation through the workspace it belongs to", async () => {
+    const pia = await createUser("pia");
+    const quinn = await createUser("quinn");
+    const invitationId = `${tag}-inv`;
+    await run(
+      Effect.flatMap(Db, ({ use }) =>
+        use((d) =>
+          d.insert(invitation).values({
+            id: invitationId,
+            organizationId: pia.organizationId,
+            email: "guest@example.com",
+            role: "member",
+            status: "pending",
+            expiresAt: new Date(Date.now() + 86_400_000),
+            inviterId: pia.userId,
+          }),
+        ),
+      ),
+    );
+    const status = () =>
+      run(
+        Effect.flatMap(Db, ({ use }) =>
+          use((d) =>
+            d
+              .select({ status: invitation.status })
+              .from(invitation)
+              .where(eq(invitation.id, invitationId)),
+          ),
+        ),
+      ).then((rows) => rows[0]?.status);
+
+    const wrong = await runExit(cancelInvitation(quinn.organizationId, invitationId, auditor));
+    expect(Exit.isFailure(wrong) && JSON.stringify(wrong.cause)).toContain("NotFound");
+    expect(await status()).toBe("pending");
+
+    await run(cancelInvitation(pia.organizationId, invitationId, auditor));
+    expect(await status()).toBe("canceled");
+    expect(await auditRows("workspace.invitation_cancel", pia.organizationId)).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!enabled)("admin audit rows commit with the change", () => {
+  const planOf = (userId: string) =>
+    run(
+      Effect.flatMap(Db, ({ use }) =>
+        use((d) => d.select({ plan: user.plan }).from(user).where(eq(user.id, userId))),
+      ),
+    ).then((rows) => rows[0]?.plan);
+
+  it("writes the plan change and its audit row together", async () => {
+    const rosa = await createUser("rosa");
+    await run(setUserPlan(rosa.userId, "pro", auditor));
+    expect(await planOf(rosa.userId)).toBe("pro");
+    const [row] = await auditRows("user.plan", rosa.userId);
+    expect(row?.metadata).toEqual({ from: "free", to: "pro" });
+  });
+
+  it("rolls the change back when the audit row can't be written", async () => {
+    const sam = await createUser("sam");
+    // actor_id references "user", so an unknown actor makes the audit insert fail.
+    const ghost = { actor: { id: `${tag}-ghost`, email: "ghost@example.com" } };
+    const exit = await runExit(setUserPlan(sam.userId, "pro", ghost));
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("DbError");
+    expect(await planOf(sam.userId)).toBe("free");
+  });
+
+  it("records the stored settings value as `previous`, not the cached one", async () => {
+    const before = await run(
+      Effect.flatMap(Db, ({ use }) =>
+        use((d) => d.select().from(appSettings).where(eq(appSettings.key, "plans"))),
+      ),
+    );
+    try {
+      const pro = { ...DEFAULT_PLANS.pro };
+      const first = { free: { ...DEFAULT_PLANS.free, receiptsPerDay: 41 }, pro };
+      const second = { free: { ...DEFAULT_PLANS.free, receiptsPerDay: 42 }, pro };
+      await run(Effect.flatMap(Settings, (s) => s.plans)); // warm the cache
+      await run(Effect.flatMap(Settings, (s) => s.save("plans", first, auditor)));
+      // Another process writes behind this one's cache.
+      await run(
+        Effect.flatMap(Db, ({ use }) =>
+          use((d) =>
+            d
+              .update(appSettings)
+              .set({ value: { ...first, free: { ...first.free, receiptsPerDay: 43 } } })
+              .where(eq(appSettings.key, "plans")),
+          ),
+        ),
+      );
+      await run(Effect.flatMap(Settings, (s) => s.plans)); // re-cache the first save
+      const { previous } = await run(
+        Effect.flatMap(Settings, (s) => s.save("plans", second, auditor)),
+      );
+      expect(previous.free.receiptsPerDay).toBe(43);
+    } finally {
+      await run(
+        Effect.flatMap(Db, ({ use }) =>
+          use(async (d) => {
+            await d.delete(appSettings).where(eq(appSettings.key, "plans"));
+            if (before[0]) await d.insert(appSettings).values(before[0]);
+          }),
+        ),
+      );
+    }
   });
 });
