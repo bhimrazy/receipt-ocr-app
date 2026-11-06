@@ -87,7 +87,7 @@ ladder was short this time (reads 40 to 200, uploads 12 to 80).
 
 | On 1 vCPU / 1 GB, 3 s model           | Held every SLO           | First failing step | What ran out                                                                         |
 | ------------------------------------- | ------------------------ | ------------------ | ------------------------------------------------------------------------------------ |
-| Reads (pages + API)                   | at least 200 requests/s  | not reached        | App CPU at 80% avg, page p95 448 ms: next to the 500 ms limit                        |
+| Reads (pages + API)                   | the 200/s step held      | not reached        | App CPU at 80% avg, page p95 448 ms: next to the 500 ms limit                        |
 | Uploads (queued, with status polling) | 12 uploads/s (48 failed) | 48/s               | Postgres CPU 87%; the quota count query is the top statement, jobs queries come next |
 
 - Before the job queue and the merged hot-path trims the same ladder held 160 reads/s (200 failed) and 64 uploads/s

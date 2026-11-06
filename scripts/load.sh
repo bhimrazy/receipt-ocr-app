@@ -46,6 +46,7 @@ done
 date_tag="$(date -u +%Y-%m-%d)"
 run_dir="bench/results/load-$date_tag"
 rm -rf "$run_dir"
+rm -f bench/results/latest.md
 mkdir -p "$run_dir"
 
 dc() { docker compose -p "$PROJECT" -f docker-compose.yml -f docker-compose.load.yml --profile app "$@"; }
