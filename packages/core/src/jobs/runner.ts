@@ -107,6 +107,7 @@ export const tick = <R>(options: TickOptions<R>) =>
     const waitFor = options.waitForRetries ?? true;
 
     const slot = Effect.gen(function* () {
+      let dueAfterEmptyClaim = false;
       while ((yield* Clock.currentTimeMillis) < stopClaimingAt) {
         const [job] = yield* queue.claim({
           worker: options.worker,
@@ -116,15 +117,23 @@ export const tick = <R>(options: TickOptions<R>) =>
           ids: options.ids,
         });
         if (job) {
+          dueAfterEmptyClaim = false;
           record(yield* runClaimed(options.registry, job, options.worker));
           continue;
         }
         if (waitFor === false) return;
         const waitMs = yield* queue.nextRunIn(kindNames, waitFor === true ? options.ids : waitFor);
         const now = yield* Clock.currentTimeMillis;
-        // Nothing to wait for, not due in time, or due but not ours to claim
-        // (paused, user at the cap, another worker has it).
-        if (waitMs === null || waitMs <= 0 || now + waitMs >= waitUntil) return;
+        if (waitMs === null || now + waitMs >= waitUntil) return;
+        if (waitMs <= 0) {
+          // Due now. It may have become due just after the empty claim, so
+          // claim once more; due twice in a row and still unclaimed means it
+          // isn't ours (paused, its user at the cap, another worker has it).
+          if (dueAfterEmptyClaim) return;
+          dueAfterEmptyClaim = true;
+          continue;
+        }
+        dueAfterEmptyClaim = false;
         yield* Effect.sleep(Duration.millis(Math.min(waitMs, IDLE_POLL_MS)));
       }
     }).pipe(

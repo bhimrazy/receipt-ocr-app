@@ -39,7 +39,7 @@ import type { JobDefinition } from "./definition";
 import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
 import { tickScope } from "./live";
 import { JobQueue } from "./queue";
-import { cancelJob, resetTickMarks, tick } from "./runner";
+import { cancelJob, resetTickMarks, tick, type JobRunRecord } from "./runner";
 
 const enabled = process.env.INTEGRATION === "1";
 const tag = `jobs-${Date.now()}`;
@@ -181,6 +181,37 @@ const drain = (ids: readonly string[], worker = `${tag}-w`, budgetMs = 20_000) =
       ids,
     }),
   );
+
+/**
+ * Runs one job attempt by attempt until it is finished, making it due before
+ * each tick instead of waiting out its backoff, so slow runners can't change
+ * the outcome. Bounded: a job that never finishes fails the test.
+ */
+async function runToEnd(jobId: string, on: "scripted" | "fixture" = "scripted") {
+  const runs: JobRunRecord[] = [];
+  for (let i = 0; i < 10; i++) {
+    const [job] = await db((d) =>
+      d.select({ state: jobs.state }).from(jobs).where(eq(jobs.id, jobId)),
+    );
+    if (job?.state !== "queued" && job?.state !== "running") return runs;
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ runAt: new Date(0) })
+        .where(and(eq(jobs.id, jobId), eq(jobs.state, "queued"))),
+    );
+    const step = tick({
+      worker: `${tag}-w`,
+      registry: receiptRegistry,
+      budgetMs: 60_000,
+      ids: [jobId],
+      waitForRetries: false,
+    });
+    const stats = await (on === "fixture" ? fixture.runPromise(step) : scripted.runPromise(step));
+    runs.push(...stats.runs);
+  }
+  throw new Error(`job ${jobId} never finished`);
+}
 
 // ---------- Test-only kinds ----------
 
@@ -439,16 +470,8 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     const { receipt, jobId } = await fixture.runPromise(
       ingestUpload({ scope: c, fileName: "f.jpg", body, limits }),
     );
-    const stats = await fixture.runPromise(
-      tick({
-        worker: `${tag}-w`,
-        registry: receiptRegistry,
-        budgetMs: 20_000,
-        stopClaimingBeforeMs: 2_000,
-        ids: [jobId],
-      }),
-    );
-    expect(stats.runs.map((r) => r.outcome)).toEqual(["retry", "retry", "retry", "dead"]);
+    const runs = await runToEnd(jobId, "fixture");
+    expect(runs.map((r) => r.outcome)).toEqual(["retry", "retry", "retry", "dead"]);
     expect(await receiptOf(receipt.id, c)).toMatchObject({
       status: "failed",
       errorMessage: EXTRACTION_FAILED_MESSAGE,
@@ -518,8 +541,14 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     expect(waiting).toMatchObject({ state: "queued", attempts: 1 });
     expect(Math.abs(waiting!.runAt.getTime() - until.getTime())).toBeLessThan(5);
     // Once it ends, the job runs on its second attempt.
-    const third = await drain([jobId]);
-    expect(third.runs.map((r) => [r.attempt, r.outcome])).toEqual([[2, "succeeded"]]);
+    await db((d) =>
+      d
+        .update(jobControls)
+        .set({ until: new Date(0) })
+        .where(eq(jobControls.scope, "provider:google")),
+    );
+    const third = await runToEnd(jobId);
+    expect(third.map((r) => [r.attempt, r.outcome])).toEqual([[2, "succeeded"]]);
     expect((await receiptOf(receipt.id, a))?.status).toBe("completed");
   });
 
@@ -754,7 +783,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     const before = (await usage()).globalDay!;
     script = [{ kind: "timeout" }, { kind: "timeout" }];
     const { jobId } = await upload(c);
-    await drain([jobId]);
+    expect((await runToEnd(jobId)).map((r) => r.outcome)).toEqual(["retry", "retry", "succeeded"]);
     // One round, three attempts that each called a model.
     expect((await usage()).globalDay! - before).toBe(3);
     // A cap that the retries filled refuses the next upload.

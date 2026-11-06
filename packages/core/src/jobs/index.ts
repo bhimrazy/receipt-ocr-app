@@ -4,4 +4,4 @@ export * from "./kinds/receipt-extract";
 export * from "./queue";
 export * from "./receipt-extract-job";
 export * from "./registry";
-export * from "./runner";
+export { cancelJob, tick, type JobRunRecord, type TickOptions, type TickStats } from "./runner";

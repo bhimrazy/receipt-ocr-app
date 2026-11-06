@@ -66,7 +66,7 @@ Everything is exported from `@receipt-ocr/core`. Two import-free entry points ex
 | Area        | Exports                                                                                                                     |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Pipeline    | `ingestUpload`, `runExtraction`, `settleFailure`, `claimRetry`, `deleteReceipt`, `purgeReceiptFiles`, `getReceiptWithImage` |
-| Jobs        | `JobQueue`, `enqueueJob`, `tick`, `cancelJob`, `JOB_REGISTRY`, `receiptExtract`, `backoffMs`, `liveReceiptJob`, job errors  |
+| Jobs        | `JobQueue`, `enqueueJob`, `tick`, `cancelJob`, `JOB_REGISTRY`, `receiptExtract`, `backoffMs`, job errors                    |
 | Quota       | `userPlan`, `quotaLimits`, `checkQuota`, `enforceQuota`, `quotaGate`, `decideQuota`, `quotaMessage`                         |
 | Usage       | `countUsage`, `lockUserQuota`, `usageByDay`, `usageByModel`, `usageByWorkspace`, `receiptCalls`, `receiptsReadSince`        |
 | Workspace   | `resolveScope`, `ensurePersonalWorkspace`, `hitRateLimit`, `parseWorkspaceName`, `personalWorkspaceName`                    |
