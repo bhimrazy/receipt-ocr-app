@@ -43,4 +43,28 @@ describe("proxy", () => {
     );
     expect(signedOut.cookies.get("signed_in_hint")?.value).toBe("");
   });
+
+  it("sets the hint readable by scripts, scoped to the site, for 30 days", () => {
+    const res = proxy(
+      new NextRequest("http://localhost/app", {
+        headers: { cookie: "better-auth.session_token=abc" },
+      }),
+    );
+    expect(res.cookies.get("signed_in_hint")).toMatchObject({
+      value: "1",
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    expect(res.cookies.get("signed_in_hint")?.httpOnly).toBeFalsy();
+  });
+
+  it("leaves the hint alone when it is already set", () => {
+    const res = proxy(
+      new NextRequest("http://localhost/app", {
+        headers: { cookie: "better-auth.session_token=abc; signed_in_hint=1" },
+      }),
+    );
+    expect(res.cookies.get("signed_in_hint")).toBeUndefined();
+  });
 });

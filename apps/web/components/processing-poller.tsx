@@ -3,67 +3,22 @@
 import type { ReceiptCounts } from "@receipt-ocr/core";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { countsKey } from "@/lib/counts-key";
+import { startBackoffPoll } from "@/lib/backoff-poll";
 import type { ReceiptStatus } from "@/lib/receipts";
 
-/** Give up after this much polling time; background extraction should never take longer. */
-const MAX_POLL_MS = 3 * 60 * 1000;
-const BASE_INTERVAL_MS = 2000;
-const MAX_INTERVAL_MS = 15000;
-
-/**
- * Calls `check` on a backed-off schedule until it returns true or the budget
- * runs out (then `onGiveUp`). Hidden tabs don't poll or spend budget; the
- * check runs again as soon as the tab is visible.
- */
 function useBackoffPoll(enabled: boolean, check: () => Promise<boolean>, onGiveUp?: () => void) {
   useEffect(() => {
     if (!enabled) return;
-    let stopped = false;
-    let attempt = 0;
-    let elapsed = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    function schedule(ms: number) {
-      clearTimeout(timer);
-      if (stopped || document.hidden) return;
-      elapsed += ms;
-      if (elapsed > MAX_POLL_MS) {
-        stopped = true;
-        onGiveUp?.();
-        return;
-      }
-      timer = setTimeout(tick, ms);
-    }
-
-    async function tick() {
-      if (stopped || document.hidden) return;
-      let done = false;
-      try {
-        done = await check();
-      } catch {
-        // transient network error: keep polling on the backed-off schedule
-      }
-      if (stopped) return;
-      if (done) {
-        stopped = true;
-        return;
-      }
-      attempt += 1;
-      schedule(Math.min(BASE_INTERVAL_MS * 2 ** Math.floor(attempt / 3), MAX_INTERVAL_MS));
-    }
-
-    function onVisibility() {
-      if (document.hidden) clearTimeout(timer);
-      else if (!stopped) void tick();
-    }
-
-    document.addEventListener("visibilitychange", onVisibility);
-    schedule(BASE_INTERVAL_MS);
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
+    return startBackoffPoll({
+      check,
+      onGiveUp,
+      isHidden: () => document.hidden,
+      onVisibilityChange: (listener) => {
+        document.addEventListener("visibilitychange", listener);
+        return () => document.removeEventListener("visibilitychange", listener);
+      },
+    });
   }, [enabled, check, onGiveUp]);
 }
 
@@ -109,8 +64,6 @@ export function ProcessingPoller({ id, status }: { id: string; status: ReceiptSt
     </div>
   );
 }
-
-const countsKey = (c: ReceiptCounts) => `${c.total}:${c.needsReview}:${c.failed}:${c.inFlight}`;
 
 /**
  * Watches a server-rendered list while any row is still being read. Polls the
