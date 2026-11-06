@@ -1,7 +1,7 @@
 # Status and handoff
 
 Where the project stands, what is in flight, and what needs a decision. Read this first when picking the work up on a
-new machine; keep it current when something merges or a decision is made. Last updated 2026-11-06 (after #36).
+new machine; keep it current when something merges or a decision is made. Last updated 2026-11-06 (after #44).
 
 How the system is built (every app and package, the main flows and the data model) is in
 [architecture](architecture/README.md).
@@ -31,6 +31,8 @@ How the system is built (every app and package, the main flows and the data mode
 | #37           | Postgres job queue: `jobs` table, leases, retries with backoff, per-user fairness, provider cooldowns; uploads and retries run through it in `after()` ([flow](architecture/flows/jobs.md)); migration `0008`          |
 | #38           | Hardening: session check before the upload body, PDF page cap, per-email auth limits, CSP reports, health endpoints, SECURITY.md, [runbook](runbook.md)                                                                |
 | #40           | Load test suite on a 1 vCPU / 1 GB server (`scripts/load.sh`, manual `load.yml`); [results](../bench/results/load-2026-11-06.md)                                                                                       |
+| #42           | Browser image shrinking by pixel budget (3 MP, short edge 1000 px or more) to about 500 KB, at most 1 MB; every decodable image re-encoded so metadata never reaches the server                                        |
+| #44           | [Currencies and FX plan](plans/2026-11-06-currencies-fx.md): `numeric(19,4)`, per-workspace home currency, Frankfurter rates on the receipt date, seven PRs                                                            |
 
 ## Production to-dos (owner)
 
@@ -47,13 +49,25 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-| Track (branch)             | Work                                                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `feat/capture`             | In-app camera, batch capture (limit per plan, default 10, set in Admin), four-corner crop with auto edge detection and straightening |
-| `feat/size-target-encoder` | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width           |
-| `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt           |
-| `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                     |
-| `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                          |
+Each track has its own branch (and worktree on the original machine). Open the PR to see done, left and next steps.
+
+| PR or branch                       | Work                                                                                                                                                             | State                                                                                                     |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| #41 `fix/pdf-page-evasions`        | Five more PDF page-hiding cases                                                                                                                                  | Fix round: /Kids overcounted Chrome and macOS PDFs (10 pages counted 12); then re-review                  |
+| #43 `feat/pwa`                     | Installable app: icons, offline page, service worker, Android share target, install prompt                                                                       | Review approved; fix round for cross-site share injection, empty MIME type, sign-out cleanup, kill switch |
+| #45 `fix/three-decimal-currencies` | Prompt: KWD/BHD/OMR three digits are fils, not thousands                                                                                                         | Review approved; small follow-up (drop IQD); real-model benchmark still to run (local key invalid)        |
+| #46 `feat/mobile-shell`            | Phone tab bar with Scan, top bar with Back, account and receipt-action sheets, `Drawer`                                                                          | Product and code review running                                                                           |
+| `feat/capture`                     | In-app camera, batch tray (`batchMax` per plan, default 10, in Admin), four-corner crop with auto detection and straightening, filters (Enhance, Greyscale, B&W) | Building; must make `/app/upload` a real page reading `?capture=1` and `?shared=1`                        |
+| `feat/receipt-groups`              | Groups (many per receipt), filter, bulk add, CSV column, `/app/groups`; migration `0009`                                                                         | Building                                                                                                  |
+| `feat/dashboard`                   | Home dashboard: this month vs last, 12 months, categories, merchants, tax; per currency                                                                          | Building; owns the shared `core/src/analytics/time-buckets.ts`                                            |
+| `feat/admin-ops`                   | Admin Operations charts (volume, latency, cost, failures, queue) and `/admin/jobs` actions                                                                       | Building; copies the time-buckets helper and adds an hour unit                                            |
+| `feat/wide-events`                 | One wide event per request, page render and job attempt; sampling; redaction; OTLP plan                                                                          | Building                                                                                                  |
+| `feat/consent-analytics`           | Cookie banner (equal Accept/Reject), `/cookies`, cookie-free analytics, optional GA4                                                                             | Building                                                                                                  |
+| `fix/perf-seo`                     | Lighthouse and SEO audit of public pages, fixes, report in `docs/reviews/`                                                                                       | Building                                                                                                  |
+
+Merge order that avoids most conflicts: #41, #45, #43, #46, then `feat/capture` (it resolves the upload-panel
+conflict with #43), then groups (migration `0009`), dashboard, admin-ops (dedupe the time-buckets helper), wide
+events, consent, perf/SEO. Every PR gets an independent review before merge.
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -83,6 +97,12 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
     `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
     which amounts are converted, sign-up default from country.
 
+13. Mobile shell (#46): admin moved into the account sheet on phones (two taps); History badge for receipts that
+    need attention (one extra count query per page); Home becomes a dashboard once Scan opens the camera; a light
+    theme or stay dark-only.
+14. Analytics on public pages: cookie-free by default (decided), GA4 only if you set its ID (it then needs the
+    consent banner). Observability: OpenTelemetry (OTLP) export, Axiom as the default endpoint (decided).
+
 ## Roadmap (order)
 
 From the [combined plan](plans/2026-11-06-combined-plan.md):
@@ -108,6 +128,13 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    [currencies and FX](plans/2026-11-06-currencies-fx.md).
 
 ## Known follow-ups
+
+- Upload capacity on the small server fell after #37 (64/s to between 12 and 48/s). Performance track: profile the
+  quota count and jobs queries, replace the quota count with a counter, fill in the 24/36/48 ladder, 30-minute soak.
+- Real-model OCR benchmark in CI: a manual workflow using a repo secret for the Gemini key (with a spend cap), so
+  prompt changes such as #45 are measured without a local key.
+- Follow the glass-analytics study ideas already passed to the dashboard and admin tracks (URL date range with
+  compare, previous-period lines, top 10 plus Other, indexes before rollups, usage and cost projection).
 
 - Image shrinking (browser, `apps/web/lib/upload-prep.ts`): decode large photos at reduced size
   (`createImageBitmap` `resizeWidth`/`resizeHeight`, after reading the dimensions from the header) to cut peak memory
