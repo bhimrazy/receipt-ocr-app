@@ -159,6 +159,12 @@ export function clientIp(request: { headers: Headers }): string | null {
 
 let warnedNoClientIp = false;
 
+/** For early returns: cancels an unread request body so the runtime stops receiving it. */
+export function discardBody(request: Request, response: Response): Response {
+  if (request.body && !request.bodyUsed) request.body.cancel().catch(() => {});
+  return response;
+}
+
 /** Room for multipart boundaries and the other form fields. */
 const MULTIPART_OVERHEAD = 64 * 1024;
 

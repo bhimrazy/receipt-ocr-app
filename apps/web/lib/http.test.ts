@@ -11,7 +11,7 @@ vi.mock("./log", async (importOriginal) => ({
 }));
 vi.mock("./env", () => ({ authEnv: { betterAuthUrl: "https://app.example", ipAddress } }));
 
-const { causeDetail, clientIp, crossOriginResponse } = await import("./http");
+const { causeDetail, clientIp, crossOriginResponse, discardBody } = await import("./http");
 
 const request = (headers: Record<string, string>) =>
   new Request("https://app.example/api/contact", { method: "POST", headers });
@@ -63,5 +63,18 @@ describe("causeDetail (L2)", () => {
     const detail = causeDetail({ cause });
     expect(detail).toContain('update "receipts"');
     expect(detail).not.toContain("Jane Doe");
+  });
+});
+
+describe("discardBody (audit L1)", () => {
+  it("cancels an unread body and passes the response through", async () => {
+    let cancelled = false;
+    const body = new ReadableStream({ cancel: () => void (cancelled = true) });
+    // @ts-expect-error Node's fetch needs `duplex` for a streamed body.
+    const req = new Request("https://app.example/x", { method: "POST", body, duplex: "half" });
+    const res = new Response(null, { status: 401 });
+    expect(discardBody(req, res)).toBe(res);
+    await Promise.resolve();
+    expect(cancelled).toBe(true);
   });
 });
