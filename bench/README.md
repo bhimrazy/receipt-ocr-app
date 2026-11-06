@@ -3,7 +3,7 @@
 ## OCR accuracy, latency and cost
 
 ```bash
-GOOGLE_GENERATIVE_AI_API_KEY=... bun run bench:ocr [--models google:gemini-3.7-flash] [--only npr-lakh,idr-dot] [--concurrency 2]
+GOOGLE_GENERATIVE_AI_API_KEY=... bun run bench:ocr [--models google:gemini-3.8-flash] [--only npr-lakh,idr-dot] [--concurrency 2]
 ```
 
 Real provider calls, billed to the key. Without the key the script exits with a message.

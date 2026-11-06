@@ -32,7 +32,7 @@ describe("planTableSchema", () => {
 });
 
 describe("ocrRoutingSchema", () => {
-  const step = { model: "google:gemini-3.7-flash", enabled: true };
+  const step = { model: "google:gemini-3.8-flash", enabled: true };
 
   it("fills in the default step timeout", () => {
     const result = ocrRoutingSchema.parse({ chain: [step] });
@@ -55,12 +55,12 @@ describe("ocrRoutingSchema", () => {
 });
 
 /** Settings over a database with no saved rows; a write would fail the test. */
-const settingsWith = (env: Record<string, string>) => {
+const settingsWith = (env: Record<string, string>, rows: unknown[] = []) => {
   const db = Layer.succeed(Db, {
     client: {
       transaction: () => Promise.reject(new Error("unexpected write")),
     } as never,
-    use: () => Effect.succeed([] as never),
+    use: () => Effect.succeed(rows as never),
   });
   return <A, E>(program: Effect.Effect<A, E, Settings>) =>
     Effect.runPromiseExit(
@@ -75,10 +75,10 @@ const actor = { actor: { id: "a", email: "a@example.com" } };
 
 describe("Settings", () => {
   it("defaults the chain to GEMINI_MODEL when it is on the allowlist", async () => {
-    const run = settingsWith({ GEMINI_MODEL: "gemini-3.7-flash" });
+    const run = settingsWith({ GEMINI_MODEL: "gemini-3.8-flash" });
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
-      "google:gemini-3.7-flash",
+      "google:gemini-3.8-flash",
     ]);
   });
 
@@ -86,7 +86,21 @@ describe("Settings", () => {
     const run = settingsWith({ GEMINI_MODEL: "gemini-unlisted" });
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
-      "google:gemini-3.7-flash",
+      "google:gemini-3.8-flash",
+    ]);
+  });
+
+  it("ignores a saved chain naming a model that is no longer offered", async () => {
+    const saved = {
+      key: "ocr",
+      value: { chain: [{ model: "google:gemini-3.7-flash", enabled: true, timeoutMs: 30_000 }] },
+      updatedAt: new Date(),
+      updatedBy: "a",
+    };
+    const run = settingsWith({ GEMINI_MODEL: "gemini-3.8-flash" }, [saved]);
+    const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
+    expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
+      "google:gemini-3.8-flash",
     ]);
   });
 
@@ -116,7 +130,7 @@ describe("Settings", () => {
     const run = settingsWith({});
     const exit = await run(
       Effect.flatMap(Settings, (s) =>
-        s.save("ocr", { chain: [{ model: "google:gemini-3.7-flash", enabled: true }] }, actor),
+        s.save("ocr", { chain: [{ model: "google:gemini-3.8-flash", enabled: true }] }, actor),
       ),
     );
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("no API key");

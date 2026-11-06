@@ -26,7 +26,8 @@ export const OCR_PROVIDERS: readonly OcrProvider[] = [
 ];
 
 export const OCR_MODELS: readonly OcrModel[] = [
-  { id: "google:gemini-3.7-flash", provider: "google", label: "Gemini 3.7 Flash" },
+  { id: "google:gemini-3.8-flash", provider: "google", label: "Gemini 3.8 Flash" },
+  { id: "google:gemini-3.5-flash-lite", provider: "google", label: "Gemini 3.5 Flash-Lite" },
   { id: "fixture", provider: "fixture", label: "Fixture receipts (no network)" },
 ];
 
