@@ -39,4 +39,4 @@ export function canonicalFor(path: string): { canonical: string } | undefined {
 
 export const siteTitle = "Receipt OCR: Turn Receipt Photos into CSV | receiptOCR";
 
-export const siteDescription = `Receipt OCR that turns photos of receipts (PNG, JPG, HEIC) into spreadsheet rows. Extracts merchant, date, line items, tax and total with confidence scores. Free, ${PLANS.free.receiptsPerDay} receipts a day.`;
+export const siteDescription = `Receipt OCR that turns receipt photos and PDFs into spreadsheet rows. Extracts merchant, date, line items, tax and total with confidence scores. Free, ${PLANS.free.receiptsPerDay} receipts a day.`;
