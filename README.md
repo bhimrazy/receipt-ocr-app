@@ -22,6 +22,9 @@ bun run db:migrate
 bun dev
 ```
 
+Deploying to production, and the steps for each release (migrations, new variables, rollback), are in
+[`docs/deployment.md`](docs/deployment.md).
+
 ## Local development stack
 
 `docker compose` brings up everything the app needs except the OCR provider:
