@@ -107,9 +107,9 @@ app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day) 
 
 The app accepts files up to 10 MB (`MAX_UPLOAD_BYTES`), but Vercel rejects any request body over **4.5 MB** with a 413.
 The browser therefore shrinks photos (long edge 2,000 px, JPEG) before uploading and refuses a file that is still over
-`DEPLOYMENT_BODY_LIMIT_BYTES` (4.4 MB, leaving room for the multipart envelope), so large PDFs are turned away with a
+`DEPLOYMENT_BODY_LIMIT_BYTES` (4 MB, leaving room for the multipart envelope), so large PDFs are turned away with a
 clear message instead of a failed request. Both constants live in `packages/core/src/upload-limits.ts`. A Docker
-deployment without that proxy limit can raise `DEPLOYMENT_BODY_LIMIT_BYTES` up to 10 MB.
+deployment without that proxy limit can raise `DEPLOYMENT_BODY_LIMIT_BYTES` up to 10 MB by editing the constant and rebuilding.
 
 ## Every release
 

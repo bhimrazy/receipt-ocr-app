@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  KEEP_ORIGINAL_BYTES,
-  UPLOAD_LIMIT_BYTES,
-  acceptedType,
-  fitWithin,
-  shouldReencode,
-} from "./upload-prep";
+import { UPLOAD_LIMIT_BYTES, acceptedType, fitWithin } from "./upload-prep";
 
 describe("fitWithin", () => {
   it("scales the long edge to the cap and keeps the aspect ratio", () => {
@@ -18,17 +12,6 @@ describe("fitWithin", () => {
   it("keeps at least one pixel on a very thin strip", () => {
     expect(fitWithin(1, 20000)).toEqual({ width: 1, height: 2000 });
   });
-});
-
-describe("shouldReencode", () => {
-  const small = { type: "image/jpeg", size: KEEP_ORIGINAL_BYTES, width: 1200, height: 1600 };
-  it("keeps a small in-bounds photo", () => expect(shouldReencode(small)).toBe(false));
-  it("re-encodes when too many pixels", () =>
-    expect(shouldReencode({ ...small, height: 2001 })).toBe(true));
-  it("re-encodes when too many bytes", () =>
-    expect(shouldReencode({ ...small, size: KEEP_ORIGINAL_BYTES + 1 })).toBe(true));
-  it("always converts HEIC", () =>
-    expect(shouldReencode({ ...small, type: "image/heic" })).toBe(true));
 });
 
 describe("acceptedType", () => {
@@ -49,6 +32,6 @@ describe("acceptedType", () => {
 
 describe("UPLOAD_LIMIT_BYTES", () => {
   it("is the deployment body limit, below the app limit", () => {
-    expect(UPLOAD_LIMIT_BYTES).toBe(4_400_000);
+    expect(UPLOAD_LIMIT_BYTES).toBe(4 * 1024 * 1024);
   });
 });

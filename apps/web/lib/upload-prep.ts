@@ -6,8 +6,6 @@ import {
 
 export const MAX_EDGE = 2000;
 export const JPEG_QUALITY = 0.85;
-/** Within bounds and under this, the original is already small enough to keep as is. */
-export const KEEP_ORIGINAL_BYTES = 500 * 1024;
 /** What the file picker is told to offer. */
 export const ACCEPT = ACCEPTED_MEDIA_TYPES.join(",");
 /** The size a file may be at upload time: the app limit, or the tighter deployment body limit. */
@@ -40,21 +38,6 @@ export function fitWithin(width: number, height: number, max = MAX_EDGE) {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
   };
-}
-
-/**
- * Whether to re-encode. HEIC always is (so every provider can read it); otherwise only photos that are
- * oversized in pixels or bytes. A small in-bounds original is left alone.
- */
-export function shouldReencode(input: {
-  type: string;
-  size: number;
-  width: number;
-  height: number;
-}) {
-  if (input.type === "image/heic" || input.type === "image/heif") return true;
-  const within = Math.max(input.width, input.height) <= MAX_EDGE;
-  return !(within && input.size <= KEEP_ORIGINAL_BYTES);
 }
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
@@ -93,22 +76,24 @@ async function encodeJpeg(bitmap: ImageBitmap, width: number, height: number): P
 }
 
 /**
- * Orients, downscales and re-encodes a photo as JPEG, which also drops EXIF/GPS. PDFs and anything the
- * browser can't decode (e.g. HEIC outside Safari) come back unchanged for the server to judge. Never throws.
+ * Orients, downscales and re-encodes every image the browser can decode as JPEG, which removes camera
+ * metadata (EXIF, including GPS). PDFs, and images the browser can't decode (e.g. HEIC outside Safari), come
+ * back unchanged with their metadata, for the server to judge. Never throws.
  */
 export async function prepareFile(file: File): Promise<File> {
   const type = acceptedType(file);
   if (!type || !IMAGE_TYPES.has(type) || typeof createImageBitmap === "undefined") return file;
   let bitmap: ImageBitmap | undefined;
   try {
-    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    const { width, height } = bitmap;
-    if (!shouldReencode({ type, size: file.size, width, height })) return file;
-    const target = fitWithin(width, height);
+    try {
+      bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch (error) {
+      // Older engines reject the options bag; they apply EXIF orientation by default.
+      if (!(error instanceof TypeError)) throw error;
+      bitmap = await createImageBitmap(file);
+    }
+    const target = fitWithin(bitmap.width, bitmap.height);
     const blob = await encodeJpeg(bitmap, target.width, target.height);
-    // Re-encoding an in-bounds file can make it bigger; keep the original then.
-    const heic = type === "image/heic" || type === "image/heif";
-    if (!heic && blob.size >= file.size && target.width === width) return file;
     return new File([blob], jpegName(file.name), { type: "image/jpeg", lastModified: Date.now() });
   } catch {
     return file;

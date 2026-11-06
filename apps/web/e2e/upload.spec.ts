@@ -9,11 +9,10 @@ test.skip(
   "set E2E_UPLOAD=1 and OCR_PROVIDER=fixture to run the upload flow",
 );
 
-// Three sign-ups from the shared e2e IP would trip the per-IP sign-up limit.
-test.use({
-  extraHTTPHeaders: {
-    "x-forwarded-for": `10.${(Math.random() * 255) | 0}.${(Math.random() * 255) | 0}.${(Math.random() * 255) | 0}`,
-  },
+// Sign-up is limited per client IP; give every test (and retry) its own address.
+test.beforeEach(async ({ context }) => {
+  const octet = () => Math.floor(Math.random() * 255);
+  await context.setExtraHTTPHeaders({ "x-forwarded-for": `10.${octet()}.${octet()}.${octet()}` });
 });
 
 test("uploading a receipt image shows the extracted merchant and total", async ({ page }) => {
@@ -69,7 +68,7 @@ test("a phone-sized photo is shrunk in the browser, then uploads", async ({ page
   });
   await page.getByRole("button", { name: "Read receipt" }).click();
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
-  expect(requests[0]).toBeLessThan(4_400_000);
+  expect(requests[0]).toBeLessThan(4 * 1024 * 1024);
 });
 
 test("a PDF is accepted, and one over the body limit is refused before upload", async ({
@@ -92,4 +91,7 @@ test("a PDF is accepted, and one over the body limit is refused before upload", 
   });
   await page.getByRole("button", { name: "Read receipt" }).click();
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
+  await expect(page.getByText("This receipt is a PDF.")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Open PDF/ })).toBeVisible();
+  await expect(page.locator('img[alt^="Photo of the receipt"]')).toHaveCount(0);
 });

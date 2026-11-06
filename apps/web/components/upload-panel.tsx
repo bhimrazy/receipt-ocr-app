@@ -116,6 +116,10 @@ export function UploadPanel({
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [preparing, setPreparing] = useState(false);
+  const queueRef = useRef<Queued[]>([]);
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -148,26 +152,35 @@ export function UploadPanel({
       if (rejection) rejected.push(rejection);
       else candidates.push(file);
     }
-    const room = Math.max(0, MAX_FILES - queue.length);
-    if (candidates.length > room) rejected.push(`you can add ${MAX_FILES} receipts at a time`);
+    const initialRoom = Math.max(0, MAX_FILES - queue.length);
+    if (candidates.length > initialRoom)
+      rejected.push(`you can add ${MAX_FILES} receipts at a time`);
     setNotice(null);
     setSuccess(null);
     setError(null);
     setPreparing(true);
     const accepted: Queued[] = [];
-    for (const original of candidates.slice(0, room)) {
+    for (const original of candidates.slice(0, initialRoom)) {
       const file = await prepareFile(original);
       const rejection = sizeRejection(file);
       if (rejection) {
         rejected.push(rejection);
         continue;
       }
-      const preview = file.type === "application/pdf" ? "" : URL.createObjectURL(file);
+      const preview = acceptedType(file) === "application/pdf" ? "" : URL.createObjectURL(file);
       if (preview) previews.current.add(preview);
       accepted.push({ id: crypto.randomUUID(), file, preview, state: "waiting" });
     }
     setPreparing(false);
-    setQueue((current) => [...current, ...accepted]);
+    const room = Math.max(0, MAX_FILES - queueRef.current.length);
+    release(accepted.slice(room));
+    if (accepted.length > room && !rejected.some((r) => r.startsWith("you can add"))) {
+      rejected.push(`you can add ${MAX_FILES} receipts at a time`);
+    }
+    setQueue((current) => [
+      ...current,
+      ...accepted.slice(0, Math.max(0, MAX_FILES - current.length)),
+    ]);
     setNotice(rejected.length > 0 ? `Not added: ${rejected.join("; ")}.` : null);
   }
 
@@ -237,6 +250,7 @@ export function UploadPanel({
     }
   }
 
+  const locked = busy || preparing;
   const empty = queue.length === 0;
   const count = waiting.length;
   const overLimit = remaining !== null && count > remaining;
@@ -254,29 +268,33 @@ export function UploadPanel({
             ? "border-primary bg-primary/5"
             : "border-input/60 bg-card hover:border-primary/50",
         )}
-        onClick={() => inputRef.current?.click()}
+        onClick={() => {
+          if (!locked) inputRef.current?.click();
+        }}
         onDragLeave={() => setDragging(false)}
         onDragOver={(event) => {
           event.preventDefault();
-          setDragging(true);
+          if (!locked) setDragging(true);
         }}
         onDrop={(event) => {
           event.preventDefault();
           setDragging(false);
-          if (!busy && !preparing) void addFiles(event.dataTransfer.files);
+          if (!locked) void addFiles(event.dataTransfer.files);
         }}
         onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
+          if (!locked && (event.key === "Enter" || event.key === " ")) {
             event.preventDefault();
             inputRef.current?.click();
           }
         }}
+        aria-disabled={locked}
         role="button"
         tabIndex={0}
       >
         <input
           accept={ACCEPT}
           className="hidden"
+          disabled={locked}
           multiple
           onChange={(event) => {
             if (event.target.files) void addFiles(event.target.files);
@@ -288,6 +306,7 @@ export function UploadPanel({
         <input
           accept={ACCEPT}
           capture="environment"
+          disabled={locked}
           className="hidden"
           onChange={(event) => {
             if (event.target.files) void addFiles(event.target.files);
@@ -319,16 +338,27 @@ export function UploadPanel({
               )}
             </p>
             <p className="mt-1 text-sm text-muted-foreground" id="upload-hint">
-              JPEG, PNG, WebP, HEIC or PDF, up to {formatSize(UPLOAD_LIMIT_BYTES)} each. Photos are
-              shrunk before they upload.
+              JPEG, PNG, WebP or HEIC photos of any size, which are shrunk before they upload, or
+              PDFs up to {formatSize(UPLOAD_LIMIT_BYTES)}.
               {empty ? ` Up to ${MAX_FILES} at a time.` : null}
-              {preparing ? " Preparing…" : null}
+            </p>
+            <p aria-live="polite" className="mt-1 text-sm text-muted-foreground">
+              {preparing ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2
+                    aria-hidden="true"
+                    className="size-3.5 animate-spin motion-reduce:animate-none"
+                  />
+                  Preparing…
+                </span>
+              ) : null}
             </p>
           </div>
         </div>
         {empty ? (
           <div className="mt-6 flex w-full flex-col gap-2 md:hidden">
             <Button
+              disabled={locked}
               onClick={(event) => {
                 event.stopPropagation();
                 cameraRef.current?.click();
@@ -339,6 +369,7 @@ export function UploadPanel({
               Take a photo
             </Button>
             <Button
+              disabled={locked}
               onClick={(event) => {
                 event.stopPropagation();
                 inputRef.current?.click();
