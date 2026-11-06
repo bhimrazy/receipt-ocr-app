@@ -235,6 +235,9 @@ export const auth = betterAuth({
           assertWorkspaceRole(invitation.role);
           return limitInvitations(inviter.id);
         },
+        // Accepting copies the stored role to a member row without beforeAddMember,
+        // so invitations stored before this check are re-checked here.
+        beforeAcceptInvitation: async ({ invitation }) => assertWorkspaceRole(invitation.role),
         beforeAddMember: async ({ member }) => assertWorkspaceRole(member.role),
         beforeUpdateMemberRole: async ({ newRole }) => assertWorkspaceRole(newRole),
         beforeDeleteOrganization: async ({ organization }) => {

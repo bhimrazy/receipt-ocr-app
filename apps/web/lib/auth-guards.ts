@@ -1,5 +1,5 @@
 import "server-only";
-import { hitRateLimit, parseWorkspaceName } from "@receipt-ocr/core";
+import { hitRateLimit, parseWorkspaceName, WORKSPACE_ROLES } from "@receipt-ocr/core";
 import { APIError } from "better-auth/api";
 import { runtime } from "./runtime";
 
@@ -20,7 +20,7 @@ export async function validateWorkspaceName<T extends { name?: string }>(
   return { data: { ...organization, name: parsed.name } };
 }
 
-const WORKSPACE_ROLES = new Set(["member", "admin", "owner"]);
+const ROLES: ReadonlySet<string> = new Set(WORKSPACE_ROLES);
 
 /**
  * Better Auth organization hook: a membership or invitation role must be exactly
@@ -28,7 +28,7 @@ const WORKSPACE_ROLES = new Set(["member", "admin", "owner"]);
  * "admin, owner" (GHSA-c85h), which would let a workspace admin mint an owner.
  */
 export function assertWorkspaceRole(role: unknown): void {
-  if (typeof role !== "string" || !WORKSPACE_ROLES.has(role)) {
+  if (typeof role !== "string" || !ROLES.has(role)) {
     throw new APIError("BAD_REQUEST", { message: "Choose member, admin or owner." });
   }
 }
