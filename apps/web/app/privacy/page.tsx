@@ -9,11 +9,14 @@ export const metadata: Metadata = {
   alternates: canonicalFor("/privacy"),
 };
 
+// Inlined at build time, like the widget itself.
+const turnstileOn = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim());
+
 export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy policy"
-      updated="November 4, 2026"
+      updated="November 6, 2026"
       intro="receiptOCR reads the receipts you upload and turns them into data you can check and export. This policy explains what we collect, who processes it on our behalf, and how you can remove it."
       sections={[
         {
@@ -42,6 +45,11 @@ export default function PrivacyPage() {
             "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
             "An email delivery provider sends account emails such as password resets and invitations.",
             "Google and GitHub, only if you choose to sign in with them.",
+            ...(turnstileOn
+              ? [
+                  "Cloudflare Turnstile: to tell people from bots, the sign-up, sign-in, password reset and contact forms run a Cloudflare Turnstile check. Cloudflare receives your IP address and browser details such as user agent and screen settings, and may set a cookie, under its own terms.",
+                ]
+              : []),
             "Only you and the people you invite to your workspace can see its receipts. receiptOCR administrators can access an account only to handle a support request.",
           ],
         },

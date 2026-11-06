@@ -24,7 +24,7 @@ export default defineConfig({
   webServer: {
     command: "bun run start",
     url: `${baseURL}/sign-in`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !process.env.CI || Boolean(process.env.E2E_REUSE_SERVER),
     timeout: 120_000,
   },
 });
