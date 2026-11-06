@@ -38,7 +38,7 @@ const STATUS: Record<string, string> = {
 export default async function AdminUserPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireAdmin();
   const { id } = await params;
-  const [plans, data] = await Promise.all([
+  const [plans, data, sessionOutcome] = await Promise.all([
     getPlanTable(),
     runtime.runPromise(
       Effect.all([
@@ -46,14 +46,15 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         listAudit({ targetType: "user", targetId: id }, { page: 1, pageSize: 20 }),
       ]),
     ),
+    // Settled, so an unknown id still ends in notFound() rather than this call's error.
+    auth.api
+      .listUserSessions({ body: { userId: id }, headers: await headers() })
+      .then((value) => ({ value }) as const, (error: unknown) => ({ error }) as const),
   ]);
   const [user, audit] = data;
   if (!user) notFound();
-
-  const sessionResult = await auth.api.listUserSessions({
-    body: { userId: id },
-    headers: await headers(),
-  });
+  if ("error" in sessionOutcome) throw sessionOutcome.error;
+  const sessionResult = sessionOutcome.value;
   const sessions: AdminSession[] = ("sessions" in sessionResult ? sessionResult.sessions : []).map(
     (s) => ({
       id: s.id,
