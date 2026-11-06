@@ -51,7 +51,7 @@ async function context() {
     headers: requestHeaders,
     audit: {
       actor: { id: session.user.id, email: session.user.email },
-      // Only proxy headers configured as trusted; anything else is client-supplied.
+      // Resolved like the auth rate limiter does; null when no trustworthy IP is available.
       ip: clientIp({ headers: requestHeaders }),
     },
   };

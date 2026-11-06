@@ -1,5 +1,6 @@
 import { AppSidebarNav, AppTabBar } from "@/components/app-nav";
 import { Brand } from "@/components/brand";
+import { NoWorkspace } from "@/components/no-workspace";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { UsageMeter, type Usage } from "@/components/usage-meter";
 import { UserMenu, type MenuUser } from "@/components/user-menu";
@@ -7,12 +8,12 @@ import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { logger } from "@/lib/log";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
-import { isAdmin, requireSession } from "@/lib/session";
+import { getActiveScope, isAdmin, requireSession } from "@/lib/session";
 import { getWorkspaceAllowance } from "@/lib/workspaces";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getUsageSummary } from "./_data/receipts-contract";
+import { getUsageSummary } from "@/lib/receipts";
 
 async function loadUsage(): Promise<Usage | null> {
   try {
@@ -30,6 +31,8 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Every /app page needs a real session; with auth unconfigured this sends everyone to /sign-in.
   const session = await requireSession();
+  // Redirecting to /sign-in here would loop: signed-in visitors are sent back to /app.
+  if (!(await getActiveScope())) return <NoWorkspace email={session.user.email} />;
   const [allowance, usage, { plan }] = await Promise.all([
     getWorkspaceAllowance(),
     loadUsage(),
@@ -49,7 +52,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <ImpersonationBanner />
         <div className="flex min-h-0 flex-1">
-          <div className="hidden w-64 shrink-0 border-r border-border bg-card/40 md:block">
+          <div className="hidden w-64 shrink-0 border-r border-border bg-sidebar md:block">
             <aside className="sticky top-0 flex h-screen flex-col gap-6 p-4">
               <Link
                 className="flex min-h-11 items-center rounded-md px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"

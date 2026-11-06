@@ -16,6 +16,7 @@ export * from "./services";
 export * from "./settings";
 export * from "./plans";
 export * from "./workspace";
+export * from "./workspace-name";
 
 /** Everything the web app (and a future worker) needs; build it once into a ManagedRuntime. */
 export const AppLayer = Layer.mergeAll(ReceiptRepo.Live, Storage.Live, Ocr.Live).pipe(

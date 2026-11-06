@@ -1,3 +1,9 @@
+import {
+  PageHeader,
+  PageHeaderContent,
+  PageHeaderDescription,
+  PageHeaderTitle,
+} from "@/components/page-header";
 import { ListPoller } from "@/components/processing-poller";
 import { ReceiptList } from "@/components/receipt-list";
 import { UploadPanel } from "@/components/upload-panel";
@@ -18,7 +24,7 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "./_data/receipts-contract";
+import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "@/lib/receipts";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -121,7 +127,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
           {open.map((item) => (
             <li className="relative" key={item.href}>
               <Link
-                className="group flex items-start gap-3 px-4 py-3.5 outline-none hover:bg-foreground/[0.04] focus-visible:bg-foreground/[0.04] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                className="group flex items-start gap-3 px-4 py-3.5 outline-none hover:bg-wash-subtle focus-visible:bg-wash-subtle focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 href={item.href}
               >
                 <span
@@ -170,15 +176,17 @@ export default async function HomePage() {
   return (
     <div className="mx-auto max-w-6xl">
       <ListPoller active={counts.inFlight > 0} />
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          {firstRun ? "Read your first receipt" : "Upload receipts"}
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Add a photo of a receipt and we read the merchant, date, items and total. Several photos
-          are read in the background while you keep working.
-        </p>
-      </div>
+      <PageHeader>
+        <PageHeaderContent>
+          <PageHeaderTitle>
+            {firstRun ? "Read your first receipt" : "Upload receipts"}
+          </PageHeaderTitle>
+          <PageHeaderDescription>
+            Add a photo of a receipt and we read the merchant, date, items and total. Several photos
+            are read in the background while you keep working.
+          </PageHeaderDescription>
+        </PageHeaderContent>
+      </PageHeader>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section aria-label="Upload">

@@ -32,7 +32,7 @@ export default function NotFound() {
             </Link>
             <Link
               className={cn(buttonVariants({ size: "lg", variant: "outline" }), "w-full sm:w-auto")}
-              href="/app/upload"
+              href="/app"
             >
               Open the app
             </Link>

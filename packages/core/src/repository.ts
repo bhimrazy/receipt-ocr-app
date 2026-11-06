@@ -23,20 +23,29 @@ import { Db } from "./services";
 export type ReceiptStatus = Receipt["status"];
 
 /**
- * Receipts belong to a workspace: every member can read and act on them.
- * `userId` is attribution and quota accounting only; it never narrows reads.
+ * Receipts belong to a workspace: every member can read them. `userId` is
+ * attribution and quota accounting; it never narrows reads, but it does
+ * narrow a plain member's edits and deletes to their own uploads.
  */
 export type ReceiptScope = {
   organizationId: string;
   userId: string;
   /**
-   * Workspace role. Plain members may delete only receipts they uploaded; one
-   * whose uploader was deleted (null `userId`) only an owner or admin can.
+   * Workspace role. Without owner or admin, only the uploader may edit or
+   * delete; a receipt whose uploader was deleted (null `userId`) only an owner
+   * or admin can.
    */
   role?: string;
 };
 
-const canDeleteAny = (scope: ReceiptScope) => scope.role !== "member";
+/** Owners and admins may edit or delete any receipt in the workspace. Fails closed without a role. */
+export const canManageAnyReceipt = (role: string | undefined) =>
+  (role ?? "").split(",").some((r) => r.trim() === "owner" || r.trim() === "admin");
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Receipt ids are UUIDs; anything else can't match, and Postgres would reject the cast. */
+export const isReceiptId = (id: string) => UUID.test(id);
 
 export type ReceiptWithItems = Receipt & { items: ReceiptItem[]; imageUrl?: string };
 
@@ -137,6 +146,12 @@ const currentAttempt = (id: string, scope: ReceiptScope, attempt: number) =>
 const inScope = (id: string, scope: ReceiptScope) =>
   and(eq(receipts.id, id), eq(receipts.organizationId, scope.organizationId));
 
+/** User edits and deletes: in the workspace, and the caller's own upload unless owner or admin. */
+const writable = (id: string, scope: ReceiptScope) =>
+  canManageAnyReceipt(scope.role)
+    ? inScope(id, scope)
+    : and(inScope(id, scope), eq(receipts.userId, scope.userId));
+
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefined {
@@ -152,6 +167,9 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
       eq(receipts.status, "completed"),
       lt(receipts.confidence, String(NEEDS_REVIEW_BELOW)),
     );
+  } else if (filters.status === "processing") {
+    // Matches the Home "Reading now" count, which includes receipts not yet picked up.
+    conditions.push(sql`${effectiveStatus} in ('uploaded', 'processing')`);
   } else if (filters.status) {
     conditions.push(sql`${effectiveStatus} = ${filters.status}`);
   }
@@ -236,7 +254,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       filters: ReceiptFilters,
       limit: number,
     ) => Effect.Effect<ReceiptExportRow[], DbError>;
-    /** Applies user corrections; false when nothing matched. */
+    /** Applies user corrections; false when nothing matched or the caller may not edit it. */
     readonly update: (
       id: string,
       scope: ReceiptScope,
@@ -336,6 +354,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
 
       claimRetry: (id, scope) =>
         use(async (db): Promise<RetryClaim> => {
+          if (!isReceiptId(id)) return { kind: "not-found" };
           const now = new Date();
           const [claimed] = await db
             .update(receipts)
@@ -367,6 +386,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
 
       get: (id, scope) =>
         use(async (db) => {
+          if (!isReceiptId(id)) return null;
           const row = await db.query.receipts.findFirst({
             where: inScope(id, scope),
             with: { items: true },
@@ -432,26 +452,24 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
 
       update: (id, scope, patch) =>
         use(async (db) => {
+          if (!isReceiptId(id)) return false;
           const fields = Object.fromEntries(
             Object.entries(patch).filter(([, v]) => v !== undefined),
           );
           const [row] = await db
             .update(receipts)
             .set({ ...fields, updatedAt: new Date() })
-            .where(inScope(id, scope))
+            .where(writable(id, scope))
             .returning({ id: receipts.id });
           return Boolean(row);
         }),
 
       remove: (id, scope) =>
         use(async (db) => {
+          if (!isReceiptId(id)) return null;
           const [row] = await db
             .delete(receipts)
-            .where(
-              canDeleteAny(scope)
-                ? inScope(id, scope)
-                : and(inScope(id, scope), eq(receipts.userId, scope.userId)),
-            )
+            .where(writable(id, scope))
             .returning({ imageObjectKey: receipts.imageObjectKey });
           return row ?? null;
         }),

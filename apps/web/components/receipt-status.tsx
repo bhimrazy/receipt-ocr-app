@@ -2,17 +2,16 @@ import { Badge } from "@receipt-ocr/ui/components/badge";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { CircleAlert, CircleCheck, Eye, Loader2, TriangleAlert } from "lucide-react";
 import { confidenceLevel, formatConfidence, type ConfidenceLevel } from "@/lib/format";
-
-export type ReceiptStatus = "uploaded" | "processing" | "completed" | "failed";
+import type { ReceiptStatus } from "@/lib/receipts";
 
 const STATUS = {
-  completed: { label: "Done", variant: "default", icon: CircleCheck },
+  completed: { label: "Done", variant: "success", icon: CircleCheck },
   processing: { label: "Reading…", variant: "secondary", icon: Loader2 },
   uploaded: { label: "Reading…", variant: "secondary", icon: Loader2 },
   failed: { label: "Couldn't read", variant: "destructive", icon: CircleAlert },
 } as const;
 
-export function isInFlight(status: string) {
+export function isInFlight(status: ReceiptStatus) {
   return status === "processing" || status === "uploaded";
 }
 
@@ -31,7 +30,7 @@ export function StatusBadge({ status, className }: { status: ReceiptStatus; clas
 }
 
 export const CONFIDENCE = {
-  high: { label: "High", variant: "default", icon: CircleCheck, hint: "High confidence" },
+  high: { label: "High", variant: "success", icon: CircleCheck, hint: "High confidence" },
   check: {
     label: "Check",
     variant: "warning",

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Enter/exit utilities (animate-in, fade-in-0, zoom-in-95, slide-in-from-*) used by the overlays. */
+@import "tw-animate-css";
 
 /* Tailwind v4 auto-detection skips node_modules, so utilities used only inside
    these shared components (e.g. button heights h-8/h-10/h-12) are never
@@ -31,6 +33,29 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-hairline: var(--hairline);
+  --color-wash: var(--wash);
+  --color-wash-subtle: var(--wash-subtle);
+  --color-cta: var(--cta);
+  --color-cta-hover: var(--cta-hover);
+  --color-cta-foreground: var(--cta-foreground);
+  --color-brand-teal: var(--brand-teal);
+  --color-brand-cyan: var(--brand-cyan);
+  /* Small mono labels, chips and tab-bar captions. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  /* One knob for corner rounding; at 0.5rem these equal Tailwind's defaults. */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 16px);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -58,6 +83,26 @@
   --destructive-foreground: #1a0606;
   --warning: #fbbf24;
   --warning-foreground: #1a1204;
+  /* Status success has its own token so the brand accent can change without it. */
+  --success: #34d399;
+  --success-foreground: #07110d;
+  --info: #7dd3fc;
+  --info-foreground: #04131c;
+  /* Signed-in shell sidebars (app and admin). */
+  --sidebar: #0f0f11;
+  /* Hairline edge on translucent (glass) surfaces. */
+  --hairline: rgb(255 255 255 / 0.1);
+  /* Hover/focus fill on transparent rows and ghost controls. */
+  --wash: color-mix(in oklab, var(--foreground) 6%, transparent);
+  --wash-subtle: color-mix(in oklab, var(--foreground) 4%, transparent);
+  /* Floating call-to-action that must keep white text legible over any page (5.5:1). */
+  --cta: #047857;
+  --cta-hover: #065f46;
+  --cta-foreground: #ffffff;
+  /* Brand gradient stops after --primary. */
+  --brand-teal: #2dd4bf;
+  --brand-cyan: #22d3ee;
+  --radius: 0.5rem;
   /* Subtle card edges; --input is for form controls and must reach 3:1 (WCAG 1.4.11). */
   --border: #27272a;
   --input: #6b6b74;
@@ -87,37 +132,10 @@ body {
   background: color-mix(in oklab, var(--primary) 34%, transparent);
 }
 
-@keyframes orb-float {
-  0%,
-  100% {
-    transform: translate(-50%, -50%) scale(1);
+/* tw-animate-css has no reduced-motion handling; overlays open and close instantly instead. */
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-in"],
+  [class*="animate-out"] {
+    animation: none !important;
   }
-  50% {
-    transform: translate(-50%, -52%) scale(1.08);
-  }
-}
-
-@keyframes card-float {
-  0%,
-  100% {
-    transform: rotate(var(--r, 0deg)) translateY(0);
-  }
-  50% {
-    transform: rotate(var(--r, 0deg)) translateY(-12px);
-  }
-}
-
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-up {
-  animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

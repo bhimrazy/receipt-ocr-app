@@ -48,7 +48,7 @@ export function UsersTable({
           </li>
         ) : (
           users.map((user) => (
-            <li className="relative px-4 py-3.5 hover:bg-foreground/[0.03]" key={user.id}>
+            <li className="relative px-4 py-3.5 hover:bg-wash-subtle" key={user.id}>
               <div className="flex items-start gap-3">
                 <Initial email={user.email} name={user.name} />
                 <div className="min-w-0 flex-1">
@@ -99,7 +99,7 @@ export function UsersTable({
               </TableRow>
             ) : (
               users.map((user) => (
-                <TableRow className="relative hover:bg-foreground/[0.03]" key={user.id}>
+                <TableRow className="relative hover:bg-wash-subtle" key={user.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Initial email={user.email} name={user.name} />

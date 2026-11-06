@@ -3,7 +3,10 @@ import { AuthLayout, AuthNotConfiguredCard } from "@/components/auth/auth-layout
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 import { authEnabled } from "@/lib/env";
 
-export const metadata: Metadata = { title: "Set a new password" };
+export const metadata: Metadata = {
+  title: "Set a new password",
+  robots: { index: false, follow: true },
+};
 
 export default async function ResetPasswordPage({
   searchParams,

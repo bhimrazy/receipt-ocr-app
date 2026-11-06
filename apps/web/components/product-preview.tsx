@@ -14,11 +14,11 @@ const items: Array<[string, string, string]> = [
  */
 export function ProductPreview() {
   return (
-    <div className="card-sheen relative overflow-hidden rounded-2xl border border-white/10 bg-card/70 shadow-2xl shadow-black/50 backdrop-blur-xl">
+    <div className="card-sheen relative overflow-hidden rounded-2xl border border-hairline bg-card/70 shadow-2xl shadow-black/50 backdrop-blur-xl">
       {/* Window chrome */}
       <div className="flex items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">
-        <span className="size-2.5 rounded-full bg-red-400/70" />
-        <span className="size-2.5 rounded-full bg-yellow-300/70" />
+        <span className="size-2.5 rounded-full bg-destructive/70" />
+        <span className="size-2.5 rounded-full bg-warning/70" />
         <span className="size-2.5 rounded-full bg-primary/70" />
         <span className="ml-3 font-mono text-xs text-muted-foreground">
           receiptocr.app/app/receipts/whole-foods
@@ -28,13 +28,13 @@ export function ProductPreview() {
       <div className="grid gap-px bg-border md:grid-cols-2">
         {/* Receipt image side */}
         <div className="flex flex-col items-center justify-center gap-4 bg-card p-8">
-          <div className="relative w-full max-w-[220px] overflow-hidden rounded-lg border border-dashed border-white/10 bg-background/60 p-5 font-mono text-[11px] text-muted-foreground">
+          <div className="relative w-full max-w-[220px] overflow-hidden rounded-lg border border-dashed border-hairline bg-background/60 p-5 font-mono text-2xs text-muted-foreground">
             <div className="scan-line pointer-events-none absolute inset-x-0 top-0" aria-hidden />
             <div className="mb-3 text-center text-foreground">WHOLE FOODS MARKET</div>
-            <div className="mb-3 text-center text-[11px] text-muted-foreground">
+            <div className="mb-3 text-center text-2xs text-muted-foreground">
               Mar 14, 2026 · 18:42
             </div>
-            <div className="flex flex-col gap-1 border-y border-dashed border-white/10 py-3">
+            <div className="flex flex-col gap-1 border-y border-dashed border-hairline py-3">
               {items.map(([name, , price]) => (
                 <div className="flex justify-between" key={name}>
                   <span className="truncate pr-2">{name}</span>
@@ -47,7 +47,7 @@ export function ProductPreview() {
               <span>$67.43</span>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 font-mono text-[11px] text-primary">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 font-mono text-2xs text-primary">
             <ReceiptText className="size-3" /> demo_receipt.jpg
           </span>
         </div>
@@ -56,7 +56,7 @@ export function ProductPreview() {
         <div className="bg-card">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <h3 className="text-sm font-medium">Extracted data</h3>
-            <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 font-mono text-[11px] text-primary">
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 font-mono text-2xs text-primary">
               <Check className="size-3" /> 98% confidence
             </span>
           </div>

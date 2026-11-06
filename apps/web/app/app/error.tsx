@@ -54,8 +54,8 @@ export default function AppError({
             <RotateCw aria-hidden="true" />
             Try again
           </Button>
-          <Link className={buttonVariants({ variant: "outline" })} href="/app/upload">
-            Back to upload
+          <Link className={buttonVariants({ variant: "outline" })} href="/app">
+            Back to Home
           </Link>
           {error.digest ? (
             <span className="font-mono text-xs text-muted-foreground">ref {error.digest}</span>

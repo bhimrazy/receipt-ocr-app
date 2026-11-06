@@ -72,6 +72,27 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(scope).toEqual({ organizationId: a.organizationId, userId: a.userId, role: "owner" });
   });
 
+  it("U4b: picks a fresh slug when the id-based slug belongs to an org the user is not in", async () => {
+    const id = `${tag}-squatted`;
+    await run(
+      Effect.flatMap(Db, ({ use }) =>
+        use(async (db) => {
+          await db
+            .insert(user)
+            .values({ id, name: "Sq", email: `${id}@example.com`, emailVerified: true });
+          await db
+            .insert(organization)
+            .values({ id: crypto.randomUUID(), name: "Squatter", slug: id, createdAt: new Date() });
+        }),
+      ),
+    );
+    expect(await run(resolveScope(id))).toBeNull();
+    const orgId = await run(ensurePersonalWorkspace({ id, email: `${id}@example.com` }));
+    expect(orgId).toBeTruthy();
+    expect(await run(resolveScope(id))).toMatchObject({ organizationId: orgId, role: "owner" });
+    expect(await run(ensurePersonalWorkspace({ id, email: `${id}@example.com` }))).toBeNull();
+  });
+
   it("completes through the fixture provider with a canonical category", async () => {
     const receipt = await run(Effect.flatMap(ReceiptRepo, (repo) => repo.get(receiptId, a)));
     expect(receipt?.status).toBe("completed");
@@ -123,9 +144,47 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(await run(Effect.flatMap(ReceiptRepo, (r) => r.get(receiptId, scope!)))).toBeNull();
   });
 
-  it("L2: a plain member cannot delete someone else's receipt", async () => {
-    const asMember = { organizationId: a.organizationId, userId: b.userId, role: "member" };
-    expect(await run(Effect.flatMap(ReceiptRepo, (r) => r.remove(receiptId, asMember)))).toBeNull();
+  it("P2-5: owners and admins edit or delete any receipt; a member only their own", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    const asRole = (role: string) => ({ organizationId: a.organizationId, userId: b.userId, role });
+    const seed = async () =>
+      (await run(ingestUpload({ scope: a, fileName: "policy.jpg", body: JPEG }))).receipt.id;
+
+    // Member: neither edit nor delete Alice's receipt, but both on their own upload.
+    const alices = await seed();
+    expect(
+      await repo((r) => r.update(alices, asRole("member"), { merchant: "=HYPERLINK()" })),
+    ).toBe(false);
+    expect(await repo((r) => r.remove(alices, asRole("member")))).toBeNull();
+    expect((await repo((r) => r.get(alices, a)))?.merchant).not.toBe("=HYPERLINK()");
+    const own = (
+      await run(ingestUpload({ scope: asRole("member"), fileName: "m.jpg", body: JPEG }))
+    ).receipt.id;
+    expect(await repo((r) => r.update(own, asRole("member"), { merchant: "Mine" }))).toBe(true);
+    expect(await repo((r) => r.remove(own, asRole("member")))).not.toBeNull();
+
+    // No role at all fails closed.
+    expect(await repo((r) => r.update(alices, { ...asRole("x"), role: undefined }, {}))).toBe(
+      false,
+    );
+
+    // Admin and owner: anyone's.
+    for (const role of ["admin", "owner"]) {
+      const id = await seed();
+      expect(await repo((r) => r.update(id, asRole(role), { merchant: `By ${role}` }))).toBe(true);
+      expect(await repo((r) => r.remove(id, asRole(role)))).not.toBeNull();
+    }
+    await run(deleteReceipt({ receiptId: alices, scope: a }));
+  });
+
+  it("L3: a non-UUID receipt id is simply not found", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    expect(await repo((r) => r.get("not-a-uuid", a))).toBeNull();
+    expect(await repo((r) => r.update("not-a-uuid", a, { merchant: "x" }))).toBe(false);
+    expect(await repo((r) => r.remove("not-a-uuid", a))).toBeNull();
+    expect(await repo((r) => r.claimRetry("not-a-uuid", a))).toEqual({ kind: "not-found" });
   });
 
   it("filters server-side by search, category, needs-review and date", async () => {
@@ -167,6 +226,18 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     );
     expect(failedRows.rows.map((row) => row.id)).toContain(stuck.receipt.id);
     expect((await run(checkQuota(a.userId, limits))).used).toBe(before.used - 1);
+    // Fresh in-flight receipts: the processing filter matches Home's "Reading now" count.
+    const fresh = await run(
+      ingestUpload({ scope: a, fileName: "fresh.jpg", body: new Uint8Array([...JPEG, 1]) }),
+    );
+    const reading = await run(
+      Effect.flatMap(ReceiptRepo, (r) =>
+        r.list(a, { status: "processing" }, { limit: 50, offset: 0 }),
+      ),
+    );
+    const inFlight = await run(Effect.flatMap(ReceiptRepo, (r) => r.counts(a)));
+    expect(reading.total).toBe(inFlight.inFlight);
+    expect(reading.rows.map((row) => row.id)).toContain(fresh.receipt.id);
     expect(
       await run(Effect.flatMap(ReceiptRepo, (r) => r.claimRetry(stuck.receipt.id, a))),
     ).toMatchObject({

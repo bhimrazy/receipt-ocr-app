@@ -37,7 +37,7 @@ export function SidebarNav({ items, label = "Main" }: { items: NavItem[]; label?
               "flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition outline-none focus-visible:ring-2 focus-visible:ring-ring",
               active
                 ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground",
+                : "text-muted-foreground hover:bg-wash hover:text-foreground",
             )}
             href={item.href}
             key={item.href}
@@ -68,7 +68,7 @@ export function BottomTabBar({ items, label = "Main" }: { items: NavItem[]; labe
               <Link
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex h-14 flex-col items-center justify-center gap-1 text-[11px] font-medium transition outline-none focus-visible:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                  "flex h-14 flex-col items-center justify-center gap-1 text-2xs font-medium transition outline-none focus-visible:bg-wash focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                   active ? "text-primary" : "text-muted-foreground hover:text-foreground",
                 )}
                 href={item.href}

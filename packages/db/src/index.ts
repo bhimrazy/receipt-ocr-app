@@ -121,9 +121,9 @@ export const receiptItems = pgTable(
 );
 
 /**
- * User-provided BYOK credentials. The secret is AES-256-GCM encrypted with
- * the server master key; only metadata (label, last4, status) is ever
- * returned to clients.
+ * Reserved for user-provided BYOK credentials. Nothing reads or writes this
+ * table yet, and no encryption for `ciphertext` exists: implement it (see
+ * docs/byok-key-management.md) before storing any secret here.
  */
 export const userCredentials = pgTable(
   "user_credentials",

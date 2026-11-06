@@ -50,6 +50,7 @@ function text(value: unknown, maxLength = 200): string | null | undefined {
 /**
  * User corrections to an extracted receipt. Only human-correctable fields
  * are accepted: never status, confidence, ownership or the raw extraction.
+ * Members may edit only their own uploads (enforced in ReceiptRepo).
  */
 export async function PATCH(request: Request, { params }: Params) {
   const forbidden = crossOriginResponse(request);
