@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Accept invitation",
+  description: "Accept an invitation to share receipts in a receiptOCR workspace.",
   robots: { index: false, follow: true },
 };
 

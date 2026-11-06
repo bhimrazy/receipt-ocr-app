@@ -315,11 +315,17 @@ export function CredentialsForm({
         {isSignUp ? (
           <p className="text-center text-xs leading-5 text-muted-foreground">
             By creating an account you agree to the{" "}
-            <Link className={cn(authLinkClass, "font-normal text-foreground")} href="/terms">
+            <Link
+              className={cn(authLinkClass, "font-normal text-foreground underline")}
+              href="/terms"
+            >
               Terms
             </Link>{" "}
             and the{" "}
-            <Link className={cn(authLinkClass, "font-normal text-foreground")} href="/privacy">
+            <Link
+              className={cn(authLinkClass, "font-normal text-foreground underline")}
+              href="/privacy"
+            >
               Privacy Policy
             </Link>
             .

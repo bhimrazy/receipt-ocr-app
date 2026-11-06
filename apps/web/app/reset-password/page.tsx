@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 import { AuthLayout, AuthNotConfiguredCard } from "@/components/auth/auth-layout";
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 import { authEnabled } from "@/lib/env";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Set a new password",
-  robots: { index: false, follow: true },
-};
+  description: "Choose a new password for your receiptOCR account.",
+  path: "/reset-password",
+  index: false,
+});
 
 export default async function ResetPasswordPage({
   searchParams,

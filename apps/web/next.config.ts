@@ -18,6 +18,20 @@ const securityHeaders = [
   { key: "Reporting-Endpoints", value: 'csp="/api/csp-report"' },
 ];
 
+const noindexHeader = { key: "X-Robots-Tag", value: "noindex" };
+const noindexPaths = [
+  "/app",
+  "/app/:path*",
+  "/admin",
+  "/admin/:path*",
+  "/api/:path*",
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/accept-invitation/:path*",
+];
+
 const nextConfig: NextConfig = {
   // Self-contained server bundle for the Docker image. Ignored by Vercel.
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
@@ -34,7 +48,12 @@ const nextConfig: NextConfig = {
   ],
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // As well as the meta tag, so non-HTML responses (CSV exports, JSON) and redirects from
+      // these paths stay out of search results too.
+      ...noindexPaths.map((source) => ({ source, headers: [noindexHeader] })),
+    ];
   },
 };
 
