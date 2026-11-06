@@ -1,4 +1,6 @@
 export * from "./categories";
+export { classifyOcrError, type OcrFailureKind } from "./errors";
+export * from "./models";
 export {
   extractReceipt,
   type ExtractReceiptInput,

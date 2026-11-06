@@ -1,0 +1,35 @@
+/**
+ * Plan limit defaults and their shape. Imports nothing so client components
+ * (marketing copy, the sign-up subtitle) can read the defaults without pulling
+ * in Effect or the database. Runtime values come from the `Settings` service,
+ * which falls back to these when no admin override is saved.
+ */
+
+export interface PlanPolicy {
+  /** Workspaces a user may own. */
+  workspaces: number;
+  /** Receipts per UTC calendar day. */
+  receiptsPerDay: number;
+  /** Burst ceiling per rolling minute. */
+  receiptsPerMinute: number;
+}
+
+export const PLAN_IDS = ["free", "pro"] as const;
+export type PlanId = (typeof PLAN_IDS)[number];
+export type PlanTable = Record<PlanId, PlanPolicy>;
+
+export const DEFAULT_PLAN: PlanId = "free";
+
+export const DEFAULT_PLANS: PlanTable = {
+  free: { workspaces: 1, receiptsPerDay: 20, receiptsPerMinute: 10 },
+  pro: { workspaces: 5, receiptsPerDay: 1000, receiptsPerMinute: 30 },
+};
+
+export function isPlanId(value: unknown): value is PlanId {
+  return typeof value === "string" && (PLAN_IDS as readonly string[]).includes(value);
+}
+
+/** Unknown or missing plans get the default plan's limits, never unlimited. */
+export function policyFor(plans: PlanTable, plan: string | null | undefined): PlanPolicy {
+  return isPlanId(plan) ? plans[plan] : plans[DEFAULT_PLAN];
+}

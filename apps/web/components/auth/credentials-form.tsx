@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
-import { PLANS } from "@/lib/plans";
 import { DEFAULT_REDIRECT } from "@/lib/redirect";
 import {
   AuthDivider,
@@ -71,8 +70,11 @@ export function CredentialsForm({
   redirectTo = DEFAULT_REDIRECT,
   notice,
   initialError,
+  freeReceiptsPerDay,
 }: {
   mode: "sign-in" | "sign-up";
+  /** The free plan's saved daily limit, shown on sign-up. */
+  freeReceiptsPerDay?: number;
   providers: SocialProvider[];
   /** Where to land after auth succeeds, e.g. back to an invite accept page. */
   redirectTo?: string;
@@ -183,8 +185,8 @@ export function CredentialsForm({
   return (
     <div className={authCardClass}>
       <AuthHeading title={isSignUp ? "Create your account" : "Sign in to receiptOCR"}>
-        {isSignUp
-          ? `Free plan: ${PLANS.free.receiptsPerDay} receipts a day. No card required.`
+        {isSignUp && freeReceiptsPerDay !== undefined
+          ? `Free plan: ${freeReceiptsPerDay} receipts a day. No card required.`
           : undefined}
       </AuthHeading>
       {notice ? (

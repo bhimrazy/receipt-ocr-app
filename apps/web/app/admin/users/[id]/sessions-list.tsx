@@ -89,11 +89,11 @@ export function SessionsList({
     if (!pending) return;
     const result =
       pending.kind === "all"
-        ? await revokeUserSessionsAction(userId)
-        : await revokeUserSessionAction(pending.session.id, userId);
-    if (!result.ok) return result.error ?? "Couldn't revoke. Try again.";
+        ? await revokeUserSessionsAction({ userId })
+        : await revokeUserSessionAction({ sessionId: pending.session.id, userId });
+    if (!result.ok) return result.error;
     toast.add({
-      title: pending.kind === "all" ? "All sessions revoked." : "Session revoked.",
+      title: pending.kind === "all" ? "Signed out on every device." : "Device signed out.",
       type: "success",
     });
   }
@@ -106,17 +106,20 @@ export function SessionsList({
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
-        <CardTitle>Active sessions ({sessions.length})</CardTitle>
+        <CardTitle>
+          Signed-in devices{" "}
+          <span className="font-mono text-muted-foreground">{sessions.length}</span>
+        </CardTitle>
         {sessions.length > 0 ? (
           <Button onClick={() => ask({ kind: "all" })} size="sm" variant="outline">
             <ShieldX aria-hidden="true" />
-            Revoke all
+            Sign out everywhere
           </Button>
         ) : null}
       </CardHeader>
       <CardContent className="space-y-2">
         {sessions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No active sessions.</p>
+          <p className="text-sm text-muted-foreground">Not signed in on any device.</p>
         ) : (
           sessions.map((session) => {
             const isCurrent = session.id === currentSessionId;
@@ -146,12 +149,13 @@ export function SessionsList({
                   </div>
                 </div>
                 <Button
+                  aria-label={`Sign out ${describeAgent(session.userAgent)}, started ${formatDateTime(session.createdAt)}`}
                   className="shrink-0"
                   onClick={() => ask({ kind: "one", session })}
                   size="sm"
                   variant="ghost"
                 >
-                  Revoke
+                  Sign out
                 </Button>
               </div>
             );
@@ -159,17 +163,17 @@ export function SessionsList({
         )}
       </CardContent>
       <ConfirmDialog
-        confirmLabel={pending?.kind === "all" ? "Revoke all sessions" : "Revoke session"}
+        confirmLabel={pending?.kind === "all" ? "Sign out everywhere" : "Sign out device"}
         description={
           includesCurrent
             ? "This includes the session you're using now, so you'll be signed out."
-            : "That device is signed out. The user can sign in again right away."
+            : "They can sign in again right away unless they are banned."
         }
         destructive
         onConfirm={confirm}
         onOpenChange={setOpen}
         open={open}
-        title={pending?.kind === "all" ? "Revoke all sessions?" : "Revoke this session?"}
+        title={pending?.kind === "all" ? "Sign this user out everywhere?" : "Sign out this device?"}
       />
     </Card>
   );

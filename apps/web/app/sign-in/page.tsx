@@ -32,8 +32,8 @@ export default async function SignInPage({
     <AuthLayout subtitle="Sign in to upload receipts, check what was read and export a CSV.">
       {authEnabled ? (
         <CredentialsForm
-          mode="sign-in"
           initialError={callbackErrorMessage(error)}
+          mode="sign-in"
           notice={
             reset
               ? ({

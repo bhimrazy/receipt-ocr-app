@@ -43,6 +43,13 @@
       "when": 1793735090960,
       "tag": "0005_receipt_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793902240173,
+      "tag": "0006_admin_audit_settings",
+      "breakpoints": true
     }
   ]
 }

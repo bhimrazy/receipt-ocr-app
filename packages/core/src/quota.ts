@@ -1,9 +1,39 @@
+import { eq, user } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { loadDailyOcrCap } from "./config";
 import { QuotaExceeded } from "./errors";
+import { DEFAULT_PLAN, isPlanId, policyFor, type PlanId, type PlanPolicy } from "./plans";
 import { ReceiptRepo, type UsageCounts } from "./repository";
+import { Db } from "./services";
+import { Settings } from "./settings";
 
 export type QuotaLimits = { perMinute: number; perDay: number };
+
+export const quotaLimits = (policy: PlanPolicy): QuotaLimits => ({
+  perMinute: policy.receiptsPerMinute,
+  perDay: policy.receiptsPerDay,
+});
+
+/**
+ * The user's plan read from the database, with the limits an admin has set
+ * for it. Not from the session: its cookie cache would delay a plan change
+ * by up to five minutes.
+ */
+export const userPlan = (userId: string) =>
+  Effect.gen(function* () {
+    const { use } = yield* Db;
+    const settings = yield* Settings;
+    const [rows, plans] = yield* Effect.all(
+      [
+        use((db) => db.select({ plan: user.plan }).from(user).where(eq(user.id, userId)).limit(1)),
+        settings.plans,
+      ],
+      { concurrency: "unbounded" },
+    );
+    const stored = rows[0]?.plan;
+    const plan: PlanId = isPlanId(stored) ? stored : DEFAULT_PLAN;
+    return { plan, policy: policyFor(plans, plan) };
+  });
 
 export type QuotaVerdict = {
   allowed: boolean;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authErrorMessage, callbackErrorMessage } from "./auth-errors";
+import { authErrorMessage, callbackErrorMessage, SUSPENDED_MESSAGE } from "./auth-errors";
 
 describe("authErrorMessage", () => {
   it("replaces Better Auth's developer wording by code", () => {
@@ -35,5 +35,14 @@ describe("callbackErrorMessage", () => {
   it("never echoes an unknown query value", () => {
     expect(callbackErrorMessage("<script>")).not.toContain("<script>");
     expect(callbackErrorMessage(undefined)).toBeUndefined();
+  });
+});
+
+describe("suspended accounts", () => {
+  it("shows the same suspended message for email and social sign-in", () => {
+    expect(authErrorMessage({ code: "BANNED_USER", message: "You have been banned" })).toBe(
+      SUSPENDED_MESSAGE,
+    );
+    expect(callbackErrorMessage("BANNED_USER")).toBe(SUSPENDED_MESSAGE);
   });
 });

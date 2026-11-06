@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+import { getPlanTable } from "@/lib/plan-limits";
 import { canonicalFor } from "@/lib/site";
-import { PLANS } from "@/lib/plans";
 
 export const metadata: Metadata = {
   title: "Terms of service",
@@ -9,7 +9,12 @@ export const metadata: Metadata = {
   alternates: canonicalFor("/terms"),
 };
 
-export default function TermsPage() {
+// Shows the free plan's limits; an admin save also revalidates (revalidatePlanCopy).
+export const revalidate = 3600;
+
+export default async function TermsPage() {
+  const { free } = await getPlanTable();
+  const workspaces = free.workspaces === 1 ? "1 workspace" : `${free.workspaces} workspaces`;
   return (
     <LegalPage
       title="Terms of service"
@@ -41,7 +46,7 @@ export default function TermsPage() {
         {
           heading: "Plans and limits",
           body: [
-            `The free plan currently includes up to ${PLANS.free.receiptsPerDay} receipts a day and ${PLANS.free.workspaces} workspace, with no card required. We may change these limits, and we'll update the site when we do.`,
+            `The free plan currently includes up to ${free.receiptsPerDay} receipts a day and ${workspaces}, with no card required. We may change these limits, and we'll update the site when we do.`,
             "Paid plans aren't available yet. If we introduce them, we'll show the price and what it includes before you're asked to pay anything.",
           ],
         },

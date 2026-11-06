@@ -15,4 +15,9 @@ describe("canEditReceipt", () => {
     expect(canEditReceipt({ userId: "u1", role: "member" }, own)).toBe(true);
     expect(canEditReceipt({ userId: "u1", role: "member" }, other)).toBe(false);
   });
+
+  it("leaves a receipt whose uploader was deleted to owners and admins", () => {
+    expect(canEditReceipt({ userId: "u1", role: "member" }, { userId: null })).toBe(false);
+    expect(canEditReceipt({ userId: "u1", role: "owner" }, { userId: null })).toBe(true);
+  });
 });

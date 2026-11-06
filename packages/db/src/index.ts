@@ -35,6 +35,7 @@ export {
   gte,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lt,
   lte,
@@ -59,10 +60,11 @@ export const receipts = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    /** Who uploaded it. Kept for attribution — it does NOT scope visibility. */
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    /**
+     * Who uploaded it. Kept for attribution — it does NOT scope visibility.
+     * Null once that user is deleted: the receipt stays with its workspace.
+     */
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     merchant: text("merchant"),
     receiptDate: text("receipt_date"),
     category: text("category"),
@@ -84,6 +86,8 @@ export const receipts = pgTable(
     attempts: integer("attempts").notNull().default(1),
     /** When the latest retry started; quota windows count it like a new upload. */
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    /** `provider:model` that produced the extraction; null until one has. */
+    model: text("model"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -94,6 +98,8 @@ export const receipts = pgTable(
     index("receipts_created_at_idx").on(table.createdAt),
     // History lists a workspace newest-first; this index serves that directly.
     index("receipts_org_created_at_idx").on(table.organizationId, table.createdAt),
+    // Lets the quota query BitmapOr retries in with created_at instead of scanning.
+    index("receipts_last_attempt_at_idx").on(table.lastAttemptAt),
   ],
 );
 
@@ -138,6 +144,40 @@ export const userCredentials = pgTable(
   (table) => [index("user_credentials_user_id_idx").on(table.userId)],
 );
 
+/**
+ * One row per admin action: who did what to which target, and why. Actor and
+ * target are snapshots (email, label) so entries still read after a deletion.
+ */
+export const adminAuditLog = pgTable(
+  "admin_audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    actorEmail: text("actor_email").notNull(),
+    /** Dotted verb, e.g. `user.ban`, `workspace.delete`, `settings.plans`. */
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(), // user | workspace | settings
+    targetId: text("target_id"),
+    targetLabel: text("target_label"),
+    reason: text("reason"),
+    metadata: jsonb("metadata"),
+    ip: text("ip"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("admin_audit_log_created_at_idx").on(table.createdAt),
+    index("admin_audit_log_target_idx").on(table.targetType, table.targetId, table.createdAt),
+  ],
+);
+
+/** Runtime settings an admin can change (`plans`, `ocr`). Values are validated on read and write. */
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
+});
+
 export const receiptsRelations = relations(receipts, ({ many }) => ({
   items: many(receiptItems),
 }));
@@ -154,6 +194,8 @@ export const schema = {
   receipts,
   receiptItems,
   userCredentials,
+  adminAuditLog,
+  appSettings,
   receiptsRelations,
   receiptItemsRelations,
   // Better Auth tables (core + organization + admin plugins).
@@ -197,5 +239,6 @@ export type Receipt = typeof receipts.$inferSelect;
 export type NewReceipt = typeof receipts.$inferInsert;
 export type ReceiptItem = typeof receiptItems.$inferSelect;
 export type NewReceiptItem = typeof receiptItems.$inferInsert;
+export type AdminAuditEntry = typeof adminAuditLog.$inferSelect;
 export type UserCredential = typeof userCredentials.$inferSelect;
 export type NewUserCredential = typeof userCredentials.$inferInsert;

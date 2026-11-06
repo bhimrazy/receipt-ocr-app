@@ -12,6 +12,9 @@ export interface AuthErrorLike {
 
 const FALLBACK = "Something went wrong. Try again.";
 
+export const SUSPENDED_MESSAGE =
+  "This account is suspended. If you think this is a mistake, contact support.";
+
 const messages: Record<string, string> = {
   INVALID_EMAIL_OR_PASSWORD:
     "That email and password don't match an account. Check both and try again.",
@@ -26,6 +29,8 @@ const messages: Record<string, string> = {
   INVALID_TOKEN: "This link is not valid or was already used. Request a new one.",
   TOKEN_EXPIRED: "This link has expired. Request a new one.",
   USER_NOT_FOUND: "We couldn't find an account for this link.",
+  // A banned user: the error code of an email sign-in, or `?error=BANNED_USER` after a social one.
+  BANNED_USER: SUSPENDED_MESSAGE,
   // OAuth callback errors arrive on /sign-in as `?error=<code>`.
   ACCESS_DENIED: "Sign-in was cancelled. Try again, or use your email and password.",
   ACCOUNT_NOT_LINKED:

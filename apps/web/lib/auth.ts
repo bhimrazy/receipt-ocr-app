@@ -1,5 +1,12 @@
 import "server-only";
-import { ensurePersonalWorkspace, purgeReceiptFiles } from "@receipt-ocr/core";
+import {
+  DEFAULT_PLANS,
+  ensurePersonalWorkspace,
+  policyFor,
+  prepareUserDeletion,
+  purgeReceiptFiles,
+  userPlan,
+} from "@receipt-ocr/core";
 import { and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
 import {
   invitationEmail,
@@ -9,6 +16,7 @@ import {
   type SendEmailInput,
 } from "@receipt-ocr/email";
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
@@ -17,7 +25,6 @@ import { isBootstrapAdmin } from "./admin-bootstrap";
 import { limitInvitations, validateWorkspaceName } from "./auth-guards";
 import { authEnabled, authEnv, emailEnv, isProduction, requireEmailVerification } from "./env";
 import { logger } from "./log";
-import { workspaceLimitForPlan } from "./plans";
 import { runtime } from "./runtime";
 
 export { authEnabled };
@@ -70,6 +77,22 @@ async function promoteIfBootstrapAdmin(user: {
 async function purgeFiles(owner: { organizationId: string } | { userId: string }) {
   const purged = await runtime.runPromise(purgeReceiptFiles(owner));
   logger.info({ event: "receipt.files_purged", ...owner, count: purged });
+}
+
+/**
+ * Before a user row goes: deletes the workspaces only they belong to (files
+ * first) and refuses while they own a shared workspace with no other owner.
+ * Shared-workspace receipts they uploaded stay, with no uploader.
+ */
+export async function deleteOwnData(userId: string) {
+  const exit = await runtime.runPromiseExit(prepareUserDeletion(userId));
+  if (exit._tag === "Success") {
+    logger.info({ event: "user.data_deleted", userId, ...exit.value });
+    return exit.value;
+  }
+  const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+  if (failure?._tag === "Conflict") throw new APIError("BAD_REQUEST", { message: failure.message });
+  throw new Error("Could not delete the user's workspaces", { cause: exit.cause });
 }
 
 export const auth = betterAuth({
@@ -141,7 +164,7 @@ export const auth = betterAuth({
     deleteUser: {
       enabled: true,
       beforeDelete: async (user) => {
-        await purgeFiles({ userId: user.id });
+        await deleteOwnData(user.id);
       },
     },
     additionalFields: {
@@ -214,9 +237,13 @@ export const auth = betterAuth({
           await purgeFiles({ organizationId: organization.id });
         },
       },
-      // Returns true when the user has REACHED their plan's org limit.
+      // Returns true when the user has REACHED their plan's org limit. The plan
+      // is read fresh (the session user can be five minutes stale).
       organizationLimit: async (user) => {
-        const limit = workspaceLimitForPlan(typeof user.plan === "string" ? user.plan : "free");
+        const limit = await runtime
+          .runPromise(userPlan(user.id))
+          .then(({ policy }) => policy.workspaces)
+          .catch(() => policyFor(DEFAULT_PLANS, null).workspaces);
         const owned = await db
           .select({ id: member.id })
           .from(member)

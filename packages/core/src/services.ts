@@ -1,9 +1,8 @@
-import { extractReceipt, type ExtractReceiptResult } from "@receipt-ocr/ai";
 import { createDb, type DbClient } from "@receipt-ocr/db";
 import { deleteObjects, getObject, putObject, signedGetUrl } from "@receipt-ocr/storage";
 import { Context, Effect, Layer, Redacted } from "effect";
-import { DatabaseUrl, loadOcrConfig, loadStorageConfig } from "./config";
-import { DbError, NotConfigured, OcrError, StorageError } from "./errors";
+import { DatabaseUrl, loadStorageConfig } from "./config";
+import { DbError, NotConfigured, StorageError } from "./errors";
 
 export class Db extends Context.Tag("@receipt-ocr/core/Db")<
   Db,
@@ -79,30 +78,3 @@ const call = <A>(
       catch: (cause) => new StorageError({ message, cause }),
     }),
   );
-
-export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
-  Ocr,
-  {
-    readonly extract: (file: {
-      data: Uint8Array;
-      mediaType: string;
-    }) => Effect.Effect<ExtractReceiptResult, OcrError | NotConfigured>;
-  }
->() {
-  static readonly Live = Layer.succeed(Ocr, {
-    extract: (file) =>
-      Effect.flatMap(loadOcrConfig, (config) =>
-        Effect.tryPromise({
-          try: (abortSignal) =>
-            extractReceipt({
-              model: config.model,
-              keys: { google: config.googleApiKey },
-              timeoutMs: config.timeoutMs,
-              file,
-              abortSignal,
-            }),
-          catch: (cause) => new OcrError({ message: "Receipt extraction failed", cause }),
-        }),
-      ),
-  });
-}

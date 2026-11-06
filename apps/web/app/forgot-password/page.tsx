@@ -8,6 +8,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true },
 };
 
+// The layout shows the free plan's limit; an admin save also revalidates (revalidatePlanCopy).
+export const revalidate = 3600;
+
 export default function ForgotPasswordPage() {
   return (
     <AuthLayout subtitle="Locked out? Send yourself a reset link and get back to your receipts.">

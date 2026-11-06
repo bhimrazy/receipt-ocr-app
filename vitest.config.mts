@@ -18,7 +18,9 @@ export default defineConfig({
     alias: {
       "@/": `${path.join(root, "apps/web")}/`,
       "@receipt-ocr/ai/categories": path.join(root, "packages/ai/src/categories.ts"),
+      "@receipt-ocr/ai/models": path.join(root, "packages/ai/src/models.ts"),
       "@receipt-ocr/ai": path.join(root, "packages/ai/src/index.ts"),
+      "@receipt-ocr/core/plans": path.join(root, "packages/core/src/plans.ts"),
       "@receipt-ocr/core": path.join(root, "packages/core/src/index.ts"),
       "@receipt-ocr/db": path.join(root, "packages/db/src/index.ts"),
       "@receipt-ocr/email": path.join(root, "packages/email/src/index.ts"),

@@ -26,8 +26,11 @@ type ConfirmDialogProps = {
   destructive?: boolean;
   /** When set, the confirm button stays disabled until this exact text is typed. */
   confirmText?: string;
-  /** Rejecting (or returning an error string) keeps the dialog open. */
-  onConfirm: () => Promise<string | void> | string | void;
+  /**
+   * Gets the text typed for `confirmText` (empty without it), so the server can
+   * check it too. Rejecting (or returning an error string) keeps the dialog open.
+   */
+  onConfirm: (typed: string) => Promise<string | void> | string | void;
 };
 
 /**
@@ -65,7 +68,7 @@ function ConfirmDialog({
     setPending(true);
     setError(null);
     try {
-      const result = await onConfirm();
+      const result = await onConfirm(typed);
       if (typeof result === "string") {
         setError(result);
         setPending(false);

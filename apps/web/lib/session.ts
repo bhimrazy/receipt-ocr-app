@@ -15,19 +15,15 @@ import { runtime } from "./runtime";
  */
 export const getSession = cache(async (): Promise<Session | null> => {
   if (!authEnabled) return null;
-  return auth.api.getSession({ headers: await headers() });
+  // Server reads skip the 5-minute cookie cache: a ban or revoked session must
+  // apply on the next request, not minutes later. Costs one indexed lookup.
+  return auth.api.getSession({ headers: await headers(), query: { disableCookieCache: true } });
 });
 
 /** Session user id, or null when signed out. */
 export async function getCurrentUserId(): Promise<string | null> {
   const session = await getSession();
   return session?.user.id ?? null;
-}
-
-/** The caller's billing plan, defaulting to "free". */
-export function planFor(session: Session | null): string {
-  const plan = (session?.user as { plan?: unknown } | undefined)?.plan;
-  return typeof plan === "string" && plan ? plan : "free";
 }
 
 /** For pages: redirects to /sign-in when there is no session. */

@@ -2,8 +2,8 @@ import {
   EXTRACTION_FAILED_MESSAGE,
   extractStored,
   ingestUpload,
-  loadOcrConfig,
   MAX_UPLOAD_BYTES,
+  Ocr,
 } from "@receipt-ocr/core";
 import { Cause, Effect } from "effect";
 import { after, NextResponse } from "next/server";
@@ -12,14 +12,15 @@ import {
   failureResponse,
   jsonError,
   readFormData,
+  recordOcr,
   runBackground,
   runRoute,
 } from "@/lib/http";
 import { logger, type WideEvent } from "@/lib/log";
 import { enforceUploadQuota } from "@/lib/quota";
-import { getActiveScope, getSession, planFor } from "@/lib/session";
+import { getActiveScope, getSession } from "@/lib/session";
 
-/** OCR is capped at 45 s; this leaves room for upload and persistence. */
+/** The OCR chain shares a 50 s deadline (OCR_DEADLINE_MS); this leaves room for upload and persistence. */
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
@@ -46,6 +47,8 @@ export async function POST(request: Request) {
   const [session, scope] = await Promise.all([getSession(), getActiveScope()]);
   if (!session) return respond(jsonError(401, "Unauthorized"));
   event.user_id = session.user.id;
+  // Requests made while an admin impersonates carry the admin's id (security review).
+  if (session.session.impersonatedBy) event.impersonated_by = session.session.impersonatedBy;
   if (!scope)
     return respond(jsonError(409, "No active workspace. Pick or create one before uploading."));
   event.organization_id = scope.organizationId;
@@ -58,12 +61,11 @@ export async function POST(request: Request) {
   event.mode = mode;
   event.file = { size_bytes: file.size, declared_type: file.type };
 
-  const plan = planFor(session);
-  event.plan = plan;
   const body = new Uint8Array(await file.arrayBuffer());
   // Check quota and OCR config first, so nothing is stored for an upload that can't be read.
-  const ingest = enforceUploadQuota(session.user.id, plan).pipe(
-    Effect.zipRight(loadOcrConfig),
+  const ingest = enforceUploadQuota(session.user.id).pipe(
+    Effect.tap((plan) => void (event.plan = plan)),
+    Effect.zipRight(Effect.flatMap(Ocr, (ocr) => ocr.ready)),
     Effect.zipRight(ingestUpload({ scope, fileName: file.name, body })),
   );
 
@@ -77,12 +79,16 @@ export async function POST(request: Request) {
         event.outcome = "queued";
         // Extraction continues after the response; the client polls GET /api/receipts/:id.
         after(() =>
-          runBackground(extractStored({ receiptId, scope, file: ingested.file }), {
-            event: "receipt.extract.background",
-            request_id: requestId,
-            receipt_id: receiptId,
-            user_id: scope.userId,
-          }),
+          runBackground(
+            extractStored({ receiptId, scope, file: ingested.file }),
+            {
+              event: "receipt.extract.background",
+              request_id: requestId,
+              receipt_id: receiptId,
+              user_id: scope.userId,
+            },
+            recordOcr,
+          ),
         );
         return NextResponse.json(
           { receiptId, status: "processing", requestId, timings: ingested.timings },
@@ -124,7 +130,7 @@ export async function POST(request: Request) {
       event.outcome = "success";
       event.status_code = 200;
       event.timings = timings;
-      event.model = result.model;
+      recordOcr(result, event);
       event.usage = result.usage;
       event.confidence = result.receipt.confidence;
       event.items_count = result.receipt.items.length;

@@ -7,7 +7,10 @@ import { SectionHead, Tick } from "./primitives";
 // content.ts ends the paid-plans line with "Contact us", but there's no contact channel yet.
 const coming = comingSoon.map((item) =>
   item.title === "Paid plans"
-    ? { ...item, desc: "Higher daily limits and more workspaces, for when 50 a day isn't enough." }
+    ? {
+        ...item,
+        desc: `Higher daily limits and more workspaces, for when ${freePlan.receiptsPerDay} a day isn't enough.`,
+      }
     : item,
 );
 
