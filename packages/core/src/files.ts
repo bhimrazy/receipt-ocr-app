@@ -1,8 +1,14 @@
 import { Effect } from "effect";
 import { InvalidInput } from "./errors";
-import { ACCEPTED_MEDIA_TYPES, MAX_UPLOAD_BYTES, type AcceptedMediaType } from "./upload-limits";
+import { countPdfPages } from "./pdf-pages";
+import {
+  ACCEPTED_MEDIA_TYPES,
+  MAX_PDF_PAGES,
+  MAX_UPLOAD_BYTES,
+  type AcceptedMediaType,
+} from "./upload-limits";
 
-export { ACCEPTED_MEDIA_TYPES, MAX_UPLOAD_BYTES, type AcceptedMediaType };
+export { ACCEPTED_MEDIA_TYPES, MAX_PDF_PAGES, MAX_UPLOAD_BYTES, type AcceptedMediaType };
 
 const ascii = (bytes: Uint8Array, start: number, end: number) =>
   String.fromCharCode(...bytes.subarray(start, end));
@@ -40,9 +46,17 @@ export const validateUpload = (
     return Effect.fail(new InvalidInput({ message: "Receipt files must be 10 MB or smaller" }));
   }
   const mediaType = sniffMediaType(bytes);
-  return mediaType
-    ? Effect.succeed(mediaType)
-    : Effect.fail(
-        new InvalidInput({ message: "Upload a JPEG, PNG, WebP or HEIC photo, or a PDF" }),
-      );
+  if (!mediaType) {
+    return Effect.fail(
+      new InvalidInput({ message: "Upload a JPEG, PNG, WebP or HEIC photo, or a PDF" }),
+    );
+  }
+  if (mediaType === "application/pdf" && countPdfPages(bytes) > MAX_PDF_PAGES) {
+    return Effect.fail(
+      new InvalidInput({
+        message: `PDFs can have up to ${MAX_PDF_PAGES} pages. Upload only the pages with the receipt.`,
+      }),
+    );
+  }
+  return Effect.succeed(mediaType);
 };
