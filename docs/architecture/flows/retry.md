@@ -11,7 +11,7 @@ The receipt page shows **Try again** when the receipt is `failed` (or stale, see
 button is only a hint.
 
 A receipt is **stale** when it is still `uploaded` or `processing` five minutes after its last update and has no live
-job (`STALE_AFTER_MS`): no job at all, or one nothing has run for five minutes past its due time
+job (`STALE_AFTER_MS`): no job at all, or an orphaned one that nothing has run
 ([orphaned jobs](jobs.md#orphaned-jobs)). Stale is computed on read: lists, counts and the detail page show it as
 `failed` with "Reading this receipt took too long", and a retry may claim it. While a job is queued or retrying, the
 receipt reads as `processing`.

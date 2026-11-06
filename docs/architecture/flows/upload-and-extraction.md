@@ -95,7 +95,7 @@ sequenceDiagram
   R-->>B: 202 { receiptId, status: processing }
   R->>A: schedule drainJobs (waits for this job's backoff)
   A->>DB: claim, extract, complete; or record calls and retry
-  loop until it changes (backoff 2 to 15 s, paused while hidden, 3 min of visible polling)
+  loop until it changes (backoff 2 to 15 s, paused while hidden, 6 min of visible polling)
     B->>R: GET /api/receipts/{id}, or GET /api/receipts/status for a list
     R-->>B: { status } or workspace counts
   end

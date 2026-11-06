@@ -42,13 +42,15 @@ receipt `failed`, so a failed first attempt leaves the receipt `processing` whil
 `tick(budget)` in [`runner.ts`](../../../packages/core/src/jobs/runner.ts) reaps expired leases, then claims and runs
 jobs until nothing is runnable or the budget says stop. Every runner calls it; nothing else changes between them.
 
-| Runner (today)                                      | When                                               | Budget and waits                                                                           |
-| --------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `runJobNow` in `POST /api/receipts` instant mode    | First attempt of the upload                        | In the request, this job only, no waiting                                                  |
-| `drainJobs` in `after()` of uploads and retries     | After the response                                 | Until 290 s after the route started; sleeps through backoff only for its own job, 90 s max |
-| `drainJobs` in `after()` of `GET /api/receipts/:id` | A poll finds the receipt's job due but not running | 115 s from the poll; same rules                                                            |
+| Runner (today)                                    | When                                                          | Budget and waits                                                                           |
+| ------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `runJobNow` in `POST /api/receipts` instant mode  | First attempt of the upload                                   | In the request, this job only, no waiting                                                  |
+| `drainJobs` in `after()` of uploads and retries   | After the response                                            | Until 290 s after the route started; sleeps through backoff only for its own job, 90 s max |
+| `kickJob` in `after()` of `GET /api/receipts/:id` | A poll finds the receipt's job due, claimable and not running | That one job only, no waiting; returns at once if it can't claim it                        |
 
-Each drain also runs anyone else's due jobs. A worker app and a cron-triggered drain route come next (Track B of the
+Upload and retry drains also run anyone else's due jobs; the poll kick never does, so poll traffic can't become
+queue concurrency. Every tick records the time in `job_controls` (scope `tick`, at most every 30 s per process),
+which the orphan rule below reads. A worker app and a cron-triggered drain route come next (Track B of the
 plan); they call the same `tick`.
 
 ```mermaid
@@ -71,7 +73,7 @@ sequenceDiagram
   end
   loop polling
     B->>R: GET /api/receipts/{id}
-    R->>A: job due and nobody running it: drain it
+    R->>A: job due, claimable, nobody running it: run that job
   end
 ```
 
@@ -123,12 +125,19 @@ sequenceDiagram
 A job can be left with nobody running it: a backoff or cooldown longer than the request's budget, or a function
 killed at its time limit. Two things cover that until a worker or cron drain exists:
 
-1. The receipt page polls `GET /api/receipts/:id`. A poll that finds the job queued and due, or running past its lease,
-   drains it in `after()`.
-2. A job queued with `run_at` more than 5 minutes ago, or running with its lease expired more than 5 minutes ago,
-   stops counting as live (`liveReceiptJob` in [`live.ts`](../../../packages/core/src/jobs/live.ts), one SQL fragment
-   for the stale rule, the quota rule and receipt lookups). The receipt then reads as failed, its round frees the
-   quota, and the user's retry cancels the old job.
+1. The receipt page polls `GET /api/receipts/:id` (for up to 6 minutes of visible polling, past the worst-case
+   retry chain of about 4 minutes; "Check again" polls once more). A poll that finds the job queued and due, or
+   running past its lease, runs that job in `after()`, unless a pause or the owner's running cap would stop the
+   claim anyway. A job nobody polls for waits for the next drain.
+2. A job stops counting as live (`liveReceiptJob` in [`live.ts`](../../../packages/core/src/jobs/live.ts), one SQL
+   fragment for the stale rule, the quota rule and receipt lookups) only when it is really orphaned:
+   - queued, past its `run_at` by more than 5 minutes, **and** no tick has run anywhere for 5 minutes, so nothing is
+     draining the queue at all; or
+   - running with its lease expired more than 5 minutes ago.
+
+   A job that is only waiting its turn (a backlog, its owner at the running cap, a pause) stays live, because ticks
+   keep running, so its receipt reads as processing and its round keeps holding quota. An orphaned job's receipt
+   reads as failed, its round frees the quota, and the user's retry cancels the old job.
 
 ## Tables
 

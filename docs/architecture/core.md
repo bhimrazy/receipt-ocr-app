@@ -110,7 +110,7 @@ stateDiagram-v2
 ```
 
 "Stale" is computed when reading, not written: a row still `processing` five minutes after `updated_at` with no live
-job (none, or one long overdue, see [Background jobs](flows/jobs.md#orphaned-jobs)) is shown as `failed` with a "took
+job (none, or an orphaned one, see [Background jobs](flows/jobs.md#orphaned-jobs)) is shown as `failed` with a "took
 too long" message and can be retried (`STALE_AFTER_MS` in [`jobs/live.ts`](../../packages/core/src/jobs/live.ts)).
 While its job is queued or running, a receipt reads as `processing` however long it waits.
 
