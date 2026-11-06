@@ -53,7 +53,7 @@ export default async function SettingsPage() {
       </PageHeader>
 
       <SettingsSection
-        description={`Receipts reset at 00:00 UTC every day. Your first ${FREE_FAILED_ROUNDS} receipts a day that couldn't be read don't count.`}
+        description={`Receipts reset at 00:00 UTC every day. Your first ${FREE_FAILED_ROUNDS} failed reads a day don't count.`}
         id="plan-heading"
         title="Plan and usage"
       >
