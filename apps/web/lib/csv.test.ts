@@ -57,6 +57,7 @@ function row(overrides: Partial<ReceiptExportRow> = {}): ReceiptExportRow {
     fileName: "corner.jpg",
     errorMessage: null,
     itemCount: 1,
+    groups: [],
     createdAt: new Date("2026-08-01T10:00:00Z"),
     ...overrides,
   };
@@ -89,6 +90,16 @@ describe("receiptsToCsv", () => {
       const csv = receiptsToCsv([row({ merchant: dangerous })]);
       expect(csv).toContain(`'${dangerous}`);
     }
+  });
+
+  it("lists the receipt's groups in one cell, guarded like any other text", () => {
+    const [header, line] = receiptsToCsv([row({ groups: ["Berlin trip", "=Taxes, 2026"] })])
+      .trimEnd()
+      .split("\n");
+    const columns = header!.split(",");
+    expect(columns[columns.indexOf("items") + 1]).toBe("groups");
+    expect(line).toContain(`"Berlin trip; =Taxes, 2026"`);
+    expect(receiptsToCsv([row({ groups: ["=SUM(A1)"] })])).toContain("'=SUM(A1)");
   });
 
   it("leaves negative amounts numeric so refunds still add up (L7)", () => {

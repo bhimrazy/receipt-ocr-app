@@ -33,6 +33,7 @@ const RECEIPT_HEADERS = [
   "total",
   "confidence",
   "items",
+  "groups",
   "file_name",
   "created_at",
 ];
@@ -55,6 +56,7 @@ export function receiptsToCsv(receipts: ReceiptExportRow[]): string {
         receipt.total,
         receipt.confidence,
         receipt.itemCount,
+        receipt.groups.join("; "),
         receipt.fileName,
         receipt.createdAt instanceof Date ? receipt.createdAt.toISOString() : receipt.createdAt,
       ]),

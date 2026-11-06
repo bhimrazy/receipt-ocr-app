@@ -3,7 +3,7 @@ import type { HistoryFilters } from "@/lib/receipts";
 const FILTER_KEYS = ["q", "category", "status", "from", "to"] as const;
 
 export function isFiltered(filters: HistoryFilters) {
-  return FILTER_KEYS.some((key) => filters[key]);
+  return FILTER_KEYS.some((key) => filters[key]) || Boolean(filters.groups?.length); // groups
 }
 
 function filterParams(filters: HistoryFilters) {
@@ -12,6 +12,7 @@ function filterParams(filters: HistoryFilters) {
     const value = filters[key];
     if (value) params.set(key, value);
   }
+  for (const id of filters.groups ?? []) params.append("group", id); // groups
   return params;
 }
 

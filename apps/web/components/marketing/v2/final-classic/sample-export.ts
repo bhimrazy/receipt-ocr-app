@@ -25,6 +25,7 @@ export const sampleExportRows: ReceiptExportRow[] = [
     total: money(r.total),
     confidence: r.confidence,
     itemCount: r.itemCount,
+    groups: [],
     fileName: r.fileName,
     errorMessage: null,
     createdAt: new Date(`${r.receiptDate}T${r.time}:00Z`),
