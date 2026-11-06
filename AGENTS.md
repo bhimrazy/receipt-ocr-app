@@ -77,7 +77,7 @@ scripts/test.sh   # unit + Playwright e2e against the compose stack (when UI or 
 ```
 
 Dependencies are exact pins and at least 7 days old; `bun run check:deps` enforces the pins. `bench/` holds the OCR
-benchmark (`bun run bench:ocr`) and the k6 upload test.
+benchmark (`bun run bench:ocr`) and the k6 load test (`scripts/load.sh`).
 
 The signed-in app always needs a real session and database; there is no mock or preview data. Without `DATABASE_URL` and
 `BETTER_AUTH_SECRET`, `/app` sends everyone to `/sign-in`, which says sign-in isn't set up. Local development uses the

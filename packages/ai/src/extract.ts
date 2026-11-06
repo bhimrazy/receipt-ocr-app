@@ -10,7 +10,7 @@ import {
 } from "ai";
 import { CATEGORY_DESCRIPTIONS, RECEIPT_CATEGORIES } from "./categories";
 import { classifyOcrError, OcrCallError } from "./errors";
-import { fixtureExtraction } from "./fixture";
+import { fixtureExtraction, fixtureLatencyMs } from "./fixture";
 import type { ExtractionUsage, OcrProviderId } from "./models";
 import { receiptExtractionSchema, type ReceiptExtraction } from "./schema";
 
@@ -113,6 +113,8 @@ function usageOf(error: unknown): ExtractionUsage | null {
  */
 export async function extractReceipt(input: ExtractReceiptInput): Promise<ExtractReceiptResult> {
   if (input.model === "fixture") {
+    const latency = fixtureLatencyMs();
+    if (latency > 0) await new Promise((resolve) => setTimeout(resolve, latency));
     try {
       return {
         extraction: fixtureExtraction(input.file.data),
