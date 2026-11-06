@@ -9,8 +9,7 @@ import {
   Check,
   Code2,
   Download,
-  Globe2,
-  KeyRound,
+  ListChecks,
   ScanLine,
   Search,
   Shield,
@@ -28,54 +27,54 @@ const features = [
   {
     icon: ScanLine,
     title: "Accurate extraction",
-    desc: "Merchant, dates, line items, tax, and totals pulled into clean fields — each with a confidence score so you know what to trust.",
+    desc: "Merchant, date, line items, tax, and totals pulled into clean fields, with a confidence score for the receipt and for each line so you know what to check.",
   },
   {
-    icon: KeyRound,
-    title: "Bring your own keys",
-    desc: "Start fully managed on the free tier. Outgrow it? Plug in your own AI and storage keys to lift the limits and pay providers directly — no markup.",
+    icon: ListChecks,
+    title: "Checks before you trust it",
+    desc: "Low-confidence lines are marked, and totals that don't add up are flagged, so you know which receipts to look at twice.",
   },
   {
     icon: Shield,
     title: "Private by design",
-    desc: "Every receipt and route is protected, and your storage keys stay server-side — never exposed to the browser.",
+    desc: "Receipts are private to your workspace. Photos your browser can open are re-encoded before upload, which removes camera location data.",
   },
   {
     icon: Download,
     title: "Export anywhere",
-    desc: "Send structured results to JSON or CSV in a click — straight into your spreadsheet, ledger, or pipeline.",
+    desc: "Export any receipt as CSV or copy it as JSON, or download your whole filtered history as one CSV for your spreadsheet.",
   },
   {
     icon: Search,
     title: "Searchable history",
-    desc: "Every receipt is stored, statused, and searchable — built for repeat finance workflows, not one-offs.",
+    desc: "Every receipt is kept with its status, so you can search it and filter by what still needs checking.",
   },
   {
-    icon: Globe2,
-    title: "No lock-in",
-    desc: "S3-compatible from day one — Cloudflare R2, AWS S3, or self-hosted RustFS. Your data stays portable.",
+    icon: Users,
+    title: "Shared workspaces",
+    desc: "Invite the people you work with. Everyone uploads into the same history, so receipts aren't scattered across phones.",
   },
 ];
 
 const stats: Array<[string, string]> = [
-  ["100%", "Of line items captured, not just the total"],
-  ["Every field", "Scored with its own confidence value"],
-  ["JSON + CSV", "Export formats, one click away"],
-  ["$0", "To start — no card required"],
+  ["Line items", "Read too, not just the total"],
+  ["Confidence", "Per receipt and per line"],
+  ["CSV + JSON", "Export as CSV, copy as JSON"],
+  ["$0", "To start, no card required"],
 ];
 
 const steps = [
   {
     title: "Upload a receipt",
-    desc: "Snap a photo or drop in a photo or PDF. Uploads are handled server-side, so storage keys never touch the browser.",
+    desc: "Take a photo or drop in photos or PDFs, up to 20 at a time. Large phone photos are shrunk before they upload.",
   },
   {
     title: "Get structured data",
-    desc: "Fields are extracted into clean, structured data in seconds — merchant, items, tax, and totals, each with a confidence score.",
+    desc: "Merchant, date, items, tax, and totals are read in seconds, with a confidence score to show what needs a second look.",
   },
   {
     title: "Review, search, export",
-    desc: "Everything lands in your searchable history, ready to review and export to JSON or CSV whenever you need it.",
+    desc: "Everything lands in your searchable history, ready to review and export to CSV whenever you need it.",
   },
 ];
 
@@ -83,17 +82,17 @@ const useCases = [
   {
     icon: Briefcase,
     title: "Founders & freelancers",
-    desc: "Keep expenses in order without hand-typing every receipt at tax time.",
+    desc: "Keep expenses in order without typing every receipt by hand.",
   },
   {
     icon: Calculator,
     title: "Bookkeepers",
-    desc: "Pull line-item detail straight into ledgers — totals, tax, and items, scored for review.",
+    desc: "Tax, totals and confidence for every receipt in one CSV, with a Needs review filter for the ones to check.",
   },
   {
     icon: Code2,
     title: "Developers",
-    desc: "Receipts in, clean JSON out. Wire it into your own pipeline with portable storage.",
+    desc: "Receipts in, clean JSON out, ready for your own scripts and spreadsheets.",
   },
   {
     icon: Users,
@@ -109,38 +108,34 @@ const faqs = [
   },
   {
     q: "How accurate is the extraction?",
-    a: "Every field — merchant, date, each line item, tax, and total — comes back with its own confidence score, so you always know exactly what to trust and what to double-check.",
-  },
-  {
-    q: "What does “bring your own keys” mean?",
-    a: "Start on the managed free tier with zero setup. When you outgrow it, plug in your own AI and storage keys to lift the limits and pay providers directly — no markup, no lock-in.",
+    a: "Each receipt gets an overall confidence score and each line item gets its own. Receipts below the threshold, lines that were hard to read, and totals that don't add up are flagged so you know what to check.",
   },
   {
     q: "Where is my receipt data stored?",
-    a: "In S3-compatible storage — Cloudflare R2, AWS S3, or self-hosted RustFS. Your storage keys stay server-side and your data stays portable and yours.",
+    a: "Receipt files are kept in private cloud storage and the extracted data in our database. Receipts are read by Google Gemini; see the privacy policy for details. You can export your data at any time.",
   },
   {
     q: "Is it really free to start?",
-    a: "Yes. The free tier needs no credit card. You only ever bring your own keys or talk to us when you genuinely need higher volume.",
+    a: "Yes. The free plan needs no credit card and includes a daily allowance of receipt reads. If you need more, contact us.",
   },
   {
     q: "Can I export what gets extracted?",
-    a: "Any receipt exports to JSON or CSV in a click — ready for your spreadsheet, ledger, or data pipeline.",
+    a: "Yes. Any receipt exports as CSV with its line items or copies as JSON, and History exports every receipt that matches your filters as one CSV.",
   },
 ];
 
 const freePlanFeatures = [
-  "Receipt OCR with confidence scores",
+  "A daily allowance of receipt reads",
   "Merchant, items, tax & totals extracted",
+  "Confidence scores and review flags",
   "Searchable receipt history",
-  "JSON & CSV export",
-  "Bring your own keys to lift limits",
+  "CSV export and JSON copy",
 ];
 
 const customPlanFeatures = [
   "Everything in Free",
-  "Higher request & storage limits",
-  "Help wiring your own providers",
+  "Higher daily limits",
+  "More workspaces",
   "Direct line to the team",
   "Shape the roadmap with your feedback",
 ];
@@ -231,8 +226,8 @@ export function LandingPage() {
             <span className="text-gradient block">structured data</span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-8 text-foreground/80 md:text-lg">
-            Snap or upload any receipt and get clean, structured data — merchant, line items, tax,
-            and totals — ready to search, review, and export.
+            Snap or upload any receipt and get clean, structured data: merchant, line items, tax,
+            and totals, ready to search, review, and export.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Button asChild size="lg">
@@ -245,7 +240,7 @@ export function LandingPage() {
             </Button>
           </div>
           <p className="mt-5 font-mono text-xs text-muted-foreground">
-            No card required · Bring your own keys when you outgrow the free tier
+            No card required · Photos and PDFs
           </p>
         </div>
       </section>
@@ -281,8 +276,8 @@ export function LandingPage() {
               Everything from snap to export
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              A complete pipeline — capture, extract, review, and export — with your data staying
-              yours the whole way through.
+              Capture, extract, review, and export in one place, with your data staying yours the
+              whole way through.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -343,11 +338,11 @@ export function LandingPage() {
           <div className="mx-auto mb-14 max-w-2xl text-center">
             <SectionLabel>Who it&apos;s for</SectionLabel>
             <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
-              Built for anyone drowning in receipts
+              Built for anyone with a pile of receipts
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              From a single founder at tax time to a team that needs every line item — the same
-              clean data, ready when you are.
+              From a single freelancer to a team that needs every line item, the same clean data
+              comes out.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -379,15 +374,15 @@ export function LandingPage() {
               Start free, scale when you need
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              No credit card to begin. When you outgrow the free tier, bring your own keys — or talk
-              to us about higher volume.
+              No credit card to begin. If you need more than the free plan, contact us about higher
+              volume.
             </p>
           </div>
           <div className="mx-auto grid max-w-3xl items-stretch gap-5 md:grid-cols-2">
             <PlanCard
               name="Free"
               price="$0"
-              cadence="/ forever"
+              cadence=""
               description="Everything you need to start turning receipts into structured data."
               features={freePlanFeatures}
               featured
@@ -424,7 +419,7 @@ export function LandingPage() {
               Questions, answered
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              Still curious? Reach out any time — we read every message.
+              Still curious? Reach out any time. We read every message.
             </p>
           </div>
           <Accordion>
@@ -449,8 +444,7 @@ export function LandingPage() {
               Start turning receipts into data
             </h2>
             <p className="mx-auto mt-4 max-w-md text-pretty text-muted-foreground">
-              Free to start, no card required. Bring your own keys when you&apos;re ready to scale —
-              your data, your costs, no lock-in.
+              Free to start, no card required. Export everything, any time.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">

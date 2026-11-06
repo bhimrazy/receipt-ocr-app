@@ -1,6 +1,11 @@
 "use client";
 
-import type { PlanId, PlanPolicy, PlanTable } from "@receipt-ocr/core/plans";
+import {
+  FREE_FAILED_ROUNDS,
+  type PlanId,
+  type PlanPolicy,
+  type PlanTable,
+} from "@receipt-ocr/core/plans";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { toast } from "@receipt-ocr/ui/components/toast";
@@ -12,7 +17,7 @@ const FIELDS: { key: keyof PlanPolicy; label: string; hint: string }[] = [
   {
     key: "receiptsPerDay",
     label: "Receipts a day",
-    hint: "Counted per user from 00:00 UTC. Failed receipts don't count.",
+    hint: `Counted per user from 00:00 UTC. The first ${FREE_FAILED_ROUNDS} failed reads a day don't count.`,
   },
   {
     key: "receiptsPerMinute",
