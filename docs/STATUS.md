@@ -33,7 +33,6 @@ Steps are in [deployment.md](deployment.md).
 | Work                                    | Where                      | Notes                                                                                                                                                                                                                                                     |
 | --------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Track 1: usage capture + quota ledger   | branch `feat/ocr-usage`    | `ocr_calls` table, token/cost per model call, quota counted from the ledger at claim time with a per-user lock (closes delete-to-reset). Plan: [combined-plan](plans/2026-11-06-combined-plan.md), [ai-usage-models](plans/2026-11-06-ai-usage-models.md) |
-| Passkeys and two-factor research        | will land in `docs/plans/` | Better Auth `twoFactor` + passkey plugin; policy, UI, tests                                                                                                                                                                                               |
 | Parser, benchmark and open-model survey | will land in `docs/plans/` | LlamaParse/LlamaExtract, ParseBench and other benchmarks, receipt datasets (CORD, SROIE…), small open-weight models                                                                                                                                       |
 
 ## Decisions waiting on the owner
@@ -52,6 +51,9 @@ Steps are in [deployment.md](deployment.md).
    [members plan](plans/2026-11-06-members-admin-plan.md).
 8. Branch protection on `main` requiring CI.
 9. BYOK tables (`user_credentials`, `storage_source`): keep or delete.
+10. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): passkey rpID (host or apex via
+    `PASSKEY_RP_ID`), require passkey or password+TOTP for platform admins, `session.freshAge` 24 h → 1 h, no email
+    OTP, trusted-device length, nudges.
 
 ## Roadmap (order)
 
@@ -64,7 +66,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 4. Accuracy: arithmetic checks, low thinking, a real benchmark set, then Flash-Lite-first cascade
    ([extraction cost and accuracy](plans/2026-11-06-extraction-cost-accuracy.md)). No Docling/OCR-first pipeline.
 5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
-6. Passkeys and two-factor.
+6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
+   Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations `0007`, `0008`.
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
 8. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
 
