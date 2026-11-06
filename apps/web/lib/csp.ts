@@ -13,6 +13,9 @@ export function buildContentSecurityPolicy(turnstileSiteKey: string | undefined)
     "img-src 'self' data: blob: https: http://localhost:9000",
     "font-src 'self' data:",
     "connect-src 'self'",
+    // public/sw.js; without this, worker-src falls back to script-src.
+    "worker-src 'self'",
+    "manifest-src 'self'",
     `frame-src 'self'${turnstile}`,
     "frame-ancestors 'none'",
     "form-action 'self'",

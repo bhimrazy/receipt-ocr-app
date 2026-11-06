@@ -1,27 +1,50 @@
 import type { MetadataRoute } from "next";
+import { SHARE_TARGET_FIELD, SHARE_TARGET_PATH } from "@/lib/share-target";
+
+// --background in packages/ui/src/styles.css; the app is dark-only.
+const BACKGROUND = "#0a0a0b";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/app",
     name: "receiptOCR",
     short_name: "receiptOCR",
-    description: "receiptOCR: receipt data to CSV",
+    description: "Turn receipt photos and PDFs into rows you can check and export as CSV.",
     start_url: "/app",
+    scope: "/",
     display: "standalone",
-    background_color: "#0a0a0b",
-    theme_color: "#0a0a0b",
+    // Portrait suits taking photos, but History's table and tablets read better sideways.
+    orientation: "any",
+    background_color: BACKGROUND,
+    theme_color: BACKGROUND,
+    categories: ["finance", "productivity", "business"],
     icons: [
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       {
-        src: "/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
-        purpose: "any",
-      },
-      {
-        src: "/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
+        src: "/icons/icon-maskable-512.png",
+        sizes: "512x512",
+        type: "image/png",
         purpose: "maskable",
       },
+      { src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
     ],
+    shortcuts: [
+      {
+        name: "Scan receipt",
+        short_name: "Scan",
+        description: "Open the camera to photograph a receipt",
+        url: "/app/upload?capture=1",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+      },
+    ],
+    // Android Chrome: receipts shared from the gallery or a PDF viewer. The service worker
+    // handles the POST; without one, the route handler sends the visitor to the upload page.
+    share_target: {
+      action: SHARE_TARGET_PATH,
+      method: "POST",
+      enctype: "multipart/form-data",
+      params: { files: [{ name: SHARE_TARGET_FIELD, accept: ["image/*", "application/pdf"] }] },
+    },
   };
 }

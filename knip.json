@@ -10,5 +10,5 @@
       "ignoreDependencies": ["tailwindcss"]
     }
   },
-  "ignore": ["bench/upload.k6.js"]
+  "ignore": ["bench/upload.k6.js", "apps/web/public/sw.js"]
 }

@@ -23,6 +23,7 @@ import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { formatTime } from "@/lib/format";
 import { usageNote, type Usage } from "@/components/usage-meter";
 import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
+import { useSharedFiles } from "@/lib/use-shared-files";
 
 type UploadResponse = { receiptId?: string; error?: string };
 
@@ -139,6 +140,9 @@ export function UploadPanel({
       previews.current.delete(item.preview);
     }
   }
+
+  // Files shared from another app (Android share sheet) arrive through the file input.
+  useSharedFiles(inputRef);
 
   if (usage?.blocked) return <LimitReached resetsIn={resetsIn} usage={usage} />;
 
