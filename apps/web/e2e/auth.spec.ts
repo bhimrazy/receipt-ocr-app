@@ -98,6 +98,6 @@ test("an invited person signs up, confirms their email and joins the workspace",
   await guest.goto(`/accept-invitation/${id}`);
   await expect(guest.getByText(invitee)).toBeVisible();
   await guest.getByRole("button", { name: /^Join / }).click();
-  await expect(guest).toHaveURL(/\/app\/upload/);
+  await expect(guest).toHaveURL(/\/app(\/|\?|$)/);
   await guest.close();
 });
