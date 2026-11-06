@@ -198,9 +198,9 @@ export function jpegEncoder(bitmap: ImageBitmap): { encode: Encoder; release: ()
 
 /**
  * Orients, shrinks to the size budget and re-encodes every image the browser can decode as JPEG, which removes camera
- * metadata (EXIF, including GPS). The original is never returned, even when the re-encode is larger: PNG eXIf
- * and JPEG APP segments can all carry GPS. PDFs, and images the browser can't decode (e.g. HEIC outside Safari), come
- * back unchanged with their metadata, for the server to judge. Never throws.
+ * metadata (EXIF, including GPS). A successful re-encode always replaces the original, even when it is larger: PNG
+ * eXIf and JPEG APP segments can all carry GPS. PDFs, images the browser can't decode (e.g. HEIC outside Safari) and
+ * images whose encode fails (e.g. canvas memory limits) come back unchanged with their metadata. Never throws.
  */
 export async function prepareFile(file: File): Promise<File> {
   const type = acceptedType(file);

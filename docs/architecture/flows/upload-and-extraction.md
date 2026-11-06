@@ -45,8 +45,9 @@ are planned ([jobs plan](../../plans/2026-11-06-jobs-queue.md), Track B); they r
   at 0.85 and steps down to 0.6, then the image shrinks 15% at a time (never under the short-edge floor), up to 6
   encodes, aiming for 500 KB. If the short-edge floor leaves it over 1 MB, a last pass drops quality to 0.5 and shrinks
   down to an 800 px short edge. This removes camera metadata (including GPS) and keeps the body under Vercel's 4.5 MB
-  limit. The original is never sent in place of the re-encode, so metadata can't slip through. PDFs and images the browser can't decode (HEIC outside Safari) are sent
-  unchanged.
+  limit. A successful re-encode always replaces the original, so its metadata is gone. PDFs, images the browser can't
+  decode (HEIC outside Safari) and images whose encode fails (for example a phone out of canvas memory) are sent
+  unchanged, metadata included; stripping those on the server is a known follow-up.
 - A file still over 4 MB (`DEPLOYMENT_BODY_LIMIT_BYTES` in
   [`upload-limits.ts`](../../../packages/core/src/upload-limits.ts)) is refused before upload.
 - "Read all" posts files one at a time and stops at the first error (usually the quota).
