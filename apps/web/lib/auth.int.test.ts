@@ -147,7 +147,18 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     expect(await decryptOAuthToken(legacy!.accessToken!, context)).toBe("ya29.legacy-plaintext");
     expect(await decryptOAuthToken(legacy!.refreshToken!, context)).toBe("1//legacy-refresh");
   });
+
   it("GHSA-c85h: refuses padded owner roles on invite and role change", async () => {
+    // The reset above revoked earlier sessions; sign in with the new password.
+    const signIn = await auth.api.signInEmail({
+      body: { email, password: `${password}-2` },
+      returnHeaders: true,
+    });
+    cookie = signIn.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .filter((c) => c?.includes("session_token="))
+      .join("; ");
     const headers = new Headers({ cookie });
     const org = await auth.api.createOrganization({
       headers,
