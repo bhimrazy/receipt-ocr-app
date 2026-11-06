@@ -1,0 +1,136 @@
+# Background jobs
+
+How a receipt gets read after it is accepted: a durable `receipt.extract` job in Postgres, claimed by whatever runs
+the queue, retried with backoff, and only then allowed to fail the receipt. The code is in
+[`packages/core/src/jobs`](../../../packages/core/src/jobs); the decision and the alternatives are in the
+[jobs plan](../../plans/2026-11-06-jobs-queue.md).
+
+## Contents
+
+- [Two state machines](#two-state-machines)
+- [Who runs the queue](#who-runs-the-queue)
+- [Claim, lease and fencing](#claim-lease-and-fencing)
+- [Retries, dead jobs and cooldowns](#retries-dead-jobs-and-cooldowns)
+- [Quota and cost](#quota-and-cost)
+- [Orphaned jobs](#orphaned-jobs)
+- [Tables](#tables)
+
+## Two state machines
+
+The receipt row stays what the user sees (`processing`, `completed`, `failed`). The job row is how the work runs.
+
+```mermaid
+stateDiagram-v2
+  [*] --> queued: enqueued with the receipt and its round
+  queued --> running: claim (attempts + 1, lease 90 s)
+  running --> succeeded: receipt completed (or nothing left to do)
+  running --> queued: retryable failure, run_at = now + backoff
+  running --> queued: every provider cooling, attempt not spent
+  running --> dead: not retryable, or the 4th attempt failed
+  running --> queued: lease expired, reaped (dead on the last attempt)
+  queued --> cancelled: cancel, or a user retry supersedes it
+  running --> cancelled: cancel (the handler is interrupted)
+  dead --> [*]: receipt settled as failed
+  cancelled --> [*]
+```
+
+`queued` includes "waiting to retry": `run_at` is then in the future. Only the job's final-failure hook marks the
+receipt `failed`, so a failed first attempt leaves the receipt `processing` while the job retries.
+
+## Who runs the queue
+
+`tick(budget)` in [`runner.ts`](../../../packages/core/src/jobs/runner.ts) reaps expired leases, then claims and runs
+jobs until nothing is runnable or the budget says stop. Every runner calls it; nothing else changes between them.
+
+| Runner (today)                                      | When                                               | Budget and waits                                                                           |
+| --------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `runJobNow` in `POST /api/receipts` instant mode    | First attempt of the upload                        | In the request, this job only, no waiting                                                  |
+| `drainJobs` in `after()` of uploads and retries     | After the response                                 | Until 290 s after the route started; sleeps through backoff only for its own job, 90 s max |
+| `drainJobs` in `after()` of `GET /api/receipts/:id` | A poll finds the receipt's job due but not running | 115 s from the poll; same rules                                                            |
+
+Each drain also runs anyone else's due jobs. A worker app and a cron-triggered drain route come next (Track B of the
+plan); they call the same `tick`.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant R as POST /api/receipts
+  participant DB as Postgres
+  participant A as after()
+
+  B->>R: upload
+  R->>DB: one transaction: lock user, quota, receipt, ocr_rounds, jobs row
+  R->>DB: instant: claim this job, run attempt 1
+  alt completed or dead
+    R-->>B: 200 completed / failed
+  else retrying
+    R-->>B: 202 processing
+    R->>A: drainJobs, waits for this job's backoff
+    A->>DB: claim, run attempt 2, 3, 4
+  end
+  loop polling
+    B->>R: GET /api/receipts/{id}
+    R->>A: job due and nobody running it: drain it
+  end
+```
+
+## Claim, lease and fencing
+
+- **Claim** is one statement: lock up to `4n` runnable candidates with `FOR UPDATE SKIP LOCKED`, rank them per user
+  with `row_number()`, keep those under the per-user running cap (2), take `n` in priority then `run_at` order, and
+  mark them `running` with `attempts + 1` and a lease. Paused kinds and a paused queue (`job_controls`) are skipped.
+  Concurrent claimers never wait on each other or claim the same row.
+- **Heartbeat** renews the lease every third of it. It touches no indexed column, so it is a HOT update. If it
+  matches no row (reaped, cancelled), the handler is interrupted; its `AbortSignal` stops the model call.
+- **Fencing.** Every write after the claim matches `id`, `locked_by`, `attempts` and `state = 'running'`. A worker
+  whose lease expired, even one that claimed the same job again under the same id, changes nothing. The receipt write
+  keeps its own guard (`status = 'processing' and attempts = round`), so a job for an older round can't overwrite a
+  newer one.
+- **Reaper**, at the start of every tick: running jobs past their lease go back to `queued`, or to `dead` on their
+  last attempt (then the receipt is settled, with one `timeout` row for the attempt that never reported).
+- Everything is plain statements and transactions: no LISTEN, no session advisory locks, no prepared statements. It
+  works through Supabase's transaction pooler.
+
+## Retries, dead jobs and cooldowns
+
+| Failure                                                                              | Next                                                    |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `timeout`, `rate-limited`, `provider-error`, storage, DB                             | Retry after backoff, up to 4 attempts                   |
+| `invalid-output`, `bad-image`, `not-configured`, unreadable stored file, bad payload | Dead now                                                |
+| Every provider in the chain cooling down                                             | Back to `queued` at the cooldown end, attempt not spent |
+
+- Backoff: `min(10 min, 10 s x 2^(attempt-1))`, jittered to 50 to 100%. A provider's Retry-After is a floor (capped
+  at 10 min). Delays are computed with the database's `now()`, so app and database clock skew doesn't matter.
+- A 429 writes a cooldown for the whole provider (`job_controls` scope `provider:<id>`, Retry-After or 30 s, at most
+  10 min). Every job reads cooldowns before calling the model and skips cooling providers, so one 429 slows every job
+  for that provider, not only the one that hit it.
+- Each attempt's calls go to `ocr_calls` with its `job_attempt`, whether it succeeded or not.
+
+## Quota and cost
+
+- The quota is reserved once per round, when the job is enqueued, under the user's advisory lock. Automatic retries
+  reuse the round and never touch `ocr_rounds`.
+- While a round's own job is live it counts as in flight, whatever calls it has made, so a failed first attempt
+  can't make room under the daily limit. Once the job is settled, the usual rules apply (a read counts once; failed
+  rounds beyond the first five a day count).
+- `OCR_DAILY_CAP` counts rounds plus every retry attempt that called a model, because the cap bounds spend and one
+  round can make four attempts. The cap is checked when a round is admitted; rounds already running may finish
+  their retries past it.
+
+## Orphaned jobs
+
+A job can be left with nobody running it: a backoff or cooldown longer than the request's budget, or a function
+killed at its time limit. Two things cover that until a worker or cron drain exists:
+
+1. The receipt page polls `GET /api/receipts/:id`. A poll that finds the job queued and due, or running past its lease,
+   drains it in `after()`.
+2. A job queued with `run_at` more than 5 minutes ago, or running with its lease expired more than 5 minutes ago,
+   stops counting as live (`liveReceiptJob` in [`live.ts`](../../../packages/core/src/jobs/live.ts), one SQL fragment
+   for the stale rule, the quota rule and receipt lookups). The receipt then reads as failed, its round frees the
+   quota, and the user's retry cancels the old job.
+
+## Tables
+
+`jobs` and `job_controls` come from migration
+[`0008_jobs_queue.sql`](../../../apps/web/drizzle/0008_jobs_queue.sql); see the [data model](../data-model.md#background-jobs).

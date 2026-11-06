@@ -37,14 +37,14 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-- **Durable job queue, Track A** (`feat/jobs-core`, [plan](plans/2026-11-06-jobs-queue.md)). Migration `0008`
-  adds `jobs`, `job_workers`, `job_controls`, `rate_windows`, `job_schedules` and `ocr_calls.job_attempt`, and
-  backfills a job for every receipt still processing. Each upload or retry enqueues a `receipt.extract` job in the
-  transaction that takes the quota; failed attempts retry with backoff (4 attempts) and only a dead job fails the
-  receipt. Until Track B (worker and drain route) lands, the upload and retry routes run the queue themselves
-  (instant upload: first attempt in the request; everything else in `after()`, `maxDuration` 300). A retry whose
-  backoff falls past that budget, or work cut off by a crash, waits for the next upload or retry anywhere to run the
-  queue. Production needs `0008` applied before this deploys.
+- **Durable job queue, Track A** (`feat/jobs-core`, [plan](plans/2026-11-06-jobs-queue.md)). Migration `0008` adds
+  `jobs`, `job_controls` and `ocr_calls.job_attempt`, and backfills a job for every receipt still processing. Each
+  upload or retry enqueues a `receipt.extract` job in the transaction that takes the quota; failed attempts retry with
+  backoff (4 attempts) and only a dead job fails the receipt. Until Track B (worker and drain route) lands, the upload
+  and retry routes run the queue themselves (instant upload: first attempt in the request; everything else in `after()`,
+  `maxDuration` 300). The receipt page's poll drains its job if it is due and nobody is running it; a job nothing runs
+  for 5 minutes past due stops holding the receipt and its quota. See [Background jobs](architecture/flows/jobs.md).
+  Production needs `0008` applied before this deploys.
 - Next: Track B (`apps/worker`, `POST /api/jobs/drain`, `pg_cron` trigger, poller shows job state), Track C
   (`/admin/jobs`), then Track 3, the usage screens ([usage design](plans/2026-11-06-usage-design.md)).
 
