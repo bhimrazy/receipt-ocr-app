@@ -11,6 +11,7 @@ import {
   type SQL,
 } from "@receipt-ocr/db";
 import { Effect } from "effect";
+import { liveReceiptJob } from "./jobs/live";
 import { FREE_FAILED_ROUNDS } from "./plans";
 import { isReceiptId } from "./repository";
 import { Db } from "./services";
@@ -21,11 +22,12 @@ import { Db } from "./services";
  *
  * - A round is one upload or one retry, recorded when it is accepted.
  * - A user's day: receipts read successfully that day, counted once, plus
- *   rounds still in flight, plus failed rounds beyond the first
+ *   rounds still in flight (their job is live, or they are recent with no
+ *   calls yet), plus finished failed rounds beyond the first
  *   `FREE_FAILED_ROUNDS` of the day. A few bad photos are free; a stream of
  *   them (each one a paid model call) is not.
- * - The burst limit and the global cap count rounds, failed ones included:
- *   each one called (or is calling) a model.
+ * - The burst limit counts rounds, failed ones included. The global cap
+ *   counts rounds plus model-calling retry attempts: each one costs.
  */
 
 export type UsageCounts = { userMinute: number; userDay: number; globalDay: number | null };
@@ -45,10 +47,19 @@ const ts = (date: Date) => sql`${date.toISOString()}::timestamptz`;
 
 /** The round (aliased `r`) has at least one successful call. */
 const readOk = sql`exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round and c.status = 'ok')`;
-/** The round has no calls yet: still running (or died, until it ages out). */
+/** The round has no calls yet: waiting or running (or died, until it ages out). */
 const noCalls = sql`not exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round)`;
-/** The round called a model and none succeeded: paid for, nothing read. */
-const failedPaid = sql`(not ${readOk} and exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round and c.model is not null))`;
+/**
+ * The round's own job is queued or running (waiting, or between automatic
+ * retries): in flight whatever calls it has made, so neither a backlog nor a
+ * failed first attempt makes room in the quota. Only an orphaned job (nothing
+ * has drained its kind for 5 minutes, or its lease expired 5 minutes ago,
+ * see `liveReceiptJob`) stops counting; a job waiting behind a backlog, its
+ * owner's cap or a pause keeps holding quota.
+ */
+const liveJobForRound = sql`exists (select 1 from jobs j where j.receipt_id = r.receipt_id and ${liveReceiptJob("j")} and (j.payload->>'round')::int = r.round)`;
+/** The round is over, called a model and none succeeded: paid for, nothing read. */
+const failedPaid = sql`(not ${readOk} and not ${liveJobForRound} and exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round and c.model is not null))`;
 
 /**
  * A user's "used today" (see the rules above) as a scalar subquery.
@@ -56,7 +67,9 @@ const failedPaid = sql`(not ${readOk} and exists (select 1 from ocr_calls c wher
  */
 export const usedSinceSql = (userId: SQL | string, since: Date, pendingSince: Date | null) => {
   const inFlight =
-    pendingSince === null ? sql`false` : sql`(r.created_at >= ${ts(pendingSince)} and ${noCalls})`;
+    pendingSince === null
+      ? sql`false`
+      : sql`(${liveJobForRound} or (r.created_at >= ${ts(pendingSince)} and ${noCalls}))`;
   const mine = sql`r.user_id = ${userId} and r.created_at >= ${ts(since)}`;
   return sql<number>`((select count(distinct r.receipt_id) from ocr_rounds r where ${mine} and (${readOk} or ${inFlight}))
     + greatest(0, (select count(*) from ocr_rounds r where ${mine} and ${failedPaid}) - ${FREE_FAILED_ROUNDS}))::int`;
@@ -67,9 +80,7 @@ export async function countUsage(
   userId: string,
   window: UsageWindow,
 ): Promise<UsageCounts> {
-  const global = window.includeGlobal
-    ? sql`(select count(*)::int from ocr_rounds r where r.created_at >= ${ts(window.dayStart)})`
-    : sql`null::int`;
+  const global = window.includeGlobal ? roundsSince(window.dayStart) : sql`null::int`;
   const rows = await db.execute<{
     user_minute: number;
     user_day: number;
@@ -98,9 +109,15 @@ const QUOTA_LOCK_NAMESPACE = 7_301;
 export const receiptsReadSince = (userColumn: SQL, since: Date) =>
   usedSinceSql(userColumn, since, null);
 
-/** Rounds started since `since`, all users: what OCR_DAILY_CAP is checked against. */
+/**
+ * What OCR_DAILY_CAP is checked against, all users since `since`: rounds
+ * started, plus each automatic retry attempt that called a model. A round
+ * can make up to four attempts, and the cap bounds spend, not uploads.
+ */
 export const roundsSince = (since: Date) =>
-  sql<number>`(select count(*)::int from ocr_rounds r where r.created_at >= ${ts(since)})`;
+  sql<number>`((select count(*) from ocr_rounds r where r.created_at >= ${ts(since)})
+    + (select count(*) from (select distinct c.receipt_id, c.round, c.job_attempt from ocr_calls c
+        where c.created_at >= ${ts(since)} and c.job_attempt > 1 and c.model is not null) retries))::int`;
 
 // ---------- Rollups for usage pages ----------
 
@@ -235,6 +252,7 @@ export const receiptCalls = (receiptId: string, organizationId: string) =>
       return db
         .select({
           round: ocrCalls.round,
+          jobAttempt: ocrCalls.jobAttempt,
           step: ocrCalls.step,
           model: ocrCalls.model,
           status: ocrCalls.status,
@@ -248,6 +266,6 @@ export const receiptCalls = (receiptId: string, organizationId: string) =>
         })
         .from(ocrCalls)
         .where(and(eq(ocrCalls.receiptId, receiptId), eq(ocrCalls.organizationId, organizationId)))
-        .orderBy(ocrCalls.round, ocrCalls.step);
+        .orderBy(ocrCalls.round, ocrCalls.jobAttempt, ocrCalls.step);
     }),
   );

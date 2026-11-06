@@ -124,6 +124,7 @@ flowchart TD
 
 - [Sign-up, sign-in and invitations](flows/auth.md)
 - [Retry](flows/retry.md) and the attempt guard
+- [Background jobs](flows/jobs.md): the Postgres queue, leases, retries and cooldowns
 - [Admin actions and the audit log](flows/admin-actions.md)
 - [Settings cache](flows/settings-cache.md)
 - [CI, deployment and migrations](flows/deployment.md)
@@ -159,14 +160,14 @@ several of them is in the [security audit](../reviews/2026-11-06-security-audit.
 
 ## What is planned, not built
 
-| Planned                                                | Today                                                             | Plan                                                                                                                                                                         |
-| ------------------------------------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Job queue (Postgres queue first, BullMQ + Redis later) | Queued mode runs in Next.js `after()` in the same function        | [Durable background jobs](../plans/2026-11-06-jobs-queue.md); also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
-| Observability (Axiom logs, PostHog, Sentry)            | One JSON wide event per request on stdout                         | [Observability](../plans/2026-11-06-observability.md)                                                                                                                        |
-| Usage screens for customers and admins                 | Rollup queries exist in `usage.ts`; only the daily meter is shown | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                          |
-| Passkeys and two-factor                                | Email/password and OAuth only                                     | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                      |
-| Second AI provider                                     | Google Gemini and the offline fixture                             | [AI usage and models](../plans/2026-11-06-ai-usage-models.md)                                                                                                                |
-| Seats and per-workspace quota                          | Quota is per user per UTC day                                     | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                               |
+| Planned                                     | Today                                                                                   | Plan                                                                                                                                                                                        |
+| ------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker app and cron drain for the job queue | The [job queue](flows/jobs.md) is run by the upload, retry and poll routes in `after()` | [Durable background jobs](../plans/2026-11-06-jobs-queue.md), Tracks B to D; also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
+| Observability (Axiom logs, PostHog, Sentry) | One JSON wide event per request on stdout                                               | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
+| Usage screens for customers and admins      | Rollup queries exist in `usage.ts`; only the daily meter is shown                       | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                                         |
+| Passkeys and two-factor                     | Email/password and OAuth only                                                           | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
+| Second AI provider                          | Google Gemini and the offline fixture                                                   | [AI usage and models](../plans/2026-11-06-ai-usage-models.md)                                                                                                                               |
+| Seats and per-workspace quota               | Quota is per user per UTC day                                                           | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                                              |
 
 ## Keeping this current
 

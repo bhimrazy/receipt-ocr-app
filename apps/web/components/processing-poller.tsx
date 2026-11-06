@@ -43,6 +43,11 @@ export function ProcessingPoller({ id, status }: { id: string; status: ReceiptSt
     return true;
   }, [id, status, router]);
   const giveUp = useCallback(() => setGaveUp(true), []);
+  // Through the status endpoint first: a poll there also runs a job nobody picked up.
+  const checkAgain = useCallback(async () => {
+    const changed = await check().catch(() => false);
+    if (!changed) router.refresh();
+  }, [check, router]);
 
   useBackoffPoll(status === "processing" || status === "uploaded", check, giveUp);
 
@@ -56,7 +61,7 @@ export function ProcessingPoller({ id, status }: { id: string; status: ReceiptSt
       Still reading after a few minutes. Something may have gone wrong.
       <button
         className="min-h-11 rounded-md font-medium underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-0"
-        onClick={() => router.refresh()}
+        onClick={() => void checkAgain()}
         type="button"
       >
         Check again

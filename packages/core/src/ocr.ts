@@ -2,6 +2,7 @@ import {
   classifyOcrError,
   extractReceipt,
   OcrCallError,
+  retryAfterMs,
   type ExtractionUsage,
   type ExtractReceiptInput,
   type ExtractReceiptResult,
@@ -10,7 +11,7 @@ import {
   type OcrProviderId,
 } from "@receipt-ocr/ai";
 import { Clock, Config, Context, Effect, Layer, Option } from "effect";
-import { NotConfigured, OcrError, type OcrAttempt } from "./errors";
+import { NotConfigured, OcrError, ProvidersCooling, type OcrAttempt } from "./errors";
 import { providerAvailability, Settings, type OcrRouting, type OcrStep } from "./settings";
 
 /**
@@ -50,7 +51,29 @@ export function activeChain(
 
 export type OcrResult = ExtractReceiptResult & { attempts: OcrAttempt[] };
 
-export type StepFailure = { kind: OcrFailureKind; usage: ExtractionUsage | null; cause: unknown };
+export type StepFailure = {
+  kind: OcrFailureKind;
+  usage: ExtractionUsage | null;
+  cause: unknown;
+  retryAfterMs?: number;
+};
+
+/** Providers cooling down after a 429, and until when; their models are skipped. */
+export type ProviderCooldowns = ReadonlyMap<OcrProviderId, Date>;
+
+/**
+ * The chain without models whose provider is cooling down. Fails when that
+ * leaves nothing, so the caller can wait instead of spending an attempt.
+ */
+export function withoutCooling(chain: OcrStep[], cooling: ProviderCooldowns, now: number) {
+  const coolingNow = (step: OcrStep) => (cooling.get(providerOf(step.model))?.getTime() ?? 0) > now;
+  const usable = chain.filter((step) => !coolingNow(step));
+  if (usable.length > 0 || chain.length === 0) return Effect.succeed(usable);
+  const until = Math.min(...chain.map((step) => cooling.get(providerOf(step.model))!.getTime()));
+  return Effect.fail(
+    new ProvidersCooling({ message: "Every OCR provider is cooling down", until: new Date(until) }),
+  );
+}
 
 /** One model call; it must give up by `timeoutMs`. Fails with the classified provider error. */
 export type ExtractCall = (input: {
@@ -99,7 +122,14 @@ export const runChain = (
         return { ...outcome.right, attempts } satisfies OcrResult;
       }
       last = outcome.left;
-      attempts.push({ model: step.model, step: index, kind: last.kind, ms, usage: last.usage });
+      attempts.push({
+        model: step.model,
+        step: index,
+        kind: last.kind,
+        ms,
+        usage: last.usage,
+        ...(last.retryAfterMs === undefined ? {} : { retryAfterMs: last.retryAfterMs }),
+      });
       if (!FALLBACK_KINDS.has(last.kind)) break;
     }
     return yield* new OcrError({
@@ -123,7 +153,8 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
   {
     readonly extract: (
       file: ExtractReceiptInput["file"],
-    ) => Effect.Effect<OcrResult, OcrError | NotConfigured>;
+      options?: { cooling?: ProviderCooldowns },
+    ) => Effect.Effect<OcrResult, OcrError | NotConfigured | ProvidersCooling>;
     /** Fails with NotConfigured when no model can run, so a route can refuse before storing. */
     readonly ready: Effect.Effect<void, NotConfigured>;
   }
@@ -139,7 +170,7 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
             ? Effect.void
             : Effect.fail(new NotConfigured({ message: "Receipt extraction is not configured" })),
         ),
-        extract: (file) =>
+        extract: (file, options) =>
           Effect.gen(function* () {
             const keys = { google: yield* googleKey };
             const call: ExtractCall = ({ model, timeoutMs, maxRetries }) =>
@@ -149,8 +180,18 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
                 catch: (cause): StepFailure =>
                   cause instanceof OcrCallError
                     ? // The error itself, not its cause: its message never holds receipt contents.
-                      { kind: cause.kind, usage: cause.usage, cause }
-                    : { kind: classifyOcrError(cause), usage: null, cause },
+                      {
+                        kind: cause.kind,
+                        usage: cause.usage,
+                        cause,
+                        retryAfterMs: retryAfterMs(cause),
+                      }
+                    : {
+                        kind: classifyOcrError(cause),
+                        usage: null,
+                        cause,
+                        retryAfterMs: retryAfterMs(cause),
+                      },
               }).pipe(
                 Effect.timeoutFail({
                   duration: timeoutMs + ABORT_GRACE_MS,
@@ -161,7 +202,12 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
                   }),
                 }),
               );
-            return yield* runChain(yield* chainNow, call);
+            const chain = yield* withoutCooling(
+              yield* chainNow,
+              options?.cooling ?? new Map(),
+              yield* Clock.currentTimeMillis,
+            );
+            return yield* runChain(chain, call);
           }),
       };
     }),

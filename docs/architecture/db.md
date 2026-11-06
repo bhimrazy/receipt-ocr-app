@@ -47,6 +47,7 @@ From `@receipt-ocr/db` ([`src/index.ts`](../../packages/db/src/index.ts)):
 | [`0005_receipt_attempts.sql`](../../apps/web/drizzle/0005_receipt_attempts.sql)                             | `attempts`, `last_attempt_at` for capped retries                                           |
 | [`0006_admin_audit_settings.sql`](../../apps/web/drizzle/0006_admin_audit_settings.sql)                     | `admin_audit_log`, `app_settings`, `receipts.model`; `receipts.user_id` becomes `SET NULL` |
 | [`0007_ocr_usage_ledger.sql`](../../apps/web/drizzle/0007_ocr_usage_ledger.sql)                             | `ocr_rounds`, `ocr_calls` with their unique indexes and the status `CHECK`                 |
+| [`0008_jobs_queue.sql`](../../apps/web/drizzle/0008_jobs_queue.sql)                                         | `jobs`, `job_controls`, `ocr_calls.job_attempt`; storage parameters and a backfill by hand |
 
 `drizzle-kit migrate` records applied files in `drizzle.__drizzle_migrations`, so rerunning it only applies new ones.
 It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.

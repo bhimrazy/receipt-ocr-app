@@ -18,21 +18,21 @@ product; most other pages describe a part of it.
 
 The work is split into two stages in [`pipeline.ts`](../../../packages/core/src/pipeline.ts):
 
-1. **Ingest** (`ingestUpload`), always inside the request: validate the bytes, store the file, insert the receipt
-   and its first round under the quota lock.
-2. **Extract** (`extractStored`), by receipt id: load the file, run the model chain, write the result or the
-   failure together with the calls made.
+1. **Ingest** (`ingestUpload`), always inside the request: validate the bytes, store the file, then in one
+   transaction under the quota lock insert the receipt, its first round and its `receipt.extract` job.
+2. **Extract**, as that job ([Background jobs](jobs.md)): each attempt (`runExtraction`) loads the file by receipt
+   id, runs the model chain and writes the result, or records its calls and leaves the job to retry. Only a dead job
+   marks the receipt failed.
 
-The two upload modes differ only in when stage 2 runs.
+The two upload modes differ only in when the job first runs.
 
-| Mode      | Used by                                     | Stage 2 runs                                    | Response                                   |
-| --------- | ------------------------------------------- | ----------------------------------------------- | ------------------------------------------ |
-| `instant` | "Read" on a single file in the upload panel | In the request, before responding               | `200` with `status: completed` or `failed` |
-| `queued`  | "Read all" on several files                 | In Next.js `after()`, once the response is sent | `202` with `status: processing`            |
+| Mode      | Used by                                     | First attempt runs                                           | Response                                                           |
+| --------- | ------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `instant` | "Read" on a single file in the upload panel | In the request, before responding (priority 0)               | `200` `completed` or `failed`; `202` `processing` while it retries |
+| `queued`  | "Read all" on several files                 | In Next.js `after()`, once the response is sent (priority 5) | `202` with `status: processing`                                    |
 
-Both run in the same serverless function, with `maxDuration = 60` seconds. **Planned:** durable background jobs so stage 2
-can run in a worker ([jobs plan](../../plans/2026-11-06-jobs-queue.md)); `extractStored` already takes only an id for
-that reason.
+The route has `maxDuration = 300` so its `after()` drain can wait out the job's backoff. A worker app and a cron drain
+are planned ([jobs plan](../../plans/2026-11-06-jobs-queue.md), Track B); they run the same job.
 
 ## 1. In the browser
 
@@ -65,12 +65,12 @@ sequenceDiagram
   R->>O: ocr.ready (any model with a key?)
   R->>R: sniff type from bytes, max 10 MB
   R->>S: put users/{userId}/receipts/{id}.{ext}
-  R->>DB: lock user, count usage, insert receipt (processing) + ocr_rounds round 1
-  R->>DB: load receipt by id and scope
+  R->>DB: lock user, count usage, insert receipt (processing) + ocr_rounds round 1 + jobs row
+  R->>DB: claim that job (attempt 1, lease 90 s)
   R->>S: get file
   R->>O: extract (chain, 50 s deadline)
   O-->>R: extraction + attempts
-  R->>DB: one transaction: ocr_calls rows + receipt completed + items
+  R->>DB: one transaction: ocr_calls rows + receipt completed + items; job succeeded
   R-->>B: 200 { receiptId, status: completed }
   B->>B: navigate to /app/receipts/{id}
 ```
@@ -93,15 +93,16 @@ sequenceDiagram
   B->>R: multipart file, mode=queued
   R->>DB: ingest (same as instant steps 2 to 7)
   R-->>B: 202 { receiptId, status: processing }
-  R->>A: schedule extractStored(receiptId)
-  A->>DB: load, extract, complete or fail
-  loop until it changes (backoff 2 to 15 s, paused while hidden, 3 min of visible polling)
+  R->>A: schedule drainJobs (waits for this job's backoff)
+  A->>DB: claim, extract, complete; or record calls and retry
+  loop until it changes (backoff 2 to 15 s, paused while hidden, 6 min of visible polling)
     B->>R: GET /api/receipts/{id}, or GET /api/receipts/status for a list
     R-->>B: { status } or workspace counts
   end
 ```
 
-The background run logs its own wide event (`receipt.extract.background`) with the model, attempts and cost.
+Each attempt logs its own wide event (`job.run`) with the outcome, error kind, model, attempts and cost. A poll that
+finds the job due but not running (its drain ran out of time, or its function was killed) drains it.
 
 ## 4. Inside extraction: the fallback chain
 
@@ -128,17 +129,17 @@ flowchart TD
 
 ## 5. What the ledger records
 
-| When                                 | Table        | Rows                                                                                  |
-| ------------------------------------ | ------------ | ------------------------------------------------------------------------------------- |
-| The upload is accepted (ingest)      | `ocr_rounds` | One, `round = 1`, in the insert transaction                                           |
-| The round succeeds                   | `ocr_calls`  | One per attempt (failed fallbacks and the successful call), with the `complete` write |
-| The round fails after calling models | `ocr_calls`  | One per attempt, with the `fail` write                                                |
-| The round fails before any model ran | `ocr_calls`  | One with `model = null`, `status = storage-error` or `not-configured`, cost 0         |
+| When                                  | Table        | Rows                                                                                     |
+| ------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
+| The upload is accepted (ingest)       | `ocr_rounds` | One, `round = 1`, in the insert transaction                                              |
+| An attempt succeeds                   | `ocr_calls`  | One per model call (failed fallbacks and the successful call), with the `complete` write |
+| An attempt fails after calling models | `ocr_calls`  | One per model call, under that attempt's `job_attempt`                                   |
+| An attempt fails before any model ran | `ocr_calls`  | One with `model = null`, `status = storage-error` or `not-configured`, cost 0            |
 
 Each call row holds the step, model, provider, status, latency, input, cached, cache-write, output and reasoning
 tokens, and the cost in micro-USD priced at write time (`null` when unknown). Calls are written even when the receipt
 was deleted or superseded meanwhile: they were made and are billed. The unique index on
-`(receipt_id, round, step)` stops a round being billed twice.
+`(receipt_id, round, job_attempt, step)` stops an attempt being billed twice.
 
 How these rows become "used today" is in [core: quota ledger semantics](../core.md#design-principles-and-invariants).
 
@@ -151,15 +152,16 @@ overall confidence under 0.9 is flagged "needs review" (`NEEDS_REVIEW_BELOW`). U
 
 ## Failure cases
 
-| What went wrong                         | What the user sees                                           | Receipt state                                               |
-| --------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------- |
-| `Origin` is not the app's own           | `403` "Cross-origin request rejected"                        | No receipt created                                          |
-| No active workspace                     | `409` "No active workspace…"                                 | No receipt created                                          |
-| Over the daily or per-minute limit      | `429` with a message and `Retry-After`                       | No receipt created                                          |
-| No model configured                     | `503` "not configured"                                       | No receipt created                                          |
-| Not an accepted type, empty, over 10 MB | `400` / `413`                                                | No receipt created                                          |
-| Every model failed                      | Instant: `200` with `status: failed` and a retry hint        | `failed`, retryable                                         |
-| The function died mid-extraction        | After 5 minutes the receipt reads as failed, "took too long" | Still `processing` in the row, shown as `failed`, retryable |
-| Receipt deleted while being read        | Nothing to show                                              | Gone; the calls are still recorded                          |
+| What went wrong                         | What the user sees                                      | Receipt state                                             |
+| --------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------- |
+| `Origin` is not the app's own           | `403` "Cross-origin request rejected"                   | No receipt created                                        |
+| No active workspace                     | `409` "No active workspace…"                            | No receipt created                                        |
+| Over the daily or per-minute limit      | `429` with a message and `Retry-After`                  | No receipt created                                        |
+| No model configured                     | `503` "not configured"                                  | No receipt created                                        |
+| Not an accepted type, empty, over 10 MB | `400` / `413`                                           | No receipt created                                        |
+| A retryable failure (timeout, 429, 5xx) | "Reading" while the job retries (up to 4 attempts)      | `processing`; `failed`, retryable, once the job is dead   |
+| Not retryable (unreadable image)        | Instant: `200` with `status: failed` and a retry hint   | `failed`, retryable                                       |
+| The function died mid-extraction        | The lease expires; the next drain or poll runs it again | `processing`; read as failed if nothing runs it for 5 min |
+| Receipt deleted while being read        | Nothing to show                                         | Gone; the calls are still recorded                        |
 
 Retrying is described in [Retry](retry.md).

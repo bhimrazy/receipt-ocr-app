@@ -3,7 +3,7 @@ import type { Receipt } from "@receipt-ocr/db";
 import { Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { NotConfigured, OcrError, StorageError } from "./errors";
-import { claimRetry, deleteReceipt, extractStored, ingestUpload } from "./pipeline";
+import { claimRetry, deleteReceipt, ingestUpload, runExtraction, settleFailure } from "./pipeline";
 import {
   EXTRACTION_FAILED_MESSAGE,
   ReceiptRepo,
@@ -38,7 +38,7 @@ function harness(
   const rows = new Map<string, ReceiptWithItems>();
   const objects = new Map<string, Uint8Array>();
   /** Every `ocr_calls` row written, with the outcome it was written with. */
-  const calls: (OcrCallRow & { with: "complete" | "fail" })[] = [];
+  const calls: (OcrCallRow & { with: "complete" | "fail" | "record" })[] = [];
   const counts = () => ({ userMinute: 0, userDay: options.usedToday ?? 0, globalDay: null });
 
   const repo = Layer.succeed(ReceiptRepo, {
@@ -59,7 +59,7 @@ function harness(
           updatedAt: new Date(),
         } as unknown as ReceiptWithItems;
         rows.set(id, row);
-        return { kind: "inserted" as const, receipt: row as Receipt };
+        return { kind: "inserted" as const, receipt: row as Receipt, jobId: `job-${id}` };
       }),
     complete: (id, _scope, attempt, extraction, model, written) =>
       Effect.sync(() => {
@@ -73,6 +73,10 @@ function harness(
           errorMessage: null,
         });
         return row;
+      }),
+    recordCalls: (written) =>
+      Effect.sync(() => {
+        calls.push(...written.map((call) => ({ ...call, with: "record" as const })));
       }),
     fail: (id, _scope, attempt, message, written) =>
       Effect.sync(() => {
@@ -91,7 +95,11 @@ function harness(
         if (row.status !== "failed") return { kind: "not-retryable" as const };
         row.status = "processing";
         row.attempts += 1;
-        return { kind: "claimed" as const, imageObjectKey: row.imageObjectKey };
+        return {
+          kind: "claimed" as const,
+          round: row.attempts,
+          jobId: `job-${id}-${row.attempts}`,
+        };
       }),
     get: (id) => Effect.sync(() => rows.get(id) ?? null),
     list: () => Effect.die("unused"),
@@ -199,28 +207,38 @@ describe("ingestUpload", () => {
   });
 });
 
-describe("extractStored", () => {
+/** One attempt of the receipt's current round, as its job would run it. */
+const attempt = (h: ReturnType<typeof harness>, id: string, jobAttempt = 1) =>
+  h.run(runExtraction({ receiptId: id, scope, round: h.rows.get(id)?.attempts ?? 1, jobAttempt }));
+
+/** The round's last attempt failed: the job is dead and settles the receipt. */
+const failRound = async (h: ReturnType<typeof harness>, id: string) => {
+  await attempt(h, id);
+  await h.run(settleFailure({ receiptId: id, scope, round: h.rows.get(id)!.attempts }));
+};
+
+describe("runExtraction", () => {
   const ingestAndExtract = async (h: ReturnType<typeof harness>, body = JPEG) => {
     const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body, limits }));
     if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
     const id = ingested.value.receipt.id;
-    return {
-      id,
-      exit: await h.run(extractStored({ receiptId: id, scope })),
-    };
+    expect(ingested.value.jobId).toBe(`job-${id}`);
+    return { id, exit: await attempt(h, id) };
   };
 
   it("completes the receipt on success and records the model that read it", async () => {
     const h = harness();
     const { id, exit } = await ingestAndExtract(h);
-    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(Exit.isSuccess(exit) && exit.value.kind).toBe("completed");
     expect(h.rows.get(id)).toMatchObject({ status: "completed", model: "google:gemini-3.8-flash" });
   });
 
   it("writes each call with the completion, priced at write time", async () => {
     const h = harness();
     const { id, exit } = await ingestAndExtract(h);
-    expect(Exit.isSuccess(exit) && exit.value.costMicroUsd).toBe(1125);
+    expect(Exit.isSuccess(exit) && exit.value.kind === "completed" && exit.value.costMicroUsd).toBe(
+      1125,
+    );
     expect(h.calls).toEqual([
       expect.objectContaining({
         with: "complete",
@@ -228,6 +246,7 @@ describe("extractStored", () => {
         organizationId: "org-a",
         userId: "user-a",
         round: 1,
+        jobAttempt: 1,
         step: 0,
         model: "google:gemini-3.8-flash",
         provider: "google",
@@ -246,23 +265,32 @@ describe("extractStored", () => {
   it("still records the calls, once, when the receipt was deleted during extraction", async () => {
     const h = harness({ deleteDuringOcr: true });
     const { exit } = await ingestAndExtract(h);
-    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("NotFound");
+    expect(Exit.isSuccess(exit) && exit.value).toEqual({ kind: "skipped", reason: "superseded" });
     expect(h.calls.map((c) => [c.with, c.status])).toEqual([["complete", "ok"]]);
   });
 
-  it("writes every failed attempt, known and unknown usage, with the failure", async () => {
+  it("records every failed call of the attempt, known and unknown usage, under its job attempt", async () => {
     const h = harness({ ocr: "fail" });
-    await ingestAndExtract(h);
-    expect(h.calls.map((c) => [c.with, c.step, c.status, c.costMicroUsd, c.priceFrom])).toEqual([
-      ["fail", 0, "invalid-output", 1125, "2026-11-06"],
-      ["fail", 1, "provider-error", null, null],
+    const { id } = await ingestAndExtract(h);
+    await attempt(h, id, 2);
+    expect(
+      h.calls.map((c) => [c.with, c.jobAttempt, c.step, c.status, c.costMicroUsd, c.priceFrom]),
+    ).toEqual([
+      ["record", 1, 0, "invalid-output", 1125, "2026-11-06"],
+      ["record", 1, 1, "provider-error", null, null],
+      ["record", 2, 0, "invalid-output", 1125, "2026-11-06"],
+      ["record", 2, 1, "provider-error", null, null],
     ]);
   });
 
-  it("marks the receipt failed with a user-facing message when OCR fails", async () => {
+  it("a failed attempt leaves the receipt processing; settling marks it failed for the UI", async () => {
     const h = harness({ ocr: "fail" });
     const { id, exit } = await ingestAndExtract(h);
-    expect(Exit.isFailure(exit)).toBe(true);
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("OcrError");
+    expect(h.rows.get(id)?.status).toBe("processing");
+    expect(await h.run(settleFailure({ receiptId: id, scope, round: 1 }))).toEqual(
+      Exit.succeed(true),
+    );
     expect(h.rows.get(id)).toMatchObject({
       status: "failed",
       errorMessage: EXTRACTION_FAILED_MESSAGE,
@@ -270,23 +298,30 @@ describe("extractStored", () => {
     expect(h.rows.get(id)?.errorMessage).not.toMatch(/gemini/i);
   });
 
-  it("loads the receipt by id: unknown ids and receipts not processing are refused", async () => {
+  it("skips a receipt that is gone, finished, or on a newer round", async () => {
     const h = harness();
-    const missing = await h.run(extractStored({ receiptId: "nope", scope }));
-    expect(Exit.isFailure(missing) && JSON.stringify(missing.cause)).toContain("NotFound");
+    const missing = await h.run(
+      runExtraction({ receiptId: "nope", scope, round: 1, jobAttempt: 1 }),
+    );
+    expect(Exit.isSuccess(missing) && missing.value).toEqual({
+      kind: "skipped",
+      reason: "not-found",
+    });
     const { id } = await ingestAndExtract(h);
-    const again = await h.run(extractStored({ receiptId: id, scope }));
-    expect(Exit.isFailure(again) && JSON.stringify(again.cause)).toContain("Conflict");
+    const again = await attempt(h, id);
+    expect(Exit.isSuccess(again) && again.value).toEqual({ kind: "skipped", reason: "superseded" });
+    const old = await h.run(runExtraction({ receiptId: id, scope, round: 0, jobAttempt: 1 }));
+    expect(Exit.isSuccess(old) && old.value.kind).toBe("skipped");
   });
 
-  it("marks the receipt failed when OCR is not configured, instead of leaving it processing", async () => {
+  it("records a no-model row when OCR is not configured", async () => {
     const h = harness({ ocr: "unconfigured" });
-    const { id } = await ingestAndExtract(h);
-    expect(h.rows.get(id)?.status).toBe("failed");
+    const { id, exit } = await ingestAndExtract(h);
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("NotConfigured");
     // One row with no model, so the round doesn't read as in flight.
     expect(h.calls).toEqual([
       expect.objectContaining({
-        with: "fail",
+        with: "record",
         receiptId: id,
         model: null,
         status: "not-configured",
@@ -300,9 +335,9 @@ describe("extractStored", () => {
     const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits }));
     if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
     h.objects.clear();
-    await h.run(extractStored({ receiptId: ingested.value.receipt.id, scope }));
+    await attempt(h, ingested.value.receipt.id);
     expect(h.calls.map((c) => [c.with, c.model, c.status])).toEqual([
-      ["fail", null, "storage-error"],
+      ["record", null, "storage-error"],
     ]);
   });
 });
@@ -314,12 +349,15 @@ describe("claimRetry", () => {
     const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body, limits }));
     if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
     const id = ingested.value.receipt.id;
-    await h.run(extractStored({ receiptId: id, scope }));
+    await failRound(h, id);
     expect(h.rows.get(id)?.status).toBe("failed");
 
     const claimed = await h.run(claimRetry({ receiptId: id, scope, limits }));
-    expect(Exit.isSuccess(claimed)).toBe(true);
+    expect(claimed).toEqual(Exit.succeed({ round: 2, jobId: `job-${id}-2` }));
     expect(h.rows.get(id)).toMatchObject({ status: "processing", attempts: 2 });
+    h.objects.set(h.rows.get(id)!.imageObjectKey!, JPEG);
+    expect(Exit.isSuccess(await attempt(h, id))).toBe(true);
+    expect(h.rows.get(id)?.status).toBe("completed");
   });
 
   it("refuses a receipt that has not failed, and a missing one", async () => {
@@ -332,29 +370,17 @@ describe("claimRetry", () => {
     expect(Exit.isFailure(missing) && JSON.stringify(missing.cause)).toContain("NotFound");
   });
 
-  it("a retried receipt is extracted from its stored file", async () => {
-    const h = harness();
-    const body = new Uint8Array([...JPEG, ...new TextEncoder().encode(FIXTURE_FAIL_MARKER)]);
-    const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body, limits }));
-    if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
-    const id = ingested.value.receipt.id;
-    await h.run(extractStored({ receiptId: id, scope }));
-    await h.run(claimRetry({ receiptId: id, scope, limits }));
-    h.objects.set(h.rows.get(id)!.imageObjectKey!, JPEG);
-    expect(Exit.isSuccess(await h.run(extractStored({ receiptId: id, scope })))).toBe(true);
-    expect(h.rows.get(id)?.status).toBe("completed");
-  });
-
-  it("puts the receipt back to failed when its file can't be read", async () => {
+  it("a stale round's settle can't fail the retried receipt", async () => {
     const h = harness({ ocr: "fail" });
     const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits }));
     if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
     const id = ingested.value.receipt.id;
-    await h.run(extractStored({ receiptId: id, scope }));
-    h.objects.clear();
+    await failRound(h, id);
     await h.run(claimRetry({ receiptId: id, scope, limits }));
-    await h.run(extractStored({ receiptId: id, scope }));
-    expect(h.rows.get(id)?.status).toBe("failed");
+    expect(await h.run(settleFailure({ receiptId: id, scope, round: 1 }))).toEqual(
+      Exit.succeed(false),
+    );
+    expect(h.rows.get(id)?.status).toBe("processing");
   });
 });
 
