@@ -10,6 +10,7 @@ import {
   smallint,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import postgres from "postgres";
@@ -122,19 +123,47 @@ export const receiptItems = pgTable(
 );
 
 /**
- * Append-only ledger: one row per model call, success or failure. Quota, the
- * global OCR cap and cost all count from here, so deleting a receipt changes
- * none of them.
+ * Append-only usage ledger, two tables. `ocr_rounds` gets a row when an
+ * upload or retry is accepted, before any model call, under the quota check;
+ * `ocr_calls` gets a row per model call when the round ends. Quota, the global
+ * cap and cost count from these, never from `receipts`, so deleting a receipt
+ * or a workspace changes none of them. Deleting a workspace or account
+ * unlinks the rows (set null) instead of removing them. No free text: nothing
+ * here can hold receipt contents or provider messages.
  */
+export const ocrRounds = pgTable(
+  "ocr_rounds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // No FK: the ledger outlives the receipt.
+    receiptId: uuid("receipt_id").notNull(),
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "set null",
+    }),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    /** `receipts.attempts` it started: 1 = the upload, 2+ = retries. */
+    round: smallint("round").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ocr_rounds_receipt_round_idx").on(table.receiptId, table.round),
+    // Per-user quota windows.
+    index("ocr_rounds_user_created_at_idx").on(table.userId, table.createdAt),
+    // Global cap.
+    index("ocr_rounds_created_at_idx").on(table.createdAt),
+  ],
+);
+
+/** One row per model call, success or failure, written when its round ends. */
 export const ocrCalls = pgTable(
   "ocr_calls",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    // No FK: deleting a receipt must not erase what its calls cost or used of the quota.
+    // No FK: deleting a receipt must not erase what its calls cost.
     receiptId: uuid("receipt_id").notNull(),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "set null",
+    }),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** `receipts.attempts` at the time: 1 = the upload, 2+ = retries. */
     round: smallint("round").notNull(),
@@ -159,12 +188,12 @@ export const ocrCalls = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // Workspace usage.
     index("ocr_calls_org_created_at_idx").on(table.organizationId, table.createdAt),
-    // Per-user quota windows.
-    index("ocr_calls_user_created_at_idx").on(table.userId, table.createdAt),
-    // Global cap and admin windows.
+    // Admin windows.
     index("ocr_calls_created_at_idx").on(table.createdAt),
-    index("ocr_calls_receipt_id_idx").on(table.receiptId),
+    // A receipt's calls; the quota's "was this round read" lookup.
+    index("ocr_calls_receipt_round_idx").on(table.receiptId, table.round),
   ],
 );
 
@@ -241,6 +270,7 @@ export const schema = {
   receiptStatus,
   receipts,
   receiptItems,
+  ocrRounds,
   ocrCalls,
   userCredentials,
   adminAuditLog,
@@ -288,6 +318,7 @@ export type Receipt = typeof receipts.$inferSelect;
 export type NewReceipt = typeof receipts.$inferInsert;
 export type ReceiptItem = typeof receiptItems.$inferSelect;
 export type NewReceiptItem = typeof receiptItems.$inferInsert;
+export type OcrRound = typeof ocrRounds.$inferSelect;
 export type OcrCall = typeof ocrCalls.$inferSelect;
 export type NewOcrCall = typeof ocrCalls.$inferInsert;
 export type AdminAuditEntry = typeof adminAuditLog.$inferSelect;
