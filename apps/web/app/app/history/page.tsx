@@ -1,38 +1,55 @@
-import { HistoryTable, type HistoryFilters } from "@/components/history-table";
+import { exportHref, isFiltered } from "@/components/history/history-href";
+import { HistoryResults } from "@/components/history/history-results";
+import { HistoryToolbar } from "@/components/history/history-toolbar";
+import {
+  PageHeader,
+  PageHeaderActions,
+  PageHeaderContent,
+  PageHeaderDescription,
+  PageHeaderTitle,
+} from "@/components/page-header";
+import { ListPoller } from "@/components/processing-poller";
+import { isInFlight } from "@/components/receipt-status";
+import { cleanFilters, filtersFromSearchParams, listReceiptSummaries } from "@/lib/receipts";
+import { buttonVariants } from "@receipt-ocr/ui/components/button";
+import { Download } from "lucide-react";
 import type { Metadata } from "next";
-import { listReceiptSummaries } from "../_data/receipts-contract";
 
 export const metadata: Metadata = { title: "History" };
 
-type Params = {
-  page?: string;
-  q?: string;
-  category?: string;
-  status?: string;
-  from?: string;
-  to?: string;
-};
+export default async function HistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { page: requested, ...raw } = filtersFromSearchParams(await searchParams);
+  const filters = cleanFilters(raw);
+  const { rows, total, page, pageSize } = await listReceiptSummaries({
+    ...filters,
+    page: requested,
+  });
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-const STATUSES = ["needs-review", "failed", "processing", "completed", "uploaded"] as const;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-function parseFilters(params: Params): HistoryFilters {
-  const status = STATUSES.find((value) => value === params.status);
-  return {
-    q: params.q?.trim() || undefined,
-    category: params.category || undefined,
-    status,
-    from: params.from && ISO_DATE.test(params.from) ? params.from : undefined,
-    to: params.to && ISO_DATE.test(params.to) ? params.to : undefined,
-  };
-}
-
-export default async function HistoryPage({ searchParams }: { searchParams: Promise<Params> }) {
-  const params = await searchParams;
-  const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
-  const filters = parseFilters(params);
-  const { rows, total, pageSize } = await listReceiptSummaries({ ...filters, page });
   return (
-    <HistoryTable filters={filters} page={page} pageSize={pageSize} receipts={rows} total={total} />
+    <div className="mx-auto max-w-6xl">
+      <ListPoller active={rows.some((receipt) => isInFlight(receipt.status))} />
+      <PageHeader>
+        <PageHeaderContent>
+          <PageHeaderTitle>History</PageHeaderTitle>
+          <PageHeaderDescription>
+            {total} {total === 1 ? "receipt" : "receipts"} in this workspace
+            {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
+          </PageHeaderDescription>
+        </PageHeaderContent>
+        <PageHeaderActions>
+          <a className={buttonVariants({ variant: "outline" })} href={exportHref(filters)}>
+            <Download aria-hidden="true" />
+            {isFiltered(filters) ? "Export filtered CSV" : "Export CSV"}
+          </a>
+        </PageHeaderActions>
+      </PageHeader>
+      <HistoryToolbar filters={filters} />
+      <HistoryResults filters={filters} page={page} receipts={rows} totalPages={totalPages} />
+    </div>
   );
 }

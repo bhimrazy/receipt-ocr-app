@@ -11,20 +11,22 @@
   background-size: 64px 64px;
 }
 
-.glow-orb {
-  animation: orb-float 8s ease-in-out infinite;
-}
+@media (prefers-reduced-motion: no-preference) {
+  .glow-orb {
+    animation: orb-float 8s ease-in-out infinite;
+  }
 
-.floating-receipt {
-  animation: card-float 6s ease-in-out infinite;
+  .floating-receipt {
+    animation: card-float 6s ease-in-out infinite;
+  }
 }
 
 .text-gradient {
   background-image: linear-gradient(
     to right,
     var(--primary),
-    color-mix(in oklab, #2dd4bf 90%, white),
-    color-mix(in oklab, #22d3ee 85%, white)
+    color-mix(in oklab, var(--brand-teal) 90%, white),
+    color-mix(in oklab, var(--brand-cyan) 85%, white)
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -101,12 +103,12 @@
     ),
     radial-gradient(
       36% 46% at 68% 58%,
-      color-mix(in oklab, #2dd4bf 20%, transparent),
+      color-mix(in oklab, var(--brand-teal) 20%, transparent),
       transparent 72%
     ),
     radial-gradient(
       34% 44% at 54% 34%,
-      color-mix(in oklab, #22d3ee 16%, transparent),
+      color-mix(in oklab, var(--brand-cyan) 16%, transparent),
       transparent 72%
     );
   filter: blur(56px);
@@ -132,4 +134,39 @@
     transform: translate3d(-2%, 3%, 0) scale(1.04);
     opacity: 0.8;
   }
+}
+
+@keyframes orb-float {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -52%) scale(1.08);
+  }
+}
+
+@keyframes card-float {
+  0%,
+  100% {
+    transform: rotate(var(--r, 0deg)) translateY(0);
+  }
+  50% {
+    transform: rotate(var(--r, 0deg)) translateY(-12px);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

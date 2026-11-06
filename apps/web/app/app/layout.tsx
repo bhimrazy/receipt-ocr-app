@@ -12,7 +12,7 @@ import { getWorkspaceAllowance } from "@/lib/workspaces";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getUsageSummary } from "./_data/receipts-contract";
+import { getUsageSummary } from "@/lib/receipts";
 
 async function loadUsage(): Promise<Usage | null> {
   try {
@@ -47,7 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <ImpersonationBanner />
         <div className="flex min-h-0 flex-1">
-          <div className="hidden w-64 shrink-0 border-r border-border bg-card/40 md:block">
+          <div className="hidden w-64 shrink-0 border-r border-border bg-sidebar md:block">
             <aside className="sticky top-0 flex h-screen flex-col gap-6 p-4">
               <Link
                 className="flex min-h-11 items-center rounded-md px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"

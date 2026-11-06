@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
+import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
@@ -337,30 +338,21 @@ export function UploadPanel({
       </Card>
 
       {notice ? (
-        <p
-          className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
-          role="status"
-        >
+        <Alert className="px-4 py-3" variant="warning">
           {notice}
-        </p>
+        </Alert>
       ) : null}
       {error ? (
-        <p
-          className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-          role="alert"
-        >
-          <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          {error}
-        </p>
+        <Alert className="px-4 py-3" variant="destructive">
+          <CircleAlert aria-hidden="true" />
+          <p>{error}</p>
+        </Alert>
       ) : null}
       {success ? (
-        <p
-          className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary/10 px-4 py-3 text-sm"
-          role="status"
-        >
-          <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
-          {success}
-        </p>
+        <Alert className="px-4 py-3" variant="success">
+          <Check aria-hidden="true" />
+          <p>{success}</p>
+        </Alert>
       ) : null}
 
       {!empty ? (

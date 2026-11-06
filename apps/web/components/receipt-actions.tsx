@@ -44,9 +44,15 @@ function useDeleteReceipt(receipt: ReceiptWithItems) {
 /**
  * Header actions. Completed: Export CSV, with Copy JSON and Delete in the
  * overflow menu (editing lives on the Details card). Failed or still reading:
- * Delete only, since there is nothing to export yet.
+ * Delete only, since there is nothing to export yet. Delete needs `canEdit`.
  */
-export function ReceiptActions({ receipt }: { receipt: ReceiptWithItems }) {
+export function ReceiptActions({
+  receipt,
+  canEdit,
+}: {
+  receipt: ReceiptWithItems;
+  canEdit: boolean;
+}) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const remove = useDeleteReceipt(receipt);
   const completed = receipt.status === "completed";
@@ -82,6 +88,7 @@ export function ReceiptActions({ receipt }: { receipt: ReceiptWithItems }) {
   );
 
   if (!completed) {
+    if (!canEdit) return null;
     return (
       <>
         <Button onClick={() => setConfirmOpen(true)} variant="outline">
@@ -112,13 +119,17 @@ export function ReceiptActions({ receipt }: { receipt: ReceiptWithItems }) {
               Copy JSON
             </DropdownMenuItem>
           </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem onClick={() => setConfirmOpen(true)} variant="destructive">
-              <Trash2 aria-hidden="true" />
-              Delete receipt
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
+          {canEdit ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={() => setConfirmOpen(true)} variant="destructive">
+                  <Trash2 aria-hidden="true" />
+                  Delete receipt
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
       {dialog}
@@ -133,6 +144,7 @@ export function ReceiptActions({ receipt }: { receipt: ReceiptWithItems }) {
  */
 export function ReceiptWorkspace({
   receipt,
+  canEdit,
   checks,
   image,
   details,
@@ -140,6 +152,7 @@ export function ReceiptWorkspace({
   footer,
 }: {
   receipt: ReceiptWithItems;
+  canEdit: boolean;
   /** Plain-words reasons to check this receipt; empty when there are none. */
   checks: string[];
   image: React.ReactNode;
@@ -160,7 +173,7 @@ export function ReceiptWorkspace({
       {checks.length > 0 ? (
         <section
           aria-labelledby="checks-heading"
-          className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/[0.07] p-4 sm:flex-row sm:items-start"
+          className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-start"
         >
           <TriangleAlert
             aria-hidden="true"
@@ -176,7 +189,7 @@ export function ReceiptWorkspace({
               ))}
             </ul>
           </div>
-          {editing ? null : (
+          {editing || !canEdit ? null : (
             <Button className="shrink-0" onClick={startEditing} variant="outline">
               <Pencil aria-hidden="true" />
               Correct details
@@ -187,8 +200,10 @@ export function ReceiptWorkspace({
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         {image}
         <div className="flex min-w-0 flex-col gap-5">
-          {editing ? (
+          {editing && canEdit ? (
             <ReceiptEditor onClose={() => setEditing(false)} receipt={receipt} />
+          ) : !canEdit ? (
+            details
           ) : (
             <div className="relative">
               {details}
