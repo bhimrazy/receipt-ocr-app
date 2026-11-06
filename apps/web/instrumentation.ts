@@ -6,15 +6,25 @@ export async function register() {
   }
 }
 
-/** Server render, route and action failures. Message and digest only: no request data, so no PII. */
-export const onRequestError: Instrumentation.onRequestError = async (error, _request, context) => {
-  const { logger, redactDbMessage } = await import("./lib/log");
-  const caught = error as Error & { digest?: string };
+/**
+ * Server render, route and action failures: the error's class and digest,
+ * never its message or the request's data. A failed page render is also
+ * handed to that page's `page.render` event by request id.
+ */
+export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
+  const { errorFields, logger, noteFailedRender } = await import("./lib/log");
+  const { REQUEST_ID_HEADER } = await import("./lib/request-id");
+  const header = request.headers[REQUEST_ID_HEADER];
+  const requestId = typeof header === "string" ? header : undefined;
+  const fields = { ...errorFields(error), digest: (error as { digest?: string }).digest };
+  if (requestId && context.routeType === "render") noteFailedRender(requestId, fields);
   logger.error({
     event: "request.error",
-    message: redactDbMessage(caught.message),
-    digest: caught.digest,
-    routePath: context.routePath,
-    routeType: context.routeType,
+    unit: "log",
+    request_id: requestId,
+    method: request.method,
+    route: context.routePath,
+    route_type: context.routeType,
+    error: fields,
   });
 };

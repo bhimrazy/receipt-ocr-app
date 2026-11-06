@@ -1,64 +1,99 @@
-# Optional observability: PostHog, Sentry, Axiom
+# Observability: wide events, OTLP transport, vendors as configuration
 
-Date: 2026-11-06. Based on `receipt-ocr-backend` @ `e8e3962`, read-only.
+Date: 2026-11-06. Revised 2026-11-06 with the owner's decision (below). Sections 2 to 10 are the earlier per-vendor
+design; where they disagree with "Decided", "Decided" wins.
 
-## Goal and rules
+## Decided (owner, 2026-11-06)
 
-- Each tool switches on with its own env vars. When they are unset, the app behaves exactly as it does today: same
-  responses, same stdout log lines, no extra network calls, no provider code in the client bundle, and no provider
-  module loaded on the server.
-- Our code reports each fact once, through one internal interface (`lib/telemetry`). Adapters fan it out.
-- Customer data stays out: no receipt images, extracted fields (merchant, amounts, line items), emails, workspace names,
-  query strings or Drizzle `params:`.
-- Each tool has one job, so we don't triple-instrument:
+1. **Wide events are the base.** Every unit of work writes one JSON event: an API request, a server page render, a
+   job attempt and a queue tick. The schema, the redaction allowlist and tail sampling live in
+   [`packages/core/src/telemetry`](../../packages/core/src/telemetry) and are documented there. Code reports each fact
+   once, on the current event (`annotateEvent` from Effect code, the `event` argument in route handlers).
+2. **Vendor-neutral through OpenTelemetry. OTLP is the only transport in code.** The app never imports a vendor's
+   logging SDK for shipping events. Events go to stdout as JSON lines (always, so `vercel logs` and `docker logs` keep
+   working) and, when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, also as OTLP log records through `@effect/opentelemetry` on
+   the Effect side and Next's `instrumentation.ts` (`register()`) on the Next side. No OTel dependency is added until
+   that track; this PR only makes the event shape ready for it.
+3. **Axiom is the default destination**, through its OTLP endpoint. Switching to Grafana Cloud, Honeycomb, Sentry
+   (its OTLP intake) or a self-hosted OpenTelemetry Collector is a change of env values only, never of code.
+4. **Vendor extras stay optional and separate** (each off unless its own env is set): Sentry error grouping, release
+   tracking and source maps (`@sentry/nextjs`, sections 3 and 4), and PostHog server-side product analytics and
+   `$ai_generation` (section 2). They add features on top; they are not the log pipeline.
+5. **Browser analytics is out of scope here.** Product analytics on public pages (client PostHog, consent) is decided
+   in the separate consent track.
 
-| Concern                                   | Owner                              | Explicitly OFF elsewhere      |
-| ----------------------------------------- | ---------------------------------- | ----------------------------- |
-| Wide events / logs                        | **Axiom** (our existing JSON line) | Sentry Logs, PostHog Logs     |
-| Errors (5xx, defects, render errors)      | **Sentry**                         | PostHog exception autocapture |
-| Product events, funnels, LLM cost/latency | **PostHog**                        | Sentry `gen_ai` spans         |
-| Traces / performance                      | Sentry, sampled at 0 by default    | PostHog OTel, `@vercel/otel`  |
+### Env keys
 
-## Package versions (exact pins, all at least 7 days old on 2026-11-06)
+| Key                           | Meaning                                                                                  | Default                       |
+| ----------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP base URL. Unset: stdout only, no exporter loaded, no network calls             | unset                         |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Comma-separated `key=value` auth headers for the endpoint (standard OTel format)          | unset                         |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` (preferred) or `http/json`                                                 | `http/protobuf`               |
+| `OTEL_SERVICE_NAME`           | `service` on every event and the OTel resource `service.name`                             | `web`                         |
+| `OTEL_RESOURCE_ATTRIBUTES`    | Extra resource attributes, e.g. `deployment.environment.name=production`                  | unset                         |
+| `LOG_SAMPLE_RATE`             | Share (0 to 1) of routine events kept: fast successful page renders, polls, idle ticks    | `1`; set `0.1` in production  |
+| `LOG_SLOW_MS`                 | At or above this `duration_ms` an event is slow and always kept                           | `1000`                        |
 
-| Package                                | Pin          | Published            | Notes                                                                                                                                         |
-| -------------------------------------- | ------------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `posthog-js`                           | `1.442.1`    | 2026-10-29           | Latest is 1.447.1 (2026-11-06, too new). Deps include `@posthog/core`, `preact`, `fflate`, `dompurify`, `web-vitals`. No install scripts.     |
-| `posthog-node`                         | `5.60.1`     | 2026-10-29           | Latest is 5.63.0 (2026-11-05). Only dep: `@posthog/core`. Peers `rxjs` and `@opentelemetry/api` (not needed for capture). No install scripts. |
-| `@sentry/nextjs`                       | `11.10.0`    | 2026-10-28           | 11.0.0 shipped 2026-09-23. Latest is 11.11.0 (2026-11-05). Peer `next ^16`. Uses `dataCollection` (`sendDefaultPii` is deprecated).           |
-| `@axiomhq/js`                          | `2.0.0`      | 2026-08-04           | Only dep: `fetch-retry`. Built-in batching with `ingest()` / `flush()` / `onError`.                                                           |
-| `@posthog/ai`                          | **not used** | (8.17.2, 2026-10-29) | `withTracing` rejects AI SDK v7 models (we're on `ai@7.0.154`). The v7 path is OTel, which collides with Sentry's OTel.                       |
-| `@axiomhq/nextjs` / `@axiomhq/logging` | **not used** | (0.4.1, 2026-09-09)  | `@axiomhq/logging` peers `@axiomhq/js ^1.0.0` while 2.0.0 is current. It brings its own logger and request logging, which we already have.    |
-| `@sentry/bun`                          | **not used** | (10.78.0 / 11.10.0)  | `@sentry/nextjs` is the SDK even under Bun. See the Bun notes.                                                                                |
+Errors (status 4xx/5xx, `error` set, level `error`), slow units and anything with a model call are always kept, at any
+rate. Sampled lines carry `sample_rate`, so dashboards weight counts by `1 / sample_rate`. `LOG_*` sampling applies
+before both stdout and OTLP, so the two sinks always hold the same events. OTel trace sampling
+(`OTEL_TRACES_SAMPLER`) stays at its default off until traces are wanted.
 
-Before adding any of these, check the changelog and diff between pin and install (per the global rules), then install
-with `bun install --frozen-lockfile` after the deliberate lockfile change.
+### Axiom example (placeholder values)
 
----
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.axiom.co
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer xaat-00000000-0000-0000-0000-000000000000,X-Axiom-Dataset=receipt-ocr
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_SERVICE_NAME=web
+LOG_SAMPLE_RATE=0.1
+```
 
-## 1. Axiom (logs)
+Use an ingest-only token scoped to the one dataset. EU org: the regional edge URL from Axiom's settings. Switching
+vendors means replacing the first two lines: for example Grafana Cloud's OTLP gateway URL with
+`Authorization=Basic <base64 instance:token>`, Honeycomb's `https://api.honeycomb.io` with `x-honeycomb-team=<key>`, or
+a collector at `http://otel-collector:4318` with no headers.
 
-**Recommendation:** add an Axiom sink to the existing wide-event logger with `@axiomhq/js`. Don't use
-`@axiomhq/nextjs` or a Vercel drain for now.
+### Mapping a wide event to an OTLP log record
 
-- **Vercel Drains are Pro/Enterprise only.** CI notes say we're on the free plan, and drains wouldn't cover the Docker
-  deployment either. If we move to Pro later, a drain is a zero-code alternative: leave `AXIOM_*` unset and point the
-  Axiom Vercel integration at the project. Both paths ship the same JSON line.
-- **`@axiomhq/nextjs`** wants its own `Logger`, `withAxiom` route wrapper and middleware request logging. That would
-  duplicate `lib/http.ts` and `lib/log.ts`. Its docs also use `NEXT_PUBLIC_AXIOM_TOKEN`, a token shipped to the
-  browser, which we don't want.
+- Resource: `service` → `service.name`, `version` → `service.version`, `env` → `deployment.environment.name`,
+  `region` → `cloud.region`, `instance` → `service.instance.id`.
+- Record: `timestamp` → `Timestamp`, `level` → `SeverityText` (and `SeverityNumber` 9 for info, 17 for error),
+  `event` → `EventName`, the rest of the fields → attributes under the same snake_case keys (nested groups flattened
+  with dots: `ocr.tokens_in`). `request_id` stays an attribute; when traces arrive the record also gets the active
+  span's `TraceId`/`SpanId`.
 
-**Design (`apps/web/lib/log.ts`):** `emit()` keeps writing the same `console.info` / `console.error` line. When
-`AXIOM_TOKEN` and `AXIOM_DATASET` are set, it also calls `axiom.ingest(dataset, obj)` with the same object. The Axiom
-client is created on first use through `await import("@axiomhq/js")` and memoised. `ingest` is fire-and-forget; failures
-go to `onError`, which writes one stderr line rate-limited to one per minute, never to the logger itself (no recursion).
+### Flushing on serverless
 
-**Flush:** `telemetry.flush()` (below) awaits `axiom.flush()` and runs in `after()`. The Bun/Docker server is
-long-lived, so the client's own interval flush covers it, plus a `SIGTERM` hook that flushes before exit.
+- Vercel functions freeze after the response. The exporter's batch processor is flushed in `after()` once per
+  request (`forceFlush()`, bounded at 2 s), and job drains flush at the end of their `after()`. When no endpoint is
+  set, nothing is registered.
+- The Docker (Bun) server is long-lived: the batch processor's timer covers it, plus `shutdown()` on `SIGTERM`.
+- Export failures never fail a request and never log through the logger (no recursion): one stderr line per minute
+  at most.
 
-**Efficiency:** one HTTP batch per request at most (usually zero extra, since batches span requests on warm instances).
-Events are the ones we already build, so there's no new serialisation work except one `JSON.stringify` that we can share
-with the console line.
+### Scrubbing
+
+- The allowlist in `telemetry/schema.ts` is the scrubber: unknown keys are dropped (their paths listed in
+  `dropped_fields`), ids must look like ids, codes like codes (no spaces or `@`), routes lose query strings and hashes.
+  Errors are described by `type`, `class`, `kind` and `code`, never their message. This runs inside `formatEvent`,
+  before any sink, so stdout and OTLP get the same scrubbed object (security plan B6).
+- Vendor SDKs added on top (Sentry, PostHog) keep their own `beforeSend` scrubbers as described below, because they
+  capture things our events don't (stack frames, breadcrumbs).
+
+### Tracks from here
+
+1. **Wide events everywhere** (this PR): schema, allowlist, sampling, request/page/job/tick events, Effect logger.
+2. **OTLP export**: `@effect/opentelemetry` with the OTLP log and trace exporters, wired in `register()` only when
+   `OTEL_EXPORTER_OTLP_ENDPOINT` is set; `after()` flush; a test that an unset endpoint loads nothing. Pin versions at
+   implementation time (7-day rule), and check that `@effect/opentelemetry` peers match `effect@3.22.4`.
+3. **Sentry extras** (optional): errors, releases and source maps, as in sections 3 and 4.
+4. **PostHog server events** (optional): as in section 2, server side only.
+
+## Earlier design (vendor-specific, superseded where it conflicts)
+
+The text below was written when Axiom was planned as an SDK sink (`@axiomhq/js`). That is replaced by OTLP above; the
+Sentry and PostHog sections still describe the optional extras.
 
 ## 2. PostHog (product analytics and LLM analytics)
 

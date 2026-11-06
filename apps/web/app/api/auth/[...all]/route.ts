@@ -1,8 +1,20 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import { NextResponse } from "next/server";
 import { auth, authEnabled } from "@/lib/auth";
+import { withRequestEvent } from "@/lib/http";
+import type { WideEvent } from "@/lib/log";
 
 const handler = toNextJsHandler(auth);
+const ROUTE = "/api/auth/[...all]";
+
+/**
+ * The endpoint's first path segment (`sign-in`, `get-session`), never the
+ * rest: later segments can be reset tokens and the query an OAuth code.
+ */
+function annotate(request: Request, event: WideEvent) {
+  const segment = new URL(request.url).pathname.split("/")[3];
+  if (segment && /^[a-z0-9-]{1,40}$/.test(segment)) event.action = segment;
+}
 
 function notConfigured() {
   return NextResponse.json(
@@ -14,12 +26,21 @@ function notConfigured() {
   );
 }
 
-export async function GET(request: Request) {
-  if (!authEnabled) return notConfigured();
-  return handler.GET(request);
-}
+// Session reads are what every page and the client poll; routine like other polls.
+export const GET = withRequestEvent(
+  { event: "auth.request", route: ROUTE, routine: true },
+  (request, _context, event) => {
+    annotate(request, event);
+    if (!authEnabled) return notConfigured();
+    return handler.GET(request);
+  },
+);
 
-export async function POST(request: Request) {
-  if (!authEnabled) return notConfigured();
-  return handler.POST(request);
-}
+export const POST = withRequestEvent(
+  { event: "auth.request", route: ROUTE },
+  (request, _context, event) => {
+    annotate(request, event);
+    if (!authEnabled) return notConfigured();
+    return handler.POST(request);
+  },
+);

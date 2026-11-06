@@ -90,6 +90,7 @@ type RawJob = {
   locked_by: string | null;
   locked_until: string | Date | null;
   last_error_kind: string | null;
+  wait_ms?: number | null;
 };
 
 const toDate = (value: string | Date) => (value instanceof Date ? value : new Date(value));
@@ -110,6 +111,7 @@ const toJob = (row: RawJob): Job => ({
   lockedBy: row.locked_by,
   lockedUntil: row.locked_until === null ? null : toDate(row.locked_until),
   lastErrorKind: row.last_error_kind,
+  ...(row.wait_ms == null ? {} : { waitMs: Number(row.wait_ms) }),
 });
 
 const list = (values: readonly string[]) =>
@@ -250,7 +252,8 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
                   locked_until = now() + make_interval(secs => ${lease}),
                   started_at = now(), updated_at = now()
                 from picked where j.id = picked.id
-                returning ${COLUMNS}`,
+                returning ${COLUMNS},
+                  greatest(0, extract(epoch from now() - j.run_at) * 1000)::int as wait_ms`,
               );
             }),
 

@@ -1,15 +1,20 @@
 import { ReceiptRepo } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { NextResponse } from "next/server";
-import { jsonError, runRoute } from "@/lib/http";
+import { annotateCaller, jsonError, runRoute, withRequestEvent } from "@/lib/http";
 import { getActiveScope } from "@/lib/session";
 
 /** Workspace-wide receipt counts, so list pollers refresh only when something changed. */
-export async function GET() {
-  const scope = await getActiveScope();
-  if (!scope) return jsonError(401, "Unauthorized");
-  return runRoute(
-    Effect.flatMap(ReceiptRepo, (repo) => repo.counts(scope)),
-    (counts) => NextResponse.json(counts, { headers: { "Cache-Control": "no-store" } }),
-  );
-}
+export const GET = withRequestEvent(
+  { event: "receipt.counts", route: "/api/receipts/status", routine: true },
+  async (_request, _context, event) => {
+    const scope = await getActiveScope();
+    if (!scope) return jsonError(401, "Unauthorized");
+    annotateCaller(event, { scope });
+    return runRoute(
+      Effect.flatMap(ReceiptRepo, (repo) => repo.counts(scope)),
+      (counts) => NextResponse.json(counts, { headers: { "Cache-Control": "no-store" } }),
+      event,
+    );
+  },
+);
