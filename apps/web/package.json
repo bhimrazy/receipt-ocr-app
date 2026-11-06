@@ -11,7 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "test:e2e": "playwright test",
-    "test:int": "INTEGRATION=1 vitest run --root ../.. apps/web/lib/auth.int.test.ts",
+    "test:int": "INTEGRATION=1 vitest run --root ../.. apps/web/lib/auth.int.test.ts apps/web/lib/migrations.int.test.ts",
     "start": "next start --port ${PORT:-3004}"
   },
   "dependencies": {

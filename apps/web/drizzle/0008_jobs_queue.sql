@@ -8,25 +8,6 @@ CREATE TABLE "job_controls" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "job_schedules" (
-	"name" text PRIMARY KEY NOT NULL,
-	"kind" text NOT NULL,
-	"payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
-	"every_seconds" integer NOT NULL,
-	"next_run_at" timestamp with time zone NOT NULL,
-	"enabled" boolean DEFAULT true NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "job_workers" (
-	"id" text PRIMARY KEY NOT NULL,
-	"mode" text NOT NULL,
-	"host" text,
-	"version" text,
-	"concurrency" smallint,
-	"started_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"last_seen_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "jobs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"kind" text NOT NULL,
@@ -53,14 +34,8 @@ CREATE TABLE "jobs" (
 	CONSTRAINT "jobs_last_error_kind_check" CHECK (last_error_kind ~ '^[a-z0-9.-]{1,40}$')
 );
 --> statement-breakpoint
-CREATE TABLE "rate_windows" (
-	"key" text NOT NULL,
-	"window_start" timestamp with time zone NOT NULL,
-	"count" integer DEFAULT 0 NOT NULL,
-	CONSTRAINT "rate_windows_key_window_start_pk" PRIMARY KEY("key","window_start")
-);
---> statement-breakpoint
 ALTER TABLE "ocr_calls" ADD COLUMN "job_attempt" smallint DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "jobs" ADD CONSTRAINT "jobs_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "jobs_runnable_idx" ON "jobs" USING btree ("priority","run_at") WHERE state = 'queued';--> statement-breakpoint
 CREATE INDEX "jobs_running_idx" ON "jobs" USING btree ("user_id") WHERE state = 'running';--> statement-breakpoint
 CREATE UNIQUE INDEX "jobs_idempotency_idx" ON "jobs" USING btree ("idempotency_key") WHERE state in ('queued', 'running');--> statement-breakpoint

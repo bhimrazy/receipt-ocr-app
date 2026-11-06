@@ -9,7 +9,6 @@ import {
   numeric,
   pgEnum,
   pgTable,
-  primaryKey,
   smallint,
   text,
   timestamp,
@@ -271,8 +270,8 @@ export const jobs = pgTable(
     // No FK: the job record outlives a deleted receipt or workspace.
     receiptId: uuid("receipt_id"),
     organizationId: text("organization_id"),
-    /** The owner, for the per-user running cap. */
-    userId: text("user_id"),
+    /** The owner, for the per-user running cap. Unlinked when the account is deleted. */
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** Incremented at claim, so a job that crashes its worker still runs out of attempts. */
     attempts: smallint("attempts").notNull().default(0),
     maxAttempts: smallint("max_attempts").notNull(),
@@ -316,18 +315,6 @@ export const jobs = pgTable(
   ],
 );
 
-/** Running workers and drains, for the admin page and the "no worker" warning. */
-export const jobWorkers = pgTable("job_workers", {
-  id: text("id").primaryKey(),
-  /** `worker` | `drain`. */
-  mode: text("mode").notNull(),
-  host: text("host"),
-  version: text("version"),
-  concurrency: smallint("concurrency"),
-  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
-  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 /**
  * Pauses and cooldowns, one row per scope: `queue`, `kind:<kind>` or
  * `provider:<id>`. A row applies while `until` is null (indefinite) or ahead.
@@ -339,29 +326,6 @@ export const jobControls = pgTable("job_controls", {
   reason: text("reason"),
   updatedBy: text("updated_by"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-/** Fixed-window counters (e.g. calls per model per minute), shared by every process. */
-export const rateWindows = pgTable(
-  "rate_windows",
-  {
-    key: text("key").notNull(),
-    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
-    count: integer("count").notNull().default(0),
-  },
-  (table) => [primaryKey({ columns: [table.key, table.windowStart] })],
-);
-
-/** Recurring jobs without a scheduler process: each tick enqueues the ones that are due. */
-export const jobSchedules = pgTable("job_schedules", {
-  name: text("name").primaryKey(),
-  kind: text("kind").notNull(),
-  payload: jsonb("payload")
-    .notNull()
-    .default(sql`'{}'::jsonb`),
-  everySeconds: integer("every_seconds").notNull(),
-  nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
-  enabled: boolean("enabled").notNull().default(true),
 });
 
 /**
@@ -441,10 +405,7 @@ export const schema = {
   ocrCalls,
   jobState,
   jobs,
-  jobWorkers,
   jobControls,
-  rateWindows,
-  jobSchedules,
   userCredentials,
   adminAuditLog,
   appSettings,
