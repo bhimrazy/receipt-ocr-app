@@ -69,9 +69,11 @@ export function HistoryToolbar({ filters }: { filters: HistoryFilters }) {
   // Debounced search so typing doesn't fire a request per keystroke.
   useEffect(() => {
     if (query.trim() === (filters.q ?? "")) return;
-    // Fires after any navigation in between (e.g. Clear), so build from the URL at fire time.
+    // Build from the URL at fire time, and skip if the search changed meanwhile (e.g. a Clear link).
+    const scheduledQ = new URLSearchParams(window.location.search).get("q");
     searchTimer.current = setTimeout(() => {
       const params = new URLSearchParams(window.location.search);
+      if (params.get("q") !== scheduledQ) return;
       const q = query.trim();
       if (q) params.set("q", q);
       else params.delete("q");

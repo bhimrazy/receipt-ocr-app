@@ -25,12 +25,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
-// Matches the server rule for workspace names (length and characters).
+// Same rule as packages/core workspace-name.ts: 1–80 characters, no angle brackets or control characters.
 const WORKSPACE_NAME_MAX = 80;
-const WORKSPACE_NAME_RULE = "Up to 80 characters, without < > or /.";
+const WORKSPACE_NAME_RULE = "Up to 80 characters, without < or >.";
 
 function isValidWorkspaceName(name: string) {
-  return name.length <= WORKSPACE_NAME_MAX && !/[<>/\u0000-\u001f\u007f]/.test(name);
+  return name.length <= WORKSPACE_NAME_MAX && !/[<>\u0000-\u001f\u007f-\u009f]/.test(name);
 }
 
 function initialFor(name: string) {
@@ -104,7 +104,7 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
       return;
     }
     if (!isValidWorkspaceName(trimmed)) {
-      setCreateError("Remove < > and / from the name.");
+      setCreateError("Remove < and > from the name.");
       return;
     }
     setCreateError(null);
