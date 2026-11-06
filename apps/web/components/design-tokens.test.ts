@@ -28,7 +28,6 @@ const EXCLUDED = [/^app\/\(lab\)\//, /^components\/marketing\//, /opengraph-imag
 // Existing literals in files other open PRs own (auth flow, admin panel). Remove an entry once
 // that file uses tokens; new files are always checked.
 const PENDING = new Set([
-  "components/auth/auth-field.tsx",
   "app/admin/layout.tsx",
   "app/admin/admin-nav.tsx",
 ]);
