@@ -1,8 +1,9 @@
 import { ocrModel, type ModelId, type OcrProviderId } from "@receipt-ocr/ai";
-import { appSettings, type DbClient } from "@receipt-ocr/db";
+import { appSettings, eq, type DbClient } from "@receipt-ocr/db";
 import { Config, Context, Effect, Layer, Option } from "effect";
 import { z } from "zod";
-import { InvalidInput, type DbError } from "./errors";
+import { insertAudit, transact, type AuditActor } from "./audit";
+import { InvalidInput, type Conflict, type DbError, type NotFound } from "./errors";
 import { DEFAULT_PLANS, type PlanTable } from "./plans";
 import { Db } from "./services";
 
@@ -105,21 +106,25 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
     readonly get: Effect.Effect<SettingsSnapshot>;
     readonly plans: Effect.Effect<PlanTable>;
     readonly ocr: Effect.Effect<OcrRouting>;
-    /** Validates and stores a value, then drops the cache. Returns the value it replaced. */
+    /**
+     * Validates and stores a value with its audit row in one transaction, then
+     * drops the cache. Returns the stored value it replaced.
+     */
     readonly save: <K extends SettingKey>(
       key: K,
       value: unknown,
-      actorId: string,
+      audit: AuditActor,
     ) => Effect.Effect<
       { previous: SettingsSnapshot[K]; next: SettingsSnapshot[K] },
-      InvalidInput | DbError
+      InvalidInput | Conflict | NotFound | DbError
     >;
   }
 >() {
   static readonly Live = Layer.effect(
     Settings,
     Effect.gen(function* () {
-      const { use } = yield* Db;
+      const db = yield* Db;
+      const { use } = db;
 
       const load = Effect.gen(function* () {
         const fallbackOcr = yield* defaultOcrRouting;
@@ -181,19 +186,38 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
         get: cached,
         plans: Effect.map(cached, (s) => s.plans),
         ocr: Effect.map(cached, (s) => s.ocr),
-        save: (key, value, actorId) =>
+        save: (key, value, audit) =>
           Effect.gen(function* () {
             const next = yield* validate(key, value);
-            const previous = (yield* cached)[key];
-            yield* use((db) =>
-              db
+            const fallback = key === "plans" ? DEFAULT_PLANS : yield* defaultOcrRouting;
+            const schema: z.ZodType<unknown> = key === "plans" ? planTableSchema : ocrRoutingSchema;
+            const previous = yield* transact(async (tx) => {
+              // Read under a row lock, not from the cache, so `previous` is what this save replaces.
+              const [row] = await tx
+                .select({ value: appSettings.value })
+                .from(appSettings)
+                .where(eq(appSettings.key, key))
+                .for("update");
+              const parsed = row ? schema.safeParse(row.value) : null;
+              const previous = parsed?.success ? parsed.data : fallback;
+              const now = new Date();
+              await tx
                 .insert(appSettings)
-                .values({ key, value: next, updatedBy: actorId, updatedAt: new Date() })
+                .values({ key, value: next, updatedBy: audit.actor.id, updatedAt: now })
                 .onConflictDoUpdate({
                   target: appSettings.key,
-                  set: { value: next, updatedBy: actorId, updatedAt: new Date() },
-                }),
-            );
+                  set: { value: next, updatedBy: audit.actor.id, updatedAt: now },
+                });
+              await insertAudit(tx, {
+                ...audit,
+                action: `settings.${key}`,
+                targetType: "settings",
+                targetId: key,
+                targetLabel: key === "plans" ? "Plan limits" : "OCR models",
+                metadata: { from: previous, to: next },
+              });
+              return previous;
+            }).pipe(Effect.provideService(Db, db));
             yield* invalidate;
             return { previous, next } as never;
           }),

@@ -22,6 +22,13 @@ const LABELS: Record<string, string> = {
   "settings.ocr": "Changed OCR models",
 };
 
+/** `<action>_failed` rows record a Better Auth call that failed after its audit row was written. */
+function label(action: string): string {
+  const base = action.endsWith("_failed") ? action.slice(0, -"_failed".length) : action;
+  const text = LABELS[base] ?? base;
+  return base === action ? text : `${text} (failed)`;
+}
+
 const cap = (value: unknown) =>
   typeof value === "string" ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : String(value);
 
@@ -76,7 +83,7 @@ function details(entry: AdminAuditEntry): string | null {
     case "settings.ocr":
       return `${chainText(meta.from as Chain)} became ${chainText(meta.to as Chain)}`;
     default:
-      return null;
+      return typeof meta.error === "string" ? `Error: ${meta.error}` : null;
   }
 }
 
@@ -123,7 +130,7 @@ export function AuditList({
             </time>
             <div className="min-w-0 text-sm">
               <p className="break-words">
-                <span className="font-medium">{LABELS[entry.action] ?? entry.action}</span>
+                <span className="font-medium">{label(entry.action)}</span>
                 {/* Settings actions already name their target. */}
                 {showTarget && entry.targetLabel && entry.targetType !== "settings" ? (
                   <>

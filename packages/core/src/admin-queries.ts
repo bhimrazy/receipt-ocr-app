@@ -565,3 +565,42 @@ export const listAudit = (filters: AuditFilters, page: Page) =>
       return { rows, total: Number(total?.value ?? 0) };
     }),
   );
+
+// ---------- Action targets ----------
+
+export type AdminTargetUser = {
+  id: string;
+  email: string;
+  role: string | null;
+  emailVerified: boolean;
+};
+
+/** The fields an admin action checks before acting on a user; null when the user is gone. */
+export const findUser = (id: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db): Promise<AdminTargetUser | null> => {
+      const [row] = await db
+        .select({
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          emailVerified: user.emailVerified,
+        })
+        .from(user)
+        .where(eq(user.id, id))
+        .limit(1);
+      return row ?? null;
+    }),
+  );
+
+export const findWorkspace = (id: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const [row] = await db
+        .select({ id: organization.id, name: organization.name })
+        .from(organization)
+        .where(eq(organization.id, id))
+        .limit(1);
+      return row ?? null;
+    }),
+  );

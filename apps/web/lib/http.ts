@@ -126,7 +126,7 @@ export function crossOriginResponse(request: Request): Response | null {
 }
 
 /** The client IP from a trusted proxy header, or null when none is configured. */
-export function clientIp(request: Request): string | null {
+export function clientIp(request: { headers: Pick<Headers, "get"> }): string | null {
   for (const header of authEnv.trustedIpHeaders) {
     const value = request.headers.get(header)?.split(",")[0]?.trim();
     if (value) return value;
