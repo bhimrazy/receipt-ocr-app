@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { siteUrl } from "@/lib/site";
+import { siteUrl, siteUrlMissing } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -15,6 +15,6 @@ export default function robots(): MetadataRoute.Robots {
         "/forgot-password",
       ],
     },
-    sitemap: `${siteUrl}/sitemap.xml`,
+    ...(siteUrlMissing ? {} : { sitemap: `${siteUrl}/sitemap.xml` }),
   };
 }

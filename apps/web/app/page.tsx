@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { LandingPage } from "@/components/landing-page";
-import { siteTitle } from "@/lib/site";
+import { canonicalFor, siteTitle } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: { absolute: siteTitle },
-  alternates: { canonical: "/" },
+  alternates: canonicalFor("/"),
 };
 
 export default function Page() {
