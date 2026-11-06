@@ -10,6 +10,7 @@ import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
 import { DEFAULT_REDIRECT } from "@/lib/redirect";
 import { AuthError, AuthMessage, AuthNotice, authCardClass } from "./auth-field";
+import { FocusHeading } from "./focus-heading";
 
 type InvitationDetails = NonNullable<
   Awaited<ReturnType<typeof authClient.organization.getInvitation>>["data"]
@@ -133,79 +134,89 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
 
   if (problem === "wrong-account") {
     return (
-      <AuthMessage
-        actions={
-          <>
-            <Button className="h-11 w-full" disabled={busy} onClick={switchAccount}>
-              {action === "sign-out" ? (
-                <Loader2 aria-hidden className="size-4 animate-spin" />
-              ) : null}
-              Sign out and switch account
-            </Button>
-            <Link className={appLink} href={DEFAULT_REDIRECT}>
-              Go to the app
-            </Link>
-          </>
-        }
-        icon={UserRoundX}
-        title="This invitation is for a different email"
-        tone="warning"
-      >
-        <p>
-          You are signed in as{" "}
-          <span className="break-all font-medium text-foreground">{email}</span>. Sign out, then
-          sign in or create an account with the email address the invitation was sent to.
-        </p>
-      </AuthMessage>
+      <FocusHeading>
+        <AuthMessage
+          actions={
+            <>
+              <Button className="h-11 w-full" disabled={busy} onClick={switchAccount}>
+                {action === "sign-out" ? (
+                  <Loader2 aria-hidden className="size-4 animate-spin" />
+                ) : null}
+                Sign out and switch account
+              </Button>
+              <Link className={appLink} href={DEFAULT_REDIRECT}>
+                Go to the app
+              </Link>
+            </>
+          }
+          icon={UserRoundX}
+          title="This invitation is for a different email"
+          tone="warning"
+        >
+          <p>
+            You are signed in as{" "}
+            <span className="break-all font-medium text-foreground">{email}</span>. Sign out, then
+            sign in or create an account with the email address the invitation was sent to.
+          </p>
+        </AuthMessage>
+      </FocusHeading>
     );
   }
 
   if (problem === "unverified") {
     return (
-      <AuthMessage
-        actions={
-          verificationSent ? undefined : (
-            <Button className="h-11 w-full" disabled={busy} onClick={sendVerification}>
-              {action === "verify" ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
-              Send confirmation link
-            </Button>
-          )
-        }
-        icon={MailWarning}
-        title="Confirm your email first"
-        tone="warning"
-      >
-        <p>
-          To accept this invitation, confirm{" "}
-          <span className="break-all font-medium text-foreground">{email}</span>. The link brings
-          you back to this page.
-        </p>
-        {verificationSent ? <AuthNotice>We sent the link. It expires in 1 hour.</AuthNotice> : null}
-        {error ? <AuthError>{error}</AuthError> : null}
-      </AuthMessage>
+      <FocusHeading>
+        <AuthMessage
+          actions={
+            verificationSent ? undefined : (
+              <Button className="h-11 w-full" disabled={busy} onClick={sendVerification}>
+                {action === "verify" ? (
+                  <Loader2 aria-hidden className="size-4 animate-spin" />
+                ) : null}
+                Send confirmation link
+              </Button>
+            )
+          }
+          icon={MailWarning}
+          title="Confirm your email first"
+          tone="warning"
+        >
+          <p>
+            To accept this invitation, confirm{" "}
+            <span className="break-all font-medium text-foreground">{email}</span>. The link brings
+            you back to this page.
+          </p>
+          {verificationSent ? (
+            <AuthNotice>We sent the link. It expires in 1 hour.</AuthNotice>
+          ) : null}
+          {error ? <AuthError>{error}</AuthError> : null}
+        </AuthMessage>
+      </FocusHeading>
     );
   }
 
   if (problem === "unusable" || !invitation) {
     return (
-      <AuthMessage
-        actions={
-          <Link
-            className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full")}
-            href={DEFAULT_REDIRECT}
-          >
-            Go to the app
-          </Link>
-        }
-        icon={Link2Off}
-        title="This invitation can't be used"
-        tone="warning"
-      >
-        <p>
-          It has expired, was cancelled, or was already answered. Ask the person who invited you to
-          send a new one.
-        </p>
-      </AuthMessage>
+      <FocusHeading>
+        <AuthMessage
+          actions={
+            <Link
+              className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full")}
+              href={DEFAULT_REDIRECT}
+            >
+              Go to the app
+            </Link>
+          }
+          icon={Link2Off}
+          title="This invitation can't be used"
+          tone="warning"
+        >
+          <p>
+            It has expired, was cancelled, or was already answered. Ask the person who invited you
+            to send a new one.
+          </p>
+        </AuthMessage>
+      </FocusHeading>
     );
   }
 
@@ -217,50 +228,52 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
   ];
 
   return (
-    <AuthMessage
-      actions={
-        <>
-          <Button className="h-11 w-full" disabled={busy} onClick={handleAccept}>
-            {action === "accept" ? (
-              <Loader2 aria-hidden className="size-4 animate-spin" />
-            ) : (
-              <Check aria-hidden className="size-4" />
-            )}
-            Join {invitation.organizationName}
-          </Button>
-          <Button className="h-11 w-full" disabled={busy} onClick={handleReject} variant="ghost">
-            {action === "reject" ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
-            Decline invitation
-          </Button>
-        </>
-      }
-      icon={UsersRound}
-      title={`Join ${invitation.organizationName}`}
-    >
-      <p>
-        You can see this workspace&apos;s receipts and add your own. Your personal workspace stays
-        as it is.
-      </p>
-      <dl className="divide-y divide-border rounded-xl bg-background/50 ring-1 ring-inset ring-border">
-        {details.map(({ label, value, mono }) => (
-          <div
-            className="grid gap-0.5 px-4 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-baseline sm:gap-4"
-            key={label}
-          >
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd
-              className={cn(
-                "break-all text-foreground sm:truncate sm:text-right",
-                mono ? "font-mono text-xs" : "text-sm font-medium",
+    <FocusHeading>
+      <AuthMessage
+        actions={
+          <>
+            <Button className="h-11 w-full" disabled={busy} onClick={handleAccept}>
+              {action === "accept" ? (
+                <Loader2 aria-hidden className="size-4 animate-spin" />
+              ) : (
+                <Check aria-hidden className="size-4" />
               )}
-              title={value}
+              Join {invitation.organizationName}
+            </Button>
+            <Button className="h-11 w-full" disabled={busy} onClick={handleReject} variant="ghost">
+              {action === "reject" ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
+              Decline invitation
+            </Button>
+          </>
+        }
+        icon={UsersRound}
+        title={`Join ${invitation.organizationName}`}
+      >
+        <p>
+          You can see this workspace&apos;s receipts and add your own. Your personal workspace stays
+          as it is.
+        </p>
+        <dl className="divide-y divide-border rounded-xl bg-background/50 ring-1 ring-inset ring-border">
+          {details.map(({ label, value, mono }) => (
+            <div
+              className="grid gap-0.5 px-4 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-baseline sm:gap-4"
+              key={label}
             >
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {error ? <AuthError>{error}</AuthError> : null}
-    </AuthMessage>
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd
+                className={cn(
+                  "break-all text-foreground sm:truncate sm:text-right",
+                  mono ? "font-mono text-xs" : "text-sm font-medium",
+                )}
+                title={value}
+              >
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {error ? <AuthError>{error}</AuthError> : null}
+      </AuthMessage>
+    </FocusHeading>
   );
 }
