@@ -7,7 +7,7 @@ container images and GitHub workflows. Deployment as a flow is on [its own page]
 
 - [Monorepo tooling](#monorepo-tooling)
 - [OCR benchmark](#ocr-benchmark)
-- [Upload load test](#upload-load-test)
+- [Load test](#load-test)
 - [Scripts](#scripts)
 - [Docker](#docker)
 - [CI workflows](#ci-workflows)
@@ -53,11 +53,28 @@ flowchart LR
 **Planned:** a set of 20 to 30 real, PII-free receipts and more engines to compare
 ([parsers landscape](../plans/2026-11-06-parsers-landscape.md)). No benchmark results are committed yet.
 
-## Upload load test
+## Load test
 
-[`bench/upload.k6.js`](../../bench/upload.k6.js) ramps to 20 virtual users posting a receipt to `POST /api/receipts`
-against a stack running `OCR_PROVIDER=fixture`, so it measures the ingest path (auth, quota, storage, database), not
-the model. k6 is a separate binary that this repo does not install.
+[`scripts/load.sh`](../../scripts/load.sh) runs the production image (`docker/Dockerfile.prod`) as a small server and
+drives it with k6. [`docker-compose.load.yml`](../../docker-compose.load.yml) limits the app to 1 vCPU and 1 GB and
+Postgres to 1 vCPU and 512 MB, turns on `pg_stat_statements`, and sets `OCR_PROVIDER=fixture` with
+`FIXTURE_LATENCY_MS` so the model takes a realistic few seconds without costing anything. k6 comes from the official
+`grafana/k6` image pinned by digest and runs on the compose network, so nothing is installed except Docker and Bun.
+
+```mermaid
+flowchart LR
+  A[Build and start limited stack] --> B[Seed users, receipts, plan limits]
+  B --> C[Warm up]
+  C --> D[k6 scenarios]
+  D --> E[Sample docker stats and Postgres]
+  D --> F[report.mjs]
+  E --> F
+  F --> G[bench/results/latest.md and load-date.json]
+```
+
+Scenarios are smoke, load, spike, soak and a capacity ladder; thresholds are k6 SLOs in
+[`bench/load/load.js`](../../bench/load/load.js). The report joins k6 results with container CPU and memory, Postgres
+connections, per-statement times and the app's wide events. Details: [`bench/README.md`](../../bench/README.md).
 
 ## Scripts
 
@@ -92,6 +109,7 @@ Images are pinned by digest. Containers have no restart policy, so they stay sto
 | [`ci.yml`](../../.github/workflows/ci.yml)                 | Every PR, every push to `main`                           | `static` (format, lint, deps, knip, audit), `checks` (typecheck, unit tests, build), `e2e` (Postgres and RustFS services, migrations, integration suites, build, Playwright) |
 | [`preview.yml`](../../.github/workflows/preview.yml)       | Every PR                                                 | Vercel preview deploy and a PR comment with its URL. Skipped for Dependabot                                                                                                  |
 | [`production.yml`](../../.github/workflows/production.yml) | CI succeeded on a push to `main`, or by hand from `main` | Vercel production deploy of the exact commit CI tested                                                                                                                       |
+| [`load.yml`](../../.github/workflows/load.yml)             | By hand only (workflow_dispatch)                         | Builds the image, runs `scripts/load.sh` with the chosen scenarios and limits, uploads the report. No secrets                                                                |
 
 All third-party actions are pinned to a commit SHA. [`.github/actions/setup-bun`](../../.github/actions/setup-bun/action.yml)
 installs the pinned Bun and runs `bun install --frozen-lockfile` with a cache. The Vercel CLI has its own pinned
