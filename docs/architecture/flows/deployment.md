@@ -35,7 +35,7 @@ sequenceDiagram
 - **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) use the Vercel project's preview environment.
   Dependabot PRs are skipped because they get no secrets.
 - **Production** ([`production.yml`](../../../.github/workflows/production.yml)) runs only after CI succeeded on a
-  push to `main` (or when started by hand), deploys one at a time (`cancel-in-progress: false`), and builds the
+  push to `main`, or when started by hand from `main` (a manual run on another branch is skipped), deploys one at a time (`cancel-in-progress: false`), and builds the
   commit CI tested rather than whatever `main` points at by then.
 - The Vercel token is given only to the `pull` and `deploy` steps. The build step runs repository code and gets no
   token. Deploys upload one archive (`--archive=tgz`) to stay under the free plan's file-upload quota.
@@ -84,9 +84,14 @@ start the new image. Off Vercel the app refuses to start in production without `
 
 ## Boot-time checks
 
-[`instrumentation.ts`](../../../apps/web/instrumentation.ts) imports [`lib/env.ts`](../../../apps/web/lib/env.ts) when
-the Node server starts, and exits the process if it throws. It throws for a half-configured OAuth provider, no `BETTER_AUTH_URL` in production, malformed `BETTER_AUTH_SECRETS` or `TRUSTED_PROXIES`, and (off Vercel) no
+[`instrumentation.ts`](../../../apps/web/instrumentation.ts) calls
+[`instrumentation-node.ts`](../../../apps/web/instrumentation-node.ts) when the Node server starts; it imports
+[`lib/env.ts`](../../../apps/web/lib/env.ts) and exits the process if that throws. It throws for a half-configured OAuth provider, no `BETTER_AUTH_URL` in production, malformed `BETTER_AUTH_SECRETS` or `TRUSTED_PROXIES`, and (off Vercel) no
 `TRUSTED_IP_HEADERS`. A misconfigured deploy fails at start instead of failing every sign-in.
+
+After boot, `onRequestError` in the same file logs any render, route or action failure as `request.error` with the
+message (database params redacted) and digest only, and [`app/global-error.tsx`](../../../apps/web/app/global-error.tsx)
+renders the last-resort error page.
 
 **Planned:** branch protection on `main` requiring CI (decision 8 in [STATUS](../../STATUS.md)), and source-map upload
 in `production.yml` with the [observability plan](../../plans/2026-11-06-observability.md).

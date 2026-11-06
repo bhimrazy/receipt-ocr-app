@@ -30,9 +30,9 @@ The two upload modes differ only in when stage 2 runs.
 | `instant` | "Read" on a single file in the upload panel | In the request, before responding               | `200` with `status: completed` or `failed` |
 | `queued`  | "Read all" on several files                 | In Next.js `after()`, once the response is sent | `202` with `status: processing`            |
 
-Both run in the same serverless function, with `maxDuration = 60` seconds. **Planned:** a real job queue (a Postgres
-queue first, then BullMQ) so stage 2 can run in a worker; `extractStored` already takes only an id for that reason
-([extraction cost and accuracy, section 5](../../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async)).
+Both run in the same serverless function, with `maxDuration = 60` seconds. **Planned:** durable background jobs so stage 2
+can run in a worker ([jobs plan](../../plans/2026-11-06-jobs-queue.md)); `extractStored` already takes only an id for
+that reason.
 
 ## 1. In the browser
 
@@ -95,9 +95,9 @@ sequenceDiagram
   R-->>B: 202 { receiptId, status: processing }
   R->>A: schedule extractStored(receiptId)
   A->>DB: load, extract, complete or fail
-  loop until the status changes (backoff, gives up after 3 min)
-    B->>R: GET /api/receipts/{id} or refresh the list
-    R-->>B: { status }
+  loop until it changes (backoff 2 to 15 s, paused while hidden, 3 min of visible polling)
+    B->>R: GET /api/receipts/{id}, or GET /api/receipts/status for a list
+    R-->>B: { status } or workspace counts
   end
 ```
 
@@ -153,6 +153,8 @@ overall confidence under 0.9 is flagged "needs review" (`NEEDS_REVIEW_BELOW`). U
 
 | What went wrong                         | What the user sees                                           | Receipt state                                               |
 | --------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------- |
+| `Origin` is not the app's own           | `403` "Cross-origin request rejected"                        | No receipt created                                          |
+| No active workspace                     | `409` "No active workspace…"                                 | No receipt created                                          |
 | Over the daily or per-minute limit      | `429` with a message and `Retry-After`                       | No receipt created                                          |
 | No model configured                     | `503` "not configured"                                       | No receipt created                                          |
 | Not an accepted type, empty, over 10 MB | `400` / `413`                                                | No receipt created                                          |

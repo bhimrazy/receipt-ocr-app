@@ -21,7 +21,7 @@ invitations in Postgres through the Drizzle adapter. Three plugins are on: **org
 | ----------------------------- | --------------------------------------------------------------------------------- |
 | Passwords                     | 8 to 128 characters; all sessions revoked on reset                                |
 | Email verification            | Required in production (`AUTH_REQUIRE_EMAIL_VERIFICATION`, default true there)    |
-| Sessions                      | 7 days, refreshed daily; cookie cache 5 minutes, but server reads skip it         |
+| Sessions                      | 7 days, refreshed daily; cookie cache off, so every read checks the session row   |
 | Rate limits (database-backed) | Sign-in 5 per minute, sign-up 3 per minute, invite 20 per hour, per client IP     |
 | Tokens at rest                | Verification and reset tokens hashed; OAuth tokens encrypted with the auth secret |
 | Social providers              | Google and GitHub, each on only when its ID and secret are both set               |
@@ -99,7 +99,7 @@ An OAuth profile can arrive already verified, so the bootstrap-admin check also 
 flowchart LR
   req[Request] --> proxy{"proxy.ts:<br/>session cookie?"}
   proxy -- "no, on /app or /admin" --> signin[Redirect to /sign-in]
-  proxy -- yes --> session["getSession()<br/>cookie cache skipped"]
+  proxy -- yes --> session["getSession()<br/>reads the session row"]
   session --> scope["resolveScope(user, preferred)<br/>query member"]
   scope -- "membership found" --> ok[Scope: workspace, user, role]
   scope -- none --> heal["ensurePersonalWorkspace"]
@@ -110,8 +110,9 @@ flowchart LR
 - `session.active_organization_id` is a preference. `resolveScope` picks that workspace if the user is still a member,
   otherwise their oldest membership. Better Auth does not clear the preference on a removed member's other sessions,
   so trusting it would keep their access.
-- Banned users and revoked sessions fail `getSession` on the next request, because server reads pass
-  `disableCookieCache: true`.
+- Banned users and revoked sessions fail `getSession` on the next request. The cookie cache is off in
+  [`lib/auth.ts`](../../../apps/web/lib/auth.ts) (with it on, a revoked session kept working on `/api/auth/*` for the
+  cache's lifetime, GHSA-fvxx), and server reads also pass `disableCookieCache: true`.
 - `/admin` additionally requires `user.role = 'admin'` (`requireAdmin`), and answers 404 otherwise.
 
 ## Invitations
@@ -130,11 +131,13 @@ sequenceDiagram
 
   I->>BA: organization.inviteMember(email, role)
   BA->>BA: rate limit 20 per hour per IP
-  BA->>DB: beforeCreateInvitation: 10 per hour per inviter (rate_limit row)
+  BA->>BA: beforeCreateInvitation: role must be exactly owner, admin or member
+  BA->>DB: then 10 per hour per inviter (rate_limit row)
   BA->>DB: cancel older pending invites to this email, insert invitation (7 days)
   BA->>M: email with /accept-invitation/{id}
   N->>BA: open link, sign in or sign up (verified email)
   N->>BA: getInvitation, then acceptInvitation
+  BA->>BA: beforeAcceptInvitation: re-check the stored role
   BA->>DB: insert member, mark invitation accepted
   N->>BA: organization.setActive(workspace)
   N->>N: go to /app
@@ -144,6 +147,12 @@ sequenceDiagram
 to sign-in with a return path, resend verification, accept, decline, or sign out to switch account. Workspace names in
 the email are escaped and restricted to plain text (`validateWorkspaceName` in
 [`auth-guards.ts`](../../../apps/web/lib/auth-guards.ts)).
+
+Every role that reaches a membership is checked by `assertWorkspaceRole`
+([`auth-guards.ts`](../../../apps/web/lib/auth-guards.ts)) in four organization hooks: `beforeCreateInvitation`,
+`beforeAcceptInvitation`, `beforeAddMember` and `beforeUpdateMemberRole`. The role must be exactly `owner`, `admin` or
+`member`. Better Auth 1.7.14 accepts comma lists with padding such as `"admin, owner"` (GHSA-c85h), which would let a
+workspace admin create an owner.
 
 Creating extra workspaces is limited by plan: `organizationLimit` counts workspaces the user **owns** against the
 plan's `workspaces` limit, read fresh from the database.

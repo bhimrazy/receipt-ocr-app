@@ -91,4 +91,4 @@ There are no unit tests in this package; the schema is exercised by the integrat
 Generate its schema with the Better Auth CLI, copy the tables into
 [`auth-schema.ts`](../../packages/db/src/auth-schema.ts) in this repo's naming, add them to `schema`, then follow
 the migration steps above. The [passkeys and 2FA plan](../plans/2026-11-06-passkeys-2fa.md) is an example
-(**planned**, migrations `0008` and `0009`).
+(**planned**; take the next free migration numbers when it lands).

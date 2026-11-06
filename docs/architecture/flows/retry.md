@@ -29,7 +29,8 @@ sequenceDiagram
   R->>DB: enforceUploadQuota (read-only), ocr.ready
   R->>DB: claimRetry, one transaction
   Note over DB: lock user, count usage, decide quota
-  Note over DB: UPDATE receipts SET status = processing,<br/>attempts = attempts + 1<br/>WHERE in scope AND (failed OR stale) AND attempts < 3
+  Note over DB: set status processing, attempts + 1
+  Note over DB: only if in scope, failed or stale, attempts under 3
   Note over DB: INSERT ocr_rounds (round = new attempts)
   R-->>B: 202 { status: processing }
   R->>A: extractStored(id)

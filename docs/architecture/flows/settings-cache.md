@@ -72,5 +72,6 @@ Validation rules:
 | Other processes or function instances                                                                   | Within 30 s, on their next read after the cache expires |
 | Cached pages that print plan limits (`/terms`, `/sign-in`, `/sign-up`, password pages, invitation page) | After `revalidatePlanCopy()` regenerates them           |
 
-A user's own plan (Free or Pro, in `user.plan`) is not cached: `userPlan` reads it from the database on every upload,
-because the session's cookie cache could delay a change by five minutes.
+A user's own plan (Free or Pro, in `user.plan`) is not cached either: `userPlan`
+([`quota.ts`](../../../packages/core/src/quota.ts)) reads it from the database on every upload and retry, so an admin's
+plan change applies on the next request.

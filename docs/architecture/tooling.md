@@ -87,11 +87,11 @@ Images are pinned by digest. Containers have no restart policy, so they stay sto
 
 ## CI workflows
 
-| Workflow                                                   | Trigger                                      | Jobs                                                                                                                                                                         |
-| ---------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`ci.yml`](../../.github/workflows/ci.yml)                 | Every PR, every push to `main`               | `static` (format, lint, deps, knip, audit), `checks` (typecheck, unit tests, build), `e2e` (Postgres and RustFS services, migrations, integration suites, build, Playwright) |
-| [`preview.yml`](../../.github/workflows/preview.yml)       | Every PR                                     | Vercel preview deploy and a PR comment with its URL. Skipped for Dependabot                                                                                                  |
-| [`production.yml`](../../.github/workflows/production.yml) | CI succeeded on a push to `main`, or by hand | Vercel production deploy of the exact commit CI tested                                                                                                                       |
+| Workflow                                                   | Trigger                                                  | Jobs                                                                                                                                                                         |
+| ---------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`ci.yml`](../../.github/workflows/ci.yml)                 | Every PR, every push to `main`                           | `static` (format, lint, deps, knip, audit), `checks` (typecheck, unit tests, build), `e2e` (Postgres and RustFS services, migrations, integration suites, build, Playwright) |
+| [`preview.yml`](../../.github/workflows/preview.yml)       | Every PR                                                 | Vercel preview deploy and a PR comment with its URL. Skipped for Dependabot                                                                                                  |
+| [`production.yml`](../../.github/workflows/production.yml) | CI succeeded on a push to `main`, or by hand from `main` | Vercel production deploy of the exact commit CI tested                                                                                                                       |
 
 All third-party actions are pinned to a commit SHA. [`.github/actions/setup-bun`](../../.github/actions/setup-bun/action.yml)
 installs the pinned Bun and runs `bun install --frozen-lockfile` with a cache. The Vercel CLI has its own pinned

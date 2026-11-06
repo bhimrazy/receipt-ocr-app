@@ -117,7 +117,9 @@ The full sequences are in [Upload, extraction and result](flows/upload-and-extra
 
 **Workspace scoping on every query.** `ReceiptRepo` builds every `where` from `inScope` (id and `organization_id`) or
 `filterWhere` (always `organization_id`). Writes by users go through `writable`, which also requires
-`user_id = caller` unless the caller's workspace role contains `owner` or `admin`. A receipt whose uploader was
+`user_id = caller` unless the caller's workspace role is `owner` or `admin` (`canManageAnyReceipt` splits on commas
+and fails closed; roles are written exactly as `owner`, `admin` or `member` since `assertWorkspaceRole` guards every
+write in Better Auth). A receipt whose uploader was
 deleted (`user_id` null) can only be changed by an owner or admin. Non-UUID ids return "not found" before reaching
 Postgres.
 
@@ -129,7 +131,8 @@ receipt id and scope and loads everything else from the database and the bucket,
 that started the work (`currentAttempt`). A run that lost a race (the receipt was retried, deleted, or already
 finished) matches no row and writes nothing to `receipts`.
 
-**Quota ledger semantics.** Usage is counted from `ocr_rounds` and `ocr_calls` ([`usage.ts`](../../packages/core/src/usage.ts)):
+**Quota ledger semantics.** In plain terms: each user may read a set number of receipts per UTC day and per minute,
+and the count comes from a log of every attempt that is never edited or deleted. Usage is counted from `ocr_rounds` and `ocr_calls` ([`usage.ts`](../../packages/core/src/usage.ts)):
 
 | Window                           | Counts                                                                                                                                                      |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |

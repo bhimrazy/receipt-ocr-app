@@ -24,9 +24,7 @@ results. There is no separate worker or queue today.
 ```mermaid
 flowchart LR
   user([User in a browser])
-  subgraph host [Vercel, or a Docker host running Bun]
-    web[Next.js app<br/>apps/web]
-  end
+  web[Next.js app, apps/web<br/>on Vercel or Docker with Bun]
   pg[(Postgres<br/>Supabase in production)]
   s3[(S3-compatible bucket<br/>R2, S3 or RustFS)]
   gemini[Google Gemini<br/>through the AI SDK]
@@ -98,17 +96,19 @@ flowchart TD
 
 ## Terms used in these pages
 
-| Term             | Meaning                                                                                                                     |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Workspace        | A Better Auth **organization**. Receipts belong to a workspace; every member can read them. Every user gets a personal one. |
-| Workspace role   | `member.role`: `owner`, `admin` or `member`. Decides who may edit or delete receipts and manage members.                    |
-| Platform admin   | A user with `user.role = 'admin'` (Better Auth admin plugin). Sees `/admin`. Unrelated to the workspace role.               |
-| Scope            | `{ organizationId, userId, role }` for one request, resolved through `member` on every request.                             |
-| Round            | One upload or one retry of a receipt. `receipts.attempts` counts them; each gets an `ocr_rounds` row.                       |
-| Call             | One model call inside a round. Each gets an `ocr_calls` row with tokens, latency and cost.                                  |
-| Chain            | The ordered list of models an admin configured. The first that works reads the receipt; the rest are fallbacks.             |
-| Usage ledger     | `ocr_rounds` + `ocr_calls`. Append-only; quota and cost are counted from it, never from `receipts`.                         |
-| Instant / queued | The two upload modes: read in the request, or respond `202` and read after the response.                                    |
+| Term             | Meaning                                                                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace        | A Better Auth **organization**. Receipts belong to a workspace; every member can read them. Every user gets a personal one.                                       |
+| Workspace role   | `member.role`: exactly one of `owner`, `admin` or `member` (enforced by `assertWorkspaceRole`). Decides who may edit or delete receipts and manage members.       |
+| Platform admin   | A user with `user.role = 'admin'` (Better Auth admin plugin). Sees `/admin`. Unrelated to the workspace role.                                                     |
+| Scope            | `{ organizationId, userId, role }` for one request, resolved through `member` on every request.                                                                   |
+| Round            | One upload or one retry of a receipt. `receipts.attempts` counts them; each gets an `ocr_rounds` row.                                                             |
+| Call             | One model call inside a round. Each gets an `ocr_calls` row with tokens, latency and cost.                                                                        |
+| Chain            | The ordered list of models an admin configured. The first that works reads the receipt; the rest are fallbacks.                                                   |
+| Usage ledger     | `ocr_rounds` + `ocr_calls`. Append-only; quota and cost are counted from it, never from `receipts`.                                                               |
+| Wide event       | One JSON log line per request (or background run) holding everything about it: ids, timings, model, cost, outcome. See [`lib/log.ts`](../../apps/web/lib/log.ts). |
+| Advisory lock    | A Postgres lock on a number, not a row (`pg_advisory_xact_lock`). Used per user so one user's quota checks run one at a time; released at commit.                 |
+| Instant / queued | The two upload modes: read in the request, or respond `202` and read after the response.                                                                          |
 
 ## Reading order
 
@@ -135,7 +135,8 @@ Related documents outside this folder: [STATUS.md](../STATUS.md) (what is shippe
 
 ## Working principles
 
-These hold across the codebase. Each package page lists its own invariants as well.
+These hold across the codebase. Each package page lists its own invariants as well. The security reasoning behind
+several of them is in the [security audit](../reviews/2026-11-06-security-audit.md).
 
 1. **Route handlers and server actions are thin adapters.** They check the session, origin and input, then run one
    Effect program from `packages/core` and map its typed error to a status code
@@ -158,14 +159,14 @@ These hold across the codebase. Each package page lists its own invariants as we
 
 ## What is planned, not built
 
-| Planned                                                | Today                                                             | Plan                                                                                                                                                             |
-| ------------------------------------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Job queue (Postgres queue first, BullMQ + Redis later) | Queued mode runs in Next.js `after()` in the same function        | [Extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async), [combined plan](../plans/2026-11-06-combined-plan.md) |
-| Observability (Axiom logs, PostHog, Sentry)            | One JSON wide event per request on stdout                         | [Observability](../plans/2026-11-06-observability.md)                                                                                                            |
-| Usage screens for customers and admins                 | Rollup queries exist in `usage.ts`; only the daily meter is shown | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                              |
-| Passkeys and two-factor                                | Email/password and OAuth only                                     | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                          |
-| Second AI provider                                     | Google Gemini and the offline fixture                             | [AI usage and models](../plans/2026-11-06-ai-usage-models.md)                                                                                                    |
-| Seats and per-workspace quota                          | Quota is per user per UTC day                                     | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                   |
+| Planned                                                | Today                                                             | Plan                                                                                                                                                                         |
+| ------------------------------------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Job queue (Postgres queue first, BullMQ + Redis later) | Queued mode runs in Next.js `after()` in the same function        | [Durable background jobs](../plans/2026-11-06-jobs-queue.md); also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
+| Observability (Axiom logs, PostHog, Sentry)            | One JSON wide event per request on stdout                         | [Observability](../plans/2026-11-06-observability.md)                                                                                                                        |
+| Usage screens for customers and admins                 | Rollup queries exist in `usage.ts`; only the daily meter is shown | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                          |
+| Passkeys and two-factor                                | Email/password and OAuth only                                     | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                      |
+| Second AI provider                                     | Google Gemini and the offline fixture                             | [AI usage and models](../plans/2026-11-06-ai-usage-models.md)                                                                                                                |
+| Seats and per-workspace quota                          | Quota is per user per UTC day                                     | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                               |
 
 ## Keeping this current
 
