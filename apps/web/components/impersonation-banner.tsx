@@ -30,8 +30,8 @@ export function ImpersonationBanner({ email }: { email: string }) {
         <div className="flex min-w-0 items-start gap-2">
           <UserCog aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span className="min-w-0 break-words">
-            Signed in as <span className="font-medium break-all">{email}</span>.
-            Everything you do runs as this user.
+            Signed in as <span className="font-medium break-all">{email}</span>. Everything you do
+            runs as this user.
           </span>
         </div>
         <Button disabled={pending} onClick={stop} size="sm" variant="outline">

@@ -47,9 +47,10 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       ]),
     ),
     // Settled, so an unknown id still ends in notFound() rather than this call's error.
-    auth.api
-      .listUserSessions({ body: { userId: id }, headers: await headers() })
-      .then((value) => ({ value }) as const, (error: unknown) => ({ error }) as const),
+    auth.api.listUserSessions({ body: { userId: id }, headers: await headers() }).then(
+      (value) => ({ value }) as const,
+      (error: unknown) => ({ error }) as const,
+    ),
   ]);
   const [user, audit] = data;
   if (!user) notFound();

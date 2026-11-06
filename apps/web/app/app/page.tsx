@@ -4,11 +4,13 @@ import {
   PageHeaderDescription,
   PageHeaderTitle,
 } from "@/components/page-header";
+import { PanelSkeleton, RowsSkeleton } from "@/components/app-skeletons";
 import { ListPoller } from "@/components/processing-poller";
 import { ReceiptList } from "@/components/receipt-list";
 import { UploadPanel } from "@/components/upload-panel";
 import { formatTimeUntil } from "@/lib/format";
 import { Card } from "@receipt-ocr/ui/components/card";
+import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import type { ReceiptCounts } from "@receipt-ocr/core";
 import {
@@ -24,6 +26,7 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "@/lib/receipts";
 
 export const metadata: Metadata = { title: "Home" };
@@ -165,21 +168,63 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
   );
 }
 
-export default async function HomePage() {
-  const [usage, counts, recent] = await Promise.all([
-    getUsageSummary(),
+async function HomeTitle() {
+  const counts = await getReceiptCounts();
+  return counts.total === 0 ? "Read your first receipt" : "Upload receipts";
+}
+
+async function UploadSection() {
+  const usage = await getUsageSummary();
+  return <UploadPanel resetsIn={formatTimeUntil(usage.resetsAt)} usage={usage} />;
+}
+
+async function CheckSection() {
+  const counts = await getReceiptCounts();
+  return (
+    <>
+      <ListPoller active={counts.inFlight > 0} counts={counts} />
+      {counts.total === 0 ? <HowItWorks /> : <ToCheck counts={counts} />}
+    </>
+  );
+}
+
+async function RecentSection() {
+  const [counts, recent] = await Promise.all([
     getReceiptCounts(),
     listReceiptSummaries({ pageSize: RECENT }),
   ]);
-  const firstRun = counts.total === 0;
+  if (counts.total === 0) return null;
 
   return (
+    <section aria-labelledby="recent-heading" className="mt-10">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-base font-semibold" id="recent-heading">
+          Recent receipts
+        </h2>
+        <Link
+          className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
+          href="/app/history"
+        >
+          All receipts
+          <ArrowRight aria-hidden="true" className="size-4" />
+        </Link>
+      </div>
+      <Card className="overflow-hidden">
+        <ReceiptList receipts={recent.rows} />
+      </Card>
+    </section>
+  );
+}
+
+export default function HomePage() {
+  return (
     <div className="mx-auto max-w-6xl">
-      <ListPoller active={counts.inFlight > 0} />
       <PageHeader>
         <PageHeaderContent>
           <PageHeaderTitle>
-            {firstRun ? "Read your first receipt" : "Upload receipts"}
+            <Suspense fallback="Upload receipts">
+              <HomeTitle />
+            </Suspense>
           </PageHeaderTitle>
           <PageHeaderDescription>
             Add a photo of a receipt and we read the merchant, date, items and total. Several photos
@@ -190,30 +235,24 @@ export default async function HomePage() {
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section aria-label="Upload">
-          <UploadPanel resetsIn={formatTimeUntil(usage.resetsAt)} usage={usage} />
+          <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+            <UploadSection />
+          </Suspense>
         </section>
-        {firstRun ? <HowItWorks /> : <ToCheck counts={counts} />}
+        <Suspense fallback={<PanelSkeleton />}>
+          <CheckSection />
+        </Suspense>
       </div>
 
-      {firstRun ? null : (
-        <section aria-labelledby="recent-heading" className="mt-10">
-          <div className="mb-3 flex items-baseline justify-between gap-3">
-            <h2 className="text-base font-semibold" id="recent-heading">
-              Recent receipts
-            </h2>
-            <Link
-              className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
-              href="/app/history"
-            >
-              All receipts
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </Link>
+      <Suspense
+        fallback={
+          <div className="mt-10">
+            <RowsSkeleton rows={RECENT} />
           </div>
-          <Card className="overflow-hidden">
-            <ReceiptList receipts={recent.rows} />
-          </Card>
-        </section>
-      )}
+        }
+      >
+        <RecentSection />
+      </Suspense>
     </div>
   );
 }

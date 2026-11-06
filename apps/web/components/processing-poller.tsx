@@ -1,13 +1,71 @@
 "use client";
 
+import type { ReceiptCounts } from "@receipt-ocr/core";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReceiptStatus } from "@/lib/receipts";
 
-/** Give up after this long; background extraction should never take longer. */
+/** Give up after this much polling time; background extraction should never take longer. */
 const MAX_POLL_MS = 3 * 60 * 1000;
 const BASE_INTERVAL_MS = 2000;
 const MAX_INTERVAL_MS = 15000;
+
+/**
+ * Calls `check` on a backed-off schedule until it returns true or the budget
+ * runs out (then `onGiveUp`). Hidden tabs don't poll or spend budget; the
+ * check runs again as soon as the tab is visible.
+ */
+function useBackoffPoll(enabled: boolean, check: () => Promise<boolean>, onGiveUp?: () => void) {
+  useEffect(() => {
+    if (!enabled) return;
+    let stopped = false;
+    let attempt = 0;
+    let elapsed = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    function schedule(ms: number) {
+      clearTimeout(timer);
+      if (stopped || document.hidden) return;
+      elapsed += ms;
+      if (elapsed > MAX_POLL_MS) {
+        stopped = true;
+        onGiveUp?.();
+        return;
+      }
+      timer = setTimeout(tick, ms);
+    }
+
+    async function tick() {
+      if (stopped || document.hidden) return;
+      let done = false;
+      try {
+        done = await check();
+      } catch {
+        // transient network error: keep polling on the backed-off schedule
+      }
+      if (stopped) return;
+      if (done) {
+        stopped = true;
+        return;
+      }
+      attempt += 1;
+      schedule(Math.min(BASE_INTERVAL_MS * 2 ** Math.floor(attempt / 3), MAX_INTERVAL_MS));
+    }
+
+    function onVisibility() {
+      if (document.hidden) clearTimeout(timer);
+      else if (!stopped) void tick();
+    }
+
+    document.addEventListener("visibilitychange", onVisibility);
+    schedule(BASE_INTERVAL_MS);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [enabled, check, onGiveUp]);
+}
 
 /**
  * While a receipt is still uploading/processing, polls its status endpoint and
@@ -21,43 +79,17 @@ export function ProcessingPoller({ id, status }: { id: string; status: ReceiptSt
   const router = useRouter();
   const [gaveUp, setGaveUp] = useState(false);
 
-  useEffect(() => {
-    if (status !== "processing" && status !== "uploaded") return;
-
-    let cancelled = false;
-    let attempt = 0;
-    let timer: ReturnType<typeof setTimeout>;
-    const startedAt = Date.now();
-
-    async function tick() {
-      if (cancelled) return;
-      if (Date.now() - startedAt > MAX_POLL_MS) {
-        setGaveUp(true);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/receipts/${id}`);
-        if (res.ok) {
-          const body = (await res.json()) as { status?: string };
-          if (body.status && body.status !== status) {
-            router.refresh();
-            return;
-          }
-        }
-      } catch {
-        // transient network error — keep polling on the backed-off schedule
-      }
-      attempt += 1;
-      const delay = Math.min(BASE_INTERVAL_MS * 2 ** Math.floor(attempt / 3), MAX_INTERVAL_MS);
-      timer = setTimeout(tick, delay);
-    }
-
-    timer = setTimeout(tick, BASE_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+  const check = useCallback(async () => {
+    const res = await fetch(`/api/receipts/${id}`);
+    if (!res.ok) return false;
+    const body = (await res.json()) as { status?: string };
+    if (!body.status || body.status === status) return false;
+    router.refresh();
+    return true;
   }, [id, status, router]);
+  const giveUp = useCallback(() => setGaveUp(true), []);
+
+  useBackoffPoll(status === "processing" || status === "uploaded", check, giveUp);
 
   if (!gaveUp) return null;
 
@@ -78,32 +110,25 @@ export function ProcessingPoller({ id, status }: { id: string; status: ReceiptSt
   );
 }
 
+const countsKey = (c: ReceiptCounts) => `${c.total}:${c.needsReview}:${c.failed}:${c.inFlight}`;
+
 /**
- * Refreshes a server-rendered list while any row is still being read, on the
- * same backed-off schedule, so a queued batch doesn't sit on a stale page.
+ * Watches a server-rendered list while any row is still being read. Polls the
+ * light counts endpoint and refreshes the page only when the counts differ from
+ * the ones the page was rendered with, so a quiet queue costs no page renders.
  */
-export function ListPoller({ active }: { active: boolean }) {
+export function ListPoller({ active, counts }: { active: boolean; counts: ReceiptCounts }) {
   const router = useRouter();
+  const rendered = countsKey(counts);
 
-  useEffect(() => {
-    if (!active) return;
-    let attempt = 0;
-    let timer: ReturnType<typeof setTimeout>;
-    const startedAt = Date.now();
+  const check = useCallback(async () => {
+    const res = await fetch("/api/receipts/status");
+    if (!res.ok) return false;
+    if (countsKey((await res.json()) as ReceiptCounts) === rendered) return false;
+    router.refresh();
+    return true;
+  }, [rendered, router]);
 
-    function tick() {
-      if (Date.now() - startedAt > MAX_POLL_MS) return;
-      router.refresh();
-      attempt += 1;
-      timer = setTimeout(
-        tick,
-        Math.min(BASE_INTERVAL_MS * 2 ** Math.floor(attempt / 3), MAX_INTERVAL_MS),
-      );
-    }
-
-    timer = setTimeout(tick, BASE_INTERVAL_MS * 2);
-    return () => clearTimeout(timer);
-  }, [active, router]);
-
+  useBackoffPoll(active, check);
   return null;
 }
