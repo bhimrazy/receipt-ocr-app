@@ -7,6 +7,7 @@ import { Input } from "@receipt-ocr/ui/components/input";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, MessageCircle, Send, X } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import { Turnstile, useTurnstile } from "@/components/turnstile";
 import {
   SUPPORT_OPEN_EVENT,
   type SupportOpenDetail,
@@ -41,6 +42,7 @@ export function SupportWidget() {
   const launcherRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const ids = useId();
+  const turnstile = useTurnstile();
 
   const openWidget = useCallback((nextTopic?: SupportTopic) => {
     if (nextTopic) setTopic(nextTopic);
@@ -73,16 +75,22 @@ export function SupportWidget() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (status === "sending") return;
-    setStatus("sending");
     setError(null);
+    if (turnstile.blocker) {
+      setStatus("error");
+      setError(turnstile.blocker);
+      return;
+    }
+    setStatus("sending");
     const company =
       (event.currentTarget.elements.namedItem("company") as HTMLInputElement | null)?.value ?? "";
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...turnstile.fetchOptions?.headers },
         body: JSON.stringify({ email, message, topic, company }),
       });
+      turnstile.reset();
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error ?? "Your message didn't send. Try again in a moment.");
@@ -91,6 +99,7 @@ export function SupportWidget() {
       setEmail("");
       setMessage("");
     } catch (err) {
+      turnstile.reset();
       setStatus("error");
       setError(
         err instanceof Error ? err.message : "Your message didn't send. Try again in a moment.",
@@ -209,6 +218,8 @@ export function SupportWidget() {
                   aria-hidden
                   className="pointer-events-none absolute -left-[9999px] h-0 w-0 opacity-0"
                 />
+
+                <Turnstile controller={turnstile} />
 
                 {error ? (
                   <Alert className="text-xs" variant="destructive">

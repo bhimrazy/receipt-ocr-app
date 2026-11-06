@@ -6,6 +6,7 @@ import { emailEnv, isProduction, supportEmail } from "@/lib/env";
 import { clientIp, crossOriginResponse } from "@/lib/http";
 import { logger, type WideEvent } from "@/lib/log";
 import { runtime } from "@/lib/runtime";
+import { checkTurnstile } from "@/lib/turnstile";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const mailer = {
@@ -94,6 +95,20 @@ export async function POST(request: Request) {
       event.status_code = 400;
       event.outcome = "message_too_long";
       return NextResponse.json({ error: "Message is too long" }, { status: 400 });
+    }
+
+    const human = await checkTurnstile(request, clientIp(request));
+    if (!human.ok) {
+      event.outcome = `turnstile_${human.reason}`;
+      if (human.reason === "rejected") event.turnstile_errors = human.errorCodes?.join(",");
+      const [status, error] =
+        human.reason === "missing"
+          ? [400, "Finish the security check, then send again."]
+          : human.reason === "rejected"
+            ? [403, "The security check failed. Reload the page and try again."]
+            : [503, "We couldn't run the security check. Please try again in a moment."];
+      event.status_code = status;
+      return NextResponse.json({ error }, { status });
     }
 
     // Like auth mail: without a mailer, dev and CI simulate (and log) delivery, but production

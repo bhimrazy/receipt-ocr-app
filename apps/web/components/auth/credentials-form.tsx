@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authErrorMessage } from "@/lib/auth-errors";
+import { Turnstile, useTurnstile } from "@/components/turnstile";
 import { authClient } from "@/lib/auth-client";
 import { DEFAULT_REDIRECT } from "@/lib/redirect";
 import {
@@ -84,6 +85,7 @@ export function CredentialsForm({
   initialError?: string;
 }) {
   const router = useRouter();
+  const turnstile = useTurnstile();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -103,6 +105,10 @@ export function CredentialsForm({
     event.preventDefault();
     setError(null);
     setCallbackError(undefined);
+    if (turnstile.blocker) {
+      setError({ message: turnstile.blocker });
+      return;
+    }
     setPending("credentials");
     const trimmedEmail = email.trim();
     if (isSignUp) {
@@ -111,7 +117,9 @@ export function CredentialsForm({
         email: trimmedEmail,
         password,
         callbackURL,
+        fetchOptions: turnstile.fetchOptions,
       });
+      turnstile.reset();
       if (authError) {
         setError({
           message: authErrorMessage(authError),
@@ -132,7 +140,9 @@ export function CredentialsForm({
         password,
         // Also the target of the confirmation link Better Auth emails to unconfirmed accounts.
         callbackURL,
+        fetchOptions: turnstile.fetchOptions,
       });
+      turnstile.reset();
       if (authError) {
         setPending(null);
         // Better Auth has already emailed a fresh confirmation link (sendOnSignIn).
@@ -256,6 +266,7 @@ export function CredentialsForm({
           required
           value={password}
         />
+        <Turnstile controller={turnstile} />
         {error ? (
           <AuthError>
             {error.signInInstead ? (

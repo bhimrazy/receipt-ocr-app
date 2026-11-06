@@ -4,6 +4,7 @@ import { Button } from "@receipt-ocr/ui/components/button";
 import { Loader2, MailCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { authErrorMessage } from "@/lib/auth-errors";
+import { Turnstile, useTurnstile } from "@/components/turnstile";
 import { authClient } from "@/lib/auth-client";
 import { AuthError, AuthMessage } from "./auth-field";
 import { FocusHeading } from "./focus-heading";
@@ -26,6 +27,7 @@ export function CheckEmail({
   callbackURL: string;
   onBack: () => void;
 }) {
+  const turnstile = useTurnstile();
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
   const [sending, setSending] = useState(false);
   const [resent, setResent] = useState(false);
@@ -38,9 +40,18 @@ export function CheckEmail({
   }, [cooldown]);
 
   async function resend() {
-    setSending(true);
     setError(null);
-    const { error: sendError } = await authClient.sendVerificationEmail({ email, callbackURL });
+    if (turnstile.blocker) {
+      setError(turnstile.blocker);
+      return;
+    }
+    setSending(true);
+    const { error: sendError } = await authClient.sendVerificationEmail({
+      email,
+      callbackURL,
+      fetchOptions: turnstile.fetchOptions,
+    });
+    turnstile.reset();
     setSending(false);
     if (sendError) {
       setError(authErrorMessage(sendError));
@@ -91,6 +102,7 @@ export function CheckEmail({
             We sent another link.
           </p>
         ) : null}
+        <Turnstile controller={turnstile} />
         {error ? <AuthError>{error}</AuthError> : null}
       </AuthMessage>
     </FocusHeading>

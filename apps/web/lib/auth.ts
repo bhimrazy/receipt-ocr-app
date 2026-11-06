@@ -20,10 +20,18 @@ import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
+import { captcha } from "better-auth/plugins/captcha";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
 import { limitInvitations, validateWorkspaceName } from "./auth-guards";
-import { authEnabled, authEnv, emailEnv, isProduction, requireEmailVerification } from "./env";
+import {
+  authEnabled,
+  authEnv,
+  emailEnv,
+  isProduction,
+  requireEmailVerification,
+  turnstileEnv,
+} from "./env";
 import { logger } from "./log";
 import { runtime } from "./runtime";
 
@@ -94,6 +102,14 @@ export async function deleteOwnData(userId: string) {
   if (failure?._tag === "Conflict") throw new APIError("BAD_REQUEST", { message: failure.message });
   throw new Error("Could not delete the user's workspaces", { cause: exit.cause });
 }
+
+/** The plugin's defaults (sign-up, sign-in, password reset) plus the resend-confirmation link. */
+const CAPTCHA_ENDPOINTS = [
+  "/sign-up/email",
+  "/sign-in/email",
+  "/request-password-reset",
+  "/send-verification-email",
+];
 
 export const auth = betterAuth({
   appName: "receiptOCR",
@@ -254,6 +270,18 @@ export const auth = betterAuth({
     admin({
       defaultRole: "user",
     }),
+    // Reads the token from `x-captcha-response` and the client IP from advanced.ipAddress. A
+    // missing token is a 400, a rejected one a 403, and a siteverify failure or timeout (10 s) a
+    // 500: all fail closed.
+    ...(turnstileEnv
+      ? [
+          captcha({
+            provider: "cloudflare-turnstile",
+            secretKey: turnstileEnv.secretKey,
+            endpoints: [...CAPTCHA_ENDPOINTS],
+          }),
+        ]
+      : []),
     // Keep nextCookies last so it can pick up Set-Cookie from server actions.
     nextCookies(),
   ],

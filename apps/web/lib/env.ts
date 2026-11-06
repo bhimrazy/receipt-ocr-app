@@ -147,6 +147,26 @@ function betterAuthSecrets(): { version: number; value: string }[] | undefined {
   return secrets;
 }
 
+/**
+ * Cloudflare Turnstile bot protection, on only when both keys are set. The site key is public and
+ * inlined into the client bundle at build time (NEXT_PUBLIC_*); the secret key stays on the server.
+ * One without the other would either show a widget nothing checks or reject every form, so that
+ * fails at startup (not during `next build`, which runs without runtime secrets).
+ */
+function turnstileConfig(): { siteKey: string; secretKey: string } | undefined {
+  const siteKey = optional("NEXT_PUBLIC_TURNSTILE_SITE_KEY");
+  const secretKey = optional("TURNSTILE_SECRET_KEY");
+  if (siteKey && secretKey) return { siteKey, secretKey };
+  if ((siteKey || secretKey) && !isBuild) {
+    throw new Error(
+      "Incomplete Turnstile config: set both NEXT_PUBLIC_TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY (or neither).",
+    );
+  }
+  return undefined;
+}
+
+export const turnstileEnv = turnstileConfig();
+
 export const authEnv = {
   /** Supabase transaction-pooler (port 6543) URL works here; postgres-js runs with prepare:false. */
   databaseUrl: optional("DATABASE_URL"),
