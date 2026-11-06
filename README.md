@@ -5,11 +5,15 @@ A Bun/Turborepo Receipt OCR MVP with Next.js, Better Auth, Drizzle/Postgres, S3-
 ## Apps and Packages
 
 - `apps/web` - Next.js App Router web app.
-- `packages/ui` - shared UI primitives.
-- `packages/db` - Drizzle schema and repository helpers.
-- `packages/storage` - R2/S3-compatible storage client.
-- `packages/ai` - Gemini OCR client and schemas.
 - `packages/core` - Effect services and receipt processing workflow.
+- `packages/ai` - AI SDK OCR call, extraction schema, model list and prices (Gemini today).
+- `packages/db` - Drizzle schema and the shared database client.
+- `packages/storage` - R2/S3-compatible storage client.
+- `packages/email` - Resend mailer and email templates.
+- `packages/ui` - shared UI primitives.
+
+How they fit together, with diagrams of every flow and the data model, is in
+[`docs/architecture/`](docs/architecture/README.md).
 
 ## Local Setup
 
@@ -41,7 +45,7 @@ Deploying to production, and the steps for each release (migrations, new variabl
 | `app`         | The Next.js app itself (profile `app`)     | `localhost:3000`                                 |
 
 ```bash
-bun run docker:up      # infra only — run the app with `bun dev`
+bun run docker:up      # infra only; run the app with `bun dev`
 bun run docker:app     # ...plus the production image (docker/Dockerfile.prod)
 bun run docker:dev     # ...or `next dev` in a container (docker/Dockerfile.dev)
 bun run docker:reset   # tear down and delete the volumes
@@ -51,7 +55,7 @@ Postgres is published on **5433**, not 5432, because 5432 is usually already
 taken by another local Postgres. Change `POSTGRES_PORT` in `.env` if you'd
 rather use a different one, and keep `DATABASE_URL` in step.
 
-Containers carry no restart policy — once stopped they stay stopped until the
+Containers carry no restart policy: once stopped they stay stopped until the
 next `bun run docker:up`.
 
 For `bun dev`, `apps/web/.env.local` needs at minimum:
@@ -68,7 +72,7 @@ S3_FORCE_PATH_STYLE=true
 GOOGLE_GENERATIVE_AI_API_KEY=<your key>
 ```
 
-The UI renders without backend credentials. Real upload/OCR requires Better Auth (`BETTER_AUTH_SECRET`), Postgres (`DATABASE_URL`), S3/R2, and Gemini env vars. Apply migrations with `bun run db:migrate` — against Supabase, that means the **session** pooler on port 5432 (set `DIRECT_URL`), not the transaction pooler.
+The UI renders without backend credentials. Real upload/OCR requires Better Auth (`BETTER_AUTH_SECRET`), Postgres (`DATABASE_URL`), S3/R2, and Gemini env vars. Apply migrations with `bun run db:migrate`. Against Supabase, that means the **session** pooler on port 5432 (set `DIRECT_URL`), not the transaction pooler.
 
 ### Self-hosting behind a proxy
 
@@ -98,8 +102,8 @@ bun run bench:ocr       # OCR accuracy/latency/cost on bench/fixtures (needs a G
 ```
 
 The e2e suite (`apps/web/e2e`) drives the built app through the UI, with receipts seeded in SQL rather than
-through OCR. First run: `bunx playwright install chromium`. The upload spec stays skipped until the fixture OCR
-provider (`OCR_PROVIDER=fixture`) exists; set `E2E_UPLOAD=1` to run it. Benchmark details and the k6 upload load
+through OCR. First run: `bunx playwright install chromium`. The upload spec runs only with `E2E_UPLOAD=1` and the
+fixture OCR provider (`OCR_PROVIDER=fixture`), which CI and `scripts/test.sh` set. Benchmark details and the k6 upload load
 test are in [`bench/README.md`](bench/README.md).
 
 CI (`.github/workflows/ci.yml`) runs the checks below, which you can run locally too:

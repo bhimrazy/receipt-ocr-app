@@ -3,6 +3,9 @@
 Where the project stands, what is in flight, and what needs a decision. Read this first when picking the work up on a
 new machine; keep it current when something merges or a decision is made. Last updated 2026-11-06 (after #27).
 
+How the system is built (every app and package, the main flows and the data model) is in
+[architecture](architecture/README.md).
+
 ## Shipped to `main` (2026-11-06)
 
 | PR       | What                                                                                                                                                                                                                   |
