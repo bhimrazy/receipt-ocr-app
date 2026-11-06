@@ -9,18 +9,50 @@ function toNumber(value?: string | number | null): number | null {
   return Number.isFinite(amount) ? amount : null;
 }
 
+// Intl constructors are slow; build each formatter once per process.
+const currencyFormatters = new Map<string, Intl.NumberFormat | null>();
+
 function currencyFormatter(currency: string) {
+  const cached = currencyFormatters.get(currency);
+  if (cached !== undefined) return cached;
+  let formatter: Intl.NumberFormat | null;
   try {
-    return new Intl.NumberFormat("en-US", {
+    formatter = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency,
       currencyDisplay: "narrowSymbol",
     });
   } catch {
     // An unknown code from OCR or a manual edit; fall back to the code itself.
-    return null;
+    formatter = null;
   }
+  currencyFormatters.set(currency, formatter);
+  return formatter;
 }
+
+const dateFormatter = new Intl.DateTimeFormat(LOCALE, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: TIME_ZONE,
+});
+
+const dateTimeFormatter = new Intl.DateTimeFormat(LOCALE, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: TIME_ZONE,
+});
+
+const timeFormatter = new Intl.DateTimeFormat(LOCALE, {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: TIME_ZONE,
+});
 
 /** Legacy: treats missing values as zero. Prefer `formatMoney` for display. */
 export function money(value?: string | number | null, currency = "USD") {
@@ -53,12 +85,7 @@ export function formatDate(value: string | Date | null | undefined): string | nu
       ? new Date(`${value}T00:00:00Z`)
       : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(LOCALE, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: TIME_ZONE,
-  }).format(date);
+  return dateFormatter.format(date);
 }
 
 /** "27 Oct 2026, 14:05 UTC". */
@@ -66,26 +93,13 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  const formatted = new Intl.DateTimeFormat(LOCALE, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: TIME_ZONE,
-  }).format(date);
+  const formatted = dateTimeFormatter.format(date);
   return `${formatted} UTC`;
 }
 
 /** "14:05 UTC". */
 export function formatTime(value: Date): string {
-  const formatted = new Intl.DateTimeFormat(LOCALE, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: TIME_ZONE,
-  }).format(value);
+  const formatted = timeFormatter.format(value);
   return `${formatted} UTC`;
 }
 

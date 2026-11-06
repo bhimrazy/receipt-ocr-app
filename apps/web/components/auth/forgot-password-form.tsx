@@ -90,7 +90,7 @@ export function ForgotPasswordForm() {
         <Button className="mt-1 h-11 w-full" disabled={pending} type="submit">
           {pending ? (
             <>
-              <Loader2 aria-hidden className="size-4 animate-spin" />
+              <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
               Sending link…
             </>
           ) : (

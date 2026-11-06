@@ -22,7 +22,7 @@ import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
-import { limitInvitations, validateWorkspaceName } from "./auth-guards";
+import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
 import { authEnabled, authEnv, emailEnv, isProduction, requireEmailVerification } from "./env";
 import { logger } from "./log";
 import { runtime } from "./runtime";
@@ -152,10 +152,9 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
-    cookieCache: {
-      enabled: true,
-      maxAge: 60 * 5, // 5 minutes
-    },
+    // Off: with the cache on, a revoked or banned session keeps working on
+    // /api/auth/* for its maxAge (see GHSA-fvxx). App reads skip it anyway.
+    cookieCache: { enabled: false },
   },
   advanced: {
     ipAddress: authEnv.ipAddress,
@@ -232,7 +231,15 @@ export const auth = betterAuth({
           validateWorkspaceName(organization, { required: true }),
         beforeUpdateOrganization: ({ organization }) =>
           validateWorkspaceName(organization, { required: false }),
-        beforeCreateInvitation: ({ inviter }) => limitInvitations(inviter.id),
+        beforeCreateInvitation: ({ invitation, inviter }) => {
+          assertWorkspaceRole(invitation.role);
+          return limitInvitations(inviter.id);
+        },
+        // Accepting copies the stored role to a member row without beforeAddMember,
+        // so invitations stored before this check are re-checked here.
+        beforeAcceptInvitation: async ({ invitation }) => assertWorkspaceRole(invitation.role),
+        beforeAddMember: async ({ member }) => assertWorkspaceRole(member.role),
+        beforeUpdateMemberRole: async ({ newRole }) => assertWorkspaceRole(newRole),
         beforeDeleteOrganization: async ({ organization }) => {
           await purgeFiles({ organizationId: organization.id });
         },

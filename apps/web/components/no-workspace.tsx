@@ -9,14 +9,14 @@ import {
   CardTitle,
 } from "@receipt-ocr/ui/components/card";
 import { useRouter } from "next/navigation";
-import { authClient } from "@/lib/auth-client";
+import { signOutAndClearHint } from "@/lib/auth-client";
 
 /** Shown to a signed-in user whose workspace could not be found or created. */
 export function NoWorkspace({ email }: { email: string }) {
   const router = useRouter();
 
   async function handleSignOut() {
-    await authClient.signOut();
+    await signOutAndClearHint();
     router.push("/");
     router.refresh();
   }
