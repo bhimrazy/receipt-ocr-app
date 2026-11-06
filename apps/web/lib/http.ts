@@ -101,7 +101,7 @@ type RequestEventSpec = {
 export function withRequestEvent<C = unknown>(
   spec: RequestEventSpec,
   handler: (request: Request, context: C, event: WideEvent) => Promise<Response> | Response,
-): (request: Request, context: C) => Promise<Response> {
+): (request: Request, context?: C) => Promise<Response> {
   return async (request, context) => {
     const startedAt = Date.now();
     const event: WideEvent = {
@@ -112,7 +112,7 @@ export function withRequestEvent<C = unknown>(
       request_id: crypto.randomUUID(),
     };
     try {
-      const response = await handler(request, context, event);
+      const response = await handler(request, context as C, event);
       event.status_code ??= response.status;
       return response;
     } catch (error) {

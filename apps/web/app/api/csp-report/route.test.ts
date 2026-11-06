@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const logger = vi.hoisted(() => ({ info: vi.fn(), error: vi.fn() }));
-vi.mock("@/lib/http", () => ({ clientIp: (r: Request) => r.headers.get("x-ip") }));
-vi.mock("@/lib/log", () => ({ logger }));
+const events = vi.hoisted(() => [] as Record<string, unknown>[]);
+vi.mock("@/lib/http", () => ({
+  clientIp: (r: Request) => r.headers.get("x-ip"),
+  withRequestEvent:
+    (_spec: unknown, handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown) =>
+    (request: Request) => {
+      const event = { event: "csp.violation" };
+      events.push(event);
+      return handler(request, undefined, event);
+    },
+}));
 
 const { POST } = await import("./route");
 
@@ -20,23 +28,25 @@ const report = (
     }),
   );
 
-beforeEach(() => logger.info.mockClear());
+beforeEach(() => void (events.length = 0));
 
 describe("POST /api/csp-report", () => {
   it("logs a redacted summary and answers 204", async () => {
     const res = await report("1.1.1.1");
     expect(res.status).toBe(204);
-    expect(logger.info).toHaveBeenCalledWith({
-      event: "csp.violation",
-      count: 1,
-      violations: [{ directive: "img-src", blocked: "x.example" }],
-    });
+    expect(events).toEqual([
+      {
+        event: "csp.violation",
+        count: 1,
+        violations: [{ directive: "img-src", blocked: "x.example" }],
+      },
+    ]);
   });
 
   it("refuses bodies over 16 KB and invalid JSON", async () => {
     expect((await report("2.2.2.2", "x".repeat(17 * 1024))).status).toBe(413);
     expect((await report("2.2.2.2", "{nope")).status).toBe(400);
-    expect(logger.info).not.toHaveBeenCalled();
+    expect(events.some((e) => "violations" in e)).toBe(false);
   });
 
   it("rate-limits one client to 30 reports a minute", async () => {

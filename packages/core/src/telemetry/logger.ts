@@ -46,6 +46,12 @@ export function levelOf(event: WideEvent): "info" | "error" {
   return "info";
 }
 
+/**
+ * What the logger accepts: a wide event, plus any other keys, which the
+ * allowlist drops (and lists in `dropped_fields`) instead of failing the build.
+ */
+export type LogInput = WideEvent & Record<string, unknown>;
+
 export type EmitOptions = {
   /** Fast, successful, frequent work (page renders, polls): subject to LOG_SAMPLE_RATE. */
   routine?: boolean;
@@ -54,7 +60,7 @@ export type EmitOptions = {
 
 /** Serialises an event as it will be written, or null when sampling drops it. */
 export function formatEvent(
-  event: WideEvent,
+  event: LogInput,
   options: EmitOptions = {},
   random: () => number = Math.random,
 ): { level: "info" | "error"; line: string } | null {
@@ -82,7 +88,7 @@ export function formatEvent(
   return { level, line };
 }
 
-function emit(event: WideEvent, options?: EmitOptions) {
+function emit(event: LogInput, options?: EmitOptions) {
   const formatted = formatEvent(event, options);
   if (!formatted) return;
   if (formatted.level === "error") console.error(formatted.line);
@@ -92,12 +98,12 @@ function emit(event: WideEvent, options?: EmitOptions) {
 export const logger = {
   /** Emits a finished unit of work, its level derived from the outcome. */
   emit,
-  info: (event: WideEvent) => emit(event, { level: "info" }),
-  error: (event: WideEvent) => emit(event, { level: "error" }),
+  info: (event: LogInput) => emit(event, { level: "info" }),
+  error: (event: LogInput) => emit(event, { level: "error" }),
 };
 
 /** As an Effect, for code that runs in one. */
-export const emitEvent = (event: WideEvent, options?: EmitOptions) =>
+export const emitEvent = (event: LogInput, options?: EmitOptions) =>
   Effect.sync(() => emit(event, options));
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -123,10 +129,7 @@ export const wideEventLogger = Logger.make(({ logLevel, message, context, annota
   const fields: Record<string, unknown> = {};
   for (const [key, value] of annotations) fields[key] = value;
   for (const part of parts.slice(1)) if (isRecord(part)) Object.assign(fields, part);
-  emit(
-    { ...fields, event: name, unit: "log" } as WideEvent,
-    { level: isError ? "error" : "info" },
-  );
+  emit({ ...fields, event: name, unit: "log" }, { level: isError ? "error" : "info" });
 });
 
 /** Replaces Effect's default (logfmt) logger with `wideEventLogger`. */

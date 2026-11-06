@@ -28,6 +28,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "@/lib/receipts";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -217,6 +218,7 @@ async function RecentSection() {
 }
 
 export default function HomePage() {
+  logPageRender("/app");
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader>

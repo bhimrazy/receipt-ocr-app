@@ -16,6 +16,7 @@ import { headers } from "next/headers";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Members" };
 
@@ -47,6 +48,7 @@ async function loadWorkspace(organizationId: string) {
 }
 
 export default async function MembersPage() {
+  logPageRender("/app/settings/members");
   const scope = await requireActiveScope();
   const workspace = await loadWorkspace(scope.organizationId);
   const canManage = scope.role === "owner" || scope.role === "admin";

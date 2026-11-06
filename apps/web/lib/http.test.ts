@@ -7,11 +7,13 @@ vi.mock("server-only", () => ({}));
 vi.mock("./runtime", () => ({ runtime: {} }));
 vi.mock("./log", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./log")>()),
-  logger: { error: vi.fn(), info: vi.fn() },
+  logger: { error: vi.fn(), info: vi.fn(), emit: vi.fn() },
 }));
 vi.mock("./env", () => ({ authEnv: { betterAuthUrl: "https://app.example", ipAddress } }));
 
-const { causeDetail, clientIp, crossOriginResponse, discardBody } = await import("./http");
+const { clientIp, crossOriginResponse, discardBody, failureResponse, withRequestEvent } =
+  await import("./http");
+const { logger } = await import("./log");
 
 const request = (headers: Record<string, string>) =>
   new Request("https://app.example/api/contact", { method: "POST", headers });
@@ -55,14 +57,65 @@ describe("crossOriginResponse (L4)", () => {
   });
 });
 
-describe("causeDetail (L2)", () => {
-  it("keeps the failed SQL but drops its bound params", () => {
-    const cause = new Error(
-      'Failed query: update "receipts" set "merchant" = $1 where "id" = $2\nparams: Jane Doe Pharmacy,0f8f',
+describe("failureResponse (L2)", () => {
+  it("records the error's tag, cause class and SQLSTATE, never the message or params", async () => {
+    const { Cause } = await import("effect");
+    const { DbError } = await import("@receipt-ocr/core");
+    const cause = Object.assign(
+      new Error(
+        'Failed query: update "receipts" set "merchant" = $1\nparams: Jane Doe Pharmacy,0f8f',
+      ),
+      { code: "23505" },
     );
-    const detail = causeDetail({ cause });
-    expect(detail).toContain('update "receipts"');
-    expect(detail).not.toContain("Jane Doe");
+    const event = { event: "receipt.update" } as Parameters<typeof failureResponse>[1] & object;
+    const res = failureResponse(
+      Cause.fail(new DbError({ message: "Update failed", cause })),
+      event,
+    );
+    expect(res.status).toBe(500);
+    expect(event.error).toEqual({ type: "DbError", class: "Error", code: "23505" });
+    expect(JSON.stringify(event)).not.toContain("Jane Doe");
+  });
+});
+
+describe("withRequestEvent", () => {
+  it("writes one event with route, method, status, duration and outcome", async () => {
+    vi.mocked(logger.emit).mockClear();
+    const handler = withRequestEvent(
+      { event: "receipt.poll", route: "/api/receipts/[id]", routine: true },
+      (_request, _context, event) => {
+        event.receipt_id = "r-1";
+        return new Response(null, { status: 404 });
+      },
+    );
+    await handler(new Request("https://app.example/api/receipts/r-1?x=1"));
+    expect(logger.emit).toHaveBeenCalledTimes(1);
+    const [event, options] = vi.mocked(logger.emit).mock.calls[0]!;
+    expect(event).toMatchObject({
+      event: "receipt.poll",
+      unit: "request",
+      route: "/api/receipts/[id]",
+      method: "GET",
+      status_code: 404,
+      outcome: "rejected",
+      receipt_id: "r-1",
+    });
+    expect(typeof event.duration_ms).toBe("number");
+    expect(options).toEqual({ routine: true });
+  });
+
+  it("records a thrown error as a 500 and rethrows it", async () => {
+    vi.mocked(logger.emit).mockClear();
+    const handler = withRequestEvent({ event: "x.y", route: "/api/x" }, () => {
+      throw new TypeError("secret receipt text");
+    });
+    await expect(handler(new Request("https://app.example/api/x"))).rejects.toThrow();
+    const [event] = vi.mocked(logger.emit).mock.calls[0]!;
+    expect(event).toMatchObject({
+      status_code: 500,
+      outcome: "error",
+      error: { class: "TypeError" },
+    });
   });
 });
 

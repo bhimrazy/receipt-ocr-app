@@ -16,7 +16,14 @@ vi.mock("@receipt-ocr/core", () => ({ hitRateLimit: () => ({}) }));
 vi.mock("@/lib/runtime", () => ({
   runtime: { runPromise: async () => ({ allowed: true, retryAfterSeconds: 0 }) },
 }));
-vi.mock("@/lib/http", () => ({ clientIp: () => "1.1.1.1", crossOriginResponse: () => null }));
+vi.mock("@/lib/http", () => ({
+  clientIp: () => "1.1.1.1",
+  crossOriginResponse: () => null,
+  withRequestEvent:
+    (_spec: unknown, handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown) =>
+    (request: Request, context?: unknown) =>
+      handler(request, context, { event: "test" }),
+}));
 vi.mock("@/lib/turnstile", () => ({ checkTurnstile: async () => env.turnstile }));
 vi.mock("@/lib/log", () => ({ logger: { info: vi.fn() } }));
 vi.mock("@/lib/env", () => ({

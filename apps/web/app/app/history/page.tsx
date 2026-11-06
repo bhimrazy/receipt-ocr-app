@@ -23,6 +23,7 @@ import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { Download } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense, cache } from "react";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "History" };
 
@@ -61,6 +62,7 @@ export default async function HistoryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  logPageRender("/app/history");
   const { page: requested, ...raw } = filtersFromSearchParams(await searchParams);
   const filters = cleanFilters(raw);
   const query = JSON.stringify({ ...filters, page: requested });

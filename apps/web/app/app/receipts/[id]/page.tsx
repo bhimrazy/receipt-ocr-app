@@ -3,8 +3,10 @@ import { canEditReceipt } from "@/lib/receipt-permissions";
 import { getReceiptForWorkspace } from "@/lib/receipts";
 import { requireActiveScope } from "@/lib/session";
 import { notFound } from "next/navigation";
+import { logPageRender } from "@/lib/page-event";
 
 export default async function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
+  logPageRender("/app/receipts/[id]");
   const { id } = await params;
   const [receipt, scope] = await Promise.all([getReceiptForWorkspace(id), requireActiveScope()]);
   if (!receipt) notFound();
