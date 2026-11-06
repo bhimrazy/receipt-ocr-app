@@ -6,7 +6,10 @@ import { safeRedirect } from "@/lib/redirect";
 import { getSession } from "@/lib/session";
 import { redirect as nextRedirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Create account" };
+export const metadata: Metadata = {
+  title: "Create account",
+  robots: { index: false, follow: true },
+};
 
 export default async function SignUpPage({
   searchParams,
@@ -26,7 +29,20 @@ export default async function SignUpPage({
   return (
     <AuthLayout subtitle="Create a free account. Photograph a receipt, check what was read, export a CSV.">
       {authEnabled ? (
-        <CredentialsForm mode="sign-up" providers={providers} redirectTo={redirectTo} />
+        <CredentialsForm
+          mode="sign-up"
+          notice={
+            redirectTo.startsWith("/accept-invitation/")
+              ? ({
+                  kind: "info",
+                  message:
+                    "Use the email address the invitation was sent to, so you can accept it.",
+                } as const)
+              : undefined
+          }
+          providers={providers}
+          redirectTo={redirectTo}
+        />
       ) : (
         <AuthNotConfiguredCard />
       )}

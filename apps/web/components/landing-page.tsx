@@ -17,7 +17,6 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { Brand } from "@/components/brand";
 import { ContactButton } from "@/components/contact-button";
 import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
 import { ProductPreview } from "@/components/product-preview";

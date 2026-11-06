@@ -93,7 +93,7 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
           {isPending ? (
             <span aria-hidden className="h-11 w-28 animate-pulse rounded-full bg-wash lg:h-10" />
           ) : session ? (
-            <Link className={cn(buttonVariants(), "h-11 lg:h-10")} href="/app/upload">
+            <Link className={cn(buttonVariants(), "h-11 lg:h-10")} href="/app">
               Open the app <ArrowRight aria-hidden className="size-4" />
             </Link>
           ) : (

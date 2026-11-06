@@ -3,7 +3,10 @@ import { AuthLayout, AuthNotConfiguredCard } from "@/components/auth/auth-layout
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 import { authEnabled } from "@/lib/env";
 
-export const metadata: Metadata = { title: "Reset password" };
+export const metadata: Metadata = {
+  title: "Reset password",
+  robots: { index: false, follow: true },
+};
 
 export default function ForgotPasswordPage() {
   return (

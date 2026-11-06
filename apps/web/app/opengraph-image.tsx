@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "receiptOCR: snap a receipt, get a spreadsheet";
+export const alt = "receiptOCR: Turn receipt photos into spreadsheet rows";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -65,8 +65,8 @@ export default function OpengraphImage() {
           letterSpacing: -2,
         }}
       >
-        <span>Snap a receipt.</span>
-        <span style={{ color: "#34d399" }}>Get a spreadsheet.</span>
+        <span>Turn receipt photos into</span>
+        <span style={{ color: "#34d399" }}>spreadsheet rows</span>
       </div>
       <div style={{ marginTop: 40, fontSize: 28, color: "#9a9aa3" }}>
         Merchant · Items · Tax · Total, checked and exported to CSV

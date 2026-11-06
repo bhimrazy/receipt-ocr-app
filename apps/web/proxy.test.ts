@@ -18,4 +18,15 @@ describe("proxy", () => {
   it("lets requests with a session cookie through", () => {
     expect(location("http://localhost/app", "better-auth.session_token=abc")).toBeNull();
   });
+
+  it("hands the requested path to server components, ignoring a spoofed header", () => {
+    const res = proxy(
+      new NextRequest("http://localhost/app/history?status=failed", {
+        headers: { cookie: "better-auth.session_token=abc", "x-requested-path": "//evil.example" },
+      }),
+    );
+    expect(res.headers.get("x-middleware-request-x-requested-path")).toBe(
+      "/app/history?status=failed",
+    );
+  });
 });
