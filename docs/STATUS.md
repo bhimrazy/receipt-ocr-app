@@ -122,7 +122,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.
 - Better Auth: verify the OAuth callback turns a banned user into `?error=BANNED_USER`.
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
-- Benchmark has five synthetic images and no committed results.
+- Benchmark has six synthetic images and no committed results.
 - Load test findings (after #37): upload capacity on the small server fell from 64/s to between 12/s (holds) and
   48/s (fails: end-to-end p95 17 s, Postgres CPU 87%). The quota count (`ocr_rounds` per user, per page and twice per
   upload) is still the top Postgres statement, with the job queue queries next. Next: a performance track that fills

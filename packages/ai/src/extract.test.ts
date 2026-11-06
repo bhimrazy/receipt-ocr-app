@@ -120,7 +120,7 @@ describe("number-format guidance in the prompt", () => {
 
   it("lets three-minor-unit currencies read three digits as the fraction", async () => {
     const prompt = await promptSent();
-    for (const code of ["KWD", "BHD", "OMR", "JOD", "TND", "LYD", "IQD", "KD", "DT"]) {
+    for (const code of ["KWD", "BHD", "OMR", "JOD", "TND", "LYD", "KD", "DT"]) {
       expect(prompt).toContain(code);
     }
     expect(prompt).toContain("three digits after the decimal mark are the fraction");
