@@ -1,4 +1,5 @@
 export {
+  getReceiptCounts,
   getUsageSummary,
   listReceiptSummaries,
   type ReceiptListFilters as ReceiptFilters,

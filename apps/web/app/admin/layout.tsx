@@ -1,50 +1,17 @@
 import { Brand } from "@/components/brand";
 import { UserMenu } from "@/components/user-menu";
-import { authEnabled } from "@/lib/env";
-import { getSession, isAdmin } from "@/lib/session";
-import { buttonVariants } from "@receipt-ocr/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@receipt-ocr/ui/components/card";
+import { requireAdmin } from "@/lib/session";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
-import { ArrowLeft, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
 import { AdminBackLink, AdminSidebarNav, AdminTabBar } from "./admin-nav";
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  // Without auth there is no admin to check, so explain rather than crash.
-  if (!authEnabled) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-5 text-foreground">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldAlert aria-hidden="true" className="size-5 text-primary" />
-              Admin isn&apos;t available
-            </CardTitle>
-            <CardDescription>
-              Sign-in isn&apos;t set up on this server, so there are no admins yet.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link className={buttonVariants({ variant: "outline" })} href="/">
-              <ArrowLeft aria-hidden="true" />
-              Back home
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+// Signed-in pages are private; keep them out of search results even if a link leaks.
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
-  const session = await getSession();
-  if (!session) redirect("/sign-in");
-  if (!isAdmin(session)) notFound();
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const session = await requireAdmin();
 
   return (
     <Toaster>
@@ -72,7 +39,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               Admin
             </span>
             <div className="ml-auto">
-              <UserMenu />
+              <UserMenu
+                showAdmin
+                user={{
+                  name: session.user.name ?? null,
+                  email: session.user.email,
+                  image: session.user.image ?? null,
+                }}
+              />
             </div>
           </header>
           <main className="flex-1 overflow-auto p-5 pb-20 md:p-10">{children}</main>

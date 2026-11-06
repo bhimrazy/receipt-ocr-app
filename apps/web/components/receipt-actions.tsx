@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@receipt-ocr/ui/components/dropdown-menu";
 import { toast } from "@receipt-ocr/ui/components/toast";
-import { Copy, Download, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Copy, Download, MoreHorizontal, Pencil, Trash2, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { csvFilename, receiptItemsToCsv } from "@/lib/csv";
@@ -42,19 +42,11 @@ function useDeleteReceipt(receipt: ReceiptWithItems) {
 }
 
 /**
- * Actions per state. Completed: Edit and Export CSV, with Copy JSON and
- * Delete in the overflow menu. Failed or still reading: Delete only (retry
- * lives in the failure banner), since there is nothing to export yet.
+ * Header actions. Completed: Export CSV, with Copy JSON and Delete in the
+ * overflow menu (editing lives on the Details card). Failed or still reading:
+ * Delete only, since there is nothing to export yet.
  */
-export function ReceiptActions({
-  receipt,
-  editing = false,
-  onEdit,
-}: {
-  receipt: ReceiptWithItems;
-  editing?: boolean;
-  onEdit?: () => void;
-}) {
+export function ReceiptActions({ receipt }: { receipt: ReceiptWithItems }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const remove = useDeleteReceipt(receipt);
   const completed = receipt.status === "completed";
@@ -80,7 +72,7 @@ export function ReceiptActions({
     <ConfirmDialog
       cancelLabel="Keep receipt"
       confirmLabel="Delete receipt"
-      description="The image, the extracted data and its line items are removed for everyone in this workspace. This can't be undone."
+      description="The photo, the extracted data and its line items are removed for everyone in this workspace. This can't be undone."
       destructive
       onConfirm={remove}
       onOpenChange={setConfirmOpen}
@@ -92,7 +84,7 @@ export function ReceiptActions({
   if (!completed) {
     return (
       <>
-        <Button className="max-md:w-full" onClick={() => setConfirmOpen(true)} variant="outline">
+        <Button onClick={() => setConfirmOpen(true)} variant="outline">
           <Trash2 aria-hidden="true" />
           Delete
         </Button>
@@ -103,12 +95,6 @@ export function ReceiptActions({
 
   return (
     <div className="flex w-full gap-2 md:w-auto">
-      {onEdit ? (
-        <Button aria-pressed={editing} className="max-md:hidden" onClick={onEdit} variant="outline">
-          <Pencil aria-hidden="true" />
-          {editing ? "Editing" : "Edit"}
-        </Button>
-      ) : null}
       <Button className="max-md:flex-1" onClick={exportCsv}>
         <Download aria-hidden="true" />
         Export CSV
@@ -121,12 +107,6 @@ export function ReceiptActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuGroup>
-            {onEdit ? (
-              <DropdownMenuItem className="md:hidden" onClick={onEdit}>
-                <Pencil aria-hidden="true" />
-                {editing ? "Stop editing" : "Edit"}
-              </DropdownMenuItem>
-            ) : null}
             <DropdownMenuItem onClick={copyJson}>
               <Copy aria-hidden="true" />
               Copy JSON
@@ -147,39 +127,86 @@ export function ReceiptActions({
 }
 
 /**
- * Owns the edit toggle. Editing swaps the extracted-data card for the form,
- * so the receipt image stays beside the fields being corrected.
+ * Owns the edit toggle. Editing swaps the Details card for the form, so the
+ * photo stays beside the fields being corrected; the checklist's button opens
+ * the same form.
  */
 export function ReceiptWorkspace({
   receipt,
-  header,
+  checks,
   image,
-  extracted,
+  details,
+  items,
+  footer,
 }: {
   receipt: ReceiptWithItems;
-  header: React.ReactNode;
+  /** Plain-words reasons to check this receipt; empty when there are none. */
+  checks: string[];
   image: React.ReactNode;
-  extracted: React.ReactNode;
+  details: React.ReactNode;
+  items: React.ReactNode;
+  footer?: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
 
+  function startEditing() {
+    setEditing(true);
+    // Move focus into the form so keyboard and screen-reader users land on it.
+    requestAnimationFrame(() => document.getElementById("merchant")?.focus());
+  }
+
   return (
     <>
-      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
-        {header}
-        <ReceiptActions
-          editing={editing}
-          onEdit={() => setEditing((value) => !value)}
-          receipt={receipt}
-        />
-      </div>
-      <div className="grid gap-5 lg:grid-cols-2">
+      {checks.length > 0 ? (
+        <section
+          aria-labelledby="checks-heading"
+          className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/[0.07] p-4 sm:flex-row sm:items-start"
+        >
+          <TriangleAlert
+            aria-hidden="true"
+            className="size-5 shrink-0 text-warning max-sm:hidden"
+          />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-medium text-warning" id="checks-heading">
+              Check this receipt before you export it
+            </h2>
+            <ul className="mt-2 flex list-disc flex-col gap-1 pl-4 text-sm text-muted-foreground marker:text-warning">
+              {checks.map((check) => (
+                <li key={check}>{check}</li>
+              ))}
+            </ul>
+          </div>
+          {editing ? null : (
+            <Button className="shrink-0" onClick={startEditing} variant="outline">
+              <Pencil aria-hidden="true" />
+              Correct details
+            </Button>
+          )}
+        </section>
+      ) : null}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         {image}
-        {editing ? (
-          <ReceiptEditor onClose={() => setEditing(false)} receipt={receipt} />
-        ) : (
-          extracted
-        )}
+        <div className="flex min-w-0 flex-col gap-5">
+          {editing ? (
+            <ReceiptEditor onClose={() => setEditing(false)} receipt={receipt} />
+          ) : (
+            <div className="relative">
+              {details}
+              <Button
+                aria-label="Edit details"
+                className="absolute top-3 right-3"
+                onClick={startEditing}
+                size="sm"
+                variant="outline"
+              >
+                <Pencil aria-hidden="true" />
+                Edit
+              </Button>
+            </div>
+          )}
+          {items}
+          {footer}
+        </div>
       </div>
     </>
   );

@@ -1,20 +1,15 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@receipt-ocr/ui/components/card";
+import { Card, CardContent } from "@receipt-ocr/ui/components/card";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Label } from "@receipt-ocr/ui/components/label";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
-import { Check, KeyRound, Loader2, Trash2, UserRound } from "lucide-react";
+import { Check, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { SettingsSection } from "@/components/settings-section";
 import { authClient } from "@/lib/auth-client";
 
 function Status({ ok, error, id }: { ok: string | null; error: string | null; id?: string }) {
@@ -74,14 +69,7 @@ function ProfileCard({ initialName }: { initialName: string }) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <UserRound aria-hidden="true" className="size-5 text-primary" />
-          Profile
-        </CardTitle>
-        <CardDescription>The name shown on your account and to workspace members.</CardDescription>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-5">
         <form className="flex flex-col gap-3" noValidate onSubmit={save}>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="name">Name</Label>
@@ -146,17 +134,7 @@ function PasswordCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <KeyRound aria-hidden="true" className="size-5 text-primary" />
-          Password
-        </CardTitle>
-        <CardDescription>
-          For email sign-in. If you sign in with a social account, change your password with that
-          provider.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-5">
         <form className="flex flex-col gap-3" noValidate onSubmit={save}>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="current-password">Current password</Label>
@@ -220,17 +198,11 @@ function DangerCard({ email }: { email: string }) {
 
   return (
     <Card className="border-destructive/30">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-destructive">
-          <Trash2 aria-hidden="true" className="size-5" />
-          Delete account
-        </CardTitle>
-        <CardDescription>
+      <CardContent className="flex flex-col gap-3 pt-5">
+        <p className="text-sm text-muted-foreground">
           Permanently removes your account, your workspaces and every receipt in them. You
           can&apos;t undo this.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+        </p>
         {notice ? (
           <p
             className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning"
@@ -278,10 +250,28 @@ export function AccountSettings() {
   if (!session) return null;
 
   return (
-    <div className="space-y-5">
-      <ProfileCard initialName={session.user.name ?? ""} />
-      <PasswordCard />
-      <DangerCard email={session.user.email} />
-    </div>
+    <>
+      <SettingsSection
+        description="The name shown on your account and to workspace members."
+        id="profile-heading"
+        title="Profile"
+      >
+        <ProfileCard initialName={session.user.name ?? ""} />
+      </SettingsSection>
+      <SettingsSection
+        description="For email sign-in. If you sign in with Google or GitHub, change your password there."
+        id="password-heading"
+        title="Password"
+      >
+        <PasswordCard />
+      </SettingsSection>
+      <SettingsSection
+        description="Close your account for good."
+        id="delete-heading"
+        title="Delete account"
+      >
+        <DangerCard email={session.user.email} />
+      </SettingsSection>
+    </>
   );
 }

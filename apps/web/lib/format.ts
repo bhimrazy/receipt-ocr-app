@@ -105,3 +105,11 @@ export function formatConfidence(value: string | number | null | undefined): str
   const score = toNumber(value);
   return score === null ? null : `${Math.round(score * 100)}%`;
 }
+
+/** "in 6 hours", "in 45 minutes": how long until `target`, rounded down to something readable. */
+export function formatTimeUntil(target: Date, now = new Date()): string {
+  const minutes = Math.max(1, Math.ceil((target.getTime() - now.getTime()) / 60_000));
+  if (minutes < 60) return `in ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  const hours = Math.floor(minutes / 60);
+  return `in ${hours} ${hours === 1 ? "hour" : "hours"}`;
+}

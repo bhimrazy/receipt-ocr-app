@@ -1,6 +1,4 @@
 import { MembersManager } from "@/components/members-manager";
-import { authEnabled } from "@/lib/env";
-import { Card, CardContent } from "@receipt-ocr/ui/components/card";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -29,21 +27,13 @@ export default function MembersPage() {
             </li>
           </ol>
         </nav>
-        <h1 className="text-3xl font-semibold tracking-tight">Workspace members</h1>
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Workspace members</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Invite teammates and choose what they can do. Everyone in a workspace shares its receipts.
         </p>
       </div>
 
-      {authEnabled ? (
-        <MembersManager />
-      ) : (
-        <Card>
-          <CardContent className="pt-5 text-sm text-muted-foreground">
-            Workspaces aren&apos;t available because sign-in isn&apos;t set up on this server.
-          </CardContent>
-        </Card>
-      )}
+      <MembersManager />
     </div>
   );
 }

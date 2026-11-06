@@ -1,14 +1,14 @@
 "use client";
 
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { History, Settings, ShieldCheck, Upload, type LucideIcon } from "lucide-react";
+import { History, House, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean };
 
 export const APP_NAV: NavItem[] = [
-  { href: "/app/upload", label: "Upload", icon: Upload },
+  { href: "/app", label: "Home", icon: House, exact: true },
   { href: "/app/history", label: "History", icon: History },
   { href: "/app/settings", label: "Settings", icon: Settings },
 ];
@@ -59,10 +59,7 @@ export function BottomTabBar({ items, label = "Main" }: { items: NavItem[]; labe
       aria-label={label}
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
-      <ul
-        className="grid"
-        style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
-      >
+      <ul className="grid auto-cols-fr grid-flow-col">
         {items.map((item) => {
           const Icon = item.icon;
           const active = isActive(pathname, item);

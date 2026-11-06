@@ -5,19 +5,20 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { auth, authEnabled, type Session } from "./auth";
+import { REQUESTED_PATH_HEADER } from "./redirect";
 import { runtime } from "./runtime";
 
 /**
  * Single place for server-side session lookups, deduplicated per request.
- * Returns null when auth is not configured (preview mode) or there is no
- * valid session.
+ * Returns null when there is no valid session, including when auth isn't
+ * configured: then nobody can be signed in and /app sends visitors to /sign-in.
  */
 export const getSession = cache(async (): Promise<Session | null> => {
   if (!authEnabled) return null;
   return auth.api.getSession({ headers: await headers() });
 });
 
-/** Session user id, or null when signed out / auth not configured. */
+/** Session user id, or null when signed out. */
 export async function getCurrentUserId(): Promise<string | null> {
   const session = await getSession();
   return session?.user.id ?? null;
@@ -32,7 +33,11 @@ export function planFor(session: Session | null): string {
 /** For pages: redirects to /sign-in when there is no session. */
 export async function requireSession(): Promise<Session> {
   const session = await getSession();
-  if (!session) redirect("/sign-in");
+  if (!session) {
+    // Set by proxy.ts for guarded paths; safeRedirect() re-validates it on /sign-in.
+    const from = (await headers()).get(REQUESTED_PATH_HEADER);
+    redirect(from ? `/sign-in?redirect=${encodeURIComponent(from)}` : "/sign-in");
+  }
   return session;
 }
 
@@ -44,8 +49,7 @@ export function isAdmin(session: Session | null): boolean {
 /**
  * For admin pages and server actions: requires a signed-in admin. Redirects
  * anonymous visitors to /sign-in and 404s non-admins (avoids leaking that the
- * admin area exists). Callers must still gate on `authEnabled` for the
- * "not configured" state — this throws/redirects rather than degrading.
+ * admin area exists).
  */
 export async function requireAdmin(): Promise<Session> {
   const session = await requireSession();
@@ -82,9 +86,15 @@ export const getActiveScope = cache(async (): Promise<ActiveScope | null> => {
   );
 });
 
-/** For pages: requires a signed-in user who is in a workspace. */
+/**
+ * For pages and actions: requires a signed-in user who is in a workspace.
+ * A session without a workspace must not bounce to /sign-in (which sends
+ * signed-in users straight back to /app); the /app layout renders a
+ * "not in a workspace" state before pages get here, so this throws.
+ */
 export async function requireActiveScope(): Promise<ActiveScope> {
+  await requireSession();
   const scope = await getActiveScope();
-  if (!scope) redirect("/sign-in");
+  if (!scope) throw new Error("Signed-in user has no workspace");
   return scope;
 }

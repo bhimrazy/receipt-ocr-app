@@ -11,12 +11,12 @@ test.skip(
 
 test("uploading a receipt image shows the extracted merchant and total", async ({ page }) => {
   await signUp(page, uniqueEmail("upload"));
-  await page.goto("/app/upload");
+  await page.goto("/app");
   await page
-    .locator('input[type="file"][accept="image/*"]')
+    .locator('input[type="file"][multiple]')
     .first()
     .setInputFiles(path.join(import.meta.dirname, "../../../bench/fixtures/npr-lakh.png"));
   await page.getByRole("button", { name: "Read receipt" }).click();
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
-  await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("Untitled receipt");
+  await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("npr-lakh.png");
 });
