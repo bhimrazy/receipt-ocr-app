@@ -309,6 +309,8 @@ export const jobs = pgTable(
     // Admin lists and retention.
     index("jobs_state_finished_idx").on(table.state, table.finishedAt),
     index("jobs_org_created_idx").on(table.organizationId, table.createdAt),
+    // The admin jobs list, newest first.
+    index("jobs_created_at_idx").on(table.createdAt),
     check("jobs_attempts_check", sql`attempts >= 0 and max_attempts >= 1`),
     // A code such as `rate-limited` or `lease-expired`, never a message.
     check("jobs_last_error_kind_check", sql`last_error_kind ~ '^[a-z0-9.-]{1,40}$'`),
