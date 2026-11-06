@@ -151,7 +151,7 @@ export function MembersTable({
                   {busy ? (
                     <Loader2
                       aria-label="Saving"
-                      className="size-4 animate-spin text-muted-foreground"
+                      className="size-4 animate-spin motion-reduce:animate-none text-muted-foreground"
                     />
                   ) : null}
                   {editable ? (

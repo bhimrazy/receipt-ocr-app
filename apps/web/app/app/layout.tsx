@@ -1,4 +1,5 @@
 import { AppSidebarNav, AppTabBar } from "@/components/app-nav";
+import { SkipLink } from "@/components/skip-link";
 import { Brand } from "@/components/brand";
 import { NoWorkspace } from "@/components/no-workspace";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
@@ -58,6 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <Toaster>
+      <SkipLink />
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         {session.session.impersonatedBy ? <ImpersonationBanner email={session.user.email} /> : null}
         <div className="flex min-h-0 flex-1">
@@ -90,7 +92,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <UserMenu showAdmin={showAdmin} user={user} />
               </div>
             </header>
-            <main className="min-w-0 flex-1 px-4 pt-6 pb-28 md:px-10 md:py-10">{children}</main>
+            <main
+              id="main-content"
+              tabIndex={-1}
+              className="min-w-0 flex-1 px-4 pt-6 pb-28 md:px-10 md:py-10"
+            >
+              {children}
+            </main>
           </div>
         </div>
         <AppTabBar showAdmin={showAdmin} />

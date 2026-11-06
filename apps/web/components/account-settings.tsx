@@ -82,7 +82,9 @@ function ProfileCard({ initialName }: { initialName: string }) {
           <Status error={error} id="name-error" ok={ok} />
           <div>
             <Button disabled={pending} type="submit">
-              {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+              {pending ? (
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : null}
               Save
             </Button>
           </div>
@@ -167,7 +169,9 @@ function PasswordCard() {
           <Status error={error} id="password-error" ok={ok} />
           <div>
             <Button disabled={pending} type="submit">
-              {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+              {pending ? (
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : null}
               Change password
             </Button>
           </div>

@@ -160,7 +160,7 @@ export function WorkspaceSwitcher({
                   {switchingTo === org.id ? (
                     <Loader2
                       aria-label="Switching"
-                      className="animate-spin text-muted-foreground"
+                      className="animate-spin motion-reduce:animate-none text-muted-foreground"
                     />
                   ) : isActive ? (
                     <Check aria-label="Current workspace" className="text-primary" />
@@ -229,7 +229,9 @@ export function WorkspaceSwitcher({
                 Cancel
               </Button>
               <Button disabled={creating} type="submit">
-                {creating ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+                {creating ? (
+                  <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+                ) : null}
                 Create workspace
               </Button>
             </DialogFooter>
