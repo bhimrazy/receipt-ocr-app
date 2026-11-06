@@ -14,6 +14,9 @@ const contentSecurityPolicy = [
   "form-action 'self'",
   "base-uri 'self'",
   "object-src 'none'",
+  // Both: Firefox and Safari still only send report-uri; Chromium prefers report-to.
+  "report-uri /api/csp-report",
+  "report-to csp",
 ].join("; ");
 
 const securityHeaders = [
@@ -25,6 +28,7 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
   { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
   { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy },
+  { key: "Reporting-Endpoints", value: 'csp="/api/csp-report"' },
 ];
 
 const nextConfig: NextConfig = {
