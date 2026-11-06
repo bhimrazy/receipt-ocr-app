@@ -38,9 +38,37 @@ type ConfirmDialogProps = {
  * so Enter never confirms by accident; Escape and focus return come from
  * the Base UI AlertDialog.
  */
-function ConfirmDialog({
-  open,
-  onOpenChange,
+function ConfirmDialog({ open, onOpenChange, confirmText, ...rest }: ConfirmDialogProps) {
+  const cancelRef = React.useRef<HTMLButtonElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  // Read only by the close guard below, so a ref is enough.
+  const pendingRef = React.useRef(false);
+
+  return (
+    <AlertDialog open={open} onOpenChange={(next) => !pendingRef.current && onOpenChange(next)}>
+      <AlertDialogContent initialFocus={confirmText !== undefined ? inputRef : cancelRef}>
+        {/* Mounts only while open, so typed text, errors and pending reset on every open. */}
+        <ConfirmBody
+          {...rest}
+          cancelRef={cancelRef}
+          confirmText={confirmText}
+          inputRef={inputRef}
+          onClose={() => onOpenChange(false)}
+          pendingRef={pendingRef}
+        />
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+type ConfirmBodyProps = Omit<ConfirmDialogProps, "open" | "onOpenChange"> & {
+  cancelRef: React.RefObject<HTMLButtonElement | null>;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  pendingRef: React.RefObject<boolean>;
+  onClose: () => void;
+};
+
+function ConfirmBody({
   title,
   description,
   confirmLabel,
@@ -48,21 +76,20 @@ function ConfirmDialog({
   destructive = false,
   confirmText,
   onConfirm,
-}: ConfirmDialogProps) {
-  const cancelRef = React.useRef<HTMLButtonElement>(null);
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  cancelRef,
+  inputRef,
+  pendingRef,
+  onClose,
+}: ConfirmBodyProps) {
   const inputId = React.useId();
   const [typed, setTyped] = React.useState("");
-  const [pending, setPending] = React.useState(false);
+  const [pending, setPendingState] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (!open) {
-      setTyped("");
-      setError(null);
-      setPending(false);
-    }
-  }, [open]);
+  const setPending = (value: boolean) => {
+    pendingRef.current = value;
+    setPendingState(value);
+  };
 
   async function confirm() {
     setPending(true);
@@ -74,7 +101,8 @@ function ConfirmDialog({
         setPending(false);
         return;
       }
-      onOpenChange(false);
+      pendingRef.current = false;
+      onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Something went wrong. Try again.");
       setPending(false);
@@ -84,47 +112,47 @@ function ConfirmDialog({
   const blocked = confirmText !== undefined && typed.trim() !== confirmText;
 
   return (
-    <AlertDialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <AlertDialogContent initialFocus={confirmText !== undefined ? inputRef : cancelRef}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        {confirmText !== undefined ? (
-          <div className="flex flex-col gap-2">
-            <Label className="block text-xs leading-5 text-muted-foreground" htmlFor={inputId}>
-              Type <span className="font-mono break-all text-foreground">{confirmText}</span> to
-              confirm
-            </Label>
-            <Input
-              autoComplete="off"
-              id={inputId}
-              onChange={(event) => setTyped(event.target.value)}
-              ref={inputRef}
-              value={typed}
-            />
-          </div>
-        ) : null}
-        {error ? (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending} ref={cancelRef}>
-            {cancelLabel}
-          </AlertDialogCancel>
-          <Button
-            disabled={pending || blocked}
-            onClick={confirm}
-            variant={destructive ? "destructive" : "default"}
-          >
-            {pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
-            {confirmLabel}
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
+        <AlertDialogDescription>{description}</AlertDialogDescription>
+      </AlertDialogHeader>
+      {confirmText !== undefined ? (
+        <div className="flex flex-col gap-2">
+          <Label className="block text-xs leading-5 text-muted-foreground" htmlFor={inputId}>
+            Type <span className="font-mono break-all text-foreground">{confirmText}</span> to
+            confirm
+          </Label>
+          <Input
+            autoComplete="off"
+            id={inputId}
+            onChange={(event) => setTyped(event.target.value)}
+            ref={inputRef}
+            value={typed}
+          />
+        </div>
+      ) : null}
+      {error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <AlertDialogFooter>
+        <AlertDialogCancel disabled={pending} ref={cancelRef}>
+          {cancelLabel}
+        </AlertDialogCancel>
+        <Button
+          disabled={pending || blocked}
+          onClick={confirm}
+          variant={destructive ? "destructive" : "default"}
+        >
+          {pending ? (
+            <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          ) : null}
+          {confirmLabel}
+        </Button>
+      </AlertDialogFooter>
+    </>
   );
 }
 
