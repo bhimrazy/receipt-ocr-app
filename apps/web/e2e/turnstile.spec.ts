@@ -38,18 +38,22 @@ test.describe("with Turnstile on and a passing secret", () => {
     await expect(page.getByRole("main").getByRole("alert").first()).toContainText(/security check/);
   });
 
-  test("the support form sends with the token", async ({ page }) => {
+  test("the support form's message gets past the check", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Contact support" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Your email").fill(uniqueEmail("turnstile-contact"));
     await dialog.getByLabel("Message").fill("Does the contact form pass the check?");
     await expect(dialog.locator('[data-turnstile="ready"]')).toBeAttached({ timeout: 30_000 });
+    const reply = page.waitForResponse("**/api/contact");
     await dialog.getByRole("button", { name: "Send message" }).click();
-    await expect(dialog.getByText("Message sent")).toBeVisible();
+    // No mailer here, and a production build won't pretend delivery: 503 means the check passed
+    // and only sending failed (a missing or rejected token would be 400 or 403).
+    expect((await reply).status()).toBe(503);
+    await expect(dialog.getByRole("alert")).not.toContainText("security check");
   });
 
-  test("the server refuses requests that carry no token", async ({ request }) => {
+  test("the server refuses requests that carry no token", async ({ request, baseURL }) => {
     const signUp = await request.post("/api/auth/sign-up/email", {
       data: { name: "Bot", email: uniqueEmail("turnstile-bot"), password: PASSWORD },
     });
@@ -57,6 +61,7 @@ test.describe("with Turnstile on and a passing secret", () => {
     expect(await signUp.json()).toMatchObject({ code: "MISSING_RESPONSE" });
 
     const contact = await request.post("/api/contact", {
+      headers: { origin: baseURL! },
       data: { email: uniqueEmail("turnstile-bot"), message: "Hello there, bot" },
     });
     expect(contact.status()).toBe(400);
