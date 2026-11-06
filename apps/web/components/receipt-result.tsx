@@ -6,6 +6,7 @@ import {
 } from "@/components/page-header";
 import {
   EXTRACTION_FAILED_MESSAGE,
+  FREE_FAILED_ROUNDS,
   MAX_EXTRACTION_ATTEMPTS,
   type ReceiptWithItems,
 } from "@receipt-ocr/core";
@@ -272,7 +273,7 @@ export function ReceiptResult({
               </AlertDescription>
               <p className="mt-2 text-xs text-muted-foreground">
                 {triesLeft > 0
-                  ? `${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left for this photo. Failed receipts don't count toward your daily limit.`
+                  ? `${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left for this photo. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count toward your daily limit.`
                   : `This photo was tried ${MAX_EXTRACTION_ATTEMPTS} times. Upload a clearer photo instead.`}
               </p>
             </div>
