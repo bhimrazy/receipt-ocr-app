@@ -21,6 +21,7 @@ import {
   CircleAlert,
   ExternalLink,
   Loader2,
+  FileText,
   ReceiptText,
   TriangleAlert,
   Upload,
@@ -166,6 +167,8 @@ export function ReceiptResult({
     </PageHeader>
   );
 
+  const isPdf = receipt.imageObjectKey?.endsWith(".pdf") ?? false;
+
   const image = (
     <Card className="flex flex-col overflow-hidden lg:sticky lg:top-6">
       <div
@@ -174,7 +177,12 @@ export function ReceiptResult({
           receipt.imageUrl ? "min-h-72 lg:min-h-96" : "min-h-40",
         )}
       >
-        {receipt.imageUrl ? (
+        {receipt.imageUrl && isPdf ? (
+          <div className="flex flex-col items-center text-center">
+            <FileText aria-hidden="true" className="mb-3 size-12 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">This receipt is a PDF.</p>
+          </div>
+        ) : receipt.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             alt={`Photo of the receipt${completed && receipt.merchant ? ` from ${receipt.merchant}` : ""}`}
@@ -185,12 +193,14 @@ export function ReceiptResult({
         ) : (
           <div className="flex flex-col items-center text-center">
             <ReceiptText aria-hidden="true" className="mb-3 size-12 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">The photo isn&apos;t available.</p>
+            <p className="text-sm text-muted-foreground">The file isn&apos;t available.</p>
           </div>
         )}
       </div>
       <div className="flex min-h-11 items-center justify-between gap-3 border-t border-border px-4 py-2 text-xs text-muted-foreground">
-        <span className="min-w-0 truncate font-mono">{receipt.fileName ?? "Photo"}</span>
+        <span className="min-w-0 truncate font-mono">
+          {receipt.fileName ?? (isPdf ? "PDF" : "Photo")}
+        </span>
         {receipt.imageUrl ? (
           <a
             className="inline-flex shrink-0 items-center gap-1 rounded-md font-medium text-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
@@ -198,7 +208,7 @@ export function ReceiptResult({
             rel="noopener noreferrer"
             target="_blank"
           >
-            Open full size
+            {isPdf ? "Open PDF" : "Open full size"}
             <ExternalLink aria-hidden="true" className="size-3.5" />
           </a>
         ) : null}

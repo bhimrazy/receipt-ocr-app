@@ -9,6 +9,7 @@ import {
   Check,
   CircleAlert,
   Clock,
+  FileText,
   ImageUp,
   Loader2,
   ScanText,
@@ -20,12 +21,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { formatTime } from "@/lib/format";
 import { usageNote, type Usage } from "@/components/usage-meter";
+import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
 
 type UploadResponse = { receiptId?: string; error?: string };
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_FILES = 20;
-const ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif";
 
 /** Per-file state so a partly failed batch says exactly which files failed. */
 type Queued = {
@@ -56,11 +56,16 @@ function formatSize(bytes: number) {
     : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Rejects what the server would reject anyway, before spending a 10 MB round trip on it. */
-function rejectionFor(file: File): string | null {
-  if (!file.type.startsWith("image/")) return `${file.name} isn't a photo`;
-  if (file.size > MAX_FILE_SIZE) return `${file.name} is ${formatSize(file.size)} (10 MB max)`;
-  return null;
+/** Rejects what the server would reject anyway, before spending a round trip on it. */
+function typeRejection(file: File): string | null {
+  return acceptedType(file) ? null : `${file.name} isn't a photo or PDF`;
+}
+
+/** Checked after preparation, since photos usually shrink well under the limit. */
+function sizeRejection(file: File): string | null {
+  if (file.size <= UPLOAD_LIMIT_BYTES) return null;
+  const hint = acceptedType(file) === "application/pdf" ? " Try a smaller PDF or a photo." : "";
+  return `${file.name} is ${formatSize(file.size)} (${formatSize(UPLOAD_LIMIT_BYTES)} max).${hint}`;
 }
 
 function plural(n: number, word: string) {
@@ -110,6 +115,11 @@ export function UploadPanel({
   const [queue, setQueue] = useState<Queued[]>([]);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const queueRef = useRef<Queued[]>([]);
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -123,6 +133,7 @@ export function UploadPanel({
 
   function release(items: Queued[]) {
     for (const item of items) {
+      if (!item.preview) continue;
       URL.revokeObjectURL(item.preview);
       previews.current.delete(item.preview);
     }
@@ -133,28 +144,44 @@ export function UploadPanel({
   const remaining = usage ? Math.max(0, usage.limit - usage.used) : null;
   const waiting = queue.filter((item) => item.state === "waiting" || item.state === "error");
 
-  function addFiles(list: FileList | File[]) {
+  async function addFiles(list: FileList | File[]) {
     const rejected: string[] = [];
-    const accepted: Queued[] = [];
+    const candidates: File[] = [];
     for (const file of Array.from(list)) {
-      const rejection = rejectionFor(file);
+      const rejection = typeRejection(file);
+      if (rejection) rejected.push(rejection);
+      else candidates.push(file);
+    }
+    const initialRoom = Math.max(0, MAX_FILES - queue.length);
+    if (candidates.length > initialRoom)
+      rejected.push(`you can add ${MAX_FILES} receipts at a time`);
+    setNotice(null);
+    setSuccess(null);
+    setError(null);
+    setPreparing(true);
+    const accepted: Queued[] = [];
+    for (const original of candidates.slice(0, initialRoom)) {
+      const file = await prepareFile(original);
+      const rejection = sizeRejection(file);
       if (rejection) {
         rejected.push(rejection);
         continue;
       }
-      const preview = URL.createObjectURL(file);
-      previews.current.add(preview);
+      const preview = acceptedType(file) === "application/pdf" ? "" : URL.createObjectURL(file);
+      if (preview) previews.current.add(preview);
       accepted.push({ id: crypto.randomUUID(), file, preview, state: "waiting" });
     }
-    const room = Math.max(0, MAX_FILES - queue.length);
-    if (accepted.length > room) {
-      release(accepted.slice(room));
+    setPreparing(false);
+    const room = Math.max(0, MAX_FILES - queueRef.current.length);
+    release(accepted.slice(room));
+    if (accepted.length > room && !rejected.some((r) => r.startsWith("you can add"))) {
       rejected.push(`you can add ${MAX_FILES} receipts at a time`);
     }
-    setQueue([...queue, ...accepted.slice(0, room)]);
+    setQueue((current) => [
+      ...current,
+      ...accepted.slice(0, Math.max(0, MAX_FILES - current.length)),
+    ]);
     setNotice(rejected.length > 0 ? `Not added: ${rejected.join("; ")}.` : null);
-    setSuccess(null);
-    setError(null);
   }
 
   function remove(id: string) {
@@ -223,6 +250,7 @@ export function UploadPanel({
     }
   }
 
+  const locked = busy || preparing;
   const empty = queue.length === 0;
   const count = waiting.length;
   const overLimit = remaining !== null && count > remaining;
@@ -232,7 +260,7 @@ export function UploadPanel({
     <div className="flex flex-col gap-4">
       <Card
         aria-describedby="upload-hint"
-        aria-label="Add receipt photos"
+        aria-label="Add receipt photos or PDFs"
         className={cn(
           "relative cursor-pointer border-2 border-dashed text-center transition outline-none focus-visible:ring-2 focus-visible:ring-ring",
           empty ? "px-5 py-8 sm:py-12" : "p-4",
@@ -240,32 +268,36 @@ export function UploadPanel({
             ? "border-primary bg-primary/5"
             : "border-input/60 bg-card hover:border-primary/50",
         )}
-        onClick={() => inputRef.current?.click()}
+        onClick={() => {
+          if (!locked) inputRef.current?.click();
+        }}
         onDragLeave={() => setDragging(false)}
         onDragOver={(event) => {
           event.preventDefault();
-          setDragging(true);
+          if (!locked) setDragging(true);
         }}
         onDrop={(event) => {
           event.preventDefault();
           setDragging(false);
-          if (!busy) addFiles(event.dataTransfer.files);
+          if (!locked) void addFiles(event.dataTransfer.files);
         }}
         onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
+          if (!locked && (event.key === "Enter" || event.key === " ")) {
             event.preventDefault();
             inputRef.current?.click();
           }
         }}
+        aria-disabled={locked}
         role="button"
         tabIndex={0}
       >
         <input
           accept={ACCEPT}
           className="hidden"
+          disabled={locked}
           multiple
           onChange={(event) => {
-            if (event.target.files) addFiles(event.target.files);
+            if (event.target.files) void addFiles(event.target.files);
             event.target.value = "";
           }}
           ref={inputRef}
@@ -274,9 +306,10 @@ export function UploadPanel({
         <input
           accept={ACCEPT}
           capture="environment"
+          disabled={locked}
           className="hidden"
           onChange={(event) => {
-            if (event.target.files) addFiles(event.target.files);
+            if (event.target.files) void addFiles(event.target.files);
             event.target.value = "";
           }}
           ref={cameraRef}
@@ -296,23 +329,36 @@ export function UploadPanel({
               {empty ? (
                 <>
                   <span className="max-md:hidden">
-                    Drop receipt photos here, or click to choose
+                    Drop receipt photos or PDFs here, or click to choose
                   </span>
-                  <span className="md:hidden">Take a photo or choose from your library</span>
+                  <span className="md:hidden">Take a photo or choose a file</span>
                 </>
               ) : (
-                "Add more photos"
+                "Add more receipts"
               )}
             </p>
             <p className="mt-1 text-sm text-muted-foreground" id="upload-hint">
-              JPEG, PNG, WebP or HEIC, up to 10 MB each.
+              JPEG, PNG, WebP or HEIC photos of any size, which are shrunk before they upload, or
+              PDFs up to {formatSize(UPLOAD_LIMIT_BYTES)}.
               {empty ? ` Up to ${MAX_FILES} at a time.` : null}
+            </p>
+            <p aria-live="polite" className="mt-1 text-sm text-muted-foreground">
+              {preparing ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2
+                    aria-hidden="true"
+                    className="size-3.5 animate-spin motion-reduce:animate-none"
+                  />
+                  Preparing…
+                </span>
+              ) : null}
             </p>
           </div>
         </div>
         {empty ? (
           <div className="mt-6 flex w-full flex-col gap-2 md:hidden">
             <Button
+              disabled={locked}
               onClick={(event) => {
                 event.stopPropagation();
                 cameraRef.current?.click();
@@ -323,6 +369,7 @@ export function UploadPanel({
               Take a photo
             </Button>
             <Button
+              disabled={locked}
               onClick={(event) => {
                 event.stopPropagation();
                 inputRef.current?.click();
@@ -331,7 +378,7 @@ export function UploadPanel({
               variant="outline"
             >
               <ImageUp aria-hidden="true" />
-              Choose photos
+              Choose files
             </Button>
           </div>
         ) : null}
@@ -368,15 +415,21 @@ export function UploadPanel({
               Remove all
             </Button>
           </div>
-          <ul aria-label="Photos to read" className="divide-y divide-border">
+          <ul aria-label="Receipts to read" className="divide-y divide-border">
             {queue.map((item) => (
               <li className="flex items-center gap-3 py-2 pr-2 pl-4" key={item.id}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  alt=""
-                  className="size-11 shrink-0 rounded-md border border-border bg-muted object-cover"
-                  src={item.preview}
-                />
+                {item.preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    alt=""
+                    className="size-11 shrink-0 rounded-md border border-border bg-muted object-cover"
+                    src={item.preview}
+                  />
+                ) : (
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
+                    <FileText aria-hidden="true" className="size-5" />
+                  </span>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-mono text-xs">{item.file.name}</p>
                   <p
