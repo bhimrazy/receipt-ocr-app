@@ -13,6 +13,8 @@ export default function robots(): MetadataRoute.Robots {
         "/accept-invitation",
         "/reset-password",
         "/forgot-password",
+        "/landing-",
+        "/final-",
       ],
     },
     ...(siteUrlMissing ? {} : { sitemap: `${siteUrl}/sitemap.xml` }),

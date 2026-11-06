@@ -91,7 +91,7 @@ test("an invited person signs up, confirms their email and joins the workspace",
   } finally {
     await sql.end();
   }
-  // A new session picks up the confirmed address (the session cookie caches the user).
+  // Sign in again so the session reflects the confirmed address.
   await guest.context().clearCookies();
   await signIn(guest, invitee);
 

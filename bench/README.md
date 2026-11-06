@@ -38,16 +38,17 @@ APP_CPUS=2 APP_MEM=2g scripts/load.sh capacity   # try a bigger box
 ```
 
 Output: `bench/results/load-<date>.md` (commit this), `.json` (everything, gitignored) and a `load-<date>/` folder with
-the raw k6 summaries and logs, the container samples and the app's logs. The exit status is non-zero when a threshold
-is crossed. In CI: Actions, "Load test", Run workflow (inputs: scenarios, app CPUs, app memory); it also runs weekly on
-Monday. It needs no secrets and uploads the same files as an artifact plus a job summary.
+the raw k6 summaries and logs, the container samples and the app's logs. The exit status is non-zero when a smoke, load, spike or soak threshold
+is crossed. `capacity` always exits 0 (it is meant to find the failing step) and the report names the highest passing rate. In CI: Actions, "Load test", Run workflow (inputs: scenarios, app CPUs, app memory); by hand only, because a scheduled
+run on a shared 2-vCPU runner fails on noise more often than on regressions. It needs no secrets, writes
+`bench/results/latest.md` (gitignored) and uploads that report as an artifact plus a job summary.
 
-| Piece                            | What it does                                                                                               |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `docker-compose.load.yml`        | Overlay with the CPU/memory limits, `pg_stat_statements`, fixture provider and its latency                 |
-| `bench/load/seed.js`, `seed.sql` | Creates `USERS` (50) accounts, raises plan limits so quota doesn't dominate, seeds `RECEIPTS` (200) each   |
-| `bench/load/load.js`             | The scenarios and thresholds. Signs every user in once (`setup`) and holds the sessions                    |
-| `bench/load/report.mjs`          | Joins k6 summaries, `docker stats` samples, Postgres connections and the app's wide events into the report |
+| Piece                            | What it does                                                                                                          |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `docker-compose.load.yml`        | Overlay with the CPU/memory limits, `pg_stat_statements`, fixture provider and its latency                            |
+| `bench/load/seed.js`, `seed.sql` | Creates `USERS` (50) accounts, raises plan limits so quota doesn't dominate, seeds `RECEIPTS` (200, under 10000) each |
+| `bench/load/load.js`             | The scenarios and thresholds. Signs every user in once (`setup`) and holds the sessions                               |
+| `bench/load/report.mjs`          | Joins k6 summaries, `docker stats` samples, Postgres connections and the app's wide events into the report            |
 
 Each simulated user has its own `x-forwarded-for` (the stack sets `TRUSTED_IP_HEADERS=x-forwarded-for`), so the per-IP
 sign-in and sign-up limits see many clients. Static assets are not requested: on Vercel they come from the CDN.
@@ -80,7 +81,7 @@ instead of k6 politely slowing down):
 | Dropped iterations (server too slow to take the arrivals) | 0                                   |
 | Spike: pages and API p95, upload to completed p95, 5xx    | under 1.5 s, under latency + 6 s, 0 |
 
-**Results** (2026-11-06, Docker Desktop on a 10-core Mac, 3.6 GiB VM; full tables in
+**Results** (2026-11-06, Docker Desktop, an 8-CPU / 3.6 GiB Docker VM on a 10-core Mac; full tables in
 [`results/load-2026-11-06.md`](results/load-2026-11-06.md)):
 
 | On 1 vCPU / 1 GB, 3 s model           | Sustained with every SLO met | First failing step | What ran out                                                                                 |
@@ -109,3 +110,5 @@ believing it. The fixture model costs a timer, not CPU or tokens, so real extrac
 socket time than measured here. Postgres runs locally, so round trips cost microseconds; with Supabase in another
 region every one of the 10-12 sequential round trips per upload ([CTO review](../docs/reviews/2026-11-06-cto.md))
 adds its network latency.
+
+How the benchmark and tooling fit the rest of the repo: [docs/architecture/tooling.md](../docs/architecture/tooling.md).

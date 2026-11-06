@@ -89,7 +89,7 @@ function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
         <p className="mt-2 text-sm text-muted-foreground">
           {global
             ? `The service has read as many receipts as it can today, for all accounts. This isn't a limit on your account. Uploads open again at ${reset}, ${resetsIn}.`
-            : `Your plan reads ${usage.limit} receipts a day and you've used all of them. You can upload again at ${reset}, ${resetsIn}. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count.`}
+            : `Your plan reads ${plural(usage.limit, "receipt")} a day and you've used all of them. You can upload again at ${reset}, ${resetsIn}. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count.`}
         </p>
       </div>
       <Link
@@ -356,34 +356,24 @@ export function UploadPanel({
             </p>
           </div>
         </div>
-        {empty ? (
-          <div className="mt-6 flex w-full flex-col gap-2 md:hidden">
-            <Button
-              disabled={locked}
-              onClick={(event) => {
-                event.stopPropagation();
-                cameraRef.current?.click();
-              }}
-              type="button"
-            >
-              <Camera aria-hidden="true" />
-              Take a photo
-            </Button>
-            <Button
-              disabled={locked}
-              onClick={(event) => {
-                event.stopPropagation();
-                inputRef.current?.click();
-              }}
-              type="button"
-              variant="outline"
-            >
-              <ImageUp aria-hidden="true" />
-              Choose files
-            </Button>
-          </div>
-        ) : null}
       </Card>
+      {empty ? (
+        <div className="flex w-full flex-col gap-2 md:hidden">
+          <Button disabled={locked} onClick={() => cameraRef.current?.click()} type="button">
+            <Camera aria-hidden="true" />
+            Take a photo
+          </Button>
+          <Button
+            disabled={locked}
+            onClick={() => inputRef.current?.click()}
+            type="button"
+            variant="outline"
+          >
+            <ImageUp aria-hidden="true" />
+            Choose files
+          </Button>
+        </div>
+      ) : null}
 
       {notice ? (
         <Alert className="px-4 py-3" variant="warning">
@@ -479,7 +469,7 @@ export function UploadPanel({
               {busy
                 ? single
                   ? "Uploading and reading. This takes a few seconds."
-                  : "Uploading one at a time. Reading carries on if you leave this page."
+                  : "Uploading one at a time. Keep this page open until every file is uploaded; reading carries on after that."
                 : overLimit
                   ? `You have ${plural(remaining, "receipt")} left today, so only the first ${remaining} will be read.`
                   : usage
@@ -492,7 +482,7 @@ export function UploadPanel({
               onClick={() => (single ? readOne(waiting[0]!) : readAll())}
             >
               {busy ? (
-                <Loader2 aria-hidden="true" className="animate-spin" />
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
               ) : (
                 <ScanText aria-hidden="true" />
               )}

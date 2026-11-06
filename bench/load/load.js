@@ -183,7 +183,7 @@ export function setup() {
       const cookie = res.cookies[SESSION_COOKIE];
       if (res.status !== 200 || !cookie) {
         throw new Error(
-          `sign-in failed for user ${start + k}: ${res.status} ${res.body}. Run the seed step first.`,
+          `sign-in failed for user ${start + k}: ${res.status}${res.status !== 200 ? ` ${res.body}` : ""}. Run the seed step first.`,
         );
       }
       sessions[start + k] = `${SESSION_COOKIE}=${cookie[0].value}`;

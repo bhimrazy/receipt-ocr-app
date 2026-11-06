@@ -135,6 +135,14 @@ function serverEvents(start, end) {
   return out;
 }
 
+const readPgss = (name) => {
+  try {
+    return readJson(`${name}.pgss.json`).slice(0, 8);
+  } catch {
+    return [];
+  }
+};
+
 const trend = (m) =>
   m
     ? {
@@ -147,8 +155,37 @@ const trend = (m) =>
     : null;
 
 function summarise(name) {
-  const k6 = readJson(`${name}.summary.json`).metrics;
   const [start, end, exit] = read(`${name}.window`).trim().split(" ").map(Number);
+  let k6;
+  try {
+    k6 = readJson(`${name}.summary.json`).metrics;
+  } catch {
+    // k6 died before writing its summary (setup failed, image missing, OOM).
+    return {
+      name,
+      durationS: end - start,
+      passed: false,
+      failedThresholds: [`k6 wrote no summary (exit ${exit}); see ${name}.k6.log`],
+      requests: 0,
+      requestsPerSec: 0,
+      iterations: 0,
+      droppedIterations: 0,
+      errorRate: 100,
+      page: null,
+      api: null,
+      upload: null,
+      uploadE2e: null,
+      uploads5xx: 0,
+      uploadsRateLimited: 0,
+      uploadsIncomplete: 0,
+      vusMax: null,
+      routes: {},
+      resources: resources(start, end),
+      server: {},
+      topStatements: [],
+      startedAt: start,
+    };
+  }
   const failedThresholds = [];
   for (const [metric, m] of Object.entries(k6)) {
     for (const [expr, crossed] of Object.entries(m.thresholds ?? {})) {
@@ -181,7 +218,7 @@ function summarise(name) {
     routes,
     resources: resources(start, end),
     server: serverEvents(start, end),
-    topStatements: readJson(`${name}.pgss.json`).slice(0, 8),
+    topStatements: readPgss(name),
     startedAt: start,
   };
 }
@@ -217,7 +254,9 @@ function bottleneck(res) {
   const hints = [];
   if (res.appCpuAvg >= 80 || res.appCpuP90 >= 95) hints.push("app CPU saturated");
   if (res.dbActiveMax >= meta.poolMax)
-    hints.push(`DB pool busy (${res.dbActiveMax} active of ${meta.poolMax})`);
+    hints.push(
+      `active DB connections at or over DATABASE_POOL_MAX (${res.dbActiveMax} active, max ${meta.poolMax})`,
+    );
   if (res.appMemMaxMiB >= 0.85 * parseFloat(meta.appMem) * (/g$/i.test(meta.appMem) ? 1024 : 1))
     hints.push("app memory near the limit");
   if (res.pgCpuMax >= 90 * Number(meta.pgCpus)) hints.push("Postgres CPU saturated");
@@ -362,4 +401,12 @@ if (busiest) {
     md.push(line([s.calls, s.total_ms, s.mean_ms, `\`${s.query.replace(/\|/g, "\\|")}\``]));
   md.push("");
 }
+md.push(
+  "## Caveats",
+  "",
+  `k6, the app, Postgres and RustFS share one Docker host (${meta.dockerCpus} CPUs), so other work on it lowers the numbers; read the host load column before trusting a failed run. ` +
+    "Postgres is local, so there is no cross-region latency; a hosted database adds its round trip time to every sequential query. " +
+    "The fixture model is a timer, not CPU, sockets or tokens, so real extractions use somewhat more.",
+  "",
+);
 writeFileSync(`${prefix}.md`, md.join("\n"));

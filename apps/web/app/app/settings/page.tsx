@@ -4,13 +4,14 @@ import {
   PageHeaderDescription,
   PageHeaderTitle,
 } from "@/components/page-header";
+import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { AccountSettings } from "@/components/account-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
 import { authEnv } from "@/lib/env";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
-import { requireActiveScope } from "@/lib/session";
+import { requireActiveScope, requireSession } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
@@ -35,7 +36,7 @@ async function loadWorkspace(organizationId: string) {
 }
 
 export default async function SettingsPage() {
-  const scope = await requireActiveScope();
+  const [scope, session] = await Promise.all([requireActiveScope(), requireSession()]);
   const [{ plan, policy }, usage, workspace] = await Promise.all([
     getCurrentPlan(),
     getUsageSummary(),
@@ -52,7 +53,7 @@ export default async function SettingsPage() {
       </PageHeader>
 
       <SettingsSection
-        description="Receipts reset at 00:00 UTC every day. Receipts that couldn't be read don't count."
+        description={`Receipts reset at 00:00 UTC every day. Your first ${FREE_FAILED_ROUNDS} failed reads a day don't count.`}
         id="plan-heading"
         title="Plan and usage"
       >
@@ -101,7 +102,7 @@ export default async function SettingsPage() {
         </Card>
       </SettingsSection>
 
-      <AccountSettings />
+      <AccountSettings email={session.user.email} name={session.user.name ?? ""} />
     </div>
   );
 }

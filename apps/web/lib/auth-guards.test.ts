@@ -16,7 +16,8 @@ vi.mock("@receipt-ocr/core", async (importOriginal) => ({
   },
 }));
 
-const { INVITES_PER_HOUR, limitInvitations, validateWorkspaceName } = await import("./auth-guards");
+const { INVITES_PER_HOUR, assertWorkspaceRole, limitInvitations, validateWorkspaceName } =
+  await import("./auth-guards");
 
 const status = async (promise: Promise<unknown>) => {
   try {
@@ -60,5 +61,26 @@ describe("limitInvitations (P1-1)", () => {
     expect(await status(limitInvitations("u1"))).toBe("TOO_MANY_REQUESTS");
     // Another inviter has their own budget.
     expect(await status(limitInvitations("u2"))).toBe("ok");
+  });
+});
+
+describe("assertWorkspaceRole (GHSA-c85h)", () => {
+  it("accepts exactly member, admin or owner", () => {
+    for (const role of ["member", "admin", "owner"])
+      expect(() => assertWorkspaceRole(role)).not.toThrow();
+  });
+
+  it("rejects padded or combined roles that Better Auth would parse as owner", () => {
+    for (const role of [
+      "admin, owner",
+      "member,owner",
+      " owner",
+      "OWNER",
+      "",
+      undefined,
+      ["owner"],
+    ]) {
+      expect(() => assertWorkspaceRole(role)).toThrow(APIError);
+    }
   });
 });

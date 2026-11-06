@@ -4,9 +4,9 @@ import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ArrowRight, Menu, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Brand } from "@/components/brand";
-import { authClient } from "@/lib/auth-client";
+import { hasSignedInHint } from "@/lib/signed-in-hint";
 
 export type NavLink = { href: string; label: string };
 
@@ -20,8 +20,11 @@ const defaultLinks: NavLink[] = [
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
+const noopSubscribe = () => () => {};
+
 export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
-  const { data: session, isPending } = authClient.useSession();
+  // Server and first client render show the signed-out buttons; a cookie hint then swaps the CTA.
+  const session = useSyncExternalStore(noopSubscribe, hasSignedInHint, () => false);
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -90,9 +93,7 @@ export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
         </nav>
 
         <div className="flex items-center gap-1.5">
-          {isPending ? (
-            <span aria-hidden className="h-11 w-28 animate-pulse rounded-full bg-wash lg:h-10" />
-          ) : session ? (
+          {session ? (
             <Link className={cn(buttonVariants(), "h-11 lg:h-10")} href="/app">
               Open the app <ArrowRight aria-hidden className="size-4" />
             </Link>

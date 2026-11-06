@@ -10,6 +10,14 @@ const environment = {
   region: process.env.VERCEL_REGION ?? "local",
 };
 
+/**
+ * Drizzle appends the bound `params:` (user text such as merchant names) to a
+ * failed query's message; this drops them and caps the length for logs.
+ */
+export function redactDbMessage(message: string): string {
+  return message.replace(/\s*params:[\s\S]*$/, " params: [redacted]").slice(0, 500);
+}
+
 export type WideEvent = Record<string, unknown>;
 
 function emit(level: "info" | "error", event: WideEvent) {

@@ -224,7 +224,9 @@ export function OcrChainForm({
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
         <Button disabled={!dirty || pending || order.length === 0} onClick={save}>
-          {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+          {pending ? (
+            <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+          ) : null}
           Save models
         </Button>
         {dirty ? (

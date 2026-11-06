@@ -12,6 +12,9 @@ const KEYS = [
   "BETTER_AUTH_SECRETS",
   "TRUSTED_IP_HEADERS",
   "TRUSTED_PROXIES",
+  "NEXT_PUBLIC_TURNSTILE_SITE_KEY",
+  "TURNSTILE_SECRET_KEY",
+  "TURNSTILE_ALLOWED_HOSTNAMES",
 ];
 
 /** Imports a fresh env.ts with exactly these variables set. */
@@ -72,6 +75,48 @@ describe("trusted IP config (P1-2)", () => {
       await expect(
         loadEnv({ ...production, TRUSTED_IP_HEADERS: "x-forwarded-for", TRUSTED_PROXIES: bad }),
       ).rejects.toThrow(/TRUSTED_PROXIES/);
+    }
+  });
+});
+
+describe("Turnstile config", () => {
+  const dev = { NODE_ENV: "development" };
+
+  it("is off with neither key and on with both", async () => {
+    expect((await loadEnv(dev)).turnstileEnv).toBeUndefined();
+    const env = await loadEnv({
+      ...dev,
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: " site ",
+      TURNSTILE_SECRET_KEY: "secret",
+    });
+    expect(env.turnstileEnv).toEqual({
+      siteKey: "site",
+      secretKey: "secret",
+      allowedHostnames: ["localhost"],
+    });
+  });
+
+  it("pins hostnames to the app URL, or to TURNSTILE_ALLOWED_HOSTNAMES when set", async () => {
+    const keys = { NEXT_PUBLIC_TURNSTILE_SITE_KEY: "site", TURNSTILE_SECRET_KEY: "secret" };
+    const pinned = await loadEnv({ ...dev, ...keys, BETTER_AUTH_URL: "https://app.example:8443" });
+    expect(pinned.turnstileEnv?.allowedHostnames).toEqual(["app.example"]);
+    const override = await loadEnv({
+      ...dev,
+      ...keys,
+      TURNSTILE_ALLOWED_HOSTNAMES: "a.example, example.com",
+    });
+    expect(override.turnstileEnv?.allowedHostnames).toEqual(["a.example", "example.com"]);
+  });
+
+  it("refuses a single key at startup but not during the build", async () => {
+    const single: Record<string, string>[] = [
+      { NEXT_PUBLIC_TURNSTILE_SITE_KEY: "site" },
+      { TURNSTILE_SECRET_KEY: "secret" },
+    ];
+    for (const vars of single) {
+      await expect(loadEnv({ ...dev, ...vars })).rejects.toThrow(/Incomplete Turnstile config/);
+      const built = await loadEnv({ ...dev, ...vars, NEXT_PHASE: "phase-production-build" });
+      expect(built.turnstileEnv).toBeUndefined();
     }
   });
 });

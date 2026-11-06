@@ -127,7 +127,7 @@ describe("FIXTURE_LATENCY_MS", () => {
     expect(fixtureLatencyMs()).toBe(60_000);
   });
 
-  it("delays the fixture provider only", async () => {
+  it("waits FIXTURE_LATENCY_MS before the fixture provider answers", async () => {
     vi.useFakeTimers();
     vi.stubEnv("FIXTURE_LATENCY_MS", "2000");
     let done = false;

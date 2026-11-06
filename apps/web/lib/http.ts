@@ -1,10 +1,10 @@
 import "server-only";
-import type { AppError, AppServices, OcrAttempt } from "@receipt-ocr/core";
+import type { AppError, AppServices } from "@receipt-ocr/core";
 import { getIP } from "better-auth/api";
 import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
 import { authEnv } from "./env";
-import { logger, type WideEvent } from "./log";
+import { logger, redactDbMessage, type WideEvent } from "./log";
 import { runtime } from "./runtime";
 
 const STATUS: Record<AppError["_tag"], number> = {
@@ -33,7 +33,7 @@ export function causeDetail(error: { cause?: unknown }): string | undefined {
   const inner = error.cause;
   if (!inner) return undefined;
   const detail = inner instanceof Error ? `${inner.name}: ${inner.message}` : String(inner);
-  return detail.replace(/\s*params:[\s\S]*$/, " params: [redacted]").slice(0, 500);
+  return redactDbMessage(detail);
 }
 
 /** Records a failure on the wide event and returns its HTTP response. */
@@ -79,36 +79,6 @@ export async function runRoute<A>(
   const response = failureResponse(exit.cause, event);
   if (!event) logFailure(exit.cause);
   return response;
-}
-
-/** For `after()` work: runs the program and logs one wide event with its outcome. */
-export async function runBackground<A>(
-  program: Effect.Effect<A, AppError, AppServices>,
-  event: WideEvent,
-  onSuccess?: (value: A, event: WideEvent) => void,
-): Promise<void> {
-  const startedAt = Date.now();
-  const exit = await runtime.runPromiseExit(program);
-  event.duration_ms = Date.now() - startedAt;
-  if (Exit.isSuccess(exit)) {
-    event.outcome = "success";
-    onSuccess?.(exit.value, event);
-    logger.info(event);
-    return;
-  }
-  failureResponse(exit.cause, event);
-  event.outcome = "error";
-  logger.error(event);
-}
-
-/** Which model read the receipt, every model tried and what it cost, for an extraction's wide event. */
-export function recordOcr(
-  result: { model: string; attempts: readonly OcrAttempt[]; costMicroUsd: number | null },
-  event: WideEvent,
-): void {
-  event.model = result.model;
-  event.ocr = { attempts: result.attempts };
-  event.cost_micro_usd = result.costMicroUsd;
 }
 
 function logFailure(cause: Cause.Cause<AppError>) {

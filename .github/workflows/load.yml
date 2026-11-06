@@ -1,6 +1,6 @@
 name: Load test
 
-# On demand (and weekly): builds the production image, runs it limited to a small server and drives it
+# On demand only: builds the production image, runs it limited to a small server and drives it
 # with k6. Not part of PR checks. No secrets: the OCR model is the fixture provider.
 on:
   workflow_dispatch:
@@ -17,8 +17,6 @@ on:
         description: "Memory for the app container"
         default: "1g"
         type: string
-  schedule:
-    - cron: "17 3 * * 1"
 
 permissions:
   contents: read
@@ -46,14 +44,14 @@ jobs:
         run: scripts/load.sh $SCENARIOS
       - name: Job summary
         if: always()
-        run: cat bench/results/load-*.md >> "$GITHUB_STEP_SUMMARY" || true
+        run: cat bench/results/latest.md >> "$GITHUB_STEP_SUMMARY" || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: load-results
           path: |
+            bench/results/latest.md
             bench/results/load-*.json
-            bench/results/load-*.md
             bench/results/load-*/*.k6.log
             bench/results/load-*/samples.tsv
           retention-days: 30

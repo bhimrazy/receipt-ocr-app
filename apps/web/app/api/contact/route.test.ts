@@ -4,6 +4,8 @@ const sendEmail = vi.fn();
 const env = vi.hoisted(() => ({
   isProduction: false,
   supportEmail: "help@example.com" as string | undefined,
+  turnstile: { ok: true } as
+    { ok: true } | { ok: false; reason: "missing" | "rejected" | "unavailable" },
 }));
 
 vi.mock("@receipt-ocr/email", async (importOriginal) => ({
@@ -15,6 +17,7 @@ vi.mock("@/lib/runtime", () => ({
   runtime: { runPromise: async () => ({ allowed: true, retryAfterSeconds: 0 }) },
 }));
 vi.mock("@/lib/http", () => ({ clientIp: () => "1.1.1.1", crossOriginResponse: () => null }));
+vi.mock("@/lib/turnstile", () => ({ checkTurnstile: async () => env.turnstile }));
 vi.mock("@/lib/log", () => ({ logger: { info: vi.fn() } }));
 vi.mock("@/lib/env", () => ({
   emailEnv: { resendApiKey: "key", from: "x <noreply@example.com>" },
@@ -36,9 +39,21 @@ beforeEach(() => {
   sendEmail.mockReset();
   env.isProduction = false;
   env.supportEmail = "help@example.com";
+  env.turnstile = { ok: true };
 });
 
 describe("POST /api/contact", () => {
+  it.each([
+    ["missing", 400],
+    ["rejected", 403],
+    ["unavailable", 503],
+  ] as const)("sends nothing when the Turnstile check is %s", async (reason, status) => {
+    env.turnstile = { ok: false, reason };
+    const res = await post(valid);
+    expect(res.status).toBe(status);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
   it("sends to the support inbox with the sender as reply-to", async () => {
     sendEmail.mockResolvedValue({ delivered: true });
     const res = await post(valid);

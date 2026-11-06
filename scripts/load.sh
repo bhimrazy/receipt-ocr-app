@@ -9,7 +9,8 @@
 #   scripts/load.sh smoke load spike    any combination, in order
 #
 # Output: bench/results/load-<date>.json and .md (the raw per-run files stay in bench/results/load-<date>/).
-# Exit status is non-zero if any scenario crossed a threshold; capacity steps are expected to fail at the top.
+# Exit status is non-zero if a smoke, load, spike or soak scenario crossed a threshold. Capacity steps are expected
+# to fail at the top, so they never set it. Also writes bench/results/latest.md (gitignored) for CI.
 #
 # Env (defaults in brackets):
 #   APP_CPUS [1] APP_MEM [1g] PG_CPUS [1] PG_MEM [512m] FIXTURE_LATENCY_MS [3000] DATABASE_POOL_MAX [5]
@@ -17,6 +18,8 @@
 #   SPIKE_MULT [5]  SOAK_DURATION [30m]  STEP_DURATION [40s]  READ_STEPS / UPLOAD_STEPS (space-separated rates)
 #   APP_PORT [3800] POSTGRES_PORT [5800] RUSTFS_PORT [9800] RUSTFS_CONSOLE_PORT [9801]  (host ports, for debugging)
 #   KEEP=1 leaves the stack up afterwards; SKIP_BUILD=1 reuses the image.
+# No -e on purpose: a k6 run that crosses a threshold exits non-zero, and the remaining scenarios, the
+# report and the cleanup must still run. Steps that must not fail check their status explicitly.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -164,5 +167,6 @@ cat >"$run_dir/meta.json" <<JSON
 }
 JSON
 bun bench/load/report.mjs "$run_dir" "bench/results/load-$date_tag" || exit 1
+cp "bench/results/load-$date_tag.md" bench/results/latest.md
 echo "==> bench/results/load-$date_tag.md"
 exit "$failed"

@@ -13,7 +13,8 @@ export const emailOf = (i) => `load-${i}@example.com`;
 // Needs TRUSTED_IP_HEADERS=x-forwarded-for on the app.
 export const ipOf = (i) => `10.${(i >> 8) & 255}.${i & 255}.7`;
 
-// Deterministic receipt ids; bench/load/seed.sql builds the same ones.
+// Deterministic receipt ids; bench/load/seed.sql builds the same ones. The id packs user * 10000 + n, so RECEIPTS
+// must stay under 10000 or ids collide across users.
 export function receiptId(user, n) {
   return `00000000-0000-4000-8000-${(user * 10000 + n).toString(16).padStart(12, "0")}`;
 }

@@ -29,6 +29,9 @@ const messages: Record<string, string> = {
   INVALID_TOKEN: "This link is not valid or was already used. Request a new one.",
   TOKEN_EXPIRED: "This link has expired. Request a new one.",
   USER_NOT_FOUND: "We couldn't find an account for this link.",
+  // Turnstile (Better Auth's captcha plugin).
+  MISSING_RESPONSE: "Finish the security check, then try again.",
+  VERIFICATION_FAILED: "The security check failed. Reload the page and try again.",
   // A banned user: the error code of an email sign-in, or `?error=BANNED_USER` after a social one.
   BANNED_USER: SUSPENDED_MESSAGE,
   // OAuth callback errors arrive on /sign-in as `?error=<code>`.

@@ -72,8 +72,29 @@ Set these in Vercel (Project → Settings → Environment Variables, Production)
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | No                | GitHub sign-in.                                                                                                                                                                                      |
 | `TRUSTED_IP_HEADERS`                       | Off Vercel only   | The header your proxy sets to the client IP, e.g. `x-forwarded-for`. The app refuses to start in production without it, because rate limits would otherwise share one bucket. Leave unset on Vercel. |
 | `TRUSTED_PROXIES`                          | No                | Required if your proxy appends to that header rather than overwriting it (nginx's default). Otherwise every client shares one rate-limit bucket, and the app logs `http.client_ip_unresolved`.       |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`           | No                | Cloudflare Turnstile site key. Set with `TURNSTILE_SECRET_KEY` to turn bot protection on; see [Bot protection](#bot-protection-turnstile). Baked in at build time.                                   |
+| `TURNSTILE_SECRET_KEY`                     | No                | Turnstile secret key. Server only.                                                                                                                                                                   |
 | `AUTH_REQUIRE_EMAIL_VERIFICATION`          | No                | Defaults to `true` in production. Set `false` only for tests.                                                                                                                                        |
 | `OCR_PROVIDER`                             | No                | `fixture` returns canned results. Tests only.                                                                                                                                                        |
+
+### Bot protection (Turnstile)
+
+Optional. With it on, sign-up, sign-in, password reset, resending the confirmation link and the support form
+require a passed [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) check. It is invisible unless
+Cloudflare needs the visitor to do something.
+
+1. In the Cloudflare dashboard, open **Turnstile**, add a widget for your domain in
+   **Managed** mode, and copy the site key and secret key.
+2. Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` together. The app refuses to start with only one.
+   Tokens must report the `BETTER_AUTH_URL` hostname; `TURNSTILE_ALLOWED_HOSTNAMES` (comma-separated) overrides that.
+3. Redeploy. The site key is inlined into the client bundle when the app is built, so changing it needs a new build;
+   the secret is read at runtime. The Content Security Policy allows `challenges.cloudflare.com` only when the site
+   key is set.
+
+If Cloudflare cannot be reached when a form is submitted, the request is refused rather than let through. For local
+and test runs, Cloudflare's [test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/) work
+on any host: site `1x00000000000000000000AA` with secret `1x0000000000000000000000000000000AA` always passes; secret
+`2x0000000000000000000000000000000AA` always fails. Their siteverify reports the hostname `example.com`, so set `TURNSTILE_ALLOWED_HOSTNAMES=example.com` with them. `scripts/test.sh --turnstile` does that.
 
 ### 5. Deploy
 
@@ -188,3 +209,9 @@ Steps specific to one release, newest first.
   `http.client_ip_unresolved`; it should never appear.
 - **After deploy:** the Free plan default drops to 20 receipts a day. Change it in **Admin → Settings** if you want
   something else.
+
+## Lab design pages
+
+The `(lab)` design directions (`/landing-a` to `/landing-h`, `/final-*`) return 404 in production builds. They are
+prerendered, so set `LAB_PAGES=1` for the build, not just the runtime, to show them. The variable is listed in
+`turbo.json` under `tasks.build.env`, so Turbo passes it through.

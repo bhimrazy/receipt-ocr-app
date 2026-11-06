@@ -114,3 +114,87 @@ jobs:
             apps/web/playwright-report/
             apps/web/test-results/
           retention-days: 7
+
+  e2e-turnstile:
+    name: E2E (Turnstile test keys)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        # postgres:18.6-alpine, same digest as docker-compose.yml.
+        image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: receipt_ocr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d receipt_ocr"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      rustfs:
+        # rustfs/rustfs:1.0.4, same digest as docker-compose.yml.
+        image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+        env:
+          RUSTFS_ACCESS_KEY: rustfsadmin
+          RUSTFS_SECRET_KEY: rustfsadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -fsS http://localhost:9000/health || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/receipt_ocr
+      DIRECT_URL: postgres://postgres:postgres@localhost:5432/receipt_ocr
+      BETTER_AUTH_URL: http://localhost:3004
+      BETTER_AUTH_SECRET: ci-secret-not-for-production-000000000
+      GOOGLE_GENERATIVE_AI_API_KEY: dummy-ci
+      OCR_PROVIDER: fixture
+      E2E_UPLOAD: "1"
+      # No mailer in CI, so sign-up skips verification (on by default in production).
+      AUTH_REQUIRE_EMAIL_VERIFICATION: "false"
+      # Playwright sends a per-worker x-forwarded-for, so rate limits apply per test client.
+      TRUSTED_IP_HEADERS: x-forwarded-for
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: receipt-ocr
+      S3_ACCESS_KEY_ID: rustfsadmin
+      S3_SECRET_ACCESS_KEY: rustfsadmin
+      S3_FORCE_PATH_STYLE: "true"
+      CI: "true"
+      # Cloudflare's test site key is inlined at build time; its test secrets report example.com.
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      TURNSTILE_ALLOWED_HOSTNAMES: example.com
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - name: Create the S3 bucket
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --aws-sigv4 aws:amz:us-east-1:s3 \
+            --user rustfsadmin:rustfsadmin -X PUT http://localhost:9000/receipt-ocr)
+          case "$code" in 200|409) ;; *) echo "bucket create failed: HTTP $code" >&2; exit 1 ;; esac
+      - run: bun run db:migrate
+      - run: bun run build
+      - run: bunx playwright install --with-deps chromium
+      - name: Turnstile e2e, always-pass secret
+        working-directory: apps/web
+        run: bunx playwright test e2e/turnstile.spec.ts
+        env:
+          TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
+          E2E_TURNSTILE: pass
+      - name: Turnstile e2e, always-reject secret
+        working-directory: apps/web
+        run: bunx playwright test e2e/turnstile.spec.ts
+        env:
+          TURNSTILE_SECRET_KEY: 2x0000000000000000000000000000000AA
+          E2E_TURNSTILE: fail
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: playwright-report-turnstile
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7

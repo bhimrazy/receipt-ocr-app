@@ -22,3 +22,4 @@ test-results/
 /bench/results/*
 !/bench/results/.gitkeep
 !/bench/results/*.md
+/bench/results/latest.md

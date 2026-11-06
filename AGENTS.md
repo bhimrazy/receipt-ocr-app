@@ -37,13 +37,25 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Storage: S3-compatible API, R2-first.
 - OCR: AI SDK with Google Gemini as v1 provider.
 - Backend workflow: Effect TS services.
-- Future jobs: BullMQ + Redis later; v1 upload is synchronous.
+- Background jobs: a Postgres job queue in `packages/core/src/jobs` (claimed with `FOR UPDATE SKIP LOCKED`, leases,
+  retries, dead state). A worker app and drain route come next; BullMQ + Redis only past the plan's scale triggers.
+
+## Working Principles
+
+- Find gaps proactively: review against a production-readiness checklist (security, privacy, reliability, infra,
+  observability, product) and raise or plan missing pieces without waiting to be asked. Track them in
+  `docs/STATUS.md`.
+- Look at changes through several lenses: principal engineer (simplicity, reversibility), research engineer
+  (accuracy, cost, measured not guessed), infrastructure (hosting limits, scaling, backups, incidents) and product
+  (what paying users need next).
+- Keep the remote current: push work as it lands and keep `docs/STATUS.md` up to date so work can resume from any
+  machine.
 
 ## Coding Rules
 
 - Put shared backend workflows in `packages/core` Effect services, not directly inside route handlers.
 - Keep Next route handlers as thin HTTP adapters.
-- Keep OCR processing reusable for a future `apps/worker` BullMQ app.
+- Run background work as a job kind in `packages/core/src/jobs`, never in an unrecorded `after()`.
 - Use `packages/ai` as the provider abstraction boundary.
 - Use `packages/storage` for object-key and S3/R2 behavior.
 - Use `packages/db` for schema and DB construction.
@@ -51,6 +63,8 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Do not copy prototype inline styles wholesale.
 - Do not add the prototype tweak panel.
 - Preserve user-owned changes; do not revert unrelated work.
+- Update the relevant page and diagram in [`docs/architecture/`](docs/architecture/README.md) in the same PR as an
+  architectural change (new package or service, table or constraint, flow, or external dependency).
 
 ## Validation
 
@@ -63,7 +77,7 @@ scripts/test.sh   # unit + Playwright e2e against the compose stack (when UI or 
 ```
 
 Dependencies are exact pins and at least 7 days old; `bun run check:deps` enforces the pins. `bench/` holds the OCR
-benchmark (`bun run bench:ocr`) and the k6 upload test.
+benchmark (`bun run bench:ocr`) and the k6 load test (`scripts/load.sh`).
 
 The signed-in app always needs a real session and database; there is no mock or preview data. Without `DATABASE_URL` and
 `BETTER_AUTH_SECRET`, `/app` sends everyone to `/sign-in`, which says sign-in isn't set up. Local development uses the

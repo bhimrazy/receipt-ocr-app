@@ -1,4 +1,4 @@
-import { and, count, createDb, eq, member } from "@receipt-ocr/db";
+import { and, asc, count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { authEnv } from "./env";
 import { getCurrentPlan } from "./plan-limits";
 import { getSession } from "./session";
@@ -29,4 +29,21 @@ export async function getWorkspaceAllowance(): Promise<WorkspaceAllowance> {
 
   const owned = Number(row?.value ?? 0);
   return { owned, limit, canCreate: owned < limit };
+}
+
+export interface WorkspaceOption {
+  id: string;
+  name: string;
+}
+
+/** Every workspace the signed-in user belongs to, for the switcher. */
+export async function listWorkspaces(): Promise<WorkspaceOption[]> {
+  const session = await getSession();
+  if (!session || !authEnv.databaseUrl) return [];
+  return createDb(authEnv.databaseUrl)
+    .select({ id: organization.id, name: organization.name })
+    .from(member)
+    .innerJoin(organization, eq(organization.id, member.organizationId))
+    .where(eq(member.userId, session.user.id))
+    .orderBy(asc(member.createdAt));
 }

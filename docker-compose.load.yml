@@ -7,6 +7,8 @@
 
 services:
   postgres:
+    ports: !override
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     cpus: ${PG_CPUS:-1}
     mem_limit: ${PG_MEM:-512m}
     # pg_stat_statements gives the per-statement counts and times the report prints.
@@ -24,6 +26,8 @@ services:
     mem_limit: ${S3_MEM:-512m}
 
   app:
+    ports: !override
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
     cpus: ${APP_CPUS:-1}
     mem_limit: ${APP_MEM:-1g}
     # No swap: hitting the memory limit must show up as an OOM kill, not as paging.

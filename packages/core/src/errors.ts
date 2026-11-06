@@ -45,6 +45,8 @@ export type OcrAttempt = {
   ms: number;
   /** Null when the provider reported none (timeout, API error). */
   usage: ExtractionUsage | null;
+  /** How long a rate-limited provider asked us to wait (its `Retry-After`). */
+  retryAfterMs?: number;
 };
 
 export class OcrError extends Data.TaggedError("OcrError")<{
@@ -53,6 +55,13 @@ export class OcrError extends Data.TaggedError("OcrError")<{
   readonly kind: OcrFailureKind;
   readonly attempts: readonly OcrAttempt[];
   readonly cause?: unknown;
+}> {}
+
+/** Every model in the chain belongs to a provider that is cooling down after a 429. */
+export class ProvidersCooling extends Data.TaggedError("ProvidersCooling")<{
+  readonly message: string;
+  /** When the first of them may be called again. */
+  readonly until: Date;
 }> {}
 
 export type AppError =

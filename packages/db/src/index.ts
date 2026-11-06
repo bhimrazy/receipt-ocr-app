@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -188,6 +189,8 @@ export const ocrCalls = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** `receipts.attempts` at the time: 1 = the upload, 2+ = retries. */
     round: smallint("round").notNull(),
+    /** Which automatic attempt of the round's job made the call (1 = first). */
+    jobAttempt: smallint("job_attempt").notNull().default(1),
     /** Position in the chain: 0 = primary, >0 = a fallback. */
     step: smallint("step").notNull(),
     /** `provider:model`; null when the round failed before calling a model. */
@@ -215,15 +218,115 @@ export const ocrCalls = pgTable(
     // Admin windows.
     index("ocr_calls_created_at_idx").on(table.createdAt),
     // A receipt's calls and the quota's "was this round read" lookup. Unique, so
-    // a round's calls written twice (e.g. a lost COMMIT ack, then the failure
-    // path) are billed once.
-    uniqueIndex("ocr_calls_receipt_round_step_idx").on(table.receiptId, table.round, table.step),
+    // an attempt's calls written twice (e.g. a lost COMMIT ack, then the
+    // failure path) are billed once, while each automatic retry keeps its own.
+    uniqueIndex("ocr_calls_receipt_round_attempt_step_idx").on(
+      table.receiptId,
+      table.round,
+      table.jobAttempt,
+      table.step,
+    ),
     check(
       "ocr_calls_status_check",
       sql.raw(`status in (${OCR_CALL_STATUSES.map((s) => `'${s}'`).join(", ")})`),
     ),
   ],
 );
+
+/**
+ * Background job states. `queued` includes "waiting to retry" (`run_at` in
+ * the future); a failed attempt goes back to `queued` or on to `dead`.
+ */
+export const jobState = pgEnum("job_state", [
+  "queued",
+  "running",
+  "succeeded",
+  "dead",
+  "cancelled",
+]);
+
+/** Job states that still hold their idempotency key and their receipt. */
+const LIVE_JOB = sql`state in ('queued', 'running')`;
+
+/**
+ * The durable job queue (`packages/core/src/jobs`). Claimed with
+ * `FOR UPDATE SKIP LOCKED` under a lease; every write after the claim is
+ * fenced on `locked_by` and `state = 'running'`, so a worker whose lease
+ * expired changes nothing. No free text: `last_error_kind` is a short code and
+ * payloads hold ids only, never receipt contents. Storage parameters
+ * (fillfactor, autovacuum) are set in migration 0008; drizzle-kit can't
+ * express them.
+ */
+export const jobs = pgTable(
+  "jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull(),
+    state: jobState("state").notNull().default("queued"),
+    /** Lower runs first: 0 interactive, 5 bulk, 9 maintenance. */
+    priority: smallint("priority").notNull().default(0),
+    payload: jsonb("payload").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    // No FK: the job record outlives a deleted receipt or workspace.
+    receiptId: uuid("receipt_id"),
+    organizationId: text("organization_id"),
+    /** The owner, for the per-user running cap. Unlinked when the account is deleted. */
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    /** Incremented at claim, so a job that crashes its worker still runs out of attempts. */
+    attempts: smallint("attempts").notNull().default(0),
+    maxAttempts: smallint("max_attempts").notNull(),
+    runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Worker id holding the lease. */
+    lockedBy: text("locked_by"),
+    /** Lease end; deliberately unindexed so heartbeats stay HOT updates. */
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    lastErrorKind: text("last_error_kind"),
+    lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+    /** The last five attempts: `{n, at, ms, outcome, kind?, worker}`. */
+    attemptLog: jsonb("attempt_log")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The claim: only runnable rows, in claim order.
+    index("jobs_runnable_idx")
+      .on(table.priority, table.runAt)
+      .where(sql`state = 'queued'`),
+    // The reaper and per-owner running counts: a small set.
+    index("jobs_running_idx")
+      .on(table.userId)
+      .where(sql`state = 'running'`),
+    // One live job per key; a finished job frees its key.
+    uniqueIndex("jobs_idempotency_idx").on(table.idempotencyKey).where(LIVE_JOB),
+    // At most one live job per receipt.
+    uniqueIndex("jobs_receipt_live_idx")
+      .on(table.receiptId)
+      .where(sql`state in ('queued', 'running') and kind like 'receipt.%'`),
+    // Admin lists and retention.
+    index("jobs_state_finished_idx").on(table.state, table.finishedAt),
+    index("jobs_org_created_idx").on(table.organizationId, table.createdAt),
+    check("jobs_attempts_check", sql`attempts >= 0 and max_attempts >= 1`),
+    // A code such as `rate-limited` or `lease-expired`, never a message.
+    check("jobs_last_error_kind_check", sql`last_error_kind ~ '^[a-z0-9.-]{1,40}$'`),
+  ],
+);
+
+/**
+ * Pauses and cooldowns, one row per scope: `queue`, `kind:<kind>` or
+ * `provider:<id>`. A row applies while `until` is null (indefinite) or ahead.
+ */
+export const jobControls = pgTable("job_controls", {
+  scope: text("scope").primaryKey(),
+  paused: boolean("paused").notNull().default(false),
+  until: timestamp("until", { withTimezone: true }),
+  reason: text("reason"),
+  updatedBy: text("updated_by"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * Reserved for user-provided BYOK credentials. Nothing reads or writes this
@@ -300,6 +403,9 @@ export const schema = {
   receiptItems,
   ocrRounds,
   ocrCalls,
+  jobState,
+  jobs,
+  jobControls,
   userCredentials,
   adminAuditLog,
   appSettings,
@@ -349,6 +455,8 @@ export type NewReceiptItem = typeof receiptItems.$inferInsert;
 export type OcrRound = typeof ocrRounds.$inferSelect;
 export type OcrCall = typeof ocrCalls.$inferSelect;
 export type NewOcrCall = typeof ocrCalls.$inferInsert;
+export type JobRow = typeof jobs.$inferSelect;
+export type NewJobRow = typeof jobs.$inferInsert;
 export type AdminAuditEntry = typeof adminAuditLog.$inferSelect;
 export type UserCredential = typeof userCredentials.$inferSelect;
 export type NewUserCredential = typeof userCredentials.$inferInsert;
