@@ -32,7 +32,7 @@ describe("planTableSchema", () => {
 });
 
 describe("ocrRoutingSchema", () => {
-  const step = { model: "google:gemini-3.7-flash", enabled: true };
+  const step = { model: "google:gemini-3.8-flash", enabled: true };
 
   it("fills in the default step timeout", () => {
     const result = ocrRoutingSchema.parse({ chain: [step] });
@@ -75,10 +75,10 @@ const actor = { actor: { id: "a", email: "a@example.com" } };
 
 describe("Settings", () => {
   it("defaults the chain to GEMINI_MODEL when it is on the allowlist", async () => {
-    const run = settingsWith({ GEMINI_MODEL: "gemini-3.7-flash" });
+    const run = settingsWith({ GEMINI_MODEL: "gemini-3.8-flash" });
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
-      "google:gemini-3.7-flash",
+      "google:gemini-3.8-flash",
     ]);
   });
 
@@ -86,7 +86,7 @@ describe("Settings", () => {
     const run = settingsWith({ GEMINI_MODEL: "gemini-unlisted" });
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
-      "google:gemini-3.7-flash",
+      "google:gemini-3.8-flash",
     ]);
   });
 
@@ -116,7 +116,7 @@ describe("Settings", () => {
     const run = settingsWith({});
     const exit = await run(
       Effect.flatMap(Settings, (s) =>
-        s.save("ocr", { chain: [{ model: "google:gemini-3.7-flash", enabled: true }] }, actor),
+        s.save("ocr", { chain: [{ model: "google:gemini-3.8-flash", enabled: true }] }, actor),
       ),
     );
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("no API key");

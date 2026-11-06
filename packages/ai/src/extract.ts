@@ -8,7 +8,7 @@ import { receiptExtractionSchema, type ReceiptExtraction } from "./schema";
 /** Providers reached through the AI SDK registry; `fixture` is handled locally. */
 type RegistryProviderId = Exclude<OcrProviderId, "fixture">;
 
-/** `provider:model`, e.g. `google:gemini-3.7-flash`, or `fixture` for the offline provider. */
+/** `provider:model`, e.g. `google:gemini-3.8-flash`, or `fixture` for the offline provider. */
 export type ModelId = `${RegistryProviderId}:${string}` | "fixture";
 
 export type ProviderKeys = Partial<Record<RegistryProviderId, string>>;

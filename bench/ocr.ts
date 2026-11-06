@@ -1,5 +1,5 @@
 // OCR accuracy, latency and cost benchmark over bench/fixtures.
-//   bun run bench:ocr [--models google:gemini-3.7-flash,...] [--concurrency 2] [--only id,id]
+//   bun run bench:ocr [--models google:gemini-3.8-flash,...] [--concurrency 2] [--only id,id]
 // Needs GOOGLE_GENERATIVE_AI_API_KEY. Fixtures: <id>.{jpg,png,pdf} + <id>.json (ground truth).
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -72,7 +72,7 @@ if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
 
 const only = arg("only", "").split(",").filter(Boolean);
 const concurrency = Math.max(1, Number(arg("concurrency", "2")) || 2);
-const models = arg("models", "google:gemini-3.7-flash")
+const models = arg("models", "google:gemini-3.8-flash")
   .split(",")
   .map((spec) => {
     const [provider, ...rest] = spec.split(":");
