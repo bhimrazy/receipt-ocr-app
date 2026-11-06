@@ -23,6 +23,9 @@ export const ROUTE_BUDGET_MS = 290_000;
 /** A claimed receipt job needs at most the OCR deadline (50 s) plus its writes. */
 const STOP_CLAIMING_BEFORE_MS = 60_000;
 
+/** Long enough for a receipt's own backoffs (about 10 s, 20 s, 40 s); later retries wait for the next run. */
+const MAX_WAIT_MS = 90_000;
+
 const workerId = () => `web:${process.pid}:${crypto.randomUUID().slice(0, 8)}`;
 
 /** One wide event per job attempt. Ids, kinds and numbers only, never receipt contents. */
@@ -55,10 +58,16 @@ function logRun(run: JobRunRecord, context: WideEvent) {
 }
 
 /**
- * Runs queued jobs until nothing is runnable or `deadline` (epoch ms) is near,
- * waiting out retry backoff in between. For `after()`.
+ * Runs due jobs (anyone's) until nothing is runnable or `deadline` (epoch ms,
+ * measured from the route's start) is near. Sleeps through backoff only for
+ * `waitFor`, the jobs this request is responsible for, and for at most
+ * MAX_WAIT_MS. For `after()`.
  */
-export async function drainJobs(deadline: number, context: WideEvent): Promise<void> {
+export async function drainJobs(
+  deadline: number,
+  context: WideEvent,
+  waitFor: readonly string[],
+): Promise<void> {
   const budgetMs = deadline - Date.now();
   if (budgetMs <= STOP_CLAIMING_BEFORE_MS) return;
   const stats = await runtime.runPromise(
@@ -67,6 +76,8 @@ export async function drainJobs(deadline: number, context: WideEvent): Promise<v
       registry: JOB_REGISTRY,
       budgetMs,
       stopClaimingBeforeMs: STOP_CLAIMING_BEFORE_MS,
+      waitForRetries: waitFor,
+      maxWaitMs: MAX_WAIT_MS,
       onRun: (run) => logRun(run, context),
     }),
   );

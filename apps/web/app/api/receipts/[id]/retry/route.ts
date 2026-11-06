@@ -42,7 +42,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       event.round = round;
       event.job_id = jobId;
       after(() =>
-        drainJobs(startedAt + ROUTE_BUDGET_MS, { request_id: requestId, user_id: scope.userId }),
+        drainJobs(startedAt + ROUTE_BUDGET_MS, { request_id: requestId, user_id: scope.userId }, [
+          jobId,
+        ]),
       );
       return NextResponse.json({ receiptId: id, status: "processing", requestId }, { status: 202 });
     },

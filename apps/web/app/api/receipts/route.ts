@@ -78,7 +78,8 @@ export async function POST(request: Request) {
   );
   const jobContext = { request_id: requestId, user_id: scope.userId };
   // Runs queued work (this upload, its retries, anything else due) after the response.
-  const drainAfter = () => after(() => drainJobs(startedAt + ROUTE_BUDGET_MS, jobContext));
+  const drainAfter = (jobId: string) =>
+    after(() => drainJobs(startedAt + ROUTE_BUDGET_MS, jobContext, [jobId]));
 
   if (mode === "queued") {
     const response = await runRoute(
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
         event.outcome = "queued";
         event.job_id = ingested.jobId;
         // The job runs after the response; the client polls GET /api/receipts/:id.
-        drainAfter();
+        drainAfter(ingested.jobId);
         return NextResponse.json(
           { receiptId, status: "processing", requestId, timings: ingested.timings },
           { status: 202 },
@@ -144,7 +145,7 @@ export async function POST(request: Request) {
       event.outcome = "queued";
       event.status_code = 202;
       if (run?.errorKind) event.error = { type: "ExtractionRetrying", kind: run.errorKind };
-      drainAfter();
+      drainAfter(ingested.jobId);
       return NextResponse.json(
         { receiptId, status: "processing", requestId, timings: ingested.timings },
         { status: 202 },

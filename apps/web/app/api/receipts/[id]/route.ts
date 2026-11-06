@@ -1,23 +1,50 @@
 import { parseCategory } from "@receipt-ocr/ai/categories";
-import { deleteReceipt, ReceiptRepo, type ReceiptPatch } from "@receipt-ocr/core";
+import { deleteReceipt, JobQueue, ReceiptRepo, type ReceiptPatch } from "@receipt-ocr/core";
 import { Effect } from "effect";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { crossOriginResponse, jsonError, runRoute } from "@/lib/http";
+import { drainJobs } from "@/lib/jobs";
 import { getActiveScope } from "@/lib/session";
 
 type Params = { params: Promise<{ id: string }> };
 
 const notFound = () => jsonError(404, "Receipt not found");
 
-/** Status for the polling client. */
+/** Room for a kicked job's attempt (OCR deadline 50 s) and its writes. */
+export const maxDuration = 120;
+const KICK_BUDGET_MS = 115_000;
+
+/**
+ * Status for the polling client. While the receipt is processing, a poll
+ * that finds its job due but not running (nothing ran the queue after a
+ * backoff, or its worker died) runs it after the response, so a waiting user
+ * is never left on a job nobody picks up.
+ */
 export async function GET(_request: Request, { params }: Params) {
+  const startedAt = Date.now();
   const scope = await getActiveScope();
   if (!scope) return jsonError(401, "Unauthorized");
   const { id } = await params;
   return runRoute(
-    Effect.flatMap(ReceiptRepo, (repo) => repo.get(id, scope)),
-    (receipt) =>
-      receipt
+    Effect.gen(function* () {
+      const receipt = yield* Effect.flatMap(ReceiptRepo, (repo) => repo.get(id, scope));
+      const dueJob =
+        receipt?.status === "processing"
+          ? yield* Effect.flatMap(JobQueue, (queue) => queue.dueReceiptJob(receipt.id)).pipe(
+              Effect.orElseSucceed(() => null),
+            )
+          : null;
+      return { receipt, dueJob };
+    }),
+    ({ receipt, dueJob }) => {
+      if (dueJob) {
+        after(() =>
+          drainJobs(startedAt + KICK_BUDGET_MS, { user_id: scope.userId, kicked_by: "poll" }, [
+            dueJob,
+          ]),
+        );
+      }
+      return receipt
         ? NextResponse.json({
             id: receipt.id,
             status: receipt.status,
@@ -26,7 +53,8 @@ export async function GET(_request: Request, { params }: Params) {
             errorMessage: receipt.errorMessage,
             updatedAt: receipt.updatedAt,
           })
-        : notFound(),
+        : notFound();
+    },
   );
 }
 
