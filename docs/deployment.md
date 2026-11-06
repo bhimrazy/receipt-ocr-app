@@ -57,7 +57,7 @@ Set these in Vercel (Project → Settings → Environment Variables, Production)
 | `DIRECT_URL`                               | For migrations    | Session pooler URL. Not needed by the running app.                                                                                                                                                   |
 | `BETTER_AUTH_SECRET`                       | Yes               | `openssl rand -base64 32`. See [Rotating the auth secret](#rotating-the-auth-secret).                                                                                                                |
 | `BETTER_AUTH_SECRETS`                      | No                | Versioned secrets for rotation, current first: `2:<new>,1:<old>`.                                                                                                                                    |
-| `BETTER_AUTH_URL`                          | Yes               | The public origin, e.g. `https://receiptocr.example.com`.                                                                                                                                            |
+| `BETTER_AUTH_URL`                          | Yes               | The exact origin users visit, e.g. `https://receiptocr.example.com`. Requests from any other host (such as a `*.vercel.app` alias) are refused.                                                      |
 | `NEXT_PUBLIC_SITE_URL`                     | Yes               | Same origin. Used for canonical URLs, the sitemap and social cards.                                                                                                                                  |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`    | Yes               | For R2, `S3_REGION=auto`.                                                                                                                                                                            |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Yes               |                                                                                                                                                                                                      |
@@ -71,7 +71,7 @@ Set these in Vercel (Project → Settings → Environment Variables, Production)
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | No                | Google sign-in.                                                                                                                                                                                      |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | No                | GitHub sign-in.                                                                                                                                                                                      |
 | `TRUSTED_IP_HEADERS`                       | Off Vercel only   | The header your proxy sets to the client IP, e.g. `x-forwarded-for`. The app refuses to start in production without it, because rate limits would otherwise share one bucket. Leave unset on Vercel. |
-| `TRUSTED_PROXIES`                          | No                | Proxy IPs or CIDRs that append to that header rather than overwrite it.                                                                                                                              |
+| `TRUSTED_PROXIES`                          | No                | Required if your proxy appends to that header rather than overwriting it (nginx's default). Otherwise every client shares one rate-limit bucket, and the app logs `http.client_ip_unresolved`.       |
 | `AUTH_REQUIRE_EMAIL_VERIFICATION`          | No                | Defaults to `true` in production. Set `false` only for tests.                                                                                                                                        |
 | `OCR_PROVIDER`                             | No                | `fixture` returns canned results. Tests only.                                                                                                                                                        |
 
@@ -149,9 +149,15 @@ schema. So **apply migrations first, then deploy**.
 
 The auth secret signs sessions and encrypts stored OAuth tokens.
 
-1. Keep `BETTER_AUTH_SECRET` as it is, and add `BETTER_AUTH_SECRETS=2:<new secret>,1:<current secret>`.
+Before the first rotation (step 0), set `BETTER_AUTH_SECRETS=1:<current BETTER_AUTH_SECRET>` and deploy. Nobody is signed
+out, and tokens sealed from then on carry a version, so `BETTER_AUTH_SECRET` can later be removed safely.
+
+To rotate:
+
+1. Keep `BETTER_AUTH_SECRET` as it is, and set `BETTER_AUTH_SECRETS=2:<new secret>,1:<current secret>`.
 2. Deploy. New sessions and tokens use version 2, and version 1 still decrypts older tokens.
-3. Remove old versions only once nothing sealed under them is still needed.
+3. Remove old versions only once nothing sealed under them is still needed. Removing `BETTER_AUTH_SECRET` before
+   step 0 above makes tokens sealed without a version unreadable.
 
 Changing the current version signs everyone out. Losing every secret makes stored OAuth tokens unreadable, so users
 have to sign in with their provider again.
@@ -165,7 +171,12 @@ Steps specific to one release, newest first.
 - **Migration:** adds the `admin_audit_log` and `app_settings` tables and the `receipts.model` column. It also makes
   `receipts.user_id` nullable with `ON DELETE SET NULL`, so receipts outlive a deleted uploader, and adds an index
   on `receipts.last_attempt_at`. It doesn't rewrite existing rows.
-- **New variables:** `SUPPORT_EMAIL`, plus `TRUSTED_IP_HEADERS` (and optionally `TRUSTED_PROXIES`) on Docker hosts.
+- **New variables:** `SUPPORT_EMAIL`, plus `TRUSTED_IP_HEADERS` on Docker hosts (and `TRUSTED_PROXIES` if the proxy appends to the header).
   `BETTER_AUTH_SECRETS` is optional.
+- **Auth hardening:** existing sessions, OAuth tokens and pending reset links keep working. Don't rotate the auth
+  secret in the same release. Setting `BETTER_AUTH_SECRETS=1:<current secret>` now is recommended (see
+  [Rotating the auth secret](#rotating-the-auth-secret)).
+- **Vercel:** leave `TRUSTED_IP_HEADERS` and `TRUSTED_PROXIES` unset. After deploy, check the logs for
+  `http.client_ip_unresolved`; it should never appear.
 - **After deploy:** the Free plan default drops to 20 receipts a day. Change it in **Admin → Settings** if you want
   something else.
