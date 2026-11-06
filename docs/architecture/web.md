@@ -142,15 +142,16 @@ Pages follow the same path without the HTTP mapping: server components call help
 
 The app installs to a home screen or desktop and opens `/app` in its own window.
 
-| Piece                                                               | What it does                                                                                                                                                                                       |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`app/manifest.ts`](../../apps/web/app/manifest.ts)                 | Name, `id` and `start_url` `/app`, standalone display, colours from the theme tokens, PNG and maskable icons, a "Scan receipt" shortcut (`/app/upload?capture=1`) and the Android share target     |
-| [`public/sw.js`](../../apps/web/public/sw.js)                       | Hand-written service worker, about 100 lines: offline fallback, share target handoff. Served with `Cache-Control: no-cache` from [`next.config.ts`](../../apps/web/next.config.ts)                 |
-| [`public/offline.html`](../../apps/web/public/offline.html)         | Self-contained page shown when a page load fails offline; reloads itself when the connection returns                                                                                               |
-| [`components/pwa.tsx`](../../apps/web/components/pwa.tsx)           | Registers the worker (production builds, `/app` routes only) and shows the install card: `beforeinstallprompt` on Android and desktop, a one-time Share then Add to Home Screen hint on iOS Safari |
-| [`lib/share-target.ts`](../../apps/web/lib/share-target.ts)         | `takeSharedFiles()`: reads the shared files from Cache Storage and deletes them                                                                                                                    |
-| [`lib/use-shared-files.ts`](../../apps/web/lib/use-shared-files.ts) | Upload panel hook: puts shared files into the panel's file input, so they are prepared and checked like picked files                                                                               |
-| [`scripts/pwa-icons.ts`](../../scripts/pwa-icons.ts)                | Renders the PNG icons and `app/apple-icon.png` from `app/icon.svg` with Playwright's Chromium                                                                                                      |
+| Piece                                                                                                                                                          | What it does                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`app/manifest.ts`](../../apps/web/app/manifest.ts)                                                                                                            | Name, `id` and `start_url` `/app`, standalone display, colours from the theme tokens, PNG and maskable icons, an "Add receipt" shortcut (`/app/upload?capture=1`; the camera track's upload page reads `capture=1`) and the Android share target |
+| [`public/sw.js`](../../apps/web/public/sw.js)                                                                                                                  | Hand-written service worker: offline fallback and share target handoff. Served with `Cache-Control: no-cache` from [`next.config.ts`](../../apps/web/next.config.ts)                                                                             |
+| [`public/offline.html`](../../apps/web/public/offline.html), [`offline.js`](../../apps/web/public/offline.js)                                                  | Page shown when a page load fails offline; reloads itself when the connection returns. The script is a file, not inline, so it still runs under a nonce-based CSP                                                                                |
+| [`public/sw-killswitch.js`](../../apps/web/public/sw-killswitch.js)                                                                                            | Not used normally. Published as `sw.js` it removes the worker and its caches everywhere; see [Disable the service worker](../runbook.md#disable-the-service-worker)                                                                              |
+| [`components/pwa.tsx`](../../apps/web/components/pwa.tsx)                                                                                                      | Registers the worker (production builds, `/app` routes only) and shows the install card: `beforeinstallprompt` on Android and desktop, a one-time Share then Add to Home Screen hint on iOS Safari                                               |
+| [`lib/share-target.ts`](../../apps/web/lib/share-target.ts)                                                                                                    | `takeSharedFiles()` reads the shared files from Cache Storage and deletes them; `clearSharedFiles()` runs on sign-out                                                                                                                            |
+| [`lib/use-shared-files.ts`](../../apps/web/lib/use-shared-files.ts), [`components/shared-files-notice.tsx`](../../apps/web/components/shared-files-notice.tsx) | In the upload panel: lists shared files with Keep and Discard, and explains `?shared=failed` and `?shared=unavailable`                                                                                                                           |
+| [`scripts/pwa-icons.ts`](../../scripts/pwa-icons.ts)                                                                                                           | Renders the PNG icons and `app/apple-icon.png` from `app/icon.svg` with Playwright's Chromium                                                                                                                                                    |
 
 How the worker routes a request:
 
@@ -159,7 +160,9 @@ flowchart TD
   R[Request from a page in scope /] --> O{Same origin?}
   O -- no --> N[Browser default, not handled]
   O -- yes --> S{POST /share-target?}
-  S -- yes --> F[Read the multipart body, store up to 20 files in the receiptocr-shared cache]
+  S -- yes --> RF{Referrer from another site?}
+  RF -- yes --> D[303 to /app/upload, nothing stored]
+  RF -- no --> F[Keep images, PDFs and untyped files up to 25 MB, at most 20, in the receiptocr-shared cache]
   F --> U[303 to /app/upload?shared=1]
   S -- no --> G{GET?}
   G -- no --> N
@@ -173,24 +176,34 @@ flowchart TD
 
 - **Nothing user-specific is cached.** Receipts are financial data, so the worker never stores API responses,
   signed-in HTML, RSC payloads or receipt images; those requests go straight to the network. The static cache holds
-  only `offline.html`, `icon.svg` and one icon. `VERSION` in `sw.js` names the cache; `activate` deletes older ones.
-- **Shared files are short-lived.** The Android share sheet posts the files to `/share-target`. The worker keeps them
-  in Cache Storage and redirects to the upload page. A signed-out visitor goes through sign-in first; the files wait
-  there for up to 10 minutes. The upload panel takes them on its next mount and deletes the cache, stale entries
-  included. A new share replaces an earlier one.
+  only `offline.html`, `offline.js`, `icon.svg` and one icon, fetched past the HTTP cache. `VERSION` in `sw.js`
+  names the cache; `activate` deletes older ones.
+- **A share is never uploaded unseen.** Any site can POST a form to `/share-target`, so shared files never join the
+  queue on their own. The worker drops a share whose referrer is another site (a page can hide its referrer, so this
+  is only a first check). The upload panel then lists the files, says they were shared on this device, possibly
+  before sign-in, and waits for **Keep** or **Discard**. Kept files go through the file input like picked files and
+  still need the usual Read click.
+- **Shared files are short-lived.** The worker keeps them in Cache Storage and redirects to the upload page; a
+  signed-out visitor goes through sign-in first. They expire after 10 minutes. The panel deletes the cache when it
+  takes them (stale entries included), the worker prunes expired entries on activate, a new share replaces an
+  earlier one, and sign-out deletes the cache. A file with no type (multipart sends it as `application/octet-stream`)
+  is stored with an empty type, so the panel goes by its extension; a file with no name becomes `shared-receipt`
+  with an extension from its type.
 - **Without a worker** (first launch before it installed, or a browser without one) the share reaches the
-  [route handler](../../apps/web/app/share-target/route.ts), which redirects to the upload page without reading the
-  body. On Vercel a share larger than 4.5 MB is refused with a 413 in that case.
+  [route handler](../../apps/web/app/share-target/route.ts), which redirects to `/app/upload?shared=unavailable`
+  without reading the body; the panel explains it. On Vercel a share larger than 4.5 MB is refused with a 413 in
+  that case.
 - **Only the app registers it.** The landing, auth and lab pages never register the worker. Once installed it
   controls every same-origin page (scope `/`), which only matters for offline page loads and the share target.
 - **iOS** has no install prompt or share target; the hint covers installing. The status bar style is `black`, so
   pages start below it and need no top safe-area inset; the root `body` pads for side insets
-  (`viewport-fit=cover`).
+  (`viewport-fit=cover`). The install card sits above the mobile tab bar using the shell's `--app-bottom-inset`.
 
 The CSP allows `worker-src 'self'` and `manifest-src 'self'` ([`lib/csp.ts`](../../apps/web/lib/csp.ts)).
 [`e2e/pwa.spec.ts`](../../apps/web/e2e/pwa.spec.ts) checks installability (Chromium's own check), the icons, the
-worker's headers, registration, the offline page, that nothing but the precached files is ever cached, and the share
-flow signed in and signed out.
+worker's headers, registration, the offline page, that nothing but the precached files is ever cached, the share flow
+signed in and signed out (Keep, Discard, no upload without the visitor's clicks), a share posted by another site, and
+that sign-out clears a waiting share.
 
 ## Design principles and invariants
 
