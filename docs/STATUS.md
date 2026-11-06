@@ -43,11 +43,12 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-| PR                   | Work                                                                                                                                                                                                  |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #37                  | Job queue Track A: Postgres `jobs` queue and core job service (migration `0008`, apply before deploying); routes run it in `after()` until Track B ([flow](architecture/flows/jobs.md)), under review |
-| #38                  | Hardening: session check before upload body, PDF page cap, per-email limits, CSP reports, health endpoints, SECURITY.md, runbook, under review                                                        |
-| (branch `test/load`) | Load test suite on a 1 vCPU / 1 GB server                                                                                                                                                             |
+| PR                             | Work                                                                                                                                                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #37                            | Job queue Track A: Postgres `jobs` queue and core job service (migration `0008`, apply before deploying); routes run it in `after()` until Track B ([flow](architecture/flows/jobs.md)), under review |
+| #38                            | Hardening: session check before upload body, PDF page cap, per-email limits, CSP reports, health endpoints, SECURITY.md, runbook, under review                                                        |
+| (branch `feat/receipt-groups`) | Receipt groups: named collections per workspace, History filter and selection, receipt picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying)                          |
+| (branch `test/load`)           | Load test suite on a 1 vCPU / 1 GB server                                                                                                                                                             |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
