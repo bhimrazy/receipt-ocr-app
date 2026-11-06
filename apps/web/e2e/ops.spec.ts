@@ -39,3 +39,12 @@ test("the CSP reports to /api/csp-report, which accepts both report formats", as
   const huge = await request.post("/api/csp-report", { data: "x".repeat(20_000) });
   expect(huge.status()).toBe(413);
 });
+
+test("security.txt is served and not expired", async ({ request }) => {
+  const res = await request.get("/.well-known/security.txt");
+  expect(res.status()).toBe(200);
+  const text = await res.text();
+  expect(text).toMatch(/^Contact: https:\/\//m);
+  const expires = /^Expires: (.+)$/m.exec(text)?.[1];
+  expect(new Date(expires!).getTime()).toBeGreaterThan(Date.now());
+});
