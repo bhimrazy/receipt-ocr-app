@@ -42,6 +42,7 @@ export function countPdfPages(bytes: Uint8Array): PageCount {
     objects: 0,
     kids: new Set(),
     treeNodes: new Set(),
+    escapedNames: 0,
   };
   for (const { id, dict, streamStart } of topLevelObjects(text, bytes)) {
     if (!classify(tally, id, dict)) return { tooComplex: true };
@@ -65,6 +66,7 @@ interface Tally {
   kids: Set<string>;
   /** Objects that are page-tree nodes (`/Type /Pages` or holding `/Kids`), not leaves. */
   treeNodes: Set<string>;
+  escapedNames: number;
 }
 
 const PAGE = /\/Type\s*\/Page(?![A-Za-z0-9])/;
@@ -90,6 +92,8 @@ const MAX_INFLATED_BYTES = 16 * 1024 * 1024;
 const MAX_WORK_CHARS = 32 * 1024 * 1024;
 const MAX_OBJECTS = 200_000;
 /** Distinct `/Kids` ids before the file counts as too complex; far above any page limit. */
+/** Names with a `#xx` escape examined per file before it counts as too complex. */
+const MAX_ESCAPED_NAMES = 10_000;
 const MAX_KID_IDS = 10_000;
 /** Entries read from one object stream; real writers put a few hundred at most. */
 const MAX_OBJSTM_ENTRIES = 65_536;
@@ -108,7 +112,7 @@ function linearizedPages(text: string): number {
 function classify(tally: Tally, id: string, dict: string): boolean {
   tally.work += dict.length + 64;
   if (++tally.objects > MAX_OBJECTS || tally.work > MAX_WORK_CHARS) return false;
-  if (dict.includes("#") && hidesReadName(dict)) return false;
+  if (dict.includes("#") && hidesReadName(tally, dict)) return false;
   if (PAGES.test(dict)) {
     tally.treeNodes.add(id);
     const count = COUNT.exec(dict);
@@ -123,8 +127,10 @@ function classify(tally: Tally, id: string, dict: string): boolean {
   return true;
 }
 
-function hidesReadName(dict: string): boolean {
+function hidesReadName(tally: Tally, dict: string): boolean {
   for (const [name] of dict.matchAll(ESCAPED_NAME)) {
+    // Real files have a handful of escaped names; a flood is treated as hiding one.
+    if (++tally.escapedNames > MAX_ESCAPED_NAMES) return true;
     const decoded = name
       .slice(1)
       .replace(/#([0-9A-Fa-f]{2})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
