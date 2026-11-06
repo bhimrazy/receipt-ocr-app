@@ -6,7 +6,6 @@ import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
-import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -83,7 +82,9 @@ function ProfileCard({ initialName }: { initialName: string }) {
           <Status error={error} id="name-error" ok={ok} />
           <div>
             <Button disabled={pending} type="submit">
-              {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+              {pending ? (
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : null}
               Save
             </Button>
           </div>
@@ -168,7 +169,9 @@ function PasswordCard() {
           <Status error={error} id="password-error" ok={ok} />
           <div>
             <Button disabled={pending} type="submit">
-              {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+              {pending ? (
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : null}
               Change password
             </Button>
           </div>
@@ -221,22 +224,7 @@ function DangerCard({ email }: { email: string }) {
   );
 }
 
-export function AccountSettings() {
-  const { data: session, isPending } = authClient.useSession();
-
-  if (isPending) {
-    return (
-      <Card aria-busy="true" aria-label="Loading your account">
-        <CardContent className="space-y-3 pt-5">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-10 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!session) return null;
-
+export function AccountSettings({ email, name }: { email: string; name: string }) {
   return (
     <>
       <SettingsSection
@@ -244,7 +232,7 @@ export function AccountSettings() {
         id="profile-heading"
         title="Profile"
       >
-        <ProfileCard initialName={session.user.name ?? ""} />
+        <ProfileCard initialName={name} />
       </SettingsSection>
       <SettingsSection
         description="For email sign-in. If you sign in with Google or GitHub, change your password there."
@@ -258,7 +246,7 @@ export function AccountSettings() {
         id="delete-heading"
         title="Delete account"
       >
-        <DangerCard email={session.user.email} />
+        <DangerCard email={email} />
       </SettingsSection>
     </>
   );

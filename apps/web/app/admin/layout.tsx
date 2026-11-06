@@ -1,3 +1,4 @@
+import { SkipLink } from "@/components/skip-link";
 import { Brand } from "@/components/brand";
 import { UserMenu, type MenuUser } from "@/components/user-menu";
 import { requireAdmin } from "@/lib/session";
@@ -48,6 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <Toaster>
+      <SkipLink />
       <div className="flex min-h-screen flex-col border-t-2 border-primary bg-background text-foreground">
         <div className="flex min-h-0 flex-1">
           <div className="hidden w-64 shrink-0 border-r border-border bg-card/40 md:block">
@@ -91,7 +93,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 <UserMenu showAdmin user={user} />
               </div>
             </header>
-            <main className="min-w-0 flex-1 px-4 pt-6 pb-28 md:px-10 md:py-10">
+            <main
+              id="main-content"
+              tabIndex={-1}
+              className="min-w-0 flex-1 px-4 pt-6 pb-28 md:px-10 md:py-10"
+            >
               <div className="mx-auto max-w-6xl">{children}</div>
             </main>
           </div>

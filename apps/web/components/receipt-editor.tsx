@@ -238,7 +238,9 @@ export function ReceiptEditor({
 
           <div className="flex gap-2 sm:col-span-2">
             <Button disabled={saving} type="submit">
-              {saving ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+              {saving ? (
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : null}
               Save changes
             </Button>
             <Button disabled={saving} onClick={onClose} type="button" variant="outline">

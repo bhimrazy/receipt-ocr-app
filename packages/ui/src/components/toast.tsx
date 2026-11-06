@@ -154,7 +154,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
   }
 
   if (type === "loading") {
-    icon = <Loader2Icon className="animate-spin" aria-hidden="true" />;
+    icon = <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" />;
   }
 
   if (!icon) {
