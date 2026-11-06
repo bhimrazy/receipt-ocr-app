@@ -12,6 +12,7 @@ import { ChevronsUpDown, LogOut, Settings, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { clearSignedInHint } from "@/lib/signed-in-hint";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
 
@@ -53,6 +54,7 @@ export function UserMenu({
 
   async function handleSignOut() {
     await authClient.signOut();
+    clearSignedInHint();
     router.push("/");
     router.refresh();
   }

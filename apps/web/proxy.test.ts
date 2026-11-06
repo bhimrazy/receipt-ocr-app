@@ -29,4 +29,18 @@ describe("proxy", () => {
       "/app/history?status=failed",
     );
   });
+
+  it("sets the landing-page hint for signed-in visits and clears it on redirect", () => {
+    const signedIn = proxy(
+      new NextRequest("http://localhost/app", {
+        headers: { cookie: "better-auth.session_token=abc" },
+      }),
+    );
+    expect(signedIn.cookies.get("signed_in_hint")?.value).toBe("1");
+
+    const signedOut = proxy(
+      new NextRequest("http://localhost/app", { headers: { cookie: "signed_in_hint=1" } }),
+    );
+    expect(signedOut.cookies.get("signed_in_hint")?.value).toBe("");
+  });
 });
