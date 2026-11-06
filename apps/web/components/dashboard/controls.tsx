@@ -46,7 +46,10 @@ export function DashboardControls({
   return (
     <div className="mb-6 flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <nav aria-label="Date range" className="flex flex-wrap gap-2">
+        <nav
+          aria-label="Date range"
+          className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 max-md:w-full md:flex-wrap"
+        >
           {PRESETS.map((preset) => (
             <Link
               aria-current={range.preset === preset.id ? "true" : undefined}

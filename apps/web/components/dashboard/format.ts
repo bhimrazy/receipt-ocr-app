@@ -41,9 +41,14 @@ function moneyFormatter(currency: string, compact: boolean, whole: boolean) {
 }
 
 /** An amount in its own currency: JPY with no decimals, KWD with three, IDR whole when whole. */
-export function formatMoney(value: number, currency: string, options: { compact?: boolean } = {}) {
+export function formatMoney(
+  value: number,
+  currency: string,
+  options: { compact?: boolean; axis?: boolean } = {},
+) {
   const code = currency.toUpperCase();
-  const compact = Boolean(options.compact) && Math.abs(value) >= 10_000;
+  // Axis ticks are always short ("£1.5K", "£500"); elsewhere only big numbers are.
+  const compact = Boolean(options.axis) || (Boolean(options.compact) && Math.abs(value) >= 10_000);
   const whole = WHOLE_UNITS.has(code) && Number.isInteger(value);
   const formatter = moneyFormatter(code, compact, whole);
   if (formatter) return formatter.format(value);
@@ -59,13 +64,15 @@ const compactCount = new Intl.NumberFormat(LOCALE, {
 export function formatValue(
   value: number,
   format: ValueFormat,
-  options: { compact?: boolean } = {},
+  options: { compact?: boolean; axis?: boolean } = {},
 ) {
   switch (format.kind) {
     case "money":
       return formatMoney(value, format.currency, options);
     case "count":
-      return (options.compact && value >= 10_000 ? compactCount : countFormat).format(value);
+      return (
+        options.axis || (options.compact && value >= 10_000) ? compactCount : countFormat
+      ).format(value);
     case "ms":
       return value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${Math.round(value)} ms`;
   }

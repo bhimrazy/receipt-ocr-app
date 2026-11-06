@@ -120,7 +120,7 @@ export default function TimeChart({
     ...points.flatMap((p) => [p.value ?? 0, hasPrevious ? (p.previous ?? 0) : 0]),
   );
   const ticks = niceTicks(max);
-  const axis = (v: number) => formatValue(v, format, { compact: true });
+  const axis = (v: number) => formatValue(v, format, { axis: true });
 
   return (
     <div>
@@ -171,7 +171,7 @@ export default function TimeChart({
             tickFormatter={axis}
             tickLine={false}
             ticks={ticks}
-            width={56}
+            width={44}
           />
           <ChartTooltip
             content={<Readout format={format} labels={labels} />}
@@ -182,7 +182,7 @@ export default function TimeChart({
               ifOverflow="extendDomain"
               label={{
                 value: reference.label,
-                position: "insideTopLeft",
+                position: "insideTopRight",
                 className: "fill-muted-foreground font-sans",
               }}
               stroke="var(--muted-foreground)"
@@ -199,7 +199,7 @@ export default function TimeChart({
               stroke="var(--color-previous)"
               strokeDasharray="4 4"
               strokeWidth={2}
-              type="monotone"
+              type="linear"
             />
           ) : null}
           {kind === "bar" ? (
@@ -223,7 +223,7 @@ export default function TimeChart({
               isAnimationActive={false}
               stroke="var(--color-value)"
               strokeWidth={2}
-              type="monotone"
+              type="linear"
             />
           ) : (
             <Line
@@ -234,7 +234,7 @@ export default function TimeChart({
               isAnimationActive={false}
               stroke="var(--color-value)"
               strokeWidth={2}
-              type="monotone"
+              type="linear"
             />
           )}
         </ComposedChart>
