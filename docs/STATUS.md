@@ -76,7 +76,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
    Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations will be `0008`, `0009`.
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
-8. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
+8. Load test: `scripts/load.sh` (on demand, and weekly in `.github/workflows/load.yml`) runs the production image on
+   1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
+   to the hot path and commit the new summary. First numbers: 160 reads/s and 64 uploads/s hold the SLOs.
+9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
 
 ## Known follow-ups
 
@@ -86,6 +89,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Better Auth: verify the OAuth callback turns a banned user into `?error=BANNED_USER`.
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
 - Benchmark has five synthetic images and no committed results.
+- Load test findings: the quota count (`ocr_rounds` per user, run per page and twice per upload) is 90% of Postgres
+  time at 64 uploads/s; the app holds up to 10 connections against a pool max of 5; pages emit no wide events.
 
 ## How to resume on another machine
 
