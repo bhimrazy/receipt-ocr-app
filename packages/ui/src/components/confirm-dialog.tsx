@@ -86,6 +86,13 @@ function ConfirmBody({
   const [pending, setPendingState] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Unmounting ends any in-flight confirm, so the close guard must not stay locked.
+  React.useEffect(() => {
+    return () => {
+      pendingRef.current = false;
+    };
+  }, [pendingRef]);
+
   const setPending = (value: boolean) => {
     pendingRef.current = value;
     setPendingState(value);

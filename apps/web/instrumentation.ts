@@ -8,11 +8,11 @@ export async function register() {
 
 /** Server render, route and action failures. Message and digest only: no request data, so no PII. */
 export const onRequestError: Instrumentation.onRequestError = async (error, _request, context) => {
-  const { logger } = await import("./lib/log");
+  const { logger, redactDbMessage } = await import("./lib/log");
   const caught = error as Error & { digest?: string };
   logger.error({
     event: "request.error",
-    message: caught.message,
+    message: redactDbMessage(caught.message),
     digest: caught.digest,
     routePath: context.routePath,
     routeType: context.routeType,

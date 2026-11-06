@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { authErrorMessage } from "@/lib/auth-errors";
-import { authClient } from "@/lib/auth-client";
+import { authClient, signOutAndClearHint } from "@/lib/auth-client";
 import { DEFAULT_REDIRECT } from "@/lib/redirect";
 import { AuthError, AuthMessage, AuthNotice, authCardClass } from "./auth-field";
 import { FocusHeading } from "./focus-heading";
@@ -99,7 +99,7 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
 
   async function switchAccount() {
     setAction("sign-out");
-    await authClient.signOut();
+    await signOutAndClearHint();
     router.replace(`/sign-in?redirect=${encodeURIComponent(returnPath)}`);
     router.refresh();
   }

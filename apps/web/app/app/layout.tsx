@@ -33,15 +33,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Every /app page needs a real session; with auth unconfigured this sends everyone to /sign-in.
   const session = await requireSession();
   // Redirecting to /sign-in here would loop: signed-in visitors are sent back to /app.
-  // The rest only needs the user, so it runs alongside the workspace lookup.
-  const [scope, allowance, workspaces, usage, { plan }] = await Promise.all([
-    getActiveScope(),
+  // First, alone: it may create the personal workspace, which the reads below count.
+  const scope = await getActiveScope();
+  if (!scope) return <NoWorkspace email={session.user.email} />;
+  const [allowance, workspaces, usage, { plan }] = await Promise.all([
     getWorkspaceAllowance(),
     listWorkspaces(),
     loadUsage(),
     getCurrentPlan(),
   ]);
-  if (!scope) return <NoWorkspace email={session.user.email} />;
   const label = planLabel(plan);
   const showAdmin = isAdmin(session);
   const user: MenuUser = {
