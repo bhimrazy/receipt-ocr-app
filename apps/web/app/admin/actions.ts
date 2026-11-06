@@ -208,6 +208,7 @@ export async function banUserAction(input: {
       .parse(input);
     notSelf(ctx, parsed.userId, "You can't ban yourself.");
     const target = await loadUser(parsed.userId);
+    notAdmin(target, "Admins can't be banned.");
     await audited(
       ctx,
       {
@@ -328,6 +329,7 @@ export async function deleteUserAction(input: { userId: string; confirm: string 
     const { userId, confirm } = z.object({ userId: id, confirm: z.string() }).parse(input);
     notSelf(ctx, userId, "You can't delete your own account from the admin panel.");
     const target = await loadUser(userId);
+    notAdmin(target, "Admins can't be deleted.");
     if (confirm.trim() !== target.email) {
       throw new ActionError("The email you typed doesn't match this user.");
     }
