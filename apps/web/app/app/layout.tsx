@@ -9,7 +9,7 @@ import { logger } from "@/lib/log";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
 import { getActiveScope, isAdmin, requireSession } from "@/lib/session";
-import { getWorkspaceAllowance } from "@/lib/workspaces";
+import { getWorkspaceAllowance, listWorkspaces } from "@/lib/workspaces";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -33,9 +33,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await requireSession();
   // Redirecting to /sign-in here would loop: signed-in visitors are sent back to /app.
   // The rest only needs the user, so it runs alongside the workspace lookup.
-  const [scope, allowance, usage, { plan }] = await Promise.all([
+  const [scope, allowance, workspaces, usage, { plan }] = await Promise.all([
     getActiveScope(),
     getWorkspaceAllowance(),
+    listWorkspaces(),
     loadUsage(),
     getCurrentPlan(),
   ]);
@@ -47,12 +48,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     email: session.user.email,
     image: session.user.image ?? null,
   };
-  const switcher = <WorkspaceSwitcher canCreate={allowance.canCreate} />;
+  const switcher = (
+    <WorkspaceSwitcher
+      activeId={scope.organizationId}
+      canCreate={allowance.canCreate}
+      workspaces={workspaces}
+    />
+  );
 
   return (
     <Toaster>
       <div className="flex min-h-screen flex-col bg-background text-foreground">
-        <ImpersonationBanner />
+        {session.session.impersonatedBy ? <ImpersonationBanner email={session.user.email} /> : null}
         <div className="flex min-h-0 flex-1">
           <div className="hidden w-64 shrink-0 border-r border-border bg-sidebar md:block">
             <aside className="sticky top-0 flex h-screen flex-col gap-6 p-4">

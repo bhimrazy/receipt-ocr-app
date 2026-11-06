@@ -24,6 +24,7 @@ import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import type { WorkspaceOption } from "@/lib/workspaces";
 
 // Same rule as packages/core workspace-name.ts: 1–80 characters, no angle brackets or control characters.
 const WORKSPACE_NAME_MAX = 80;
@@ -49,13 +50,19 @@ function Initial({ name }: { name: string }) {
 }
 
 /**
- * `canCreate` comes from the server (lib/workspaces.ts) and counts only the
+ * Workspaces and the active one come from the server layout, so there is no client fetch or
+ * loading flash; only switching and creating call the auth client. `canCreate` comes from the server (lib/workspaces.ts) and counts only the
  * workspaces the user OWNS, so memberships elsewhere don't lock creation.
  */
-export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
-  const { data: organizations, isPending: orgsPending } = authClient.useListOrganizations();
-  const { data: activeOrg } = authClient.useActiveOrganization();
-  const { data: session } = authClient.useSession();
+export function WorkspaceSwitcher({
+  activeId,
+  canCreate,
+  workspaces,
+}: {
+  activeId: string;
+  canCreate: boolean;
+  workspaces: WorkspaceOption[];
+}) {
   const router = useRouter();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -66,18 +73,8 @@ export function WorkspaceSwitcher({ canCreate }: { canCreate: boolean }) {
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  if (orgsPending) {
-    return (
-      <span
-        aria-hidden="true"
-        className="block h-9 w-40 animate-pulse rounded-lg border border-border bg-card max-md:h-11"
-      />
-    );
-  }
-
-  const orgs = organizations ?? [];
-  const current =
-    activeOrg ?? orgs.find((org) => org.id === session?.session.activeOrganizationId) ?? orgs[0];
+  const orgs = workspaces;
+  const current = orgs.find((org) => org.id === activeId) ?? orgs[0];
 
   async function handleSwitch(organizationId: string) {
     if (organizationId === current?.id) {

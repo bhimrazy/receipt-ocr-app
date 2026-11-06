@@ -1,6 +1,5 @@
 "use client";
 
-import { authClient } from "@/lib/auth-client";
 import { stopImpersonatingAction } from "@/lib/impersonation-actions";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { UserCog } from "lucide-react";
@@ -8,15 +7,11 @@ import { useState } from "react";
 
 /**
  * Persistent banner shown while an admin is impersonating another user
- * (session.impersonatedBy is set). "Stop" restores the admin's own session and
+ * (the layout renders it only when session.impersonatedBy is set). "Stop" restores the admin's own session and
  * returns to that user's admin page.
  */
-export function ImpersonationBanner() {
-  const { data: session } = authClient.useSession();
+export function ImpersonationBanner({ email }: { email: string }) {
   const [pending, setPending] = useState(false);
-
-  const impersonatedBy = session?.session?.impersonatedBy;
-  if (!impersonatedBy) return null;
 
   // Server action: it writes the audit row, then redirects to the user's admin page.
   async function stop() {
@@ -35,7 +30,7 @@ export function ImpersonationBanner() {
         <div className="flex min-w-0 items-start gap-2">
           <UserCog aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span className="min-w-0 break-words">
-            Signed in as <span className="font-medium break-all">{session?.user?.email}</span>.
+            Signed in as <span className="font-medium break-all">{email}</span>.
             Everything you do runs as this user.
           </span>
         </div>
