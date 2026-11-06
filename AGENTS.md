@@ -37,7 +37,8 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Storage: S3-compatible API, R2-first.
 - OCR: AI SDK with Google Gemini as v1 provider.
 - Backend workflow: Effect TS services.
-- Future jobs: BullMQ + Redis later; v1 upload is synchronous.
+- Background jobs: a Postgres job queue in `packages/core/src/jobs` (claimed with `FOR UPDATE SKIP LOCKED`, leases,
+  retries, dead state). A worker app and drain route come next; BullMQ + Redis only past the plan's scale triggers.
 
 ## Working Principles
 
@@ -54,7 +55,7 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 
 - Put shared backend workflows in `packages/core` Effect services, not directly inside route handlers.
 - Keep Next route handlers as thin HTTP adapters.
-- Keep OCR processing reusable for a future `apps/worker` BullMQ app.
+- Run background work as a job kind in `packages/core/src/jobs`, never in an unrecorded `after()`.
 - Use `packages/ai` as the provider abstraction boundary.
 - Use `packages/storage` for object-key and S3/R2 behavior.
 - Use `packages/db` for schema and DB construction.
