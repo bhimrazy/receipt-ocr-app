@@ -95,7 +95,11 @@ export async function readCappedText(request: Request, maxBytes: number): Promis
 export function createWindowLimiter(windowMs: number, max: number, maxKeys = 10_000) {
   const windows = new Map<string, { start: number; count: number }>();
   const evict = (now: number) => {
-    for (const [k, w] of windows) if (now - w.start >= windowMs) windows.delete(k);
+    // Insertion order is start order, so the first live entry ends the expired ones.
+    for (const [k, w] of windows) {
+      if (now - w.start < windowMs) break;
+      windows.delete(k);
+    }
     // Map keeps insertion order; refreshed keys are re-inserted below, so first is oldest.
     while (windows.size >= maxKeys) windows.delete(windows.keys().next().value as string);
   };
