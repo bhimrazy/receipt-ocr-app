@@ -282,11 +282,11 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
           </Row>
         ) : (
           <Row
-            hint={isSelf ? "This is your own account." : "Signs them out now and blocks sign-in."}
+            hint={blockedReason ?? "Signs them out now and blocks sign-in."}
             label="Ban this user"
           >
             <Button
-              disabled={isSelf}
+              disabled={Boolean(blockedReason)}
               onClick={() => setBanOpen(true)}
               size="sm"
               variant="destructive"
@@ -301,12 +301,12 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
           hint={
             isSelf
               ? "Delete your own account from Settings in the app."
-              : "Removes the account for good. You type their email to confirm."
+              : (blockedReason ?? "Removes the account for good. You type their email to confirm.")
           }
           label="Delete this user"
         >
           <Button
-            disabled={isSelf}
+            disabled={Boolean(blockedReason)}
             onClick={() =>
               ask({
                 title: `Delete ${who}?`,
@@ -319,8 +319,8 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
                 confirmLabel: "Delete user",
                 confirmText: who,
                 destructive: true,
-                onConfirm: () =>
-                  settle(deleteUserAction({ userId: user.id, confirm: who }), "User deleted."),
+                onConfirm: (typed) =>
+                  settle(deleteUserAction({ userId: user.id, confirm: typed }), "User deleted."),
               })
             }
             size="sm"

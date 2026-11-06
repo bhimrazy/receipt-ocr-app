@@ -25,4 +25,5 @@ export const AppLayer = Layer.mergeAll(ReceiptRepo.Live, Storage.Live, Ocr.Live)
 
 export type AppServices = Layer.Layer.Success<typeof AppLayer>;
 export * from "./admin";
+export * from "./audit";
 export * from "./admin-queries";

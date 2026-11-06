@@ -1,12 +1,12 @@
 import { OCR_MODELS, OCR_PROVIDERS } from "@receipt-ocr/ai/models";
 import {
   DEFAULT_PLANS,
+  findUser,
   loadDailyOcrCap,
   OCR_DEADLINE_MS,
   providerAvailability,
   Settings,
 } from "@receipt-ocr/core";
-import { eq, user as userTable } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -15,7 +15,6 @@ import { SettingsSection } from "@/components/settings-section";
 import { formatDateTime } from "@/lib/format";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
-import { adminDb } from "../admin-db";
 import { OcrChainForm } from "./ocr-chain-form";
 import { PlanLimitsForm } from "./plan-limits-form";
 
@@ -23,15 +22,8 @@ export const metadata: Metadata = { title: "Settings" };
 
 async function savedLine(saved?: { updatedAt: Date; updatedBy: string | null }) {
   if (!saved) return "Using the defaults in code. Nothing has been saved here yet.";
-  let who = "a deleted admin";
-  if (saved.updatedBy) {
-    const [row] = await adminDb()
-      .select({ email: userTable.email })
-      .from(userTable)
-      .where(eq(userTable.id, saved.updatedBy))
-      .limit(1);
-    if (row) who = row.email;
-  }
+  const admin = saved.updatedBy ? await runtime.runPromise(findUser(saved.updatedBy)) : null;
+  const who = admin?.email ?? "a deleted admin";
   return `Last saved ${formatDateTime(saved.updatedAt)} by ${who}.`;
 }
 
