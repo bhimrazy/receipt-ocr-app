@@ -41,8 +41,15 @@ import { receiptTitle } from "@/components/receipt-list";
 import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 
-const FAILED_FALLBACK =
-  "The photo may be blurry, cropped or too dark. Try again, or upload a clearer photo.";
+const FAILED_FALLBACK = {
+  photo: "The photo may be blurry, cropped or too dark. Try again, or upload a clearer photo.",
+  pdf: "The PDF may be a blurry scan or have no receipt in it. Try again, or upload a clearer copy.",
+};
+
+/** "photo" or "PDF", so failure and review copy names what the person actually uploaded. */
+function fileNoun(receipt: { imageObjectKey: string | null }) {
+  return receipt.imageObjectKey?.endsWith(".pdf") ? "PDF" : "photo";
+}
 
 function toNumber(value: string | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
@@ -69,7 +76,7 @@ function checksFor(receipt: ReceiptWithItems, money: (value: string | null) => s
   const level = confidenceLevel(receipt.confidence);
   if (level === "review" || level === "check") {
     checks.push(
-      `Overall confidence is ${formatConfidence(receipt.confidence)}. Compare the merchant, date and total with the photo.`,
+      `Overall confidence is ${formatConfidence(receipt.confidence)}. Compare the merchant, date and total with the ${fileNoun(receipt)}.`,
     );
   }
   const lowLines = receipt.items.filter((item) => confidenceLevel(item.confidence) === "review");
@@ -168,7 +175,8 @@ export function ReceiptResult({
     </PageHeader>
   );
 
-  const isPdf = receipt.imageObjectKey?.endsWith(".pdf") ?? false;
+  const noun = fileNoun(receipt);
+  const isPdf = noun === "PDF";
 
   const image = (
     <Card className="flex flex-col overflow-hidden lg:sticky lg:top-6">
@@ -268,13 +276,13 @@ export function ReceiptResult({
               <AlertDescription className="mt-1">
                 {/* The generic message repeats the heading, so say only the useful part. */}
                 {!receipt.errorMessage || receipt.errorMessage === EXTRACTION_FAILED_MESSAGE
-                  ? FAILED_FALLBACK
+                  ? FAILED_FALLBACK[isPdf ? "pdf" : "photo"]
                   : receipt.errorMessage}
               </AlertDescription>
               <p className="mt-2 text-xs text-muted-foreground">
                 {triesLeft > 0
-                  ? `${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left for this photo. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count toward your daily limit.`
-                  : `This photo was tried ${MAX_EXTRACTION_ATTEMPTS} times. Upload a clearer photo instead.`}
+                  ? `${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left for this ${noun}. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count toward your daily limit.`
+                  : `This ${noun} was tried ${MAX_EXTRACTION_ATTEMPTS} times. Upload a clearer one instead.`}
               </p>
             </div>
             <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
@@ -284,7 +292,7 @@ export function ReceiptResult({
                 href="/app"
               >
                 <Upload aria-hidden="true" />
-                Upload a new photo
+                Upload a new {noun}
               </Link>
             </div>
           </Alert>
@@ -293,12 +301,22 @@ export function ReceiptResult({
           {image}
           {failed ? (
             <Card className="p-5">
-              <h2 className="text-sm font-medium">For a clearer photo</h2>
+              <h2 className="text-sm font-medium">For a clearer {noun}</h2>
               <ul className="mt-3 flex list-disc flex-col gap-1.5 pl-4 text-sm text-muted-foreground marker:text-primary">
-                <li>Lay the receipt flat, without folds.</li>
-                <li>Use even light and avoid glare and shadows.</li>
-                <li>Keep the whole receipt in the frame, including the total.</li>
-                <li>Hold the phone still so the text is sharp.</li>
+                {isPdf ? (
+                  <>
+                    <li>Check the PDF opens and shows the receipt, not a cover page.</li>
+                    <li>If it is a scan, scan again at a higher resolution.</li>
+                    <li>Or take a photo of the paper receipt instead.</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Lay the receipt flat, without folds.</li>
+                    <li>Use even light and avoid glare and shadows.</li>
+                    <li>Keep the whole receipt in the frame, including the total.</li>
+                    <li>Hold the phone still so the text is sharp.</li>
+                  </>
+                )}
               </ul>
             </Card>
           ) : null}
@@ -390,7 +408,7 @@ export function ReceiptResult({
                     {low ? (
                       <span className="mt-1 flex items-center gap-1 text-xs text-warning">
                         <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0" />
-                        Check this line against the photo
+                        Check this line against the {noun}
                       </span>
                     ) : null}
                   </td>

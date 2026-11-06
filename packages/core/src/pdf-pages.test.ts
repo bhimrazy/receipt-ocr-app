@@ -136,4 +136,21 @@ describe("validateUpload PDF page cap (audit L2)", () => {
       expect(String(exit.cause)).toContain(`up to ${MAX_PDF_PAGES} pages`);
     }
   });
+
+  it("scans ~1 MB of adversarial input in linear time", () => {
+    const MB = 1024 * 1024;
+    const inputs = {
+      digits: "7".repeat(MB),
+      zeroPairs: "0 0 ".repeat(MB / 4),
+      spaceAfterDigits: `1${" ".repeat(MB)}`,
+      digitSpaceRuns: "1234567890 ".repeat(MB / 11),
+      pairsThenSpaces: `${"12 ".repeat(1000)}${" ".repeat(MB)}`,
+      typeRuns: `1 0 obj ${"/Type /Linearized ".repeat(MB / 18)}`,
+    };
+    for (const [name, text] of Object.entries(inputs)) {
+      const started = performance.now();
+      expect(countPdfPages(enc(text)), name).toBe(0);
+      expect(performance.now() - started, name).toBeLessThan(1000);
+    }
+  });
 });

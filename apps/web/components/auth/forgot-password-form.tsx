@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, MailCheck } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { authErrorMessage } from "@/lib/auth-errors";
+import { Turnstile, useTurnstile } from "@/components/turnstile";
 import { authClient } from "@/lib/auth-client";
 import {
   AuthError,
@@ -18,6 +19,7 @@ import {
 import { FocusHeading } from "./focus-heading";
 
 export function ForgotPasswordForm() {
+  const turnstile = useTurnstile();
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -25,12 +27,18 @@ export function ForgotPasswordForm() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
     setError(null);
+    if (turnstile.blocker) {
+      if (!turnstile.broken) setError(turnstile.blocker);
+      return;
+    }
+    setPending(true);
     const { error: resetError } = await authClient.requestPasswordReset({
       email: email.trim(),
       redirectTo: "/reset-password",
+      fetchOptions: turnstile.fetchOptions,
     });
+    turnstile.reset();
     setPending(false);
     if (resetError) {
       setError(authErrorMessage(resetError));
@@ -86,8 +94,14 @@ export function ForgotPasswordForm() {
           required
           value={email}
         />
+        <Turnstile controller={turnstile} />
         {error ? <AuthError>{error}</AuthError> : null}
-        <Button className="mt-1 h-11 w-full" disabled={pending} type="submit">
+        <Button
+          aria-busy={turnstile.pending}
+          className="mt-1 h-11 w-full"
+          disabled={pending}
+          type="submit"
+        >
           {pending ? (
             <>
               <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />

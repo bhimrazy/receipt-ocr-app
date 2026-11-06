@@ -62,6 +62,8 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Do not copy prototype inline styles wholesale.
 - Do not add the prototype tweak panel.
 - Preserve user-owned changes; do not revert unrelated work.
+- Update the relevant page and diagram in [`docs/architecture/`](docs/architecture/README.md) in the same PR as an
+  architectural change (new package or service, table or constraint, flow, or external dependency).
 
 ## Validation
 

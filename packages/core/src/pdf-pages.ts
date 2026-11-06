@@ -37,7 +37,8 @@ const PAGES = /\/Type\s*\/Pages(?![A-Za-z0-9])/;
 const COUNT = /\/Count\s+(\d+)/;
 const LINEARIZED_N = /\/Linearized\b[\s\S]*?\/N\s+(\d+)/;
 const OBJ_STM = /\/Type\s*\/ObjStm(?![A-Za-z0-9])/;
-const OBJ_START = /(\d+)\s+(\d+)\s+obj\b/g;
+// Bounded and anchored so no match can start inside a digit run: linear on hostile input.
+const OBJ_START = /(?<![0-9])(\d{1,10})\s{1,16}(\d{1,10})\s{1,16}obj\b/g;
 
 /**
  * Budget for all inflated object streams in one file, against zip bombs. Object streams
