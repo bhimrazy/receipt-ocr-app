@@ -22,6 +22,9 @@ bun run db:migrate
 bun dev
 ```
 
+Project status, open decisions and how to resume work are in [`docs/STATUS.md`](docs/STATUS.md); plans and
+reviews are in [`docs/plans/`](docs/plans) and [`docs/reviews/`](docs/reviews).
+
 Deploying to production, and the steps for each release (migrations, new variables, rollback), are in
 [`docs/deployment.md`](docs/deployment.md).
 
