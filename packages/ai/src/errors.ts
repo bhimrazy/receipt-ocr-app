@@ -10,6 +10,7 @@ import {
   RetryError,
   TypeValidationError,
 } from "ai";
+import type { ExtractionUsage } from "./models";
 
 /**
  * Why one extraction call failed. The caller decides from this whether
@@ -29,7 +30,20 @@ function fromStatus(status: number): OcrFailureKind {
   return "bad-image";
 }
 
+/** Every failed extraction call: why, and the tokens it used when the provider reported them. */
+export class OcrCallError extends Error {
+  override name = "OcrCallError";
+  constructor(
+    readonly kind: OcrFailureKind,
+    readonly usage: ExtractionUsage | null,
+    override readonly cause: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : `OCR call failed: ${kind}`, { cause });
+  }
+}
+
 export function classifyOcrError(error: unknown): OcrFailureKind {
+  if (error instanceof OcrCallError) return error.kind;
   // With retries, the SDK wraps the last attempt's error.
   if (RetryError.isInstance(error)) return classifyOcrError(error.lastError);
   if (APICallError.isInstance(error)) {

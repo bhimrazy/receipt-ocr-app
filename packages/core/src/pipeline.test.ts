@@ -107,7 +107,7 @@ function harness(options: { storagePut?: "fail"; ocr?: "fixture" | "fail" | "unc
       }
       return Effect.succeed({
         extraction: FIXTURE_RECEIPTS[0]!,
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0 },
         model: "fixture" as const,
         attempts: [{ model: "fixture", kind: "ok" as const, ms: 1 }],
       });

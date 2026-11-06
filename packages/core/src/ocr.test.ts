@@ -16,7 +16,7 @@ const failure = (kind: OcrFailureKind) => ({ kind, cause: new Error(kind) });
 const success = (model: ModelId) =>
   Effect.succeed({
     extraction: FIXTURE_RECEIPTS[0]!,
-    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0 },
     model,
   });
 

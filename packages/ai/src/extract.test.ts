@@ -1,5 +1,7 @@
+import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it } from "vitest";
-import { extractReceipt } from "./extract";
+import { OcrCallError } from "./errors";
+import { extractReceipt, extractWith } from "./extract";
 import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS } from "./fixture";
 import { receiptExtractionSchema } from "./schema";
 
@@ -19,12 +21,77 @@ describe("extractReceipt with the fixture provider", () => {
     }
     const { usage, model } = await extractReceipt({ model: "fixture", file: file("x") });
     expect(model).toBe("fixture");
-    expect(usage.totalTokens).toBe(0);
+    expect(usage.inputTokens).toBe(0);
+    expect(usage.outputTokens).toBe(0);
   });
 
-  it("fails on demand, to exercise the failure path end to end", async () => {
-    await expect(
-      extractReceipt({ model: "fixture", file: file(`a ${FIXTURE_FAIL_MARKER} b`) }),
-    ).rejects.toThrow(/simulated/);
+  it("fails on demand as an OcrCallError, to exercise the failure path end to end", async () => {
+    const error = await extractReceipt({
+      model: "fixture",
+      file: file(`a ${FIXTURE_FAIL_MARKER} b`),
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OcrCallError);
+    expect(error).toMatchObject({ kind: "provider-error", usage: null });
+  });
+});
+
+const googleUsage = {
+  inputTokens: { total: 1200, noCache: 1000, cacheRead: 200, cacheWrite: undefined },
+  outputTokens: { total: 300, text: 120, reasoning: 180 },
+};
+
+const reply = (text: string, finish: "stop" | "length" = "stop") =>
+  new MockLanguageModelV4({
+    doGenerate: {
+      content: text ? [{ type: "text", text }] : [],
+      finishReason: { unified: finish, raw: finish },
+      usage: googleUsage,
+      warnings: [],
+    },
+  });
+
+const expectedUsage = {
+  inputTokens: 1200,
+  cachedInputTokens: 200,
+  outputTokens: 300,
+  reasoningTokens: 180,
+};
+
+describe("extractWith (mock model)", () => {
+  it("returns the extraction with cache and reasoning split out of the totals", async () => {
+    const result = await extractWith(reply(JSON.stringify(FIXTURE_RECEIPTS[0])), {
+      file: file("x"),
+      maxRetries: 0,
+    });
+    expect(result.extraction).toEqual(FIXTURE_RECEIPTS[0]);
+    expect(result.usage).toEqual(expectedUsage);
+  });
+
+  it("keeps the usage of a billed call whose output failed the schema", async () => {
+    const error = await extractWith(reply('{"merchant": 3}'), {
+      file: file("x"),
+      maxRetries: 0,
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OcrCallError);
+    expect(error).toMatchObject({ kind: "invalid-output", usage: expectedUsage });
+  });
+
+  it("keeps the usage of a truncated reply with no output", async () => {
+    const error = await extractWith(reply("", "length"), { file: file("x"), maxRetries: 0 }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toMatchObject({ kind: "invalid-output", usage: expectedUsage });
+  });
+
+  it("has no usage when the provider call itself failed", async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new TypeError("fetch failed");
+      },
+    });
+    const error = await extractWith(model, { file: file("x"), maxRetries: 0 }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toMatchObject({ kind: "provider-error", usage: null });
   });
 });
