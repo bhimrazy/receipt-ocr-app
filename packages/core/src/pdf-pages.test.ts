@@ -164,6 +164,101 @@ describe("validateUpload PDF page cap (audit L2)", () => {
     }
   });
 
+  describe("page-hiding tricks", () => {
+    const kidsRefs = (n: number) => Array.from({ length: n }, (_, i) => `${10 + i} 0 R`).join(" ");
+    const objStmPdf = (extraDict: string, type = "/ObjStm", compress = true) => {
+      const body = `${treeDict(
+        20,
+        Array.from({ length: 20 }, (_, i) => 10 + i),
+      )} `;
+      const head = `2 0\n`;
+      const raw = enc(head + body);
+      const data = compress ? deflateSync(raw) : raw;
+      const filter = compress ? "/Filter /FlateDecode " : "";
+      return concat(
+        enc(
+          `%PDF-1.5\n5 0 obj\n<< /Type ${type} /N 1 /First ${head.length} ${filter}${extraDict} /Length ${data.length} >>\nstream\n`,
+        ),
+        data,
+        enc("\nendstream\nendobj\n"),
+      );
+    };
+
+    it("counts objects whose header has a % comment before obj", () => {
+      const pages = Array.from(
+        { length: 20 },
+        (_, i) => `${10 + i} 0 %c\nobj\n${pageDict()}\nendobj\n`,
+      );
+      expect(count(enc(`%PDF-1.4\n${pages.join("")}`))).toBe(20);
+    });
+
+    it("still finds a header after a % in the line before it", () => {
+      const pdf = enc(
+        `%PDF-1.4\n3 0 obj\n<< /Length 9 >>\nstream\nab %cd\nendstream endobj 4 0 obj ${pageDict()} endobj\n`,
+      );
+      expect(count(pdf)).toBe(1);
+    });
+
+    it("rejects names written with #xx escapes that the scan reads", () => {
+      const tree = `1 0 obj\n<< /Type /P#61ges /Kids [${kidsRefs(20)}] /Count 20 >>\nendobj\n`;
+      expect(count(enc(`%PDF-1.4\n${tree}`))).toBe("tooComplex");
+      expect(count(enc("%PDF-1.4\n1 0 obj\n<< /Type /Page /Obj#53tm 1 >>\nendobj\n"))).toBe(
+        "tooComplex",
+      );
+    });
+
+    it("ignores #xx escapes in names the scan doesn't read", () => {
+      const pdf = enc(`%PDF-1.4\n1 0 obj\n<< /Type /Page /Font << /F#31 2 0 R >> >>\nendobj\n`);
+      expect(count(pdf)).toBe(1);
+    });
+
+    it("reads an object stream with a no-op predictor in /DecodeParms", () => {
+      expect(count(objStmPdf("/DecodeParms << /Predictor 1 >>"))).toBe(20);
+    });
+
+    it("reads an uncompressed object stream", () => {
+      expect(count(objStmPdf("", "/ObjStm", false))).toBe(20);
+    });
+
+    it("rejects object streams it can't decode", () => {
+      expect(count(objStmPdf("/DecodeParms << /Predictor 12 /Columns 5 >>"))).toBe("tooComplex");
+      expect(count(objStmPdf("/DecodeParms 9 0 R"))).toBe("tooComplex");
+      expect(count(objStmPdf("/Obj#53tm", "/Obj#53tm"))).toBe("tooComplex");
+      const lzw = enc(
+        "%PDF-1.5\n5 0 obj\n<< /Type /ObjStm /N 1 /First 2 /Filter /LZWDecode /Length 4 >>\nstream\nabcd\nendstream\nendobj\n",
+      );
+      expect(count(lzw)).toBe("tooComplex");
+    });
+
+    it("counts the ids in /Kids of an untyped page tree", () => {
+      const objects = [
+        `1 0 obj\n<< /Kids [${kidsRefs(20)}] /Count 3 0 R >>\nendobj\n`,
+        ...Array.from(
+          { length: 20 },
+          (_, i) => `${10 + i} 0 obj\n<< /MediaBox [0 0 1 1] >>\nendobj\n`,
+        ),
+      ];
+      expect(count(enc(`%PDF-1.4\n${objects.join("")}`))).toBe(20);
+    });
+  });
+
+  it("stays fast on 10 MB of comments, escapes and kids", () => {
+    const MB10 = 10 * 1024 * 1024;
+    const inputs = {
+      comments: `%PDF-1.4\n${"1 0 %c\n".repeat(MB10 / 7)}`,
+      longComments: `%PDF-1.4\n${`1 0 %${"x".repeat(250)}\n`.repeat(MB10 / 256)}`,
+      percents: "%".repeat(MB10),
+      escapes: `1 0 obj << ${"/N#41me ".repeat(MB10 / 7)}`,
+      kidsNoClose: `1 0 obj << ${"/Kids ".repeat(MB10 / 6)}`,
+      kidsRefs: `1 0 obj << /Kids [${"1 0 R ".repeat(MB10 / 6)}`,
+    };
+    for (const [name, text] of Object.entries(inputs)) {
+      const started = performance.now();
+      count(enc(text));
+      expect(performance.now() - started, name).toBeLessThan(1000);
+    }
+  });
+
   it("stays fast and light on 10 MB adversarial files", () => {
     const MB10 = 10 * 1024 * 1024;
     const trailers = `%PDF-1.4\n${"trailer << /Root 1 0 R >>\n".repeat(MB10 / 27)}`;
