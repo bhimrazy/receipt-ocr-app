@@ -18,7 +18,7 @@ export type SpendRange = {
   /** Inclusive calendar days. */
   from: string;
   to: string;
-  unit: BucketUnit;
+  unit: Exclude<BucketUnit, "hour">;
   /** Show the previous period and the change against it. */
   compare: boolean;
   previous: { from: string; to: string; kind: "previous-period" | "last-year" };
@@ -71,7 +71,7 @@ export function resolveDateValue(value: string | undefined, today: string): stri
 }
 
 /** Daily up to a month, weekly up to about a quarter, monthly beyond. */
-export function unitFor(from: string, to: string): BucketUnit {
+export function unitFor(from: string, to: string): SpendRange["unit"] {
   const days = daySpan(from, to);
   if (days <= 31) return "day";
   return days <= 92 ? "week" : "month";

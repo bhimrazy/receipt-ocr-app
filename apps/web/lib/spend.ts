@@ -3,7 +3,7 @@ import {
   parseSpendSearch,
   resolveRange,
   spendDashboard,
-  todayIn,
+  localDate,
   type SpendDashboard,
   type SpendSearch,
 } from "@receipt-ocr/core";
@@ -24,7 +24,7 @@ export type SpendView = { search: SpendSearch; dashboard: SpendDashboard };
 const load = cache(async (key: string): Promise<SpendView> => {
   const search = parseSpendSearch(Object.fromEntries(new URLSearchParams(key)));
   const scope = await requireActiveScope();
-  const today = todayIn(TIME_ZONE);
+  const today = localDate(new Date(), TIME_ZONE);
   const dashboard = await runtime.runPromise(
     spendDashboard(scope, { range: resolveRange(search, today), today, timeZone: TIME_ZONE }),
   );

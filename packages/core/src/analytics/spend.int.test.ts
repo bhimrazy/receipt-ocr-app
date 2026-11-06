@@ -30,11 +30,11 @@ async function workspace(name: string) {
   return { organizationId, userId: id };
 }
 
-type Seed = Partial<NewReceipt> & { date: string | null; total: string | null };
+type Seed = Partial<NewReceipt> & { date: string | null; total: string | null; uploaded?: string };
 
 /** A completed receipt uploaded the day after its date unless `uploaded` says otherwise. */
 function row(ws: { organizationId: string; userId: string }, seed: Seed): NewReceipt {
-  const { date, uploaded, ...rest } = seed as Seed & { uploaded?: string };
+  const { date, uploaded, ...rest } = seed;
   const day = /^\d{4}-\d{2}-\d{2}$/.test(date ?? "") ? date! : TODAY;
   return {
     organizationId: ws.organizationId,

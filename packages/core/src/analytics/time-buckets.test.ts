@@ -1,6 +1,15 @@
+import { sql } from "@receipt-ocr/db";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import { shiftMonths } from "./dates";
-import { bucketOf, bucketsBetween, fillBuckets, isTimeZone, localDate } from "./time-buckets";
+import {
+  bucketOf,
+  bucketSql,
+  bucketsBetween,
+  fillBuckets,
+  isTimeZone,
+  localDate,
+} from "./time-buckets";
 
 describe("bucketsBetween", () => {
   it("lists every day, inclusive", () => {
@@ -75,5 +84,11 @@ describe("bucket helpers", () => {
   it("knows real zones from made-up ones", () => {
     expect(isTimeZone("Europe/Berlin")).toBe(true);
     expect(isTimeZone("Mars/Olympus")).toBe(false);
+  });
+
+  it("renders the zone as a bound parameter, not inline SQL", () => {
+    const query = new PgDialect().sqlToQuery(bucketSql(sql`created_at`, "week", "Asia/Kathmandu"));
+    expect(query.sql).toBe("date_trunc($1, (created_at at time zone $2))::date::text");
+    expect(query.params).toEqual(["week", "Asia/Kathmandu"]);
   });
 });

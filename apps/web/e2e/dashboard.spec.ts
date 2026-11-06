@@ -50,17 +50,20 @@ test.describe("Home spending dashboard", () => {
     await expect(page.getByRole("heading", { name: "Spending" })).toHaveCount(0);
   });
 
-  for (const viewport of [
-    { name: "phone", width: 390, height: 844 },
-    { name: "desktop", width: 1440, height: 900 },
-  ]) {
-    test(`shows per-currency spending on ${viewport.name}`, async ({ page }) => {
-      await page.setViewportSize(viewport);
-      const email = uniqueEmail(`dash-${viewport.name}`);
-      await signUp(page, email);
-      await seed(email);
-      await page.goto("/app");
+  // One seeded account for both widths and the link check: sign-ups are rate-limited per client.
+  test("shows per-currency spending at 390 px and on desktop, and links into History", async ({
+    page,
+  }) => {
+    const email = uniqueEmail("dash-data");
+    await signUp(page, email);
+    await seed(email);
 
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/app");
       const spending = page.getByRole("region", { name: "Spending" });
       await expect(spending).toBeVisible();
       // GBP has more receipts, so it is selected; JPY is offered, never added in.
@@ -81,18 +84,13 @@ test.describe("Home spending dashboard", () => {
       await expect(page).toHaveURL(/currency=JPY/);
       await expect(spending.getByText("¥1,580").first()).toBeVisible();
       await noSidewaysScroll(page);
-    });
-  }
+    }
 
-  test("a category opens History filtered to it", async ({ page }) => {
-    const email = uniqueEmail("dash-link");
-    await signUp(page, email);
-    await seed(email);
     await page.goto("/app?range=3m");
     const categories = page.getByRole("list", { name: "Spend by category" });
     await categories.getByRole("link", { name: /Fuel/ }).click();
     await expect(page).toHaveURL(/\/app\/history\?.*category=Fuel/);
-    await expect(page.getByText("Shell")).toBeVisible();
+    await expect(page.getByText("Shell").filter({ visible: true }).first()).toBeVisible();
   });
 
   test("only unread receipts: says spending appears once one is read", async ({ page }) => {

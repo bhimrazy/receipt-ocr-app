@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@receipt-ocr/ui/components/chart";
+import { ChartContainer, ChartTooltip, type ChartConfig } from "@receipt-ocr/ui/components/chart";
 import { useRouter } from "next/navigation";
 import {
   Area,
@@ -17,6 +12,7 @@ import {
   ReferenceLine,
   XAxis,
   YAxis,
+  type TooltipContentProps,
 } from "recharts";
 import { change, formatChange, formatValue, niceTicks, type ValueFormat } from "./format";
 
@@ -50,6 +46,57 @@ const config = (labels: TimeChartProps["labels"]): ChartConfig => ({
     ? { previous: { label: labels.previous, color: "var(--muted-foreground)" } }
     : {}),
 });
+
+/** One readout for every series at the hovered point, with the change against the comparison. */
+function Readout({
+  active,
+  payload,
+  format,
+  labels,
+}: Partial<TooltipContentProps<number, string>> & {
+  format: ValueFormat;
+  labels: TimeChartProps["labels"];
+}) {
+  const point = payload?.[0]?.payload as TimePoint | undefined;
+  if (!active || !point) return null;
+  const rows = [
+    { key: "value", name: labels.value, value: point.value, line: "border-solid border-primary" },
+    ...(labels.previous
+      ? [
+          {
+            key: "previous",
+            name: labels.previous,
+            value: point.previous ?? null,
+            line: "border-dashed border-muted-foreground",
+          },
+        ]
+      : []),
+  ].filter((r) => r.value != null);
+  const delta =
+    labels.previous && point.value != null && point.previous != null
+      ? change(point.value, point.previous)
+      : null;
+  return (
+    <div className="min-w-40 rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-xl">
+      <p className="mb-1.5 font-medium">{point.title}</p>
+      {rows.map((r) => (
+        <p className="flex items-center justify-between gap-4" key={r.key}>
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span aria-hidden="true" className={`w-3 border-t-2 ${r.line}`} />
+            {r.name}
+          </span>
+          <span className="font-mono tabular-nums">{formatValue(r.value!, format)}</span>
+        </p>
+      ))}
+      {delta != null ? (
+        <p className="mt-1.5 text-muted-foreground">
+          <span className="font-mono tabular-nums">{formatChange(delta)}</span> against{" "}
+          {labels.previous}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * Spend over time: an area or line with an optional dashed comparison, or
@@ -92,7 +139,12 @@ export default function TimeChart({
           </li>
         </ul>
       ) : null}
-      <ChartContainer aria-hidden="true" config={config(labels)} style={{ height }}>
+      <ChartContainer
+        aria-hidden="true"
+        className="aspect-auto font-mono tabular-nums"
+        config={config(labels)}
+        style={{ height }}
+      >
         <ComposedChart
           accessibilityLayer={false}
           data={points}
@@ -122,18 +174,7 @@ export default function TimeChart({
             width={56}
           />
           <ChartTooltip
-            content={
-              <ChartTooltipContent
-                footer={(payload) => {
-                  const point = payload[0]?.payload as TimePoint | undefined;
-                  if (!hasPrevious || point?.value == null || point.previous == null) return null;
-                  const delta = change(point.value, point.previous);
-                  return delta == null ? null : `${formatChange(delta)} against ${labels.previous}`;
-                }}
-                formatValue={(v) => formatValue(v, format)}
-                title={(payload) => (payload[0]?.payload as TimePoint | undefined)?.title}
-              />
-            }
+            content={<Readout format={format} labels={labels} />}
             cursor={kind === "bar" ? true : { strokeWidth: 1 }}
           />
           {reference ? (

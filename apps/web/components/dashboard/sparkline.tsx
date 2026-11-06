@@ -9,7 +9,12 @@ const config = { value: { label: "Trend", color: "var(--primary)" } };
 export default function Sparkline({ values }: { values: number[] }) {
   const data = values.map((value) => ({ value }));
   return (
-    <ChartContainer aria-hidden="true" config={config} style={{ height: 32 }}>
+    <ChartContainer
+      aria-hidden="true"
+      className="aspect-auto"
+      config={config}
+      style={{ height: 32 }}
+    >
       <LineChart
         accessibilityLayer={false}
         data={data}
