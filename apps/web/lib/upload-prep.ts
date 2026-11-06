@@ -21,7 +21,10 @@ export const CEILING_BYTES = 1024 * 1024;
 export const START_QUALITY = 0.85;
 export const MIN_QUALITY = 0.6;
 export const SCALE_STEP = 0.85;
-export const MAX_ATTEMPTS = 5;
+/** Last resort when the floor leaves the file over CEILING_BYTES: quality 0.5 and a short edge down to this. */
+export const RESCUE_QUALITY = 0.5;
+export const HARD_MIN_SHORT_EDGE = 800;
+export const MAX_ATTEMPTS = 6;
 /** What the file picker is told to offer. */
 export const ACCEPT = ACCEPTED_MEDIA_TYPES.join(",");
 /** The size a file may be at upload time: the app limit, or the tighter deployment body limit. */
@@ -80,37 +83,48 @@ export interface EncodeResult {
 
 /**
  * Encodes at START_QUALITY, then steps quality down to MIN_QUALITY, then shrinks by SCALE_STEP (never below
- * the short-edge floor) until the result is under `target` or `maxAttempts` is spent. Returns the smallest
- * encode it made.
+ * the short-edge floor) until the result is under `target` or `maxAttempts` is spent. If the floor stops the
+ * scaling with the best result still over `ceiling`, it tries RESCUE_QUALITY and keeps scaling down to
+ * HARD_MIN_SHORT_EDGE until under the ceiling. Returns the smallest encode it made.
  */
 export async function encodeToTarget(
   encode: Encoder,
   size: { width: number; height: number },
   {
     target = TARGET_BYTES,
+    ceiling = CEILING_BYTES,
     maxAttempts = MAX_ATTEMPTS,
     minShort = MIN_SHORT_EDGE,
-  }: { target?: number; maxAttempts?: number; minShort?: number } = {},
+  }: { target?: number; ceiling?: number; maxAttempts?: number; minShort?: number } = {},
 ): Promise<EncodeResult> {
   const qualities = [START_QUALITY, 0.72, MIN_QUALITY];
+  const budget = Math.max(1, maxAttempts);
   let { width, height } = size;
-  const floor = Math.min(minShort, width, height);
+  let floor = Math.min(minShort, width, height);
   let quality = START_QUALITY;
+  let rescue = false;
   let best: Omit<EncodeResult, "attempts"> | undefined;
   let attempts = 0;
-  while (attempts < maxAttempts) {
+  while (attempts < budget) {
     attempts++;
     const blob = await encode(width, height, quality);
     if (!best || blob.size < best.blob.size) best = { blob, width, height, quality };
-    if (blob.size <= target) break;
-    const next = qualities[qualities.indexOf(quality) + 1];
+    if (blob.size <= (rescue ? ceiling : target)) break;
+    const step = qualities.indexOf(quality);
+    const next = step < 0 ? undefined : qualities[step + 1];
     if (next !== undefined) {
       quality = next;
       continue;
     }
     const w = Math.round(width * SCALE_STEP);
     const h = Math.round(height * SCALE_STEP);
-    if (Math.min(w, h) < floor) break;
+    if (Math.min(w, h) < floor) {
+      if (rescue || best.blob.size <= ceiling) break;
+      rescue = true;
+      quality = RESCUE_QUALITY;
+      floor = Math.min(HARD_MIN_SHORT_EDGE, floor);
+      continue;
+    }
     width = w;
     height = h;
   }
@@ -123,73 +137,76 @@ function jpegName(name: string) {
   return `${name.replace(/\.[^./]+$/, "") || "receipt"}.jpg`;
 }
 
-/** A reusable JPEG encoder for one decoded image; each call redraws at the requested size. */
-export function jpegEncoder(bitmap: ImageBitmap): Encoder {
-  const draw = (
-    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
-    w: number,
-    h: number,
-  ) => {
-    ctx.fillStyle = "#fff"; // JPEG has no alpha; a transparent PNG would turn black
-    ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(bitmap, 0, 0, w, h);
+type Ctx2D = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+type AnyCanvas = OffscreenCanvas | HTMLCanvasElement;
+
+/**
+ * A JPEG encoder for one decoded image. It holds a single canvas, redrawn only when the output size changes,
+ * so quality steps re-encode the same pixels. Call `release` to free the canvas (iOS Safari caps canvas memory).
+ */
+export function jpegEncoder(bitmap: ImageBitmap): { encode: Encoder; release: () => void } {
+  let canvas: AnyCanvas | undefined;
+  let ctx: Ctx2D | null = null;
+  let drawn = "";
+  const release = () => {
+    if (canvas) canvas.width = canvas.height = 0;
+    canvas = undefined;
+    ctx = null;
+    drawn = "";
   };
-  return async (width, height, quality) => {
-    // OffscreenCanvas encodes off the main thread's critical path where supported (all current engines).
+  const open = (width: number, height: number) => {
+    // OffscreenCanvas keeps encoding off the main thread's critical path where supported.
     if (typeof OffscreenCanvas !== "undefined") {
-      const canvas = new OffscreenCanvas(width, height);
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        draw(ctx, width, height);
-        return canvas.convertToBlob({ type: "image/jpeg", quality });
-      }
+      canvas = new OffscreenCanvas(width, height);
+      ctx = canvas.getContext("2d");
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      const el = document.createElement("canvas");
+      el.width = width;
+      el.height = height;
+      canvas = el;
+      ctx = el.getContext("2d");
+    }
     if (!ctx) throw new Error("no 2d context");
-    draw(ctx, width, height);
-    return new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error("encode failed"))),
-        "image/jpeg",
-        quality,
-      ),
-    );
   };
-}
-
-/** True when a JPEG carries an APP1 (EXIF, XMP) or APP13 (IPTC) segment before its image data. */
-export function jpegHasMetadata(bytes: Uint8Array): boolean {
-  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return true;
-  let i = 2;
-  while (i + 4 <= bytes.length) {
-    if (bytes[i] !== 0xff) return true;
-    const marker = bytes[i + 1]!;
-    if (marker === 0xe1 || marker === 0xed) return true;
-    if (marker === 0xda || marker === 0xd9) return false;
-    i += 2 + ((bytes[i + 2]! << 8) | bytes[i + 3]!);
-  }
-  return true;
-}
-
-/** PNG carries no camera metadata; a JPEG is clean when it has no EXIF/XMP/IPTC. WebP and HEIC are always re-encoded. */
-async function isCleanOriginal(file: File, type: string) {
-  if (type === "image/png") return true;
-  if (type !== "image/jpeg") return false;
-  return !jpegHasMetadata(new Uint8Array(await file.slice(0, 65536).arrayBuffer()));
+  const encode: Encoder = async (width, height, quality) => {
+    const key = `${width}x${height}`;
+    if (drawn !== key) {
+      release();
+      open(width, height);
+      const c = ctx!;
+      c.imageSmoothingQuality = "high";
+      c.fillStyle = "#fff"; // JPEG has no alpha; a transparent PNG would turn black
+      c.fillRect(0, 0, width, height);
+      c.drawImage(bitmap, 0, 0, width, height);
+      drawn = key;
+    }
+    const target = canvas!;
+    if ("toBlob" in target) {
+      return new Promise<Blob>((resolve, reject) =>
+        target.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error("encode failed"))),
+          "image/jpeg",
+          quality,
+        ),
+      );
+    }
+    return target.convertToBlob({ type: "image/jpeg", quality });
+  };
+  return { encode, release };
 }
 
 /**
  * Orients, shrinks to the size budget and re-encodes every image the browser can decode as JPEG, which removes camera
- * metadata (EXIF, including GPS). PDFs, and images the browser can't decode (e.g. HEIC outside Safari), come
+ * metadata (EXIF, including GPS). The original is never returned, even when the re-encode is larger: PNG eXIf
+ * and JPEG APP segments can all carry GPS. PDFs, and images the browser can't decode (e.g. HEIC outside Safari), come
  * back unchanged with their metadata, for the server to judge. Never throws.
  */
 export async function prepareFile(file: File): Promise<File> {
   const type = acceptedType(file);
   if (!type || !IMAGE_TYPES.has(type) || typeof createImageBitmap === "undefined") return file;
   let bitmap: ImageBitmap | undefined;
+  let encoder: ReturnType<typeof jpegEncoder> | undefined;
   try {
     try {
       bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -199,13 +216,13 @@ export async function prepareFile(file: File): Promise<File> {
       bitmap = await createImageBitmap(file);
     }
     const size = planSize(bitmap.width, bitmap.height);
-    const { blob } = await encodeToTarget(jpegEncoder(bitmap), size);
-    // Keep the original when re-encoding would only make it bigger and there is no metadata to strip.
-    if (blob.size >= file.size && (await isCleanOriginal(file, type))) return file;
+    encoder = jpegEncoder(bitmap);
+    const { blob } = await encodeToTarget(encoder.encode, size);
     return new File([blob], jpegName(file.name), { type: "image/jpeg", lastModified: Date.now() });
   } catch {
     return file;
   } finally {
+    encoder?.release();
     bitmap?.close();
   }
 }

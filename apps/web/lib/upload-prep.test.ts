@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_ATTEMPTS,
   MAX_LONG_EDGE,
@@ -6,7 +6,9 @@ import {
   UPLOAD_LIMIT_BYTES,
   acceptedType,
   encodeToTarget,
-  jpegHasMetadata,
+  prepareFile,
+  CEILING_BYTES,
+  HARD_MIN_SHORT_EDGE,
   planSize,
   type Encoder,
 } from "./upload-prep";
@@ -37,6 +39,14 @@ describe("planSize", () => {
   });
   it("leaves a source with a short edge under the floor at its own width", () => {
     expect(planSize(600, 3000)).toEqual({ width: 600, height: 3000 });
+  });
+  it("fits a square to the budget", () => {
+    expect(planSize(2000, 2000)).toEqual({ width: 1732, height: 1732 });
+  });
+  it("fits a very large square without passing the long-edge cap", () => {
+    const out = planSize(12000, 12000);
+    expect(out).toEqual({ width: 1732, height: 1732 });
+    expect(area(out)).toBeLessThanOrEqual(PIXEL_BUDGET);
   });
   it("keeps one pixel on a thin strip", () => {
     expect(planSize(1, 20000)).toEqual({ width: 1, height: 6000 });
@@ -84,32 +94,106 @@ describe("encodeToTarget", () => {
     expect(out.blob.size).toBe(Math.min(...calls.map(([w]) => 5_000_000 + w)));
   });
   it("does not scale below the short-edge floor", async () => {
-    const { encode, calls } = mockEncoder(() => 5_000_000);
+    const { encode, calls } = mockEncoder(() => 800_000);
     const out = await encodeToTarget(encode, { width: 1100, height: 4000 });
     // 1100 -> 935 would break the 1,000 px floor, so it stops after the quality steps.
     expect(calls).toHaveLength(3);
     expect(out.attempts).toBe(3);
   });
   it("accepts a source already smaller than the floor without shrinking it", async () => {
-    const { encode, calls } = mockEncoder(() => 5_000_000);
+    const { encode, calls } = mockEncoder(() => 800_000);
     await encodeToTarget(encode, { width: 600, height: 900 });
     expect(calls).toHaveLength(3);
     expect(calls.every(([w]) => w === 600)).toBe(true);
   });
 });
 
-describe("jpegHasMetadata", () => {
-  const jpeg = (...segments: number[][]) =>
-    new Uint8Array([0xff, 0xd8, ...segments.flat(), 0xff, 0xda, 0, 2]);
-  it("flags EXIF and IPTC segments", () => {
-    expect(jpegHasMetadata(jpeg([0xff, 0xe1, 0, 4, 0, 0]))).toBe(true);
-    expect(jpegHasMetadata(jpeg([0xff, 0xed, 0, 4, 0, 0]))).toBe(true);
+describe("encodeToTarget rescue", () => {
+  it("drops to quality 0.5 and scales below the floor when still over the ceiling", async () => {
+    // Over the ceiling until the short edge is at most ~900.
+    const { encode, calls } = mockEncoder((w, h, q) =>
+      Math.min(w, h) <= 900 && q === 0.5 ? 800_000 : 2_000_000,
+    );
+    const out = await encodeToTarget(encode, { width: 1000, height: 4000 });
+    expect(calls.map((c) => c[2])).toEqual([0.85, 0.72, 0.6, 0.5, 0.5]);
+    expect(calls[3]![0]).toBe(1000);
+    expect(out.width).toBe(850);
+    expect(out.blob.size).toBe(800_000);
+    expect(out.attempts).toBe(5);
   });
-  it("passes a JPEG with only JFIF and quantisation tables", () => {
-    expect(jpegHasMetadata(jpeg([0xff, 0xe0, 0, 4, 0, 0], [0xff, 0xdb, 0, 4, 0, 0]))).toBe(false);
+  it("never goes under the hard minimum short edge", async () => {
+    const { encode, calls } = mockEncoder(() => 5_000_000);
+    await encodeToTarget(encode, { width: 1000, height: 4000 }, { maxAttempts: 20 });
+    expect(Math.min(...calls.map(([w, h]) => Math.min(w, h)))).toBeGreaterThanOrEqual(
+      HARD_MIN_SHORT_EDGE,
+    );
   });
-  it("is cautious about anything that is not a JPEG", () => {
-    expect(jpegHasMetadata(new Uint8Array([1, 2, 3]))).toBe(true);
+  it("does not rescue a result between the target and the ceiling", async () => {
+    const { encode, calls } = mockEncoder(() => CEILING_BYTES - 1);
+    await encodeToTarget(encode, { width: 1000, height: 4000 });
+    expect(calls).toHaveLength(3);
+  });
+  it("always makes at least one attempt", async () => {
+    const { encode, calls } = mockEncoder(() => 5_000_000);
+    await encodeToTarget(encode, size0, { maxAttempts: 0 });
+    expect(calls).toHaveLength(1);
+  });
+});
+
+const size0 = { width: 1000, height: 1000 };
+
+describe("prepareFile metadata", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  function stubBrowser() {
+    vi.stubGlobal("createImageBitmap", async () => ({ width: 100, height: 100, close() {} }));
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        width = 0;
+        height = 0;
+        constructor(w: number, h: number) {
+          this.width = w;
+          this.height = h;
+        }
+        getContext() {
+          return { fillRect() {}, drawImage() {} };
+        }
+        async convertToBlob() {
+          return new Blob(["jpeg"], { type: "image/jpeg" });
+        }
+      },
+    );
+  }
+  const bytes = (...parts: Array<string | number[]>) =>
+    new Uint8Array(
+      parts.flatMap((p) => (typeof p === "string" ? [...p].map((c) => c.charCodeAt(0)) : p)),
+    );
+  it("re-encodes a PNG with an eXIf chunk, even though the original is smaller", async () => {
+    stubBrowser();
+    const png = new File([bytes([0x89], "PNG", "eXIf", "GPS")], "a.png", { type: "image/png" });
+    const out = await prepareFile(png);
+    expect(out.type).toBe("image/jpeg");
+    expect(out.name).toBe("a.jpg");
+  });
+  it("re-encodes a JPEG with EXIF and MPF segments", async () => {
+    stubBrowser();
+    const jpeg = new File(
+      [bytes([0xff, 0xd8, 0xff, 0xe1, 0, 8], "Exif", [0xff, 0xe2, 0, 4])],
+      "a.jpg",
+      {
+        type: "image/jpeg",
+      },
+    );
+    const out = await prepareFile(jpeg);
+    expect(out.type).toBe("image/jpeg");
+    expect(await out.text()).toBe("jpeg");
+  });
+  it("returns the original when the browser can't decode it", async () => {
+    vi.stubGlobal("createImageBitmap", async () => {
+      throw new Error("no decoder");
+    });
+    const heic = new File(["heic"], "a.heic", { type: "image/heic" });
+    expect(await prepareFile(heic)).toBe(heic);
   });
 });
 

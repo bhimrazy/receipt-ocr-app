@@ -74,12 +74,48 @@ const rows = await page.evaluate(async (fixtures) => {
     await synthetic("tall-1x6-800.jpg", 800, 4800),
     await synthetic("small-640.jpg", 640, 960),
   );
+  // Metadata carriers: a PNG with an eXIf chunk and a JPEG with EXIF and MPF segments (fake GPS text).
+  const png = new Uint8Array(await (await synthetic("x.png", 400, 300, "image/png")).arrayBuffer());
+  const chunk = (type, data) => {
+    const b = new Uint8Array(12 + data.length);
+    new DataView(b.buffer).setUint32(0, data.length);
+    b.set(
+      [...type].map((c) => c.charCodeAt(0)),
+      4,
+    );
+    b.set(data, 8);
+    return b;
+  };
+  const text = (t) => Uint8Array.from(t, (c) => c.charCodeAt(0));
+  const ihdrEnd = 8 + 25;
+  files.push(
+    new File(
+      [png.slice(0, ihdrEnd), chunk("eXIf", text("GPSLATITUDE")), png.slice(ihdrEnd)],
+      "exif-chunk.png",
+      {
+        type: "image/png",
+      },
+    ),
+  );
+  const jpg = new Uint8Array(await (await synthetic("y.jpg", 400, 300)).arrayBuffer());
+  const seg = (m, t) => Uint8Array.from([0xff, m, 0, t.length + 2, ...text(t)]);
+  files.push(
+    new File(
+      [jpg.slice(0, 2), seg(0xe1, "Exif GPSLATITUDE"), seg(0xe2, "MPF"), jpg.slice(2)],
+      "exif-mpf.jpg",
+      {
+        type: "image/jpeg",
+      },
+    ),
+  );
   const out = [];
   for (const file of files) {
     const bitmap = await createImageBitmap(file);
     const plan = planSize(bitmap.width, bitmap.height);
     const t0 = performance.now();
-    const r = await encodeToTarget(jpegEncoder(bitmap), plan);
+    const enc = jpegEncoder(bitmap);
+    const r = await encodeToTarget(enc.encode, plan);
+    enc.release();
     const ms = Math.round(performance.now() - t0);
     const final = await prepareFile(file);
     out.push({
@@ -90,7 +126,10 @@ const rows = await page.evaluate(async (fixtures) => {
       outKB: Math.round(final.size / 1024),
       q: r.quality,
       attempts: r.attempts,
-      kept: final === file ? "original" : "jpeg",
+      kept: final === file ? "original" : final.type,
+      clean: !/GPSLATITUDE|Exif|eXIf|MPF/.test(
+        new TextDecoder("latin1").decode(new Uint8Array(await final.arrayBuffer())),
+      ),
       ms,
     });
     bitmap.close();
@@ -100,9 +139,9 @@ const rows = await page.evaluate(async (fixtures) => {
 await browser.close();
 
 console.log(
-  "| file | in | in KB | out | out KB | quality | attempts | result | ms |\n| --- | --- | ---: | --- | ---: | ---: | ---: | --- | ---: |",
+  "| file | in | in KB | out | out KB | quality | attempts | result | no metadata | ms |\n| --- | --- | ---: | --- | ---: | ---: | ---: | --- | --- | ---: |",
 );
 for (const r of rows)
   console.log(
-    `| ${r.name} | ${r.inDim} | ${r.inKB} | ${r.outDim} | ${r.outKB} | ${r.q} | ${r.attempts} | ${r.kept} | ${r.ms} |`,
+    `| ${r.name} | ${r.inDim} | ${r.inKB} | ${r.outDim} | ${r.outKB} | ${r.q} | ${r.attempts} | ${r.kept} | ${r.clean} | ${r.ms} |`,
   );

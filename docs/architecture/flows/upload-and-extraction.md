@@ -42,10 +42,11 @@ are planned ([jobs plan](../../plans/2026-11-06-jobs-queue.md), Track B); they r
 - Files are checked for an accepted type (JPEG, PNG, WebP, HEIC/HEIF, PDF). Up to 20 can be queued at once.
 - Every image the browser can decode is oriented, sized to a pixel budget (about 3 MP, the short edge kept at 1,000 px
   or more where the source has it, long edge capped at 6,000 px, never upscaled) and re-encoded as JPEG. Quality starts
-  at 0.85 and steps down to 0.6, then the image shrinks 15% at a time (never under the short-edge floor), up to 5
-  encodes, aiming for 500 KB. This removes camera metadata (including GPS) and keeps the body under Vercel's 4.5 MB
-  limit. The original is kept only when re-encoding would make it larger and it has no EXIF/XMP/IPTC (a clean JPEG or
-  a PNG). PDFs and images the browser can't decode (HEIC outside Safari) are sent unchanged.
+  at 0.85 and steps down to 0.6, then the image shrinks 15% at a time (never under the short-edge floor), up to 6
+  encodes, aiming for 500 KB. If the short-edge floor leaves it over 1 MB, a last pass drops quality to 0.5 and shrinks
+  down to an 800 px short edge. This removes camera metadata (including GPS) and keeps the body under Vercel's 4.5 MB
+  limit. The original is never sent in place of the re-encode, so metadata can't slip through. PDFs and images the browser can't decode (HEIC outside Safari) are sent
+  unchanged.
 - A file still over 4 MB (`DEPLOYMENT_BODY_LIMIT_BYTES` in
   [`upload-limits.ts`](../../../packages/core/src/upload-limits.ts)) is refused before upload.
 - "Read all" posts files one at a time and stops at the first error (usually the quota).
