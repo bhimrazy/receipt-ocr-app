@@ -1,18 +1,8 @@
 import { Effect } from "effect";
 import { InvalidInput } from "./errors";
+import { ACCEPTED_MEDIA_TYPES, MAX_UPLOAD_BYTES, type AcceptedMediaType } from "./upload-limits";
 
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-
-export const ACCEPTED_MEDIA_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-  "application/pdf",
-] as const;
-
-export type AcceptedMediaType = (typeof ACCEPTED_MEDIA_TYPES)[number];
+export { ACCEPTED_MEDIA_TYPES, MAX_UPLOAD_BYTES, type AcceptedMediaType };
 
 const ascii = (bytes: Uint8Array, start: number, end: number) =>
   String.fromCharCode(...bytes.subarray(start, end));
