@@ -39,6 +39,17 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Backend workflow: Effect TS services.
 - Future jobs: BullMQ + Redis later; v1 upload is synchronous.
 
+## Working Principles
+
+- Find gaps proactively: review against a production-readiness checklist (security, privacy, reliability, infra,
+  observability, product) and raise or plan missing pieces without waiting to be asked. Track them in
+  `docs/STATUS.md`.
+- Look at changes through several lenses: principal engineer (simplicity, reversibility), research engineer
+  (accuracy, cost, measured not guessed), infrastructure (hosting limits, scaling, backups, incidents) and product
+  (what paying users need next).
+- Keep the remote current: push work as it lands and keep `docs/STATUS.md` up to date so work can resume from any
+  machine.
+
 ## Coding Rules
 
 - Put shared backend workflows in `packages/core` Effect services, not directly inside route handlers.

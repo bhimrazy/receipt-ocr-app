@@ -80,6 +80,15 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Zod at every boundary: `PATCH /api/receipts/[id]` validates by hand and drops bad values; history/export query
+  params, `apps/web/lib/env.ts` and customer forms should share Zod schemas (today Zod covers only the AI output
+  schema, admin settings and admin actions).
+- Bot protection: Cloudflare Turnstile via Better Auth's built-in `captcha` plugin (sign-up, sign-in, password reset,
+  resend verification) plus `/api/contact`; optional by env, Cloudflare test keys in e2e.
+- Best-practice reviews ([Next.js](reviews/2026-11-06-nextjs.md), [React](reviews/2026-11-06-react.md),
+  [shadcn/UI](reviews/2026-11-06-shadcn-ui.md)): quick wins in progress; later, shared primitives (Spinner, Meter,
+  Checkbox, Avatar, Empty, Pagination), Button aligned with base-nova, one form system on `Field`.
+
 - Admin Settings shows "Last saved by…" for a saved OCR chain that was discarded as invalid.
 - HEIC conversion untested (no fixture or Safari in CI); add a WebKit e2e project later.
 - Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.
