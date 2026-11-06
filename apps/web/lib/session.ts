@@ -15,8 +15,8 @@ import { runtime } from "./runtime";
  */
 export const getSession = cache(async (): Promise<Session | null> => {
   if (!authEnabled) return null;
-  // Server reads skip the 5-minute cookie cache: a ban or revoked session must
-  // apply on the next request, not minutes later. Costs one indexed lookup.
+  // Always read the session row (the cookie cache is off in auth.ts too): a ban
+  // or revoked session must apply on the next request. One indexed lookup.
   return auth.api.getSession({ headers: await headers(), query: { disableCookieCache: true } });
 });
 

@@ -228,7 +228,7 @@ export async function banUserAction(input: {
           },
           headers: ctx.headers,
         });
-        // Sign them out everywhere now; server session reads skip the cookie cache, so this applies at once.
+        // Sign them out everywhere now; sessions are read from the database, so this applies at once.
         await auth.api.revokeUserSessions({
           body: { userId: parsed.userId },
           headers: ctx.headers,
