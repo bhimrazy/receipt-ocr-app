@@ -1,8 +1,0 @@
-{
-  "note": "USD per 1M tokens, edited by hand from the provider's price page. null = not filled in yet, so cost shows as n/a. Gemini 3.8 Flash is scheduled to double on 2027-01-01.",
-  "updated": "2026-11-06",
-  "models": {
-    "gemini-3.8-flash": { "input": 0.75, "output": 3.75 },
-    "gemini-3.5-flash-lite": { "input": 0.3, "output": 2.5 }
-  }
-}

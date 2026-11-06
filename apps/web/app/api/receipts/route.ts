@@ -64,9 +64,9 @@ export async function POST(request: Request) {
   const body = new Uint8Array(await file.arrayBuffer());
   // Check quota and OCR config first, so nothing is stored for an upload that can't be read.
   const ingest = enforceUploadQuota(session.user.id).pipe(
-    Effect.tap((plan) => void (event.plan = plan)),
-    Effect.zipRight(Effect.flatMap(Ocr, (ocr) => ocr.ready)),
-    Effect.zipRight(ingestUpload({ scope, fileName: file.name, body })),
+    Effect.tap(({ plan }) => void (event.plan = plan)),
+    Effect.tap(() => Effect.flatMap(Ocr, (ocr) => ocr.ready)),
+    Effect.flatMap(({ limits }) => ingestUpload({ scope, fileName: file.name, body, limits })),
   );
 
   if (mode === "queued") {

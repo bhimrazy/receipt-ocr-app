@@ -1,14 +1,17 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
+  check,
   index,
   integer,
   jsonb,
   numeric,
   pgEnum,
   pgTable,
+  smallint,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import postgres from "postgres";
@@ -121,6 +124,108 @@ export const receiptItems = pgTable(
 );
 
 /**
+ * Append-only usage ledger, two tables. `ocr_rounds` gets a row when an
+ * upload or retry is accepted, before any model call, under the quota check;
+ * `ocr_calls` gets a row per model call when the round ends. Quota, the global
+ * cap and cost count from these, never from `receipts`, so deleting a receipt
+ * or a workspace changes none of them. Deleting a workspace or account
+ * unlinks the rows (set null) instead of removing them. No free text: nothing
+ * here can hold receipt contents or provider messages.
+ */
+export const ocrRounds = pgTable(
+  "ocr_rounds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // No FK: the ledger outlives the receipt.
+    receiptId: uuid("receipt_id").notNull(),
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "set null",
+    }),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    /** `receipts.attempts` it started: 1 = the upload, 2+ = retries. */
+    round: smallint("round").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ocr_rounds_receipt_round_idx").on(table.receiptId, table.round),
+    // Per-user quota windows.
+    index("ocr_rounds_user_created_at_idx").on(table.userId, table.createdAt),
+    // Global cap.
+    index("ocr_rounds_created_at_idx").on(table.createdAt),
+  ],
+);
+
+/**
+ * Allowed `ocr_calls.status` values: "ok", the AI failure kinds (kept in step
+ * with `OCR_FAILURE_KINDS` in packages/ai by a core test), and
+ * "storage-error" for a round that failed before any model was called.
+ */
+export const OCR_CALL_STATUSES = [
+  "ok",
+  "timeout",
+  "rate-limited",
+  "provider-error",
+  "invalid-output",
+  "bad-image",
+  "not-configured",
+  "storage-error",
+] as const;
+
+/**
+ * One row per model call, success or failure, written when its round ends. A
+ * round that failed before calling any model gets one row with a null model,
+ * so it stops reading as in flight.
+ */
+export const ocrCalls = pgTable(
+  "ocr_calls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // No FK: deleting a receipt must not erase what its calls cost.
+    receiptId: uuid("receipt_id").notNull(),
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "set null",
+    }),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    /** `receipts.attempts` at the time: 1 = the upload, 2+ = retries. */
+    round: smallint("round").notNull(),
+    /** Position in the chain: 0 = primary, >0 = a fallback. */
+    step: smallint("step").notNull(),
+    /** `provider:model`; null when the round failed before calling a model. */
+    model: text("model"),
+    provider: text("provider"),
+    /** One of `OCR_CALL_STATUSES`. */
+    status: text("status").notNull(),
+    latencyMs: integer("latency_ms").notNull(),
+    // Null = the provider didn't report it (timeout, API error), not zero.
+    inputTokens: integer("input_tokens"),
+    cachedInputTokens: integer("cached_input_tokens"),
+    cacheWriteTokens: integer("cache_write_tokens"),
+    /** Includes reasoning tokens. */
+    outputTokens: integer("output_tokens"),
+    reasoningTokens: integer("reasoning_tokens"),
+    /** Priced when written, never recomputed; null = unknown. Sum as bigint. */
+    costMicroUsd: integer("cost_micro_usd"),
+    /** `from` of the price row used. */
+    priceFrom: text("price_from"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Workspace usage.
+    index("ocr_calls_org_created_at_idx").on(table.organizationId, table.createdAt),
+    // Admin windows.
+    index("ocr_calls_created_at_idx").on(table.createdAt),
+    // A receipt's calls and the quota's "was this round read" lookup. Unique, so
+    // a round's calls written twice (e.g. a lost COMMIT ack, then the failure
+    // path) are billed once.
+    uniqueIndex("ocr_calls_receipt_round_step_idx").on(table.receiptId, table.round, table.step),
+    check(
+      "ocr_calls_status_check",
+      sql.raw(`status in (${OCR_CALL_STATUSES.map((s) => `'${s}'`).join(", ")})`),
+    ),
+  ],
+);
+
+/**
  * Reserved for user-provided BYOK credentials. Nothing reads or writes this
  * table yet, and no encryption for `ciphertext` exists: implement it (see
  * docs/byok-key-management.md) before storing any secret here.
@@ -193,6 +298,8 @@ export const schema = {
   receiptStatus,
   receipts,
   receiptItems,
+  ocrRounds,
+  ocrCalls,
   userCredentials,
   adminAuditLog,
   appSettings,
@@ -239,6 +346,9 @@ export type Receipt = typeof receipts.$inferSelect;
 export type NewReceipt = typeof receipts.$inferInsert;
 export type ReceiptItem = typeof receiptItems.$inferSelect;
 export type NewReceiptItem = typeof receiptItems.$inferInsert;
+export type OcrRound = typeof ocrRounds.$inferSelect;
+export type OcrCall = typeof ocrCalls.$inferSelect;
+export type NewOcrCall = typeof ocrCalls.$inferInsert;
 export type AdminAuditEntry = typeof adminAuditLog.$inferSelect;
 export type UserCredential = typeof userCredentials.$inferSelect;
 export type NewUserCredential = typeof userCredentials.$inferInsert;

@@ -11,14 +11,23 @@ const step = (model: ModelId, timeoutMs = 30_000, enabled = true): OcrStep => ({
 });
 
 /** Classification itself is tested in packages/ai; here only the kind matters. */
-const failure = (kind: OcrFailureKind) => ({ kind, cause: new Error(kind) });
+const USAGE = {
+  inputTokens: 1,
+  cachedInputTokens: 0,
+  cacheWriteTokens: 0,
+  outputTokens: 1,
+  reasoningTokens: 0,
+};
+
+/** As in packages/ai: only output the model produced (and failed the schema) carries usage. */
+const failure = (kind: OcrFailureKind) => ({
+  kind,
+  usage: kind === "invalid-output" ? USAGE : null,
+  cause: new Error(kind),
+});
 
 const success = (model: ModelId) =>
-  Effect.succeed({
-    extraction: FIXTURE_RECEIPTS[0]!,
-    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-    model,
-  });
+  Effect.succeed({ extraction: FIXTURE_RECEIPTS[0]!, usage: USAGE, model });
 
 /** A fake provider per model: fail with the given error (after `ms` of test time) or succeed. */
 function fakeCall(plan: Partial<Record<ModelId, { error?: OcrFailureKind; ms?: number }>>) {
@@ -96,6 +105,20 @@ describe("runChain", () => {
     expect(error.attempts.map((a) => [a.model, a.kind])).toEqual([
       [A, "provider-error"],
       [B, "rate-limited"],
+    ]);
+  });
+
+  it("records each call's chain position and usage, known or not", async () => {
+    const { call } = fakeCall({ [A]: { error: "rate-limited" } });
+    const ok = await run(runChain([step(A), step(B)], call));
+    expect(Exit.isSuccess(ok) && ok.value.attempts).toEqual([
+      { model: A, step: 0, kind: "rate-limited", ms: 0, usage: null },
+      { model: B, step: 1, kind: "ok", ms: 0, usage: USAGE },
+    ]);
+    const bad = await run(runChain([step(A)], fakeCall({ [A]: { error: "invalid-output" } }).call));
+    if (!Exit.isFailure(bad) || bad.cause._tag !== "Fail") throw new Error("expected a failure");
+    expect(bad.cause.error._tag === "OcrError" && bad.cause.error.attempts).toEqual([
+      { model: A, step: 0, kind: "invalid-output", ms: 0, usage: USAGE },
     ]);
   });
 

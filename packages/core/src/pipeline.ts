@@ -1,14 +1,17 @@
+import { costOf, type ModelId } from "@receipt-ocr/ai";
 import { receiptObjectKey } from "@receipt-ocr/storage";
 import { Duration, Effect } from "effect";
-import { Conflict, NotFound, StorageError } from "./errors";
+import { Conflict, NotFound, StorageError, type OcrAttempt } from "./errors";
 import { sniffMediaType, validateUpload } from "./files";
 import {
   MAX_EXTRACTION_ATTEMPTS,
   EXTRACTION_FAILED_MESSAGE,
   ReceiptRepo,
+  type OcrCallRow,
   type ReceiptScope,
 } from "./repository";
-import { Ocr } from "./ocr";
+import { Ocr, providerOf } from "./ocr";
+import { quotaExceeded, quotaGate, type QuotaLimits } from "./quota";
 import { Storage } from "./services";
 
 export type StepTiming = { step: string; ms: number };
@@ -25,8 +28,82 @@ const timed = <A, E, R>(timings: StepTiming[], step: string, effect: Effect.Effe
     }),
   );
 
-/** Stage 1, always synchronous: validate the file, store it, create the row. */
-export const ingestUpload = (input: { scope: ReceiptScope; fileName: string; body: Uint8Array }) =>
+/** One `ocr_calls` row per attempt, priced now; the price is never recomputed later. */
+export function ocrCallRows(
+  attempts: readonly OcrAttempt[],
+  context: { receiptId: string; scope: ReceiptScope; round: number; at: Date },
+): OcrCallRow[] {
+  return attempts.map((attempt) => {
+    const cost = costOf(attempt.model, attempt.usage, context.at);
+    return {
+      receiptId: context.receiptId,
+      organizationId: context.scope.organizationId,
+      userId: context.scope.userId,
+      round: context.round,
+      step: attempt.step,
+      model: attempt.model,
+      provider: providerOf(attempt.model as ModelId),
+      status: attempt.kind,
+      latencyMs: Math.round(attempt.ms),
+      inputTokens: attempt.usage?.inputTokens ?? null,
+      cachedInputTokens: attempt.usage?.cachedInputTokens ?? null,
+      cacheWriteTokens: attempt.usage?.cacheWriteTokens ?? null,
+      outputTokens: attempt.usage?.outputTokens ?? null,
+      reasoningTokens: attempt.usage?.reasoningTokens ?? null,
+      costMicroUsd: cost.microUsd,
+      priceFrom: cost.priceFrom,
+      createdAt: context.at,
+    };
+  });
+}
+
+/**
+ * The one row for a round that failed before any model was called (no stored
+ * file, nothing configured), so it stops reading as in flight. It cost nothing.
+ */
+export function noCallRow(
+  status: OcrCallRow["status"],
+  context: { receiptId: string; scope: ReceiptScope; round: number; at: Date },
+): OcrCallRow {
+  return {
+    receiptId: context.receiptId,
+    organizationId: context.scope.organizationId,
+    userId: context.scope.userId,
+    round: context.round,
+    step: 0,
+    model: null,
+    provider: null,
+    status,
+    latencyMs: 0,
+    inputTokens: null,
+    cachedInputTokens: null,
+    cacheWriteTokens: null,
+    outputTokens: null,
+    reasoningTokens: null,
+    costMicroUsd: 0,
+    priceFrom: null,
+    createdAt: context.at,
+  };
+}
+
+/** Total of the known costs; null when no call has one. */
+const totalCost = (rows: readonly OcrCallRow[]) =>
+  rows.reduce<number | null>(
+    (sum, row) => (row.costMicroUsd == null ? sum : (sum ?? 0) + row.costMicroUsd),
+    null,
+  );
+
+/**
+ * Stage 1, always synchronous: validate the file, store it, create the row.
+ * The quota is checked again where the row is created, under the user's lock:
+ * a parallel burst can't all pass an earlier check.
+ */
+export const ingestUpload = (input: {
+  scope: ReceiptScope;
+  fileName: string;
+  body: Uint8Array;
+  limits: QuotaLimits;
+}) =>
   Effect.gen(function* () {
     const mediaType = yield* validateUpload(input.body);
     const repo = yield* ReceiptRepo;
@@ -36,20 +113,24 @@ export const ingestUpload = (input: { scope: ReceiptScope; fileName: string; bod
     const id = crypto.randomUUID();
     const imageObjectKey = receiptObjectKey(input.scope.userId, id, mediaType);
     yield* timed(timings, "storage.put", storage.put(imageObjectKey, input.body, mediaType));
-    const receipt = yield* timed(
+    const gate = yield* quotaGate(input.limits);
+    const inserted = yield* timed(
       timings,
       "db.insert",
-      repo.insert({
-        id,
-        scope: input.scope,
-        fileName: input.fileName.slice(0, 200),
-        imageObjectKey,
-      }),
+      repo.insert(
+        { id, scope: input.scope, fileName: input.fileName.slice(0, 200), imageObjectKey },
+        gate,
+      ),
     ).pipe(
+      Effect.flatMap((result) =>
+        result.kind === "inserted"
+          ? Effect.succeed(result.receipt)
+          : Effect.fail(quotaExceeded(result.verdict)),
+      ),
       // No row means nothing would ever delete the object.
       Effect.tapError(() => storage.remove([imageObjectKey]).pipe(Effect.ignore)),
     );
-    return { receipt, timings };
+    return { receipt: inserted, timings };
   });
 
 /**
@@ -73,6 +154,29 @@ export const extractStored = (input: { receiptId: string; scope: ReceiptScope })
     }
     const attempt = row.attempts;
     const key = row.imageObjectKey;
+    // Calls made so far. Written with whichever outcome is recorded, so every
+    // call is billed and counted even when the receipt is gone or superseded.
+    let calls: OcrCallRow[] = [];
+    let recorded = false;
+    const context = () => ({
+      receiptId: input.receiptId,
+      scope: input.scope,
+      round: attempt,
+      at: new Date(),
+    });
+    const rowsFor = (attempts: readonly OcrAttempt[]) => ocrCallRows(attempts, context());
+    /** What the failure path writes: the calls made, or one row saying none was. */
+    const failedCalls = (error: { _tag: string; kind?: OcrCallRow["status"] }) => {
+      if (recorded) return [];
+      if (calls.length > 0) return calls;
+      const status =
+        error._tag === "OcrError" && error.kind
+          ? error.kind
+          : error._tag === "NotConfigured"
+            ? "not-configured"
+            : "storage-error";
+      return [noCallRow(status, context())];
+    };
 
     return yield* Effect.gen(function* () {
       if (!key) return yield* new StorageError({ message: "This receipt has no stored file" });
@@ -81,12 +185,33 @@ export const extractStored = (input: { receiptId: string; scope: ReceiptScope })
       if (!mediaType) {
         return yield* new StorageError({ message: "The stored file is not a supported type" });
       }
-      const result = yield* timed(timings, "ai.extract", ocr.extract({ data, mediaType }));
+      const result = yield* timed(
+        timings,
+        "ai.extract",
+        ocr.extract({ data, mediaType }).pipe(
+          Effect.tapError((error) =>
+            Effect.sync(() => {
+              if (error._tag === "OcrError") calls = rowsFor(error.attempts);
+            }),
+          ),
+        ),
+      );
+      const written = rowsFor(result.attempts);
+      calls = written;
       const receipt = yield* timed(
         timings,
         "db.complete",
-        repo.complete(input.receiptId, input.scope, attempt, result.extraction, result.model),
+        repo.complete(
+          input.receiptId,
+          input.scope,
+          attempt,
+          result.extraction,
+          result.model,
+          written,
+        ),
       );
+      // Written with the completion; the failure path must not write them again.
+      recorded = true;
       if (!receipt) {
         return yield* new NotFound({
           message: "Receipt was deleted or superseded during extraction",
@@ -97,17 +222,31 @@ export const extractStored = (input: { receiptId: string; scope: ReceiptScope })
         usage: result.usage,
         model: result.model,
         attempts: result.attempts,
+        costMicroUsd: totalCost(written),
         timings,
       };
-    }).pipe(Effect.tapError(() => markFailed(input.receiptId, input.scope, attempt)));
+    }).pipe(
+      Effect.tapError((error) =>
+        markFailed(input.receiptId, input.scope, attempt, failedCalls(error)),
+      ),
+    );
   });
 
-const markFailed = (receiptId: string, scope: ReceiptScope, attempt: number) =>
+const markFailed = (
+  receiptId: string,
+  scope: ReceiptScope,
+  attempt: number,
+  calls: readonly OcrCallRow[],
+) =>
   Effect.flatMap(ReceiptRepo, (repo) =>
-    repo.fail(receiptId, scope, attempt, EXTRACTION_FAILED_MESSAGE),
+    repo.fail(receiptId, scope, attempt, EXTRACTION_FAILED_MESSAGE, calls),
   ).pipe(
     Effect.catchAll((error) =>
-      Effect.logError("receipt.fail_not_recorded", { receiptId, error: error.message }),
+      Effect.logError("receipt.fail_not_recorded", {
+        receiptId,
+        unrecordedCalls: calls.length,
+        error: error.message,
+      }),
     ),
   );
 
@@ -115,10 +254,19 @@ const markFailed = (receiptId: string, scope: ReceiptScope, attempt: number) =>
  * Atomically moves a failed receipt back to `processing` under a new attempt.
  * The caller then runs `extractStored` (in the background).
  */
-export const claimRetry = (input: { receiptId: string; scope: ReceiptScope }) =>
+export const claimRetry = (input: {
+  receiptId: string;
+  scope: ReceiptScope;
+  limits: QuotaLimits;
+}) =>
   Effect.gen(function* () {
     const repo = yield* ReceiptRepo;
-    const claim = yield* repo.claimRetry(input.receiptId, input.scope);
+    const claim = yield* repo.claimRetry(
+      input.receiptId,
+      input.scope,
+      yield* quotaGate(input.limits),
+    );
+    if (claim.kind === "quota") return yield* quotaExceeded(claim.verdict);
     if (claim.kind === "not-found") return yield* new NotFound({ message: "Receipt not found" });
     if (claim.kind === "not-retryable") {
       return yield* new Conflict({ message: "Only receipts that failed can be retried" });

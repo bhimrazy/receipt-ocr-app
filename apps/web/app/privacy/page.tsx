@@ -50,6 +50,7 @@ export default function PrivacyPage() {
           body: [
             "We keep your account and receipts until you delete them.",
             "Deleting a receipt removes it, its extracted data and its original file. Deleting your account from Settings removes your account, the receipts you uploaded and their files.",
+            "For billing and to enforce plan limits, we keep a usage record of each time the AI read a receipt: which model, how many tokens, the estimated cost and when. It holds no receipt contents or images, and deleting the receipt doesn't remove it. Deleting your workspace or your account unlinks the record from it and from you.",
           ],
         },
         {

@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { formatTime } from "@/lib/format";
 import { usageNote, type Usage } from "@/components/usage-meter";
 import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
@@ -88,7 +89,7 @@ function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
         <p className="mt-2 text-sm text-muted-foreground">
           {global
             ? `The service has read as many receipts as it can today, for all accounts. This isn't a limit on your account. Uploads open again at ${reset}, ${resetsIn}.`
-            : `Your plan reads ${usage.limit} receipts a day and you've used all of them. You can upload again at ${reset}, ${resetsIn}. Receipts that couldn't be read don't count.`}
+            : `Your plan reads ${usage.limit} receipts a day and you've used all of them. You can upload again at ${reset}, ${resetsIn}. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count.`}
         </p>
       </div>
       <Link

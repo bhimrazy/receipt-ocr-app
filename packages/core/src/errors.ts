@@ -1,4 +1,4 @@
-import type { OcrFailureKind } from "@receipt-ocr/ai";
+import type { ExtractionUsage, OcrFailureKind } from "@receipt-ocr/ai";
 import { Data } from "effect";
 
 /** Bad input from the caller: wrong file type, too large, malformed fields. */
@@ -36,8 +36,16 @@ export class StorageError extends Data.TaggedError("StorageError")<{
   readonly cause?: unknown;
 }> {}
 
-/** One model call in the OCR chain, for the request's wide event. */
-export type OcrAttempt = { model: string; kind: OcrFailureKind | "ok"; ms: number };
+/** One model call in the OCR chain: logged on the wide event and written to `ocr_calls`. */
+export type OcrAttempt = {
+  model: string;
+  /** Position in the chain: 0 = primary. */
+  step: number;
+  kind: OcrFailureKind | "ok";
+  ms: number;
+  /** Null when the provider reported none (timeout, API error). */
+  usage: ExtractionUsage | null;
+};
 
 export class OcrError extends Data.TaggedError("OcrError")<{
   readonly message: string;

@@ -1,8 +1,17 @@
 import { createGoogle } from "@ai-sdk/google";
-import { createProviderRegistry, generateText, Output } from "ai";
+import {
+  createProviderRegistry,
+  generateText,
+  NoObjectGeneratedError,
+  Output,
+  RetryError,
+  type LanguageModel,
+  type LanguageModelUsage,
+} from "ai";
 import { CATEGORY_DESCRIPTIONS, RECEIPT_CATEGORIES } from "./categories";
+import { classifyOcrError, OcrCallError } from "./errors";
 import { fixtureExtraction } from "./fixture";
-import type { OcrProviderId } from "./models";
+import type { ExtractionUsage, OcrProviderId } from "./models";
 import { receiptExtractionSchema, type ReceiptExtraction } from "./schema";
 
 /** Providers reached through the AI SDK registry; `fixture` is handled locally. */
@@ -24,12 +33,6 @@ export type ExtractReceiptInput = {
   abortSignal?: AbortSignal;
 };
 
-export type ExtractionUsage = {
-  inputTokens: number | null;
-  outputTokens: number | null;
-  totalTokens: number | null;
-};
-
 export type ExtractReceiptResult = {
   extraction: ReceiptExtraction;
   usage: ExtractionUsage;
@@ -43,6 +46,11 @@ export type ExtractReceiptResult = {
  */
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_RETRIES = 2;
+/**
+ * Caps one call's output cost. Thinking tokens count toward it, so it sits
+ * well above what a long receipt's JSON needs.
+ */
+const MAX_OUTPUT_TOKENS = 16_384;
 
 const PROMPT = [
   "Extract this receipt into structured data.",
@@ -73,42 +81,83 @@ function registryFor(keys: ProviderKeys) {
   return registry;
 }
 
-const NO_USAGE: ExtractionUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+const NO_USAGE: ExtractionUsage = {
+  inputTokens: 0,
+  cachedInputTokens: 0,
+  cacheWriteTokens: 0,
+  outputTokens: 0,
+  reasoningTokens: 0,
+};
+
+/** ai v7 totals already include cached input and reasoning output; the details split them out. */
+export function toUsage(usage: LanguageModelUsage): ExtractionUsage {
+  return {
+    inputTokens: usage.inputTokens ?? null,
+    cachedInputTokens: usage.inputTokenDetails?.cacheReadTokens ?? null,
+    cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens ?? null,
+    outputTokens: usage.outputTokens ?? null,
+    reasoningTokens: usage.outputTokenDetails?.reasoningTokens ?? null,
+  };
+}
+
+/** A schema or parse failure was still a billed call; the SDK attaches its usage. */
+function usageOf(error: unknown): ExtractionUsage | null {
+  if (RetryError.isInstance(error)) return usageOf(error.lastError);
+  if (NoObjectGeneratedError.isInstance(error) && error.usage) return toUsage(error.usage);
+  return null;
+}
 
 /**
  * One extraction with one model: no fallback here, the caller owns routing.
- * Failures are the AI SDK's errors; `classifyOcrError` says what kind.
+ * Every failure is an `OcrCallError` with its kind and whatever usage is known.
  */
 export async function extractReceipt(input: ExtractReceiptInput): Promise<ExtractReceiptResult> {
   if (input.model === "fixture") {
-    return { extraction: fixtureExtraction(input.file.data), usage: NO_USAGE, model: input.model };
+    try {
+      return {
+        extraction: fixtureExtraction(input.file.data),
+        usage: NO_USAGE,
+        model: input.model,
+      };
+    } catch (error) {
+      throw new OcrCallError(classifyOcrError(error), null, error);
+    }
   }
+  const { extraction, usage } = await extractWith(
+    registryFor(input.keys ?? {}).languageModel(input.model),
+    input,
+  );
+  return { extraction, usage, model: input.model };
+}
 
-  const registry = registryFor(input.keys ?? {});
-  const result = await generateText({
-    model: registry.languageModel(input.model),
-    output: Output.object({ schema: receiptExtractionSchema }),
-    timeout: { totalMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS },
-    maxRetries: input.maxRetries ?? DEFAULT_MAX_RETRIES,
-    abortSignal: input.abortSignal,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: PROMPT },
-          { type: "file", data: input.file.data, mediaType: input.file.mediaType },
-        ],
-      },
-    ],
-  });
-
-  return {
-    extraction: result.output,
-    usage: {
-      inputTokens: result.usage.inputTokens ?? null,
-      outputTokens: result.usage.outputTokens ?? null,
-      totalTokens: result.usage.totalTokens ?? null,
-    },
-    model: input.model,
-  };
+/** The model call itself, separate from the registry so tests can pass a mock model. */
+export async function extractWith(
+  model: LanguageModel,
+  input: Omit<ExtractReceiptInput, "model" | "keys">,
+): Promise<Omit<ExtractReceiptResult, "model">> {
+  let usage: ExtractionUsage | null = null;
+  try {
+    const result = await generateText({
+      model,
+      output: Output.object({ schema: receiptExtractionSchema }),
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      timeout: { totalMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS },
+      maxRetries: input.maxRetries ?? DEFAULT_MAX_RETRIES,
+      abortSignal: input.abortSignal,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: PROMPT },
+            { type: "file", data: input.file.data, mediaType: input.file.mediaType },
+          ],
+        },
+      ],
+    });
+    // Before `output`: reading it throws on an empty or truncated reply, which was still billed.
+    usage = toUsage(result.usage);
+    return { extraction: result.output, usage };
+  } catch (error) {
+    throw new OcrCallError(classifyOcrError(error), usageOf(error) ?? usage, error);
+  }
 }

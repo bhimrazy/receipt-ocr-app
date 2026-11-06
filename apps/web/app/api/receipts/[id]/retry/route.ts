@@ -29,9 +29,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const response = await runRoute(
     enforceUploadQuota(session.user.id).pipe(
-      Effect.tap((plan) => void (event.plan = plan)),
-      Effect.zipRight(Effect.flatMap(Ocr, (ocr) => ocr.ready)),
-      Effect.zipRight(claimRetry({ receiptId: id, scope })),
+      Effect.tap(({ plan }) => void (event.plan = plan)),
+      Effect.tap(() => Effect.flatMap(Ocr, (ocr) => ocr.ready)),
+      Effect.flatMap(({ limits }) => claimRetry({ receiptId: id, scope, limits })),
     ),
     () => {
       event.outcome = "queued";

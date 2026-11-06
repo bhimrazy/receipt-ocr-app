@@ -1,10 +1,17 @@
 // OCR accuracy, latency and cost benchmark over bench/fixtures.
 //   bun run bench:ocr [--models google:gemini-3.8-flash,...] [--concurrency 2] [--only id,id]
 // Needs GOOGLE_GENERATIVE_AI_API_KEY. Fixtures: <id>.{jpg,png,pdf} + <id>.json (ground truth).
-import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { extractReceipt, type ModelId } from "@receipt-ocr/ai";
+import {
+  costOf,
+  extractReceipt,
+  OcrCallError,
+  ocrModel,
+  priceAt,
+  type ExtractionUsage,
+  type ModelId,
+} from "@receipt-ocr/ai";
 import { AMOUNT_FIELDS, EXACT_FIELDS, percentile, scoreReceipt, type Receipt } from "./score";
 
 const root = import.meta.dirname;
@@ -14,49 +21,30 @@ const MIME: Record<string, string> = {
   ".pdf": "application/pdf",
 };
 
-type Usage = { inputTokens: number; outputTokens: number };
 type Fixture = { id: string; file: string };
 type Run = {
   fixture: string;
   ok: boolean;
   timeout: boolean;
   ms: number;
-  usage: Usage;
+  usage: ExtractionUsage | null;
+  /** Micro-USD from the model registry's price table; null when unknown. */
+  costMicroUsd: number | null;
   scores: Record<string, number>;
   error?: string;
 };
 
 // The single call into packages/ai. Bare model names default to the Google provider.
-async function extract(model: string, bytes: Uint8Array, mimeType: string): Promise<Receipt> {
-  const id = (model.includes(":") ? model : `google:${model}`) as ModelId;
-  const { extraction } = await extractReceipt({
-    model: id,
+const modelId = (model: string) => (model.includes(":") ? model : `google:${model}`) as ModelId;
+
+async function extract(model: string, bytes: Uint8Array, mimeType: string) {
+  const { extraction, usage } = await extractReceipt({
+    model: modelId(model),
     file: { data: bytes, mediaType: mimeType },
     keys: { google: process.env.GOOGLE_GENERATIVE_AI_API_KEY },
   });
-  return extraction as Receipt;
+  return { got: extraction as Receipt, usage };
 }
-
-// The extraction function returns no token counts, so read Gemini's `usageMetadata` off the
-// AI SDK's HTTP responses, attributed to the run that made the call.
-const usageScope = new AsyncLocalStorage<Usage>();
-const realFetch = globalThis.fetch;
-globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
-  const res = await realFetch(...args);
-  const sink = usageScope.getStore();
-  if (sink && res.headers.get("content-type")?.includes("json")) {
-    const body = (await res
-      .clone()
-      .json()
-      .catch(() => null)) as { usageMetadata?: Record<string, number> } | null;
-    const meta = body?.usageMetadata;
-    if (meta) {
-      sink.inputTokens += meta.promptTokenCount ?? 0;
-      sink.outputTokens += (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0);
-    }
-  }
-  return res;
-}) as typeof fetch;
 
 function arg(name: string, fallback: string) {
   const i = process.argv.indexOf(`--${name}`);
@@ -91,30 +79,34 @@ if (fixtures.length === 0) {
   process.exit(2);
 }
 
-const prices = JSON.parse(readFileSync(path.join(root, "prices.json"), "utf8")) as {
-  updated: string;
-  models: Record<string, { input: number | null; output: number | null }>;
-};
-
 async function runOne(model: string, { id, file }: Fixture): Promise<Run> {
   const truth = JSON.parse(
     readFileSync(path.join(root, "fixtures", `${id}.json`), "utf8"),
   ) as Receipt;
   const bytes = new Uint8Array(readFileSync(path.join(root, "fixtures", file)));
-  const usage: Usage = { inputTokens: 0, outputTokens: 0 };
   const started = performance.now();
   try {
-    const got = await usageScope.run(usage, () => extract(model, bytes, MIME[path.extname(file)]!));
-    const ms = performance.now() - started;
-    return { fixture: id, ok: true, timeout: false, ms, usage, scores: scoreReceipt(truth, got) };
+    const { got, usage } = await extract(model, bytes, MIME[path.extname(file)]!);
+    return {
+      fixture: id,
+      ok: true,
+      timeout: false,
+      ms: performance.now() - started,
+      usage,
+      costMicroUsd: costOf(modelId(model), usage, new Date()).microUsd,
+      scores: scoreReceipt(truth, got),
+    };
   } catch (error) {
+    // The message is the failure kind only, never the model's output.
+    const usage = error instanceof OcrCallError ? error.usage : null;
     const message = error instanceof Error ? error.message : String(error);
     return {
       fixture: id,
       ok: false,
-      timeout: /timeout|timed out|abort/i.test(message),
+      timeout: error instanceof OcrCallError && error.kind === "timeout",
       ms: performance.now() - started,
       usage,
+      costMicroUsd: costOf(modelId(model), usage, new Date()).microUsd,
       scores: {},
       error: message.slice(0, 300),
     };
@@ -130,6 +122,11 @@ async function runModel(model: string) {
   await Promise.all(Array.from({ length: concurrency }, worker));
   return runs.sort((a, b) => a.fixture.localeCompare(b.fixture));
 }
+
+const priceFrom = (model: string) => {
+  const entry = ocrModel(modelId(model));
+  return (entry && priceAt(entry, new Date())?.from) ?? null;
+};
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
 const pct = (n: number) => (Number.isNaN(n) ? "n/a" : `${(n * 100).toFixed(0)}%`);
@@ -155,26 +152,28 @@ for (const model of models) {
   const field = (f: string) =>
     mean(okRuns.map((r) => r.scores[f]).filter((v): v is number => v !== undefined));
   const tokens = runs.reduce(
-    (t, r) => ({ i: t.i + r.usage.inputTokens, o: t.o + r.usage.outputTokens }),
+    (t, r) => ({ i: t.i + (r.usage?.inputTokens ?? 0), o: t.o + (r.usage?.outputTokens ?? 0) }),
     { i: 0, o: 0 },
   );
-  const price = prices.models[model];
+  const unpriced = runs.filter((r) => r.costMicroUsd === null).length;
+  const micro = runs.reduce((sum, r) => sum + (r.costMicroUsd ?? 0), 0);
   const cost =
-    price?.input != null && price.output != null
-      ? `$${((tokens.i * price.input + tokens.o * price.output) / 1e6).toFixed(4)}`
-      : "n/a";
+    unpriced === runs.length ? "n/a" : `$${(micro / 1e6).toFixed(4)}${unpriced ? "*" : ""}`;
   md.push(
     `| ${model} | ${fieldNames.map((f) => pct(field(f))).join(" | ")} | ${sec(percentile(latencies, 50))} | ${sec(percentile(latencies, 95))} | ${sec(okRuns[0]?.ms ?? NaN)} | ${runs.length - okRuns.length}/${runs.length} | ${runs.filter((r) => r.timeout).length} | ${tokens.i}/${tokens.o} | ${cost} |`,
   );
   const raw = path.join(root, "results", `${date}-${model}.json`);
   writeFileSync(
     raw,
-    `${JSON.stringify({ date, model, pricesUpdated: prices.updated, runs }, null, 2)}\n`,
+    `${JSON.stringify({ date, model, priceFrom: priceFrom(model), runs }, null, 2)}\n`,
   );
   for (const r of runs.filter((r) => !r.ok)) console.error(`  ${r.fixture}: ${r.error}`);
 }
 
-md.push("", `Prices: bench/prices.json (updated ${prices.updated}). Cold = first finished call.`);
+md.push(
+  "",
+  "Prices: the model registry (packages/ai/src/models.ts), row in effect today. * = some calls reported no usage, so the cost is a lower bound. Cold = first finished call.",
+);
 const summary = path.join(root, "results", `${date}.md`);
 writeFileSync(summary, `${md.join("\n")}\n`);
 console.log(`\n${md.join("\n")}\nwrote ${path.relative(process.cwd(), summary)}`);

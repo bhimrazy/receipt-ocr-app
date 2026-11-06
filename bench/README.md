@@ -17,9 +17,9 @@ Real provider calls, billed to the key. Without the key the script exits with a 
   same total price).
 - Output: `results/<date>.md` (summary, commit it) and `results/<date>-<model>.json` (raw, gitignored). Latency is
   p50/p95 of successful calls, `cold` the first one to finish.
-- Cost: token counts are read from Gemini's `usageMetadata` on the HTTP responses (the extraction function does not
-  return usage) times `prices.json`. Prices are `null` until filled in by hand from the provider's price page;
-  cost shows `n/a` meanwhile.
+- Cost: the usage `extractReceipt` returns (or a failed call's `OcrCallError.usage`), priced with `costOf` from the
+  model registry's effective-dated table in `packages/ai/src/models.ts`, the same prices the app stores per call.
+  `n/a` when no call reported usage.
 - The only call into `packages/ai` is `extract()` in `ocr.ts`; change that one function if the export is renamed.
 
 ## Upload load test

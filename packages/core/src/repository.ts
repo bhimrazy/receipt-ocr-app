@@ -8,17 +8,26 @@ import {
   ilike,
   lt,
   lte,
+  ocrCalls,
+  ocrRounds,
   or,
+  organization,
   receiptItems,
   receipts,
   sql,
+  OCR_CALL_STATUSES,
+  type DbClient,
+  type NewOcrCall,
   type Receipt,
   type ReceiptItem,
   type SQL,
+  user,
 } from "@receipt-ocr/db";
 import { Context, Effect, Layer } from "effect";
 import type { DbError } from "./errors";
+import type { QuotaVerdict } from "./quota";
 import { Db } from "./services";
+import { countUsage, lockUserQuota, type UsageCounts, type UsageWindow } from "./usage";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -100,10 +109,28 @@ export type ReceiptCounts = {
   inFlight: number;
 };
 
-export type UsageCounts = { userMinute: number; userDay: number; globalDay: number | null };
+/** One `ocr_calls` row, built by the pipeline. */
+export type OcrCallRow = Omit<NewOcrCall, "id" | "status"> & {
+  userId: string | null;
+  organizationId: string;
+  status: (typeof OCR_CALL_STATUSES)[number];
+};
+
+/**
+ * The quota check run under the user's lock, in the same transaction that
+ * records the new round, so parallel requests can't all pass it.
+ */
+export type QuotaGate = {
+  window: UsageWindow;
+  decide: (counts: UsageCounts) => QuotaVerdict;
+};
+
+export type InsertResult =
+  { kind: "inserted"; receipt: Receipt } | { kind: "quota"; verdict: QuotaVerdict };
 
 export type RetryClaim =
   | { kind: "claimed"; imageObjectKey: string | null }
+  | { kind: "quota"; verdict: QuotaVerdict }
   | { kind: "not-found" }
   | { kind: "not-retryable" }
   | { kind: "attempts-exhausted" };
@@ -208,20 +235,48 @@ const toSummary = (row: SummaryRow): ReceiptSummary => ({
 
 const decimal = (value: number | null) => (value == null ? null : String(value));
 
+/**
+ * Writes the calls of a round. The workspace or the user may have been
+ * deleted while the model ran; the row is then kept unlinked (null) instead
+ * of failing the transaction on the foreign key.
+ */
+async function recordCalls(
+  tx: Parameters<Parameters<DbClient["transaction"]>[0]>[0],
+  calls: readonly OcrCallRow[],
+) {
+  if (calls.length === 0) return;
+  await tx
+    .insert(ocrCalls)
+    .values(
+      calls.map((call) => ({
+        ...call,
+        organizationId: sql`(select ${organization.id} from ${organization} where ${organization.id} = ${call.organizationId})`,
+        userId:
+          call.userId === null
+            ? null
+            : sql`(select ${user.id} from ${user} where ${user.id} = ${call.userId})`,
+      })),
+    )
+    // A round's calls written twice (a lost COMMIT ack, then the failure path) count once.
+    .onConflictDoNothing();
+}
+
 export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
   ReceiptRepo,
   {
-    /** Inserts an uploaded receipt straight into `processing`; its file is already stored. */
-    readonly insert: (input: {
-      id: string;
-      scope: ReceiptScope;
-      fileName: string;
-      imageObjectKey: string;
-    }) => Effect.Effect<Receipt, DbError>;
+    /**
+     * Inserts an uploaded receipt straight into `processing` (its file is
+     * already stored) and records its first round, if the quota allows.
+     */
+    readonly insert: (
+      input: { id: string; scope: ReceiptScope; fileName: string; imageObjectKey: string },
+      quota: QuotaGate,
+    ) => Effect.Effect<InsertResult, DbError>;
     /**
      * Persists an extraction, its items and the model that produced it. Only the
      * current attempt of a `processing` receipt may complete it; null when the
      * receipt is gone or a newer attempt or a final state superseded this one.
+     * `calls` are recorded either way, in the same transaction: they were made.
      */
     readonly complete: (
       id: string,
@@ -229,16 +284,28 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       attempt: number,
       extraction: ReceiptExtraction,
       model: string,
+      calls: readonly OcrCallRow[],
     ) => Effect.Effect<ReceiptWithItems | null, DbError>;
-    /** Marks the current attempt failed; false when it is no longer the current `processing` one. */
+    /**
+     * Marks the current attempt failed; false when it is no longer the current
+     * `processing` one. `calls` are recorded either way.
+     */
     readonly fail: (
       id: string,
       scope: ReceiptScope,
       attempt: number,
       message: string,
+      calls: readonly OcrCallRow[],
     ) => Effect.Effect<boolean, DbError>;
-    /** Atomically moves a failed (or stale) receipt back to `processing`. */
-    readonly claimRetry: (id: string, scope: ReceiptScope) => Effect.Effect<RetryClaim, DbError>;
+    /**
+     * Atomically moves a failed (or stale) receipt back to `processing` and
+     * records the new round, if the quota allows.
+     */
+    readonly claimRetry: (
+      id: string,
+      scope: ReceiptScope,
+      quota: QuotaGate,
+    ) => Effect.Effect<RetryClaim, DbError>;
     readonly get: (
       id: string,
       scope: ReceiptScope,
@@ -269,37 +336,44 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
     readonly objectKeys: (
       owner: { organizationId: string } | { userId: string },
     ) => Effect.Effect<string[], DbError>;
-    readonly usage: (input: {
-      userId: string;
-      dayStart: Date;
-      minuteStart: Date;
-      includeGlobal: boolean;
-    }) => Effect.Effect<UsageCounts, DbError>;
+    readonly usage: (userId: string, window: UsageWindow) => Effect.Effect<UsageCounts, DbError>;
   }
 >() {
   static readonly Live = Layer.effect(
     ReceiptRepo,
     Effect.map(Db, ({ use }) => ({
-      insert: ({ id, scope, fileName, imageObjectKey }) =>
-        use(async (db) => {
-          const [row] = await db
-            .insert(receipts)
-            .values({
-              id,
+      insert: ({ id, scope, fileName, imageObjectKey }, quota) =>
+        use((db) =>
+          db.transaction(async (tx): Promise<InsertResult> => {
+            await lockUserQuota(tx, scope.userId);
+            const verdict = quota.decide(await countUsage(tx, scope.userId, quota.window));
+            if (!verdict.allowed) return { kind: "quota", verdict };
+            const [row] = await tx
+              .insert(receipts)
+              .values({
+                id,
+                organizationId: scope.organizationId,
+                userId: scope.userId,
+                status: "processing",
+                fileName,
+                imageObjectKey,
+              })
+              .returning();
+            if (!row) throw new Error("Insert returned no row");
+            await tx.insert(ocrRounds).values({
+              receiptId: id,
               organizationId: scope.organizationId,
               userId: scope.userId,
-              status: "processing",
-              fileName,
-              imageObjectKey,
-            })
-            .returning();
-          if (!row) throw new Error("Insert returned no row");
-          return row;
-        }),
+              round: 1,
+            });
+            return { kind: "inserted", receipt: row };
+          }),
+        ),
 
-      complete: (id, scope, attempt, extraction, model) =>
+      complete: (id, scope, attempt, extraction, model, calls) =>
         use((db) =>
           db.transaction(async (tx) => {
+            await recordCalls(tx, calls);
             const [row] = await tx
               .update(receipts)
               .set({
@@ -342,46 +416,62 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           }),
         ),
 
-      fail: (id, scope, attempt, message) =>
-        use(async (db) => {
-          const rows = await db
-            .update(receipts)
-            .set({ status: "failed", errorMessage: message, updatedAt: new Date() })
-            .where(currentAttempt(id, scope, attempt))
-            .returning({ id: receipts.id });
-          return rows.length > 0;
-        }),
+      fail: (id, scope, attempt, message, calls) =>
+        use((db) =>
+          db.transaction(async (tx) => {
+            await recordCalls(tx, calls);
+            const rows = await tx
+              .update(receipts)
+              .set({ status: "failed", errorMessage: message, updatedAt: new Date() })
+              .where(currentAttempt(id, scope, attempt))
+              .returning({ id: receipts.id });
+            return rows.length > 0;
+          }),
+        ),
 
-      claimRetry: (id, scope) =>
+      claimRetry: (id, scope, quota) =>
         use(async (db): Promise<RetryClaim> => {
           if (!isReceiptId(id)) return { kind: "not-found" };
-          const now = new Date();
-          const [claimed] = await db
-            .update(receipts)
-            .set({
-              status: "processing",
-              errorMessage: null,
-              attempts: sql`${receipts.attempts} + 1`,
-              lastAttemptAt: now,
-              updatedAt: now,
-            })
-            .where(
-              and(
-                inScope(id, scope),
-                or(eq(receipts.status, "failed"), isStale),
-                lt(receipts.attempts, MAX_EXTRACTION_ATTEMPTS),
-              ),
-            )
-            .returning({ imageObjectKey: receipts.imageObjectKey });
-          if (claimed) return { kind: "claimed", imageObjectKey: claimed.imageObjectKey };
-          const [existing] = await db
-            .select({ attempts: receipts.attempts })
-            .from(receipts)
-            .where(inScope(id, scope));
-          if (!existing) return { kind: "not-found" };
-          return existing.attempts >= MAX_EXTRACTION_ATTEMPTS
-            ? { kind: "attempts-exhausted" }
-            : { kind: "not-retryable" };
+          return db.transaction(async (tx): Promise<RetryClaim> => {
+            await lockUserQuota(tx, scope.userId);
+            const verdict = quota.decide(await countUsage(tx, scope.userId, quota.window));
+            if (!verdict.allowed) return { kind: "quota", verdict };
+            const now = new Date();
+            const [claimed] = await tx
+              .update(receipts)
+              .set({
+                status: "processing",
+                errorMessage: null,
+                attempts: sql`${receipts.attempts} + 1`,
+                lastAttemptAt: now,
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  inScope(id, scope),
+                  or(eq(receipts.status, "failed"), isStale),
+                  lt(receipts.attempts, MAX_EXTRACTION_ATTEMPTS),
+                ),
+              )
+              .returning({ imageObjectKey: receipts.imageObjectKey, attempts: receipts.attempts });
+            if (claimed) {
+              await tx.insert(ocrRounds).values({
+                receiptId: id,
+                organizationId: scope.organizationId,
+                userId: scope.userId,
+                round: claimed.attempts,
+              });
+              return { kind: "claimed", imageObjectKey: claimed.imageObjectKey };
+            }
+            const [existing] = await tx
+              .select({ attempts: receipts.attempts })
+              .from(receipts)
+              .where(inScope(id, scope));
+            if (!existing) return { kind: "not-found" };
+            return existing.attempts >= MAX_EXTRACTION_ATTEMPTS
+              ? { kind: "attempts-exhausted" }
+              : { kind: "not-retryable" };
+          });
         }),
 
       get: (id, scope) =>
@@ -487,34 +577,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           return rows.flatMap((row) => (row.key ? [row.key] : []));
         }),
 
-      usage: ({ userId, dayStart, minuteStart, includeGlobal }) =>
-        use(async (db) => {
-          const since = new Date(Math.min(dayStart.getTime(), minuteStart.getTime())).toISOString();
-          const day = dayStart.toISOString();
-          const minute = minuteStart.toISOString();
-          const mine = sql`${receipts.userId} = ${userId}`;
-          const retriedSince = (at: string) => sql`${receipts.lastAttemptAt} >= ${at}::timestamptz`;
-          // Failed (and stale) receipts don't count against the user's day:
-          // a bad photo shouldn't cost them a slot. The burst and global
-          // counts include them, since each one still called the provider.
-          const [row] = await db
-            .select({
-              userMinute: sql<number>`(count(*) filter (where ${mine} and ${receipts.createdAt} >= ${minute}::timestamptz) + count(*) filter (where ${mine} and ${retriedSince(minute)}))::int`,
-              userDay: sql<number>`count(*) filter (where ${mine} and ${receipts.createdAt} >= ${day}::timestamptz and ${receipts.status} <> 'failed' and not ${isStale})::int`,
-              globalDay: sql<number>`(count(*) filter (where ${receipts.createdAt} >= ${day}::timestamptz) + count(*) filter (where ${retriedSince(day)}))::int`,
-            })
-            .from(receipts)
-            .where(
-              includeGlobal
-                ? sql`(${receipts.createdAt} >= ${since}::timestamptz or ${retriedSince(since)})`
-                : sql`${mine} and (${receipts.createdAt} >= ${since}::timestamptz or ${retriedSince(since)})`,
-            );
-          return {
-            userMinute: row?.userMinute ?? 0,
-            userDay: row?.userDay ?? 0,
-            globalDay: includeGlobal ? (row?.globalDay ?? 0) : null,
-          };
-        }),
+      usage: (userId, window) => use((db) => countUsage(db, userId, window)),
     })),
   );
 }
