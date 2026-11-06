@@ -25,6 +25,7 @@ import { organization as organizationPlugin } from "better-auth/plugins/organiza
 import { isBootstrapAdmin } from "./admin-bootstrap";
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
 import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
+import { allowAuthEmail } from "./email-limits";
 import {
   authEnabled,
   authEnv,
@@ -122,6 +123,7 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     requireEmailVerification,
     sendResetPassword: async ({ user, url }) => {
+      if (!(await allowAuthEmail("password-reset", user.email))) return;
       await deliver({ to: user.email, ...passwordResetEmail(url) });
     },
   },
@@ -131,6 +133,7 @@ export const auth = betterAuth({
     sendOnSignIn: requireEmailVerification,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
+      if (!(await allowAuthEmail("verification", user.email))) return;
       await deliver({ to: user.email, ...verificationEmail(url) });
     },
     afterEmailVerification: async (user) => {

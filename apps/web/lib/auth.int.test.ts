@@ -123,6 +123,27 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     ).toBe(200);
   });
 
+  it("caps reset emails per address and still answers like an unknown address", async () => {
+    const other = `${tag}-limit@example.com`;
+    const created = await auth.api.signUpEmail({ body: { email: other, password, name: "Limit" } });
+    sent.length = 0;
+    for (let i = 0; i < 5; i++) {
+      const res = await auth.api.requestPasswordReset({
+        body: { email: other, redirectTo: "/reset-password" },
+      });
+      expect(res.status).toBe(true);
+    }
+    expect(sent.filter((mail) => mail.to === other)).toHaveLength(3);
+    const unknown = await auth.api.requestPasswordReset({
+      body: { email: `${tag}-nobody@example.com`, redirectTo: "/reset-password" },
+    });
+    expect(unknown.status).toBe(true);
+    await db.execute(
+      sql`delete from organization where id in (select organization_id from member where user_id = ${created.user.id})`,
+    );
+    await db.delete(user).where(eq(user.id, created.user.id));
+  });
+
   it("P2-4: seals new OAuth tokens and still reads plaintext rows from before", async () => {
     // The inferred plugin context is narrower than the helpers' AuthContext parameter.
     const context = (await auth.$context) as unknown as Parameters<typeof setTokenUtil>[1];

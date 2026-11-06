@@ -9,7 +9,7 @@ import {
 } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
-import { crossOriginResponse, jsonError, readFormData, runRoute } from "@/lib/http";
+import { crossOriginResponse, discardBody, jsonError, readFormData, runRoute } from "@/lib/http";
 import { drainJobs, ROUTE_BUDGET_MS, runJobNow } from "@/lib/jobs";
 import { logger, type WideEvent } from "@/lib/log";
 import { enforceUploadQuota } from "@/lib/quota";
@@ -39,20 +39,26 @@ export async function POST(request: Request) {
   };
 
   const forbidden = crossOriginResponse(request);
-  if (forbidden) return respond(forbidden);
+  if (forbidden) return respond(discardBody(request, forbidden));
 
-  // Start reading the body while the session and workspace resolve.
-  const formPromise = readFormData(request, MAX_UPLOAD_BYTES);
+  // Session and workspace come before the body: an anonymous client must not
+  // make the server buffer up to MAX_UPLOAD_BYTES (security audit L1).
   const [session, scope] = await Promise.all([getSession(), getActiveScope()]);
-  if (!session) return respond(jsonError(401, "Unauthorized"));
+  if (!session) return respond(discardBody(request, jsonError(401, "Unauthorized")));
   event.user_id = session.user.id;
   // Requests made while an admin impersonates carry the admin's id (security review).
   if (session.session.impersonatedBy) event.impersonated_by = session.session.impersonatedBy;
-  if (!scope)
-    return respond(jsonError(409, "No active workspace. Pick or create one before uploading."));
+  if (!scope) {
+    return respond(
+      discardBody(
+        request,
+        jsonError(409, "No active workspace. Pick or create one before uploading."),
+      ),
+    );
+  }
   event.organization_id = scope.organizationId;
 
-  const form = await formPromise;
+  const form = await readFormData(request, MAX_UPLOAD_BYTES);
   if (form instanceof Response) return respond(form);
   const file = form.get("file");
   if (!(file instanceof File)) return respond(jsonError(400, "A receipt file is required"));

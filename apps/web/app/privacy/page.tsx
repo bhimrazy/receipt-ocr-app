@@ -26,7 +26,7 @@ export default function PrivacyPage() {
             "Receipts: the photos and PDFs you upload and the data we extract from them, such as merchant, date, line items, tax, total, category and a confidence score, plus any corrections you make.",
             "Workspace details: the workspaces you create or join, their members and the invitations you send.",
             "Messages: if you write to us through the support button, your email address and your message.",
-            "Technical data: a session cookie that keeps you signed in, and server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors.",
+            "Technical data: a session cookie that keeps you signed in, server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors, and short-lived counters that limit how often we send account emails to one address (they hold a one-way hash of the address, not the address).",
           ],
         },
         {
@@ -57,8 +57,9 @@ export default function PrivacyPage() {
           heading: "How long we keep it",
           body: [
             "We keep your account and receipts until you delete them.",
-            "Deleting a receipt removes it, its extracted data and its original file. Deleting your account from Settings removes your account, the receipts you uploaded and their files.",
-            "For billing and to enforce plan limits, we keep a usage record of each time the AI read a receipt: which model, how many tokens, the estimated cost and when. It holds no receipt contents or images, and deleting the receipt doesn't remove it. Deleting your workspace or your account unlinks the record from it and from you.",
+            "Deleting a receipt removes it, its extracted data and its original file.",
+            "Deleting your account from Settings removes your account and every workspace where you are the only member, with all of its receipts and files. Receipts you uploaded to a workspace shared with other people stay in that workspace, without your name on them, because they belong to the workspace. If you are the only owner of a shared workspace, make another member an owner first.",
+            "For billing and to enforce plan limits, we keep a usage record of each time the AI read a receipt: which model, how many tokens, the estimated cost and when. It holds no receipt contents or images. It stays after you delete the receipt, the workspace or your account, but is then no longer linked to them or to you.",
           ],
         },
         {
