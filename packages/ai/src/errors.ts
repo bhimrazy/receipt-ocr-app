@@ -17,8 +17,15 @@ import type { ExtractionUsage } from "./models";
  * another model is worth trying: a slow or overloaded provider is, a photo
  * the model can't read usually isn't.
  */
-export type OcrFailureKind =
-  "timeout" | "rate-limited" | "provider-error" | "invalid-output" | "bad-image" | "not-configured";
+export const OCR_FAILURE_KINDS = [
+  "timeout",
+  "rate-limited",
+  "provider-error",
+  "invalid-output",
+  "bad-image",
+  "not-configured",
+] as const;
+export type OcrFailureKind = (typeof OCR_FAILURE_KINDS)[number];
 
 function fromStatus(status: number): OcrFailureKind {
   if (status === 408) return "timeout";

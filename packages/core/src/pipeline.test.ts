@@ -15,7 +15,13 @@ import { Storage } from "./services";
 
 const scope = { organizationId: "org-a", userId: "user-a" };
 const limits = { perMinute: 10, perDay: 20 };
-const USAGE = { inputTokens: 1000, cachedInputTokens: 0, outputTokens: 100, reasoningTokens: 40 };
+const USAGE = {
+  inputTokens: 1000,
+  cachedInputTokens: 0,
+  cacheWriteTokens: 0,
+  outputTokens: 100,
+  reasoningTokens: 40,
+};
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 
 /** In-memory stand-ins for the three services the pipeline uses. */

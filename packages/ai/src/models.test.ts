@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { costOf, OCR_MODELS, priceAt, type ExtractionUsage } from "./models";
+import { costOf, OCR_MODELS, priceAt, priceCall, type ExtractionUsage } from "./models";
 
 const usage = (u: Partial<ExtractionUsage>): ExtractionUsage => ({
   inputTokens: null,
   cachedInputTokens: null,
+  cacheWriteTokens: null,
   outputTokens: null,
   reasoningTokens: null,
   ...u,
@@ -43,6 +44,28 @@ describe("costOf", () => {
       day("2026-11-20"),
     );
     expect(cost.microUsd).toBe(442);
+  });
+
+  it("charges cache writes at their own rate, or as input when the model has none", () => {
+    const u = usage({
+      inputTokens: 1000,
+      cachedInputTokens: 200,
+      cacheWriteTokens: 300,
+      outputTokens: 0,
+    });
+    // 500 × 1.00 + 200 × 0.10 + 300 × 1.25
+    expect(
+      priceCall(
+        { from: "2026-01-01", input: 1, cachedInput: 0.1, cacheWrite: 1.25, output: 5 },
+        {
+          ...u,
+          inputTokens: 1000,
+          outputTokens: 0,
+        },
+      ),
+    ).toBe(895);
+    // Gemini has no write price: the written 300 cost the input rate, 800 × 0.30 + 200 × 0.03.
+    expect(costOf("google:gemini-3.5-flash-lite", u, day("2026-11-20")).microUsd).toBe(246);
   });
 
   it("switches to the new price on its first UTC day", () => {

@@ -46,7 +46,10 @@ export type ExtractReceiptResult = {
  */
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_RETRIES = 2;
-/** Caps one call's output cost (reasoning included); a long receipt needs well under this. */
+/**
+ * Caps one call's output cost. Thinking tokens count toward it, so it sits
+ * well above what a long receipt's JSON needs.
+ */
 const MAX_OUTPUT_TOKENS = 16_384;
 
 const PROMPT = [
@@ -81,6 +84,7 @@ function registryFor(keys: ProviderKeys) {
 const NO_USAGE: ExtractionUsage = {
   inputTokens: 0,
   cachedInputTokens: 0,
+  cacheWriteTokens: 0,
   outputTokens: 0,
   reasoningTokens: 0,
 };
@@ -90,6 +94,7 @@ export function toUsage(usage: LanguageModelUsage): ExtractionUsage {
   return {
     inputTokens: usage.inputTokens ?? null,
     cachedInputTokens: usage.inputTokenDetails?.cacheReadTokens ?? null,
+    cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens ?? null,
     outputTokens: usage.outputTokens ?? null,
     reasoningTokens: usage.outputTokenDetails?.reasoningTokens ?? null,
   };

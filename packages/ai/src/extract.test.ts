@@ -53,6 +53,7 @@ const reply = (text: string, finish: "stop" | "length" = "stop") =>
 const expectedUsage = {
   inputTokens: 1200,
   cachedInputTokens: 200,
+  cacheWriteTokens: null,
   outputTokens: 300,
   reasoningTokens: 180,
 };

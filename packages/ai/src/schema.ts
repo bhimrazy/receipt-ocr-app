@@ -7,7 +7,7 @@ const confidence = z.number().min(0).max(1);
 /** The single source of truth for an extraction: validated by the AI SDK, typed via `z.infer`. */
 export const receiptExtractionSchema = z.object({
   merchant: z.string().max(200),
-  receiptDate: z.string().nullable(),
+  receiptDate: z.string().max(32).nullable(),
   category: z.enum(RECEIPT_CATEGORIES),
   currency: z.string().length(3).describe("ISO 4217 currency code, e.g. USD"),
   subtotal: z.number().nullable(),

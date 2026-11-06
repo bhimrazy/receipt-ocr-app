@@ -11,7 +11,13 @@ const step = (model: ModelId, timeoutMs = 30_000, enabled = true): OcrStep => ({
 });
 
 /** Classification itself is tested in packages/ai; here only the kind matters. */
-const USAGE = { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0 };
+const USAGE = {
+  inputTokens: 1,
+  cachedInputTokens: 0,
+  cacheWriteTokens: 0,
+  outputTokens: 1,
+  reasoningTokens: 0,
+};
 
 /** As in packages/ai: only output the model produced (and failed the schema) carries usage. */
 const failure = (kind: OcrFailureKind) => ({

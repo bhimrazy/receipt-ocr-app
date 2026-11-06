@@ -22,6 +22,8 @@ export interface ModelPrice {
   from: string;
   input: number;
   cachedInput: number;
+  /** Writing to the prompt cache (Anthropic bills 1.25× input). Unset: charged as input. */
+  cacheWrite?: number;
   /** Includes reasoning ("thinking") tokens. */
   output: number;
 }
@@ -76,6 +78,8 @@ export type ExtractionUsage = {
   inputTokens: number | null;
   /** The part of `inputTokens` read from the provider's cache. */
   cachedInputTokens: number | null;
+  /** The part of `inputTokens` written to the provider's cache. */
+  cacheWriteTokens: number | null;
   /** All generated tokens, reasoning included. */
   outputTokens: number | null;
   /** The part of `outputTokens` spent reasoning. */
@@ -100,11 +104,25 @@ export function costOf(modelId: string, usage: ExtractionUsage | null, at: Date)
   if (!price || usage?.inputTokens == null || usage.outputTokens == null) {
     return { microUsd: null, priceFrom: null };
   }
+  const { inputTokens, outputTokens } = usage;
+  return {
+    microUsd: priceCall(price, { ...usage, inputTokens, outputTokens }),
+    priceFrom: price.from,
+  };
+}
+
+/** Micro-USD for known token counts at one price row, rounded once. */
+export function priceCall(
+  price: ModelPrice,
+  usage: ExtractionUsage & { inputTokens: number; outputTokens: number },
+): number {
   const cached = Math.min(usage.cachedInputTokens ?? 0, usage.inputTokens);
+  const written = Math.min(usage.cacheWriteTokens ?? 0, usage.inputTokens - cached);
   // Reasoning is already inside outputTokens; adding it again would double-count.
   const microUsd =
-    (usage.inputTokens - cached) * price.input +
+    (usage.inputTokens - cached - written) * price.input +
     cached * price.cachedInput +
+    written * (price.cacheWrite ?? price.input) +
     usage.outputTokens * price.output;
-  return { microUsd: Math.round(microUsd), priceFrom: price.from };
+  return Math.round(microUsd);
 }
