@@ -32,7 +32,9 @@ const slugFor = (userId: string) => userId.toLowerCase().replace(/[^a-z0-9-]/g, 
 /**
  * Creates the user's personal workspace and owner membership in one
  * transaction, so a failure can't leave an org without its owner. Idempotent:
- * returns null when the personal workspace already exists.
+ * returns null when the user already belongs to any workspace. If the
+ * id-based slug is held by an org the user isn't in, a random suffix keeps
+ * self-heal from failing forever.
  */
 export const ensurePersonalWorkspace = (user: {
   id: string;
@@ -43,12 +45,25 @@ export const ensurePersonalWorkspace = (user: {
     use((db) =>
       db.transaction(async (tx) => {
         const now = new Date();
+        const [existing] = await tx
+          .select({ id: member.id })
+          .from(member)
+          .where(eq(member.userId, user.id))
+          .limit(1);
+        if (existing) return null;
+        const base = slugFor(user.id);
+        const [holder] = await tx
+          .select({ id: organization.id })
+          .from(organization)
+          .where(eq(organization.slug, base))
+          .limit(1);
+        const slug = holder ? `${base}-${crypto.randomUUID().slice(0, 8)}` : base;
         const [org] = await tx
           .insert(organization)
           .values({
             id: crypto.randomUUID(),
             name: personalWorkspaceName(user),
-            slug: slugFor(user.id),
+            slug,
             createdAt: now,
           })
           .onConflictDoNothing({ target: organization.slug })

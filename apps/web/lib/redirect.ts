@@ -1,6 +1,9 @@
 /** Where to land after auth when no safe redirect was requested. */
 export const DEFAULT_REDIRECT = "/app";
 
+/** Request header the proxy sets to the guarded path (and query) being requested. */
+export const REQUESTED_PATH_HEADER = "x-requested-path";
+
 const PROBE_ORIGIN = "http://redirect.invalid";
 
 /**

@@ -1,12 +1,13 @@
 import { AppSidebarNav, AppTabBar } from "@/components/app-nav";
 import { Brand } from "@/components/brand";
+import { NoWorkspace } from "@/components/no-workspace";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { UsageMeter, type Usage } from "@/components/usage-meter";
 import { UserMenu, type MenuUser } from "@/components/user-menu";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { logger } from "@/lib/log";
 import { planLabel } from "@/lib/plans";
-import { isAdmin, planFor, requireSession } from "@/lib/session";
+import { getActiveScope, isAdmin, planFor, requireSession } from "@/lib/session";
 import { getWorkspaceAllowance } from "@/lib/workspaces";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
@@ -29,6 +30,8 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Every /app page needs a real session; with auth unconfigured this sends everyone to /sign-in.
   const session = await requireSession();
+  // Redirecting to /sign-in here would loop: signed-in visitors are sent back to /app.
+  if (!(await getActiveScope())) return <NoWorkspace email={session.user.email} />;
   const [allowance, usage] = await Promise.all([getWorkspaceAllowance(), loadUsage()]);
   const label = planLabel(planFor(session));
   const showAdmin = isAdmin(session);

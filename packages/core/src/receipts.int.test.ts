@@ -71,6 +71,27 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(scope).toEqual({ organizationId: a.organizationId, userId: a.userId, role: "owner" });
   });
 
+  it("U4b: picks a fresh slug when the id-based slug belongs to an org the user is not in", async () => {
+    const id = `${tag}-squatted`;
+    await run(
+      Effect.flatMap(Db, ({ use }) =>
+        use(async (db) => {
+          await db
+            .insert(user)
+            .values({ id, name: "Sq", email: `${id}@example.com`, emailVerified: true });
+          await db
+            .insert(organization)
+            .values({ id: crypto.randomUUID(), name: "Squatter", slug: id, createdAt: new Date() });
+        }),
+      ),
+    );
+    expect(await run(resolveScope(id))).toBeNull();
+    const orgId = await run(ensurePersonalWorkspace({ id, email: `${id}@example.com` }));
+    expect(orgId).toBeTruthy();
+    expect(await run(resolveScope(id))).toMatchObject({ organizationId: orgId, role: "owner" });
+    expect(await run(ensurePersonalWorkspace({ id, email: `${id}@example.com` }))).toBeNull();
+  });
+
   it("completes through the fixture provider with a canonical category", async () => {
     const receipt = await run(Effect.flatMap(ReceiptRepo, (repo) => repo.get(receiptId, a)));
     expect(receipt?.status).toBe("completed");
@@ -204,6 +225,18 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     );
     expect(failedRows.rows.map((row) => row.id)).toContain(stuck.receipt.id);
     expect((await run(checkQuota(a.userId, limits))).used).toBe(before.used - 1);
+    // Fresh in-flight receipts: the processing filter matches Home's "Reading now" count.
+    const fresh = await run(
+      ingestUpload({ scope: a, fileName: "fresh.jpg", body: new Uint8Array([...JPEG, 1]) }),
+    );
+    const reading = await run(
+      Effect.flatMap(ReceiptRepo, (r) =>
+        r.list(a, { status: "processing" }, { limit: 50, offset: 0 }),
+      ),
+    );
+    const inFlight = await run(Effect.flatMap(ReceiptRepo, (r) => r.counts(a)));
+    expect(reading.total).toBe(inFlight.inFlight);
+    expect(reading.rows.map((row) => row.id)).toContain(fresh.receipt.id);
     expect(
       await run(Effect.flatMap(ReceiptRepo, (r) => r.claimRetry(stuck.receipt.id, a))),
     ).toMatchObject({

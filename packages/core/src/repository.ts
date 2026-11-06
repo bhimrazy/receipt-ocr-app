@@ -159,6 +159,9 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
       eq(receipts.status, "completed"),
       lt(receipts.confidence, String(NEEDS_REVIEW_BELOW)),
     );
+  } else if (filters.status === "processing") {
+    // Matches the Home "Reading now" count, which includes receipts not yet picked up.
+    conditions.push(sql`${effectiveStatus} in ('uploaded', 'processing')`);
   } else if (filters.status) {
     conditions.push(sql`${effectiveStatus} = ${filters.status}`);
   }
