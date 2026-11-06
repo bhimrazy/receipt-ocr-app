@@ -57,6 +57,13 @@
       "when": 1793943493576,
       "tag": "0007_ocr_usage_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793946078156,
+      "tag": "0008_jobs_queue",
+      "breakpoints": true
     }
   ]
 }
