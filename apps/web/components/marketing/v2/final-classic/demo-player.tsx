@@ -106,7 +106,7 @@ export function DemoPlayer({
           <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-foreground/15" />
           <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-foreground/15" />
           <span className="ml-2 min-w-0 truncate font-mono text-xs text-muted-foreground">
-            receiptocr.app/receipts/{current.slug}
+            receipts.local/receipts/{current.slug}
           </span>
           <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">Sample</span>
         </div>
