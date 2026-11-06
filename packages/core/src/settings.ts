@@ -91,7 +91,9 @@ const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
     const wanted = `google:${model}`;
     if (ocrModel(wanted)) return Effect.succeed(wanted as ModelId);
     // An unlisted model would leave the settings page with nothing that can run.
-    return Effect.logWarning("settings.unlisted_model", { ocr: { model: wanted } }).pipe(Effect.as(`google:${DEFAULT_GOOGLE_MODEL}` as ModelId));
+    return Effect.logWarning("settings.unlisted_model", { ocr: { model: wanted } }).pipe(
+      Effect.as(`google:${DEFAULT_GOOGLE_MODEL}` as ModelId),
+    );
   }),
   Effect.map((model) => ({
     chain: [{ model, enabled: true, timeoutMs: DEFAULT_STEP_TIMEOUT_MS }],

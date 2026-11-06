@@ -21,8 +21,7 @@ export function mergeFields(event: WideEventFields, fields: WideEventFields): vo
   for (const [key, value] of Object.entries(fields)) {
     if (value === undefined) continue;
     const current = target[key];
-    target[key] =
-      isPlainObject(current) && isPlainObject(value) ? { ...current, ...value } : value;
+    target[key] = isPlainObject(current) && isPlainObject(value) ? { ...current, ...value } : value;
   }
 }
 

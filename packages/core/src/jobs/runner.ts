@@ -140,7 +140,10 @@ const runTick = <R>(options: TickOptions<R>) =>
     }
     const reaped = yield* queue.reap().pipe(
       Effect.tapError((error) =>
-        Effect.zipRight(annotateEvent({ error: errorFields(error) }), Effect.logError("jobs.reap_failed")),
+        Effect.zipRight(
+          annotateEvent({ error: errorFields(error) }),
+          Effect.logError("jobs.reap_failed"),
+        ),
       ),
       Effect.orElseSucceed((): Job[] => []),
     );
@@ -187,7 +190,10 @@ const runTick = <R>(options: TickOptions<R>) =>
       }
     }).pipe(
       Effect.catchAll((error) =>
-        Effect.zipRight(annotateEvent({ error: errorFields(error) }), Effect.logError("jobs.tick_failed")),
+        Effect.zipRight(
+          annotateEvent({ error: errorFields(error) }),
+          Effect.logError("jobs.tick_failed"),
+        ),
       ),
     );
 
