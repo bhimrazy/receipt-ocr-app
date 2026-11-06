@@ -6,6 +6,8 @@ import {
   eq,
   gte,
   ilike,
+  inArray,
+  jobs,
   lt,
   lte,
   ocrCalls,
@@ -25,6 +27,8 @@ import {
 } from "@receipt-ocr/db";
 import { Context, Effect, Layer } from "effect";
 import type { DbError } from "./errors";
+import { enqueueJob } from "./jobs/queue";
+import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-job";
 import type { QuotaVerdict } from "./quota";
 import { Db } from "./services";
 import { countUsage, lockUserQuota, type UsageCounts, type UsageWindow } from "./usage";
@@ -126,10 +130,10 @@ export type QuotaGate = {
 };
 
 export type InsertResult =
-  { kind: "inserted"; receipt: Receipt } | { kind: "quota"; verdict: QuotaVerdict };
+  { kind: "inserted"; receipt: Receipt; jobId: string } | { kind: "quota"; verdict: QuotaVerdict };
 
 export type RetryClaim =
-  | { kind: "claimed"; imageObjectKey: string | null }
+  | { kind: "claimed"; round: number; jobId: string }
   | { kind: "quota"; verdict: QuotaVerdict }
   | { kind: "not-found" }
   | { kind: "not-retryable" }
@@ -142,9 +146,10 @@ export const MAX_EXTRACTION_ATTEMPTS = 3;
 export const NEEDS_REVIEW_BELOW = 0.9;
 
 /**
- * An upload whose function was killed mid-extraction never reaches a final
- * state. Past this age (well beyond the route's maxDuration) it reads as
- * failed and can be retried.
+ * Legacy safety net. Every round now has a job, and while the job is queued
+ * or running the receipt reads as processing however long it waits. A
+ * `processing` receipt with no live job (one whose final-failure write was
+ * lost) reads as failed past this age, and can be retried.
  */
 export const STALE_AFTER_MS = 5 * 60_000;
 export const STALE_MESSAGE = "Reading this receipt took too long. Try again.";
@@ -152,13 +157,17 @@ export const EXTRACTION_FAILED_MESSAGE =
   "We couldn't read this receipt. It may be blurry, cropped or too dark. Try again, or upload a clearer copy.";
 
 const staleInterval = sql.raw(`interval '${STALE_AFTER_MS / 1000} seconds'`);
-const isStale = sql`(${receipts.status} in ('uploaded', 'processing') and ${receipts.updatedAt} < now() - ${staleInterval})`;
+// Qualified by hand: Drizzle renders columns unqualified in a single-table
+// select, and a bare `id` here would resolve to `jobs.id`.
+const hasLiveJob = sql`exists (select 1 from jobs j where j.receipt_id = receipts.id and j.state in ('queued', 'running'))`;
+const isStale = sql`(${receipts.status} in ('uploaded', 'processing') and ${receipts.updatedAt} < now() - ${staleInterval} and not ${hasLiveJob})`;
 const effectiveStatus = sql<ReceiptStatus>`case when ${isStale} then 'failed' else ${receipts.status}::text end`;
 const effectiveError = sql<
   string | null
 >`case when ${isStale} then ${STALE_MESSAGE} else ${receipts.errorMessage} end`;
 
-export function isStaleReceipt(row: Pick<Receipt, "status" | "updatedAt">, now = Date.now()) {
+/** Old enough to be stale if no job is live for it; the caller checks the job. */
+export function isStaleCandidate(row: Pick<Receipt, "status" | "updatedAt">, now = Date.now()) {
   return (
     (row.status === "uploaded" || row.status === "processing") &&
     row.updatedAt.getTime() < now - STALE_AFTER_MS
@@ -240,10 +249,7 @@ const decimal = (value: number | null) => (value == null ? null : String(value))
  * deleted while the model ran; the row is then kept unlinked (null) instead
  * of failing the transaction on the foreign key.
  */
-async function recordCalls(
-  tx: Parameters<Parameters<DbClient["transaction"]>[0]>[0],
-  calls: readonly OcrCallRow[],
-) {
+async function recordCalls(tx: Pick<DbClient, "insert">, calls: readonly OcrCallRow[]) {
   if (calls.length === 0) return;
   await tx
     .insert(ocrCalls)
@@ -257,7 +263,7 @@ async function recordCalls(
             : sql`(select ${user.id} from ${user} where ${user.id} = ${call.userId})`,
       })),
     )
-    // A round's calls written twice (a lost COMMIT ack, then the failure path) count once.
+    // An attempt's calls written twice (a lost COMMIT ack, then the failure path) count once.
     .onConflictDoNothing();
 }
 
@@ -266,10 +272,19 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
   {
     /**
      * Inserts an uploaded receipt straight into `processing` (its file is
-     * already stored) and records its first round, if the quota allows.
+     * already stored), records its first round and enqueues the job that
+     * reads it, all in one transaction, if the quota allows. There is never a
+     * receipt without a job, or a job without its quota.
      */
     readonly insert: (
-      input: { id: string; scope: ReceiptScope; fileName: string; imageObjectKey: string },
+      input: {
+        id: string;
+        scope: ReceiptScope;
+        fileName: string;
+        imageObjectKey: string;
+        /** Job priority; interactive by default. */
+        priority?: number;
+      },
       quota: QuotaGate,
     ) => Effect.Effect<InsertResult, DbError>;
     /**
@@ -297,9 +312,11 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       message: string,
       calls: readonly OcrCallRow[],
     ) => Effect.Effect<boolean, DbError>;
+    /** Records calls of an attempt that didn't settle the receipt (its job will retry). */
+    readonly recordCalls: (calls: readonly OcrCallRow[]) => Effect.Effect<void, DbError>;
     /**
-     * Atomically moves a failed (or stale) receipt back to `processing` and
-     * records the new round, if the quota allows.
+     * Atomically moves a failed (or stale) receipt back to `processing`,
+     * records the new round and enqueues its job, if the quota allows.
      */
     readonly claimRetry: (
       id: string,
@@ -342,7 +359,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
   static readonly Live = Layer.effect(
     ReceiptRepo,
     Effect.map(Db, ({ use }) => ({
-      insert: ({ id, scope, fileName, imageObjectKey }, quota) =>
+      insert: ({ id, scope, fileName, imageObjectKey, priority }, quota) =>
         use((db) =>
           db.transaction(async (tx): Promise<InsertResult> => {
             await lockUserQuota(tx, scope.userId);
@@ -366,7 +383,20 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               userId: scope.userId,
               round: 1,
             });
-            return { kind: "inserted", receipt: row };
+            const job = await enqueueJob(
+              tx,
+              receiptExtractJob(
+                {
+                  receiptId: id,
+                  organizationId: scope.organizationId,
+                  userId: scope.userId,
+                  round: 1,
+                },
+                priority ?? PRIORITY_INTERACTIVE,
+              ),
+            );
+            if (!("id" in job)) throw new Error("A new receipt already had a live job");
+            return { kind: "inserted", receipt: row, jobId: job.id };
           }),
         ),
 
@@ -416,6 +446,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           }),
         ),
 
+      recordCalls: (calls) => use((db) => recordCalls(db, calls)),
+
       fail: (id, scope, attempt, message, calls) =>
         use((db) =>
           db.transaction(async (tx) => {
@@ -453,15 +485,43 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                   lt(receipts.attempts, MAX_EXTRACTION_ATTEMPTS),
                 ),
               )
-              .returning({ imageObjectKey: receipts.imageObjectKey, attempts: receipts.attempts });
+              .returning({ attempts: receipts.attempts });
             if (claimed) {
+              const round = claimed.attempts;
               await tx.insert(ocrRounds).values({
                 receiptId: id,
                 organizationId: scope.organizationId,
                 userId: scope.userId,
-                round: claimed.attempts,
+                round,
               });
-              return { kind: "claimed", imageObjectKey: claimed.imageObjectKey };
+              // A job still live for an older round can no longer write (the
+              // round fences it); end it so the new round's job can be enqueued.
+              await tx
+                .update(jobs)
+                .set({
+                  state: "cancelled",
+                  lastErrorKind: "superseded",
+                  lastErrorAt: now,
+                  finishedAt: now,
+                  lockedBy: null,
+                  lockedUntil: null,
+                  updatedAt: now,
+                })
+                .where(and(eq(jobs.receiptId, id), inArray(jobs.state, ["queued", "running"])));
+              const job = await enqueueJob(
+                tx,
+                receiptExtractJob(
+                  {
+                    receiptId: id,
+                    organizationId: scope.organizationId,
+                    userId: scope.userId,
+                    round,
+                  },
+                  PRIORITY_INTERACTIVE,
+                ),
+              );
+              if (!("id" in job)) throw new Error("The new round's job collided with a live one");
+              return { kind: "claimed", round, jobId: job.id };
             }
             const [existing] = await tx
               .select({ attempts: receipts.attempts })
@@ -481,10 +541,13 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             where: inScope(id, scope),
             with: { items: true },
           });
-          if (!row) return null;
-          return isStaleReceipt(row)
-            ? { ...row, status: "failed" as const, errorMessage: STALE_MESSAGE }
-            : row;
+          if (!row || !isStaleCandidate(row)) return row ?? null;
+          const [live] = await db
+            .select({ id: jobs.id })
+            .from(jobs)
+            .where(and(eq(jobs.receiptId, id), inArray(jobs.state, ["queued", "running"])))
+            .limit(1);
+          return live ? row : { ...row, status: "failed" as const, errorMessage: STALE_MESSAGE };
         }),
 
       list: (scope, filters, page) =>

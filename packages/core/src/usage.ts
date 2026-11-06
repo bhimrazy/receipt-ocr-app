@@ -21,7 +21,7 @@ import { Db } from "./services";
  *
  * - A round is one upload or one retry, recorded when it is accepted.
  * - A user's day: receipts read successfully that day, counted once, plus
- *   rounds still in flight, plus failed rounds beyond the first
+ *   rounds still in flight (no calls yet, and recent or with a live job), plus failed rounds beyond the first
  *   `FREE_FAILED_ROUNDS` of the day. A few bad photos are free; a stream of
  *   them (each one a paid model call) is not.
  * - The burst limit and the global cap count rounds, failed ones included:
@@ -45,8 +45,14 @@ const ts = (date: Date) => sql`${date.toISOString()}::timestamptz`;
 
 /** The round (aliased `r`) has at least one successful call. */
 const readOk = sql`exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round and c.status = 'ok')`;
-/** The round has no calls yet: still running (or died, until it ages out). */
+/** The round has no calls yet: waiting or running (or died, until it ages out). */
 const noCalls = sql`not exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round)`;
+/**
+ * The receipt has a job queued or running: its round is in flight however
+ * long it waits, so a backlog can't let a burst past the quota. Only the
+ * latest round can have one; older rounds already have calls.
+ */
+const liveJob = sql`exists (select 1 from jobs j where j.receipt_id = r.receipt_id and j.state in ('queued', 'running'))`;
 /** The round called a model and none succeeded: paid for, nothing read. */
 const failedPaid = sql`(not ${readOk} and exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round and c.model is not null))`;
 
@@ -56,7 +62,9 @@ const failedPaid = sql`(not ${readOk} and exists (select 1 from ocr_calls c wher
  */
 export const usedSinceSql = (userId: SQL | string, since: Date, pendingSince: Date | null) => {
   const inFlight =
-    pendingSince === null ? sql`false` : sql`(r.created_at >= ${ts(pendingSince)} and ${noCalls})`;
+    pendingSince === null
+      ? sql`false`
+      : sql`((r.created_at >= ${ts(pendingSince)} or ${liveJob}) and ${noCalls})`;
   const mine = sql`r.user_id = ${userId} and r.created_at >= ${ts(since)}`;
   return sql<number>`((select count(distinct r.receipt_id) from ocr_rounds r where ${mine} and (${readOk} or ${inFlight}))
     + greatest(0, (select count(*) from ocr_rounds r where ${mine} and ${failedPaid}) - ${FREE_FAILED_ROUNDS}))::int`;
@@ -235,6 +243,7 @@ export const receiptCalls = (receiptId: string, organizationId: string) =>
       return db
         .select({
           round: ocrCalls.round,
+          jobAttempt: ocrCalls.jobAttempt,
           step: ocrCalls.step,
           model: ocrCalls.model,
           status: ocrCalls.status,
@@ -248,6 +257,6 @@ export const receiptCalls = (receiptId: string, organizationId: string) =>
         })
         .from(ocrCalls)
         .where(and(eq(ocrCalls.receiptId, receiptId), eq(ocrCalls.organizationId, organizationId)))
-        .orderBy(ocrCalls.round, ocrCalls.step);
+        .orderBy(ocrCalls.round, ocrCalls.jobAttempt, ocrCalls.step);
     }),
   );

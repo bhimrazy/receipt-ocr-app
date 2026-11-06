@@ -6,7 +6,10 @@
  */
 import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS } from "@receipt-ocr/ai";
 import {
+  and,
   eq,
+  inArray,
+  jobs,
   member,
   ocrCalls,
   ocrRounds,
@@ -18,13 +21,8 @@ import {
 import { Effect, Exit, ManagedRuntime } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppLayer, type AppServices } from "./index";
-import {
-  claimRetry,
-  deleteReceipt,
-  extractStored,
-  ingestUpload,
-  purgeReceiptFiles,
-} from "./pipeline";
+import { JOB_REGISTRY, tick } from "./jobs";
+import { claimRetry, deleteReceipt, ingestUpload, purgeReceiptFiles } from "./pipeline";
 import { FREE_FAILED_ROUNDS } from "./plans";
 import { checkQuota, quotaGate, usageWindow } from "./quota";
 import { ReceiptRepo, STALE_AFTER_MS } from "./repository";
@@ -45,6 +43,47 @@ const limits = { perMinute: 1000, perDay: 1000 };
 const gate = () => run(quotaGate(limits));
 const db = <A>(f: (d: Parameters<Parameters<typeof Db.Service.use>[0]>[0]) => Promise<A>) =>
   run(Effect.flatMap(Db, ({ use }) => use(f)));
+
+/**
+ * Runs the receipt's live job to the end, skipping its backoff waits: a
+ * failing fixture read is retried until the job is dead.
+ */
+async function extract(receiptId: string) {
+  for (let i = 0; i < 10; i++) {
+    const [live] = await db((d) =>
+      d
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(and(eq(jobs.receiptId, receiptId), inArray(jobs.state, ["queued", "running"]))),
+    );
+    if (!live) return;
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ runAt: new Date(0) })
+        .where(eq(jobs.id, live.id)),
+    );
+    await run(
+      tick({
+        worker: `${tag}-worker`,
+        registry: JOB_REGISTRY,
+        budgetMs: 60_000,
+        ids: [live.id],
+        waitForRetries: false,
+      }),
+    );
+  }
+  throw new Error(`receipt ${receiptId}'s job never finished`);
+}
+
+/** Ends a receipt's live job without running it, as a lost final write would leave it. */
+const dropJob = (receiptId: string) =>
+  db((d) =>
+    d
+      .update(jobs)
+      .set({ state: "dead", finishedAt: new Date() })
+      .where(and(eq(jobs.receiptId, receiptId), inArray(jobs.state, ["queued", "running"]))),
+  );
 
 async function createUser(name: string) {
   const id = `${tag}-${name}`;
@@ -74,7 +113,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     );
     receiptId = ingested.receipt.id;
     objectKey = ingested.receipt.imageObjectKey!;
-    await run(extractStored({ receiptId, scope: a }));
+    await extract(receiptId);
   });
 
   afterAll(async () => {
@@ -85,6 +124,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         use(async (db) => {
           await db.delete(ocrCalls).where(sql`${ocrCalls.userId} like ${`${tag}%`}`);
           await db.delete(ocrRounds).where(sql`${ocrRounds.userId} like ${`${tag}%`}`);
+          await db.delete(jobs).where(sql`${jobs.userId} like ${`${tag}%`}`);
           await db.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
           await db.delete(user).where(sql`${user.id} like ${`${tag}%`}`);
         }),
@@ -235,19 +275,20 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(counts.total).toBe((await list({})).total);
   });
 
-  it("U2: a receipt stuck in processing reads as failed and stops counting against quota", async () => {
+  it("U2: a receipt stuck in processing with no live job reads as failed and stops counting against quota", async () => {
     const stuck = await run(ingestUpload({ scope: a, fileName: "stuck.jpg", body: JPEG, limits }));
     const before = await run(checkQuota(a.userId, limits));
-    await run(
-      Effect.flatMap(Db, ({ use }) =>
-        use((db) =>
-          db
-            .update(receipts)
-            .set({ updatedAt: new Date(Date.now() - STALE_AFTER_MS - 1000) })
-            .where(sql`${receipts.id} = ${stuck.receipt.id}`),
-        ),
-      ),
+    await db((d) =>
+      d
+        .update(receipts)
+        .set({ updatedAt: new Date(Date.now() - STALE_AFTER_MS - 1000) })
+        .where(eq(receipts.id, stuck.receipt.id)),
     );
+    // Waiting in the queue, however long, is not stale.
+    expect(
+      (await run(Effect.flatMap(ReceiptRepo, (r) => r.get(stuck.receipt.id, a))))?.status,
+    ).toBe("processing");
+    await dropJob(stuck.receipt.id);
     // Its round in the ledger aged out too (the function was killed: no calls were written).
     await db((d) =>
       d
@@ -377,7 +418,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       run(checkQuota(userId, l)).then((v) => v.used);
     const readAndExtract = async (scope: typeof a, body = JPEG) => {
       const { receipt } = await run(ingestUpload({ scope, fileName: "r.jpg", body, limits }));
-      await runExit(extractStored({ receiptId: receipt.id, scope }));
+      await extract(receipt.id);
       return receipt.id;
     };
 
@@ -403,16 +444,18 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       const start = await usage();
       const id = await readAndExtract(c, FAILING_JPEG);
       await run(claimRetry({ receiptId: id, scope: c, limits }));
-      await runExit(extractStored({ receiptId: id, scope: c }));
+      await extract(id);
       const end = await usage();
       expect(end.userDay).toBe(start.userDay);
+      // Two rounds, however many automatic attempts each took.
       expect(end.userMinute).toBe(start.userMinute + 2);
       expect(end.globalDay! - start.globalDay!).toBeGreaterThanOrEqual(2);
       const calls = await run(receiptCalls(id, c.organizationId));
-      expect(calls.map((call) => [call.round, call.status])).toEqual([
-        [1, "provider-error"],
-        [2, "provider-error"],
-      ]);
+      expect(calls.map((call) => [call.round, call.jobAttempt, call.status])).toEqual(
+        [1, 2].flatMap((round) =>
+          [1, 2, 3, 4].map((attempt) => [round, attempt, "provider-error"]),
+        ),
+      );
     });
 
     it("M1: failed reads past the free allowance count toward the day", async () => {
@@ -424,7 +467,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       for (let i = 0; i < 20 + FREE_FAILED_ROUNDS; i++) {
         const exit = await upload();
         if (!Exit.isSuccess(exit)) throw new Error(`upload ${i + 1} was refused`);
-        await runExit(extractStored({ receiptId: exit.value.receipt.id, scope: c }));
+        await extract(exit.value.receipt.id);
       }
       expect(await usedToday(c.userId, tight)).toBe(20);
       const refused = await upload();
@@ -438,8 +481,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         const exit = await runExit(
           ingestUpload({ scope: c, fileName: "m.jpg", body, limits: tight }),
         );
-        if (Exit.isSuccess(exit))
-          await runExit(extractStored({ receiptId: exit.value.receipt.id, scope: c }));
+        if (Exit.isSuccess(exit)) await extract(exit.value.receipt.id);
         return exit;
       };
       for (const body of [JPEG, JPEG]) expect(Exit.isSuccess(await read(body))).toBe(true);
@@ -458,12 +500,14 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       );
       expect(await usedToday(c.userId)).toBe(1); // in flight
       await run(Effect.flatMap(Storage, (s) => s.remove([receipt.imageObjectKey!])));
-      await runExit(extractStored({ receiptId: receipt.id, scope: c }));
+      await extract(receipt.id);
       expect(await usedToday(c.userId)).toBe(0);
       const rows = await db((d) =>
         d.select().from(ocrCalls).where(eq(ocrCalls.receiptId, receipt.id)),
       );
-      expect(rows).toMatchObject([{ model: null, status: "storage-error", costMicroUsd: 0 }]);
+      // One no-model row per automatic attempt (the object may come back).
+      expect(rows).toHaveLength(4);
+      expect(rows[0]).toMatchObject({ model: null, status: "storage-error", costMicroUsd: 0 });
       // Not a model call: rollups leave it out.
       const days = await run(
         usageByDay({ organizationId: c.organizationId }, new Date(Date.now() - 60_000)),
@@ -512,30 +556,31 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         {
           day: new Date().toISOString().slice(0, 10),
           receipts: 1,
-          calls: 2,
-          failedCalls: 1,
+          // One read, and a failing one tried four times.
+          calls: 5,
+          failedCalls: 4,
           inputTokens: 0,
           cachedInputTokens: 0,
           cacheWriteTokens: 0,
           outputTokens: 0,
           reasoningTokens: 0,
           costMicroUsd: 0,
-          unpricedCalls: 1,
+          unpricedCalls: 4,
         },
       ]);
       const [model] = await run(usageByModel(scope, since));
-      expect(model).toMatchObject({ model: "fixture", calls: 2, failedCalls: 1, fallbackCalls: 0 });
+      expect(model).toMatchObject({ model: "fixture", calls: 5, failedCalls: 4, fallbackCalls: 0 });
       expect(model?.p50Ms).toEqual(expect.any(Number));
 
       const workspaces = await run(usageByWorkspace(since, 500));
       expect(workspaces.find((w) => w.organizationId === c.organizationId)).toMatchObject({
-        calls: 2,
+        calls: 5,
         receipts: 1,
       });
       // Another workspace sees none of it.
       expect(await run(usageByDay({ organizationId: b.organizationId }, since))).toEqual([]);
       const all = await run(usageByDay("all", since));
-      expect(all[0]!.calls).toBeGreaterThanOrEqual(2);
+      expect(all[0]!.calls).toBeGreaterThanOrEqual(5);
     });
   });
 

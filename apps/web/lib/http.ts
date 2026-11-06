@@ -1,5 +1,5 @@
 import "server-only";
-import type { AppError, AppServices, OcrAttempt } from "@receipt-ocr/core";
+import type { AppError, AppServices } from "@receipt-ocr/core";
 import { getIP } from "better-auth/api";
 import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
@@ -79,36 +79,6 @@ export async function runRoute<A>(
   const response = failureResponse(exit.cause, event);
   if (!event) logFailure(exit.cause);
   return response;
-}
-
-/** For `after()` work: runs the program and logs one wide event with its outcome. */
-export async function runBackground<A>(
-  program: Effect.Effect<A, AppError, AppServices>,
-  event: WideEvent,
-  onSuccess?: (value: A, event: WideEvent) => void,
-): Promise<void> {
-  const startedAt = Date.now();
-  const exit = await runtime.runPromiseExit(program);
-  event.duration_ms = Date.now() - startedAt;
-  if (Exit.isSuccess(exit)) {
-    event.outcome = "success";
-    onSuccess?.(exit.value, event);
-    logger.info(event);
-    return;
-  }
-  failureResponse(exit.cause, event);
-  event.outcome = "error";
-  logger.error(event);
-}
-
-/** Which model read the receipt, every model tried and what it cost, for an extraction's wide event. */
-export function recordOcr(
-  result: { model: string; attempts: readonly OcrAttempt[]; costMicroUsd: number | null },
-  event: WideEvent,
-): void {
-  event.model = result.model;
-  event.ocr = { attempts: result.attempts };
-  event.cost_micro_usd = result.costMicroUsd;
 }
 
 function logFailure(cause: Cause.Cause<AppError>) {
