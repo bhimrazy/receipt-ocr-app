@@ -128,9 +128,12 @@ export default function ReviewSheet({
     if (encoded[current.id]?.key === key) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void encode(bitmap, edit, current.name).then((file) => {
-        if (!cancelled) setEncoded((all) => ({ ...all, [current.id]: { key, file } }));
-      });
+      encode(bitmap, edit, current.name)
+        .then((file) => {
+          if (!cancelled) setEncoded((all) => ({ ...all, [current.id]: { key, file } }));
+        })
+        // No estimate this time; the upload encodes again.
+        .catch(() => {});
     }, 400);
     return () => {
       cancelled = true;
