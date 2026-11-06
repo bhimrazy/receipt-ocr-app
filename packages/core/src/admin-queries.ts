@@ -19,6 +19,7 @@ import { Effect } from "effect";
 import { policyFor, type PlanId, type PlanTable } from "./plans";
 import { utcDayStart } from "./quota";
 import { Db } from "./services";
+import { readOkSql, receiptsReadSince, roundsSince } from "./usage";
 
 /**
  * Reads for the admin pages. Every list is offset-paged with a total, and its
@@ -37,9 +38,8 @@ const ts = (date: Date) => sql`${date.toISOString()}::timestamptz`;
 /** A ban past its expiry no longer applies (Better Auth lifts it on the next sign-in). */
 const activeBan = sql<boolean>`(${user.banned} and (${user.banExpires} is null or ${user.banExpires} > now()))`;
 
-/** Same rule as the quota: failed receipts don't use up the day. */
-const usedSince = (userColumn: SQL, since: Date) =>
-  sql<number>`(select count(*)::int from ${receipts} r where r.user_id = ${userColumn} and r.created_at >= ${ts(since)} and r.status <> 'failed')`;
+/** Same rule as the quota (from the usage ledger), without receipts still being read. */
+const usedSince = receiptsReadSince;
 
 export type Page = { page: number; pageSize: number };
 const offsetOf = ({ page, pageSize }: Page) => (Math.max(1, page) - 1) * pageSize;
@@ -107,34 +107,27 @@ export const adminOverview = (plans: PlanTable, now = new Date()) =>
         .where(sql`${receipts.createdAt} >= ${ts(chartStart)}`)
         .groupBy(sql`1`);
 
-      const [reads] = await db
-        .select({
-          value: sql<number>`(count(*) filter (where ${receipts.createdAt} >= ${ts(today)}) + count(*) filter (where ${receipts.lastAttemptAt} >= ${ts(today)}))::int`,
-        })
-        .from(receipts)
-        .where(
-          sql`(${receipts.createdAt} >= ${ts(today)} or ${receipts.lastAttemptAt} >= ${ts(today)})`,
-        );
+      const [reads] = await db.execute<{ value: number }>(
+        sql`select ${roundsSince(today)} as value`,
+      );
 
       // Anyone at 80% of the smallest daily limit is a candidate; their own plan decides.
       const threshold = Math.ceil(
         Math.min(...Object.values(plans).map((p) => p.receiptsPerDay)) * 0.8,
       );
-      const heavy = await db
-        .select({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          plan: user.plan,
-          used: sql<number>`count(*)::int`,
-        })
-        .from(receipts)
-        .innerJoin(user, eq(user.id, receipts.userId))
-        .where(and(sql`${receipts.createdAt} >= ${ts(today)}`, sql`${receipts.status} <> 'failed'`))
-        .groupBy(user.id)
-        .having(sql`count(*) >= ${threshold}`)
-        .orderBy(desc(sql`count(*)`))
-        .limit(50);
+      const heavy = await db.execute<{
+        id: string;
+        name: string;
+        email: string;
+        plan: string;
+        used: number;
+      }>(sql`select u.id, u.name, u.email, u.plan, count(distinct r.receipt_id)::int as used
+        from ocr_rounds r join "user" u on u.id = r.user_id
+        where r.created_at >= ${ts(today)} and ${readOkSql}
+        group by u.id
+        having count(distinct r.receipt_id) >= ${threshold}
+        order by used desc
+        limit 50`);
 
       const nearLimit = heavy
         .map((row) => ({ ...row, limit: policyFor(plans, row.plan).receiptsPerDay }))

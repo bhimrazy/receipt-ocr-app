@@ -70,7 +70,9 @@ async function join(userId: string, organizationId: string, role = "member") {
 }
 
 const upload = (scope: { userId: string; organizationId: string; role: string }) =>
-  run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG })).then((r) => r.receipt);
+  run(
+    ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits: { perMinute: 1e6, perDay: 1e6 } }),
+  ).then((r) => r.receipt);
 
 const objectExists = async (key: string) =>
   Exit.isSuccess(await runExit(Effect.flatMap(Storage, (s) => s.get(key))));

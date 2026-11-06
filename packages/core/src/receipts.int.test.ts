@@ -4,15 +4,31 @@
  * after `bun run db:migrate`, with DATABASE_URL and S3_* set and
  * OCR_PROVIDER=fixture.
  */
-import { FIXTURE_RECEIPTS } from "@receipt-ocr/ai";
-import { member, organization, receipts, sql, user } from "@receipt-ocr/db";
+import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS } from "@receipt-ocr/ai";
+import {
+  eq,
+  member,
+  ocrCalls,
+  ocrRounds,
+  organization,
+  receipts,
+  sql,
+  user,
+} from "@receipt-ocr/db";
 import { Effect, Exit, ManagedRuntime } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppLayer, type AppServices } from "./index";
-import { deleteReceipt, extractStored, ingestUpload, purgeReceiptFiles } from "./pipeline";
-import { checkQuota } from "./quota";
+import {
+  claimRetry,
+  deleteReceipt,
+  extractStored,
+  ingestUpload,
+  purgeReceiptFiles,
+} from "./pipeline";
+import { checkQuota, quotaGate, usageWindow } from "./quota";
 import { ReceiptRepo, STALE_AFTER_MS } from "./repository";
 import { Db, Storage } from "./services";
+import { receiptCalls, usageByDay, usageByModel, usageByWorkspace } from "./usage";
 import { ensurePersonalWorkspace, hitRateLimit, resolveScope } from "./workspace";
 
 const enabled = process.env.INTEGRATION === "1";
@@ -22,6 +38,12 @@ const runExit = <A, E>(effect: Effect.Effect<A, E, AppServices>) => runtime.runP
 
 const tag = `int-${Date.now()}`;
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new TextEncoder().encode(tag)]);
+const FAILING_JPEG = new Uint8Array([...JPEG, ...new TextEncoder().encode(FIXTURE_FAIL_MARKER)]);
+/** Room for everything the suite uploads; quota tests pass their own limits. */
+const limits = { perMinute: 1000, perDay: 1000 };
+const gate = () => run(quotaGate(limits));
+const db = <A>(f: (d: Parameters<Parameters<typeof Db.Service.use>[0]>[0]) => Promise<A>) =>
+  run(Effect.flatMap(Db, ({ use }) => use(f)));
 
 async function createUser(name: string) {
   const id = `${tag}-${name}`;
@@ -46,7 +68,9 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
   beforeAll(async () => {
     a = await createUser("alice");
     b = await createUser("bob");
-    const ingested = await run(ingestUpload({ scope: a, fileName: "lunch.jpg", body: JPEG }));
+    const ingested = await run(
+      ingestUpload({ scope: a, fileName: "lunch.jpg", body: JPEG, limits }),
+    );
     receiptId = ingested.receipt.id;
     objectKey = ingested.receipt.imageObjectKey!;
     await run(extractStored({ receiptId, scope: a }));
@@ -58,6 +82,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     await run(
       Effect.flatMap(Db, ({ use }) =>
         use(async (db) => {
+          await db.delete(ocrCalls).where(sql`${ocrCalls.userId} like ${`${tag}%`}`);
+          await db.delete(ocrRounds).where(sql`${ocrRounds.userId} like ${`${tag}%`}`);
           await db.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
           await db.delete(user).where(sql`${user.id} like ${`${tag}%`}`);
         }),
@@ -105,11 +131,12 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
   it("workspace isolation: org B cannot read, list, export, edit, retry or delete org A's receipt", async () => {
     const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
       run(Effect.flatMap(ReceiptRepo, f));
+    const g = await gate();
     expect(await repo((r) => r.get(receiptId, b))).toBeNull();
     expect((await repo((r) => r.list(b, {}, { limit: 50, offset: 0 }))).total).toBe(0);
     expect(await repo((r) => r.exportRows(b, {}, 50))).toEqual([]);
     expect(await repo((r) => r.update(receiptId, b, { merchant: "pwned" }))).toBe(false);
-    expect(await repo((r) => r.claimRetry(receiptId, b))).toEqual({ kind: "not-found" });
+    expect(await repo((r) => r.claimRetry(receiptId, b, g))).toEqual({ kind: "not-found" });
     const deleted = await runExit(deleteReceipt({ receiptId, scope: b }));
     expect(Exit.isFailure(deleted)).toBe(true);
     const still = await repo((r) => r.get(receiptId, a));
@@ -149,7 +176,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
     const asRole = (role: string) => ({ organizationId: a.organizationId, userId: b.userId, role });
     const seed = async () =>
-      (await run(ingestUpload({ scope: a, fileName: "policy.jpg", body: JPEG }))).receipt.id;
+      (await run(ingestUpload({ scope: a, fileName: "policy.jpg", body: JPEG, limits }))).receipt
+        .id;
 
     // Member: neither edit nor delete Alice's receipt, but both on their own upload.
     const alices = await seed();
@@ -159,7 +187,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(await repo((r) => r.remove(alices, asRole("member")))).toBeNull();
     expect((await repo((r) => r.get(alices, a)))?.merchant).not.toBe("=HYPERLINK()");
     const own = (
-      await run(ingestUpload({ scope: asRole("member"), fileName: "m.jpg", body: JPEG }))
+      await run(ingestUpload({ scope: asRole("member"), fileName: "m.jpg", body: JPEG, limits }))
     ).receipt.id;
     expect(await repo((r) => r.update(own, asRole("member"), { merchant: "Mine" }))).toBe(true);
     expect(await repo((r) => r.remove(own, asRole("member")))).not.toBeNull();
@@ -184,7 +212,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(await repo((r) => r.get("not-a-uuid", a))).toBeNull();
     expect(await repo((r) => r.update("not-a-uuid", a, { merchant: "x" }))).toBe(false);
     expect(await repo((r) => r.remove("not-a-uuid", a))).toBeNull();
-    expect(await repo((r) => r.claimRetry("not-a-uuid", a))).toEqual({ kind: "not-found" });
+    const g = await gate();
+    expect(await repo((r) => r.claimRetry("not-a-uuid", a, g))).toEqual({ kind: "not-found" });
   });
 
   it("filters server-side by search, category, needs-review and date", async () => {
@@ -206,8 +235,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
   });
 
   it("U2: a receipt stuck in processing reads as failed and stops counting against quota", async () => {
-    const stuck = await run(ingestUpload({ scope: a, fileName: "stuck.jpg", body: JPEG }));
-    const limits = { perMinute: 100, perDay: 100 };
+    const stuck = await run(ingestUpload({ scope: a, fileName: "stuck.jpg", body: JPEG, limits }));
     const before = await run(checkQuota(a.userId, limits));
     await run(
       Effect.flatMap(Db, ({ use }) =>
@@ -219,6 +247,13 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         ),
       ),
     );
+    // Its round in the ledger aged out too (the function was killed: no calls were written).
+    await db((d) =>
+      d
+        .update(ocrRounds)
+        .set({ createdAt: new Date(Date.now() - STALE_AFTER_MS - 1000) })
+        .where(eq(ocrRounds.receiptId, stuck.receipt.id)),
+    );
     const read = await run(Effect.flatMap(ReceiptRepo, (r) => r.get(stuck.receipt.id, a)));
     expect(read?.status).toBe("failed");
     const failedRows = await run(
@@ -228,7 +263,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect((await run(checkQuota(a.userId, limits))).used).toBe(before.used - 1);
     // Fresh in-flight receipts: the processing filter matches Home's "Reading now" count.
     const fresh = await run(
-      ingestUpload({ scope: a, fileName: "fresh.jpg", body: new Uint8Array([...JPEG, 1]) }),
+      ingestUpload({ scope: a, fileName: "fresh.jpg", body: new Uint8Array([...JPEG, 1]), limits }),
     );
     const reading = await run(
       Effect.flatMap(ReceiptRepo, (r) =>
@@ -238,70 +273,92 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const inFlight = await run(Effect.flatMap(ReceiptRepo, (r) => r.counts(a)));
     expect(reading.total).toBe(inFlight.inFlight);
     expect(reading.rows.map((row) => row.id)).toContain(fresh.receipt.id);
+    const g = await gate();
     expect(
-      await run(Effect.flatMap(ReceiptRepo, (r) => r.claimRetry(stuck.receipt.id, a))),
+      await run(Effect.flatMap(ReceiptRepo, (r) => r.claimRetry(stuck.receipt.id, a, g))),
     ).toMatchObject({
       kind: "claimed",
     });
   });
 
+  let g: Awaited<ReturnType<typeof gate>>;
+  beforeAll(async () => {
+    g = await gate();
+  });
+
   it("retries count against the burst and global windows, and stop after the attempt cap", async () => {
-    const failing = await run(ingestUpload({ scope: a, fileName: "blurry.jpg", body: JPEG }));
+    const failing = await run(
+      ingestUpload({ scope: a, fileName: "blurry.jpg", body: JPEG, limits }),
+    );
     const id = failing.receipt.id;
     const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
       run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
-    const window = () => {
-      const now = Date.now();
-      return {
-        userId: a.userId,
-        dayStart: new Date(now - 60 * 60 * 1000),
-        minuteStart: new Date(now - 60 * 1000),
-        includeGlobal: true,
-      };
-    };
+    const window = () => usageWindow(new Date(), true);
     let attempt = 1;
-    const markFailed = () => repo((r) => r.fail(id, a, attempt, "unreadable"));
+    const markFailed = () => repo((r) => r.fail(id, a, attempt, "unreadable", []));
 
     await markFailed();
-    const before = await repo((r) => r.usage(window()));
-    expect(await repo((r) => r.claimRetry(id, a))).toMatchObject({ kind: "claimed" });
+    const before = await repo((r) => r.usage(a.userId, window()));
+    expect(await repo((r) => r.claimRetry(id, a, g))).toMatchObject({ kind: "claimed" });
     attempt += 1;
-    const after = await repo((r) => r.usage(window()));
+    const after = await repo((r) => r.usage(a.userId, window()));
     expect(after.userMinute).toBe(before.userMinute + 1);
     expect(after.globalDay).toBe((before.globalDay ?? 0) + 1);
 
     await markFailed();
-    expect(await repo((r) => r.claimRetry(id, a))).toMatchObject({ kind: "claimed" });
+    expect(await repo((r) => r.claimRetry(id, a, g))).toMatchObject({ kind: "claimed" });
     attempt += 1;
     await markFailed();
-    expect(await repo((r) => r.claimRetry(id, a))).toEqual({ kind: "attempts-exhausted" });
+    expect(await repo((r) => r.claimRetry(id, a, g))).toEqual({ kind: "attempts-exhausted" });
   });
 
-  it("only the current attempt can complete or fail a receipt", async () => {
-    const fresh = await run(ingestUpload({ scope: a, fileName: "race.jpg", body: JPEG }));
+  it("only the current attempt can complete or fail a receipt; every run's calls are kept", async () => {
+    const fresh = await run(ingestUpload({ scope: a, fileName: "race.jpg", body: JPEG, limits }));
     const id = fresh.receipt.id;
     const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
       run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
     const extraction = FIXTURE_RECEIPTS[0]!;
+    const call = (round: number) => ({
+      receiptId: id,
+      organizationId: a.organizationId,
+      userId: a.userId,
+      round,
+      step: 0,
+      model: "fixture",
+      provider: "fixture",
+      status: "ok",
+      latencyMs: 5,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      costMicroUsd: 0,
+      priceFrom: "2000-01-01",
+    });
 
     // Attempt 1 times out and fails, a retry claims attempt 2.
-    expect(await repo((r) => r.fail(id, a, 1, "slow"))).toBe(true);
-    expect(await repo((r) => r.claimRetry(id, a))).toMatchObject({ kind: "claimed" });
+    expect(await repo((r) => r.fail(id, a, 1, "slow", []))).toBe(true);
+    expect(await repo((r) => r.claimRetry(id, a, g))).toMatchObject({ kind: "claimed" });
 
-    // The stale attempt 1 finishing late can neither complete nor fail attempt 2.
-    expect(await repo((r) => r.complete(id, a, 1, extraction, "fixture"))).toBeNull();
-    expect(await repo((r) => r.fail(id, a, 1, "late"))).toBe(false);
+    // The stale attempt 1 finishing late can neither complete nor fail attempt 2,
+    // but the call it made is still recorded.
+    expect(await repo((r) => r.complete(id, a, 1, extraction, "fixture", [call(1)]))).toBeNull();
+    expect(await repo((r) => r.fail(id, a, 1, "late", []))).toBe(false);
     expect((await repo((r) => r.get(id, a)))?.status).toBe("processing");
 
-    expect(await repo((r) => r.complete(id, a, 2, extraction, "fixture"))).not.toBeNull();
+    expect(
+      await repo((r) => r.complete(id, a, 2, extraction, "fixture", [call(2)])),
+    ).not.toBeNull();
     // A duplicate completion or a late failure cannot touch the finished receipt.
     const other = { ...extraction, merchant: "Overwritten" };
-    expect(await repo((r) => r.complete(id, a, 2, other, "fixture"))).toBeNull();
-    expect(await repo((r) => r.fail(id, a, 2, "dup"))).toBe(false);
+    expect(await repo((r) => r.complete(id, a, 2, other, "fixture", []))).toBeNull();
+    expect(await repo((r) => r.fail(id, a, 2, "dup", []))).toBe(false);
     expect(await repo((r) => r.get(id, a))).toMatchObject({
       status: "completed",
       merchant: extraction.merchant,
     });
+    const calls = await run(receiptCalls(id, a.organizationId));
+    expect(calls.map((c) => c.round)).toEqual([1, 2]);
   });
 
   it("U1: deleting a receipt deletes its stored object", async () => {
@@ -310,6 +367,116 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(Exit.isSuccess(await storage((s) => s.get(objectKey)))).toBe(true);
     await run(deleteReceipt({ receiptId, scope: a }));
     expect(Exit.isFailure(await storage((s) => s.get(objectKey)))).toBe(true);
+  });
+
+  describe("usage ledger", () => {
+    const usedToday = (userId: string, l = limits) =>
+      run(checkQuota(userId, l)).then((v) => v.used);
+    const readAndExtract = async (scope: typeof a, body = JPEG) => {
+      const { receipt } = await run(ingestUpload({ scope, fileName: "r.jpg", body, limits }));
+      await runExit(extractStored({ receiptId: receipt.id, scope }));
+      return receipt.id;
+    };
+
+    it("P0-1: deleting a receipt gives back neither the user's quota nor the global count", async () => {
+      const c = await createUser("deleter");
+      const id = await readAndExtract(c);
+      expect(await usedToday(c.userId)).toBe(1);
+      const before = await run(
+        Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+      );
+      await run(deleteReceipt({ receiptId: id, scope: c }));
+      expect(await usedToday(c.userId)).toBe(1);
+      const after = await run(
+        Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+      );
+      expect(after).toEqual(before);
+    });
+
+    it("a failed read costs no quota but counts toward the global cap, and so do its retries", async () => {
+      const c = await createUser("failer");
+      const window = () => usageWindow(new Date(), true);
+      const usage = () => run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, window())));
+      const start = await usage();
+      const id = await readAndExtract(c, FAILING_JPEG);
+      await run(claimRetry({ receiptId: id, scope: c, limits }));
+      await runExit(extractStored({ receiptId: id, scope: c }));
+      const end = await usage();
+      expect(end.userDay).toBe(start.userDay);
+      expect(end.userMinute).toBe(start.userMinute + 2);
+      expect(end.globalDay! - start.globalDay!).toBeGreaterThanOrEqual(2);
+      const calls = await run(receiptCalls(id, c.organizationId));
+      expect(calls.map((call) => [call.round, call.status])).toEqual([
+        [1, "provider-error"],
+        [2, "provider-error"],
+      ]);
+    });
+
+    it("B4: deleting the workspace keeps its usage, unlinked, and the user's quota stays used", async () => {
+      const c = await createUser("ws-deleter");
+      const id = await readAndExtract(c);
+      expect(await usedToday(c.userId)).toBe(1);
+      await db((d) => d.delete(organization).where(eq(organization.id, c.organizationId)));
+      expect(await usedToday(c.userId)).toBe(1);
+      const [call] = await db((d) => d.select().from(ocrCalls).where(eq(ocrCalls.receiptId, id)));
+      expect(call).toMatchObject({ organizationId: null, userId: c.userId, status: "ok" });
+    });
+
+    it("B4: a parallel burst can't get past the daily limit", async () => {
+      const c = await createUser("burst");
+      const tight = { perMinute: 100, perDay: 5 };
+      const exits = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          runExit(ingestUpload({ scope: c, fileName: "b.jpg", body: JPEG, limits: tight })),
+        ),
+      );
+      expect(exits.filter(Exit.isSuccess)).toHaveLength(5);
+      for (const exit of exits.filter(Exit.isFailure)) {
+        expect(JSON.stringify(exit.cause)).toContain("QuotaExceeded");
+      }
+      // The refused ones stored nothing that stays.
+      const rows = await db((d) =>
+        d.select({ id: receipts.id }).from(receipts).where(eq(receipts.userId, c.userId)),
+      );
+      expect(rows).toHaveLength(5);
+    });
+
+    it("rolls usage up by day, model and workspace", async () => {
+      const c = await createUser("rollup");
+      await readAndExtract(c);
+      await readAndExtract(c, FAILING_JPEG);
+      const since = new Date(Date.now() - 60_000);
+      const scope = { organizationId: c.organizationId };
+
+      const days = await run(usageByDay(scope, since));
+      expect(days).toEqual([
+        {
+          day: new Date().toISOString().slice(0, 10),
+          receipts: 1,
+          calls: 2,
+          failedCalls: 1,
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          reasoningTokens: 0,
+          costMicroUsd: 0,
+          unpricedCalls: 1,
+        },
+      ]);
+      const [model] = await run(usageByModel(scope, since));
+      expect(model).toMatchObject({ model: "fixture", calls: 2, failedCalls: 1, fallbackCalls: 0 });
+      expect(model?.p50Ms).toEqual(expect.any(Number));
+
+      const workspaces = await run(usageByWorkspace(since, 500));
+      expect(workspaces.find((w) => w.organizationId === c.organizationId)).toMatchObject({
+        calls: 2,
+        receipts: 1,
+      });
+      // Another workspace sees none of it.
+      expect(await run(usageByDay({ organizationId: b.organizationId }, since))).toEqual([]);
+      const all = await run(usageByDay("all", since));
+      expect(all[0]!.calls).toBeGreaterThanOrEqual(2);
+    });
   });
 
   it("U8: the contact rate limit counts across calls and resets after the window", async () => {

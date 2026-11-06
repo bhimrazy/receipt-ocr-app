@@ -14,6 +14,7 @@ export * from "./quota";
 export * from "./repository";
 export * from "./services";
 export * from "./settings";
+export * from "./usage";
 export * from "./plans";
 export * from "./workspace";
 export * from "./workspace-name";

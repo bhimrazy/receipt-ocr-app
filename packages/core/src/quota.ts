@@ -3,9 +3,10 @@ import { Effect } from "effect";
 import { loadDailyOcrCap } from "./config";
 import { QuotaExceeded } from "./errors";
 import { DEFAULT_PLAN, isPlanId, policyFor, type PlanId, type PlanPolicy } from "./plans";
-import { ReceiptRepo, type UsageCounts } from "./repository";
+import { ReceiptRepo, STALE_AFTER_MS, type QuotaGate } from "./repository";
 import { Db } from "./services";
 import { Settings } from "./settings";
+import type { UsageCounts, UsageWindow } from "./usage";
 
 export type QuotaLimits = { perMinute: number; perDay: number };
 
@@ -75,17 +76,32 @@ export function decideQuota(
   return { ...base, allowed: true };
 }
 
+export const usageWindow = (now: Date, includeGlobal: boolean): UsageWindow => ({
+  dayStart: utcDayStart(now),
+  minuteStart: new Date(now.getTime() - 60_000),
+  pendingSince: new Date(now.getTime() - STALE_AFTER_MS),
+  includeGlobal,
+});
+
+/** The check `ReceiptRepo.insert` / `claimRetry` run under the user's lock. */
+export const quotaGate = (limits: QuotaLimits, now = new Date()) =>
+  Effect.map(loadDailyOcrCap, (globalCap): QuotaGate => ({
+    window: usageWindow(now, globalCap !== undefined),
+    decide: (counts) => decideQuota(counts, limits, globalCap, now),
+  }));
+
+/** Read-only check, for the usage meter and to refuse early before storing a file. */
 export const checkQuota = (userId: string, limits: QuotaLimits, now = new Date()) =>
   Effect.gen(function* () {
     const repo = yield* ReceiptRepo;
-    const globalCap = yield* loadDailyOcrCap;
-    const counts = yield* repo.usage({
-      userId,
-      dayStart: utcDayStart(now),
-      minuteStart: new Date(now.getTime() - 60_000),
-      includeGlobal: globalCap !== undefined,
-    });
-    return decideQuota(counts, limits, globalCap, now);
+    const gate = yield* quotaGate(limits, now);
+    return gate.decide(yield* repo.usage(userId, gate.window));
+  });
+
+export const quotaExceeded = (verdict: QuotaVerdict) =>
+  new QuotaExceeded({
+    message: quotaMessage(verdict),
+    retryAfterSeconds: verdict.retryAfterSeconds ?? 60,
   });
 
 export function quotaMessage(verdict: QuotaVerdict): string {
@@ -102,12 +118,5 @@ export function quotaMessage(verdict: QuotaVerdict): string {
 /** Fails with QuotaExceeded when the user (or the whole service) is out of room. */
 export const enforceQuota = (userId: string, limits: QuotaLimits) =>
   Effect.flatMap(checkQuota(userId, limits), (verdict) =>
-    verdict.allowed
-      ? Effect.succeed(verdict)
-      : Effect.fail(
-          new QuotaExceeded({
-            message: quotaMessage(verdict),
-            retryAfterSeconds: verdict.retryAfterSeconds ?? 60,
-          }),
-        ),
+    verdict.allowed ? Effect.succeed(verdict) : Effect.fail(quotaExceeded(verdict)),
   );

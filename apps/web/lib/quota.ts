@@ -7,12 +7,15 @@ import { requireSession } from "./session";
 
 /**
  * Effect for routes: fails with QuotaExceeded when the user or the service is
- * out of room. Reads the plan fresh from the database; returns its id for logs.
+ * out of room, before anything is stored. Reads the plan fresh from the
+ * database; returns its id for logs and the limits that ingest and retry
+ * enforce again under the user's lock.
  */
 export const enforceUploadQuota = (userId: string) =>
-  Effect.flatMap(userPlan(userId), ({ plan, policy }) =>
-    enforceQuota(userId, quotaLimits(policy)).pipe(Effect.as(plan)),
-  );
+  Effect.flatMap(userPlan(userId), ({ plan, policy }) => {
+    const limits = quotaLimits(policy);
+    return enforceQuota(userId, limits).pipe(Effect.as({ plan, limits }));
+  });
 
 export type UsageSummary = {
   used: number;

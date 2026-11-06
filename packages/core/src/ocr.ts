@@ -1,6 +1,8 @@
 import {
   classifyOcrError,
   extractReceipt,
+  OcrCallError,
+  type ExtractionUsage,
   type ExtractReceiptInput,
   type ExtractReceiptResult,
   type ModelId,
@@ -48,7 +50,7 @@ export function activeChain(
 
 export type OcrResult = ExtractReceiptResult & { attempts: OcrAttempt[] };
 
-export type StepFailure = { kind: OcrFailureKind; cause: unknown };
+export type StepFailure = { kind: OcrFailureKind; usage: ExtractionUsage | null; cause: unknown };
 
 /** One model call; it must give up by `timeoutMs`. Fails with the classified provider error. */
 export type ExtractCall = (input: {
@@ -72,9 +74,9 @@ export const runChain = (
     }
     const startedAt = yield* Clock.currentTimeMillis;
     const attempts: OcrAttempt[] = [];
-    let last: StepFailure = { kind: "timeout", cause: undefined };
+    let last: StepFailure = { kind: "timeout", usage: null, cause: undefined };
 
-    for (const step of chain) {
+    for (const [index, step] of chain.entries()) {
       const stepStart = yield* Clock.currentTimeMillis;
       const remaining = deadlineMs - (stepStart - startedAt);
       if (remaining < MIN_STEP_MS) break;
@@ -87,11 +89,17 @@ export const runChain = (
       );
       const ms = (yield* Clock.currentTimeMillis) - stepStart;
       if (outcome._tag === "Right") {
-        attempts.push({ model: step.model, kind: "ok", ms });
+        attempts.push({
+          model: step.model,
+          step: index,
+          kind: "ok",
+          ms,
+          usage: outcome.right.usage,
+        });
         return { ...outcome.right, attempts } satisfies OcrResult;
       }
       last = outcome.left;
-      attempts.push({ model: step.model, kind: last.kind, ms });
+      attempts.push({ model: step.model, step: index, kind: last.kind, ms, usage: last.usage });
       if (!FALLBACK_KINDS.has(last.kind)) break;
     }
     return yield* new OcrError({
@@ -138,11 +146,19 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
               Effect.tryPromise({
                 try: (abortSignal) =>
                   extractReceipt({ model, keys, file, timeoutMs, maxRetries, abortSignal }),
-                catch: (cause): StepFailure => ({ kind: classifyOcrError(cause), cause }),
+                catch: (cause): StepFailure =>
+                  cause instanceof OcrCallError
+                    ? // The error itself, not its cause: its message never holds receipt contents.
+                      { kind: cause.kind, usage: cause.usage, cause }
+                    : { kind: classifyOcrError(cause), usage: null, cause },
               }).pipe(
                 Effect.timeoutFail({
                   duration: timeoutMs + ABORT_GRACE_MS,
-                  onTimeout: (): StepFailure => ({ kind: "timeout", cause: "OCR step deadline" }),
+                  onTimeout: (): StepFailure => ({
+                    kind: "timeout",
+                    usage: null,
+                    cause: "OCR step deadline",
+                  }),
                 }),
               );
             return yield* runChain(yield* chainNow, call);

@@ -101,13 +101,14 @@ export async function runBackground<A>(
   logger.error(event);
 }
 
-/** Which model read the receipt, and every model tried, for an extraction's wide event. */
+/** Which model read the receipt, every model tried and what it cost, for an extraction's wide event. */
 export function recordOcr(
-  result: { model: string; attempts: readonly OcrAttempt[] },
+  result: { model: string; attempts: readonly OcrAttempt[]; costMicroUsd: number | null },
   event: WideEvent,
 ): void {
   event.model = result.model;
   event.ocr = { attempts: result.attempts };
+  event.cost_micro_usd = result.costMicroUsd;
 }
 
 function logFailure(cause: Cause.Cause<AppError>) {
