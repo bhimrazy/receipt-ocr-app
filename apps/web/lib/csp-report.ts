@@ -90,14 +90,20 @@ export async function readCappedText(request: Request, maxBytes: number): Promis
 
 /**
  * Fixed-window counter per key, in memory. Per server instance on purpose: a report
- * storm should not turn into database writes. The map is cleared when it grows large.
+ * storm should not turn into database writes. When the map is full, expired entries are evicted first, then the oldest.
  */
 export function createWindowLimiter(windowMs: number, max: number, maxKeys = 10_000) {
   const windows = new Map<string, { start: number; count: number }>();
+  const evict = (now: number) => {
+    for (const [k, w] of windows) if (now - w.start >= windowMs) windows.delete(k);
+    // Map keeps insertion order; refreshed keys are re-inserted below, so first is oldest.
+    while (windows.size >= maxKeys) windows.delete(windows.keys().next().value as string);
+  };
   return (key: string, now = Date.now()): boolean => {
     const current = windows.get(key);
     if (!current || now - current.start >= windowMs) {
-      if (windows.size >= maxKeys) windows.clear();
+      if (!current && windows.size >= maxKeys) evict(now);
+      windows.delete(key);
       windows.set(key, { start: now, count: 1 });
       return true;
     }

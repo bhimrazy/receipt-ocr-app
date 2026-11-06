@@ -97,4 +97,19 @@ describe("createWindowLimiter", () => {
     // The map was cleared when full, so "a" starts a fresh window.
     expect(hit("a", 1)).toBe(true);
   });
+
+  it("evicts expired keys, then the oldest, instead of resetting everyone", () => {
+    const hit = createWindowLimiter(1000, 1, 3);
+    hit("a", 0);
+    hit("b", 500);
+    hit("c", 600);
+    expect(hit("b", 700)).toBe(false);
+    // Full at t=1200: "a" has expired and is dropped; "b" keeps its count.
+    hit("d", 1200);
+    expect(hit("b", 1200)).toBe(false);
+    // Full again with nothing expired: the oldest ("b") goes; "c" and "d" stay limited.
+    hit("e", 1300);
+    expect(hit("c", 1300)).toBe(false);
+    expect(hit("d", 1300)).toBe(false);
+  });
 });
