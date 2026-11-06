@@ -15,7 +15,8 @@ export const REFRESH_MS = 30_000;
 export function AutoRefresh({ generatedAt }: { generatedAt: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const last = useRef(Date.now());
+  // Set by the first effect below, before the timer effect reads it.
+  const last = useRef(0);
 
   useEffect(() => {
     last.current = Date.now();

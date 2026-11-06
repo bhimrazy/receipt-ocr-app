@@ -82,14 +82,12 @@ type Call = {
   jobAttempt?: number;
 };
 
-let receiptSeq = 0;
 /** One round at `createdAt` with its calls, straight into the ledger. */
 async function seedRound(
   owner: { userId: string; organizationId: string },
   createdAt: Date,
   calls: Call[],
 ) {
-  receiptSeq += 1;
   const receiptId = crypto.randomUUID();
   await db((d) =>
     d.execute(sql`insert into ocr_rounds (receipt_id, organization_id, user_id, round, created_at)
@@ -166,17 +164,13 @@ beforeAll(async () => {
   const admin = await createUser("admin");
   auditor = { actor: { id: admin.userId, email: admin.email }, ip: "203.0.113.7" };
 
-  // Hour 10: two rounds read by model A (latencies 100..1000 over ten calls), one failed.
+  // Hour 10: model A makes ten calls (100..1000 ms). Round 1: five timeouts, then a read.
+  // Round 2: a read of four calls. B's round fails with one unpriced rate-limited call.
   const latencies = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
-  await seedRound(
-    a,
-    at("2031-03-15T10:05:00Z"),
-    latencies
-      .slice(0, 5)
-      .map((ms) => ({ latencyMs: ms, status: "timeout", cost: 0 }))
-      .concat([{ latencyMs: 0, status: "ok", cost: 0 }])
-      .map((c, i) => (i === 5 ? { ...c, latencyMs: latencies[5]! } : c)),
-  );
+  await seedRound(a, at("2031-03-15T10:05:00Z"), [
+    ...latencies.slice(0, 5).map((ms) => ({ latencyMs: ms, status: "timeout", cost: 0 })),
+    { latencyMs: latencies[5]!, cost: 0 },
+  ]);
   await seedRound(
     a,
     at("2031-03-15T10:40:00Z"),
