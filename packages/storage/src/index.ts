@@ -1,6 +1,7 @@
 import {
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -73,6 +74,23 @@ export async function getObject(config: S3StorageConfig, key: string): Promise<U
   );
   if (!response.Body) throw new Error(`Object ${key} has no body`);
   return response.Body.transformToByteArray();
+}
+
+/**
+ * Reachability and credentials check for health probes: a HEAD on a key that
+ * need not exist. 200 or 404 means the bucket answered an authenticated request.
+ * AWS S3 answers 403 for a missing key without s3:ListBucket, which reads as down.
+ */
+export async function probeBucket(config: S3StorageConfig, signal?: AbortSignal): Promise<void> {
+  try {
+    await s3Client(config).send(
+      new HeadObjectCommand({ Bucket: config.bucket, Key: "health/probe" }),
+      { abortSignal: signal },
+    );
+  } catch (error) {
+    const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+    if (status !== 404) throw error;
+  }
 }
 
 /** Deletes keys in batches of the S3 maximum (1000) per request. */

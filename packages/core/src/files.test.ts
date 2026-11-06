@@ -32,6 +32,15 @@ describe("sniffMediaType (U3)", () => {
 describe("validateUpload", () => {
   const fails = (input: Uint8Array) => Exit.isFailure(Effect.runSyncExit(validateUpload(input)));
 
+  it("asks for a re-export when a PDF is too complex to check", () => {
+    const flood = bytes(`%PDF-1.4\n${"1 0 obj<<>>endobj\n".repeat(210_000)}`);
+    const exit = Effect.runSyncExit(validateUpload(flood));
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(String(Exit.isFailure(exit) && exit.cause)).toContain(
+      "We couldn't check this PDF's pages. Export only the receipt pages to a new PDF and try again.",
+    );
+  });
+
   it("rejects empty and oversize files", () => {
     expect(fails(new Uint8Array())).toBe(true);
     const big = new Uint8Array(MAX_UPLOAD_BYTES + 1);

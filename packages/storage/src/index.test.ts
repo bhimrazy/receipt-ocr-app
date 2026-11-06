@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { receiptObjectKey, signedGetUrl } from "./index";
+import { describe, expect, it, vi } from "vitest";
+import { probeBucket, receiptObjectKey, s3Client, signedGetUrl } from "./index";
 
 const config = {
   endpoint: "http://localhost:9000",
@@ -30,5 +30,23 @@ describe("signedGetUrl (L5)", () => {
     const query = await params("users/u1/receipts/r1.bin");
     expect(query.get("response-content-type")).toBe("application/octet-stream");
     expect(query.get("response-content-disposition")).toMatch(/^attachment/);
+  });
+});
+
+describe("probeBucket", () => {
+  const failWith = (status: number) =>
+    Object.assign(new Error(`HTTP ${status}`), { $metadata: { httpStatusCode: status } });
+
+  it("treats a found or missing probe key as reachable, anything else as down", async () => {
+    const send = vi.spyOn(s3Client(config), "send");
+    send.mockResolvedValueOnce({} as never);
+    await expect(probeBucket(config)).resolves.toBeUndefined();
+    send.mockRejectedValueOnce(failWith(404) as never);
+    await expect(probeBucket(config)).resolves.toBeUndefined();
+    send.mockRejectedValueOnce(failWith(403) as never);
+    await expect(probeBucket(config)).rejects.toThrow("HTTP 403");
+    send.mockRejectedValueOnce(new Error("ECONNREFUSED") as never);
+    await expect(probeBucket(config)).rejects.toThrow("ECONNREFUSED");
+    send.mockRestore();
   });
 });

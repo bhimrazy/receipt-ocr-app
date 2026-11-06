@@ -1,8 +1,14 @@
 import { Effect } from "effect";
 import { InvalidInput } from "./errors";
-import { ACCEPTED_MEDIA_TYPES, MAX_UPLOAD_BYTES, type AcceptedMediaType } from "./upload-limits";
+import { countPdfPages } from "./pdf-pages";
+import {
+  ACCEPTED_MEDIA_TYPES,
+  MAX_PDF_PAGES,
+  MAX_UPLOAD_BYTES,
+  type AcceptedMediaType,
+} from "./upload-limits";
 
-export { ACCEPTED_MEDIA_TYPES, MAX_UPLOAD_BYTES, type AcceptedMediaType };
+export { ACCEPTED_MEDIA_TYPES, MAX_PDF_PAGES, MAX_UPLOAD_BYTES, type AcceptedMediaType };
 
 const ascii = (bytes: Uint8Array, start: number, end: number) =>
   String.fromCharCode(...bytes.subarray(start, end));
@@ -43,12 +49,31 @@ export const validateUpload = (
     return Effect.fail(new InvalidInput({ message: "Receipt files must be 10 MB or smaller" }));
   }
   const mediaType = sniffMediaType(bytes);
-  return mediaType
-    ? Effect.succeed(mediaType)
-    : Effect.fail(
+  if (!mediaType) {
+    return Effect.fail(
+      new InvalidInput({
+        message:
+          "This file isn't a readable JPEG, PNG, WebP, HEIC or PDF. It may be damaged or renamed; open it on your device to check, or export it again.",
+      }),
+    );
+  }
+  if (mediaType === "application/pdf") {
+    const count = countPdfPages(bytes);
+    if ("tooComplex" in count) {
+      return Effect.fail(
         new InvalidInput({
           message:
-            "This file isn't a readable JPEG, PNG, WebP, HEIC or PDF. It may be damaged or renamed; open it on your device to check, or export it again.",
+            "We couldn't check this PDF's pages. Export only the receipt pages to a new PDF and try again.",
         }),
       );
+    }
+    if (count.pages > MAX_PDF_PAGES) {
+      return Effect.fail(
+        new InvalidInput({
+          message: `PDFs can have up to ${MAX_PDF_PAGES} pages. Export only the receipt pages to a new PDF and try again.`,
+        }),
+      );
+    }
+  }
+  return Effect.succeed(mediaType);
 };
