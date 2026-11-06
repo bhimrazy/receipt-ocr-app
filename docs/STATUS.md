@@ -28,13 +28,17 @@ How the system is built (every app and package, the main flows and the data mode
 | #34           | [Architecture guide](architecture/README.md) with per-package pages, flows and diagrams                                                                                                                                |
 | #35           | Optional Cloudflare Turnstile on sign-up, sign-in, password reset, resend verification and the support form, with hostname pinning                                                                                     |
 | #36           | UX sweep: honest landing copy, no sideways scroll at 390 px, quota wording that matches the ledger                                                                                                                     |
+| #37           | Postgres job queue: `jobs` table, leases, retries with backoff, per-user fairness, provider cooldowns; uploads and retries run through it in `after()` ([flow](architecture/flows/jobs.md)); migration `0008`          |
+| #38           | Hardening: session check before the upload body, PDF page cap, per-email auth limits, CSP reports, health endpoints, SECURITY.md, [runbook](runbook.md)                                                                |
+| #40           | Load test suite on a 1 vCPU / 1 GB server (`scripts/load.sh`, manual `load.yml`); [results](../bench/results/load-2026-11-06.md)                                                                                       |
 
 ## Production to-dos (owner)
 
 Steps are in [deployment.md](deployment.md).
 
 - Run `bun run db:migrate` against production for `0006_admin_audit_settings` (admin panel) and
-  `0007_ocr_usage_ledger` (usage ledger). After `0007`, everyone's "used today" restarts once (the ledger starts empty).
+  `0007_ocr_usage_ledger` (usage ledger), then `0008_jobs_queue` (job queue) before deploying #37 or later. After `0007`,
+  everyone's "used today" restarts once (the ledger starts empty).
 - Set `OCR_DAILY_CAP` in production as a spend guard.
 - Vercel env: `NEXT_PUBLIC_SITE_URL`, `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`; recommended
   `BETTER_AUTH_SECRETS=1:<current BETTER_AUTH_SECRET>`.
@@ -43,11 +47,13 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-| PR                   | Work                                                                                                                                                                                                  |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #37                  | Job queue Track A: Postgres `jobs` queue and core job service (migration `0008`, apply before deploying); routes run it in `after()` until Track B ([flow](architecture/flows/jobs.md)), under review |
-| #38                  | Hardening: session check before upload body, PDF page cap, per-email limits, CSP reports, health endpoints, SECURITY.md, runbook, under review                                                        |
-| (branch `test/load`) | Load test suite on a 1 vCPU / 1 GB server                                                                                                                                                             |
+| Track (branch)             | Work                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `feat/capture`             | In-app camera, batch capture (limit per plan, default 10, set in Admin), four-corner crop with auto edge detection and straightening |
+| `feat/size-target-encoder` | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width           |
+| `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt           |
+| `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                     |
+| `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                          |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -91,7 +97,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
    Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations take the next free numbers after `0008` (job queue).
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
-8. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
+8. Load test: `scripts/load.sh` (by hand, and from `.github/workflows/load.yml` on demand) runs the production image on
+   1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
+   to the hot path and commit the new summary. Latest: reads hold 200/s; uploads hold 12/s and fail by 48/s since the job queue (ladder not yet filled in).
+9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
 
 ## Known follow-ups
 
@@ -110,6 +119,11 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Better Auth: verify the OAuth callback turns a banned user into `?error=BANNED_USER`.
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
 - Benchmark has five synthetic images and no committed results.
+- Load test findings (after #37): upload capacity on the small server fell from 64/s to between 12/s (holds) and
+  48/s (fails: end-to-end p95 17 s, Postgres CPU 87%). The quota count (`ocr_rounds` per user, per page and twice per
+  upload) is still the top Postgres statement, with the job queue queries next. Next: a performance track that fills
+  in the 24/36/48 ladder after #38, profiles both, replaces the quota count with something cheaper, and runs a
+  30-minute soak. The app also holds up to 10 connections against a pool max of 5, and pages emit no wide events.
 
 ## How to resume on another machine
 
