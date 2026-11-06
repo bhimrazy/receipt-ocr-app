@@ -111,6 +111,28 @@ describe("extractWith (mock model)", () => {
   });
 });
 
+describe("number-format guidance in the prompt", () => {
+  const promptSent = async () => {
+    const model = reply(JSON.stringify(FIXTURE_RECEIPTS[0]));
+    await extractWith(model, { file: file("x"), maxRetries: 0 });
+    return JSON.stringify(model.doGenerateCalls[0]!.prompt);
+  };
+
+  it("lets three-minor-unit currencies read three digits as the fraction", async () => {
+    const prompt = await promptSent();
+    for (const code of ["KWD", "BHD", "OMR", "JOD", "TND", "LYD", "IQD", "KD", "DT"]) {
+      expect(prompt).toContain(code);
+    }
+    expect(prompt).toContain("three digits after the decimal mark are the fraction");
+  });
+
+  it("keeps the thousands rule for other currencies", async () => {
+    const prompt = await promptSent();
+    expect(prompt).toContain("almost always thousands");
+    expect(prompt).toContain("25.000");
+  });
+});
+
 describe("FIXTURE_LATENCY_MS", () => {
   afterEach(() => {
     vi.unstubAllEnvs();

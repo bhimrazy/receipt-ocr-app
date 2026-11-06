@@ -9,7 +9,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=... bun run bench:ocr [--models google:gemini-3.8-f
 Real provider calls, billed to the key. Without the key the script exits with a message.
 
 - Fixtures: `fixtures/<id>.{jpg,png,pdf}` plus `<id>.json` ground truth (same fields as the extraction; omit a
-  field to skip it). The five starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, EUR comma
+  field to skip it). The six starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, KWD three decimals, EUR comma
   decimals, IDR dot thousands, a tip, a 34-line receipt. Add real, PII-free receipts the same way (faded
   thermal, skewed phone shots, handwritten totals).
 - Scoring (`score.ts`, unit-tested): exact currency/date/category; total/tax/subtotal/tip within 0.01 (a missing

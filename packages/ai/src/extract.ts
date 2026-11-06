@@ -56,8 +56,8 @@ const PROMPT = [
   "Extract this receipt into structured data.",
   "Use null for missing numeric/date fields; receiptDate must be ISO (YYYY-MM-DD) when present.",
   "currency must be an ISO 4217 code such as USD or EUR.",
-  // Observed: an IDR receipt reading 31.000 (31 thousand) came back as 31.00.
-  "Numbers use locale-specific separators. Decide from the receipt's own locale and currency whether '.' or ',' is the decimal mark, and emit every amount as a plain number with a '.' decimal point and no grouping separators. A trailing group of exactly three digits after a separator is almost always thousands, not cents.",
+  // Observed: an IDR receipt reading 31.000 (31 thousand) came back as 31.00. ISO 4217 three-decimal currencies are the exception.
+  "Numbers use locale-specific separators. Decide from the receipt's own locale and currency whether '.' or ',' is the decimal mark, and emit every amount as a plain number with a '.' decimal point and no grouping separators. A trailing group of exactly three digits after a separator is almost always thousands, not cents (IDR \"25.000\" is 25000), unless the currency has three minor-unit digits: for KWD, BHD, OMR, JOD, TND, LYD and IQD (judge by symbol, code such as KD, BD, RO, JD or DT, or country), three digits after the decimal mark are the fraction (KWD \"1.250\" is 1.25).",
   `category must be exactly one of: ${RECEIPT_CATEGORIES.map((c) => `${c} (${CATEGORY_DESCRIPTIONS[c]})`).join("; ")}.`,
   "Confidence values must be between 0 and 1 and reflect how legible each value was.",
 ].join(" ");
