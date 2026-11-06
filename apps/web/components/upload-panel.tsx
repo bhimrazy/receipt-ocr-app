@@ -89,7 +89,7 @@ function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
         <p className="mt-2 text-sm text-muted-foreground">
           {global
             ? `The service has read as many receipts as it can today, for all accounts. This isn't a limit on your account. Uploads open again at ${reset}, ${resetsIn}.`
-            : `Your plan reads ${usage.limit} receipts a day and you've used all of them. You can upload again at ${reset}, ${resetsIn}. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count.`}
+            : `Your plan reads ${plural(usage.limit, "receipt")} a day and you've used all of them. You can upload again at ${reset}, ${resetsIn}. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count.`}
         </p>
       </div>
       <Link
