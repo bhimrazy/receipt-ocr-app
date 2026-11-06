@@ -93,7 +93,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
 8. Load test: `scripts/load.sh` (by hand, and from `.github/workflows/load.yml` on demand) runs the production image on
    1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
-   to the hot path and commit the new summary. First numbers: 160 reads/s and 64 uploads/s hold the SLOs.
+   to the hot path and commit the new summary. Latest: reads hold 200/s; uploads hold 12/s and fail by 48/s since the job queue (ladder not yet filled in).
 9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
 
 ## Known follow-ups

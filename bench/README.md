@@ -81,23 +81,26 @@ instead of k6 politely slowing down):
 | Dropped iterations (server too slow to take the arrivals) | 0                                   |
 | Spike: pages and API p95, upload to completed p95, 5xx    | under 1.5 s, under latency + 6 s, 0 |
 
-**Results** (2026-11-06, Docker Desktop, an 8-CPU / 3.6 GiB Docker VM on a 10-core Mac; full tables in
-[`results/load-2026-11-06.md`](results/load-2026-11-06.md)):
+**Results** (2026-11-06, after the job queue landed; Docker Desktop, an 8-CPU / 3.6 GiB Docker VM on a 10-core Mac;
+host load 2 to 3 during the runs; full tables in [`results/load-2026-11-06.md`](results/load-2026-11-06.md)). The
+ladder was short this time (reads 40 to 200, uploads 12 to 80).
 
-| On 1 vCPU / 1 GB, 3 s model           | Sustained with every SLO met | First failing step | What ran out                                                                                 |
-| ------------------------------------- | ---------------------------- | ------------------ | -------------------------------------------------------------------------------------------- |
-| Reads (pages + API)                   | **160 requests/s**           | 200/s              | App CPU (86% avg, 99% p90); pages go from 37 ms to 13 s p95 and memory climbs 500 to 790 MiB |
-| Uploads (queued, with status polling) | **64 uploads/s** (204 req/s) | 80/s               | Postgres CPU (98%), 90% of it the quota count query; the 5-connection pool is busy as well   |
+| On 1 vCPU / 1 GB, 3 s model           | Held every SLO           | First failing step | What ran out                                                                         |
+| ------------------------------------- | ------------------------ | ------------------ | ------------------------------------------------------------------------------------ |
+| Reads (pages + API)                   | at least 200 requests/s  | not reached        | App CPU at 80% avg, page p95 448 ms: next to the 500 ms limit                        |
+| Uploads (queued, with status polling) | 12 uploads/s (48 failed) | 48/s               | Postgres CPU 87%; the quota count query is the top statement, jobs queries come next |
 
-- At the load rates (20 reads/s, 2 uploads/s) p95 is 26 ms for pages, 15 ms for API reads and 35 ms to accept an
-  upload; the receipt completes in the model latency plus about 1 s. The app uses about 30% of its CPU and 430 MiB.
-- Spike (5x for 40 s, i.e. 100 reads/s and 10 uploads/s): no errors, no 5xx, p95 24 ms; app CPU peaked near 70%.
-- Past the limit the server degrades by queueing, not by failing: 0 errors and 0 5xx, p95 in seconds, memory up to 800 MiB
-  of the 1 GB limit (never OOM-killed in these runs). A bigger or longer overload than 200 reads/s was not tried.
-- Postgres connections: 10 at most during reads and 5 during uploads, against a pool max of 5. Two pools (or the
-  pool plus Better Auth's) appear to share the process; the pool is not what limits reads.
-- The first run after boot is slower (route compilation, JIT): the first `load` run on a cold app had page p95 of
-  1.1 s, so `load.sh` warms up for about 35 s before measuring.
+- Before the job queue and the merged hot-path trims the same ladder held 160 reads/s (200 failed) and 64 uploads/s
+  (80 failed). Reads improved; uploads got more expensive: at 48/s upload-to-completed p95 was 17 s and 152 iterations
+  were dropped, and 24 and 36/s were not measured in this run, so the new upload ceiling lies between 12 and 48/s.
+- Uploads still complete through the queue (upload to completed p95 4.0 s at 12/s with a 3 s model).
+- At the load rates (20 reads/s, 2 uploads/s) p95 is 24 ms for pages, 13 ms for API reads and 30 ms to accept an
+  upload. The app uses about 25% of its CPU and 430 MiB.
+- Spike (5x for 40 s, 100 reads/s and 10 uploads/s): no errors, page p95 19 ms.
+- Past the limit the server degrades by queueing, not by failing (0 errors and 0 5xx), with memory up to 800 MiB of
+  the 1 GB limit and no OOM kill in earlier runs.
+- Postgres connections: 10 at most during reads and 5 during uploads, against a pool max of 5.
+- The first run after boot is slower (route compilation, JIT), so `load.sh` warms up for about 35 s before measuring.
 
 Reading the report: "DB conns" is `pg_stat_activity` (total, and active at the busiest sample); the app's pool max is
 `DATABASE_POOL_MAX` (5). "App CPU" is `docker stats`, where 100% is the whole 1 vCPU limit. The wide-event table is
