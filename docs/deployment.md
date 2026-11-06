@@ -102,6 +102,8 @@ app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day) 
 - Sign up with email and confirm the verification email arrives.
 - Upload a receipt and confirm it is read, appears in History and exports to CSV.
 - Open `/admin` and confirm the receipt shows on the overview.
+- `curl https://<your domain>/api/health/ready` returns `"ok":true`. Point an uptime monitor at it. When something
+  breaks, see the [runbook](runbook.md).
 
 ### Upload size limit
 
@@ -110,6 +112,8 @@ The browser therefore shrinks photos (long edge 2,000 px, JPEG) before uploading
 `DEPLOYMENT_BODY_LIMIT_BYTES` (4 MB, leaving room for the multipart envelope), so large PDFs are turned away with a
 clear message instead of a failed request. Both constants live in `packages/core/src/upload-limits.ts`. A Docker
 deployment without that proxy limit can raise `DEPLOYMENT_BODY_LIMIT_BYTES` up to 10 MB by editing the constant and rebuilding.
+On Docker, also cap request bodies in the reverse proxy in front of the image (for example nginx
+`client_max_body_size 11m;`), so oversized requests are refused before they reach the app.
 
 ## Every release
 
