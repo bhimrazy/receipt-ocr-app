@@ -76,8 +76,37 @@ describe("countPdfPages", () => {
     expect(countPdfPages(compressedPdf(50, 1))).toBe(50);
   });
 
-  it("can't be fooled by a /Count larger than the visible pages", () => {
-    expect(countPdfPages(plainPdf(1, 40))).toBe(40);
+  it("counts the pages a reader renders when /Count overstates them", () => {
+    expect(countPdfPages(plainPdf(1, 40))).toBe(1);
+  });
+
+  it("falls back to the largest /Count when there is no followable page tree", () => {
+    const pdf = enc(
+      `%PDF-1.4\n2 0 obj\n${treeDict(40, [])}\nendobj\n3 0 obj\n${pageDict()}\nendobj\n`,
+    );
+    expect(countPdfPages(pdf)).toBe(40);
+  });
+
+  it("counts only the pages left after an incremental save deleted some", () => {
+    const kept = pageIds(12).slice(0, 4);
+    const update = enc(
+      `2 0 obj\n${treeDict(4, kept)}\nendobj\ntrailer\n<< /Root 1 0 R /Prev 0 >>\n%%EOF\n`,
+    );
+    expect(countPdfPages(concat(plainPdf(12), update))).toBe(4);
+  });
+
+  it("still counts every page when an incremental save adds some", () => {
+    const update = enc(
+      `2 0 obj\n${treeDict(14, pageIds(14))}\nendobj\n${[13, 14].map((id) => `${id + 2} 0 obj\n${pageDict()}\nendobj\n`).join("")}trailer\n<< /Root 1 0 R >>\n%%EOF\n`,
+    );
+    expect(countPdfPages(concat(plainPdf(12), update))).toBe(14);
+  });
+
+  it("can't be hidden by a decoy trailer pointing at a small catalog", () => {
+    const decoy = enc(
+      `901 0 obj\n<< /Type /Catalog /Pages 900 0 R >>\nendobj\n900 0 obj\n${treeDict(1, [3])}\nendobj\ntrailer\n<< /Root 901 0 R >>\n%%EOF\n`,
+    );
+    expect(countPdfPages(concat(plainPdf(30), decoy))).toBe(30);
   });
 
   it("counts a page rewritten by an incremental update once", () => {
@@ -135,6 +164,40 @@ describe("validateUpload PDF page cap (audit L2)", () => {
     if (Exit.isFailure(exit)) {
       expect(String(exit.cause)).toContain(`up to ${MAX_PDF_PAGES} pages`);
     }
+  });
+
+  it("stays fast on overlapping object-stream offsets", () => {
+    const pairs = 40_000;
+    const header = `${Array.from({ length: pairs }, (_, i) => `${i + 1} ${i % 2 ? 65_536 : 0}`).join(" ")}\n`;
+    const data = deflateSync(enc(header + " ".repeat(65_546)));
+    const pdf = concat(
+      enc(
+        `%PDF-1.5\n7 0 obj\n<< /Type /ObjStm /N ${pairs} /First ${header.length} /Filter /FlateDecode /Length ${data.length} >>\nstream\n`,
+      ),
+      data,
+      enc("\nendstream\nendobj\n"),
+    );
+    const started = performance.now();
+    expect(countPdfPages(pdf)).toBe(0);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it("stays fast on many 64 KB objects, and rejects an object flood", () => {
+    const filler = "/Linearized ".repeat(5400);
+    const big = Array.from({ length: 70 }, (_, i) => `${i + 1} 0 obj ${filler} endobj\n`).join("");
+    let started = performance.now();
+    expect(countPdfPages(enc(`%PDF-1.4\n${big}`))).toBe(0);
+    expect(performance.now() - started).toBeLessThan(1000);
+
+    const flood = "1 0 obj<<>>endobj\n".repeat(210_000);
+    started = performance.now();
+    expect(countPdfPages(enc(flood))).toBe(Number.POSITIVE_INFINITY);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it("ignores /Linearized outside the first 1024 bytes", () => {
+    const pdf = enc(`%PDF-1.6\n${" ".repeat(1100)}9 0 obj\n<< /Linearized 1 /N 25 >>\nendobj\n`);
+    expect(countPdfPages(pdf)).toBe(0);
   });
 
   it("scans ~1 MB of adversarial input in linear time", () => {
