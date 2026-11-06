@@ -77,7 +77,7 @@ test("admin finds a user, bans them with a reason, and the audit log shows it", 
   // Customer side: the banned user is refused with a plain message.
   await target.page.goto("/sign-in");
   await target.page.getByLabel("Email").fill(target.email);
-  await target.page.getByLabel("Password").fill(PASSWORD);
+  await target.page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await target.page.getByRole("button", { name: "Sign in" }).click();
   await expect(target.page.getByText(/This account is suspended/)).toBeVisible();
 
