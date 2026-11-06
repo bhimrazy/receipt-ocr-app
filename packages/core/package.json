@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./plans": "./src/plans.ts",
-    "./upload-limits": "./src/upload-limits.ts"
+    "./upload-limits": "./src/upload-limits.ts",
+    "./group-rules": "./src/group-rules.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

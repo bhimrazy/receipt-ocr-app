@@ -1,4 +1,9 @@
 import { RowsSkeleton } from "@/components/app-skeletons";
+// groups: filter chips and selection mode
+import { GroupFilter } from "@/components/groups/group-filter";
+import { GroupSelectList } from "@/components/groups/group-select-list";
+import { SELECT_PARAM } from "@/components/groups/hrefs";
+import { getWorkspaceGroups } from "@/lib/groups";
 import { exportHref, isFiltered } from "@/components/history/history-href";
 import { HistoryResults } from "@/components/history/history-results";
 import { HistoryToolbar } from "@/components/history/history-toolbar";
@@ -42,7 +47,15 @@ async function Summary({ query }: { query: string }) {
   );
 }
 
-async function Results({ query, filters }: { query: string; filters: ReceiptListFilters }) {
+async function Results({
+  query,
+  filters,
+  selecting,
+}: {
+  query: string;
+  filters: ReceiptListFilters;
+  selecting: boolean;
+}) {
   const [{ rows, total, page, pageSize }, counts] = await Promise.all([
     loadPage(query),
     getReceiptCounts(),
@@ -51,8 +64,24 @@ async function Results({ query, filters }: { query: string; filters: ReceiptList
   return (
     <>
       <ListPoller active={rows.some((receipt) => isInFlight(receipt.status))} counts={counts} />
-      <HistoryResults filters={filters} page={page} receipts={rows} totalPages={totalPages} />
+      {/* groups: selection mode for bulk "Add to group" */}
+      {selecting ? (
+        <GroupSelectList groups={await getWorkspaceGroups()} receipts={rows} />
+      ) : (
+        <HistoryResults filters={filters} page={page} receipts={rows} totalPages={totalPages} />
+      )}
     </>
+  );
+}
+
+// groups: the chip row under the toolbar
+async function Groups({ filters, selecting }: { filters: ReceiptListFilters; selecting: boolean }) {
+  return (
+    <GroupFilter
+      groups={await getWorkspaceGroups()}
+      selectedIds={filters.groups ?? []}
+      selecting={selecting}
+    />
   );
 }
 
@@ -61,8 +90,10 @@ export default async function HistoryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { page: requested, ...raw } = filtersFromSearchParams(await searchParams);
+  const params = await searchParams;
+  const { page: requested, ...raw } = filtersFromSearchParams(params);
   const filters = cleanFilters(raw);
+  const selecting = params[SELECT_PARAM] === "1"; // groups
   const query = JSON.stringify({ ...filters, page: requested });
 
   return (
@@ -86,8 +117,12 @@ export default async function HistoryPage({
       <Suspense fallback={<Skeleton className="h-11 w-full" />}>
         <HistoryToolbar filters={filters} />
       </Suspense>
-      <Suspense fallback={<RowsSkeleton />} key={query}>
-        <Results filters={filters} query={query} />
+      {/* groups */}
+      <Suspense fallback={<Skeleton className="mb-5 h-9 w-full" />}>
+        <Groups filters={filters} selecting={selecting} />
+      </Suspense>
+      <Suspense fallback={<RowsSkeleton />} key={`${query}${selecting}`}>
+        <Results filters={filters} query={query} selecting={selecting} />
       </Suspense>
     </div>
   );

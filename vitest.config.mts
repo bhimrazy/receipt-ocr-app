@@ -20,6 +20,7 @@ export default defineConfig({
       "@receipt-ocr/ai/categories": path.join(root, "packages/ai/src/categories.ts"),
       "@receipt-ocr/ai/models": path.join(root, "packages/ai/src/models.ts"),
       "@receipt-ocr/ai": path.join(root, "packages/ai/src/index.ts"),
+      "@receipt-ocr/core/group-rules": path.join(root, "packages/core/src/group-rules.ts"),
       "@receipt-ocr/core/plans": path.join(root, "packages/core/src/plans.ts"),
       "@receipt-ocr/core/upload-limits": path.join(root, "packages/core/src/upload-limits.ts"),
       "@receipt-ocr/core": path.join(root, "packages/core/src/index.ts"),
