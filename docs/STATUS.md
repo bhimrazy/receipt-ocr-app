@@ -30,10 +30,9 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-| Work                                    | Where                      | Notes                                                                                                                                                                                                                                                     |
-| --------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Track 1: usage capture + quota ledger   | branch `feat/ocr-usage`    | `ocr_calls` table, token/cost per model call, quota counted from the ledger at claim time with a per-user lock (closes delete-to-reset). Plan: [combined-plan](plans/2026-11-06-combined-plan.md), [ai-usage-models](plans/2026-11-06-ai-usage-models.md) |
-| Parser, benchmark and open-model survey | will land in `docs/plans/` | LlamaParse/LlamaExtract, ParseBench and other benchmarks, receipt datasets (CORD, SROIE…), small open-weight models                                                                                                                                       |
+| Work                                  | Where                   | Notes                                                                                                                                                                                                                                                     |
+| ------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Track 1: usage capture + quota ledger | branch `feat/ocr-usage` | `ocr_calls` table, token/cost per model call, quota counted from the ledger at claim time with a per-user lock (closes delete-to-reset). Plan: [combined-plan](plans/2026-11-06-combined-plan.md), [ai-usage-models](plans/2026-11-06-ai-usage-models.md) |
 
 ## Decisions waiting on the owner
 
@@ -65,6 +64,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    ([observability](plans/2026-11-06-observability.md)) with the [security requirements](reviews/2026-11-06-security-plan.md).
 4. Accuracy: arithmetic checks, low thinking, a real benchmark set, then Flash-Lite-first cascade
    ([extraction cost and accuracy](plans/2026-11-06-extraction-cost-accuracy.md)). No Docling/OCR-first pipeline.
+   Benchmark set and engines to compare (Qwen3-VL-8B via an OpenAI-compatible host, LlamaExtract, Mistral OCR):
+   [parsers landscape](plans/2026-11-06-parsers-landscape.md). LangChain, Reducto, Unstructured and OCR-to-markdown
+   models: no.
 5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
    Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations `0007`, `0008`.
