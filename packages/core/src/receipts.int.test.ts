@@ -4,6 +4,7 @@
  * after `bun run db:migrate`, with DATABASE_URL and S3_* set and
  * OCR_PROVIDER=fixture.
  */
+import { FIXTURE_RECEIPTS } from "@receipt-ocr/ai";
 import { member, organization, receipts, sql, user } from "@receipt-ocr/db";
 import { Effect, Exit, ManagedRuntime } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -48,7 +49,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const ingested = await run(ingestUpload({ scope: a, fileName: "lunch.jpg", body: JPEG }));
     receiptId = ingested.receipt.id;
     objectKey = ingested.receipt.imageObjectKey!;
-    await run(extractStored({ receiptId, scope: a, file: ingested.file }));
+    await run(extractStored({ receiptId, scope: a }));
   });
 
   afterAll(async () => {
@@ -187,19 +188,49 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         includeGlobal: true,
       };
     };
-    const markFailed = () => repo((r) => r.fail(id, a, "unreadable"));
+    let attempt = 1;
+    const markFailed = () => repo((r) => r.fail(id, a, attempt, "unreadable"));
 
     await markFailed();
     const before = await repo((r) => r.usage(window()));
     expect(await repo((r) => r.claimRetry(id, a))).toMatchObject({ kind: "claimed" });
+    attempt += 1;
     const after = await repo((r) => r.usage(window()));
     expect(after.userMinute).toBe(before.userMinute + 1);
     expect(after.globalDay).toBe((before.globalDay ?? 0) + 1);
 
     await markFailed();
     expect(await repo((r) => r.claimRetry(id, a))).toMatchObject({ kind: "claimed" });
+    attempt += 1;
     await markFailed();
     expect(await repo((r) => r.claimRetry(id, a))).toEqual({ kind: "attempts-exhausted" });
+  });
+
+  it("only the current attempt can complete or fail a receipt", async () => {
+    const fresh = await run(ingestUpload({ scope: a, fileName: "race.jpg", body: JPEG }));
+    const id = fresh.receipt.id;
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    const extraction = FIXTURE_RECEIPTS[0]!;
+
+    // Attempt 1 times out and fails, a retry claims attempt 2.
+    expect(await repo((r) => r.fail(id, a, 1, "slow"))).toBe(true);
+    expect(await repo((r) => r.claimRetry(id, a))).toMatchObject({ kind: "claimed" });
+
+    // The stale attempt 1 finishing late can neither complete nor fail attempt 2.
+    expect(await repo((r) => r.complete(id, a, 1, extraction, "fixture"))).toBeNull();
+    expect(await repo((r) => r.fail(id, a, 1, "late"))).toBe(false);
+    expect((await repo((r) => r.get(id, a)))?.status).toBe("processing");
+
+    expect(await repo((r) => r.complete(id, a, 2, extraction, "fixture"))).not.toBeNull();
+    // A duplicate completion or a late failure cannot touch the finished receipt.
+    const other = { ...extraction, merchant: "Overwritten" };
+    expect(await repo((r) => r.complete(id, a, 2, other, "fixture"))).toBeNull();
+    expect(await repo((r) => r.fail(id, a, 2, "dup"))).toBe(false);
+    expect(await repo((r) => r.get(id, a))).toMatchObject({
+      status: "completed",
+      merchant: extraction.merchant,
+    });
   });
 
   it("U1: deleting a receipt deletes its stored object", async () => {

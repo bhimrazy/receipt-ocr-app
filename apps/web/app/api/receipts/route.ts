@@ -80,7 +80,7 @@ export async function POST(request: Request) {
         // Extraction continues after the response; the client polls GET /api/receipts/:id.
         after(() =>
           runBackground(
-            extractStored({ receiptId, scope, file: ingested.file }),
+            extractStored({ receiptId, scope }),
             {
               event: "receipt.extract.background",
               request_id: requestId,
@@ -106,11 +106,9 @@ export async function POST(request: Request) {
       event.receipt_id = ingested.receipt.id;
       // The upload itself succeeded: an extraction failure is reported as the
       // receipt's state (failed, retryable), not as a failed request.
-      const extracted = yield* extractStored({
-        receiptId: ingested.receipt.id,
-        scope,
-        file: ingested.file,
-      }).pipe(Effect.either);
+      const extracted = yield* extractStored({ receiptId: ingested.receipt.id, scope }).pipe(
+        Effect.either,
+      );
       return { receiptId: ingested.receipt.id, ingested, extracted };
     }),
     ({ receiptId, ingested, extracted }) => {

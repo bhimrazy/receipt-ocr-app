@@ -27,16 +27,17 @@ function harness(options: { storagePut?: "fail"; ocr?: "fixture" | "fail" | "unc
           fileName,
           imageObjectKey,
           errorMessage: null,
+          attempts: 1,
           items: [],
           updatedAt: new Date(),
         } as unknown as ReceiptWithItems;
         rows.set(id, row);
         return row as Receipt;
       }),
-    complete: (id, _scope, extraction, model) =>
+    complete: (id, _scope, attempt, extraction, model) =>
       Effect.sync(() => {
         const row = rows.get(id);
-        if (!row) return null;
+        if (!row || row.status !== "processing" || row.attempts !== attempt) return null;
         Object.assign(row, {
           status: "completed",
           merchant: extraction.merchant,
@@ -45,10 +46,12 @@ function harness(options: { storagePut?: "fail"; ocr?: "fixture" | "fail" | "unc
         });
         return row;
       }),
-    fail: (id, _scope, message) =>
+    fail: (id, _scope, attempt, message) =>
       Effect.sync(() => {
         const row = rows.get(id);
-        if (row) Object.assign(row, { status: "failed", errorMessage: message });
+        if (!row || row.status !== "processing" || row.attempts !== attempt) return false;
+        Object.assign(row, { status: "failed", errorMessage: message });
+        return true;
       }),
     claimRetry: (id) =>
       Effect.sync(() => {
@@ -56,6 +59,7 @@ function harness(options: { storagePut?: "fail"; ocr?: "fixture" | "fail" | "unc
         if (!row) return { kind: "not-found" as const };
         if (row.status !== "failed") return { kind: "not-retryable" as const };
         row.status = "processing";
+        row.attempts += 1;
         return { kind: "claimed" as const, imageObjectKey: row.imageObjectKey };
       }),
     get: (id) => Effect.sync(() => rows.get(id) ?? null),
@@ -149,7 +153,7 @@ describe("extractStored", () => {
     const id = ingested.value.receipt.id;
     return {
       id,
-      exit: await h.run(extractStored({ receiptId: id, scope, file: ingested.value.file })),
+      exit: await h.run(extractStored({ receiptId: id, scope })),
     };
   };
 
@@ -171,6 +175,15 @@ describe("extractStored", () => {
     expect(h.rows.get(id)?.errorMessage).not.toMatch(/gemini/i);
   });
 
+  it("loads the receipt by id: unknown ids and receipts not processing are refused", async () => {
+    const h = harness();
+    const missing = await h.run(extractStored({ receiptId: "nope", scope }));
+    expect(Exit.isFailure(missing) && JSON.stringify(missing.cause)).toContain("NotFound");
+    const { id } = await ingestAndExtract(h);
+    const again = await h.run(extractStored({ receiptId: id, scope }));
+    expect(Exit.isFailure(again) && JSON.stringify(again.cause)).toContain("Conflict");
+  });
+
   it("marks the receipt failed when OCR is not configured, instead of leaving it processing", async () => {
     const h = harness({ ocr: "unconfigured" });
     const { id } = await ingestAndExtract(h);
@@ -185,12 +198,12 @@ describe("claimRetry", () => {
     const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body }));
     if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
     const id = ingested.value.receipt.id;
-    await h.run(extractStored({ receiptId: id, scope, file: ingested.value.file }));
+    await h.run(extractStored({ receiptId: id, scope }));
     expect(h.rows.get(id)?.status).toBe("failed");
 
     const claimed = await h.run(claimRetry({ receiptId: id, scope }));
-    expect(Exit.isSuccess(claimed) && claimed.value.mediaType).toBe("image/jpeg");
-    expect(h.rows.get(id)?.status).toBe("processing");
+    expect(Exit.isSuccess(claimed)).toBe(true);
+    expect(h.rows.get(id)).toMatchObject({ status: "processing", attempts: 2 });
   });
 
   it("refuses a receipt that has not failed, and a missing one", async () => {
@@ -203,14 +216,28 @@ describe("claimRetry", () => {
     expect(Exit.isFailure(missing) && JSON.stringify(missing.cause)).toContain("NotFound");
   });
 
+  it("a retried receipt is extracted from its stored file", async () => {
+    const h = harness();
+    const body = new Uint8Array([...JPEG, ...new TextEncoder().encode(FIXTURE_FAIL_MARKER)]);
+    const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body }));
+    if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
+    const id = ingested.value.receipt.id;
+    await h.run(extractStored({ receiptId: id, scope }));
+    await h.run(claimRetry({ receiptId: id, scope }));
+    h.objects.set(h.rows.get(id)!.imageObjectKey!, JPEG);
+    expect(Exit.isSuccess(await h.run(extractStored({ receiptId: id, scope })))).toBe(true);
+    expect(h.rows.get(id)?.status).toBe("completed");
+  });
+
   it("puts the receipt back to failed when its file can't be read", async () => {
     const h = harness({ ocr: "fail" });
     const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG }));
     if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
     const id = ingested.value.receipt.id;
-    await h.run(extractStored({ receiptId: id, scope, file: ingested.value.file }));
+    await h.run(extractStored({ receiptId: id, scope }));
     h.objects.clear();
     await h.run(claimRetry({ receiptId: id, scope }));
+    await h.run(extractStored({ receiptId: id, scope }));
     expect(h.rows.get(id)?.status).toBe("failed");
   });
 });

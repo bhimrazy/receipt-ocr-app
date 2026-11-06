@@ -129,6 +129,10 @@ export function isStaleReceipt(row: Pick<Receipt, "status" | "updatedAt">, now =
   );
 }
 
+/** Only the live attempt may write a result: a stale or duplicate run matches no row. */
+const currentAttempt = (id: string, scope: ReceiptScope, attempt: number) =>
+  and(inScope(id, scope), eq(receipts.status, "processing"), eq(receipts.attempts, attempt));
+
 /** Every read and write is narrowed to the caller's workspace. */
 const inScope = (id: string, scope: ReceiptScope) =>
   and(eq(receipts.id, id), eq(receipts.organizationId, scope.organizationId));
@@ -196,18 +200,25 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       fileName: string;
       imageObjectKey: string;
     }) => Effect.Effect<Receipt, DbError>;
-    /** Persists an extraction, its items and the model that produced it; null when the receipt no longer exists. */
+    /**
+     * Persists an extraction, its items and the model that produced it. Only the
+     * current attempt of a `processing` receipt may complete it; null when the
+     * receipt is gone or a newer attempt or a final state superseded this one.
+     */
     readonly complete: (
       id: string,
       scope: ReceiptScope,
+      attempt: number,
       extraction: ReceiptExtraction,
       model: string,
     ) => Effect.Effect<ReceiptWithItems | null, DbError>;
+    /** Marks the current attempt failed; false when it is no longer the current `processing` one. */
     readonly fail: (
       id: string,
       scope: ReceiptScope,
+      attempt: number,
       message: string,
-    ) => Effect.Effect<void, DbError>;
+    ) => Effect.Effect<boolean, DbError>;
     /** Atomically moves a failed (or stale) receipt back to `processing`. */
     readonly claimRetry: (id: string, scope: ReceiptScope) => Effect.Effect<RetryClaim, DbError>;
     readonly get: (
@@ -268,7 +279,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           return row;
         }),
 
-      complete: (id, scope, extraction, model) =>
+      complete: (id, scope, attempt, extraction, model) =>
         use((db) =>
           db.transaction(async (tx) => {
             const [row] = await tx
@@ -289,7 +300,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 errorMessage: null,
                 updatedAt: new Date(),
               })
-              .where(inScope(id, scope))
+              .where(currentAttempt(id, scope, attempt))
               .returning();
             if (!row) return null;
             await tx.delete(receiptItems).where(eq(receiptItems.receiptId, id));
@@ -313,12 +324,14 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           }),
         ),
 
-      fail: (id, scope, message) =>
+      fail: (id, scope, attempt, message) =>
         use(async (db) => {
-          await db
+          const rows = await db
             .update(receipts)
             .set({ status: "failed", errorMessage: message, updatedAt: new Date() })
-            .where(inScope(id, scope));
+            .where(currentAttempt(id, scope, attempt))
+            .returning({ id: receipts.id });
+          return rows.length > 0;
         }),
 
       claimRetry: (id, scope) =>
