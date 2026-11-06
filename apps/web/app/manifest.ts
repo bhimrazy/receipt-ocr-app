@@ -31,9 +31,10 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       {
-        name: "Scan receipt",
-        short_name: "Scan",
-        description: "Open the camera to photograph a receipt",
+        name: "Add receipt",
+        short_name: "Add",
+        description: "Upload or photograph a receipt",
+        // capture=1 is for the camera track's upload page, which will open the camera from it.
         url: "/app/upload?capture=1",
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
       },

@@ -88,9 +88,10 @@ function InstallPrompt() {
   }
 
   return (
+    // --app-bottom-inset is the mobile tab bar's height plus the home indicator (set by the app shell).
     <aside
       aria-label="Install the app"
-      className="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 md:inset-x-auto md:right-6 md:bottom-6 md:w-80"
+      className="fixed inset-x-4 bottom-[calc(var(--app-bottom-inset,0px)+0.5rem)] z-50 md:inset-x-auto md:right-6 md:bottom-6 md:w-80"
     >
       <Card className="flex items-start gap-3 p-4 shadow-lg">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary">
