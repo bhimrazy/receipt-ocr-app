@@ -11,6 +11,11 @@ This repo is a Bun/Turborepo Receipt OCR MVP.
 - `packages/ai`: AI SDK OCR extraction. Gemini is the first provider, but do not hard-code orchestration to Gemini-only concepts.
 - `packages/core`: Effect TS services and receipt processing workflow.
 
+## Status and Plans
+
+Start with `docs/STATUS.md`: what has shipped, what is in flight, open owner decisions and the roadmap. Dated plans
+are in `docs/plans/` and reviews in `docs/reviews/`; write new ones there, not in local notes.
+
 ## Design Source
 
 The app implements the Claude Design handoff for `Receipt OCR.html`:
