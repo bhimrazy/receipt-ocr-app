@@ -152,11 +152,20 @@ function betterAuthSecrets(): { version: number; value: string }[] | undefined {
  * inlined into the client bundle at build time (NEXT_PUBLIC_*); the secret key stays on the server.
  * One without the other would either show a widget nothing checks or reject every form, so that
  * fails at startup (not during `next build`, which runs without runtime secrets).
+ * TURNSTILE_ALLOWED_HOSTNAMES (comma-separated) overrides the hostname siteverify must report; it
+ * defaults to the BETTER_AUTH_URL host.
  */
-function turnstileConfig(): { siteKey: string; secretKey: string } | undefined {
+function turnstileConfig():
+  { siteKey: string; secretKey: string; allowedHostnames: string[] } | undefined {
   const siteKey = optional("NEXT_PUBLIC_TURNSTILE_SITE_KEY");
   const secretKey = optional("TURNSTILE_SECRET_KEY");
-  if (siteKey && secretKey) return { siteKey, secretKey };
+  if (siteKey && secretKey) {
+    // Pin tokens to our own host so one minted for another site on the same widget key is refused.
+    const allowedHostnames = list("TURNSTILE_ALLOWED_HOSTNAMES") ?? [
+      new URL(betterAuthUrl()).hostname,
+    ];
+    return { siteKey, secretKey, allowedHostnames };
+  }
   if ((siteKey || secretKey) && !isBuild) {
     throw new Error(
       "Incomplete Turnstile config: set both NEXT_PUBLIC_TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY (or neither).",

@@ -29,7 +29,7 @@ export function ForgotPasswordForm() {
     event.preventDefault();
     setError(null);
     if (turnstile.blocker) {
-      setError(turnstile.blocker);
+      if (!turnstile.broken) setError(turnstile.blocker);
       return;
     }
     setPending(true);
@@ -96,7 +96,12 @@ export function ForgotPasswordForm() {
         />
         <Turnstile controller={turnstile} />
         {error ? <AuthError>{error}</AuthError> : null}
-        <Button className="mt-1 h-11 w-full" disabled={pending} type="submit">
+        <Button
+          aria-busy={turnstile.pending}
+          className="mt-1 h-11 w-full"
+          disabled={pending}
+          type="submit"
+        >
           {pending ? (
             <>
               <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />

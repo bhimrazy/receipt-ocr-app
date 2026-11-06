@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 
 // Report-only until it has run clean in production: Next's inline bootstrap scripts need nonces
 // before `script-src` can be enforced. Receipt images load from presigned storage URLs (R2/S3/RustFS).
-// Cloudflare's origin joins script, frame and connect sources only when Turnstile is on (the site
+// Cloudflare's origin joins script and frame sources only when Turnstile is on (the site
 // key is inlined at build time, so this matches the client bundle).
 const turnstile = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
   ? " https://challenges.cloudflare.com"
@@ -15,7 +15,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https: http://localhost:9000",
   "font-src 'self' data:",
-  `connect-src 'self'${turnstile}`,
+  "connect-src 'self'",
   `frame-src 'self'${turnstile}`,
   "frame-ancestors 'none'",
   "form-action 'self'",

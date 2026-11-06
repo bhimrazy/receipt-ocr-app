@@ -14,6 +14,7 @@ const KEYS = [
   "TRUSTED_PROXIES",
   "NEXT_PUBLIC_TURNSTILE_SITE_KEY",
   "TURNSTILE_SECRET_KEY",
+  "TURNSTILE_ALLOWED_HOSTNAMES",
 ];
 
 /** Imports a fresh env.ts with exactly these variables set. */
@@ -88,7 +89,23 @@ describe("Turnstile config", () => {
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: " site ",
       TURNSTILE_SECRET_KEY: "secret",
     });
-    expect(env.turnstileEnv).toEqual({ siteKey: "site", secretKey: "secret" });
+    expect(env.turnstileEnv).toEqual({
+      siteKey: "site",
+      secretKey: "secret",
+      allowedHostnames: ["localhost"],
+    });
+  });
+
+  it("pins hostnames to the app URL, or to TURNSTILE_ALLOWED_HOSTNAMES when set", async () => {
+    const keys = { NEXT_PUBLIC_TURNSTILE_SITE_KEY: "site", TURNSTILE_SECRET_KEY: "secret" };
+    const pinned = await loadEnv({ ...dev, ...keys, BETTER_AUTH_URL: "https://app.example:8443" });
+    expect(pinned.turnstileEnv?.allowedHostnames).toEqual(["app.example"]);
+    const override = await loadEnv({
+      ...dev,
+      ...keys,
+      TURNSTILE_ALLOWED_HOSTNAMES: "a.example, example.com",
+    });
+    expect(override.turnstileEnv?.allowedHostnames).toEqual(["a.example", "example.com"]);
   });
 
   it("refuses a single key at startup but not during the build", async () => {

@@ -22,6 +22,29 @@ describe("verifyTurnstileToken", () => {
     });
   });
 
+  it("rejects a valid token minted for another hostname", async () => {
+    const fetchImpl = reply({ success: true, hostname: "evil.example" });
+    const allowedHostnames = ["app.example"];
+    await expect(
+      verifyTurnstileToken("tok", null, { ...options, allowedHostnames, fetchImpl }),
+    ).resolves.toEqual({ ok: false, reason: "rejected", errorCodes: ["hostname_mismatch"] });
+    const missing = reply({ success: true });
+    await expect(
+      verifyTurnstileToken("tok", null, { ...options, allowedHostnames, fetchImpl: missing }),
+    ).resolves.toMatchObject({ ok: false, reason: "rejected" });
+  });
+
+  it("accepts a token for an allowed hostname", async () => {
+    const fetchImpl = reply({ success: true, hostname: "app.example" });
+    await expect(
+      verifyTurnstileToken("tok", null, {
+        ...options,
+        allowedHostnames: ["other.example", "app.example"],
+        fetchImpl,
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+
   it("rejects a token Cloudflare refuses, with its error codes", async () => {
     const fetchImpl = reply({ success: false, "error-codes": ["invalid-input-response"] });
     await expect(verifyTurnstileToken("bad", null, { ...options, fetchImpl })).resolves.toEqual({

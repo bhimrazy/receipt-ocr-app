@@ -69,8 +69,14 @@ if [ "$turnstile" = 1 ]; then
       pass) secret=1x0000000000000000000000000000000AA ;;
       fail) secret=2x0000000000000000000000000000000AA ;;
     esac
-    (cd apps/web && TURNSTILE_SECRET_KEY="$secret" exec bun run start) &
-    until curl -fsS -o /dev/null "$E2E_BASE_URL/sign-in"; do sleep 1; done
+    # Test secrets report the hostname example.com.
+    (cd apps/web && TURNSTILE_SECRET_KEY="$secret" TURNSTILE_ALLOWED_HOSTNAMES=example.com exec bun run start) &
+    up=0
+    for _ in $(seq 60); do
+      curl -fsS -o /dev/null "$E2E_BASE_URL/sign-in" && up=1 && break
+      sleep 1
+    done
+    [ "$up" = 1 ] || { echo "test.sh: server did not answer on $E2E_BASE_URL within 60s ($mode secret)" >&2; exit 1; }
     (cd apps/web && E2E_TURNSTILE="$mode" E2E_REUSE_SERVER=1 bunx playwright test e2e/turnstile.spec.ts)
     stop_server
     sleep 1

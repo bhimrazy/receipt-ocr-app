@@ -83,9 +83,10 @@ Optional. With it on, sign-up, sign-in, password reset, resending the confirmati
 require a passed [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) check. It is invisible unless
 Cloudflare needs the visitor to do something.
 
-1. In the Cloudflare dashboard, open **Turnstile**, add a widget for your domain (and `localhost` for local work) in
+1. In the Cloudflare dashboard, open **Turnstile**, add a widget for your domain in
    **Managed** mode, and copy the site key and secret key.
 2. Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` together. The app refuses to start with only one.
+   Tokens must report the `BETTER_AUTH_URL` hostname; `TURNSTILE_ALLOWED_HOSTNAMES` (comma-separated) overrides that.
 3. Redeploy. The site key is inlined into the client bundle when the app is built, so changing it needs a new build;
    the secret is read at runtime. The Content Security Policy allows `challenges.cloudflare.com` only when the site
    key is set.
@@ -93,7 +94,7 @@ Cloudflare needs the visitor to do something.
 If Cloudflare cannot be reached when a form is submitted, the request is refused rather than let through. For local
 and test runs, Cloudflare's [test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/) work
 on any host: site `1x00000000000000000000AA` with secret `1x0000000000000000000000000000000AA` always passes; secret
-`2x0000000000000000000000000000000AA` always fails. `scripts/test.sh --turnstile` runs the e2e checks with them.
+`2x0000000000000000000000000000000AA` always fails. Their siteverify reports the hostname `example.com`, so set `TURNSTILE_ALLOWED_HOSTNAMES=example.com` with them. `scripts/test.sh --turnstile` does that.
 
 ### 5. Deploy
 

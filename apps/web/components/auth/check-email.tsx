@@ -42,7 +42,7 @@ export function CheckEmail({
   async function resend() {
     setError(null);
     if (turnstile.blocker) {
-      setError(turnstile.blocker);
+      if (!turnstile.broken) setError(turnstile.blocker);
       return;
     }
     setSending(true);
@@ -69,6 +69,7 @@ export function CheckEmail({
             <Button
               className="h-11 w-full"
               disabled={sending || cooldown > 0}
+              aria-busy={turnstile.pending}
               onClick={resend}
               variant="outline"
             >

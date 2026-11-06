@@ -28,8 +28,12 @@ declare global {
 export interface TurnstileController {
   /** False when no site key is set: forms then skip the check entirely. */
   enabled: boolean;
-  /** An error line to show instead of submitting, or null when the form may go ahead. */
+  /** Why the form must not submit yet, or null when it may go ahead. */
   blocker: string | null;
+  /** True when the script or widget failed: <Turnstile> already shows that error. */
+  broken: boolean;
+  /** True while the first token is pending, for aria-busy on the submit button. */
+  pending: boolean;
   /** Spread into an `authClient` call's `fetchOptions`; `undefined` when there is no token. */
   fetchOptions: { headers: Record<string, string> } | undefined;
   /** Tokens are single use: call after every submit, successful or not, to get a fresh one. */
@@ -62,6 +66,8 @@ export function useTurnstile(): TurnstileController {
       enabled: Boolean(SITE_KEY),
       blocker: !SITE_KEY || token ? null : broken ? BROKEN_MESSAGE : WAIT_MESSAGE,
       fetchOptions: token ? { headers: { [CAPTCHA_HEADER]: token } } : undefined,
+      broken,
+      pending: Boolean(SITE_KEY) && !token && !broken,
       reset,
       widget: { setToken, setBroken, attach, broken },
     }),

@@ -11,6 +11,8 @@ export type TurnstileResult =
 
 export interface VerifyOptions {
   secretKey: string;
+  /** When non-empty, siteverify must report one of these hostnames. */
+  allowedHostnames?: string[];
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -22,7 +24,7 @@ export interface VerifyOptions {
 export async function verifyTurnstileToken(
   token: string | null | undefined,
   remoteIp: string | null,
-  { secretKey, fetchImpl = fetch, timeoutMs = TIMEOUT_MS }: VerifyOptions,
+  { secretKey, allowedHostnames, fetchImpl = fetch, timeoutMs = TIMEOUT_MS }: VerifyOptions,
 ): Promise<TurnstileResult> {
   if (!token) return { ok: false, reason: "missing" };
   try {
@@ -37,8 +39,20 @@ export async function verifyTurnstileToken(
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) return { ok: false, reason: "unavailable" };
-    const body = (await response.json()) as { success?: boolean; "error-codes"?: string[] };
-    if (body.success === true) return { ok: true };
+    const body = (await response.json()) as {
+      success?: boolean;
+      hostname?: string;
+      "error-codes"?: string[];
+    };
+    if (body.success === true) {
+      if (
+        allowedHostnames?.length &&
+        !(body.hostname && allowedHostnames.includes(body.hostname))
+      ) {
+        return { ok: false, reason: "rejected", errorCodes: ["hostname_mismatch"] };
+      }
+      return { ok: true };
+    }
     return { ok: false, reason: "rejected", errorCodes: body["error-codes"] };
   } catch {
     return { ok: false, reason: "unavailable" };
@@ -55,5 +69,6 @@ export async function checkTurnstile(
   if (!turnstileEnv) return { ok: true };
   return verifyTurnstileToken(request.headers.get("x-captcha-response"), remoteIp, {
     secretKey: turnstileEnv.secretKey,
+    allowedHostnames: turnstileEnv.allowedHostnames,
   });
 }

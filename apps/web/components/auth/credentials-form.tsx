@@ -106,7 +106,7 @@ export function CredentialsForm({
     setError(null);
     setCallbackError(undefined);
     if (turnstile.blocker) {
-      setError({ message: turnstile.blocker });
+      if (!turnstile.broken) setError({ message: turnstile.blocker });
       return;
     }
     setPending("credentials");
@@ -284,7 +284,12 @@ export function CredentialsForm({
             )}
           </AuthError>
         ) : null}
-        <Button className="mt-1 h-11 w-full" disabled={busy} type="submit">
+        <Button
+          aria-busy={turnstile.pending}
+          className="mt-1 h-11 w-full"
+          disabled={busy}
+          type="submit"
+        >
           {pending === "credentials" ? (
             <>
               <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />

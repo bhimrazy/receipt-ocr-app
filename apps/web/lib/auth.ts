@@ -23,6 +23,7 @@ import { admin } from "better-auth/plugins/admin";
 import { captcha } from "better-auth/plugins/captcha";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
+import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
 import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
 import {
   authEnabled,
@@ -102,14 +103,6 @@ export async function deleteOwnData(userId: string) {
   if (failure?._tag === "Conflict") throw new APIError("BAD_REQUEST", { message: failure.message });
   throw new Error("Could not delete the user's workspaces", { cause: exit.cause });
 }
-
-/** The plugin's defaults (sign-up, sign-in, password reset) plus the resend-confirmation link. */
-const CAPTCHA_ENDPOINTS = [
-  "/sign-up/email",
-  "/sign-in/email",
-  "/request-password-reset",
-  "/send-verification-email",
-];
 
 export const auth = betterAuth({
   appName: "receiptOCR",
@@ -286,6 +279,7 @@ export const auth = betterAuth({
             provider: "cloudflare-turnstile",
             secretKey: turnstileEnv.secretKey,
             endpoints: [...CAPTCHA_ENDPOINTS],
+            allowedHostnames: turnstileEnv.allowedHostnames,
           }),
         ]
       : []),

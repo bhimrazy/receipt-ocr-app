@@ -77,8 +77,10 @@ export function SupportWidget() {
     if (status === "sending") return;
     setError(null);
     if (turnstile.blocker) {
-      setStatus("error");
-      setError(turnstile.blocker);
+      if (!turnstile.broken) {
+        setStatus("error");
+        setError(turnstile.blocker);
+      }
       return;
     }
     setStatus("sending");
@@ -227,7 +229,12 @@ export function SupportWidget() {
                   </Alert>
                 ) : null}
 
-                <Button type="submit" disabled={status === "sending"} className="h-11 w-full">
+                <Button
+                  aria-busy={turnstile.pending}
+                  type="submit"
+                  disabled={status === "sending"}
+                  className="h-11 w-full"
+                >
                   {status === "sending" ? (
                     "Sending…"
                   ) : (
