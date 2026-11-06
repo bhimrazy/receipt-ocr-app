@@ -230,6 +230,52 @@ describe("validateUpload PDF page cap (audit L2)", () => {
       expect(count(lzw)).toBe("tooComplex");
     });
 
+    it("doesn't count intermediate tree nodes as pages (two-level tree)", () => {
+      const leaves = Array.from({ length: 10 }, (_, i) => 20 + i);
+      const objects = [
+        `1 0 obj\n<< /Type /Pages /Kids [10 0 R 11 0 R] /Count 10 >>\nendobj\n`,
+        `10 0 obj\n<< /Type /Pages /Parent 1 0 R /Kids [${leaves
+          .slice(0, 5)
+          .map((n) => `${n} 0 R`)
+          .join(" ")}] /Count 5 >>\nendobj\n`,
+        `11 0 obj\n<< /Parent 1 0 R /Kids [${leaves
+          .slice(5)
+          .map((n) => `${n} 0 R`)
+          .join(" ")}] >>\nendobj\n`,
+        ...leaves.map((n) => `${n} 0 obj\n<< /MediaBox [0 0 1 1] >>\nendobj\n`),
+      ];
+      expect(count(enc(`%PDF-1.4\n${objects.join("")}`))).toBe(10);
+    });
+
+    it("rejects a file with more distinct /Kids ids than it will track", () => {
+      const refs = Array.from({ length: 10_001 }, (_, i) => `${i + 100} 0 R`).join(" ");
+      expect(count(enc(`%PDF-1.4\n1 0 obj << /Kids [${refs}] >> endobj`))).toBe("tooComplex");
+    });
+
+    it("reads the prefix of a truncated object stream", () => {
+      const body = `${treeDict(20, [])} ${"x".repeat(5000)}`;
+      const data = deflateSync(enc(`2 0\n${body}`), { level: 0 });
+      const cut = data.subarray(0, data.length - 3000);
+      const pdf = concat(
+        enc(
+          `%PDF-1.5\n5 0 obj\n<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length ${cut.length} >>\nstream\n`,
+        ),
+        cut,
+        enc("\nendstream\nendobj\n"),
+      );
+      expect(count(pdf)).toBe(20);
+    });
+
+    it("rejects /Kids arrays that list 10,000 tree nodes before the real pages", () => {
+      const nodes = Array.from({ length: 10_000 }, (_, i) => 100 + i);
+      const objects = [
+        `1 0 obj << /Kids [${nodes.map((n) => `${n} 0 R`).join(" ")}] >> endobj\n`,
+        ...nodes.map((n) => `${n} 0 obj << /Kids [] >> endobj\n`),
+        `2 0 obj << /Kids [${kidsRefs(20)}] >> endobj\n`,
+      ];
+      expect(count(enc(`%PDF-1.4\n${objects.join("")}`))).toBe("tooComplex");
+    });
+
     it("counts the ids in /Kids of an untyped page tree", () => {
       const objects = [
         `1 0 obj\n<< /Kids [${kidsRefs(20)}] /Count 3 0 R >>\nendobj\n`,
@@ -251,6 +297,12 @@ describe("validateUpload PDF page cap (audit L2)", () => {
       escapes: `1 0 obj << ${"/N#41me ".repeat(MB10 / 7)}`,
       kidsNoClose: `1 0 obj << ${"/Kids ".repeat(MB10 / 6)}`,
       kidsRefs: `1 0 obj << /Kids [${"1 0 R ".repeat(MB10 / 6)}`,
+      bigDict: `1 0 obj << ${"/A 1 ".repeat(MB10 / 5)} >> endobj`,
+      bigDicts: Array.from(
+        { length: 5 },
+        (_, i) => `${i + 1} 0 obj << ${"/Kids [ ".repeat(MB10 / 40)} >> endobj\n`,
+      ).join(""),
+      bigPageDict: `1 0 obj << /Type /Page ${"/Kids ".repeat(MB10 / 12)}${"/Count 1 ".repeat(MB10 / 18)} >> endobj`,
     };
     for (const [name, text] of Object.entries(inputs)) {
       const started = performance.now();

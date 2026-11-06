@@ -95,6 +95,11 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- PDF page cap gaps: the hand-written page counter (`packages/core/src/pdf-pages.ts`) can undercount when the word
+  `stream` sits inside a string, when comments sit inside a dictionary, and for encrypted object streams. The cap is a
+  cost guard, not a security boundary: uploads are size-capped, the daily quota bounds total cost and the ledger
+  records real tokens per call, so an outlier is visible. If abuse shows up, count with a real reader (pdf.js in a
+  worker with a timeout) rather than parsing further by hand.
 - Zod at every boundary: `PATCH /api/receipts/[id]` validates by hand and drops bad values; history/export query
   params, `apps/web/lib/env.ts` and customer forms should share Zod schemas (today Zod covers only the AI output
   schema, admin settings and admin actions).

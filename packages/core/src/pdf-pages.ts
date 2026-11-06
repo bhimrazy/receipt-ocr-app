@@ -1,4 +1,4 @@
-import { inflateSync } from "node:zlib";
+import { constants, inflateSync } from "node:zlib";
 
 export type PageCount = { pages: number } | { tooComplex: true };
 
@@ -9,7 +9,8 @@ export type PageCount = { pages: number } | { tooComplex: true };
  * - distinct objects with `/Type /Page`, by object number (a page rewritten by an
  *   incremental update counts once; orphaned pages from earlier revisions still count);
  * - the largest `/Count` on a `/Type /Pages` node, or `/N` in a linearization dictionary;
- * - distinct object ids listed in any `/Kids` array, which also catches untyped page trees.
+ * - distinct object ids listed in any `/Kids` array, minus those that are themselves tree
+ *   nodes, which also catches untyped page trees.
  *
  * It errs toward overcounting on purpose: a PDF whose pages were deleted by an incremental
  * save still counts the deleted ones, and may be rejected. Following the page tree safely
@@ -20,8 +21,16 @@ export type PageCount = { pages: number } | { tooComplex: true };
  * are skipped. Anything else that could hide pages makes the file `tooComplex`: an object
  * stream with another filter or a predictor, a name written with a `#xx` escape that
  * decodes to one the scan reads, or a file over the inflate or work budgets.
- * What it can't see: encrypted object streams, which count only the plain-text objects
- * and so may report fewer pages than they have.
+ *
+ * The page cap is a cost guard, not a security boundary: uploads are size-capped, the daily
+ * quota bounds total cost and the ledger records real tokens per call. If abuse shows up,
+ * count with a real reader (pdf.js in a worker with a timeout), not more hand parsing.
+ *
+ * Known gaps, which can report fewer pages than a reader renders:
+ * - encrypted object streams (only plain-text objects are counted);
+ * - the word `stream` inside a string, which cuts a dictionary short;
+ * - comments inside a dictionary, which can split a name or reference the scan reads;
+ * - other inflate errors, which count only what is visible elsewhere.
  */
 export function countPdfPages(bytes: Uint8Array): PageCount {
   const text = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("latin1");
@@ -32,6 +41,7 @@ export function countPdfPages(bytes: Uint8Array): PageCount {
     work: 0,
     objects: 0,
     kids: new Set(),
+    treeNodes: new Set(),
   };
   for (const { id, dict, streamStart } of topLevelObjects(text, bytes)) {
     if (!classify(tally, id, dict)) return { tooComplex: true };
@@ -39,7 +49,9 @@ export function countPdfPages(bytes: Uint8Array): PageCount {
       return { tooComplex: true };
     }
   }
-  return { pages: Math.max(tally.pages.size, tally.maxCount, tally.kids.size) };
+  let leaves = 0;
+  for (const id of tally.kids) if (!tally.treeNodes.has(id)) leaves++;
+  return { pages: Math.max(tally.pages.size, tally.maxCount, leaves) };
 }
 
 interface Tally {
@@ -49,8 +61,10 @@ interface Tally {
   /** Characters classified, across all objects and object-stream entries. */
   work: number;
   objects: number;
-  /** Object ids seen in `/Kids` arrays, capped: past the cap the file is far over any limit. */
+  /** Object ids seen in `/Kids` arrays. */
   kids: Set<string>;
+  /** Objects that are page-tree nodes (`/Type /Pages` or holding `/Kids`), not leaves. */
+  treeNodes: Set<string>;
 }
 
 const PAGE = /\/Type\s*\/Page(?![A-Za-z0-9])/;
@@ -65,7 +79,6 @@ const ESCAPED_NAME_ANY = /#[0-9A-Fa-f]{2}/;
 const READ_NAMES = new Set(["Type", "Page", "Pages", "ObjStm", "Count", "N", "Kids", "Linearized"]);
 const OBJ_STM = /\/Type\s*\/ObjStm(?![A-Za-z0-9])/;
 // Bounded and anchored so no match can start inside a digit run: linear on hostile input.
-// Known gap: a comment between the object header and `obj` hides that object from the scan.
 const OBJ_START = /(?<![0-9])(\d{1,10})\s{1,256}(\d{1,10})\s{1,256}obj\b/g;
 
 /**
@@ -73,13 +86,12 @@ const OBJ_START = /(?<![0-9])(\d{1,10})\s{1,256}(\d{1,10})\s{1,256}obj\b/g;
  * hold only small dictionaries; real receipts and invoices use a few KB.
  */
 const MAX_INFLATED_BYTES = 16 * 1024 * 1024;
-/** Page and page-tree dictionaries are small; longer spans are cut before matching. */
-const MAX_DICT_CHARS = 64 * 1024;
 /** Total characters classified and objects visited: a hard stop on CPU per upload. */
 const MAX_WORK_CHARS = 32 * 1024 * 1024;
 const MAX_OBJECTS = 200_000;
-/** Entries read from one object stream; real writers put a few hundred at most. */
+/** Distinct `/Kids` ids before the file counts as too complex; far above any page limit. */
 const MAX_KID_IDS = 10_000;
+/** Entries read from one object stream; real writers put a few hundred at most. */
 const MAX_OBJSTM_ENTRIES = 65_536;
 /** The linearization dictionary must be among the first bytes of the file. */
 const LINEARIZED_WINDOW = 1024;
@@ -93,18 +105,21 @@ function linearizedPages(text: string): number {
 }
 
 /** False when the work budget is spent or the dictionary hides names from the scan. */
-function classify(tally: Tally, id: string, span: string): boolean {
-  const dict = span.slice(0, MAX_DICT_CHARS);
+function classify(tally: Tally, id: string, dict: string): boolean {
   tally.work += dict.length + 64;
   if (++tally.objects > MAX_OBJECTS || tally.work > MAX_WORK_CHARS) return false;
   if (dict.includes("#") && hidesReadName(dict)) return false;
   if (PAGES.test(dict)) {
+    tally.treeNodes.add(id);
     const count = COUNT.exec(dict);
     if (count) tally.maxCount = Math.max(tally.maxCount, Number(count[1]));
   } else if (PAGE.test(dict)) {
     tally.pages.add(id);
   }
-  if (dict.includes("/Kids")) collectKids(tally, dict);
+  if (dict.includes("/Kids")) {
+    tally.treeNodes.add(id);
+    return collectKids(tally, dict);
+  }
   return true;
 }
 
@@ -118,19 +133,18 @@ function hidesReadName(dict: string): boolean {
   return false;
 }
 
-/** Ids inside each `/Kids [ ... ]`. Each search resumes after the last `]`: linear. */
-function collectKids(tally: Tally, dict: string) {
-  let from = 0;
-  for (let at = dict.indexOf("/Kids"); at !== -1 && tally.kids.size < MAX_KID_IDS;) {
+/** Ids inside each `/Kids [ ... ]`; false past MAX_KID_IDS. Each search resumes after the last `]`: linear. */
+function collectKids(tally: Tally, dict: string): boolean {
+  for (let at = dict.indexOf("/Kids"); at !== -1;) {
     const close = dict.indexOf("]", at);
     const end = close === -1 ? dict.length : close;
     for (const m of dict.slice(at, end).matchAll(KIDS_REF)) {
-      if (tally.kids.size >= MAX_KID_IDS) break;
       tally.kids.add(m[1]);
+      if (tally.kids.size > MAX_KID_IDS) return false;
     }
-    from = end;
-    at = close === -1 ? -1 : dict.indexOf("/Kids", from);
+    at = close === -1 ? -1 : dict.indexOf("/Kids", end);
   }
+  return true;
 }
 
 /**
@@ -246,7 +260,9 @@ function readObjectStream(
   let decoded: string;
   try {
     const raw = bytes.subarray(streamStart, end);
-    const out = filtered ? inflateSync(raw, { maxOutputLength: budget }) : Buffer.from(raw);
+    const out = filtered
+      ? inflateSync(raw, { maxOutputLength: budget, finishFlush: constants.Z_SYNC_FLUSH })
+      : Buffer.from(raw);
     if (out.byteLength > budget) return false;
     tally.inflated += out.byteLength;
     decoded = out.toString("latin1");
