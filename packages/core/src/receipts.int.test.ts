@@ -143,9 +143,47 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(await run(Effect.flatMap(ReceiptRepo, (r) => r.get(receiptId, scope!)))).toBeNull();
   });
 
-  it("L2: a plain member cannot delete someone else's receipt", async () => {
-    const asMember = { organizationId: a.organizationId, userId: b.userId, role: "member" };
-    expect(await run(Effect.flatMap(ReceiptRepo, (r) => r.remove(receiptId, asMember)))).toBeNull();
+  it("P2-5: owners and admins edit or delete any receipt; a member only their own", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    const asRole = (role: string) => ({ organizationId: a.organizationId, userId: b.userId, role });
+    const seed = async () =>
+      (await run(ingestUpload({ scope: a, fileName: "policy.jpg", body: JPEG }))).receipt.id;
+
+    // Member: neither edit nor delete Alice's receipt, but both on their own upload.
+    const alices = await seed();
+    expect(
+      await repo((r) => r.update(alices, asRole("member"), { merchant: "=HYPERLINK()" })),
+    ).toBe(false);
+    expect(await repo((r) => r.remove(alices, asRole("member")))).toBeNull();
+    expect((await repo((r) => r.get(alices, a)))?.merchant).not.toBe("=HYPERLINK()");
+    const own = (
+      await run(ingestUpload({ scope: asRole("member"), fileName: "m.jpg", body: JPEG }))
+    ).receipt.id;
+    expect(await repo((r) => r.update(own, asRole("member"), { merchant: "Mine" }))).toBe(true);
+    expect(await repo((r) => r.remove(own, asRole("member")))).not.toBeNull();
+
+    // No role at all fails closed.
+    expect(await repo((r) => r.update(alices, { ...asRole("x"), role: undefined }, {}))).toBe(
+      false,
+    );
+
+    // Admin and owner: anyone's.
+    for (const role of ["admin", "owner"]) {
+      const id = await seed();
+      expect(await repo((r) => r.update(id, asRole(role), { merchant: `By ${role}` }))).toBe(true);
+      expect(await repo((r) => r.remove(id, asRole(role)))).not.toBeNull();
+    }
+    await run(deleteReceipt({ receiptId: alices, scope: a }));
+  });
+
+  it("L3: a non-UUID receipt id is simply not found", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    expect(await repo((r) => r.get("not-a-uuid", a))).toBeNull();
+    expect(await repo((r) => r.update("not-a-uuid", a, { merchant: "x" }))).toBe(false);
+    expect(await repo((r) => r.remove("not-a-uuid", a))).toBeNull();
+    expect(await repo((r) => r.claimRetry("not-a-uuid", a))).toEqual({ kind: "not-found" });
   });
 
   it("filters server-side by search, category, needs-review and date", async () => {

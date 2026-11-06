@@ -1,5 +1,6 @@
 import "server-only";
 import type { AppError, AppServices } from "@receipt-ocr/core";
+import { getIP } from "better-auth/api";
 import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
 import { authEnv } from "./env";
@@ -23,11 +24,16 @@ const PUBLIC = new Set<AppError["_tag"]>(["InvalidInput", "NotFound", "Conflict"
 export const jsonError = (status: number, error: string, headers?: HeadersInit) =>
   NextResponse.json({ error }, { status, headers });
 
-/** The wrapped provider/driver error, which says why (bad key, timeout, SQL). */
-function causeDetail(error: { cause?: unknown }): string | undefined {
+/**
+ * The wrapped provider/driver error, which says why (bad key, timeout, SQL).
+ * Drizzle appends the bound `params:` (user text such as merchant names) to a
+ * failed query's message; those stay out of logs.
+ */
+export function causeDetail(error: { cause?: unknown }): string | undefined {
   const inner = error.cause;
   if (!inner) return undefined;
-  return (inner instanceof Error ? `${inner.name}: ${inner.message}` : String(inner)).slice(0, 500);
+  const detail = inner instanceof Error ? `${inner.name}: ${inner.message}` : String(inner);
+  return detail.replace(/\s*params:[\s\S]*$/, " params: [redacted]").slice(0, 500);
 }
 
 /** Records a failure on the wide event and returns its HTTP response. */
@@ -105,24 +111,42 @@ function logFailure(cause: Cause.Cause<AppError>) {
 const appOrigin = new URL(authEnv.betterAuthUrl).origin;
 
 /**
- * Rejects cross-site mutations. Browsers always send Origin on cross-origin
- * POST/PATCH/DELETE, so a mismatch is a forged request; a missing Origin is a
- * non-browser client, which still needs the session cookie.
+ * Rejects cross-site mutations. Browsers send Origin on every POST, PATCH and
+ * DELETE, so these routes require it to be the app's own; a request without
+ * one is refused rather than assumed to be same-site.
  */
 export function crossOriginResponse(request: Request): Response | null {
-  const origin = request.headers.get("origin");
-  if (!origin || origin === appOrigin) return null;
+  if (request.headers.get("origin") === appOrigin) return null;
   return jsonError(403, "Cross-origin request rejected");
 }
 
-/** The client IP from a trusted proxy header, or null when none is configured. */
+/**
+ * The client IP by Better Auth's own rule, so app limiters and auth limiters
+ * agree: a configured header with one value, or the right-most hop not in
+ * TRUSTED_PROXIES. Never the first X-Forwarded-For entry, which the client
+ * controls. Null when no trustworthy IP is available.
+ */
 export function clientIp(request: Request): string | null {
-  for (const header of authEnv.trustedIpHeaders) {
-    const value = request.headers.get(header)?.split(",")[0]?.trim();
-    if (value) return value;
+  const ip = getIP(request, { advanced: { ipAddress: authEnv.ipAddress } });
+  if (ip === null && !warnedNoClientIp && process.env.NODE_ENV === "production") {
+    const headers = authEnv.ipAddress.ipAddressHeaders ?? ["x-forwarded-for"];
+    const hops = headers.map((h) => request.headers.get(h)?.split(",").length ?? 0);
+    if (hops.some((n) => n > 0)) {
+      // Every such client shares one rate-limit bucket, so a few bad sign-ins lock everyone out.
+      warnedNoClientIp = true;
+      logger.error({
+        event: "http.client_ip_unresolved",
+        message:
+          "No client IP from the trusted header. If your proxy appends to it, list the proxy in TRUSTED_PROXIES.",
+        headers: headers.join(","),
+        hops: hops.join(","),
+      });
+    }
   }
-  return null;
+  return ip;
 }
+
+let warnedNoClientIp = false;
 
 /** Room for multipart boundaries and the other form fields. */
 const MULTIPART_OVERHEAD = 64 * 1024;

@@ -6,7 +6,10 @@ const handler = toNextJsHandler(auth);
 
 function notConfigured() {
   return NextResponse.json(
-    { error: "Auth is not configured. Set DATABASE_URL and BETTER_AUTH_SECRET." },
+    {
+      error:
+        "Auth is not configured. Set DATABASE_URL and BETTER_AUTH_SECRET or BETTER_AUTH_SECRETS.",
+    },
     { status: 503 },
   );
 }
