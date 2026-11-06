@@ -127,8 +127,26 @@ export function crossOriginResponse(request: Request): Response | null {
  * controls. Null when no trustworthy IP is available.
  */
 export function clientIp(request: Request): string | null {
-  return getIP(request, { advanced: { ipAddress: authEnv.ipAddress } });
+  const ip = getIP(request, { advanced: { ipAddress: authEnv.ipAddress } });
+  if (ip === null && !warnedNoClientIp && process.env.NODE_ENV === "production") {
+    const headers = authEnv.ipAddress.ipAddressHeaders ?? ["x-forwarded-for"];
+    const hops = headers.map((h) => request.headers.get(h)?.split(",").length ?? 0);
+    if (hops.some((n) => n > 0)) {
+      // Every such client shares one rate-limit bucket, so a few bad sign-ins lock everyone out.
+      warnedNoClientIp = true;
+      logger.error({
+        event: "http.client_ip_unresolved",
+        message:
+          "No client IP from the trusted header. If your proxy appends to it, list the proxy in TRUSTED_PROXIES.",
+        headers: headers.join(","),
+        hops: hops.join(","),
+      });
+    }
+  }
+  return ip;
 }
+
+let warnedNoClientIp = false;
 
 /** Room for multipart boundaries and the other form fields. */
 const MULTIPART_OVERHEAD = 64 * 1024;
