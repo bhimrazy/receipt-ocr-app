@@ -4,7 +4,7 @@ import { Config, Context, Effect, Layer, Option } from "effect";
 import { z } from "zod";
 import { insertAudit, transact, type AuditActor } from "./audit";
 import { InvalidInput, type Conflict, type DbError, type NotFound } from "./errors";
-import { DEFAULT_PLANS, type PlanTable } from "./plans";
+import { DEFAULT_BATCH_MAX, DEFAULT_PLANS, type PlanTable } from "./plans";
 import { Db } from "./services";
 
 /**
@@ -20,6 +20,8 @@ const planPolicySchema = z
     workspaces: count(100),
     receiptsPerDay: count(100_000),
     receiptsPerMinute: count(1_000),
+    // Rows saved before this field existed get the default.
+    batchMax: count(50).default(DEFAULT_BATCH_MAX),
   })
   .refine((p) => p.receiptsPerMinute <= p.receiptsPerDay, {
     message: "The per-minute limit can't be higher than the daily limit.",

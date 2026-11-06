@@ -25,6 +25,11 @@ const FIELDS: { key: keyof PlanPolicy; label: string; hint: string }[] = [
     hint: "Burst limit per user, over a rolling minute.",
   },
   {
+    key: "batchMax",
+    label: "Receipts in one batch",
+    hint: "Photos and files a user can add before uploading, from 1 to 50. The limits above still apply to each upload.",
+  },
+  {
     key: "workspaces",
     label: "Workspaces they can own",
     hint: "Workspaces they join as a member don't count.",

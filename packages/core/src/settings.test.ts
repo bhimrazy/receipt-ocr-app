@@ -4,7 +4,7 @@ import { DEFAULT_PLANS } from "./plans";
 import { Db } from "./services";
 import { ocrRoutingSchema, planTableSchema, Settings } from "./settings";
 
-const policy = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10 };
+const policy = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10, batchMax: 10 };
 
 describe("planTableSchema", () => {
   it("accepts the defaults", () => {
@@ -28,6 +28,28 @@ describe("planTableSchema", () => {
       planTableSchema.safeParse({ free: { ...policy, receiptsPerDay: 1.5 }, pro: policy }).success,
     ).toBe(false);
     expect(planTableSchema.safeParse({ free: policy }).success).toBe(false);
+  });
+});
+
+describe("planTableSchema batchMax", () => {
+  it("defaults a row saved before batchMax existed to 10", () => {
+    const old = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10 };
+    const result = planTableSchema.parse({ free: old, pro: old });
+    expect(result.free.batchMax).toBe(10);
+    expect(result.pro.batchMax).toBe(10);
+  });
+
+  it("accepts 1 to 50 and rejects values outside that range", () => {
+    for (const batchMax of [1, 50]) {
+      expect(
+        planTableSchema.safeParse({ free: { ...policy, batchMax }, pro: policy }).success,
+      ).toBe(true);
+    }
+    for (const batchMax of [0, 51, 2.5]) {
+      expect(
+        planTableSchema.safeParse({ free: { ...policy, batchMax }, pro: policy }).success,
+      ).toBe(false);
+    }
   });
 });
 

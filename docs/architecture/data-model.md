@@ -173,6 +173,9 @@ erDiagram
   }
 ```
 
+The `plans` value holds, per plan, `workspaces`, `receiptsPerDay`, `receiptsPerMinute` and `batchMax` (images in one
+upload batch). A row saved before `batchMax` existed reads as 10.
+
 `admin_audit_log` stores the actor's email and the target's label as text, so an entry still reads after either is
 deleted. `target_id` is not a foreign key for the same reason.
 

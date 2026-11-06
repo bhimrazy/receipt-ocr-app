@@ -12,6 +12,8 @@ export interface PlanPolicy {
   receiptsPerDay: number;
   /** Burst ceiling per rolling minute. */
   receiptsPerMinute: number;
+  /** Images in one upload batch (camera tray plus picked files). A client-side cap; the limits above still apply per upload. */
+  batchMax: number;
 }
 
 /**
@@ -27,9 +29,11 @@ export type PlanTable = Record<PlanId, PlanPolicy>;
 
 export const DEFAULT_PLAN: PlanId = "free";
 
+export const DEFAULT_BATCH_MAX = 10;
+
 export const DEFAULT_PLANS: PlanTable = {
-  free: { workspaces: 1, receiptsPerDay: 20, receiptsPerMinute: 10 },
-  pro: { workspaces: 5, receiptsPerDay: 1000, receiptsPerMinute: 30 },
+  free: { workspaces: 1, receiptsPerDay: 20, receiptsPerMinute: 10, batchMax: DEFAULT_BATCH_MAX },
+  pro: { workspaces: 5, receiptsPerDay: 1000, receiptsPerMinute: 30, batchMax: DEFAULT_BATCH_MAX },
 };
 
 export function isPlanId(value: unknown): value is PlanId {
