@@ -42,12 +42,12 @@ const features = [
   {
     icon: Download,
     title: "Export anywhere",
-    desc: "Download any receipt as JSON or CSV, or your whole filtered history as one CSV for your spreadsheet.",
+    desc: "Export any receipt as CSV or copy it as JSON, or download your whole filtered history as one CSV for your spreadsheet.",
   },
   {
     icon: Search,
     title: "Searchable history",
-    desc: "Every receipt is stored, statused, and searchable — built for repeat finance workflows, not one-offs.",
+    desc: "Every receipt is kept with its status, so you can search it and filter by what still needs checking.",
   },
   {
     icon: Users,
@@ -59,8 +59,8 @@ const features = [
 const stats: Array<[string, string]> = [
   ["Line items", "Read too, not just the total"],
   ["Confidence", "Per receipt and per line"],
-  ["JSON + CSV", "Export formats, one click away"],
-  ["$0", "To start — no card required"],
+  ["CSV + JSON", "Export as CSV, copy as JSON"],
+  ["$0", "To start, no card required"],
 ];
 
 const steps = [
@@ -74,7 +74,7 @@ const steps = [
   },
   {
     title: "Review, search, export",
-    desc: "Everything lands in your searchable history, ready to review and export to JSON or CSV whenever you need it.",
+    desc: "Everything lands in your searchable history, ready to review and export to CSV whenever you need it.",
   },
 ];
 
@@ -87,7 +87,7 @@ const useCases = [
   {
     icon: Calculator,
     title: "Bookkeepers",
-    desc: "Line items, tax, and totals in one CSV, with low-confidence receipts flagged for review.",
+    desc: "Tax, totals and confidence for every receipt in one CSV, with a Needs review filter for the ones to check.",
   },
   {
     icon: Code2,
@@ -120,7 +120,7 @@ const faqs = [
   },
   {
     q: "Can I export what gets extracted?",
-    a: "Yes. Any receipt downloads as JSON or CSV, and History exports every receipt that matches your filters as one CSV.",
+    a: "Yes. Any receipt exports as CSV with its line items or copies as JSON, and History exports every receipt that matches your filters as one CSV.",
   },
 ];
 
@@ -129,13 +129,13 @@ const freePlanFeatures = [
   "Merchant, items, tax & totals extracted",
   "Confidence scores and review flags",
   "Searchable receipt history",
-  "JSON & CSV export",
+  "CSV export and JSON copy",
 ];
 
 const customPlanFeatures = [
   "Everything in Free",
   "Higher daily limits",
-  "Shared workspaces for your team",
+  "More workspaces",
   "Direct line to the team",
   "Shape the roadmap with your feedback",
 ];
@@ -226,8 +226,8 @@ export function LandingPage() {
             <span className="text-gradient block">structured data</span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-8 text-foreground/80 md:text-lg">
-            Snap or upload any receipt and get clean, structured data — merchant, line items, tax,
-            and totals — ready to search, review, and export.
+            Snap or upload any receipt and get clean, structured data: merchant, line items, tax,
+            and totals, ready to search, review, and export.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Button asChild size="lg">
@@ -276,8 +276,8 @@ export function LandingPage() {
               Everything from snap to export
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              A complete pipeline — capture, extract, review, and export — with your data staying
-              yours the whole way through.
+              Capture, extract, review, and export in one place, with your data staying yours the
+              whole way through.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -419,7 +419,7 @@ export function LandingPage() {
               Questions, answered
             </h2>
             <p className="mt-4 text-pretty text-muted-foreground">
-              Still curious? Reach out any time — we read every message.
+              Still curious? Reach out any time. We read every message.
             </p>
           </div>
           <Accordion>
