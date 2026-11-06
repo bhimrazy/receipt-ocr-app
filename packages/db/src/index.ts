@@ -7,6 +7,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  smallint,
   text,
   timestamp,
   uuid,
@@ -121,6 +122,53 @@ export const receiptItems = pgTable(
 );
 
 /**
+ * Append-only ledger: one row per model call, success or failure. Quota, the
+ * global OCR cap and cost all count from here, so deleting a receipt changes
+ * none of them.
+ */
+export const ocrCalls = pgTable(
+  "ocr_calls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // No FK: deleting a receipt must not erase what its calls cost or used of the quota.
+    receiptId: uuid("receipt_id").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    /** `receipts.attempts` at the time: 1 = the upload, 2+ = retries. */
+    round: smallint("round").notNull(),
+    /** Position in the chain: 0 = primary, >0 = a fallback. */
+    step: smallint("step").notNull(),
+    /** `provider:model`. */
+    model: text("model").notNull(),
+    provider: text("provider").notNull(),
+    /** "ok" or the failure kind (`OcrFailureKind`). */
+    status: text("status").notNull(),
+    latencyMs: integer("latency_ms").notNull(),
+    // Null = the provider didn't report it (timeout, API error), not zero.
+    inputTokens: integer("input_tokens"),
+    cachedInputTokens: integer("cached_input_tokens"),
+    /** Includes reasoning tokens. */
+    outputTokens: integer("output_tokens"),
+    reasoningTokens: integer("reasoning_tokens"),
+    /** Priced when written, never recomputed; null = unknown. Sum as bigint. */
+    costMicroUsd: integer("cost_micro_usd"),
+    /** `from` of the price row used. */
+    priceFrom: text("price_from"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("ocr_calls_org_created_at_idx").on(table.organizationId, table.createdAt),
+    // Per-user quota windows.
+    index("ocr_calls_user_created_at_idx").on(table.userId, table.createdAt),
+    // Global cap and admin windows.
+    index("ocr_calls_created_at_idx").on(table.createdAt),
+    index("ocr_calls_receipt_id_idx").on(table.receiptId),
+  ],
+);
+
+/**
  * Reserved for user-provided BYOK credentials. Nothing reads or writes this
  * table yet, and no encryption for `ciphertext` exists: implement it (see
  * docs/byok-key-management.md) before storing any secret here.
@@ -193,6 +241,7 @@ export const schema = {
   receiptStatus,
   receipts,
   receiptItems,
+  ocrCalls,
   userCredentials,
   adminAuditLog,
   appSettings,
@@ -239,6 +288,8 @@ export type Receipt = typeof receipts.$inferSelect;
 export type NewReceipt = typeof receipts.$inferInsert;
 export type ReceiptItem = typeof receiptItems.$inferSelect;
 export type NewReceiptItem = typeof receiptItems.$inferInsert;
+export type OcrCall = typeof ocrCalls.$inferSelect;
+export type NewOcrCall = typeof ocrCalls.$inferInsert;
 export type AdminAuditEntry = typeof adminAuditLog.$inferSelect;
 export type UserCredential = typeof userCredentials.$inferSelect;
 export type NewUserCredential = typeof userCredentials.$inferInsert;
