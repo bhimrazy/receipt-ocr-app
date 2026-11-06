@@ -3,7 +3,7 @@ import { deleteReceipt, JobQueue, ReceiptRepo, type ReceiptPatch } from "@receip
 import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
 import { crossOriginResponse, jsonError, runRoute } from "@/lib/http";
-import { drainJobs } from "@/lib/jobs";
+import { kickJob } from "@/lib/jobs";
 import { getActiveScope } from "@/lib/session";
 
 type Params = { params: Promise<{ id: string }> };
@@ -12,16 +12,14 @@ const notFound = () => jsonError(404, "Receipt not found");
 
 /** Room for a kicked job's attempt (OCR deadline 50 s) and its writes. */
 export const maxDuration = 120;
-const KICK_BUDGET_MS = 115_000;
 
 /**
  * Status for the polling client. While the receipt is processing, a poll
- * that finds its job due but not running (nothing ran the queue after a
- * backoff, or its worker died) runs it after the response, so a waiting user
- * is never left on a job nobody picks up.
+ * that finds its job due and claimable but not running (its drain ran out of
+ * time, or its function was killed) runs that job after the response. A job
+ * nobody polls for still waits for the next drain.
  */
 export async function GET(_request: Request, { params }: Params) {
-  const startedAt = Date.now();
   const scope = await getActiveScope();
   if (!scope) return jsonError(401, "Unauthorized");
   const { id } = await params;
@@ -38,11 +36,7 @@ export async function GET(_request: Request, { params }: Params) {
     }),
     ({ receipt, dueJob }) => {
       if (dueJob) {
-        after(() =>
-          drainJobs(startedAt + KICK_BUDGET_MS, { user_id: scope.userId, kicked_by: "poll" }, [
-            dueJob,
-          ]),
-        );
+        after(() => kickJob(dueJob, { user_id: scope.userId, kicked_by: "poll" }));
       }
       return receipt
         ? NextResponse.json({

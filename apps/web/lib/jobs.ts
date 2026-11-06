@@ -99,3 +99,12 @@ export const runJobNow = (jobId: string, context: WideEvent) =>
     waitForRetries: false,
     onRun: (run) => logRun(run, context),
   }).pipe(Effect.map((stats) => stats.runs.find((run) => run.jobId === jobId)));
+
+/**
+ * For `after()` of a poll that found the receipt's job due and nobody running
+ * it: runs that one job, or returns at once if it can't be claimed. Never
+ * other jobs, so poll traffic doesn't become queue concurrency.
+ */
+export async function kickJob(jobId: string, context: WideEvent): Promise<void> {
+  await runtime.runPromise(runJobNow(jobId, context));
+}
