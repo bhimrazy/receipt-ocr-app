@@ -129,6 +129,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   in the 24/36/48 ladder after #38, profiles both, replaces the quota count with something cheaper, and runs a
   30-minute soak. The app also holds up to 10 connections against a pool max of 5, and pages emit no wide events.
 
+- Perf/SEO follow-ups from [the audit](reviews/2026-11-06-perf-seo.md) on files other tracks own: root layout
+  preloads DM Sans with the `opsz` axis (62 KB) and JetBrains Mono (40 KB) on every page, and its `openGraph.url: "/"`
+  and 179-char description reach pages without their own metadata (PWA track); receipt page `<img>` has no
+  width/height and its `dl` wraps `dt`/`dd` in extra divs, and the history search box is the LCP element after
+  hydration (mobile shell track).
+
 ## How to resume on another machine
 
 1. `git clone`, `bun install --frozen-lockfile`, then follow the [README](../README.md) local setup.
