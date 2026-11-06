@@ -4,11 +4,11 @@
 
 Please report security problems privately. Do not open a public issue, pull request or discussion.
 
-- **Preferred:** use GitHub's private vulnerability reporting. Open the repository's **Security** tab and choose
+- Use GitHub's private vulnerability reporting. Open the repository's **Security** tab and choose
   **Report a vulnerability**, or go to
   <https://github.com/bhimrazy/receipt-ocr-app/security/advisories/new>.
-- **Email:** write to the support inbox of the deployment you tested (the address configured as `SUPPORT_EMAIL`):
-  `SECURITY_CONTACT_EMAIL` (placeholder, filled in by the maintainer). Put "Security" in the subject.
+
+The maintainer can add a contact email address here later.
 
 Include what you found, how to reproduce it, and what an attacker could do with it. A proof of concept helps, but
 keep it minimal.
