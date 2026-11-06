@@ -46,6 +46,8 @@ export type ExtractReceiptResult = {
  */
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_RETRIES = 2;
+/** Caps one call's output cost (reasoning included); a long receipt needs well under this. */
+const MAX_OUTPUT_TOKENS = 16_384;
 
 const PROMPT = [
   "Extract this receipt into structured data.",
@@ -133,6 +135,7 @@ export async function extractWith(
     const result = await generateText({
       model,
       output: Output.object({ schema: receiptExtractionSchema }),
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
       timeout: { totalMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS },
       maxRetries: input.maxRetries ?? DEFAULT_MAX_RETRIES,
       abortSignal: input.abortSignal,

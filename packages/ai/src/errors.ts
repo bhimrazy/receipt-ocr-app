@@ -30,16 +30,28 @@ function fromStatus(status: number): OcrFailureKind {
   return "bad-image";
 }
 
-/** Every failed extraction call: why, and the tokens it used when the provider reported them. */
+/**
+ * Every failed extraction call: why, and the tokens it used when the provider
+ * reported them. The message is the kind (plus an HTTP status) only: the SDK's
+ * own messages can embed the model's output, i.e. receipt contents. `cause`
+ * keeps the original for debugging; never log its message.
+ */
 export class OcrCallError extends Error {
   override name = "OcrCallError";
   constructor(
     readonly kind: OcrFailureKind,
     readonly usage: ExtractionUsage | null,
-    override readonly cause: unknown,
+    // Not a parameter property: Error's own `cause` is non-enumerable, so serializers skip it.
+    cause: unknown,
   ) {
-    super(cause instanceof Error ? cause.message : `OCR call failed: ${kind}`, { cause });
+    const status = statusOf(cause);
+    super(`OCR call failed: ${kind}${status === undefined ? "" : ` (HTTP ${status})`}`, { cause });
   }
+}
+
+function statusOf(error: unknown): number | undefined {
+  if (RetryError.isInstance(error)) return statusOf(error.lastError);
+  return APICallError.isInstance(error) ? error.statusCode : undefined;
 }
 
 export function classifyOcrError(error: unknown): OcrFailureKind {

@@ -76,6 +76,20 @@ describe("extractWith (mock model)", () => {
     expect(error).toMatchObject({ kind: "invalid-output", usage: expectedUsage });
   });
 
+  it("never puts the model's output (receipt contents) in the error message", async () => {
+    const leaked = { ...FIXTURE_RECEIPTS[0]!, merchant: "Dr Smith Clinic", total: "12" };
+    const error = await extractWith(reply(JSON.stringify(leaked)), {
+      file: file("x"),
+      maxRetries: 0,
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OcrCallError);
+    const line = JSON.stringify({ message: (error as Error).message, error });
+    expect((error as Error).message).toBe("OCR call failed: invalid-output");
+    expect(line).not.toContain("Dr Smith");
+    // The original stays reachable for debugging in-process.
+    expect(String((error as { cause: { cause?: unknown } }).cause.cause)).toContain("Dr Smith");
+  });
+
   it("keeps the usage of a truncated reply with no output", async () => {
     const error = await extractWith(reply("", "length"), { file: file("x"), maxRetries: 0 }).catch(
       (e: unknown) => e,
