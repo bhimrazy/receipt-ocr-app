@@ -1,5 +1,6 @@
 "use client";
 
+import { withStepUp } from "@/components/step-up/step-up";
 import { clearSharedFiles } from "@/lib/share-target";
 import type { PlanTable } from "@receipt-ocr/core/plans";
 import { Button } from "@receipt-ocr/ui/components/button";
@@ -12,7 +13,7 @@ import {
   SelectValue,
 } from "@receipt-ocr/ui/components/select";
 import { toast } from "@receipt-ocr/ui/components/toast";
-import { Ban, LogIn, MailCheck, ShieldCheck, Trash2 } from "lucide-react";
+import { Ban, KeyRound, LogIn, MailCheck, ShieldCheck, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ReasonDialog } from "@/components/admin/reason-dialog";
 import { formatDateTime } from "@/lib/format";
@@ -21,6 +22,7 @@ import {
   deleteUserAction,
   impersonateUserAction,
   resendVerificationAction,
+  resetTwoFactorAction,
   setPlanAction,
   setRoleAction,
   unbanUserAction,
@@ -35,6 +37,8 @@ export type ActionUser = {
   banned: boolean;
   banExpires: string | null;
   emailVerified: boolean;
+  twoFactorEnabled: boolean;
+  passkeys: number;
   /** Workspaces only this user belongs to: deleted with them. */
   soloWorkspaces: number;
 };
@@ -60,8 +64,8 @@ const n = (value: number) => value.toLocaleString("en-US");
 const plural = (count: number, one: string) => `${n(count)} ${one}${count === 1 ? "" : "s"}`;
 
 /** Toast on success; the error string keeps a dialog open and shows inline. */
-async function settle(promise: Promise<ActionResult>, success: string): Promise<string | void> {
-  const result = await promise;
+async function settle(call: () => Promise<ActionResult>, success: string): Promise<string | void> {
+  const result = await withStepUp(call);
   if (!result.ok) return result.error;
   toast.add({ title: success, type: "success" });
 }
@@ -120,7 +124,7 @@ export function AccountControls({
                 description: `Their limits become ${n(limits.receiptsPerDay)} receipts a day, ${n(limits.receiptsPerMinute)} a minute and ${n(limits.workspaces)} owned ${limits.workspaces === 1 ? "workspace" : "workspaces"}. This applies to their next upload. Nobody is charged.`,
                 confirmLabel: "Change plan",
                 onConfirm: () =>
-                  settle(setPlanAction({ userId: user.id, plan: next }), "Plan changed."),
+                  settle(() => setPlanAction({ userId: user.id, plan: next }), "Plan changed."),
               });
             }}
             value={user.plan}
@@ -161,7 +165,7 @@ export function AccountControls({
                 destructive: !toAdmin,
                 onConfirm: () =>
                   settle(
-                    setRoleAction({ userId: user.id, role: next as "user" | "admin" }),
+                    () => setRoleAction({ userId: user.id, role: next as "user" | "admin" }),
                     "Role changed.",
                   ),
               });
@@ -200,7 +204,7 @@ export function AccountControls({
                   confirmLabel: "Send email",
                   onConfirm: () =>
                     settle(
-                      resendVerificationAction({ userId: user.id }),
+                      () => resendVerificationAction({ userId: user.id }),
                       "Verification email sent.",
                     ),
                 })
@@ -225,6 +229,7 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
   const [banOpen, setBanOpen] = useState(false);
   const [banDays, setBanDays] = useState("7");
   const [impersonateOpen, setImpersonateOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const ask = (next: Confirm) => {
     setConfirm(next);
     setOpen(true);
@@ -257,6 +262,27 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
           </Button>
         </Row>
 
+        <Row
+          hint={
+            isSelf
+              ? "Manage yours in Settings → Security in the app."
+              : user.twoFactorEnabled || user.passkeys > 0
+                ? `${[user.twoFactorEnabled ? "Authenticator app" : null, user.passkeys > 0 ? `${user.passkeys} passkey${user.passkeys === 1 ? "" : "s"}` : null].filter(Boolean).join(" and ")}. Reset only after checking who is asking; it also signs them out everywhere.`
+                : "Off for this user."
+          }
+          label="Two-step sign-in"
+        >
+          <Button
+            disabled={isSelf || (!user.twoFactorEnabled && user.passkeys === 0)}
+            onClick={() => setResetOpen(true)}
+            size="sm"
+            variant="outline"
+          >
+            <KeyRound aria-hidden="true" />
+            Reset 2FA
+          </Button>
+        </Row>
+
         {user.banned ? (
           <Row
             hint={
@@ -272,7 +298,8 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
                   title: `Lift the ban on ${who}?`,
                   description: "They can sign in again straight away.",
                   confirmLabel: "Lift ban",
-                  onConfirm: () => settle(unbanUserAction({ userId: user.id }), "Ban lifted."),
+                  onConfirm: () =>
+                    settle(() => unbanUserAction({ userId: user.id }), "Ban lifted."),
                 })
               }
               size="sm"
@@ -322,7 +349,10 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
                 confirmText: who,
                 destructive: true,
                 onConfirm: (typed) =>
-                  settle(deleteUserAction({ userId: user.id, confirm: typed }), "User deleted."),
+                  settle(
+                    () => deleteUserAction({ userId: user.id, confirm: typed }),
+                    "User deleted.",
+                  ),
               })
             }
             size="sm"
@@ -344,11 +374,12 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
         onOpenChange={setBanOpen}
         onSubmit={(reason) =>
           settle(
-            banUserAction({
-              userId: user.id,
-              reason,
-              days: banDays ? (Number(banDays) as 1 | 7 | 30) : null,
-            }),
+            () =>
+              banUserAction({
+                userId: user.id,
+                reason,
+                days: banDays ? (Number(banDays) as 1 | 7 | 30) : null,
+              }),
             `${who} is banned.`,
           )
         }
@@ -380,13 +411,31 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
       </ReasonDialog>
 
       <ReasonDialog
+        confirmLabel="Reset 2FA"
+        description="Removes their authenticator app, passkeys and trusted devices, and signs them out everywhere. They're emailed, and can turn it on again after signing in with their password. You never see their codes."
+        destructive
+        minLength={10}
+        onOpenChange={setResetOpen}
+        onSubmit={(reason) =>
+          settle(
+            () => resetTwoFactorAction({ userId: user.id, reason }),
+            `Two-step sign-in reset for ${who}.`,
+          )
+        }
+        open={resetOpen}
+        reasonHint="Kept in the audit log. For example: the support request, and how you checked it was them."
+        reasonLabel="Why are you resetting it?"
+        title={`Reset two-step sign-in for ${who}?`}
+      />
+
+      <ReasonDialog
         confirmLabel="Sign in as user"
         description="You'll leave the admin panel and use the app as this user until you select Stop impersonating in the banner."
         minLength={10}
         onOpenChange={setImpersonateOpen}
         onSubmit={(reason) =>
           settle(
-            clearSharedFiles().then(() => impersonateUserAction({ userId: user.id, reason })),
+            () => clearSharedFiles().then(() => impersonateUserAction({ userId: user.id, reason })),
             "Signed in.",
           )
         }

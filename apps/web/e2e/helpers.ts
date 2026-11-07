@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import postgres from "postgres";
+import { totpFromBase32 } from "../lib/totp";
 
 export const PASSWORD = "e2e-password-123";
 
@@ -74,4 +75,60 @@ export async function seedReceipts(email: string, merchants: string[]) {
   } finally {
     await sql.end();
   }
+}
+
+/** The code an authenticator app would show now for a base32 key (RFC 6238, as the app uses). */
+export const totpCode = (key: string) => totpFromBase32(key);
+
+/**
+ * Turns on two-step sign-in from Settings → Security the way a person does: password, read the
+ * manual key off the page, enter a code, tick "saved" for the backup codes. Returns the key and
+ * the backup codes.
+ */
+/**
+ * Adding a factor asks for a fresh check, which for an account with no factor is an emailed code.
+ * The e2e build has no mailer, so the check is recorded on the user's sessions directly, as if it
+ * had passed. Integration tests cover the emailed code itself.
+ */
+export async function markSteppedUp(email: string) {
+  const sql = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
+  try {
+    await sql`update session set step_up_at = now(), step_up_method = 'email'
+              where user_id = (select id from "user" where email = ${email})`;
+  } finally {
+    await sql.end();
+  }
+}
+
+export async function enrolAuthenticator(page: Page, email: string) {
+  await markSteppedUp(email);
+  await page.goto("/app/settings/security");
+  await page.getByRole("button", { name: "Set up authenticator app" }).click();
+  await page.getByLabel(/Confirm your password/).fill(PASSWORD);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("img", { name: "QR code for your authenticator app" })).toBeVisible();
+  const key = (await page.getByTestId("totp-key").textContent())!.replace(/\s/g, "");
+  await page.getByLabel("Enter the 6-digit code it shows").fill(totpFromBase32(key));
+  await page.getByRole("button", { name: "Turn on" }).click();
+  const list = page.getByRole("list", { name: "Backup codes" });
+  await expect(list).toBeVisible();
+  const backupCodes = (await list.getByRole("listitem").allTextContents()).map((c) => c.trim());
+  await page.getByLabel("I've saved these codes somewhere safe").check();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByText("Two-step sign-in is on.")).toBeVisible();
+  return { key, backupCodes };
+}
+
+/**
+ * Admins must have a factor and prove it once per session (enforced in production mode, which
+ * e2e runs in): enrol, then pass the "Confirm it's you to open Admin" page.
+ */
+export async function verifiedAdmin(page: Page, email: string) {
+  const { key } = await enrolAuthenticator(page, email);
+  await page.goto("/admin");
+  await expect(page).toHaveURL(/\/app\/settings\/security\/verify/);
+  await page.getByLabel("Code from your app").fill(totpFromBase32(key));
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  return { key };
 }

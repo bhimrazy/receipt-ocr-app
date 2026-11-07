@@ -430,6 +430,10 @@ These were set when the project was created. Listed so a new environment doesn't
 | `LOG_SAMPLE_RATE`      | `0.1`: keep 10% of routine logs (Production)                   | Config |
 | `OCR_DAILY_CAP`        | `200` Production, `50` Preview                                 | Config |
 
+Two-step sign-in and "confirm it's you" need nothing new: they use `BETTER_AUTH_SECRET(S)` and the mailer above.
+`ADMIN_MFA_ENFORCE` exists only as an emergency off switch for the admin requirement (see
+[deployment.md](deployment.md#admin-locked-out-of-two-step-sign-in)); leave it unset. Passkeys take their relying-party id from `BETTER_AUTH_URL`'s host (`receipt-ocr.bhimraj.com.np`), so nothing new there either.
+
 `DIRECT_URL` (for database migrations) never goes to Vercel. It lives in the `staging-db` and `production-db`
 GitHub environments, used only by the **Database Migration** workflow.
 

@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { escapeHtml, invitationEmail, passwordResetEmail } from "./templates";
+import {
+  backupCodesRegeneratedEmail,
+  escapeHtml,
+  invitationEmail,
+  passkeyAddedEmail,
+  passkeyRemovedEmail,
+  passwordResetEmail,
+  stepUpCodeEmail,
+  twoFactorDisabledEmail,
+  twoFactorEnabledEmail,
+} from "./templates";
 
 const hostileName =
   'Acme</strong></p><h1 style="color:red">Your account is locked</h1><p><a href="https://evil.example/login">Verify</a></p>';
@@ -46,5 +56,35 @@ describe("escapeHtml", () => {
     expect(passwordResetEmail('https://app.example/r?a=1&b="2"').html).toContain(
       'href="https://app.example/r?a=1&amp;b=&quot;2&quot;"',
     );
+  });
+});
+
+describe("security emails", () => {
+  it("puts the step-up code in the body only, escaped", () => {
+    const mail = stepUpCodeEmail("123456");
+    expect(mail.subject).not.toContain("123456");
+    expect(mail.text).toContain("123456");
+    expect(mail.html).toContain("123456");
+    expect(mail.text).toContain("10 minutes");
+    expect(stepUpCodeEmail("<b>").html).toContain("&lt;b&gt;");
+  });
+
+  it("tells the user how to react to a change they didn't make", () => {
+    for (const mail of [
+      twoFactorEnabledEmail(),
+      twoFactorDisabledEmail({ byAdmin: false }),
+      backupCodesRegeneratedEmail(),
+      passkeyAddedEmail(),
+      passkeyRemovedEmail(),
+    ]) {
+      expect(mail.text).toContain("If this wasn't you");
+      expect(mail.html.match(/<a /g)).toBeNull();
+    }
+  });
+
+  it("says when an administrator made the reset", () => {
+    expect(twoFactorDisabledEmail({ byAdmin: true }).subject).toContain("was reset");
+    expect(twoFactorDisabledEmail({ byAdmin: true }).text).toContain("signed out everywhere");
+    expect(twoFactorDisabledEmail({ byAdmin: false }).subject).toContain("is off");
   });
 });

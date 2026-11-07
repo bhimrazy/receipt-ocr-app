@@ -14,6 +14,7 @@ import {
   recordAudit,
   recordTestEmail,
   removeMember,
+  resetSecondFactor,
   setMemberRole,
   setUserPlan,
   Settings,
@@ -30,12 +31,14 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { twoFactorDisabledEmail } from "@receipt-ocr/email";
+import { auth, deliverEmail } from "@/lib/auth";
 import { clientIp } from "@/lib/http";
 import { errorFields, logger } from "@/lib/log";
 import { revalidatePlanCopy } from "@/lib/plan-limits";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
+import { requireStepUp, STEP_UP_REQUIRED, StepUpRequiredError } from "@/lib/step-up-check";
 import { sendTestEmail, type TestEmailOutcome } from "@/lib/test-email";
 
 /**
@@ -45,7 +48,8 @@ import { sendTestEmail, type TestEmailOutcome } from "@/lib/test-email";
  * the row first. Errors returned to the browser are user-safe messages only.
  */
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult =
+  { ok: true } | { ok: false; error: string; code?: typeof STEP_UP_REQUIRED; action?: string };
 
 /** A message that is safe to show the admin as-is. */
 class ActionError extends Error {}
@@ -57,6 +61,7 @@ async function context() {
   const session = await requireAdmin();
   const requestHeaders = await headers();
   return {
+    session,
     headers: requestHeaders,
     audit: {
       actor: { id: session.user.id, email: session.user.email },
@@ -117,12 +122,17 @@ async function recordFailure(ctx: Context, entry: Entry, error: unknown) {
   );
 }
 
+/** Every admin mutation goes through here: admin role, then a fresh step-up, then the change. */
 async function run(name: string, body: (ctx: Context) => Promise<void>): Promise<ActionResult> {
   const ctx = await context(); // outside try: requireAdmin's notFound() must propagate
   try {
+    await requireStepUp(ctx.session, `admin.${name}`);
     await body(ctx);
     return { ok: true };
   } catch (error) {
+    if (error instanceof StepUpRequiredError) {
+      return { ok: false, error: error.message, code: STEP_UP_REQUIRED, action: error.action };
+    }
     if (error instanceof ActionError) return { ok: false, error: error.message };
     if (error instanceof APIError) return { ok: false, error: error.message || GENERIC };
     if (error instanceof z.ZodError) {
@@ -384,6 +394,33 @@ export async function impersonateUserAction(input: { userId: string; reason: str
   });
   if (result.ok) redirect("/app");
   return result;
+}
+
+/**
+ * Clears a user's authenticator, trusted devices and sessions (one audited
+ * transaction), then emails them. For someone who lost their authenticator and
+ * their backup codes, after support has checked who they are.
+ */
+export async function resetTwoFactorAction(input: { userId: string; reason: string }) {
+  return run("user.two_factor_reset", async (ctx) => {
+    const parsed = z.object({ userId: id, reason: reason(10, "for the reset") }).parse(input);
+    notSelf(ctx, parsed.userId, "Reset your own two-step sign-in from Settings → Security.");
+    const target = await loadUser(parsed.userId);
+    if (!target.twoFactorEnabled && target.passkeys === 0) {
+      throw new ActionError("This user has no authenticator app or passkey to reset.");
+    }
+    await core(resetSecondFactor(target, { ...ctx.audit, reason: parsed.reason }));
+    await deliverEmail({ to: target.email, ...twoFactorDisabledEmail({ byAdmin: true }) }).catch(
+      (error: unknown) =>
+        logger.error({
+          event: "admin.two_factor_reset_email_failed",
+          unit: "log",
+          user_id: parsed.userId,
+          error: errorFields(error),
+        }),
+    );
+    touchUser(parsed.userId);
+  });
 }
 
 // ---------- Workspaces ----------

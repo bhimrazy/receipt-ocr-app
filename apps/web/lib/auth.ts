@@ -26,6 +26,17 @@ import { admin } from "better-auth/plugins/admin";
 import { captcha } from "better-auth/plugins/captcha";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
+// --- two-factor + step-up (feat/two-factor) ---
+import {
+  authMethodOf,
+  authMethodSessionField,
+  twoFactorAfterHook,
+  passkeyPlugin,
+  twoFactorBeforeHook,
+  twoFactorPlugin,
+  twoFactorUserUpdated,
+} from "./auth-two-factor";
+// --- end two-factor + step-up ---
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
 import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
 import { allowAuthEmail } from "./email-limits";
@@ -72,6 +83,9 @@ async function deliver(input: SendEmailInput) {
     throw new Error(`Email not delivered (${result.reason})`);
   }
 }
+
+// two-factor + step-up (feat/two-factor): step-up codes are sent the same way.
+export { deliver as deliverEmail };
 
 /**
  * Grants the admin role to an ADMIN_EMAILS address only once it is verified;
@@ -178,7 +192,16 @@ export const auth = betterAuth({
     // Off: with the cache on, a revoked or banned session keeps working on
     // /api/auth/* for its maxAge (see GHSA-fvxx). App reads skip it anyway.
     cookieCache: { enabled: false },
+    // --- two-factor + step-up (feat/two-factor) ---
+    additionalFields: authMethodSessionField,
+    // --- end two-factor + step-up ---
   },
+  // --- two-factor + step-up (feat/two-factor) ---
+  hooks: {
+    before: twoFactorBeforeHook,
+    after: twoFactorAfterHook(deliver),
+  },
+  // --- end two-factor + step-up ---
   advanced: {
     ipAddress: authEnv.ipAddress,
   },
@@ -208,10 +231,13 @@ export const auth = betterAuth({
           await promoteIfBootstrapAdmin(user);
         },
       },
+      // --- two-factor + step-up (feat/two-factor) ---
+      update: { after: twoFactorUserUpdated(deliver) },
+      // --- end two-factor + step-up ---
     },
     session: {
       create: {
-        before: async (session) => {
+        before: async (session, ctx) => {
           // Default the active organization to the user's personal workspace
           // (their first membership) so org-scoped APIs work immediately.
           const [membership] = await db
@@ -223,6 +249,8 @@ export const auth = betterAuth({
             data: {
               ...session,
               activeOrganizationId: membership?.organizationId ?? null,
+              // two-factor + step-up (feat/two-factor)
+              authMethod: authMethodOf(session as { authMethod?: string | null }, ctx),
             },
           };
         },
@@ -298,6 +326,9 @@ export const auth = betterAuth({
     admin({
       defaultRole: "user",
     }),
+    // two-factor + step-up (feat/two-factor)
+    twoFactorPlugin(),
+    passkeyPlugin(authEnv.betterAuthUrl),
     // Reads the token from `x-captcha-response` and the client IP from advanced.ipAddress. A
     // missing token is a 400, a rejected one a 403, and a siteverify failure or timeout (10 s) a
     // 500: all fail closed.

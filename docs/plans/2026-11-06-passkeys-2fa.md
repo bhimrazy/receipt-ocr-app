@@ -1,8 +1,91 @@
 # Passkeys and two-factor authentication — plan (2026-11-06)
 
-Status: proposal. Nothing implemented yet. Every behaviour claim below was checked against the installed
-`better-auth@1.7.14` source (`node_modules/.bun/better-auth@1.7.14+…/dist/plugins/two-factor/**`) and the packed
-`@better-auth/passkey@1.7.14` tarball, not recalled from docs.
+Status: **shipped on `feat/two-factor`, as one PR**: TOTP, backup codes, passkeys (`@better-auth/passkey@1.7.18`,
+after the Better Auth 1.7.18 upgrade in #90), step-up, admin enforcement and reset. The owner-approved policy below
+(2026-11-07) is the source of truth and replaces §5 where they differ. Behaviour claims about the plugins were checked
+against the installed source.
+
+## Policy (owner-approved 2026-11-07, source of truth)
+
+**Who must enrol**
+
+- **Platform admins must** have a passkey or TOTP. Without one, `/admin` redirects to Settings → Security with an
+  explanation. Enforced server-side in `requireAdmin()`, so every admin page and action inherits it.
+- **Workspace owners and admins are encouraged**: a dismissible banner in the app when they own or administer a
+  workspace that has other members.
+- **Regular users are optional**, with a gentle nudge (the Security card on Settings).
+
+**Step-up for important actions, for everyone.** A passed check lasts 10 minutes, per session, and every check is
+audit-logged.
+
+- Users **with** 2FA verify with a passkey or a TOTP code (backup codes allowed).
+- Users **without** 2FA get an emailed one-time code: 6 digits, about 10 minutes, rate-limited, hashed at rest.
+- **Admins never get the email fallback.**
+- Actions: delete account, change email, change password; disable 2FA, regenerate backup codes, remove a passkey;
+  bulk delete or export all receipts, delete a workspace, transfer ownership; **all** admin mutations (impersonate,
+  ban, role or plan change, OCR chain and settings edits, kill switches, job re-run and cancel); future API/MCP token
+  creation.
+- One server helper (`requireStepUp(session, action)`) and one client dialog, applied to every existing action above.
+
+This replaces two earlier recommendations: email OTP is now allowed, but **only** as the step-up method for accounts
+with no factor, never as a sign-in factor (§1's objection was to email as a second sign-in factor); and admin
+enforcement is not behind an owner decision any more.
+
+## What shipped (`feat/two-factor`)
+
+| Piece                                                                                                                                                                                                           | Where                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| twoFactor plugin (TOTP + 10 sealed backup codes, opt-in 30-day trusted device, `allowPasswordless` so OAuth-only users can enrol)                                                                               | `lib/auth-two-factor.ts`, plugged into `lib/auth.ts` in delimited blocks                                  |
+| Migration `0002_two_factor_passkey_step_up`: `user.two_factor_enabled`, `session.auth_method/step_up_at/step_up_method`, tables `two_factor`, `passkey`, `step_up_events`, `step_up_codes` (RLS on)             | `apps/web/drizzle/`                                                                                       |
+| Step-up policy (pure) and store (Effect)                                                                                                                                                                        | `packages/core/src/step-up/`                                                                              |
+| `requireStepUp` + Better Auth `hooks.before` gate                                                                                                                                                               | `lib/step-up-check.ts`, `lib/step-up-paths.ts`                                                            |
+| Verify and email-code flow (own RFC 6238 check with replay guard, HMAC'd email codes, 5-failure lockout)                                                                                                        | `lib/step-up.ts`, `lib/step-up-actions.ts`, `lib/totp.ts`                                                 |
+| One dialog + `withStepUp`                                                                                                                                                                                       | `components/step-up/step-up.tsx`                                                                          |
+| Settings → Security (QR via `uqr`, manual key, verify, backup codes once with copy/download, regenerate, turn off)                                                                                              | `app/app/settings/security/`, `components/security/`                                                      |
+| Sign-in code step with backup codes and "trust this device"                                                                                                                                                     | `app/sign-in/two-factor/`, `components/auth/two-factor-form.tsx`                                          |
+| Admin enforcement (`enrol` / `verify` / `ok`, `ADMIN_MFA_ENFORCE`) and the verify page                                                                                                                          | `lib/session.ts`, `app/app/settings/security/verify/`                                                     |
+| Admin → Users 2FA column and badge; Reset 2FA (step-up, reason, audit row, email)                                                                                                                               | `app/admin/users/`, `resetSecondFactor` in core                                                           |
+| Passkeys: rpID/origin from `BETTER_AUTH_URL`, resident key and user verification required, rate limits; Settings add (named)/rename/remove; "Use a passkey" on sign-in plus autofill; passkey as step-up factor | `lib/auth-two-factor.ts`, `components/security/passkeys-card.tsx`, `components/auth/credentials-form.tsx` |
+| Emails: step-up code, 2FA on, 2FA off, reset by admin, new backup codes, passkey added, passkey removed                                                                                                         | `packages/email/src/templates.ts`                                                                         |
+
+Differences from the proposal below, and why:
+
+- **Step-up is a session column, not Better Auth's `freshAge`.** `freshAge` measures session age, so a 7-day session
+  can't be "fresh" again without signing in. `step_up_at` is set by a passed check and read from the row on every
+  request, which binds it to the session.
+- **Our own TOTP check for step-up.** The plugin's session-bound `verify-totp` skips its attempt counter and lockout
+  (they apply only to the sign-in challenge) and has no replay protection. Step-up decrypts the plugin's secret with
+  Better Auth's `symmetricDecrypt` and checks it with a small RFC 6238 helper that returns the matched time step, which
+  is stored and refused a second time. Sign-in itself still uses the plugin (and keeps its ±1-step replay window).
+- **TOTP is offered to OAuth-only users** (owner: "OAuth users can enrol too"). It isn't asked for at a Google/GitHub
+  sign-in; it guards step-up and admin access. The Security card says this.
+- **Admin enforcement also checks the session proved a factor** (`auth_method` `mfa`/`passkey`, or a factor step-up
+  on this session); otherwise `/app/settings/security/verify`. Without it an enrolled admin signing in with Google
+  would reach `/admin` with no second factor. The verify page lives under `/app` because `/admin`'s layout runs the
+  guard itself.
+- **Backup codes stay encrypted, not hashed**: the plugin offers no hashed mode (§1). They are single use and the
+  database alone can't read them.
+- **A passkey check is a fresh sign-in.** The plugin's `verify-authentication` always creates a session, so a passkey
+  step-up signs in again: an after-hook (`adoptPasskeySession`) marks the new session verified, copies the old
+  session's active workspace and deletes the old session. Any passkey sign-in therefore counts as a check for 10
+  minutes, which is honest: it just required user verification.
+- **Adding a factor needs step-up too** (`two_factor.enable`, `passkey.add`), or a stolen session could enrol the
+  thief's own factor and then pass every check. With no factor yet the emailed code is the only way, so it is allowed
+  for that one purpose even for admins. `/two-factor/get-totp-uri` (returns the secret) is blocked outright.
+- **One admin reset** clears the authenticator and passkeys (one audit row with counts), not two actions.
+- **TOTP secrets are encrypted at rest** by the plugin, so nothing goes to the BYOK envelope plan; the rotation caveat
+  is in `docs/deployment.md`.
+
+Not yet done, and why:
+
+- **Previews:** passkeys bind to the host in `BETTER_AUTH_URL`. A preview opened on its other host (deployment URL
+  instead of branch alias) fails the ceremony with a plain "didn't work here" message; password and OAuth still work.
+- **History CSV export** is not gated. It is the everyday filtered export, and the policy's "bulk export all receipts"
+  reads as a full-account export, which doesn't exist yet; `receipts.export` and `receipts.delete_all` are defined for
+  it. Owner decision, see the PR.
+- **Workspace delete and transfer ownership** have no UI; the Better Auth endpoints are gated (`/organization/delete`,
+  owner grants via role change or invite), so the members page's "make owner" already asks.
+- **Change email** isn't enabled; `/change-email` is gated for when it is.
 
 ## TL;DR
 

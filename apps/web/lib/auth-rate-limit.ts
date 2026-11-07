@@ -8,4 +8,8 @@ export const authRateLimitRules = {
   "/sign-up/email": { window: 60, max: 3 },
   // Per IP; auth-guards also caps each inviter.
   "/organization/invite-member": { window: 60 * 60, max: 20 },
+  // The passkey plugin has no limits of its own (only the global 100 per 10 s).
+  "/passkey/generate-authenticate-options": { window: 60, max: 20 },
+  "/passkey/verify-authentication": { window: 60, max: 10 },
+  "/passkey/generate-register-options": { window: 60, max: 10 },
 } as const;

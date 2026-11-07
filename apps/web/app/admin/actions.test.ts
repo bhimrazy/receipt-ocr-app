@@ -9,6 +9,12 @@ const authApi = new Proxy({} as Record<string, ReturnType<typeof vi.fn>>, {
 
 const requireAdmin = vi.fn();
 vi.mock("@/lib/session", () => ({ requireAdmin }));
+vi.mock("server-only", () => ({}));
+const requireStepUp = vi.fn();
+vi.mock("@/lib/step-up-check", async () => {
+  const real = await vi.importActual<Record<string, unknown>>("@/lib/step-up-check");
+  return { ...real, requireStepUp };
+});
 vi.mock("@/lib/runtime", () => ({ runtime: { runPromiseExit } }));
 vi.mock("@/lib/auth", () => ({ auth: { api: authApi } }));
 vi.mock("@/lib/http", () => ({ clientIp: () => null }));
@@ -30,6 +36,10 @@ const calls: [string, () => Promise<unknown>][] = [
   ["setPlanAction", () => actions.setPlanAction({ userId: "u", plan: "pro" })],
   ["banUserAction", () => actions.banUserAction({ userId: "u", reason: "spam", days: 7 })],
   ["unbanUserAction", () => actions.unbanUserAction({ userId: "u" })],
+  [
+    "resetTwoFactorAction",
+    () => actions.resetTwoFactorAction({ userId: "u", reason: "lost phone, ticket 42" }),
+  ],
   ["revokeUserSessionsAction", () => actions.revokeUserSessionsAction({ userId: "u" })],
   [
     "revokeUserSessionAction",
@@ -61,7 +71,15 @@ const calls: [string, () => Promise<unknown>][] = [
   ["sendTestEmailAction", () => actions.sendTestEmailAction()],
 ];
 
+/** Read-only checks; everything else is a mutation and needs a fresh step-up. */
+const READS = new Set([
+  "checkConnectionsAction",
+  "checkChainProvidersAction",
+  "sendTestEmailAction",
+]);
+
 beforeEach(() => {
+  requireStepUp.mockReset().mockResolvedValue(undefined);
   runPromiseExit.mockReset();
   for (const fn of Object.values(authApi)) fn.mockReset();
   // What next/navigation's notFound() throws for a signed-in non-admin.
@@ -118,6 +136,37 @@ describe("admin server actions for an admin", () => {
     expect(result).toEqual({ ok: false, error: expect.any(String) });
     expect(order).toEqual(["lookup", "audit", "setRole", "audit"]);
   });
+});
+
+describe("admin mutations without a fresh step-up", () => {
+  beforeEach(async () => {
+    const { StepUpRequiredError } = await import("@/lib/step-up-check");
+    requireAdmin.mockResolvedValue({
+      session: { id: "s" },
+      user: { id: "me", email: "me@x.com", role: "admin" },
+    });
+    requireStepUp.mockImplementation(async (_session, action) => {
+      throw new StepUpRequiredError(action, "required");
+    });
+  });
+
+  it.each(calls.filter(([name]) => !READS.has(name)))(
+    "%s asks for step-up before reading or changing anything",
+    async (_name, call) => {
+      expect(await call()).toEqual({
+        ok: false,
+        error: expect.any(String),
+        code: "STEP_UP_REQUIRED",
+        action: expect.stringMatching(/^admin\./),
+      });
+      expect(requireStepUp).toHaveBeenCalledWith(
+        expect.objectContaining({ session: { id: "s" } }),
+        expect.stringMatching(/^admin\./),
+      );
+      expect(runPromiseExit).not.toHaveBeenCalled();
+      for (const fn of Object.values(authApi)) expect(fn).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("connection checks for an admin", () => {

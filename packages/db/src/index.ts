@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -22,8 +23,10 @@ import {
   invitation,
   member,
   organization,
+  passkey,
   rateLimit,
   session,
+  twoFactor,
   user,
   verification,
 } from "./auth-schema";
@@ -37,6 +40,7 @@ export {
   count,
   desc,
   eq,
+  gt,
   gte,
   ilike,
   inArray,
@@ -450,6 +454,64 @@ export const receiptItemsRelations = relations(receiptItems, ({ one }) => ({
   }),
 }));
 
+/**
+ * One row per "verify it's you" event: a code sent, a check passed or failed.
+ * Kept as the step-up audit trail (also when the session is gone), and read for
+ * the failure lockout and TOTP replay protection.
+ */
+export const stepUpEvents = pgTable(
+  "step_up_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").references(() => session.id, { onDelete: "set null" }),
+    /** What asked for the check, e.g. `account.delete`, `admin.user.ban`. */
+    action: text("action").notNull(),
+    method: text("method").notNull(), // totp | backup_code | passkey | email
+    outcome: text("outcome").notNull(), // sent | verified | failed
+    /** The TOTP time step a verified code matched, so it can't be used twice. */
+    totpCounter: bigint("totp_counter", { mode: "number" }),
+    ip: text("ip"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("step_up_events_user_created_idx").on(table.userId, table.createdAt),
+    check(
+      "step_up_events_method_check",
+      sql`method in ('totp', 'backup_code', 'passkey', 'email')`,
+    ),
+    check("step_up_events_outcome_check", sql`outcome in ('sent', 'verified', 'failed')`),
+  ],
+).enableRLS();
+
+/**
+ * Emailed step-up codes for users without a second factor. Bound to one
+ * session; only an HMAC of the code is stored.
+ */
+export const stepUpCodes = pgTable(
+  "step_up_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => session.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    attempts: smallint("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("step_up_codes_session_idx").on(table.sessionId),
+    index("step_up_codes_user_created_idx").on(table.userId, table.createdAt),
+  ],
+).enableRLS();
+
 export const schema = {
   receiptStatus,
   receipts,
@@ -464,6 +526,8 @@ export const schema = {
   appSettings,
   receiptGroups,
   receiptGroupMembers,
+  stepUpEvents,
+  stepUpCodes,
   receiptsRelations,
   receiptItemsRelations,
   // Better Auth tables (core + organization + admin plugins).
@@ -475,6 +539,8 @@ export const schema = {
   member,
   invitation,
   rateLimit,
+  twoFactor,
+  passkey,
 };
 
 /**

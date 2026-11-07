@@ -19,7 +19,7 @@ import { requireActiveScope, requireSession } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getUsageSummary } from "@/lib/receipts";
@@ -118,6 +118,38 @@ export default async function SettingsPage() {
       </SettingsSection>
 
       <ReceiptReadingSettings readers={readers} />
+
+      <SettingsSection
+        description="Two-step sign-in, and the check before important changes."
+        id="security-heading"
+        title="Security"
+      >
+        <Card className="flex flex-wrap items-center gap-3 p-4">
+          <span
+            aria-hidden="true"
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"
+          >
+            <ShieldCheck className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">
+              Two-step sign-in is {session.user.twoFactorEnabled ? "on" : "off"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {session.user.twoFactorEnabled
+                ? "Your password alone isn't enough to sign in."
+                : "Protect your account with a code from an app on your phone."}
+            </p>
+          </div>
+          <Link
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+            href="/app/settings/security"
+          >
+            {session.user.twoFactorEnabled ? "Manage" : "Set up"}
+            <ChevronRight aria-hidden="true" />
+          </Link>
+        </Card>
+      </SettingsSection>
 
       <AccountSettings email={session.user.email} name={session.user.name ?? ""} />
     </div>

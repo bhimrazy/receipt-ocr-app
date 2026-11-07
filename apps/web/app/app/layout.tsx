@@ -6,11 +6,13 @@ import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { UsageMeter, type Usage } from "@/components/usage-meter";
 import { AccountSheet, UserMenu, type MenuUser } from "@/components/user-menu";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
+import { SecurityNudge } from "@/components/security/security-nudge";
+import { StepUpProvider } from "@/components/step-up/step-up";
 import { errorFields, logger } from "@/lib/log";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
 import { getActiveScope, isAdmin, requireSession } from "@/lib/session";
-import { getWorkspaceAllowance, listWorkspaces } from "@/lib/workspaces";
+import { getWorkspaceAllowance, isSharedWorkspace, listWorkspaces } from "@/lib/workspaces";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -36,11 +38,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // First, alone: it may create the personal workspace, which the reads below count.
   const scope = await getActiveScope();
   if (!scope) return <NoWorkspace email={session.user.email} />;
-  const [allowance, workspaces, usage, { plan }] = await Promise.all([
+  // Owners and admins of a shared workspace are nudged towards two-step sign-in.
+  const mayNudge =
+    !session.user.twoFactorEnabled &&
+    !session.session.impersonatedBy &&
+    (scope.role === "owner" || scope.role === "admin");
+  const [allowance, workspaces, usage, { plan }, nudge] = await Promise.all([
     getWorkspaceAllowance(),
     listWorkspaces(),
     loadUsage(),
     getCurrentPlan(),
+    mayNudge ? isSharedWorkspace(scope.organizationId) : false,
   ]);
   const label = planLabel(plan);
   const showAdmin = isAdmin(session);
@@ -98,12 +106,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               tabIndex={-1}
               className="min-w-0 flex-1 px-4 pt-5 pb-[calc(2rem+var(--app-bottom-inset,0px))] md:px-10 md:py-10"
             >
+              {nudge ? <SecurityNudge /> : null}
               {children}
             </main>
           </div>
         </div>
         <AppTabBar />
       </div>
+      <StepUpProvider />
     </Toaster>
   );
 }
