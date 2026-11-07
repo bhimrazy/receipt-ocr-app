@@ -59,7 +59,7 @@ flowchart LR
   supports one. A small copy of the frame is checked for the receipt outline four times a second and drawn over the
   viewfinder. The stream stops on close, when the page is hidden and when the panel unmounts. Without getUserMedia
   (plain HTTP, old browsers) or when access is blocked, "Take photos" falls back to the phone's camera app through
-  `<input capture>`. Desktop shows the button only when a camera exists.
+  `<input capture>`. The camera is touch-only: "Take photos" and `?capture=1` apply on `(pointer: coarse)` devices and viewports under `md`, never on fine-pointer desktops, even with a webcam.
 - **Review.** Every photo opens here before upload. `detect-quad.ts` finds the receipt on a 256 px greyscale copy
   (Otsu threshold, largest component, convex hull, four corners) and places the corners there; when it isn't
   confident, the crop is the whole image. Corners drag with pointer events or move with arrow keys; rotation is in
