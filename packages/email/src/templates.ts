@@ -47,6 +47,12 @@ export function emailSlots(
   for (const [name, value] of Object.entries(raw) as [SlotName, string][]) {
     values[name] = normalizeSlot(SLOT_KINDS[name], value);
   }
+  for (const [name, value] of Object.entries(values)) {
+    // Links go out under our trusted sender, so they stay on the app's own origin.
+    if (SLOT_KINDS[name as SlotName] === "url" && new URL(value).origin !== values.appOrigin) {
+      throw new Error(`Email link ${name} must be on ${values.appOrigin}`);
+    }
+  }
   values.appHost = new URL(values.appOrigin).host;
   if (values.url) values.urlLabel = displayUrl(values.url);
   if (values.resetUrl) values.resetUrlLabel = displayUrl(values.resetUrl);

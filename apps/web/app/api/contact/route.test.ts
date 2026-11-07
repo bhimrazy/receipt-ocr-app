@@ -8,6 +8,7 @@ const env = vi.hoisted(() => ({
     { ok: true } | { ok: false; reason: "missing" | "rejected" | "unavailable" },
 }));
 
+vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
   sendEmail,
@@ -20,6 +21,7 @@ const specs = vi.hoisted(() => [] as unknown[]);
 vi.mock("@/lib/http", () => ({
   clientIp: () => "1.1.1.1",
   crossOriginResponse: () => null,
+  jsonError: (status: number, error: string) => Response.json({ error }, { status }),
   withRequestEvent: (
     spec: unknown,
     handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown,
@@ -65,6 +67,37 @@ describe("POST /api/contact", () => {
     const res = await post(valid);
     expect(res.status).toBe(status);
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("refuses an oversized body with 413 before parsing it, declared or streamed", async () => {
+    const big = JSON.stringify({ ...valid, message: "x".repeat(70 * 1024) });
+    const declared = await POST(
+      new Request("http://localhost/api/contact", {
+        method: "POST",
+        body: big,
+        headers: { "content-length": String(big.length) },
+      }),
+    );
+    expect(declared.status).toBe(413);
+    const streamed = await POST(
+      new Request("http://localhost/api/contact", {
+        method: "POST",
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(big));
+            controller.close();
+          },
+        }),
+        // @ts-expect-error duplex is required for stream bodies in Node.
+        duplex: "half",
+      }),
+    );
+    expect(streamed.status).toBe(413);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("rejects a body that is not a JSON object", async () => {
+    expect((await post(["x"])).status).toBe(400);
   });
 
   it("keeps every rate-limited submission in the logs (abuse signal, never sampled)", () => {

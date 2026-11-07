@@ -6,7 +6,7 @@ import { jsonError } from "./http";
 const MAX_JSON_BYTES = 16 * 1024;
 
 /** The body's bytes, or null once it passes the limit; stops reading at that point. */
-async function readCapped(request: Request): Promise<Uint8Array | null> {
+async function readCapped(request: Request, limit: number): Promise<Uint8Array | null> {
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -15,7 +15,7 @@ async function readCapped(request: Request): Promise<Uint8Array | null> {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > MAX_JSON_BYTES) {
+    if (size > limit) {
       await reader.cancel();
       return null;
     }
@@ -32,18 +32,19 @@ async function readCapped(request: Request): Promise<Uint8Array | null> {
 
 /**
  * Reads a small JSON body and validates it with `schema`. Returns the parsed
- * value, or the 400/413 response to send.
+ * value, or the 400/413 response to send. `limit` is in bytes.
  */
 export async function readJson<T>(
   request: Request,
   schema: z.ZodType<T, unknown>,
+  limit = MAX_JSON_BYTES,
 ): Promise<{ data: T } | { response: Response }> {
-  if (Number(request.headers.get("content-length") ?? "") > MAX_JSON_BYTES) {
+  if (Number(request.headers.get("content-length") ?? "") > limit) {
     return { response: jsonError(413, "Request body too large") };
   }
   let text: string;
   try {
-    const bytes = await readCapped(request);
+    const bytes = await readCapped(request, limit);
     if (!bytes) return { response: jsonError(413, "Request body too large") };
     text = new TextDecoder().decode(bytes);
   } catch {
@@ -61,3 +62,6 @@ export async function readJson<T>(
   }
   return { data: parsed.data };
 }
+
+/** Receipt edits and contact messages: a few short fields, so 64 KB is generous. */
+export const MAX_FORM_JSON_BYTES = 64 * 1024;

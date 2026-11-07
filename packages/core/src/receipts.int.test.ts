@@ -28,7 +28,7 @@ import { checkQuota, quotaGate, usageWindow } from "./quota";
 import { ReceiptRepo, STALE_AFTER_MS } from "./repository";
 import { Db, Storage } from "./services";
 import { receiptCalls, usageByDay, usageByModel, usageByWorkspace } from "./usage";
-import { ensurePersonalWorkspace, hitRateLimit, resolveScope } from "./workspace";
+import { ensurePersonalWorkspace, clearRateLimit, hitRateLimit, resolveScope } from "./workspace";
 
 const enabled = process.env.INTEGRATION === "1";
 const runtime = ManagedRuntime.make(AppLayer);
@@ -616,5 +616,16 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         use((db) => db.execute(sql`delete from rate_limit where id = ${key}`)),
       ),
     );
+  });
+
+  it("clearRateLimit resets a counter, and hitRateLimit never admits more than max concurrently", async () => {
+    const key = `${tag}:clear`;
+    const burst = await Promise.all(
+      Array.from({ length: 15 }, () => run(hitRateLimit(key, 60_000, 10))),
+    );
+    expect(burst.filter((hit) => hit.allowed)).toHaveLength(10);
+    await run(clearRateLimit(key));
+    expect((await run(hitRateLimit(key, 60_000, 10))).allowed).toBe(true);
+    await run(clearRateLimit(key));
   });
 });

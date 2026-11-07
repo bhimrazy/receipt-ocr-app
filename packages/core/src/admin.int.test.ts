@@ -23,6 +23,7 @@ import {
   setMemberRole,
   setUserPlan,
 } from "./admin";
+import { countOtherAdmins } from "./admin-queries";
 import { DEFAULT_PLANS } from "./plans";
 import { Settings } from "./settings";
 import { AppLayer, type AppServices } from "./index";
@@ -365,5 +366,28 @@ describe.skipIf(!enabled)("admin audit rows commit with the change", () => {
         ),
       );
     }
+  });
+});
+
+describe.skipIf(!enabled)("last-admin guard query", () => {
+  it("counts other unbanned admins, including multi-role values", async () => {
+    const subject = await createUser("la-subject");
+    const base = await run(countOtherAdmins(subject.userId));
+    const setRole = (id: string, role: string, banned = false) =>
+      run(
+        Effect.flatMap(Db, ({ use }) =>
+          use((d) => d.update(user).set({ role, banned }).where(eq(user.id, id))),
+        ),
+      );
+    const other = await createUser("la-other");
+    const banned = await createUser("la-banned");
+    const plain = await createUser("la-plain");
+    await setRole(subject.userId, "admin");
+    await setRole(other.userId, "user,admin");
+    await setRole(banned.userId, "admin", true);
+    await setRole(plain.userId, "user");
+    expect(await run(countOtherAdmins(subject.userId))).toBe(base + 1);
+    await setRole(other.userId, "user");
+    expect(await run(countOtherAdmins(subject.userId))).toBe(base);
   });
 });
