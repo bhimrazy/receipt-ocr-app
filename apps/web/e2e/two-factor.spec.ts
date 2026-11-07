@@ -32,7 +32,7 @@ test("turn on two-step sign-in, then sign in with a code and with a backup code"
   await passwordStep(page, email);
   await page.getByLabel("Authentication code").fill("000000");
   await page.getByRole("button", { name: "Verify" }).click();
-  await expect(page.getByRole("alert")).toContainText("isn't right");
+  await expect(page.getByText("That code isn't right.")).toBeVisible();
   await page.getByLabel("Authentication code").fill(totpCode(key));
   await page.getByRole("button", { name: "Verify" }).click();
   await expect(page).toHaveURL(/\/app(\/|\?|$)/);

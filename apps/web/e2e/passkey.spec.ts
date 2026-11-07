@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import postgres from "postgres";
 import { markSteppedUp, PASSWORD, signOut, signUp, uniqueEmail, waitForAuthForm } from "./helpers";
 
 /**
@@ -27,13 +28,18 @@ async function virtualAuthenticator(page: Page) {
   };
 }
 
-async function passkeySignIn(page: Page) {
-  await page.goto("/sign-in");
-  await waitForAuthForm(page);
-  await page.getByRole("button", { name: "Use a passkey" }).click();
+/** Clears "verified recently" on the user's sessions, so the next important change asks again. */
+async function expireStepUp(email: string) {
+  const sql = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
+  try {
+    await sql`update session set step_up_at = null
+              where user_id = (select id from "user" where email = ${email})`;
+  } finally {
+    await sql.end();
+  }
 }
 
-test("add a passkey, use it to confirm a change and to sign in, then remove it", async ({
+test("add a passkey, confirm a change with it, sign in with it by autofill, then remove it", async ({
   page,
 }) => {
   const authenticator = await virtualAuthenticator(page);
@@ -49,14 +55,8 @@ test("add a passkey, use it to confirm a change and to sign in, then remove it",
   await expect(page.getByRole("list", { name: "Your passkeys" })).toContainText("E2E laptop");
   expect(await authenticator.credentials()).toHaveLength(1);
 
-  // A password session isn't verified yet: changing the password asks, and the passkey answers.
-  await signOut(page);
-  await page.goto("/sign-in");
-  await waitForAuthForm(page);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/app(\/|\?|$)/);
+  // Not verified recently: changing the password asks, and the passkey answers.
+  await expireStepUp(email);
   await page.goto("/app/settings");
   await page.getByLabel("Current password").fill(PASSWORD);
   await page.getByLabel("New password").fill(PASSWORD);
@@ -66,16 +66,20 @@ test("add a passkey, use it to confirm a change and to sign in, then remove it",
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Password changed.")).toBeVisible();
 
-  // Without user verification (no PIN or biometric), the passkey is refused.
+  // Without user verification (no PIN or biometric) the passkey is refused, autofill included.
   await signOut(page);
   await authenticator.setUserVerified(false);
-  await passkeySignIn(page);
-  await expect(page.getByRole("alert")).toBeVisible();
+  await page.goto("/sign-in");
+  await waitForAuthForm(page);
+  await page.getByRole("button", { name: "Use a passkey" }).click();
+  await expect(page.getByText(/didn't work here|Cancelled or timed out/)).toBeVisible();
   await expect(page).toHaveURL(/\/sign-in/);
 
+  // With it, the sign-in page's passkey autofill (conditional UI) signs in by itself; the
+  // virtual authenticator answers the pending request without a click.
   await authenticator.setUserVerified(true);
-  await passkeySignIn(page);
-  await expect(page).toHaveURL(/\/app(\/|\?|$)/);
+  await page.goto("/sign-in");
+  await expect(page).toHaveURL(/\/app(\/|\?|$)/, { timeout: 15_000 });
 
   // A passkey sign-in counts as a fresh check, so removing asks nothing more.
   await page.goto("/app/settings/security");
