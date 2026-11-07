@@ -121,6 +121,9 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
 12. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
     `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
     which amounts are converted, sign-up default from country.
+13. UX decisions ([plan](plans/2026-11-07-ux-decisions.md)): five-slot phone bar with centred Scan and Groups (no
+    drawer), install offer after the first read with a snooze and an iOS 26 guide, the name spelled ReceiptOCR,
+    push notifications deferred until batch capture data.
 
 ## Roadmap (order)
 
