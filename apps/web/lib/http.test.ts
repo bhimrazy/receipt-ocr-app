@@ -142,6 +142,12 @@ describe("withRequestEvent", () => {
       routine: true,
     });
     expect(
+      await optionsOf(
+        { ...spec, keepRateLimited: true },
+        () => new Response(null, { status: 429 }),
+      ),
+    ).toEqual({ routine: false });
+    expect(
       await optionsOf({ ...spec, routine: true }, (event) => {
         event.notices = ["receipt.calls_not_recorded"];
         return new Response();

@@ -36,8 +36,9 @@ export const GET = withRequestEvent(
   },
 );
 
+// Rate-limited sign-ins, sign-ups and resets are the credential-stuffing signal: never sampled.
 export const POST = withRequestEvent(
-  { event: "auth.request", route: ROUTE },
+  { event: "auth.request", route: ROUTE, keepRateLimited: true },
   (request, _context, event) => {
     annotate(request, event);
     if (!authEnabled) return notConfigured();

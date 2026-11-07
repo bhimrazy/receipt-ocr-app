@@ -12,11 +12,11 @@ vi.mock("@/lib/auth", () => ({ auth: {}, authEnabled: true }));
 vi.mock("better-auth/next-js", () => ({
   toNextJsHandler: () => ({
     GET: async () => new Response(null, { status: 302, headers: { location: "/sign-in?error=x" } }),
-    POST: async () => new Response(null, { status: 200 }),
+    POST: async () => new Response(null, { status: 429 }),
   }),
 }));
 
-const { GET } = await import("./route");
+const { GET, POST } = await import("./route");
 
 beforeEach(() => emit.mockReset());
 
@@ -39,6 +39,20 @@ describe("GET /api/auth/[...all] sampling", () => {
       expect(routine, path).toBe(false);
       expect(event).toMatchObject({ event: "auth.request", status_code: 302 });
       expect(JSON.stringify(event)).not.toMatch(/tok|code=|token=/);
+    }
+  });
+
+  it("never samples a rate-limited sign-in, sign-up or password reset", async () => {
+    for (const path of [
+      "/api/auth/sign-in/email",
+      "/api/auth/sign-up/email",
+      "/api/auth/forget-password",
+    ]) {
+      await POST(new Request(`https://app.example${path}`, { method: "POST" }));
+      const [event, options] = emit.mock.calls[0]!;
+      emit.mockReset();
+      expect(event, path).toMatchObject({ status_code: 429 });
+      expect(options.routine, path).toBe(false);
     }
   });
 

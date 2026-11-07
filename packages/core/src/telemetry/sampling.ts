@@ -17,6 +17,8 @@ export type SamplingConfig = {
 /** Unset: keep everything. Production should set LOG_SAMPLE_RATE=0.1. */
 const DEFAULT_RATE = 1;
 const DEFAULT_SLOW_MS = 1_000;
+/** Floor, so `LOG_SAMPLE_RATE=0` can't erase routine 401s and 429s entirely. */
+const MIN_RATE = 0.01;
 
 const parse = (raw: string | undefined, fallback: number, min: number, max: number) => {
   if (raw === undefined || raw.trim() === "") return fallback;
@@ -25,7 +27,7 @@ const parse = (raw: string | undefined, fallback: number, min: number, max: numb
 };
 
 export const samplingFromEnv = (env: Record<string, string | undefined>): SamplingConfig => ({
-  rate: parse(env.LOG_SAMPLE_RATE, DEFAULT_RATE, 0, 1),
+  rate: parse(env.LOG_SAMPLE_RATE, DEFAULT_RATE, MIN_RATE, 1),
   slowMs: parse(env.LOG_SLOW_MS, DEFAULT_SLOW_MS, 0, Number.MAX_SAFE_INTEGER),
 });
 

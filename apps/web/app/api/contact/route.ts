@@ -26,7 +26,10 @@ type ContactPayload = {
   company?: unknown; // honeypot — humans never see or fill this
 };
 
-export const POST = withRequestEvent({ event: "contact.submit", route: "/api/contact" }, submit);
+export const POST = withRequestEvent(
+  { event: "contact.submit", route: "/api/contact", keepRateLimited: true },
+  submit,
+);
 
 async function submit(request: Request, _context: unknown, event: WideEvent) {
   const forbidden = crossOriginResponse(request);

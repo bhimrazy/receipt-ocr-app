@@ -102,6 +102,11 @@ type RequestEventSpec = {
    * (auth: only session reads are routine, never a callback or a reset).
    */
   routine?: boolean | ((request: Request) => boolean);
+  /**
+   * Keep every 429 instead of sampling it: endpoints where a run of rejections
+   * is the signal (sign-in, sign-up, password reset, the contact form).
+   */
+  keepRateLimited?: boolean;
 };
 
 /** Events a handler chose not to write (a rate limiter rejecting a flood). */
@@ -116,13 +121,13 @@ export function skipEvent(event: WideEvent): void {
 }
 
 /**
- * Whether a finished request is routine for sampling. A 429 always is, so a
- * flood of rejected requests can't flood the logs; anything that logged a
- * notice never is (the same rule as job ticks).
+ * Whether a finished request is routine for sampling. A 429 is, so a flood
+ * of rejected requests can't flood the logs, unless the route keeps them;
+ * anything that logged a notice never is (the same rule as job ticks).
  */
 function isRoutine(spec: RequestEventSpec, request: Request, event: WideEvent): boolean {
   if ((event.notices?.length ?? 0) > 0) return false;
-  if (event.status_code === 429) return true;
+  if (event.status_code === 429) return spec.keepRateLimited !== true;
   if (typeof spec.routine === "function") {
     try {
       return spec.routine(request);

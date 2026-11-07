@@ -16,13 +16,17 @@ vi.mock("@receipt-ocr/core", () => ({ hitRateLimit: () => ({}) }));
 vi.mock("@/lib/runtime", () => ({
   runtime: { runPromise: async () => ({ allowed: true, retryAfterSeconds: 0 }) },
 }));
+const specs = vi.hoisted(() => [] as unknown[]);
 vi.mock("@/lib/http", () => ({
   clientIp: () => "1.1.1.1",
   crossOriginResponse: () => null,
-  withRequestEvent:
-    (_spec: unknown, handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown) =>
-    (request: Request, context?: unknown) =>
-      handler(request, context, { event: "test" }),
+  withRequestEvent: (
+    spec: unknown,
+    handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown,
+  ) => {
+    specs.push(spec);
+    return (request: Request, context?: unknown) => handler(request, context, { event: "test" });
+  },
 }));
 vi.mock("@/lib/turnstile", () => ({ checkTurnstile: async () => env.turnstile }));
 vi.mock("@/lib/log", () => ({ logger: { info: vi.fn() } }));
@@ -60,6 +64,10 @@ describe("POST /api/contact", () => {
     const res = await post(valid);
     expect(res.status).toBe(status);
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("keeps every rate-limited submission in the logs (abuse signal, never sampled)", () => {
+    expect(specs).toEqual([expect.objectContaining({ keepRateLimited: true })]);
   });
 
   it("sends to the support inbox with the sender as reply-to", async () => {

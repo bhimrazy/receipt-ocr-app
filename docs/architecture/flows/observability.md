@@ -79,15 +79,16 @@ prompt or model output. Adding one means adding it to the schema, which is where
 [`sampling.ts`](../../../packages/core/src/telemetry/sampling.ts) decides after the unit has finished. Errors (5xx,
 4xx other than 401 and 429, an `error` field, level `error`), slow units (`duration_ms` at or above `LOG_SLOW_MS`,
 default 1000) and anything that called a model are always kept. Only routine units are sampled, at `LOG_SAMPLE_RATE`
-(default 1, `0.1` in production), and a kept sampled line carries `sample_rate` so counts can be weighted back up.
+(default 1, `0.1` in production, never below `0.01` so routine 401s and 429s can't vanish entirely), and a kept sampled line carries `sample_rate` so counts can be weighted back up.
 
 What counts as routine:
 
 - Routes declare it in `withRequestEvent` as a flag or a per-request predicate. Auth GETs are routine only for
   session and list reads (`lib/auth-routine.ts`); OAuth callbacks, email verification and password resets answer
   with redirects that can hide a failure, so they are always logged.
-- Any 429 response is routine, and a 401 on a routine route is not counted as an error, so a flood can't fill the
-  logs. The CSP-report route skips the event entirely (`skipEvent`) once its per-IP limiter rejects.
+- A 429 response is routine, and a 401 on a routine route is not counted as an error, so a flood can't fill the
+  logs. Routes where rejections are the signal opt out with `keepRateLimited`: auth POSTs (sign-in, sign-up,
+  password reset: the credential-stuffing signal) and the contact form keep every 429. The CSP-report route skips the event entirely (`skipEvent`) once its per-IP limiter rejects.
 - A unit that logged a notice is never routine (requests, page renders and ticks alike).
 
 ## Effect code

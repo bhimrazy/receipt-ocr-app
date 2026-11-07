@@ -332,6 +332,9 @@ describe("sampling", () => {
     });
     expect(samplingFromEnv({ LOG_SAMPLE_RATE: "7" }).rate).toBe(1);
     expect(samplingFromEnv({ LOG_SAMPLE_RATE: "nope" }).rate).toBe(1);
+    // Floored, so routine 401s and 429s are never erased entirely.
+    expect(samplingFromEnv({ LOG_SAMPLE_RATE: "0" }).rate).toBe(0.01);
+    expect(samplingFromEnv({ LOG_SAMPLE_RATE: "-1" }).rate).toBe(0.01);
   });
 });
 
