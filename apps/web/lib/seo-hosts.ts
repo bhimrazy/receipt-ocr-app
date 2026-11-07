@@ -14,9 +14,12 @@ export function isProductionHost(raw: string | null | undefined): boolean {
   return normalizeHost(raw) === PRODUCTION_HOST;
 }
 
-/** Host of a request: the forwarded host when a proxy set one, else Host. */
+/**
+ * Host of a request. Host only, never X-Forwarded-Host: next.config's host rules match Host, and a
+ * client can send any forwarded value, so both checks must read the same header.
+ */
 export function requestHost(headers: { get(name: string): string | null }): string {
-  return headers.get("x-forwarded-host") ?? headers.get("host") ?? "";
+  return headers.get("host") ?? "";
 }
 
 export const NOINDEX_VALUE = "noindex, nofollow";
@@ -43,15 +46,14 @@ export function buildIsIndexable(env: Partial<Record<string, string | undefined>
 }
 
 /** Paths crawlers must not fetch on the production host. */
+// Sign-in, sign-up and forgot-password stay crawlable so Google can read their noindex; a
+// disallowed but linked URL can still be listed as a bare result.
 export const PRODUCTION_DISALLOW = [
   "/api/",
   "/app/",
   "/app$",
   "/admin/",
   "/admin$",
-  "/sign-in",
-  "/sign-up",
-  "/forgot-password",
   "/reset-password",
   "/accept-invitation",
   "/account-deleted",

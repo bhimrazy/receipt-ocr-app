@@ -38,9 +38,9 @@ describe("isProductionHost", () => {
 });
 
 describe("requestHost", () => {
-  it("prefers the forwarded host", () => {
+  it("reads Host and ignores a forwarded host", () => {
     const headers = new Headers({ host: "internal", "x-forwarded-host": PRODUCTION_HOST });
-    expect(requestHost(headers)).toBe(PRODUCTION_HOST);
+    expect(requestHost(headers)).toBe("internal");
     expect(requestHost(new Headers({ host: "a.example" }))).toBe("a.example");
   });
 });

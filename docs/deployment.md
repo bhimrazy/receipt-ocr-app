@@ -228,7 +228,9 @@ then fails at "Check the secret is set".
   Turnstile off there.
 - **Indexing:** only `PRODUCTION_HOST` (`apps/web/lib/seo-hosts.ts`) is indexable. Every other host gets
   `Disallow: /` in robots.txt, `X-Robots-Tag: noindex, nofollow` on every response (next.config.ts, keyed on the
-  request host) and no `/llms.txt`, so custom preview domains are covered without any Vercel setting.
+  request host) and no `/llms.txt`, so custom preview domains are covered without any Vercel setting. Both checks
+  read the `Host` header, so a reverse proxy in front of the Docker image must pass the original `Host` through
+  (nginx: `proxy_set_header Host $host;`), or production is served as noindex.
 
 ### 6. First admin
 

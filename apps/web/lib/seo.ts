@@ -126,7 +126,7 @@ export function homeJsonLd(): Record<string, unknown> {
         url,
         description: homeDescription,
         applicationCategory: "FinanceApplication",
-        operatingSystem: "Web, iOS, Android",
+        operatingSystem: "Web",
         isAccessibleForFree: true,
         offers: { "@type": "Offer", price: "0", priceCurrency: "USD", description: "Free plan" },
         publisher: { "@id": orgId },

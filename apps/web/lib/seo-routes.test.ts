@@ -30,13 +30,15 @@ describe("robots.txt per host", () => {
       "/api/",
       "/app/",
       "/admin/",
-      "/sign-in",
-      "/sign-up",
       "/accept-invitation",
       "/account-deleted",
       "/offline.html",
     ]) {
       expect(rules.disallow, path).toContain(path);
+    }
+    // Crawlable so their noindex can be read.
+    for (const path of ["/sign-in", "/sign-up", "/forgot-password"]) {
+      expect(rules.disallow, path).not.toContain(path);
     }
     // "/app" as a bare prefix would also block /apple-icon.png.
     expect(rules.disallow).not.toContain("/app");
