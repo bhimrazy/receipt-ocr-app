@@ -4,7 +4,7 @@
  * with its prices, to offer another model.
  */
 
-export type OcrProviderId = "google" | "anthropic" | "fixture";
+export type OcrProviderId = "google" | "anthropic" | "groq" | "fixture";
 
 export interface OcrProvider {
   id: OcrProviderId;
@@ -46,12 +46,13 @@ export interface OcrModel {
    * `maxItems` from the request (the reply is still checked against the full schema).
    * Default "full".
    */
-  schemaMode?: "full" | "no-array-bounds";
+  schemaMode?: "full" | "no-array-bounds" | "no-bounds";
 }
 
 export const OCR_PROVIDERS: readonly OcrProvider[] = [
   { id: "google", label: "Google Gemini", keyEnv: "GOOGLE_GENERATIVE_AI_API_KEY" },
   { id: "anthropic", label: "Anthropic Claude", keyEnv: "ANTHROPIC_API_KEY" },
+  { id: "groq", label: "Groq", keyEnv: "GROQ_API_KEY" },
   // Deterministic offline stand-in; only offered when OCR_PROVIDER=fixture (tests, local).
   { id: "fixture", label: "Offline fixture", keyEnv: null },
 ];
@@ -113,6 +114,19 @@ export const OCR_MODELS: readonly OcrModel[] = [
     provider: "anthropic",
     label: "Claude Opus 5.5",
     prices: [{ from: "2026-11-07", input: 4, cachedInput: 0.2, cacheWrite: 5, output: 20 }],
+  },
+  // Groq: only models its docs list with image input (https://console.groq.com/docs/vision, checked
+  // 2026-11-07). muse-spark-open is vision-capable but in limited preview by request, so it is not
+  // offered. The price is the paid rate; the free plan bills nothing but is capped at 8K tokens a
+  // minute and 1K requests a day (docs/architecture/ai.md), so the ledger's cost is an upper bound there.
+  {
+    id: "groq:qwen/qwen3.8-27b",
+    provider: "groq",
+    label: "Qwen 3.8 27B (Groq, preview)",
+    // Groq's docs list no supported keywords for best-effort json_schema, so size bounds are
+    // dropped from the request. The reply is still checked against the full schema.
+    schemaMode: "no-bounds",
+    prices: [{ from: "2026-11-07", input: 0.8, output: 4 }],
   },
   {
     id: "fixture",

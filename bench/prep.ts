@@ -125,6 +125,8 @@ export async function prepare(
  */
 export function imageTokens(provider: string, width: number | null, height: number | null) {
   if (provider === "google") return 1120;
+  // Groq docs: each image counts as 2048 input tokens (qwen/qwen3.8-27b).
+  if (provider === "groq") return 2048;
   if (width === null || height === null) return null;
   const tokens = (s: number) => Math.ceil((width * s) / 28) * Math.ceil((height * s) / 28);
   let scale = Math.min(1, 2576 / Math.max(width, height));

@@ -15,6 +15,7 @@
         "GEMINI_*",
         "GITHUB_CLIENT_*",
         "GOOGLE_*",
+        "GROQ_*",
         "LAB_PAGES",
         "NEXT_OUTPUT",
         "NEXT_PUBLIC_*",

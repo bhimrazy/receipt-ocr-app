@@ -40,7 +40,7 @@ describe("checkAiProviders", () => {
 
   it("checks every keyed provider when no models are given", async () => {
     const rows = await Effect.runPromise(checkAiProviders([]).pipe(withEnv({})));
-    expect(rows.map((r) => r.id)).toEqual(["ai:google", "ai:anthropic"]);
+    expect(rows.map((r) => r.id)).toEqual(["ai:google", "ai:anthropic", "ai:groq"]);
   });
 });
 

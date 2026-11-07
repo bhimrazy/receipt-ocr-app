@@ -6,6 +6,9 @@ describe("provider registry cache", () => {
   it("reuses the registry for the same keys and builds a new one for another key", () => {
     const keys = { google: "AIza-test-secret-one", anthropic: "sk-ant-test-secret-one" };
     expect(registryFor({ ...keys })).toBe(registryFor({ ...keys }));
+    expect(registryFor({ ...keys, groq: "gsk_two" })).not.toBe(
+      registryFor({ ...keys, groq: "gsk_one" }),
+    );
     expect(registryFor({ ...keys, google: "AIza-test-secret-two" })).not.toBe(registryFor(keys));
   });
 

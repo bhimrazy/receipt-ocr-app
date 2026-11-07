@@ -80,6 +80,10 @@ describe("prepare", () => {
 });
 
 describe("imageTokens", () => {
+  it("counts Groq images at its documented flat 2048 tokens", () => {
+    expect(imageTokens("groq", 1000, 1000)).toBe(2048);
+  });
+
   it("matches the Claude high-resolution examples in the vision docs", () => {
     expect(imageTokens("anthropic", 1000, 1000)).toBe(1296);
     expect(imageTokens("anthropic", 1920, 1080)).toBe(2691);
