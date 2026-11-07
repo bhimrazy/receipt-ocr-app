@@ -3,7 +3,7 @@ import { CookieSettingsButton } from "@/components/consent/cookie-settings-butto
 import { LegalPage } from "@/components/legal-page";
 import { entriesFor, type StorageCategory, type StorageEntry } from "@/lib/consent/cookies";
 import { gaMeasurementId, turnstileOn } from "@/lib/consent/env";
-import { pageMetadata } from "@/lib/seo";
+import { LEGAL_UPDATED, formatLegalDate, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "Cookie policy",
@@ -75,7 +75,7 @@ export default function CookiesPage() {
         },
       ]}
       title="Cookie policy"
-      updated="November 6, 2026"
+      updated={formatLegalDate(LEGAL_UPDATED.cookies)}
     >
       <div className="mt-6">
         <CookieSettingsButton variant="secondary" />
