@@ -202,6 +202,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- `/list-sessions` is an ungated read of the user's own sessions now that `freshAge` is 0 (Better Auth's freshness check
+  was its only guard). Low: it shows a session thief the user's other devices; gate it with step-up if that matters.
+- Sign-ins finished through `/two-factor/verify-totp` or `/two-factor/verify-backup-code` aren't in `isSignIn`
+  (`lib/auth-two-factor.ts`), so a TOTP user's second sign-in from the same browser doesn't replace the earlier
+  session. The password step clears the session cookie first, so the earlier token has to be carried through the
+  challenge to find it.
 - Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
   rows older than 90 days with a job kind in `packages/core/src/jobs` (there is no retention job yet), keeping the last
   pass and recent failures that the lockout reads; then update the privacy policy.
