@@ -1,8 +1,8 @@
 import { MockLanguageModelV4 } from "ai/test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { OcrCallError } from "./errors";
 import { extractReceipt, extractWith } from "./extract";
-import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS } from "./fixture";
+import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, fixtureLatencyMs } from "./fixture";
 import { receiptExtractionSchema } from "./schema";
 
 const file = (text: string) => ({ data: new TextEncoder().encode(text), mediaType: "image/jpeg" });
@@ -108,5 +108,36 @@ describe("extractWith (mock model)", () => {
       (e: unknown) => e,
     );
     expect(error).toMatchObject({ kind: "provider-error", usage: null });
+  });
+});
+
+describe("FIXTURE_LATENCY_MS", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it("is 0 when unset or invalid, and capped", () => {
+    expect(fixtureLatencyMs()).toBe(0);
+    vi.stubEnv("FIXTURE_LATENCY_MS", "abc");
+    expect(fixtureLatencyMs()).toBe(0);
+    vi.stubEnv("FIXTURE_LATENCY_MS", "-5");
+    expect(fixtureLatencyMs()).toBe(0);
+    vi.stubEnv("FIXTURE_LATENCY_MS", "999999");
+    expect(fixtureLatencyMs()).toBe(60_000);
+  });
+
+  it("waits FIXTURE_LATENCY_MS before the fixture provider answers", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("FIXTURE_LATENCY_MS", "2000");
+    let done = false;
+    const call = extractReceipt({ model: "fixture", file: file("slow") }).then(() => {
+      done = true;
+    });
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(done).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await call;
+    expect(done).toBe(true);
   });
 });

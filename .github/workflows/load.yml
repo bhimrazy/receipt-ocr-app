@@ -1,0 +1,57 @@
+name: Load test
+
+# On demand only: builds the production image, runs it limited to a small server and drives it
+# with k6. Not part of PR checks. No secrets: the OCR model is the fixture provider.
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "Space-separated: smoke load spike soak capacity"
+        default: "smoke load spike"
+        type: string
+      app_cpus:
+        description: "vCPUs for the app container"
+        default: "1"
+        type: string
+      app_mem:
+        description: "Memory for the app container"
+        default: "1g"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load
+  cancel-in-progress: false
+
+jobs:
+  load:
+    name: k6 against the production image
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    env:
+      SCENARIOS: ${{ inputs.scenarios || 'smoke load spike' }}
+      APP_CPUS: ${{ inputs.app_cpus || '1' }}
+      APP_MEM: ${{ inputs.app_mem || '1g' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      # Inputs reach the script through env vars, never interpolated into the command line.
+      - name: Run the scenarios
+        run: scripts/load.sh $SCENARIOS
+      - name: Job summary
+        if: always()
+        run: cat bench/results/latest.md >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: load-results
+          path: |
+            bench/results/latest.md
+            bench/results/load-*.json
+            bench/results/load-*/*.k6.log
+            bench/results/load-*/samples.tsv
+          retention-days: 30

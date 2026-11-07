@@ -168,6 +168,7 @@ several of them is in the [security audit](../reviews/2026-11-06-security-audit.
 | Passkeys and two-factor                     | Email/password and OAuth only                                                           | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
 | Second AI provider                          | Google Gemini and the offline fixture                                                   | [AI usage and models](../plans/2026-11-06-ai-usage-models.md)                                                                                                                               |
 | Seats and per-workspace quota               | Quota is per user per UTC day                                                           | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                                              |
+| Home currency and FX conversion             | Amounts `numeric(12,2)`, currency defaults to USD, no conversion                        | [Currencies and FX](../plans/2026-11-06-currencies-fx.md)                                                                                                                                   |
 
 ## Keeping this current
 
