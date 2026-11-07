@@ -33,6 +33,7 @@ import {
   authEnv,
   emailEnv,
   isProduction,
+  logUndeliveredMail,
   requireEmailVerification,
   turnstileEnv,
 } from "./env";
@@ -55,7 +56,7 @@ const db = createDb(authEnv.databaseUrl ?? PLACEHOLDER_DATABASE_URL);
 const mailer = {
   apiKey: emailEnv.resendApiKey,
   from: emailEnv.from,
-  logUndelivered: process.env.NODE_ENV === "development",
+  logUndelivered: logUndeliveredMail(),
   log: (event: EmailLogEvent) => logger.emit(event),
 };
 

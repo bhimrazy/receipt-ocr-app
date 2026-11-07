@@ -2,7 +2,7 @@ import { hitRateLimit } from "@receipt-ocr/core";
 import { sendEmail, type EmailLogEvent } from "@receipt-ocr/email";
 import { NextResponse } from "next/server";
 import { contactEmail, isTopic } from "@/lib/contact-mail";
-import { emailEnv, isProduction, supportEmail } from "@/lib/env";
+import { emailEnv, isProduction, logUndeliveredMail, supportEmail } from "@/lib/env";
 import { clientIp, crossOriginResponse, withRequestEvent } from "@/lib/http";
 import { logger, type WideEvent } from "@/lib/log";
 import { runtime } from "@/lib/runtime";
@@ -12,7 +12,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const mailer = {
   apiKey: emailEnv.resendApiKey,
   from: emailEnv.from,
-  logUndelivered: process.env.NODE_ENV === "development",
+  logUndelivered: logUndeliveredMail(),
   log: (event: EmailLogEvent) => logger.emit(event),
 };
 const MAX_MESSAGE = 2000;
