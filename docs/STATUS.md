@@ -110,6 +110,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- PDF page cap gaps: the hand-written page counter (`packages/core/src/pdf-pages.ts`) can undercount when the word
+  `stream` sits inside a string or `/stream` is used as a name, when `endobj` sits inside a string, when comments sit
+  inside a dictionary, and for encrypted object streams. The list is not exhaustive. The cap is a
+  cost guard, not a security boundary: uploads are size-capped, the daily quota bounds total cost and the ledger
+  records real tokens per call, so an outlier is visible. If abuse shows up, count with a real reader (pdf.js in a
+  worker with a timeout) rather than parsing further by hand.
 - Image shrinking (browser, `apps/web/lib/upload-prep.ts`): decode large photos at reduced size
   (`createImageBitmap` `resizeWidth`/`resizeHeight`, after reading the dimensions from the header) to cut peak memory
   on phones; and strip metadata on the server for files the browser couldn't decode or encode (for example HEIC
