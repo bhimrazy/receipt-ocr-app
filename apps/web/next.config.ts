@@ -32,6 +32,7 @@ const noindexPaths = [
   "/forgot-password",
   "/reset-password",
   "/accept-invitation/:path*",
+  "/account-deleted",
 ];
 
 // Everything but production stays out of search results. Vercel only adds this on *.vercel.app, not on

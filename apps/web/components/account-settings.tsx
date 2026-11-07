@@ -8,12 +8,12 @@ import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ReauthDialog, type SignInMethods } from "@/components/reauth-dialog";
 import { SettingsSection } from "@/components/settings-section";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
-import { SESSION_NOT_FRESH } from "@/lib/step-up";
+import { SESSION_NOT_FRESH, soleOwnerMessage } from "@/lib/step-up";
 
 /** Where a Google or GitHub re-sign-in returns, so the interrupted step can continue. */
 export type ResumeStep = "delete-account" | "change-email";
@@ -123,6 +123,14 @@ function EmailCard({
     resumed ? "You signed in again. Enter the new address to continue." : null,
   );
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Back from a Google or GitHub re-sign-in: bring the user to the field they were filling in.
+  useEffect(() => {
+    if (!resumed) return;
+    inputRef.current?.scrollIntoView({ block: "center" });
+    inputRef.current?.focus({ preventScroll: true });
+  }, [resumed]);
 
   async function request(newEmail: string) {
     setPending(true);
@@ -145,8 +153,8 @@ function EmailCard({
     // Better Auth answers the same when the new address already has an account.
     setOk(
       emailVerified
-        ? `Check ${email}: approve the change from the link we sent there, then confirm ${newEmail} from the email we send to it.`
-        : `Check ${newEmail}: confirm it from the link we sent there to finish the change.`,
+        ? `Check ${email}: approve the change from the link we sent there within 1 hour, then confirm ${newEmail} from the email we send to it.`
+        : `Check ${newEmail}: confirm it from the link we sent there within 1 hour to finish the change.`,
     );
   }
 
@@ -183,6 +191,7 @@ function EmailCard({
               inputMode="email"
               onChange={(event) => setNext(event.target.value)}
               placeholder="name@example.com"
+              ref={inputRef}
               type="email"
               value={next}
             />
@@ -302,20 +311,24 @@ function DangerCard({
   email,
   methods,
   resumed,
+  blockingWorkspaces,
 }: {
   email: string;
   methods: SignInMethods;
   resumed: boolean;
+  /** Shared workspaces only this user owns: deletion would be refused, so it isn't offered. */
+  blockingWorkspaces: string[];
 }) {
+  const blocked = blockingWorkspaces.length > 0;
   // Back from a Google or GitHub re-sign-in: pick up where the user left off.
-  const [open, setOpen] = useState(resumed);
+  const [open, setOpen] = useState(resumed && !blocked);
   const [reauth, setReauth] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const sent = `Check your email. We sent a link to ${email}. Your account is deleted only when you open it, within 1 hour.`;
+  const sent = `We sent a link to ${email}. Open it within 1 hour and confirm to delete your account. Until then, nothing changes.`;
 
-  /** Only emails a link: the account goes when that link is opened (lib/auth.ts). */
+  /** Only emails a link; the account goes when the user confirms on the page it opens. */
   async function request(): Promise<string | void> {
     setNotice(null);
     setError(null);
@@ -335,6 +348,12 @@ function DangerCard({
           Permanently removes your account, your workspaces and every receipt in them. We email you
           a link to confirm. You can&apos;t undo this.
         </p>
+        {blocked ? (
+          <Alert variant="warning">
+            {soleOwnerMessage(blockingWorkspaces, "come back here")} Owners change roles in that
+            workspace&apos;s Settings, under Members.
+          </Alert>
+        ) : null}
         {notice ? (
           <p className="flex items-start gap-1.5 text-sm text-success" role="status">
             <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -343,7 +362,7 @@ function DangerCard({
         ) : null}
         {error ? <Alert variant="destructive">{error}</Alert> : null}
         <div>
-          <Button onClick={() => setOpen(true)} variant="destructive">
+          <Button disabled={blocked} onClick={() => setOpen(true)} variant="destructive">
             <Trash2 aria-hidden="true" />
             Delete account
           </Button>
@@ -353,7 +372,7 @@ function DangerCard({
         cancelLabel="Keep my account"
         confirmLabel="Email me the link"
         confirmText={email}
-        description={`We'll email a confirmation link to ${email}. Opening it permanently removes your account, your workspaces and every receipt in them.`}
+        description={`We'll email a link to ${email}. Open it within 1 hour and confirm there to permanently remove your account, your workspaces and every receipt in them.`}
         destructive
         onConfirm={request}
         onOpenChange={setOpen}
@@ -377,12 +396,14 @@ function DangerCard({
 }
 
 export function AccountSettings({
+  blockingWorkspaces,
   email,
   emailVerified,
   name,
   methods,
   resume,
 }: {
+  blockingWorkspaces: string[];
   email: string;
   emailVerified: boolean;
   name: string;
@@ -404,7 +425,7 @@ export function AccountSettings({
         <ProfileCard initialName={name} />
       </SettingsSection>
       <SettingsSection
-        description="Where we send sign-in links and account notices. The change needs a confirmation from both addresses."
+        description="Where we send account emails. The change needs a confirmation from both addresses."
         id="email-heading"
         title="Email"
       >
@@ -423,11 +444,16 @@ export function AccountSettings({
         <PasswordCard />
       </SettingsSection>
       <SettingsSection
-        description="Close your account for good."
+        description="Close your account permanently."
         id="delete-heading"
         title="Delete account"
       >
-        <DangerCard email={email} methods={methods} resumed={resume === "delete-account"} />
+        <DangerCard
+          blockingWorkspaces={blockingWorkspaces}
+          email={email}
+          methods={methods}
+          resumed={resume === "delete-account"}
+        />
       </SettingsSection>
     </>
   );

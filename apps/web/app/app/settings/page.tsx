@@ -4,7 +4,12 @@ import {
   PageHeaderDescription,
   PageHeaderTitle,
 } from "@/components/page-header";
-import { providerAvailability, receiptReaders, Settings } from "@receipt-ocr/core";
+import {
+  providerAvailability,
+  receiptReaders,
+  Settings,
+  workspacesBlockingDeletion,
+} from "@receipt-ocr/core";
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { Effect } from "effect";
 import { AccountSettings, type ResumeStep } from "@/components/account-settings";
@@ -69,7 +74,7 @@ export default async function SettingsPage({
     searchParams,
   ]);
   const resumeStep = RESUME_STEPS.find((step) => step === resume);
-  const [{ plan, policy }, usage, workspace, readers, methods] = await Promise.all([
+  const [{ plan, policy }, usage, workspace, readers, methods, blocking] = await Promise.all([
     getCurrentPlan(),
     getUsageSummary(),
     loadWorkspace(scope.organizationId),
@@ -81,6 +86,7 @@ export default async function SettingsPage({
       ),
     ),
     signInMethods(),
+    runtime.runPromise(workspacesBlockingDeletion(session.user.id)),
   ]);
 
   return (
@@ -147,6 +153,7 @@ export default async function SettingsPage({
       <ReceiptReadingSettings readers={readers} />
 
       <AccountSettings
+        blockingWorkspaces={blocking.map((w) => w.name)}
         email={session.user.email}
         emailVerified={session.user.emailVerified}
         methods={methods}
