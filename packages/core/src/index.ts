@@ -10,6 +10,7 @@ export * from "./analytics/index";
 export * from "./config";
 export * from "./errors";
 export * from "./files";
+export * from "./groups";
 export * from "./health";
 export * from "./jobs";
 export * from "./ocr";

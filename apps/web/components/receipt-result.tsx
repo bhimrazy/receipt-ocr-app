@@ -137,10 +137,13 @@ function Field({
 export function ReceiptResult({
   receipt,
   canEdit,
+  groups,
 }: {
   receipt: ReceiptWithItems;
   /** False for members viewing someone else's receipt: no edit or delete controls. */
   canEdit: boolean;
+  /** groups: the receipt's group chips and picker, shown under the title. */
+  groups?: React.ReactNode;
 }) {
   const inFlight = isInFlight(receipt.status);
   const completed = receipt.status === "completed";
@@ -170,6 +173,7 @@ export function ReceiptResult({
             </>
           )}
         </PageHeaderDescription>
+        {groups ? <div className="mt-3">{groups}</div> : null}
       </PageHeaderContent>
       <ReceiptActions canEdit={canEdit} receipt={receipt} />
     </PageHeader>
