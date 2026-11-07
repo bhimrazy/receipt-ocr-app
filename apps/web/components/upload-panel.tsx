@@ -27,7 +27,7 @@ import { formatTime } from "@/lib/format";
 import { usageNote, type Usage } from "@/components/usage-meter";
 import { fitBatch } from "@/lib/capture/batch-limit";
 import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
-import { browserCameraSupport, hasCamera, type CameraSupport } from "@/lib/capture/camera";
+import { browserCameraSupport, wantsCamera, type CameraSupport } from "@/lib/capture/camera";
 import { postReceipt } from "@/lib/capture/upload-request";
 import { useHydrated } from "@/lib/use-hydrated";
 import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
@@ -186,7 +186,6 @@ export function UploadPanel({
   const reviewingRef = useRef<ReviewImage[]>([]);
   const pendingRef = useRef(0);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraFound, setCameraFound] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -208,10 +207,6 @@ export function UploadPanel({
     browserCameraSupport,
     () => "unsupported",
   );
-  useEffect(() => {
-    if (support !== "ok") return;
-    void hasCamera().then(setCameraFound);
-  }, [support]);
 
   // `?capture=1` (the Scan tab and the home-screen shortcut) opens the camera on every visit.
   // The parameter is dropped once used, so the next tap on Scan is a change again, and Back
@@ -221,13 +216,11 @@ export function UploadPanel({
     if (!captureRequested) return;
     const url = new URL(window.location.href);
     url.searchParams.delete("capture");
-    // This re-renders with `captureRequested` false straight away, so the camera check below
-    // must not be cancelled by this effect's cleanup.
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-    if (browserCameraSupport() !== "ok") return;
-    void hasCamera().then((found) => {
-      setCameraFound(found);
-      if (!found) return;
+    // Desktops just show the page; the camera is for touch devices.
+    if (!wantsCamera() || browserCameraSupport() !== "ok") return;
+    // Deferred: this re-renders with `captureRequested` false, which must not cancel it.
+    queueMicrotask(() => {
       if (queue.getSnapshot().running) setNotice(BUSY_NOTICE);
       else setCameraOpen(true);
     });
@@ -394,9 +387,8 @@ export function UploadPanel({
   const count = snapshot.items.filter((i) => i.status === "waiting" || i.status === "error").length;
   const overLimit = remaining !== null && count > remaining;
   const single = items.length === 1;
-  // Desktop offers the camera only when one exists; phones always get the button, falling
-  // back to the camera app when the in-app camera can't run.
-  const cameraOnDesktop = support === "ok" && cameraFound;
+  // Touch devices always get the camera button, falling back to the camera app when the
+  // in-app camera can't run. Fine-pointer desktops never do (CAMERA_MEDIA_QUERY, in CSS).
   const instant = queue.getMode() === "instant";
   const heading = busy
     ? instant
@@ -480,10 +472,12 @@ export function UploadPanel({
             <p className="font-medium">
               {empty ? (
                 <>
-                  <span className="max-md:hidden">
+                  <span className="max-md:hidden pointer-coarse:hidden">
                     Drop receipt photos or PDFs here, or click to choose
                   </span>
-                  <span className="md:hidden">Take photos or choose files</span>
+                  <span className="hidden max-md:inline pointer-coarse:inline">
+                    Take photos or choose files
+                  </span>
                 </>
               ) : (
                 "Add more receipts"
@@ -508,7 +502,7 @@ export function UploadPanel({
         </div>
       </Card>
 
-      <div className={cn("flex w-full gap-2 max-md:flex-col", !cameraOnDesktop && "md:hidden")}>
+      <div className="hidden w-full gap-2 max-md:flex max-md:flex-col pointer-coarse:flex">
         <Button
           disabled={locked}
           onClick={openCamera}
@@ -520,7 +514,6 @@ export function UploadPanel({
           Take photos
         </Button>
         <Button
-          className="md:hidden"
           disabled={locked}
           onClick={() => inputRef.current?.click()}
           type="button"
