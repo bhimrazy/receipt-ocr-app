@@ -7,6 +7,8 @@ import { SiteFooter } from "@/components/site-footer";
 
 export const metadata: Metadata = {
   title: "Page not found",
+  description:
+    "This page doesn't exist on receiptOCR. The link may be old, or the page may have moved.",
   robots: { index: false },
 };
 

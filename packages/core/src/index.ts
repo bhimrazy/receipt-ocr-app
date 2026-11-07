@@ -6,9 +6,11 @@ import { Db, Storage } from "./services";
 import { Settings } from "./settings";
 
 export { RECEIPT_CATEGORIES, type ReceiptCategory } from "@receipt-ocr/ai/categories";
+export * from "./analytics/index";
 export * from "./config";
 export * from "./errors";
 export * from "./files";
+export * from "./groups";
 export * from "./health";
 export * from "./jobs";
 export * from "./ocr";
@@ -34,3 +36,4 @@ export type AppServices = Layer.Layer.Success<typeof AppLayer>;
 export * from "./admin";
 export * from "./audit";
 export * from "./admin-queries";
+export * from "./admin-ops";

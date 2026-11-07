@@ -64,6 +64,20 @@
       "when": 1793948588549,
       "tag": "0008_jobs_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793952715866,
+      "tag": "0009_receipt_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794031131250,
+      "tag": "0010_jobs_created_at",
+      "breakpoints": true
     }
   ]
 }

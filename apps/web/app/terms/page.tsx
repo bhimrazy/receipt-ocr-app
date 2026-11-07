@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { getPlanTable } from "@/lib/plan-limits";
-import { canonicalFor } from "@/lib/site";
+import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Terms of service",
-  description: "The terms for using receiptOCR, including the free plan and AI-extracted data.",
-  alternates: canonicalFor("/terms"),
-};
+  description:
+    "The terms for using receiptOCR: your account, your receipts, the free plan, and checking AI-extracted data before you rely on it.",
+  path: "/terms",
+});
 
 // Shows the free plan's limits; an admin save also revalidates (revalidatePlanCopy).
 export const revalidate = 3600;
@@ -18,7 +19,7 @@ export default async function TermsPage() {
   return (
     <LegalPage
       title="Terms of service"
-      updated="November 4, 2026"
+      updated={formatLegalDate(LEGAL_UPDATED.terms)}
       intro="These terms apply when you use receiptOCR. By creating an account or using the service, you agree to them. receiptOCR is in early access, so some features may change."
       sections={[
         {

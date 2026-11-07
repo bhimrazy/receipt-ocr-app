@@ -4,6 +4,11 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 
 const LABELS: Record<string, string> = {
+  "job.rerun": "Re-ran job",
+  "job.cancel": "Cancelled job",
+  "job.pause": "Paused jobs",
+  "job.resume": "Resumed jobs",
+  "job.cooldown_clear": "Cleared provider cooldown",
   "user.role": "Changed role",
   "user.plan": "Changed plan",
   "user.ban": "Banned user",
@@ -93,6 +98,10 @@ function targetHref(entry: AdminAuditEntry): string | null {
   if (entry.targetType === "user") return `/admin/users/${entry.targetId}`;
   if (entry.targetType === "workspace") return `/admin/workspaces/${entry.targetId}`;
   if (entry.targetType === "settings") return "/admin/settings";
+  if (entry.targetType === "job")
+    return entry.action === "job.rerun" || entry.action === "job.cancel"
+      ? `/admin/jobs/${entry.targetId}`
+      : "/admin/jobs";
   return null;
 }
 

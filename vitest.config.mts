@@ -5,13 +5,14 @@ const root = import.meta.dirname;
 
 /**
  * One config for the whole workspace. These are unit tests over pure logic —
- * no database, no network, no DOM — so a single Node environment covers all of
+ * no database, no network, no browser DOM (components render to static markup) — so a single Node environment covers all of
  * them and keeps `bun run test` fast enough to run on every change.
  */
 export default defineConfig({
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "node",
-    include: ["apps/**/*.test.ts", "packages/**/*.test.ts", "bench/**/*.test.ts"],
+    include: ["apps/**/*.test.{ts,tsx}", "packages/**/*.test.ts", "bench/**/*.test.ts"],
     exclude: ["**/node_modules/**", "**/.next/**", "**/dist/**"],
   },
   resolve: {
@@ -20,6 +21,7 @@ export default defineConfig({
       "@receipt-ocr/ai/categories": path.join(root, "packages/ai/src/categories.ts"),
       "@receipt-ocr/ai/models": path.join(root, "packages/ai/src/models.ts"),
       "@receipt-ocr/ai": path.join(root, "packages/ai/src/index.ts"),
+      "@receipt-ocr/core/group-rules": path.join(root, "packages/core/src/group-rules.ts"),
       "@receipt-ocr/core/plans": path.join(root, "packages/core/src/plans.ts"),
       "@receipt-ocr/core/upload-limits": path.join(root, "packages/core/src/upload-limits.ts"),
       "@receipt-ocr/core": path.join(root, "packages/core/src/index.ts"),

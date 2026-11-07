@@ -6,12 +6,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./plans": "./src/plans.ts",
-    "./upload-limits": "./src/upload-limits.ts"
+    "./upload-limits": "./src/upload-limits.ts",
+    "./group-rules": "./src/group-rules.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test:int": "INTEGRATION=1 vitest run --root ../.. --no-file-parallelism packages/core/src/receipts.int.test.ts packages/core/src/admin.int.test.ts packages/core/src/jobs/jobs.int.test.ts"
+    "test:int": "INTEGRATION=1 vitest run --root ../.. --no-file-parallelism packages/core/src/receipts.int.test.ts packages/core/src/admin.int.test.ts packages/core/src/admin-ops.int.test.ts packages/core/src/analytics/spend.int.test.ts packages/core/src/jobs/jobs.int.test.ts packages/core/src/groups.int.test.ts"
   },
   "dependencies": {
     "@receipt-ocr/ai": "workspace:0.0.0",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "25.9.1",
+    "drizzle-orm": "0.45.4",
     "typescript": "6.0.3"
   }
 }

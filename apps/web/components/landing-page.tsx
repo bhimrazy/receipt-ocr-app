@@ -1,4 +1,3 @@
-import { Accordion, AccordionItem } from "@receipt-ocr/ui/components/accordion";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
@@ -10,6 +9,7 @@ import {
   Code2,
   Download,
   ListChecks,
+  Plus,
   ScanLine,
   Search,
   Shield,
@@ -22,6 +22,7 @@ import { ProductPreview } from "@/components/product-preview";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
+import { homeJsonLd, jsonLdScript } from "@/lib/seo";
 
 const features = [
   {
@@ -140,6 +141,7 @@ const customPlanFeatures = [
   "Shape the roadmap with your feedback",
 ];
 
+// The FAQ entity mirrors the visible FAQ section below; keep the two in step.
 const faqJsonLd = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -149,6 +151,8 @@ const faqJsonLd = {
     acceptedAnswer: { "@type": "Answer", text: faq.a },
   })),
 };
+
+const siteJsonLd = homeJsonLd();
 
 function SectionLabel({ children }: { children: string }) {
   return <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">{children}</p>;
@@ -202,9 +206,15 @@ function PlanCard({
 export function LandingPage() {
   return (
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
+      {siteJsonLd ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(siteJsonLd) }}
+        />
+      ) : null}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(faqJsonLd) }}
       />
       <SiteHeader />
 
@@ -216,7 +226,7 @@ export function LandingPage() {
         <div className="hero-aurora pointer-events-none absolute left-1/2 top-[36%] size-[780px] -translate-x-1/2 -translate-y-1/2 rounded-full" />
         <HeroFloatingReceipts />
 
-        <div className="relative z-10 mx-auto max-w-3xl animate-fade-up">
+        <div className="relative z-10 mx-auto max-w-3xl animate-rise">
           <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-hairline bg-wash-subtle px-4 py-1.5 font-mono text-xs text-muted-foreground">
             <span className="size-1.5 rounded-full bg-primary shadow-[0_0_10px_var(--primary)]" />
             Early access · Free to start
@@ -247,7 +257,7 @@ export function LandingPage() {
 
       {/* Product preview */}
       <section className="relative px-5 pb-8">
-        <div className="mx-auto -mt-6 max-w-4xl animate-fade-up">
+        <div className="mx-auto -mt-6 max-w-4xl animate-rise">
           <ProductPreview />
         </div>
       </section>
@@ -422,13 +432,21 @@ export function LandingPage() {
               Still curious? Reach out any time. We read every message.
             </p>
           </div>
-          <Accordion>
+          {/* Native disclosure: no client JS, and every answer is in the HTML. */}
+          <div className="flex w-full flex-col divide-y divide-border rounded-xl border border-border">
             {faqs.map((faq) => (
-              <AccordionItem key={faq.q} question={faq.q}>
-                {faq.a}
-              </AccordionItem>
+              <details className="group/faq px-5" key={faq.q}>
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-md py-5 text-left text-sm font-medium text-foreground outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                  {faq.q}
+                  <Plus
+                    aria-hidden
+                    className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open/faq:rotate-45 group-open/faq:text-primary"
+                  />
+                </summary>
+                <p className="pb-5 text-sm leading-7 text-muted-foreground">{faq.a}</p>
+              </details>
             ))}
-          </Accordion>
+          </div>
         </div>
       </section>
 

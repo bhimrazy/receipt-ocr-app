@@ -33,3 +33,21 @@ test("lab design pages are not served in a normal build", async ({ page }) => {
   const res = await page.goto("/landing-a");
   expect(res?.status()).toBe(404);
 });
+
+test("a failed support panel chunk shows a fallback with retry instead of breaking the page", async ({
+  page,
+}) => {
+  await page.goto("/privacy");
+  // Everything the page needs is loaded; only the lazy panel chunk is fetched after this.
+  let failing = true;
+  await page.route(/\/_next\/static\/.*\.js/, (route) =>
+    failing ? route.abort() : route.continue(),
+  );
+  await page.getByRole("button", { name: "Contact support" }).click();
+  await expect(page.getByText("Couldn't load the form")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  failing = false;
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByLabel(/email/i).first()).toBeVisible();
+});
