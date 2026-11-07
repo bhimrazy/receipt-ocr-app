@@ -1,21 +1,18 @@
 import type { MetadataRoute } from "next";
-import { siteUrl, siteUrlMissing } from "@/lib/site";
+import { headers } from "next/headers";
+import { PRODUCTION_DISALLOW, isProductionHost, requestHost } from "@/lib/seo-hosts";
+import { siteUrl } from "@/lib/site";
 
-// Signed-in pages, admin and auth flows stay crawlable so crawlers can read their noindex
-// (meta tag and X-Robots-Tag in next.config.ts); a Disallow would hide it and let a linked URL
-// be indexed without content. Only the API and the lab pages (404 in production) are blocked.
-// Non-production Vercel deployments block everything: they sit behind Deployment Protection and carry
-// X-Robots-Tag: noindex, so there is no content for a crawler to reach anyway.
-export default function robots(): MetadataRoute.Robots {
-  if (process.env.VERCEL_ENV !== undefined && process.env.VERCEL_ENV !== "production") {
-    return { rules: { userAgent: "*", disallow: "/" } };
-  }
+export function robotsFor(host: string): MetadataRoute.Robots {
+  if (!isProductionHost(host)) return { rules: { userAgent: "*", disallow: "/" } };
   return {
-    rules: {
-      userAgent: "*",
-      allow: "/",
-      disallow: ["/api/", "/landing-", "/final-"],
-    },
-    ...(siteUrlMissing ? {} : { sitemap: `${siteUrl}/sitemap.xml` }),
+    rules: { userAgent: "*", allow: "/", disallow: PRODUCTION_DISALLOW },
+    sitemap: `${siteUrl}/sitemap.xml`,
   };
+}
+
+// Decided per request by host. Every non-production host (previews, localhost) blocks everything;
+// X-Robots-Tag (next.config.ts) covers responses a crawler fetches regardless.
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  return robotsFor(requestHost(await headers()));
 }
