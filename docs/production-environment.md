@@ -1,6 +1,8 @@
-# Vercel environment setup
+# Production environment setup
 
-How to give a Vercel environment the keys it needs, one service at a time. Follow the steps in order: each one
+How to give an environment (Production or Preview) the keys it needs, one service at a time. The services and
+variables are the same wherever the app runs; the steps for adding them are written for Vercel, where it runs today.
+On Docker or a VPS, set the same variables in the container's environment instead. Follow the steps in order: each one
 unlocks part of the app, and you can stop after step 3 with a working app.
 
 ## Checklist
@@ -75,6 +77,25 @@ More help: [Create buckets](https://developers.cloudflare.com/r2/buckets/create-
 | `S3_SECRET_ACCESS_KEY` | 64 letters and digits                                         | Secret |
 
 **Check:** after deploying, `/api/health/ready` shows `"storage":"ok"`.
+
+**CORS: leave it unset.** The browser never calls R2 directly: uploads go through the app, and images load in a
+plain `<img>` from a signed link, which needs no CORS. With no policy, no website's scripts can read the bucket's
+responses, which is the strictest setting. Add one only when a feature needs it (direct browser uploads to R2, or a
+script that fetches an image), and keep it to the one origin and the methods used:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://receipt-ocr.bhimraj.com.np"],
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Preview addresses change with every pull request, so a Preview bucket would need a fixed preview domain before it
+can have a policy like this.
 
 ---
 
@@ -174,7 +195,19 @@ More help: [Domains](https://resend.com/docs/dashboard/domains/introduction),
 
 ## 4. Sign in with Google
 
-**Unlocks:** the "Continue with Google" button. Production only: preview addresses change with every pull request.
+**Unlocks:** the "Continue with Google" button.
+
+**One client per environment, in separate Google Cloud projects.** A leaked or rotated preview secret then never
+touches production, each client lists only its own redirect address, and the consent screen (which belongs to the
+project) can stay in **Testing** for staging while production is published.
+
+| Google Cloud project            | Holds                                                                                                                       | Status                                    |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `receipt-ocr` (Production)      | Published consent screen, the production web client, the production Gemini key                                              | Set up now                                |
+| `receipt-ocr-staging` (Preview) | Consent screen left in Testing (test users only), a client for the preview domain, a preview Gemini key with a small budget | Only if previews ever need Google sign-in |
+
+Today only Production gets Google sign-in. Previews use email and password: their addresses change with every pull
+request, and Google needs each redirect address listed exactly.
 
 <details>
 <summary><b>Create the sign-in client in Google Cloud</b></summary>
@@ -196,6 +229,11 @@ More help: [Domains](https://resend.com/docs/dashboard/domains/introduction),
 6. **Create**, then copy the **Client ID** and **Client secret**. Download the JSON as a backup: the secret may not
    be shown again.
 
+For a staging client later, repeat in the `receipt-ocr-staging` project with the origin
+`https://preview.receipt-ocr.bhimraj.com.np` and the redirect URI
+`https://preview.receipt-ocr.bhimraj.com.np/api/auth/callback/google`. Leave its audience in **Testing** and add
+yourself as a test user. The authorised domain `bhimraj.com.np` already covers the preview subdomain.
+
 More help: [Google Auth Platform](https://support.google.com/cloud/answer/15544987),
 [Better Auth: Google](https://www.better-auth.com/docs/authentication/google).
 
@@ -206,13 +244,20 @@ More help: [Google Auth Platform](https://support.google.com/cloud/answer/155449
 | `GOOGLE_CLIENT_ID`     | `1234…-abc….apps.googleusercontent.com` | Config |
 | `GOOGLE_CLIENT_SECRET` | `GOCSPX-…`                              | Secret |
 
+Add both to **Production** only. Never paste the production client into Preview.
+
 **Check:** the sign-in page shows the Google button, and signing in returns you to the app.
 
 ---
 
 ## 5. Sign in with GitHub
 
-**Unlocks:** the "Continue with GitHub" button. Production only.
+**Unlocks:** the "Continue with GitHub" button.
+
+**One OAuth app per environment.** A GitHub OAuth app allows exactly one callback URL, so production and a staging
+app can't share one anyway. Create the production app now; previews use email and password. If previews ever need it,
+create a second app, `receiptOCR (staging)`, with the callback
+`https://preview.receipt-ocr.bhimraj.com.np/api/auth/callback/github`, and add its values to **Preview** only.
 
 <details>
 <summary><b>Create the sign-in app in GitHub</b></summary>
@@ -234,6 +279,8 @@ More help: [Creating an OAuth app](https://docs.github.com/en/apps/oauth-apps/bu
 | ---------------------- | --------------------- | ------ |
 | `GITHUB_CLIENT_ID`     | `Ov23li…`             | Config |
 | `GITHUB_CLIENT_SECRET` | 40 letters and digits | Secret |
+
+Add both to **Production** only.
 
 **Check:** the sign-in page shows the GitHub button.
 
@@ -289,6 +336,33 @@ Add **both or neither**: with only one, the app refuses to start.
 | Google says "Access blocked" or "app not verified" | The app is still in **Testing**: publish it (step 4.3).                     |
 | Google says "redirect_uri_mismatch"                | The redirect URI doesn't match exactly (https, no trailing slash).          |
 | The site won't start after adding Turnstile        | Only one of the two Turnstile keys is set.                                  |
+
+---
+
+## Preview environment
+
+Pull-request previews use the staging database, so give them their own storage and keys too. Otherwise test uploads
+land in the production bucket, and a leaked preview key reaches production. In Vercel, add each of these with only
+**Preview** ticked.
+
+| Key                            | Value for Preview                                                     | Kind   | Notes                                         |
+| ------------------------------ | --------------------------------------------------------------------- | ------ | --------------------------------------------- |
+| `S3_ENDPOINT`                  | Same as Production (one Cloudflare account)                           | Config |                                               |
+| `S3_REGION`                    | `auto`                                                                | Config |                                               |
+| `S3_BUCKET`                    | `receipt-ocr-staging`                                                 | Config |                                               |
+| `S3_ACCESS_KEY_ID`             | From a second R2 token limited to `receipt-ocr-staging` only          | Secret | Never reuse the Production token              |
+| `S3_SECRET_ACCESS_KEY`         | From that token                                                       | Secret |                                               |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | A separate key, ideally in its own Google project with a small budget | Secret |                                               |
+| `ANTHROPIC_API_KEY`            | A key from a preview workspace with a low spend limit                 | Secret | Optional                                      |
+| `RESEND_API_KEY`               | A separate key                                                        | Secret | Optional; send only to `delivered@resend.dev` |
+| `EMAIL_FROM`, `SUPPORT_EMAIL`  | Same as Production                                                    | Config |                                               |
+| `DATABASE_URL`                 | The **staging** database's transaction pooler URL                     | Secret | Already set                                   |
+| `BETTER_AUTH_SECRET`           | Its own secret, never Production's                                    | Secret | Already set                                   |
+| `OCR_DAILY_CAP`                | `50`                                                                  | Config | Already set                                   |
+
+Leave out for Preview: `BETTER_AUTH_URL` (previews use their own address), the Google and GitHub sign-in keys
+(callback URLs can't match random preview addresses), and Turnstile (or use Cloudflare's test keys). Previews are
+behind Vercel Deployment Protection, so only the team can open them.
 
 ---
 
