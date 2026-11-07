@@ -16,7 +16,13 @@ const core = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/env", () => ({ authEnv: { betterAuthUrl: "https://app.example", ipAddress: {} } }));
+vi.mock("@/lib/env", () => ({
+  authEnv: {
+    betterAuthUrl: "https://app.example",
+    trustedOrigins: ["https://app.example"],
+    ipAddress: {},
+  },
+}));
 vi.mock("@/lib/log", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/log")>()),
   logger: { error: vi.fn(), info: vi.fn() },

@@ -17,8 +17,34 @@ export const requireEmailVerification =
   process.env.AUTH_REQUIRE_EMAIL_VERIFICATION === undefined
     ? isProduction
     : process.env.AUTH_REQUIRE_EMAIL_VERIFICATION !== "false";
-/** `next build` runs with NODE_ENV=production but without runtime secrets. */
+/**
+ * `next build` runs with NODE_ENV=production but without runtime secrets: on Vercel they are stored
+ * as Sensitive, so `vercel pull` in CI gets empty or placeholder values for them.
+ */
 const isBuild = process.env.NEXT_PHASE === "phase-production-build";
+
+/**
+ * Parses a runtime-only value. A malformed value throws when the server starts, but during the
+ * build it is treated as unset (with a warning), so a placeholder never fails the build.
+ */
+function runtimeOnly<T>(name: string, parse: () => T, unset: T): T {
+  try {
+    return parse();
+  } catch (error) {
+    if (!isBuild) throw error;
+    console.warn(`[env] ${name} is not valid at build time; treating it as unset for the build.`);
+    return unset;
+  }
+}
+
+function isUrl(value: string): boolean {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function optional(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -31,6 +57,14 @@ export interface SocialProviderEnv {
 }
 
 function socialProvider(prefix: "GOOGLE" | "GITHUB"): SocialProviderEnv | undefined {
+  return runtimeOnly(
+    `${prefix}_CLIENT_ID/${prefix}_CLIENT_SECRET`,
+    () => parseSocialProvider(prefix),
+    undefined,
+  );
+}
+
+function parseSocialProvider(prefix: "GOOGLE" | "GITHUB"): SocialProviderEnv | undefined {
   const clientId = optional(`${prefix}_CLIENT_ID`);
   const clientSecret = optional(`${prefix}_CLIENT_SECRET`);
   if (!clientId && !clientSecret) return undefined;
@@ -68,9 +102,36 @@ export const supportEmail = optional("SUPPORT_EMAIL");
 
 export const emailEnabled = Boolean(emailEnv.resendApiKey && emailEnv.from);
 
+/**
+ * Vercel preview deployments only (VERCEL_ENV is "production" on the live site). Production never
+ * reads VERCEL_URL: its origin is always the exact BETTER_AUTH_URL.
+ */
+const isVercelPreview = process.env.VERCEL_ENV === "preview";
+
+/** The preview's hosts, branch alias first: `https://<branch alias>` and `https://<deployment>`. */
+function previewOrigins(): string[] {
+  if (!isVercelPreview) return [];
+  const hosts = [optional("VERCEL_BRANCH_URL"), optional("VERCEL_URL")].filter(
+    (host): host is string => Boolean(host),
+  );
+  return [...new Set(hosts.map((host) => `https://${host}`))];
+}
+
 function betterAuthUrl(): string {
+  return runtimeOnly("BETTER_AUTH_URL", parseBetterAuthUrl, "http://localhost:3000");
+}
+
+function parseBetterAuthUrl(): string {
   const url = optional("BETTER_AUTH_URL");
-  if (url) return url;
+  if (url) {
+    if (!isUrl(url))
+      throw new Error("BETTER_AUTH_URL must be an absolute URL, e.g. https://app.example.com.");
+    return url;
+  }
+  // A preview has no fixed domain, so its own host is the app origin: sign-in works there and
+  // email links point back at the preview, never at production.
+  const preview = previewOrigins()[0];
+  if (preview) return preview;
   // Localhost in production means broken invite links, a trustedOrigins
   // mismatch and non-Secure cookies; fail at startup instead.
   if (isProduction && !isBuild && optional("DATABASE_URL")) {
@@ -78,6 +139,11 @@ function betterAuthUrl(): string {
   }
   return "http://localhost:3000";
 }
+
+const appUrl = betterAuthUrl();
+
+/** Origins allowed to call auth and mutating routes: the app URL, plus both hosts of a preview. */
+const trustedOrigins = [...new Set([new URL(appUrl).origin, ...previewOrigins()])];
 
 function list(name: string): string[] | undefined {
   const raw = optional(name);
@@ -115,6 +181,10 @@ function isIpOrCidr(value: string): boolean {
  * list, instead of a single-value header.
  */
 function trustedProxies(): string[] | undefined {
+  return runtimeOnly("TRUSTED_PROXIES", parseTrustedProxies, undefined);
+}
+
+function parseTrustedProxies(): string[] | undefined {
   const proxies = list("TRUSTED_PROXIES");
   const invalid = proxies?.filter((proxy) => !isIpOrCidr(proxy));
   if (invalid?.length) {
@@ -130,6 +200,10 @@ function trustedProxies(): string[] | undefined {
  * so rotating still signs everyone out.
  */
 function betterAuthSecrets(): { version: number; value: string }[] | undefined {
+  return runtimeOnly("BETTER_AUTH_SECRETS", parseBetterAuthSecrets, undefined);
+}
+
+function parseBetterAuthSecrets(): { version: number; value: string }[] | undefined {
   const entries = list("BETTER_AUTH_SECRETS");
   if (!entries) return undefined;
   const secrets = entries.map((entry) => {
@@ -153,7 +227,7 @@ function betterAuthSecrets(): { version: number; value: string }[] | undefined {
  * One without the other would either show a widget nothing checks or reject every form, so that
  * fails at startup (not during `next build`, which runs without runtime secrets).
  * TURNSTILE_ALLOWED_HOSTNAMES (comma-separated) overrides the hostname siteverify must report; it
- * defaults to the BETTER_AUTH_URL host.
+ * defaults to the app's own hosts (the BETTER_AUTH_URL host, or both hosts of a preview).
  */
 function turnstileConfig():
   { siteKey: string; secretKey: string; allowedHostnames: string[] } | undefined {
@@ -162,7 +236,7 @@ function turnstileConfig():
   if (siteKey && secretKey) {
     // Pin tokens to our own host so one minted for another site on the same widget key is refused.
     const allowedHostnames = list("TURNSTILE_ALLOWED_HOSTNAMES") ?? [
-      new URL(betterAuthUrl()).hostname,
+      ...new Set(trustedOrigins.map((origin) => new URL(origin).hostname)),
     ];
     return { siteKey, secretKey, allowedHostnames };
   }
@@ -176,15 +250,30 @@ function turnstileConfig():
 
 export const turnstileEnv = turnstileConfig();
 
+/** Postgres URL. Malformed means postgres-js would throw on first import of the auth module. */
+function databaseUrl(): string | undefined {
+  return runtimeOnly(
+    "DATABASE_URL",
+    () => {
+      const url = optional("DATABASE_URL");
+      if (url && !isUrl(url)) throw new Error("DATABASE_URL is not a valid connection URL.");
+      return url;
+    },
+    undefined,
+  );
+}
+
 export const authEnv = {
   /** Supabase transaction-pooler (port 6543) URL works here; postgres-js runs with prepare:false. */
-  databaseUrl: optional("DATABASE_URL"),
+  databaseUrl: databaseUrl(),
   /** Min 32 chars. Generate with `openssl rand -base64 32`. */
   betterAuthSecret: optional("BETTER_AUTH_SECRET"),
   /** Versioned secrets for rotation; when set, BETTER_AUTH_SECRET only decrypts older payloads. */
   betterAuthSecrets: betterAuthSecrets(),
   /** Canonical app origin, e.g. https://receiptocr.example.com. Defaults to localhost in dev. */
-  betterAuthUrl: betterAuthUrl(),
+  betterAuthUrl: appUrl,
+  /** Exact origins Better Auth and `crossOriginResponse()` accept. Only previews add any. */
+  trustedOrigins,
   /** Client-IP resolution shared by Better Auth's limiter and `clientIp()`. */
   ipAddress: { ipAddressHeaders: trustedIpHeaders(), trustedProxies: trustedProxies() },
   /** Emails auto-promoted to the `admin` role when they sign up. */
@@ -203,7 +292,7 @@ export const authEnabled = Boolean(
 );
 
 const currentSecret = authEnv.betterAuthSecrets?.[0]?.value ?? authEnv.betterAuthSecret;
-if (currentSecret && currentSecret.length < 32) {
+if (currentSecret && currentSecret.length < 32 && !isBuild) {
   console.warn(
     "The current auth secret is shorter than 32 characters; generate a stronger one with `openssl rand -base64 32`.",
   );

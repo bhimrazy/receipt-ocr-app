@@ -1,5 +1,7 @@
 name: Vercel Preview Deployment
 
+# Previews use the staging database (Vercel's Preview env vars) and never run migrations: a PR whose
+# migration hasn't merged yet won't find its tables there. See docs/deployment.md.
 on:
   # Every PR, including stacked ones whose base isn't main.
   pull_request:
@@ -75,5 +77,7 @@ jobs:
             |---|---|
             | **URL** | ${{ steps.deploy.outputs.preview_url }} |
             | **Commit** | `${{ github.event.pull_request.head.sha }}` |
+
+            Uses the staging database. Migrations in this PR are not applied there until it merges.
 
             This comment updates with the newest deployment on each push.
