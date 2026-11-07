@@ -18,10 +18,17 @@ Postgres fixed-window limiter `hitRateLimit` (`packages/core/src/workspace.ts`),
 - **The spec moved a lot.** The current revision is **2026-07-28**: stateless (no `initialize`, no sessions, no GET
   stream), one POST endpoint, and Client ID Metadata Documents (CIMD) preferred over the now-deprecated Dynamic Client
   Registration (DCR). Stateless is good news for Vercel: every call is one short request.
-- **Smallest safe version (Phase 1, about 4–5 days):** a personal access token (PAT) created in Settings → Agent access
-  (off by default), one endpoint `POST /api/mcp`, five read-only tools, per-user limits per minute, hour and day on the
-  existing limiter, small capped outputs that are marked as untrusted data, an admin kill switch, and one wide event per
-  call. This works today in **Claude Code, Cursor, Codex, VS Code** and any client that sends a header.
+- **Smallest safe version (Phase 1, about 6 days):** a personal access token (PAT) created in Settings → Agent access
+  (off by default), one endpoint `POST /api/mcp`, five read-only tools, and small capped outputs marked as untrusted data.
+  Limits start low: 10 a minute for everyone, 60 an hour and 200 a day on Free, and 300 an hour and 1,000 a day on Pro.
+  They are tunable in `app_settings`, with a global daily cap and at most 2 calls in flight per token. Every call goes
+  in a durable `mcp_calls` table (no arguments or results; kept 90 days; pruned by a job) as well as a wide event. Users
+  see their activity in Settings, and there is an admin kill switch. This works today in **Claude Code, Cursor, Codex,
+  VS Code** and any client that sends a header. The admin page comes right after (Phase 1c, about 2 days).
+- **Product analytics** follows the [observability plan](2026-11-06-observability.md): server-side PostHog keyed by
+  user id. Plan goes on the person, workspace on the group, role on the event. MCP usage is sent as a daily rollup
+  from `mcp_calls`, not one event per call. `plan_changed {from, to, reason}` is a server event, and plan history lives
+  in our database as the source of truth (§9).
 - **Claude.ai, Claude Desktop and ChatGPT need OAuth** for per-user private data. Claude.ai's header option is a
   beta for a limited set of organizations and is an organization-wide shared credential; ChatGPT accepts no static
   keys at all. So **Phase 2 (about 5–7 days)** adds OAuth 2.1 with Better Auth's `@better-auth/mcp` and
@@ -191,17 +198,28 @@ call checks three fixed windows with `hitRateLimit`: keys `mcp:m:<userId>`, `mcp
 server. Store the numbers per plan in a new `mcp` key in `app_settings` (30 s cache, edited in Admin → Settings, the
 same as `plans`).
 
-| Plan   | Per minute | Per hour | Per day                                           | `export_receipts_csv` per day |
-| ------ | ---------- | -------- | ------------------------------------------------- | ----------------------------- |
-| Free   | 20         | 200      | 500                                               | 10                            |
-| Pro    | 60         | 1,000    | 5,000                                             | 100                           |
-| Global | —          | —        | 50,000 (an `MCP_DAILY_CAP`, like `OCR_DAILY_CAP`) | —                             |
+Starting limits. The owner asked to start low; raising a limit is easy, and lowering one breaks someone's workflow.
+
+| Plan   | Per minute | Per hour | Per day                                           | `export_receipts_csv` per day | In flight per token |
+| ------ | ---------- | -------- | ------------------------------------------------- | ----------------------------- | ------------------- |
+| Free   | 10         | 60       | 200                                               | 3                             | 2                   |
+| Pro    | 10         | 300      | 1,000                                             | 20                            | 2                   |
+| Global | —          | —        | 10,000 (an `MCP_DAILY_CAP`, like `OCR_DAILY_CAP`) | —                             | —                   |
 
 Why these numbers: one question ("what did I spend on groceries last month?") is typically one to four tool calls, so
-20 a minute is a fast-typing human with headroom and a stuck agent loop stops within a minute. Buildkite uses 50 a
-minute per user; Xero's daily cap is 1,000 to 5,000 per organisation. 500 a day on Free is far above real use but caps a
-leaked token at a small scrape. These are guesses to be measured: log every limit hit, and revisit after two weeks of
-real traffic.
+10 a minute is two or three questions a minute, and a stuck agent loop stops within a minute. The same per-minute
+number on both plans keeps the burst shape the same; the plan buys sustained use, not speed. The hourly limit stops a
+loop that waits out the per-minute window. 200 a day on Free is roughly 50 questions. A leaked Free token can pull
+at most 200 × 25 = 5,000 receipt rows a day through `list_receipts`. For comparison, Buildkite allows 50 a minute per
+user and Xero 1,000 to 5,000 a day per organisation; we are deliberately well below both. The global cap of 10,000 a
+day protects the Vercel and Supabase quotas (§7). Measure from `mcp_calls` and revisit after two weeks.
+
+**Concurrency, cheaply.** At most 2 calls in flight per token, using transaction-scoped Postgres advisory locks: the
+tool's query runs in a transaction that first tries `pg_try_advisory_xact_lock(hashtext('mcp:' || token_id), slot)` for
+slot 0, then slot 1. If both are held, the call returns "too many calls at once, retry shortly". There are no rows to
+write, and a crashed function releases the lock with its transaction, so nothing can leak. This works through
+Supabase's transaction pooler because the lock lives exactly as long as the transaction. It is cheap only because each
+tool is one short query; a long-running tool would need a counter with leases instead.
 
 Before auth, limit failed authentication per client IP (`clientIp()`), for example 30 bad tokens a minute. Tokens are
 256-bit, so this protects the database, not the token space. Fixed windows allow up to twice the limit across a window
@@ -279,15 +297,76 @@ This lowers the risk; it doesn't remove it. Say so in the privacy page.
 - **Origin.** Reject a present `Origin` that isn't one of our app origins with `403` (`originValidationResponse`).
   Server-side clients send none. Send no CORS headers.
 
-### Audit logging
+### Audit logging: wide events plus a durable `mcp_calls` table
 
-One wide event per call, `mcp.call`, through `withRequestEvent` and `annotateEvent`: `user_id`, `organization_id`,
-`token_id` (`id`), `auth` (`pat` | `oauth`), `mcp_client` (a token from our own list: `claude`, `chatgpt`, `cursor`,
-`claude_code`, `other`, mapped from known CIMD URLs or the `clientInfo` name), `tool`, `outcome`, `status_code`,
-`count` (rows returned), `bytes`, `truncated`, `rate_limited` (which window), `duration_ms`, and `flags` for which
-filters were used. **Never argument values**: a `query` can be a merchant name, and the export route already logs flags
-only. Each new key goes in `packages/core/src/telemetry/schema.ts` and the PR's field audit (all from our own code, none
-can carry PII). Token creation and revocation also emit `mcp.token_created` and `mcp.token_revoked`.
+Two records per call, for different readers.
+
+**Wide event** (operations, sampled, short log retention): one `mcp.call` through `withRequestEvent` and
+`annotateEvent`: `user_id`, `organization_id`, `token_id` (`id`), `auth` (`pat` | `oauth`), `mcp_client` (a token from
+our own list: `claude`, `chatgpt`, `cursor`, `claude_code`, `other`, mapped from known CIMD URLs or the `clientInfo`
+name), `tool`, `outcome`, `status_code`, `count` (rows returned), `bytes`, `truncated`, `rate_limited` (which window),
+`duration_ms`, and `flags` for which filters were used. **Never argument values**: a `query` can be a merchant name, and
+the export route already logs flags only. Each new key goes in `packages/core/src/telemetry/schema.ts` and the PR's
+field audit (all from our own code, none can carry PII). Token creation and revocation emit `mcp.token_created` and
+`mcp.token_revoked`. Calls with a bad or missing token have no user, so they appear only here.
+
+**`mcp_calls` table** (product and security, every authenticated call, 90 days). Wide events are sampled and may never
+reach a log store, so they can't back a user-facing view or an abuse investigation.
+
+| Column            | Type                                                                                            | Notes                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `id`              | uuid                                                                                            |                                                                                   |
+| `created_at`      | timestamptz                                                                                     |                                                                                   |
+| `user_id`         | text, FK `user` **on delete cascade**                                                           | The user's own activity; it goes with the account                                 |
+| `organization_id` | text, FK `organization` on delete set null                                                      | Null for `list_workspaces`                                                        |
+| `token_id`        | uuid, FK `mcp_tokens` on delete set null; Phase 2 adds `oauth_client_id`                        | Revoked tokens keep their row (soft revoke), so history stays readable            |
+| `tool`            | text                                                                                            | One of our five names; anything else is stored as `unknown`                       |
+| `status`          | text: `ok`, `tool_error`, `rate_limited`, `concurrency`, `denied` (workspace or scope), `error` | `error_kind` (text, our own vocabulary) for the last two                          |
+| `rows`, `bytes`   | int                                                                                             | Rows returned and response size                                                   |
+| `latency_ms`      | int                                                                                             |                                                                                   |
+| `plan`, `role`    | text                                                                                            | Plan and workspace role **at call time**, so "by plan" stays right after upgrades |
+
+No arguments, no results, no IP, no user agent. Indexes: `(user_id, created_at)` for the user view and "calls today",
+`(token_id, created_at)` for the per-token list, and `(created_at)` for admin charts and pruning. The row is inserted in
+the same request, after the result is built. If the insert fails, the call fails: the query just hit the same
+database, and a durable log that silently has gaps isn't one.
+
+**Retention and pruning.** Keep 90 days. A new job kind `mcp-calls.prune` in `packages/core/src/jobs/kinds/` deletes
+rows older than 90 days in batches of 5,000 and re-enqueues itself while a full batch was deleted. It also deletes
+tokens that were revoked or expired more than 90 days ago. The queue has no scheduler yet (the cron-triggered drain is
+Track B of the jobs plan), so until then the first MCP call of each UTC day enqueues it with
+`idempotencyKey: "mcp-calls.prune:<date>"`. The key dedupes against live jobs, so concurrent first calls create one job.
+Once the cron drain lands, it enqueues the job daily instead. A user's rows go at once on account deletion (cascade).
+
+**Size.** About 150 bytes a row plus indexes, roughly 300 bytes. At 100 active users making 50 calls a day, 90 days is
+450k rows, about 135 MB. That is fine, but not free on a small Supabase plan. If it grows, keep 30 days of raw rows and
+roll older days into an `mcp_call_daily (user_id, day, tool, status, calls, rows)` table kept 13 months, matching the
+usage ledger retention suggestion (decision 10).
+
+**What the user sees** (Settings → Agent access, Phase 1):
+
+- At the top, "calls today: 37 of 200" and "last used 3 minutes ago (Claude Code)". Both are read from `mcp_calls`.
+- Per token: name, workspace, created, expires, last used, and a "Recent activity" disclosure with the last 20 calls
+  (tool, time, status). A Revoke button sits on each token.
+- The same layout for OAuth clients in Phase 2.
+
+**What admins see** (Admin → Agents, Phase 1c):
+
+- Calls per day for 30 days, split by status.
+- Breakdowns by tool, plan and status.
+- Rate-limit and concurrency hits per window.
+- Top users over 7 days, with a link to the user's admin page.
+- Recent errors by tool and `error_kind`.
+- Each user's tokens with Revoke. It asks for a reason and writes `mcp.token_revoke` to `admin_audit_log`.
+
+The kill switch and limits live in Admin → Settings and audit as `settings.mcp`, like `settings.plans`. Admins see
+metadata only: tool names, counts and times, never queries or receipt content. That keeps this page safe to open and
+consistent with the recommendation that admins don't see receipt photos by default (decision 4).
+
+**How it fits the admin audit log.** `admin_audit_log` records what **admins** do (ban, plan change, settings), with
+actor, reason and IP. `mcp_calls` records what **tokens** do. Don't mix them: user self-service (creating or revoking
+their own token) goes in `mcp_tokens` (`created_at`, `revoked_at`, `revoked_by`: `user` | `admin` | `system`, where
+`system` means password reset, opt-out or ban). Admin revocations go in both places.
 
 ### Privacy policy and terms
 
@@ -295,7 +374,10 @@ can carry PII). Token creation and revocation also emit `mcp.token_created` and 
   data it asks for is sent to that assistant and its provider and is handled under their terms, not ours. Access is
   read-only, off until you turn it on, and you can revoke it in Settings. Receipt text is read by OCR from images and
   may contain content that tries to instruct an AI assistant; keep tool approval on in your assistant." Also say that
-  shared-workspace receipts reach the provider of whichever member connects an agent.
+  shared-workspace receipts reach the provider of whichever member connects an agent. And on the call log: "We keep a
+  record of each agent request (which tool, when, the outcome and how many receipts were returned) for 90 days. We use
+  it to show you your activity, enforce limits and investigate abuse. It never contains your search terms or receipt
+  contents, and it is deleted with your account."
 - **Terms** (`app/terms`): agent access is a beta feature with rate limits we may change; you are responsible for
   actions taken with your tokens; don't share tokens; we may suspend agent access for abuse.
 - A provider the user connects is not our subprocessor (the user directs the disclosure), but a lawyer should confirm
@@ -303,16 +385,18 @@ can carry PII). Token creation and revocation also emit `mcp.token_created` and 
 
 ## 7. Costs and operations on Vercel
 
-- **Per call:** one function invocation, a JWT or hash check, one membership read, three rate-limit upserts, one
-  query. Database time dominates, and waiting on I/O isn't active CPU. As a guess to measure, 10–30 ms of CPU per call.
+- **Per call:** one function invocation, a JWT or hash check, one membership read, three rate-limit upserts, an
+  advisory lock, one query and one `mcp_calls` insert. Database time dominates, and waiting on I/O isn't active CPU. As
+  a guess to measure, 10–30 ms of CPU per call.
 - **Hobby includes** 1M invocations, 4 CPU-hours (14,400 s) and 360 GB-hours a month
   ([Hobby plan](https://vercel.com/docs/plans/hobby)). At 20 ms that is about 700k calls of CPU. One user at the Free
-  daily cap would use 15k calls a month. MCP alone won't exhaust Hobby, but a few heavy users plus normal traffic could,
-  and **Hobby pauses features for 30 days when exceeded**. Set `MCP_DAILY_CAP` well below the share we can afford.
+  daily cap would use 6k calls a month, and the global cap stops at 300k a month. MCP alone won't exhaust Hobby, but
+  it shares the quota with everything else, and **Hobby pauses features for 30 days when exceeded**. Watch the global
+  cap.
 - **Hobby is "non-commercial, personal use only"** under Vercel's fair-use rules. That is a question about charging
   for the app at all, not about MCP, but MCP makes it more likely we're judged a production service (open question 6).
-- **Postgres:** three extra upserts per call on `rate_limit`. That is fine at these limits. Three rows per user, so
-  the table grows with users, not with calls.
+- **Postgres:** three upserts on `rate_limit` (three rows per user, so it grows with users, not calls) and one insert
+  into `mcp_calls` (which grows with calls, bounded by the 90-day prune; see the size estimate in §6).
 - **Gemini cost: none.** MCP never runs OCR.
 - **Middleware:** `apps/web/proxy.ts` only matches `/app` and `/admin`, so `/api/mcp` and `/.well-known/*` pass
   through untouched. `/api/:path*` already gets `X-Robots-Tag: noindex`.
@@ -328,13 +412,14 @@ can carry PII). Token creation and revocation also emit `mcp.token_created` and 
 
 ## 8. Phased plan
 
-| Phase                                  | Scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Effort         |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| **0. Decide**                          | The owner answers the open questions below; privacy and terms copy                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 0.5 day        |
-| **1. PAT + endpoint (MVP)**            | `mcp_tokens` table (a migration after the baseline), `AgentReads` core service with five tools and output sanitising, `POST /api/mcp` on `@modelcontextprotocol/server@2.4.0` (GET and DELETE answer `405`), per-user limits in `app_settings`, kill switch, Settings → Agent access (opt-in, create, list and revoke tokens, copy-paste snippets for Claude Code and Cursor), wide events, unit tests for scope and limits, an integration test that removes a member and checks access ends, `docs/architecture` page and diagram | 4–5 days       |
-| **1b. Dogfood**                        | Owner uses it from Claude Code and Cursor for two weeks; tune limits and output size from the `mcp.call` events                                                                                                                                                                                                                                                                                                                                                                                                                     | 2 weeks, light |
-| **2. OAuth for Claude.ai and ChatGPT** | Better Auth 1.7.18 upgrade (decision 1) with `@better-auth/mcp`, `@better-auth/cimd` and `jwt()`; OAuth tables (a migration); consent page with workspace picker; CIMD trust allowlist; JWKS and metadata routes; connected-clients list and revoke in Settings; test against Claude.ai (custom connector), Claude Code, ChatGPT developer mode (needs a Business workspace) and the MCP Inspector                                                                                                                                  | 5–7 days       |
-| **3. Later, if usage justifies it**    | Claude directory listing (CIMD avoids DCR client sprawl), owner control per workspace, a "recent agent activity" list for users, keyset pagination                                                                                                                                                                                                                                                                                                                                                                                  | as needed      |
+| Phase                                  | Scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Effort         |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| **0. Decide**                          | The owner answers the open questions below; privacy and terms copy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 0.5 day        |
+| **1. PAT + endpoint (MVP)**            | `mcp_tokens` and `mcp_calls` tables (one migration after the baseline), `AgentReads` core service with five tools and output sanitising, `POST /api/mcp` on `@modelcontextprotocol/server@2.4.0` (GET and DELETE answer `405`), per-user limits and the global cap in `app_settings`, per-token concurrency locks, kill switch, the `mcp-calls.prune` job kind, Settings → Agent access (opt-in; create, list and revoke tokens; calls today; recent activity per token; copy-paste snippets for Claude Code and Cursor), wide events, unit tests for scope and limits, integration tests (a removed member loses access; prune deletes only old rows), `docs/architecture` page and diagram | about 6 days   |
+| **1b. Dogfood**                        | Owner uses it from Claude Code and Cursor for two weeks; tune limits and output size from `mcp_calls`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 2 weeks, light |
+| **1c. Admin → Agents**                 | The admin page in §6 (charts by tool, plan and status; rate-limit hits; top users; errors; audited revoke), limits and kill switch in Admin → Settings, and the server-side analytics events in §9 if PostHog is on by then                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | about 2 days   |
+| **2. OAuth for Claude.ai and ChatGPT** | Better Auth 1.7.18 upgrade (decision 1) with `@better-auth/mcp`, `@better-auth/cimd` and `jwt()`; OAuth tables (a migration); consent page with workspace picker; CIMD trust allowlist; JWKS and metadata routes; connected-clients list and revoke in Settings; test against Claude.ai (custom connector), Claude Code, ChatGPT developer mode (needs a Business workspace) and the MCP Inspector                                                                                                                                                                                                                                                                                           | 5–7 days       |
+| **3. Later, if usage justifies it**    | Claude directory listing (CIMD avoids DCR client sprawl), owner control per workspace, daily rollups of `mcp_calls`, keyset pagination                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | as needed      |
 
 ### What not to do yet
 
@@ -348,6 +433,61 @@ can carry PII). Token creation and revocation also emit `mcp.token_created` and 
 - **No authless mode, and no Claude.ai `static_headers`.**
 - **No DCR** unless a client we need can't do CIMD; DCR registers a new client on every fresh Claude connection.
 - **No BullMQ, Redis or Upstash for limits.** The Postgres limiter is enough at these numbers.
+- **No per-call analytics events** and no MCP events in GA4 (§9).
+
+## 9. Product analytics: who uses MCP, by plan and role
+
+The [observability plan](2026-11-06-observability.md) already sets the direction, and decision 6 recommends server-only
+PostHog first. It uses `posthog-node` behind `POSTHOG_KEY`, with `distinctId = user.id` (never an email),
+`groups: { workspace: organizationId }` on workspace events, `groupIdentify` with no workspace name, no product events
+while impersonating, and no IP or GeoIP. MCP should plug into that, not add anything new.
+
+**Where properties go**
+
+- **Person (the user), set server-side** with `$set` whenever the value changes: `plan`, `plan_changed_at`,
+  `agent_access` (on or off), `signup_method`. Never email or name.
+- **Group (the workspace):** `personal`, `member_count_bucket`, and `plan` once plans move to workspaces (decision 3).
+- **Event, not person: `role`.** A user is an owner in one workspace and a member in another, so a person-level role is
+  wrong half the time. Put `role` (and `plan`, for convenience) on each workspace-scoped event, read at the moment it
+  happened. `mcp_calls` already stores both per call for the same reason.
+
+**Events** (server-side, added to the observability plan's catalogue)
+
+| Event                  | When                                                       | Props                                                                                                                            |
+| ---------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `agent_access_changed` | Opt-in toggled in Settings                                 | `enabled`                                                                                                                        |
+| `mcp_token_created`    | PAT created or OAuth grant approved                        | `auth` (`pat` / `oauth`), `client`, `workspace_scope` (`one` / `all`), `expires_days`, `role`, `plan`                            |
+| `mcp_token_revoked`    | Any revoke                                                 | `by` (`user` / `admin` / `system`), `age_days`                                                                                   |
+| `mcp_first_call`       | First successful call of a token (`last_used_at` was null) | `tool`, `client`, `role`, `plan`. The activation step of the funnel                                                              |
+| `mcp_usage_daily`      | Once a day per active user, built from `mcp_calls`         | `calls`, `by_tool` (counts), `by_status` (counts), `rows`, `plan`, `role`                                                        |
+| `plan_changed`         | Inside `setUserPlan` today, billing webhooks later         | `from`, `to`, `reason` (`admin`, `checkout`, `renewal`, `cancel`, `payment_failed`, `trial_end`), `source` (`admin` / `billing`) |
+
+`mcp_tool_called` per call is the obvious event, but **send a daily rollup instead.** At 200 calls a day per user it
+would be most of our event volume and cost, and the exact numbers already live in `mcp_calls`. The rollup can run in the
+same daily job as the prune. If the owner wants per-call events in PostHog anyway, sample them (for example 10%) and
+weight by the sample rate. The funnel becomes `agent_access_changed(enabled)` → `mcp_token_created` →
+`mcp_first_call` → `mcp_usage_daily` on 3+ days, broken down by `plan` and `role`.
+
+**Plan transitions.** The database is the source of truth, and analytics is a copy. Today `setUserPlan` changes
+`user.plan` and writes `admin_audit_log` with `{ from, to }`. That covers admin changes, but billing webhooks aren't
+admin actions and don't belong there. When billing lands (roadmap 7), add a `plan_changes` table: `user_id` (or
+`organization_id`), `from`, `to`, `reason`, `source`, `external_ref` (the provider's event id, unique, so webhook
+retries don't double count), `actor_id`, `created_at`. Backfill it from the `user.plan` rows in `admin_audit_log`. Emit
+`plan_changed` after the transaction commits. Upgrade and downgrade counts, time on plan and churn then come from SQL
+we control, and PostHog's numbers can be checked against it.
+
+**Consent.** Consent (#53) covers public pages only: `ANALYTICS_PATH_LIST` is `/`, `/privacy`, `/terms`, `/cookies`,
+`/sign-in` and `/sign-up`. On those pages, Vercel Web Analytics runs cookie-free, and GA4 only after opt-in.
+
+- **Signed-in app and MCP events are server-side,** with no cookies, no device identifiers and no IP. The observability
+  plan treats this as legitimate interest for a SaaS, to be disclosed on `/privacy`. No banner is needed because nothing
+  is stored on the device. Offering an opt-out in Settings ("share product usage") is good practice in the EU and
+  cheap; it's an owner decision.
+- **Don't link the public-page consent identity to the user id.** A GA or browser analytics id from `/` must not be
+  joined to `user.id` server-side without consent, or the cookie-free promise for the app stops being true.
+- **No MCP or app events go to GA4,** and none go client-side. Client PostHog in the app stays a separate,
+  consent-gated switch, as in the observability plan §6.
+- PostHog becomes a subprocessor once it is on: list it on `/privacy` then, with the EU host if users are in the EU.
 
 ## Open questions for the owner
 
@@ -357,13 +497,20 @@ can carry PII). Token creation and revocation also emit `mcp.token_created` and 
    advisories (decision 1)? Recommended: yes.
 3. **Shared workspaces:** may any member connect an agent to a shared workspace, or only with the owner's permission?
    Recommended: an owner toggle, off by default for shared workspaces.
-4. **Plans:** is agent access free for everyone or a Pro feature? Are the suggested limits right?
+4. **Plans and limits:** is agent access free for everyone or a Pro feature? Are the starting limits right (10 a
+   minute for both; 60/200 an hour/day on Free and 300/1,000 on Pro; a global 10,000 a day; 2 in flight per token)?
 5. **Token defaults:** 90-day expiry and one workspace per token by default?
 6. **Hosting:** is production staying on Vercel Hobby? Hobby is non-commercial only, and MCP traffic counts against
    its monthly quota.
 7. **ChatGPT:** worth testing at all, given that custom MCP servers need a Business, Enterprise or Edu workspace?
 8. **Endpoint URL:** `https://<site>/api/mcp`, or a dedicated `mcp.<domain>` (cleaner `.well-known` and a separate
    firewall rule)?
+9. **Call log:** keep `mcp_calls` for 90 days? Should a failed log insert fail the call (recommended), or should we
+   accept gaps?
+10. **Admin page timing:** ship Admin → Agents with Phase 1, or right after dogfooding (Phase 1c, recommended)?
+11. **Analytics:** per-call PostHog events (sampled) or the daily rollup only (recommended)? Should signed-in users get
+    a "share product usage" opt-out?
+12. **Plan history:** add `plan_changes` with billing (recommended), or now, backfilled from `admin_audit_log`?
 
 ## Sources
 
@@ -411,3 +558,6 @@ Fetched 2026-11-07:
 - **Per-call CPU time (10–30 ms)** and the cost figures built on it: estimates, to measure in Phase 1.
 - **Chrome applying `form-action` to redirects after a form POST:** from memory of browser behaviour; check before
   enforcing CSP.
+- **Advisory locks through Supabase's pooler:** transaction-scoped locks should work in transaction mode. That is from
+  Postgres and PgBouncer semantics, not tested on our pooler.
+- **`mcp_calls` row size (about 300 bytes with indexes)** and the Supabase plan headroom: estimates.
