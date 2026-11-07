@@ -116,6 +116,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    Benchmark set and engines to compare (Qwen3-VL-8B via an OpenAI-compatible host, LlamaExtract, Mistral OCR):
    [parsers landscape](plans/2026-11-06-parsers-landscape.md). LangChain, Reducto, Unstructured and OCR-to-markdown
    models: no.
+   Real benchmark set (CORD/CORU committed, SROIE/ReceiptBench local, the owner's 40 Nepal receipts, BS-date and
+   Devanagari scoring fixes): [receipt benchmark set](plans/2026-11-07-receipt-benchmark-set.md). Long receipts as
+   multi-part receipts: [long receipt capture](plans/2026-11-07-long-receipt-capture.md).
 5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
    Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations take the next free numbers after `0008` (job queue).
