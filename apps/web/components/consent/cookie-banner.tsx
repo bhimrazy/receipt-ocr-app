@@ -3,7 +3,12 @@
 import { Button } from "@receipt-ocr/ui/components/button";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { ACCEPT_ALL, REJECT_ALL, type ConsentChoice } from "@/lib/consent/state";
+import {
+  ACCEPT_ALL,
+  REJECT_ALL,
+  type ConsentChoice,
+  type ConsentFeatures,
+} from "@/lib/consent/state";
 import { dismissConfirmation, openConsentSettings, saveConsent } from "@/lib/consent/store";
 
 const shell =
@@ -14,7 +19,13 @@ const shell =
  * style and size so rejecting is as easy as accepting. After a choice it turns into a short
  * confirmation that takes focus, as GOV.UK's banner does, so focus isn't lost with the buttons.
  */
-export function CookieBanner({ confirmation }: { confirmation?: ConsentChoice }) {
+export function CookieBanner({
+  confirmation,
+  features,
+}: {
+  confirmation?: ConsentChoice;
+  features: ConsentFeatures;
+}) {
   const messageRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     if (confirmation) messageRef.current?.focus();
@@ -52,8 +63,8 @@ export function CookieBanner({ confirmation }: { confirmation?: ConsentChoice })
           </h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             We use necessary cookies to keep you signed in. With your permission we also use Google
-            Analytics cookies and cookie-free page counts to see how people find and use this site.
-            They are off until you accept.{" "}
+            Analytics cookies{features.pageCounts ? " and cookie-free page counts" : ""} to see how
+            people find and use this site. They are off until you accept.{" "}
             <Link
               className="rounded-sm text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               href="/cookies"

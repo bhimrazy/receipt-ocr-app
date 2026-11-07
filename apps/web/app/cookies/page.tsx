@@ -40,7 +40,7 @@ export default function CookiesPage() {
         {
           heading: "What needs your permission",
           body: [
-            "Necessary cookies and storage keep you signed in, protect forms and remember your choices. They don't need permission, and you can't turn them off here; your browser can still block or delete them, but signing in won't work without them.",
+            "Necessary cookies and storage keep you signed in, protect forms, remember your choices and make the signed-in app show your data correctly. They don't need permission, and you can't turn them off here; your browser can still block or delete them, but signing in won't work without them.",
             googleAnalytics
               ? "Google Analytics cookies are optional. They are set only after you choose Accept all, or turn on analytics in Cookie settings. Until then Google's script isn't loaded at all."
               : "We don't use any cookies that need your permission at the moment, so we don't show a cookie banner.",

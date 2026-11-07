@@ -37,7 +37,10 @@ export function initGtag(id: string) {
   // page_location and page_referrer are set here and again on every page view: gtag's automatic
   // hits (user_engagement, scroll, form and outbound-click events) default to location.href,
   // which on /sign-in can carry ?redirect=/app/receipts/<id>.
+  // cookie_domain is the host, not "auto": auto writes _ga on the parent domain, which other
+  // sites of the same owner share, and a rejection here would then delete their cookies.
   gtag("config", id, {
+    cookie_domain: location.hostname,
     page_location: location.origin + location.pathname,
     page_referrer: safeReferrer(document.referrer),
     send_page_view: false,
@@ -86,18 +89,18 @@ export function withdrawGtag(id: string) {
   deleteGaCookies();
 }
 
-/** Works whether or not gtag ever loaded on this page: a withdrawal on a 404 still clears _ga*. */
+/**
+ * Works whether or not gtag ever loaded on this page: a withdrawal on a 404 still clears _ga*.
+ * Host-only and host-domain variants only; a parent domain's cookies belong to other sites.
+ */
 export function deleteGaCookies() {
-  // GA writes its cookies on the widest domain it can, so try the host and every parent.
   const names = document.cookie
     .split("; ")
     .map((part) => part.split("=")[0]!)
     .filter((name) => name === "_ga" || name.startsWith("_ga_"));
-  const labels = location.hostname.split(".");
-  const domains = [""];
-  for (let i = 0; i < labels.length - 1; i++)
-    domains.push(`; Domain=.${labels.slice(i).join(".")}`);
   for (const name of names) {
-    for (const domain of domains) document.cookie = `${name}=; Path=/; Max-Age=0${domain}`;
+    for (const domain of ["", `; Domain=${location.hostname}`]) {
+      document.cookie = `${name}=; Path=/; Max-Age=0${domain}`;
+    }
   }
 }

@@ -20,14 +20,22 @@ import {
   type ConsentChoice,
   type ConsentFeatures,
 } from "@/lib/consent/state";
-import { closeConsentSettings, saveConsent, useConsent } from "@/lib/consent/store";
+import {
+  closeConsentSettings,
+  consentReturnFocus,
+  saveConsent,
+  useConsent,
+} from "@/lib/consent/store";
 
 /** Opened by "Customise" in the banner and by every "Cookie settings" link. */
 export function ConsentDialog({ features }: { features: ConsentFeatures }) {
   const { dialogOpen } = useConsent();
   return (
     <Dialog onOpenChange={(open) => !open && closeConsentSettings()} open={dialogOpen}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+      <DialogContent
+        finalFocus={() => consentReturnFocus() ?? true}
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg"
+      >
         {/* Remounted on each open so the switches start from the saved choice. */}
         {dialogOpen && <ConsentForm features={features} />}
       </DialogContent>
@@ -60,7 +68,7 @@ function ConsentForm({ features }: { features: ConsentFeatures }) {
 
       <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
         <Category
-          description="Keep you signed in, protect sign-in from forged requests, remember this choice and, where it is on, run Cloudflare's bot check on forms. The site can't work without them."
+          description="Keep you signed in, protect sign-in from forged requests, remember this choice, make the signed-in app show your data correctly and, where it is on, run Cloudflare's bot check on forms. The site can't work without them."
           title="Necessary"
         >
           <Badge variant="secondary">Always on</Badge>

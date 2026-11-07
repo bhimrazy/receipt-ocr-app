@@ -10,9 +10,10 @@ import {
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronsUpDown, Cookie, LogOut, Settings, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { signOutAndClearHint } from "@/lib/auth-client";
-import { openConsentSettings } from "@/lib/consent/store";
+import { openConsentSettingsFrom } from "@/lib/consent/store";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
 
@@ -51,6 +52,7 @@ export function UserMenu({
   variant?: "avatar" | "row";
 }) {
   const router = useRouter();
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   async function handleSignOut() {
     await signOutAndClearHint();
@@ -62,6 +64,7 @@ export function UserMenu({
     <DropdownMenu>
       {variant === "row" ? (
         <DropdownMenuTrigger
+          ref={triggerRef}
           aria-label="Account menu"
           className="flex min-h-12 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-wash"
         >
@@ -76,6 +79,7 @@ export function UserMenu({
         </DropdownMenuTrigger>
       ) : (
         <DropdownMenuTrigger
+          ref={triggerRef}
           aria-label="Account menu"
           className="flex size-11 items-center justify-center rounded-full border border-border transition outline-none hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
@@ -102,7 +106,7 @@ export function UserMenu({
             Admin
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem onClick={openConsentSettings}>
+        <DropdownMenuItem onClick={() => openConsentSettingsFrom(triggerRef.current)}>
           <Cookie aria-hidden="true" />
           Cookie settings
         </DropdownMenuItem>

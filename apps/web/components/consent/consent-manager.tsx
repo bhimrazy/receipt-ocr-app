@@ -13,7 +13,7 @@ import {
   withdrawGtag,
 } from "@/lib/consent/gtag";
 import { allowedTools, needsBanner, type ConsentFeatures } from "@/lib/consent/state";
-import { currentConsent, useConsent } from "@/lib/consent/store";
+import { currentConsent, setGaConfigured, useConsent } from "@/lib/consent/store";
 import { CookieBanner } from "./cookie-banner";
 import { ConsentDialog } from "./consent-dialog";
 
@@ -34,6 +34,7 @@ export function ConsentManager({
     googleAnalytics: Boolean(gaMeasurementId),
     pageCounts: vercelAnalytics,
   };
+  useEffect(() => setGaConfigured(features.googleAnalytics), [features.googleAnalytics]);
   const publicPage = isAnalyticsPath(pathname);
   const allowed = consent.hydrated
     ? allowedTools(consent.record, consent.signals, features)
@@ -48,9 +49,11 @@ export function ConsentManager({
   return (
     <>
       {consent.hydrated && publicPage && needsBanner(consent.record, consent.signals, features) && (
-        <CookieBanner />
+        <CookieBanner features={features} />
       )}
-      {consent.hydrated && consent.justSaved && <CookieBanner confirmation={consent.justSaved} />}
+      {consent.hydrated && consent.justSaved && (
+        <CookieBanner confirmation={consent.justSaved} features={features} />
+      )}
       <ConsentDialog features={features} />
       {gaMeasurementId && (
         <GoogleAnalytics

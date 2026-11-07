@@ -69,8 +69,9 @@ export const storageEntries: StorageEntry[] = [
     setBy: "receiptOCR",
     category: "necessary",
     purpose:
-      'Remembers your browser\'s time zone so the dashboard shows the right "today". It holds only the zone name and is sent nowhere but this app.',
-    duration: "12 months",
+      'Remembers your browser\'s time zone so the signed-in app shows your data correctly, such as the right "today". It holds only the zone name and is sent nowhere but this app.',
+    duration:
+      "Up to 30 days; rewritten when your zone changes. Safari keeps cookies set by page scripts for 7 days at most.",
   },
   {
     name: "consent",

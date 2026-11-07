@@ -79,6 +79,18 @@ export function currentConsent(): Snapshot {
   return snapshot;
 }
 
+/** Set by ConsentManager: only a build with GA has _ga cookies to delete. */
+let gaConfigured = false;
+export function setGaConfigured(value: boolean) {
+  gaConfigured = value;
+}
+
+/** Where focus goes when the dialog closes, for openers that unmount (a menu item). */
+let returnFocus: HTMLElement | null = null;
+export function consentReturnFocus(): HTMLElement | null {
+  return returnFocus?.isConnected ? returnFocus : null;
+}
+
 export function saveConsent(choice: ConsentChoice, from: "banner" | "dialog") {
   const record = makeRecord(choice, nowSeconds());
   const value = serializeConsent(record);
@@ -86,7 +98,7 @@ export function saveConsent(choice: ConsentChoice, from: "banner" | "dialog") {
   // written from script at 7 days, but not ones set by a same-site response.
   const secure = location.protocol === "https:" ? "; Secure" : "";
   document.cookie = `${CONSENT_COOKIE}=${encodeURIComponent(value)}; Path=/; Max-Age=${CONSENT_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
-  if (!choice.analytics) deleteGaCookies();
+  if (gaConfigured && !choice.analytics) deleteGaCookies();
   void fetch("/api/consent", { method: "POST", body: value, keepalive: true }).catch(() => {
     // The script-written cookie still holds the choice.
   });
@@ -94,7 +106,13 @@ export function saveConsent(choice: ConsentChoice, from: "banner" | "dialog") {
 }
 
 export function openConsentSettings() {
+  returnFocus = null;
   set({ dialogOpen: true, justSaved: null });
+}
+
+export function openConsentSettingsFrom(opener: HTMLElement | null) {
+  openConsentSettings();
+  returnFocus = opener;
 }
 
 export function closeConsentSettings() {

@@ -1,5 +1,5 @@
-import { authRateLimitRules } from "./auth-rate-limit";
 import "server-only";
+import { authRateLimitRules } from "./auth-rate-limit";
 import {
   DEFAULT_PLANS,
   ensurePersonalWorkspace,

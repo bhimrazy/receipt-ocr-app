@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { signUp, uniqueEmail } from "./helpers";
 
 // Default build: no GA measurement id, so nothing needs consent and no banner shows.
 test.skip(Boolean(process.env.E2E_GA), "default build only");
@@ -36,4 +37,31 @@ test("the cookie policy lists what the app stores", async ({ page }) => {
     "href",
     "/cookies",
   );
+});
+
+test("Cookie settings in the account menu opens the dialog and Escape returns focus to the trigger", async ({
+  page,
+}) => {
+  await signUp(page, uniqueEmail("cookie-menu"));
+  const trigger = page.getByRole("button", { name: "Account menu" });
+  await trigger.click();
+  await page.getByRole("menuitem", { name: "Cookie settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Cookie settings" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(":focus")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test("pages where analytics may run send only their origin as Referer; the app keeps the default", async ({
+  page,
+  request,
+}) => {
+  for (const path of ["/", "/sign-in"]) {
+    expect((await request.get(path)).headers()["referrer-policy"], path).toBe("origin");
+  }
+  await signUp(page, uniqueEmail("referrer"));
+  const app = await page.goto("/app");
+  expect(app!.headers()["referrer-policy"]).toBe("strict-origin-when-cross-origin");
 });

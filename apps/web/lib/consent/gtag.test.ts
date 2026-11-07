@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deleteGaCookies, gtagPageView } from "./gtag";
+import { deleteGaCookies, gtagPageView, initGtag } from "./gtag";
 
 function stubBrowser(cookie: string, hostname = "app.example.com") {
   const written: string[] = [];
@@ -24,13 +24,15 @@ function stubBrowser(cookie: string, hostname = "app.example.com") {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("deleteGaCookies", () => {
-  it("expires _ga and _ga_<id> on the host and every parent domain, and nothing else", () => {
+  it("expires _ga and _ga_<id> host-only and on the host, never on a parent domain", () => {
     const { written } = stubBrowser("consent=x; _ga=GA1.1.1; _ga_ABC123=GS1; session=y");
     deleteGaCookies();
     expect(written).toContain("_ga=; Path=/; Max-Age=0");
-    expect(written).toContain("_ga=; Path=/; Max-Age=0; Domain=.app.example.com");
-    expect(written).toContain("_ga=; Path=/; Max-Age=0; Domain=.example.com");
-    expect(written).toContain("_ga_ABC123=; Path=/; Max-Age=0; Domain=.example.com");
+    expect(written).toContain("_ga=; Path=/; Max-Age=0; Domain=app.example.com");
+    expect(written).toContain("_ga_ABC123=; Path=/; Max-Age=0; Domain=app.example.com");
+    expect(written.some((c) => c.includes("Domain=.") || c.includes("Domain=example.com"))).toBe(
+      false,
+    );
     expect(written.some((c) => c.startsWith("consent=") || c.startsWith("session="))).toBe(false);
   });
 
@@ -38,6 +40,15 @@ describe("deleteGaCookies", () => {
     const { written } = stubBrowser("consent=x");
     deleteGaCookies();
     expect(written).toEqual([]);
+  });
+});
+
+describe("initGtag", () => {
+  it("keeps _ga on this host so a rejection can't touch a shared parent domain", () => {
+    const { calls } = stubBrowser("");
+    initGtag("G-TEST123456");
+    const config = calls.find((c) => c[0] === "config");
+    expect((config![2] as { cookie_domain: string }).cookie_domain).toBe("app.example.com");
   });
 });
 
