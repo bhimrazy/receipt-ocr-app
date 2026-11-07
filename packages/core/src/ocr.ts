@@ -1,6 +1,7 @@
 import {
   classifyOcrError,
   extractReceipt,
+  OCR_PROVIDERS,
   OcrCallError,
   retryAfterMs,
   type ExtractionUsage,
@@ -9,6 +10,7 @@ import {
   type ModelId,
   type OcrFailureKind,
   type OcrProviderId,
+  type ProviderKeys,
 } from "@receipt-ocr/ai";
 import { Clock, Config, Context, Effect, Layer, Option } from "effect";
 import { NotConfigured, OcrError, ProvidersCooling, type OcrAttempt } from "./errors";
@@ -28,14 +30,17 @@ const STEP_MAX_RETRIES = 1;
 
 /**
  * Worth trying the next model: the provider was slow, busy, down or
- * misconfigured. `invalid-output` and `bad-image` stop the chain: the image
- * is usually the problem, and a second model would cost a second call.
+ * misconfigured, refused, or can't take this file. `invalid-output` and
+ * `bad-image` stop the chain: the image is usually the problem, and a second
+ * model would cost a second call.
  */
 const FALLBACK_KINDS: ReadonlySet<OcrFailureKind> = new Set([
   "timeout",
   "rate-limited",
   "provider-error",
   "not-configured",
+  "refused",
+  "unsupported-file",
 ]);
 
 export const providerOf = (model: ModelId): OcrProviderId =>
@@ -56,6 +61,7 @@ export type StepFailure = {
   usage: ExtractionUsage | null;
   cause: unknown;
   retryAfterMs?: number;
+  skipped?: true;
 };
 
 /** Providers cooling down after a 429, and until when; their models are skipped. */
@@ -129,6 +135,7 @@ export const runChain = (
         ms,
         usage: last.usage,
         ...(last.retryAfterMs === undefined ? {} : { retryAfterMs: last.retryAfterMs }),
+        ...(last.skipped ? { skipped: true as const } : {}),
       });
       if (!FALLBACK_KINDS.has(last.kind)) break;
     }
@@ -140,10 +147,16 @@ export const runChain = (
     });
   });
 
-const googleKey = Config.option(Config.string("GOOGLE_GENERATIVE_AI_API_KEY")).pipe(
-  Config.map(Option.getOrUndefined),
-  Effect.orElseSucceed(() => undefined),
-);
+/** Every provider's key from its `keyEnv`; unset keys are left out. */
+const providerKeys: Effect.Effect<ProviderKeys> = Effect.forEach(
+  OCR_PROVIDERS.flatMap((p) => (p.keyEnv ? [{ id: p.id, env: p.keyEnv }] : [])),
+  ({ id, env }) =>
+    Config.option(Config.string(env)).pipe(
+      // Trimmed like providerAvailability reads them: a pasted newline isn't part of the key.
+      Config.map((value) => [id, Option.getOrUndefined(value)?.trim() || undefined] as const),
+      Effect.orElseSucceed(() => [id, undefined] as const),
+    ),
+).pipe(Effect.map((entries) => Object.fromEntries(entries) as ProviderKeys));
 
 /** Grace on top of the SDK's own timeout, in case a provider ignores the abort. */
 const ABORT_GRACE_MS = 1_000;
@@ -172,7 +185,7 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
         ),
         extract: (file, options) =>
           Effect.gen(function* () {
-            const keys = { google: yield* googleKey };
+            const keys = yield* providerKeys;
             const call: ExtractCall = ({ model, timeoutMs, maxRetries }) =>
               Effect.tryPromise({
                 try: (abortSignal) =>
@@ -185,6 +198,7 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
                         usage: cause.usage,
                         cause,
                         retryAfterMs: retryAfterMs(cause),
+                        ...(cause.skipped ? { skipped: true as const } : {}),
                       }
                     : {
                         kind: classifyOcrError(cause),
@@ -202,12 +216,27 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
                   }),
                 }),
               );
-            const chain = yield* withoutCooling(
-              yield* chainNow,
-              options?.cooling ?? new Map(),
-              yield* Clock.currentTimeMillis,
+            const full = yield* chainNow;
+            const cooling = options?.cooling ?? new Map();
+            const chain = yield* withoutCooling(full, cooling, yield* Clock.currentTimeMillis);
+            const dropped = full.filter((step) => !chain.includes(step));
+            const ends = dropped.flatMap((step) => {
+              const until = cooling.get(providerOf(step.model));
+              return until ? [until.getTime()] : [];
+            });
+            return yield* runChain(chain, call).pipe(
+              Effect.mapError((error) =>
+                error._tag === "OcrError" && ends.length > 0
+                  ? new OcrError({
+                      message: error.message,
+                      kind: error.kind,
+                      attempts: error.attempts,
+                      cause: error.cause,
+                      coolingUntil: new Date(Math.min(...ends)),
+                    })
+                  : error,
+              ),
             );
-            return yield* runChain(chain, call);
           }),
       };
     }),

@@ -2,7 +2,7 @@ import { ConfigProvider, Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PLANS } from "./plans";
 import { Db } from "./services";
-import { ocrRoutingSchema, planTableSchema, Settings } from "./settings";
+import { ocrRoutingSchema, planTableSchema, providerAvailability, Settings } from "./settings";
 
 const policy = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10 };
 
@@ -73,6 +73,31 @@ const settingsWith = (env: Record<string, string>, rows: unknown[] = []) => {
 
 const actor = { actor: { id: "a", email: "a@example.com" } };
 
+describe("providerAvailability", () => {
+  const availability = (env: Record<string, string>) =>
+    Effect.runPromise(
+      providerAvailability.pipe(
+        Effect.withConfigProvider(ConfigProvider.fromMap(new Map(Object.entries(env)))),
+      ),
+    );
+
+  it("marks each provider available from its own key env var", async () => {
+    expect(await availability({ ANTHROPIC_API_KEY: "k" })).toEqual({
+      google: false,
+      anthropic: true,
+      fixture: false,
+    });
+    expect(
+      await availability({ GOOGLE_GENERATIVE_AI_API_KEY: "k", ANTHROPIC_API_KEY: " " }),
+    ).toEqual({ google: true, anthropic: false, fixture: false });
+    expect(await availability({ OCR_PROVIDER: "fixture" })).toEqual({
+      google: false,
+      anthropic: false,
+      fixture: true,
+    });
+  });
+});
+
 describe("Settings", () => {
   it("defaults the chain to GEMINI_MODEL when it is on the allowlist", async () => {
     const run = settingsWith({ GEMINI_MODEL: "gemini-3.8-flash" });
@@ -123,6 +148,26 @@ describe("Settings", () => {
     );
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(
       "Turn on at least one model",
+    );
+  });
+
+  it("keeps Gemini as the default chain when an Anthropic key is set", async () => {
+    const run = settingsWith({ ANTHROPIC_API_KEY: "k", GOOGLE_GENERATIVE_AI_API_KEY: "k" });
+    const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
+    expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
+      "google:gemini-3.8-flash",
+    ]);
+  });
+
+  it("refuses to turn on a Claude model without ANTHROPIC_API_KEY", async () => {
+    const run = settingsWith({ GOOGLE_GENERATIVE_AI_API_KEY: "k" });
+    const exit = await run(
+      Effect.flatMap(Settings, (s) =>
+        s.save("ocr", { chain: [{ model: "anthropic:claude-haiku-5-5", enabled: true }] }, actor),
+      ),
+    );
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(
+      "Claude Haiku 5.5 has no API key",
     );
   });
 

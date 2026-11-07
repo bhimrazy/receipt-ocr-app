@@ -28,6 +28,7 @@ flowchart LR
   pg[(Postgres<br/>Supabase in production)]
   s3[(S3-compatible bucket<br/>R2, S3 or RustFS)]
   gemini[Google Gemini<br/>through the AI SDK]
+  claude[Anthropic Claude<br/>optional, through the AI SDK]
   resend[Resend<br/>transactional email]
   oauth[Google and GitHub<br/>OAuth]
 
@@ -36,6 +37,7 @@ flowchart LR
   web -- "SQL over a pool" --> pg
   web -- "put, get, delete,<br/>sign URLs" --> s3
   web -- "image + prompt,<br/>structured output" --> gemini
+  web -. "optional chain step" .-> claude
   web -- "verify, reset,<br/>invite mail" --> resend
   user -- "OAuth redirect" --> oauth
   oauth -- "callback with code" --> web
@@ -46,6 +48,7 @@ flowchart LR
 | Postgres              | Every table: auth, workspaces, receipts, usage ledger, admin | `DATABASE_URL` (app), `DIRECT_URL` (migrations)                  |
 | S3-compatible storage | The uploaded receipt files; the bucket stays private         | `S3_*`                                                           |
 | Google Gemini         | Reading the receipt into the extraction schema               | `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_MODEL`, Admin → Settings |
+| Anthropic Claude      | Optional OCR models an admin can add to the chain            | `ANTHROPIC_API_KEY`, Admin → Settings                            |
 | Resend                | Verification, password reset, invitation and support mail    | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`                  |
 | Google, GitHub OAuth  | Optional social sign-in                                      | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`       |
 | Google Analytics 4    | Optional visit counts on public pages, only after consent    | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))              |

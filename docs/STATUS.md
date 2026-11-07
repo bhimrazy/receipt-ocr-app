@@ -59,6 +59,9 @@ Steps are in [deployment.md](deployment.md).
   deploys need a successful `production-db` run with the same migrations. The automatic gate compares with the last
   run of the workflow on `main` whose `deploy-production` job succeeded; CI creates no git tags (tags are for real
   releases, later).
+- `feat/anthropic-provider` adds migration `0001_ocr_call_refused_unsupported` (widens `ocr_calls_status_check`
+  with `refused` and `unsupported-file`; existing rows stay valid). Run **Database Migration** before deploying it:
+  without it, a refused or skipped call fails its ledger insert.
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
   to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
@@ -86,6 +89,7 @@ Steps are in [deployment.md](deployment.md).
 | `ci/db-migrations`         | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging                                                         |
 | `feat/consent-analytics`   | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                                                                                  |
 | `feat/wide-events` (#52)   | [Wide events](architecture/flows/observability.md): one event per request, page render, job attempt and tick; schema allowlist, tail sampling (`LOG_SAMPLE_RATE`, `LOG_SLOW_MS`); `job.run` is now `job.attempt`. Next: OTLP export |
+| `feat/anthropic-provider`  | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet                                                                          |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -100,7 +104,8 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
    [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
 4. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
-5. Second AI provider (recommended: Anthropic Haiku), direct keys vs Vercel AI Gateway.
+5. Anthropic (direct key, `ANTHROPIC_API_KEY`): approve the Claude benchmark spend (dry-run estimate about $0.34 for
+   the six fixtures on all three models), then which Claude model, if any, joins the production chain and where.
 6. PostHog: server-only first (recommended) or browser too; Sentry tracing off; source-map upload approach.
 7. Members: free seats 3 or 5, single owner + transfer, pending invites count. See
    [members plan](plans/2026-11-06-members-admin-plan.md).
@@ -131,7 +136,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    Real benchmark set (CORD/CORU committed, SROIE/ReceiptBench local, the owner's 40 Nepal receipts, BS-date and
    Devanagari scoring fixes): [receipt benchmark set](plans/2026-11-07-receipt-benchmark-set.md). Long receipts as
    multi-part receipts: [long receipt capture](plans/2026-11-07-long-receipt-capture.md).
-5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
+5. Second provider: Anthropic wired in (`feat/anthropic-provider`); admitted to the default chain only by the
+   benchmark. Then OpenAI.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
    Security; PR B passkeys (primary sign-in) + admin enforcement. Each adds a migration after the baseline.
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.

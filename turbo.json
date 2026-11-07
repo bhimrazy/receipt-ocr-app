@@ -6,6 +6,7 @@
       "outputs": [".next/**", "dist/**", "!.next/cache/**"],
       "env": [
         "ADMIN_EMAILS",
+        "ANTHROPIC_*",
         "AUTH_REQUIRE_EMAIL_VERIFICATION",
         "BETTER_AUTH_*",
         "DATABASE_*",

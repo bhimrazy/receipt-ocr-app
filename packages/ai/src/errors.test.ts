@@ -25,8 +25,9 @@ describe("classifyOcrError", () => {
     [503, "provider-error"],
     [408, "timeout"],
     [400, "bad-image"],
-    [413, "bad-image"],
+    [413, "unsupported-file"],
     [401, "not-configured"],
+    [402, "not-configured"],
     [403, "not-configured"],
     [404, "not-configured"],
   ] as const)("maps HTTP %i to %s", (status, kind) => {
@@ -102,9 +103,45 @@ describe("retryAfterMs", () => {
     ).toBe(30_000);
   });
 
+  it("reads Gemini's RetryInfo from the 429 body when there is no header", () => {
+    const body = (retryDelay: unknown) =>
+      new APICallError({
+        message: "429",
+        url: "https://provider.test",
+        requestBodyValues: {},
+        statusCode: 429,
+        responseHeaders: {},
+        responseBody: JSON.stringify({
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            details: [
+              { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [] },
+              { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay },
+            ],
+          },
+        }),
+      });
+    expect(retryAfterMs(body("17s"))).toBe(17_000);
+    expect(retryAfterMs(body("1.5s"))).toBe(1_500);
+    expect(retryAfterMs(body("soon"))).toBeUndefined();
+    // A header still wins over the body.
+    const both = body("17s");
+    Object.assign(both, { responseHeaders: { "retry-after": "3" } });
+    expect(retryAfterMs(both)).toBe(3_000);
+  });
+
   it("is undefined when the provider gave no usable hint", () => {
     expect(retryAfterMs(limited({}))).toBeUndefined();
     expect(retryAfterMs(limited({ "retry-after": "soon" }))).toBeUndefined();
     expect(retryAfterMs(new Error("x"))).toBeUndefined();
+    const notJson = new APICallError({
+      message: "429",
+      url: "https://provider.test",
+      requestBodyValues: {},
+      statusCode: 429,
+      responseBody: "<html>busy</html>",
+    });
+    expect(retryAfterMs(notJson)).toBeUndefined();
   });
 });

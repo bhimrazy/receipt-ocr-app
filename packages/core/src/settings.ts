@@ -1,4 +1,10 @@
-import { OCR_MODELS, ocrModel, type ModelId, type OcrProviderId } from "@receipt-ocr/ai";
+import {
+  OCR_MODELS,
+  OCR_PROVIDERS,
+  ocrModel,
+  type ModelId,
+  type OcrProviderId,
+} from "@receipt-ocr/ai";
 import { appSettings, eq, type DbClient } from "@receipt-ocr/db";
 import { Config, Context, Effect, Layer, Option } from "effect";
 import { z } from "zod";
@@ -72,13 +78,25 @@ const nonEmpty = (name: string) =>
   );
 
 /** Which providers can run: a key is present in env (the value is never read out). */
-export const providerAvailability: Effect.Effect<Record<OcrProviderId, boolean>> = Effect.all({
-  google: nonEmpty("GOOGLE_GENERATIVE_AI_API_KEY"),
-  fixture: Config.string("OCR_PROVIDER").pipe(
-    Config.map((value) => value === "fixture"),
-    Config.withDefault(false),
+export const providerAvailability: Effect.Effect<Record<OcrProviderId, boolean>> = Effect.all(
+  Object.fromEntries(
+    OCR_PROVIDERS.map((p) => [
+      p.id,
+      p.keyEnv
+        ? nonEmpty(p.keyEnv)
+        : // The keyless offline fixture runs only where OCR_PROVIDER=fixture opts in.
+          Config.string("OCR_PROVIDER").pipe(
+            Config.map((value) => value === "fixture"),
+            Config.withDefault(false),
+          ),
+    ]),
+  ) as Record<OcrProviderId, Config.Config<boolean>>,
+).pipe(
+  Effect.orElseSucceed(
+    () =>
+      Object.fromEntries(OCR_PROVIDERS.map((p) => [p.id, false])) as Record<OcrProviderId, boolean>,
   ),
-}).pipe(Effect.orElseSucceed(() => ({ google: false, fixture: false })));
+);
 
 /** The chain used until an admin saves one: whatever env configures, as before. */
 const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({

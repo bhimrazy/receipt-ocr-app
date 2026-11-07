@@ -123,7 +123,7 @@ flowchart TD
   time -- no --> fail
   time -- yes --> model["Call the model<br/>timeout = min(step timeout, time left)<br/>1 retry inside the call"]
   model -- ok --> success([extraction + attempts])
-  model -- "timeout, rate-limited,<br/>provider-error, not-configured" --> next
+  model -- "timeout, rate-limited,<br/>provider-error, not-configured,<br/>refused, unsupported-file" --> next
   model -- "invalid-output, bad-image" --> fail
 ```
 
@@ -141,6 +141,7 @@ flowchart TD
 | An attempt succeeds                   | `ocr_calls`  | One per model call (failed fallbacks and the successful call), with the `complete` write |
 | An attempt fails after calling models | `ocr_calls`  | One per model call, under that attempt's `job_attempt`                                   |
 | An attempt fails before any model ran | `ocr_calls`  | One with `model = null`, `status = storage-error` or `not-configured`, cost 0            |
+| A step is skipped before its request  | `ocr_calls`  | One with `model = null`, its provider and step, `status = unsupported-file`, cost 0      |
 
 Each call row holds the step, model, provider, status, latency, input, cached, cache-write, output and reasoning
 tokens, and the cost in micro-USD priced at write time (`null` when unknown). Calls are written even when the receipt
