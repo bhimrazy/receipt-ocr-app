@@ -75,8 +75,8 @@ const cases: Record<
   },
   test: { make: (ctx) => testEmail(ctx), input: {} },
   deleteAccount: {
-    make: (ctx) => deleteAccountEmail(ctx, { url, expiresInSeconds: hour }),
-    input: { url, expiry: "1 hour" },
+    make: (ctx) => deleteAccountEmail(ctx, { url, expiresInSeconds: hour, resetUrl }),
+    input: { url, expiry: "1 hour", resetUrl },
   },
   passwordChanged: {
     make: (ctx) => passwordChangedEmail(ctx, { resetUrl }),
@@ -152,7 +152,7 @@ describe.each(Object.entries(cases))("%s email", (name, { make, input }) => {
       for (const href of hrefs) expect(href).toMatch(/^(https:\/\/app\.example\/|mailto:help@)/);
       const images = mail.html.match(/<img[^>]*>/g) ?? [];
       expect(images).toHaveLength(1);
-      expect(images[0]).toContain('src="https://app.example/icons/icon-192.png"');
+      expect(images[0]).toContain('src="https://app.example/brand/email-logo.png"');
       expect(images[0]).toMatch(/width="32"/);
       expect(images[0]).toMatch(/height="32"/);
       expect(images[0]).toMatch(/alt=""/);
@@ -160,9 +160,9 @@ describe.each(Object.entries(cases))("%s email", (name, { make, input }) => {
 
     it("has a plain-text part with the footer, no markup and no stray control characters", () => {
       const { text, subject } = mail;
-      expect(subject).toContain("receiptOCR");
+      expect(subject).toContain("ReceiptOCR");
       expect(subject).not.toMatch(/[\r\n]/);
-      expect(text).toMatch(/^receiptOCR\n/);
+      expect(text).toMatch(/^ReceiptOCR\n/);
       expect(text).toContain("Privacy: https://app.example/privacy");
       // Plain text carries user text as typed; the template itself adds no markup.
       const variant = ctx === withSupport ? "support" : "nosupport";
@@ -203,7 +203,7 @@ describe("link emails", () => {
         resetUrl,
         expiresInSeconds: hour,
       }),
-      deleteAccountEmail(withSupport, { url, expiresInSeconds: hour }),
+      deleteAccountEmail(withSupport, { url, expiresInSeconds: hour, resetUrl }),
     ]) {
       expect(mail.text.match(/https?:\/\/\S+/)?.[0]).toBe(url);
     }
@@ -241,7 +241,7 @@ describe("invitationEmail", () => {
   });
 
   it("uses a fixed subject and preheader with no user text", () => {
-    expect(mail.subject).toBe("You're invited to a receiptOCR workspace");
+    expect(mail.subject).toBe("You're invited to a ReceiptOCR workspace");
     expect(mail.html).toContain(">Accept the invitation to share receipts in this workspace.<");
   });
 
@@ -270,7 +270,7 @@ describe("invitationEmail", () => {
 describe("supportMessageEmail", () => {
   it("keeps the visitor's line breaks but no other control characters", () => {
     const { text, html, subject } = cases.supportMessage.make(withSupport);
-    expect(subject).toBe("[receiptOCR support] Question");
+    expect(subject).toBe("[ReceiptOCR support] Question");
     expect(text).toContain("Line one\n\nAcme");
     expect(html).toContain("Line one\n\nAcme");
     expect(text).not.toContain("\u0007");
@@ -280,19 +280,27 @@ describe("supportMessageEmail", () => {
 describe("security notices", () => {
   it("delete confirmation: red button, single-use link, nothing changes until confirmed on the page", () => {
     const delUrl = "https://app.example/app/settings/delete-account?token=abc";
-    const mail = deleteAccountEmail(withSupport, { url: delUrl, expiresInSeconds: hour });
-    expect(mail.subject).toBe("Confirm deleting your receiptOCR account");
+    const mail = deleteAccountEmail(withSupport, {
+      url: delUrl,
+      expiresInSeconds: hour,
+      resetUrl,
+    });
+    expect(mail.subject).toBe("Confirm deleting your ReceiptOCR account");
     expect(mail.html).toContain(`href="${delUrl}"`);
-    expect(mail.html).toMatch(/background-color:rgb\(185,28,28\)[^>]*>[\s\S]*?Delete my account/);
+    expect(mail.html).toMatch(
+      /background-color:rgb\(185,28,28\)[^>]*>[\s\S]*?Continue to delete account/,
+    );
     expect(mail.text).toContain(delUrl);
     expect(mail.text).toMatch(/works once and expires in 1 hour/);
-    expect(mail.text).toMatch(/within 1 hour and confirm on the page it opens/);
-    expect(mail.text).toContain("Until then, nothing changes.");
+    expect(mail.text).toContain("confirm on the page it opens. Until then, nothing is deleted.");
+    expect(mail.text).toContain("Receipts you uploaded to shared workspaces stay there.");
+    expect(mail.text).toContain(`reset your password (${resetUrl})`);
+    expect(mail.html).toContain(`href="${resetUrl}"`);
   });
 
   it("password changed: points at the reset page and the support inbox", () => {
     const mail = passwordChangedEmail(withSupport, { resetUrl });
-    expect(mail.subject).toBe("Your receiptOCR password was changed");
+    expect(mail.subject).toBe("Your ReceiptOCR password was changed");
     expect(mail.html).toContain(`href="${resetUrl}"`);
     expect(mail.html).toContain('href="mailto:help@app.example"');
     expect(mail.text).toContain("contact us at help@app.example");
@@ -312,10 +320,10 @@ describe("security notices", () => {
       resetUrl,
       expiresInSeconds: hour,
     });
-    expect(mail.subject).toBe("Approve the email change on your receiptOCR account");
+    expect(mail.subject).toBe("Approve your ReceiptOCR email change");
     expect(mail.html).not.toContain("<h1>locked");
     expect(mail.html.match(/<h1/g)).toHaveLength(1);
-    const button = mail.html.match(/<a[^>]*href="([^"]+)"[^>]*>[\s\S]*?Approve the change/)?.[1];
+    const button = mail.html.match(/<a[^>]*href="([^"]+)"[^>]*>[\s\S]*?Approve email change/)?.[1];
     expect(button).toBe(escapeHtml(url));
     expect(mail.html).toContain(`href="${resetUrl}"`);
     expect(mail.text).toContain("expires in 1 hour");
@@ -354,45 +362,5 @@ describe("helpers", () => {
     expect(formatDuration(7200)).toBe("2 hours");
     expect(formatDuration(604800)).toBe("7 days");
     expect(formatDuration(900)).toBe("15 minutes");
-  });
-});
-
-describe("security notices", () => {
-  it("links the delete confirmation page and says nothing changes until the user confirms there", () => {
-    const mail = deleteAccountEmail("https://app.example/app/settings/delete-account?token=abc");
-    expect(mail.html).toContain('href="https://app.example/app/settings/delete-account?token=abc"');
-    expect(mail.text).toContain("https://app.example/app/settings/delete-account?token=abc");
-    expect(mail.text).toMatch(/within 1 hour and confirm on the page it opens/);
-    expect(mail.text).toContain("Until then, nothing changes. The link works once");
-  });
-
-  it("points a password change notice at the reset page and the support inbox", () => {
-    const mail = passwordChangedEmail({
-      resetUrl: "https://app.example/forgot-password",
-      supportEmail: "help@example.com",
-    });
-    expect(mail.subject).toBe("Your receiptOCR password was changed");
-    expect(mail.html).toContain('href="https://app.example/forgot-password"');
-    expect(mail.html).toContain('href="mailto:help@example.com"');
-    expect(mail.text).toContain("contact us at help@example.com");
-  });
-
-  it("falls back to the in-app support form without a support inbox", () => {
-    const mail = passwordChangedEmail({ resetUrl: "https://app.example/forgot-password" });
-    expect(mail.html).not.toContain("mailto:");
-    expect(mail.text).toContain("support button in the app");
-  });
-
-  it("escapes the requested address in the email change notice and keeps the subject fixed", () => {
-    const mail = emailChangeEmail({
-      newEmail: '"><h1>locked</h1>@evil.example\r\nBcc: x',
-      url: "https://app.example/api/auth/verify-email?token=t",
-      resetUrl: "https://app.example/forgot-password",
-    });
-    expect(mail.subject).toBe("Approve the email change on your receiptOCR account");
-    expect(mail.html).not.toContain("<h1>locked");
-    expect(mail.html.match(/<h1/g)).toHaveLength(1);
-    expect(mail.html).toContain('href="https://app.example/forgot-password"');
-    expect(mail.text).not.toMatch(/\r|\n\s*Bcc/);
   });
 });

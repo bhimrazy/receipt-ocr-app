@@ -353,6 +353,7 @@ export const auth = betterAuth({
           ...deleteAccountEmail(emailContext, {
             url: deleteConfirmUrl(url, token),
             expiresInSeconds: DELETE_TOKEN_SECONDS,
+            ...recovery(),
           }),
         });
         logger.info({ event: "user.delete_requested", unit: "log", user_id: user.id });

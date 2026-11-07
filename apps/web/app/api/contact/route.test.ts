@@ -78,7 +78,7 @@ describe("POST /api/contact", () => {
     const input = sendEmail.mock.calls[0][1];
     expect(input).toMatchObject({ to: "help@example.com", replyTo: "me@example.com" });
     expect(sendEmail.mock.calls[0][0]).toMatchObject({ replyTo: "help@example.com" });
-    expect(input.subject).toBe("[receiptOCR support] Feature request");
+    expect(input.subject).toBe("[ReceiptOCR support] Feature request");
   });
 
   it("escapes HTML in the message", async () => {

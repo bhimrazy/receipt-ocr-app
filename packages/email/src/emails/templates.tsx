@@ -48,15 +48,16 @@ const verification: EmailDefinition = {
   slots: ["url", "urlLabel", "expiry"],
   render(v, shared) {
     const heading = "Confirm your email address";
-    const body = `Thanks for signing up for ${BRAND}. Confirm this is your address to finish setting up your account.`;
+    const body = `Confirm this address to use it with your ${BRAND} account.`;
     const expiry = `This link expires in ${v.expiry}.`;
-    const note = "Didn't sign up? You can ignore this email. Nothing happens without this link.";
+    const note =
+      "Didn't ask for this? Ignore this email. Nothing changes unless this link is used.";
     const reason = `You're receiving this because this address was used to create a ${BRAND} account.`;
     return {
       html: (
         <Layout
           shared={shared}
-          preheader={`One step left: confirm your address to start using ${BRAND}.`}
+          preheader={`One step left: confirm this address for your ${BRAND} account.`}
           heading={heading}
           reason={reason}
         >
@@ -83,7 +84,7 @@ const passwordReset: EmailDefinition = {
     const body = `We got a request to reset the password for your ${BRAND} account. Choose a new one with the button below.`;
     const expiry = `This link expires in ${v.expiry}. Resetting signs you out on every device.`;
     const note =
-      "Didn't ask for this? Ignore this email. Your password stays the same unless this link is used.";
+      "Didn't ask for this? Ignore this email. Your password won't change unless this link is used.";
     const reason = "You're receiving this because a password reset was requested for this address.";
     return {
       html: (
@@ -113,8 +114,8 @@ const invitation: EmailDefinition = {
   slots: ["url", "urlLabel", "expiry", "organizationName", "inviterEmail"],
   render(v, shared) {
     const heading = "You're invited to a workspace";
-    const expiry = `This invitation expires in ${v.expiry}. Sign in or sign up with this email address to accept it.`;
-    const note = "Not expecting this? You can ignore it. You won't join unless you accept.";
+    const expiry = `This invitation expires in ${v.expiry}. Sign in or create an account with this email address, then accept it.`;
+    const note = "Not expecting this? Ignore this email. You won't join unless you accept.";
     const reason = `You're receiving this because a ${BRAND} workspace member invited this address.`;
     return {
       html: (
@@ -126,8 +127,8 @@ const invitation: EmailDefinition = {
         >
           <P>
             <Strong>{v.inviterEmail}</Strong> invited you to join the{" "}
-            <Strong>{v.organizationName}</Strong> workspace on {BRAND}, to upload and review
-            receipts together.
+            <Strong>{v.organizationName}</Strong> workspace on {BRAND}, where you can upload and
+            review receipts together.
           </P>
           <Action label="Accept invitation" url={v.url} urlLabel={v.urlLabel} expiry={expiry} />
           <Note>{note}</Note>
@@ -136,7 +137,7 @@ const invitation: EmailDefinition = {
       text: plainText(shared, {
         heading,
         body: [
-          `${v.inviterEmail} invited you to join the "${v.organizationName}" workspace on ${BRAND}, to upload and review receipts together.`,
+          `${v.inviterEmail} invited you to join the "${v.organizationName}" workspace on ${BRAND}, where you can upload and review receipts together.`,
         ],
         action: { label: "Accept invitation", url: v.url, expiry },
         note,
@@ -179,7 +180,7 @@ const test: EmailDefinition = {
   slots: [],
   render(_v, shared) {
     const heading = "Email delivery works";
-    const body = `This test was sent from the ${BRAND} admin console. Because it arrived, sign-up confirmations, password resets and invitations can reach people too.`;
+    const body = `This test was sent from the ${BRAND} admin console. If you're reading it, sign-up confirmations, password resets and invitations can be delivered too.`;
     const reason = "You're receiving this because you sent a test from the admin console.";
     return {
       html: (
@@ -199,38 +200,46 @@ const test: EmailDefinition = {
 
 /** Step-up confirmation before an account is deleted; the only red button. */
 const deleteAccount: EmailDefinition = {
-  slots: ["url", "urlLabel", "expiry"],
+  slots: ["url", "urlLabel", "expiry", "resetUrl"],
   render(v, shared) {
     const heading = "Confirm deleting your account";
-    const body = `Someone signed in to your account asked to delete it. Open this link within ${v.expiry} and confirm on the page it opens to permanently delete the account, its workspaces and every receipt in them. Until then, nothing changes.`;
+    const body = [
+      `We got a request to delete your ${BRAND} account. Deleting it permanently removes the account and any workspace only you belong to, with every receipt in it. Receipts you uploaded to shared workspaces stay there. This can't be undone.`,
+      "To continue, open the link and confirm on the page it opens. Until then, nothing is deleted.",
+    ];
     const expiry = `The link works once and expires in ${v.expiry}.`;
-    const note =
-      "Wasn't you? Don't open the link. Change your password, or the password of the Google or GitHub account you sign in with, because someone else can use your account.";
+    const help = contact(shared);
     const reason = `You're receiving this because deleting this ${BRAND} account was requested while signed in.`;
     return {
       html: (
         <Layout
           shared={shared}
-          preheader="Confirm to permanently delete your account. Not you? Don't open the link."
+          preheader="Confirm to permanently delete your account. Didn't ask for this? Don't open the link."
           heading={heading}
           reason={reason}
         >
-          <P>{body}</P>
+          {body.map((p) => (
+            <P key={p}>{p}</P>
+          ))}
           <Action
-            label="Delete my account"
+            label="Continue to delete account"
             url={v.url}
             urlLabel={v.urlLabel}
             expiry={expiry}
             tone="danger"
           />
-          <Note>{note}</Note>
+          <Note>
+            Didn&apos;t ask for this? Don&apos;t open the link. Someone may have access to your
+            account, so <InlineLink href={v.resetUrl}>reset your password</InlineLink> and{" "}
+            {help.html}.
+          </Note>
         </Layout>
       ),
       text: plainText(shared, {
         heading,
-        body: [body],
-        action: { label: "Delete my account", url: v.url, expiry },
-        note,
+        body,
+        action: { label: "Continue to delete account", url: v.url, expiry },
+        note: `Didn't ask for this? Don't open the link. Someone may have access to your account, so reset your password (${v.resetUrl}) and ${help.text}.`,
         reason,
       }),
     };
@@ -242,7 +251,7 @@ const passwordChanged: EmailDefinition = {
   slots: ["resetUrl", "resetUrlLabel"],
   render(v, shared) {
     const heading = "Your password was changed";
-    const body = `The password for your ${BRAND} account was just changed. If that was you, there's nothing to do.`;
+    const body = `The password for your ${BRAND} account was just changed. If you made this change, you don't need to do anything.`;
     const help = contact(shared);
     const reason = `You're receiving this because the password for this ${BRAND} account changed.`;
     return {
@@ -254,13 +263,19 @@ const passwordChanged: EmailDefinition = {
           reason={reason}
         >
           <P>{body}</P>
-          <Note className="mb-6">Wasn&apos;t you? Reset your password now and {help.html}.</Note>
+          <Note className="mb-6">
+            Didn&apos;t change it? Reset your password now and {help.html} so we can help secure
+            your account.
+          </Note>
           <Action label="Reset password" url={v.resetUrl} urlLabel={v.resetUrlLabel} />
         </Layout>
       ),
       text: plainText(shared, {
         heading,
-        body: [body, `Wasn't you? Reset your password now and ${help.text}.`],
+        body: [
+          body,
+          `Didn't change it? Reset your password now and ${help.text} so we can help secure your account.`,
+        ],
         action: { label: "Reset password", url: v.resetUrl },
         reason,
       }),
@@ -275,37 +290,39 @@ const passwordChanged: EmailDefinition = {
 const emailChange: EmailDefinition = {
   slots: ["url", "urlLabel", "expiry", "newEmail", "resetUrl"],
   render(v, shared) {
-    const heading = "Approve the email change";
+    const heading = "Approve your email change";
     const expiry = `This link expires in ${v.expiry}.`;
     const help = contact(shared);
     const reason = `You're receiving this because this is the sign-in address of a ${BRAND} account.`;
-    const body = `Nothing changes until you approve it here and then confirm the new address from the email we send there.`;
+    const tail =
+      "Approve it below, then open the link we send to the new address. You'll keep signing in with this address until both steps are done.";
     return {
       html: (
         <Layout
           shared={shared}
-          preheader="Approve the change, or ignore this email to keep your current address."
+          preheader="Approve the new address, or ignore this email to keep your current one."
           heading={heading}
           reason={reason}
         >
           <P>
-            Someone signed in to your account asked to change its email address to{" "}
-            <Strong>{v.newEmail}</Strong>. {body}
+            We got a request to change the email for your {BRAND} account to{" "}
+            <Strong>{v.newEmail}</Strong>. {tail}
           </P>
-          <Action label="Approve the change" url={v.url} urlLabel={v.urlLabel} expiry={expiry} />
+          <Action label="Approve email change" url={v.url} urlLabel={v.urlLabel} expiry={expiry} />
           <Note>
-            Wasn&apos;t you? Don&apos;t open the link.{" "}
-            <InlineLink href={v.resetUrl}>Reset your password</InlineLink> and {help.html}.
+            Didn&apos;t ask for this? Don&apos;t open the link. Your address stays the same. Someone
+            may have access to your account, so{" "}
+            <InlineLink href={v.resetUrl}>reset your password</InlineLink> and {help.html}.
           </Note>
         </Layout>
       ),
       text: plainText(shared, {
         heading,
         body: [
-          `Someone signed in to your ${BRAND} account asked to change its email address to ${v.newEmail}. ${body}`,
+          `We got a request to change the email for your ${BRAND} account to ${v.newEmail}. ${tail}`,
         ],
-        action: { label: "Approve the change", url: v.url, expiry },
-        note: `Wasn't you? Don't open the link. Reset your password and ${help.text}: ${v.resetUrl}`,
+        action: { label: "Approve email change", url: v.url, expiry },
+        note: `Didn't ask for this? Don't open the link. Your address stays the same. Someone may have access to your account, so reset your password (${v.resetUrl}) and ${help.text}.`,
         reason,
       }),
     };

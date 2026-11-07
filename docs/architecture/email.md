@@ -13,7 +13,7 @@ whether an undelivered message is an error.
 | `verificationEmail(ctx, { url, expiresInSeconds })`                                                                               | `{ subject, html, text }` for "confirm your email"                                                |
 | `passwordResetEmail(ctx, { url, expiresInSeconds })`                                                                              | Same for a reset link                                                                             |
 | `invitationEmail(ctx, { organizationName, inviterEmail, url, expiresInSeconds })`                                                 | Same for a workspace invitation                                                                   |
-| `deleteAccountEmail(ctx, { url, expiresInSeconds })`                                                                              | The account-deletion confirmation link (single use; red button)                                   |
+| `deleteAccountEmail(ctx, { url, expiresInSeconds, resetUrl })`                                                                    | The account-deletion confirmation link (single use; red button)                                   |
 | `passwordChangedEmail(ctx, { resetUrl })`                                                                                         | "Your password was changed", with the reset page and support contact                              |
 | `emailChangeEmail(ctx, { newEmail, url, resetUrl, expiresInSeconds })`                                                            | To the current address: approve a change to `newEmail` (`url` is Better Auth's approval link)     |
 | `supportMessageEmail(ctx, { from, topicLabel, message })`                                                                         | A contact-form message for the support inbox                                                      |
@@ -22,7 +22,7 @@ whether an undelivered message is an error.
 
 All template functions are synchronous. `ctx` is an `EmailContext`: `{ appUrl, supportEmail? }`. The package reads no
 environment; the web app builds it once as `emailContext` in [`lib/env.ts`](../../apps/web/lib/env.ts) from
-`BETTER_AUTH_URL` and `SUPPORT_EMAIL`. Links, the logo (`<appUrl>/icons/icon-192.png`) and the privacy link all hang
+`BETTER_AUTH_URL` and `SUPPORT_EMAIL`. Links, the logo (`<appUrl>/brand/email-logo.png`) and the privacy link all hang
 off `appUrl`, so a preview deployment's mail points at the preview. Without `supportEmail` the "Questions?" and
 "contact us" lines point at the in-app support button instead of a mailbox.
 
@@ -77,13 +77,13 @@ flowchart LR
 Every template uses one `Layout`, the shape well-branded transactional mail converges on (Linear, Vercel, Stripe,
 Notion; React Email's [templates](https://react.email/templates)):
 
-1. **Header:** the app icon (hosted PNG, 32×32) and the `receiptOCR` wordmark as live text.
+1. **Header:** the logo (`/brand/email-logo.png`, 32×32) and the `Receipt` + accent `OCR` wordmark as live text.
 2. **One heading** (`h1`) that says what the mail is about.
 3. **A short body**, one or two sentences.
 4. **At most one primary action**, then its expiry and a "Button not working? Open this link:" fallback whose visible
    text is the host (and short path), never the token. The full URL is in the `href` and the plain-text part. The
    delete-account button is red; every other one is emerald.
-5. **A security note** ("Didn't sign up? You can ignore this email."). Security notices carry "Wasn't you?" with the
+5. **A security note** ("Didn't ask for this? Ignore this email."). Security notices carry "Didn't ask for this?" with the
    reset link and the support contact.
 6. **Footer:** why you got this, where replies go (Reply-To is the support inbox), app name, site and privacy links.
 
@@ -103,7 +103,7 @@ workspace names and addresses are user input, and the inbox list is where a phis
   `#f87171` destructive). Support for the media query is partial
   ([caniemail](https://www.caniemail.com/features/css-at-media-prefers-color-scheme/)), which is why the light design
   must stand on its own.
-- The logo is the app icon PNG (emerald tile, dark glyph), legible on both backgrounds without a swap. No SVG: Gmail
+- The logo is the logo PNG (emerald tile, dark glyph), legible on both backgrounds without a swap. No SVG: Gmail
   rasterizes or drops it ([caniemail](https://www.caniemail.com/features/image-svg/)). It is decorative (`alt=""`)
   because the wordmark beside it is text, so image-blocking clients still show the name.
 - The canvas colour sits on a full-width table, not `<body>`, because Gmail strips body styles.

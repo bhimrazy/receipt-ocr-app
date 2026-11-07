@@ -22,7 +22,7 @@ import {
 } from "react-email";
 import { tailwindConfig } from "./theme";
 
-export const BRAND = "receiptOCR";
+export const BRAND = "ReceiptOCR";
 
 /** Values every message needs: the app origin and host, and the support inbox when there is one. */
 export interface Shared {
@@ -149,7 +149,7 @@ export function Layout({ shared, preheader, heading, reason, replyNote, children
                   <Column className="w-[40px] align-middle">
                     {/* Decorative: the wordmark beside it is live text, so image-off clients still show the name. */}
                     <Img
-                      src={`${shared.appOrigin}/icons/icon-192.png`}
+                      src={`${shared.appOrigin}/brand/email-logo.png`}
                       width="32"
                       height="32"
                       alt=""
@@ -158,7 +158,7 @@ export function Layout({ shared, preheader, heading, reason, replyNote, children
                   </Column>
                   <Column className="align-middle">
                     <Text className="m-0 font-mono text-[16px] leading-[24px] font-semibold tracking-tight text-ink dark:text-d-ink">
-                      receipt<span className="text-accent dark:text-d-accent">OCR</span>
+                      Receipt<span className="text-accent dark:text-d-accent">OCR</span>
                     </Text>
                   </Column>
                 </Row>
