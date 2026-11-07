@@ -7,6 +7,9 @@
     },
     "apps/web": {
       "ignoreDependencies": ["tailwindcss"]
+    },
+    "packages/email": {
+      "entry": ["scripts/*.ts"]
     }
   },
   "ignore": ["bench/load/*.js", "apps/web/public/*.js"]

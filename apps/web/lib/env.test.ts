@@ -22,6 +22,7 @@ const KEYS = [
   "GOOGLE_CLIENT_SECRET",
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
+  "SUPPORT_EMAIL",
 ];
 
 /** Imports a fresh env.ts with exactly these variables set. */
@@ -288,5 +289,20 @@ describe("logUndeliveredMail", () => {
     ]) {
       expect(logUndeliveredMail(env), JSON.stringify(env)).toBe(false);
     }
+  });
+});
+
+describe("SUPPORT_EMAIL", () => {
+  it("accepts a bare address", async () => {
+    const env = await loadEnv({ SUPPORT_EMAIL: "help@example.com" });
+    expect(env.supportEmail).toBe("help@example.com");
+    expect(env.emailEnv.replyTo).toBe("help@example.com");
+  });
+
+  it("treats a display-name form as unset, with a warning", async () => {
+    const env = await loadEnv({ SUPPORT_EMAIL: "Support <help@example.com>" });
+    expect(env.supportEmail).toBeUndefined();
+    expect(env.emailEnv.replyTo).toBeUndefined();
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("SUPPORT_EMAIL"));
   });
 });

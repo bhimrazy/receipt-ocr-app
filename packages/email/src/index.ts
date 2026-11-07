@@ -54,7 +54,7 @@ function resend(apiKey: string): Resend {
 
 export interface MailerConfig {
   apiKey?: string;
-  /** e.g. `receiptOCR <noreply@yourdomain.com>` */
+  /** e.g. `ReceiptOCR <noreply@yourdomain.com>` */
   from?: string;
   /** Reply-To for messages that set none (e.g. the support inbox, since `from` is noreply). */
   replyTo?: string;

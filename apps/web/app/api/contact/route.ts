@@ -2,7 +2,7 @@ import { hitRateLimit } from "@receipt-ocr/core";
 import { sendEmail, type EmailLogEvent } from "@receipt-ocr/email";
 import { NextResponse } from "next/server";
 import { contactEmail, isTopic } from "@/lib/contact-mail";
-import { emailEnv, isProduction, logUndeliveredMail, supportEmail } from "@/lib/env";
+import { emailContext, emailEnv, isProduction, logUndeliveredMail, supportEmail } from "@/lib/env";
 import { clientIp, crossOriginResponse, withRequestEvent } from "@/lib/http";
 import { logger, type WideEvent } from "@/lib/log";
 import { runtime } from "@/lib/runtime";
@@ -108,8 +108,12 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
   // Like auth mail: without a mailer, dev and CI simulate (and log) delivery, but production
   // must not tell a visitor their message arrived when it didn't.
   const delivered = supportEmail
-    ? (await sendEmail(mailer, contactEmail({ to: supportEmail, from: email, topic, message })))
-        .delivered
+    ? (
+        await sendEmail(
+          mailer,
+          contactEmail(emailContext, { to: supportEmail, from: email, topic, message }),
+        )
+      ).delivered
     : false;
   if (!delivered && isProduction) {
     event.status_code = 503;

@@ -67,6 +67,7 @@ jobs:
       - run: bun run format:check
       - run: bun run lint
       - run: bun run check:deps
+      - run: bun run email:check
       - run: bun run knip
       - run: bun run audit
       # A schema change without its migration fails here. drizzle-kit generate diffs the schema
@@ -112,6 +113,15 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
+      # Emails are prerendered by packages/email; React Email must never reach the server bundle.
+      - name: No React Email in the server bundle
+        run: |
+          du -sh apps/web/.next/server
+          # Code fingerprints only: the prerendered HTML itself carries data-id="__react-email-column".
+          if grep -rlE --include='*.js' '@react-email_|react-email\.element|pixelBasedPreset|sanitizeNonInlinableRules' apps/web/.next/server; then
+            echo "React Email reached the server bundle (see the files above)." >&2
+            exit 1
+          fi
 
   e2e:
     name: E2E (Playwright)
