@@ -150,4 +150,4 @@ jobs:
 
             Uses the staging database. Migrations in this PR are not applied there until it merges.
 
-            This comment updates with the newest deployment on each push.
+            This comment updates with each new preview deploy (re-add the `preview` label to redeploy).

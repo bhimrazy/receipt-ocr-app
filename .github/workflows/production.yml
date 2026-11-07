@@ -91,7 +91,11 @@ jobs:
             exit 0
           fi
           # Docs, tests and CI-only merges don't change the app; the next real change deploys them too.
-          if [ -z "$(.github/scripts/shipped-files.sh "$last" "$HEAD_SHA")" ]; then
+          if ! shipped=$(.github/scripts/shipped-files.sh "$last" "$HEAD_SHA"); then
+            skip "Can't compare with the last production deploy (${last:0:12})."
+            exit 0
+          fi
+          if [ -z "$shipped" ]; then
             skip "Nothing that ships changed since ${last:0:12} (docs, tests or CI only)."
             exit 0
           fi
