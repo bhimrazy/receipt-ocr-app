@@ -216,12 +216,27 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
                   }),
                 }),
               );
-            const chain = yield* withoutCooling(
-              yield* chainNow,
-              options?.cooling ?? new Map(),
-              yield* Clock.currentTimeMillis,
+            const full = yield* chainNow;
+            const cooling = options?.cooling ?? new Map();
+            const chain = yield* withoutCooling(full, cooling, yield* Clock.currentTimeMillis);
+            const dropped = full.filter((step) => !chain.includes(step));
+            const ends = dropped.flatMap((step) => {
+              const until = cooling.get(providerOf(step.model));
+              return until ? [until.getTime()] : [];
+            });
+            return yield* runChain(chain, call).pipe(
+              Effect.mapError((error) =>
+                error._tag === "OcrError" && ends.length > 0
+                  ? new OcrError({
+                      message: error.message,
+                      kind: error.kind,
+                      attempts: error.attempts,
+                      cause: error.cause,
+                      coolingUntil: new Date(Math.min(...ends)),
+                    })
+                  : error,
+              ),
             );
-            return yield* runChain(chain, call);
           }),
       };
     }),

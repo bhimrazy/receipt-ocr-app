@@ -1,8 +1,8 @@
 import { FIXTURE_RECEIPTS, type ModelId, type OcrFailureKind } from "@receipt-ocr/ai";
-import { Duration, Effect, Exit, TestClock, TestContext } from "effect";
+import { ConfigProvider, Duration, Effect, Exit, Layer, TestClock, TestContext } from "effect";
 import { describe, expect, it } from "vitest";
-import { activeChain, OCR_DEADLINE_MS, runChain, type ExtractCall } from "./ocr";
-import type { OcrStep } from "./settings";
+import { activeChain, Ocr, OCR_DEADLINE_MS, runChain, type ExtractCall } from "./ocr";
+import { Settings, type OcrStep } from "./settings";
 
 const step = (model: ModelId, timeoutMs = 30_000, enabled = true): OcrStep => ({
   model,
@@ -177,5 +177,38 @@ describe("runChain", () => {
     const { call } = fakeCall({});
     const exit = await run(runChain([], call));
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("NotConfigured");
+  });
+});
+
+describe("Ocr.Live with a provider cooling down", () => {
+  it("says when the left-out provider is back, so a terminal rest can wait for it", async () => {
+    const chain = [step("google:gemini-3.8-flash"), step("anthropic:claude-haiku-5-5")];
+    const settings = Layer.succeed(Settings, {
+      ocr: Effect.succeed({ chain }),
+    } as unknown as Settings["Type"]);
+    const env = ConfigProvider.fromMap(
+      new Map([
+        ["GOOGLE_GENERATIVE_AI_API_KEY", "test"],
+        ["ANTHROPIC_API_KEY", "test"],
+      ]),
+    );
+    const until = new Date(Date.now() + 60_000);
+    // HEIC: Claude skips it before any request, and Gemini is cooling, so nothing reaches a network.
+    const heic = { data: new Uint8Array([0, 0, 0, 24]), mediaType: "image/heic" };
+    const exit = await Effect.runPromiseExit(
+      Effect.flatMap(Ocr, (ocr) =>
+        ocr.extract(heic, { cooling: new Map([["google", until]]) }),
+      ).pipe(
+        Effect.provide(Ocr.Live.pipe(Layer.provide(settings))),
+        Effect.withConfigProvider(env),
+      ),
+    );
+    if (!Exit.isFailure(exit) || exit.cause._tag !== "Fail") throw new Error("expected a failure");
+    expect(exit.cause.error).toMatchObject({
+      _tag: "OcrError",
+      kind: "unsupported-file",
+      coolingUntil: until,
+      attempts: [{ model: "anthropic:claude-haiku-5-5", kind: "unsupported-file", skipped: true }],
+    });
   });
 });

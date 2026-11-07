@@ -62,6 +62,8 @@ export class OcrError extends Data.TaggedError("OcrError")<{
   readonly kind: OcrFailureKind;
   readonly attempts: readonly OcrAttempt[];
   readonly cause?: unknown;
+  /** Steps were left out for a provider cooling down after a 429; the earliest that one ends. */
+  readonly coolingUntil?: Date;
 }> {}
 
 /** Every model in the chain belongs to a provider that is cooling down after a 429. */

@@ -62,20 +62,31 @@ const MAX_COOLDOWN_MS = 10 * 60_000;
  *   chain was already tried), and an unreadable stored file;
  * - deferred, without spending an attempt: every provider is cooling down.
  * The chain reports its last step's kind, but a transient failure anywhere in
- * it makes the whole round worth retrying: [429, HEIC skipped] is a 429.
+ * it makes the whole round worth retrying: [429, HEIC skipped] is a 429. The
+ * retry waits at least as long as the cooldowns this failure starts, or the
+ * cooled provider would be left out of the retry too. And when steps were left
+ * out for cooling and the rest failed for good, the round is retried once the
+ * first of those providers is back (as an attempt, so the cap still ends it).
  */
-export function classifyExtractionError(error: ExtractionError): JobFailure {
+export function classifyExtractionError(error: ExtractionError, now = Date.now()): JobFailure {
   switch (error._tag) {
     case "OcrError": {
       const transient = RETRYABLE_OCR.has(error.kind)
         ? error.kind
         : error.attempts.find((a) => a.kind !== "ok" && RETRYABLE_OCR.has(a.kind))?.kind;
       if (transient === undefined) {
+        if (error.coolingUntil) {
+          return new RetryableJobError({
+            kind: "providers-cooling",
+            retryAfterMs: Math.max(0, error.coolingUntil.getTime() - now),
+          });
+        }
         return new NonRetryableJobError({ kind: error.kind });
       }
-      const waits = error.attempts.flatMap((a) =>
-        a.retryAfterMs === undefined ? [] : [a.retryAfterMs],
-      );
+      const waits = [
+        ...error.attempts.flatMap((a) => (a.retryAfterMs === undefined ? [] : [a.retryAfterMs])),
+        ...cooldownsFrom(error).values(),
+      ];
       return new RetryableJobError({
         kind: transient,
         ...(waits.length > 0 ? { retryAfterMs: Math.max(...waits) } : {}),
