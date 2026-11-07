@@ -65,11 +65,51 @@ describe("Google 400 INVALID_ARGUMENT", () => {
     expect(classifyOcrError(apiError400(""))).toBe("bad-image");
     expect(classifyOcrError(apiError400("<html>"))).toBe("bad-image");
     expect(classifyOcrError(apiError400(googleBody("FAILED_PRECONDITION", "x")))).toBe("bad-image");
+    // Not from api.anthropic.com, so the Anthropic branch doesn't apply.
     expect(
       classifyOcrError(
         apiError400(JSON.stringify({ type: "error", error: { type: "invalid_request_error" } })),
       ),
     ).toBe("bad-image");
+  });
+});
+
+describe("Anthropic 400s", () => {
+  const anthropic400 = (type: string, message: string) =>
+    new APICallError({
+      message,
+      url: "https://api.anthropic.com/v1/messages",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ type: "error", error: { type, message } }),
+    });
+
+  it.each([
+    "output_config.effort: unsupported value for this model",
+    "output_config.format.schema: maxItems is not supported",
+    "model: claude-old is not available",
+  ])("a rejected request moves to the next model: %s", (message) => {
+    expect(classifyOcrError(anthropic400("invalid_request_error", message))).toBe("not-configured");
+  });
+
+  it.each([
+    "messages.0.content.0.image.source.base64: image exceeds 5 MB maximum",
+    "Could not process image",
+    "The PDF specified was not valid.",
+  ])("a complaint about the file stays bad-image: %s", (message) => {
+    expect(classifyOcrError(anthropic400("invalid_request_error", message))).toBe("bad-image");
+  });
+
+  it("another error type or an unreadable body keeps the status mapping", () => {
+    expect(classifyOcrError(anthropic400("api_error", "x"))).toBe("bad-image");
+    const raw = new APICallError({
+      message: "x",
+      url: "https://api.anthropic.com/v1/messages",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: "<html>",
+    });
+    expect(classifyOcrError(raw)).toBe("bad-image");
   });
 });
 
