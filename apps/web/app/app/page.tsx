@@ -175,7 +175,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
 
 async function HomeTitle() {
   const counts = await getReceiptCounts();
-  return counts.total === 0 ? "Read your first receipt" : "Upload receipts";
+  return counts.total === 0 ? "Read your first receipt" : "Home";
 }
 
 async function UploadSection() {
@@ -287,7 +287,7 @@ export default function HomePage({ searchParams }: { searchParams: SearchParams 
       <PageHeader>
         <PageHeaderContent>
           <PageHeaderTitle>
-            <Suspense fallback="Upload receipts">
+            <Suspense fallback="Home">
               <HomeTitle />
             </Suspense>
           </PageHeaderTitle>

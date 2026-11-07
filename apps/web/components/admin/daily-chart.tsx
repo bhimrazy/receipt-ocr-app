@@ -1,10 +1,12 @@
-import { formatDate } from "@/lib/format";
+import { formatDate, threeLetterMonth } from "@/lib/format";
 
 type Day = { day: string; completed: number; failed: number };
 
 const short = (day: string) =>
-  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(
-    new Date(`${day}T00:00:00Z`),
+  threeLetterMonth(
+    new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(
+      new Date(`${day}T00:00:00Z`),
+    ),
   );
 
 /**

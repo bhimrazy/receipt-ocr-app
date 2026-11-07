@@ -141,6 +141,40 @@
   }
 }
 
+/* Taps fire at once (no double-tap-zoom wait); controls draw their own pressed state. */
+html {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Installed, there's no browser chrome to pull: no rubber band, no pull-to-refresh. */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+/* The phone tab bar: --tabbar-h is its height above the home indicator, --app-bottom-inset
+   all the room it takes. Pages, toasts and floating cards clear it with these. */
+@media (width < 48rem) {
+  :root:has([data-slot="tab-bar"]) {
+    --tabbar-h: 4rem;
+    --app-bottom-inset: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    /* Keep focused fields and #anchors clear of the sticky bars. */
+    scroll-padding-bottom: var(--app-bottom-inset);
+  }
+  /* The impersonation banner carries the status-bar inset, so the app bar below it adds none. */
+  :root:has([data-slot="impersonation-banner"]) {
+    --top-inset: 0px;
+  }
+  :root:has([data-slot="app-bar"]) {
+    scroll-padding-top: calc(
+      var(--banner-h, 0px) + var(--top-inset, env(safe-area-inset-top)) + 3.5rem + 0.5rem
+    );
+  }
+}
+
 body {
   min-height: 100vh;
   background: var(--background);
@@ -156,5 +190,29 @@ body {
   [class*="animate-in"],
   [class*="animate-out"] {
     animation: none !important;
+  }
+}
+
+/* Fades the right edge of a horizontally scrolling row (chips) while more is hidden. Browsers
+   without scroll-driven animations show no fade. */
+@property --fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes scroll-fade-end {
+  0%,
+  92% {
+    --fade-end: 2rem;
+  }
+  100% {
+    --fade-end: 0px;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .scroll-fade-x {
+    animation: scroll-fade-end linear both;
+    animation-timeline: scroll(self inline);
+    mask-image: linear-gradient(to right, #000 calc(100% - var(--fade-end)), transparent);
   }
 }

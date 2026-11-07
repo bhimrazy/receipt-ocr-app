@@ -48,7 +48,7 @@ export function DashboardControls({
       <div className="flex flex-wrap items-center gap-2">
         <nav
           aria-label="Date range"
-          className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 max-md:w-full md:flex-wrap"
+          className="scroll-fade-x -mx-1 flex max-w-full gap-2 overflow-x-auto px-1 max-md:w-full md:flex-wrap"
         >
           {PRESETS.map((preset) => (
             <Link
@@ -73,7 +73,10 @@ export function DashboardControls({
         {group}
       </div>
       {currencies.length > 1 || convertedTo ? (
-        <nav aria-label="Currency" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <nav
+          aria-label="Currency"
+          className="scroll-fade-x -mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+        >
           {convertedTo ? <span className={cn(chip, chipOff)}>All, in {convertedTo}</span> : null}
           {currencies.map((c) => (
             <Link
