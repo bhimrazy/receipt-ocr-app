@@ -2,6 +2,7 @@ import {
   classifyOcrError,
   extractReceipt,
   OCR_PROVIDERS,
+  ocrModel,
   OcrCallError,
   retryAfterMs,
   type ExtractionUsage,
@@ -52,6 +53,20 @@ export function activeChain(
   available: Record<OcrProviderId, boolean>,
 ): OcrStep[] {
   return routing.chain.filter((step) => step.enabled && available[providerOf(step.model)] === true);
+}
+
+/**
+ * The models that will read a receipt, in order, by friendly label. For what
+ * users may see: no keys, timeouts or ids beyond the provider.
+ */
+export function receiptReaders(
+  routing: OcrRouting,
+  available: Record<OcrProviderId, boolean>,
+): { label: string; provider: OcrProviderId }[] {
+  return activeChain(routing, available).map((step) => {
+    const model = ocrModel(step.model);
+    return { label: model?.label ?? step.model, provider: providerOf(step.model) };
+  });
 }
 
 export type OcrResult = ExtractReceiptResult & { attempts: OcrAttempt[] };

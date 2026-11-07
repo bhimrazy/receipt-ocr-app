@@ -1,7 +1,14 @@
 import { FIXTURE_RECEIPTS, type ModelId, type OcrFailureKind } from "@receipt-ocr/ai";
 import { ConfigProvider, Duration, Effect, Exit, Layer, TestClock, TestContext } from "effect";
 import { describe, expect, it } from "vitest";
-import { activeChain, Ocr, OCR_DEADLINE_MS, runChain, type ExtractCall } from "./ocr";
+import {
+  activeChain,
+  Ocr,
+  OCR_DEADLINE_MS,
+  receiptReaders,
+  runChain,
+  type ExtractCall,
+} from "./ocr";
 import { Settings, type OcrStep } from "./settings";
 
 const step = (model: ModelId, timeoutMs = 30_000, enabled = true): OcrStep => ({
@@ -49,6 +56,32 @@ const run = <A, E>(effect: Effect.Effect<A, E>) =>
 const A = "google:model-a" as const;
 const B = "google:model-b" as const;
 const F = "fixture" as const;
+
+describe("receiptReaders", () => {
+  const claude = "anthropic:claude-sonnet-5-5" as const;
+  const flash = "google:gemini-3.8-flash" as const;
+  const lite = "google:gemini-3.5-flash-lite" as const;
+  const keys = { google: true, anthropic: true, fixture: false };
+
+  it("lists friendly labels in chain order, skipping disabled steps and missing keys", () => {
+    const chain = [step(claude), step(flash, 30_000, false), step(lite)];
+    expect(receiptReaders({ chain }, keys)).toEqual([
+      { label: "Claude Sonnet 5.5", provider: "anthropic" },
+      { label: "Gemini 3.5 Flash-Lite", provider: "google" },
+    ]);
+    expect(receiptReaders({ chain }, { ...keys, anthropic: false })).toEqual([
+      { label: "Gemini 3.5 Flash-Lite", provider: "google" },
+    ]);
+    expect(receiptReaders({ chain }, { google: false, anthropic: false, fixture: false })).toEqual(
+      [],
+    );
+  });
+
+  it("exposes nothing but label and provider", () => {
+    const [reader] = receiptReaders({ chain: [step(flash, 45_000)] }, keys);
+    expect(Object.keys(reader!).sort()).toEqual(["label", "provider"]);
+  });
+});
 
 describe("activeChain", () => {
   it("keeps the saved order and skips disabled steps and providers without a key", () => {
