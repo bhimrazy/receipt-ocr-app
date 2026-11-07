@@ -72,7 +72,7 @@ Steps are in [deployment.md](deployment.md).
 - Keep every new production secret Sensitive in Vercel. The build tolerates their placeholders (fix in
   `ci/db-migrations`); `BETTER_AUTH_SECRETS` was removed from Vercel as a stopgap and can go back once it lands.
 - Set `OCR_DAILY_CAP` in production as a spend guard.
-- Vercel env: `NEXT_PUBLIC_SITE_URL`, `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`; recommended
+- Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`; recommended
   `BETTER_AUTH_SECRETS=1:<current BETTER_AUTH_SECRET>`.
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
 - If an admin saved an OCR chain naming `gemini-3.7-flash`, re-save it in Admin → Settings.
@@ -101,6 +101,14 @@ Steps are in [deployment.md](deployment.md).
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
+
+## Brand decisions (owner, 2026-11-07)
+
+Logo: "Scan line" (receipt crossed by a bar that overshoots both edges; keep the overshoot in every drawing). Palette:
+refined emerald (the current one; light-context tile `#047857` with a white glyph). Wordmark: `Receipt` + emerald
+`OCR`, mono. Masters and the asset table: [`apps/web/brand/README.md`](../apps/web/brand/README.md); regenerate with
+`bun run brand:assets`. Planned, not done: respell receiptOCR to ReceiptOCR everywhere in copy (one constant), and
+"scanned" wording in copy. The wordmark component and asset alt text already use ReceiptOCR.
 
 ## Decisions waiting on the owner
 

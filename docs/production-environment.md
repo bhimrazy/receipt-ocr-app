@@ -523,17 +523,16 @@ password.
 
 These were set when the project was created. Listed so a new environment doesn't miss them.
 
-| Key                    | What                                                                | Kind   |
-| ---------------------- | ------------------------------------------------------------------- | ------ |
-| `DATABASE_URL`         | Supabase connection (transaction pooler, port 6543)                 | Secret |
-| `BETTER_AUTH_SECRET`   | Signs sessions: `openssl rand -base64 32`, one per environment      | Secret |
-| `BETTER_AUTH_SECRETS`  | Optional, for rotating the secret: `1:<current secret>`             | Secret |
-| `BETTER_AUTH_URL`      | `https://receipt-ocr.bhimraj.com.np` (Production only)              | Config |
-| `NEXT_PUBLIC_SITE_URL` | The same address                                                    | Config |
-| `ADMIN_EMAILS`         | Who becomes admin on sign-up, comma-separated                       | Config |
-| `LOG_SAMPLE_RATE`      | `0.1`: keep 10% of routine logs (Production)                        | Config |
-| `OCR_DAILY_CAP`        | `200` Production, `50` Preview                                      | Config |
-| `CRON_SECRET`          | Bearer secret for `/api/jobs/drain` ([step 8](#8-queue-drain-cron)) | Secret |
+| Key                   | What                                                                | Kind   |
+| --------------------- | ------------------------------------------------------------------- | ------ |
+| `DATABASE_URL`        | Supabase connection (transaction pooler, port 6543)                 | Secret |
+| `BETTER_AUTH_SECRET`  | Signs sessions: `openssl rand -base64 32`, one per environment      | Secret |
+| `BETTER_AUTH_SECRETS` | Optional, for rotating the secret: `1:<current secret>`             | Secret |
+| `BETTER_AUTH_URL`     | `https://receipt-ocr.bhimraj.com.np` (Production only)              | Config |
+| `ADMIN_EMAILS`        | Who becomes admin on sign-up, comma-separated                       | Config |
+| `LOG_SAMPLE_RATE`     | `0.1`: keep 10% of routine logs (Production)                        | Config |
+| `OCR_DAILY_CAP`       | `200` Production, `50` Preview                                      | Config |
+| `CRON_SECRET`         | Bearer secret for `/api/jobs/drain` ([step 8](#8-queue-drain-cron)) | Secret |
 
 `DIRECT_URL` (for database migrations) never goes to Vercel. It lives in the `staging-db` and `production-db`
 GitHub environments, used only by the **Database Migration** workflow.
