@@ -6,5 +6,8 @@ import { withRequestEvent } from "@/lib/http";
 export const GET = withRequestEvent(
   { event: "health.live", route: "/api/health", routine: true },
   () =>
-    NextResponse.json({ ok: true, commit: commitSha() }, { headers: { "Cache-Control": "no-store" } }),
+    NextResponse.json(
+      { ok: true, commit: commitSha() },
+      { headers: { "Cache-Control": "no-store" } },
+    ),
 );

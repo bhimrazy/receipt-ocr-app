@@ -24,15 +24,15 @@ design; where they disagree with "Decided", "Decided" wins.
 
 ### Env keys
 
-| Key                           | Meaning                                                                                  | Default                       |
-| ----------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP base URL. Unset: stdout only, no exporter loaded, no network calls             | unset                         |
-| `OTEL_EXPORTER_OTLP_HEADERS`  | Comma-separated `key=value` auth headers for the endpoint (standard OTel format)          | unset                         |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` (preferred) or `http/json`                                                 | `http/protobuf`               |
-| `OTEL_SERVICE_NAME`           | `service` on every event and the OTel resource `service.name`                             | `web`                         |
-| `OTEL_RESOURCE_ATTRIBUTES`    | Extra resource attributes, e.g. `deployment.environment.name=production`                  | unset                         |
-| `LOG_SAMPLE_RATE`             | Share (0 to 1) of routine events kept: fast successful page renders, polls, idle ticks    | `1`; set `0.1` in production  |
-| `LOG_SLOW_MS`                 | At or above this `duration_ms` an event is slow and always kept                           | `1000`                        |
+| Key                           | Meaning                                                                                | Default                      |
+| ----------------------------- | -------------------------------------------------------------------------------------- | ---------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP base URL. Unset: stdout only, no exporter loaded, no network calls           | unset                        |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Comma-separated `key=value` auth headers for the endpoint (standard OTel format)       | unset                        |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` (preferred) or `http/json`                                             | `http/protobuf`              |
+| `OTEL_SERVICE_NAME`           | `service` on every event and the OTel resource `service.name`                          | `web`                        |
+| `OTEL_RESOURCE_ATTRIBUTES`    | Extra resource attributes, e.g. `deployment.environment.name=production`               | unset                        |
+| `LOG_SAMPLE_RATE`             | Share (0 to 1) of routine events kept: fast successful page renders, polls, idle ticks | `1`; set `0.1` in production |
+| `LOG_SLOW_MS`                 | At or above this `duration_ms` an event is slow and always kept                        | `1000`                       |
 
 Errors (status 4xx/5xx, `error` set, level `error`), slow units and anything with a model call are always kept, at any
 rate. Sampled lines carry `sample_rate`, so dashboards weight counts by `1 / sample_rate`. `LOG_*` sampling applies
