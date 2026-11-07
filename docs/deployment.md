@@ -50,7 +50,7 @@ Each provider turns on only when both its ID and secret are set. Use these callb
 ### 4. Environment variables
 
 Set these in Vercel (Project → Settings → Environment Variables, Production) or in the container's environment.
-`apps/web/.env.example` explains each one; [vercel-environment.md](vercel-environment.md) walks through them in order
+`apps/web/.env.example` explains each one; [production-environment.md](production-environment.md) walks through them in order
 (R2, AI keys, Resend), marking which are secrets.
 
 | Variable                                   | Required          | Notes                                                                                                                                                                                                |
