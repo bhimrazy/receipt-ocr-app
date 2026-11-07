@@ -2,11 +2,17 @@
 
 export type Reader = { label: string; provider: string };
 
-/** "A", "A, then B if that fails", "A, then B if that fails, then C if that fails". */
+/**
+ * "Your receipts are read by A." / "… by A. If it can't read one, B tries next." /
+ * "… by A. If it can't read one, B tries next, then C."
+ */
 export function readingSentence(readers: readonly Reader[]): string | null {
   if (readers.length === 0) return null;
-  const [first, ...rest] = readers;
-  return `Platform default: ${[first!.label, ...rest.map((r) => `${r.label} if that fails`)].join(", then ")}`;
+  const [first, second, ...rest] = readers;
+  const lead = `Your receipts are read by ${first!.label}.`;
+  if (!second) return lead;
+  const others = rest.map((r) => `, then ${r.label}`).join("");
+  return `${lead} If it can't read one, ${second.label} tries next${others}.`;
 }
 
 /** Provider names once each, in first-use order, as the company users should look up in the policy. */

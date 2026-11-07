@@ -8,7 +8,7 @@ export function ReceiptReadingSettings({ readers }: { readers: readonly Reader[]
   const providers = providerNames(readers);
   return (
     <SettingsSection
-      description="Which AI model turns your receipt photos into data."
+      description="Which AI model reads your receipts."
       id="reading-heading"
       title="Receipt reading"
     >
@@ -17,14 +17,14 @@ export function ReceiptReadingSettings({ readers }: { readers: readonly Reader[]
           <p className="text-sm">{sentence}</p>
           {providers.length > 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">
-              Your receipts are processed by {providers.join(" and ")} under our{" "}
+              We choose these models and may change them. Our{" "}
               <Link
                 className="rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
                 href="/privacy"
               >
                 privacy policy
-              </Link>
-              . The models and their order can change.
+              </Link>{" "}
+              explains how your receipts are handled by {providers.join(" and ")}.
             </p>
           ) : null}
         </>

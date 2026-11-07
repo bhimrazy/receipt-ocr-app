@@ -6,7 +6,7 @@ import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Privacy policy",
   description:
-    "What receiptOCR collects, who processes it, including the Google Gemini and Anthropic Claude AI models, how long it is kept and how to delete it.",
+    "What receiptOCR collects, who processes it (including Google Gemini and Anthropic Claude AI), how long it is kept and how to delete it.",
   path: "/privacy",
 });
 
@@ -48,7 +48,7 @@ export default function PrivacyPage() {
         {
           heading: "Who processes your data",
           body: [
-            "Google (Gemini API) and Anthropic (Claude API): every receipt file you upload is sent to an AI model from one of these providers, which reads it and returns the extracted data. We may change which model is tried first and in what order. We send the file to the next provider only if the first one can't read it (for example it is slow, busy or unavailable, declines the file, or can't accept its type or size). A file may be sent more than once if a read is retried. Each provider processes the file under its terms for its API.",
+            "Google (Gemini API) and Anthropic (Claude API): every receipt file you upload is sent to an AI model from one of these providers, which reads it and returns the extracted data. We choose the models and the order they are tried in, and we may change them. A file goes to the next provider only if the first can't read it, for example because it is slow, busy or unavailable, declines the file, or can't take its type or size. If a read is retried, the file may be sent again. Each provider handles the file under the terms of its paid API. Under those terms, neither provider uses your receipts to train its models, and each keeps a copy for a limited time only to check for misuse.",
             "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
             "An email delivery provider sends account emails such as password resets and invitations.",
             "Google and GitHub, only if you choose to sign in with them.",

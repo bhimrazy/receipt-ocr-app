@@ -7,15 +7,15 @@ const lite = { label: "Gemini 3.5 Flash-Lite", provider: "google" };
 
 describe("readingSentence", () => {
   it("names a single model", () => {
-    expect(readingSentence([flash])).toBe("Platform default: Gemini 3.8 Flash");
+    expect(readingSentence([flash])).toBe("Your receipts are read by Gemini 3.8 Flash.");
   });
 
   it("lists fallbacks in chain order", () => {
     expect(readingSentence([flash, sonnet])).toBe(
-      "Platform default: Gemini 3.8 Flash, then Claude Sonnet 5.5 if that fails",
+      "Your receipts are read by Gemini 3.8 Flash. If it can't read one, Claude Sonnet 5.5 tries next.",
     );
     expect(readingSentence([sonnet, flash, lite])).toBe(
-      "Platform default: Claude Sonnet 5.5, then Gemini 3.8 Flash if that fails, then Gemini 3.5 Flash-Lite if that fails",
+      "Your receipts are read by Claude Sonnet 5.5. If it can't read one, Gemini 3.8 Flash tries next, then Gemini 3.5 Flash-Lite.",
     );
   });
 
