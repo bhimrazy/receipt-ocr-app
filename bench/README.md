@@ -4,9 +4,14 @@
 
 ```bash
 GOOGLE_GENERATIVE_AI_API_KEY=... bun run bench:ocr [--models google:gemini-3.8-flash] [--only npr-lakh,idr-dot] [--concurrency 2]
+ANTHROPIC_API_KEY=... bun run bench:ocr --models anthropic:claude-haiku-5-5,anthropic:claude-sonnet-5-5,anthropic:claude-opus-5-5
+bun run bench:ocr --dry-run --models anthropic:claude-haiku-5-5,anthropic:claude-sonnet-5-5   # cost estimate, no calls
 ```
 
-Real provider calls, billed to the key. Without the key the script exits with a message.
+Real provider calls, billed to the keys. `--models` takes any id in `OCR_MODELS`; a missing key for a chosen provider
+exits with a message. `--dry-run` needs no key and prints an estimate from the fixture sizes (assumptions in
+`printEstimate`, deliberately generous), so spend can be approved before a run. Fixtures without a `.json` (the load
+test's receipt) are skipped.
 
 - Fixtures: `fixtures/<id>.{jpg,png,pdf}` plus `<id>.json` ground truth (same fields as the extraction; omit a
   field to skip it). The six starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, KWD three decimals, EUR comma

@@ -1,11 +1,13 @@
 // OCR accuracy, latency and cost benchmark over bench/fixtures.
-//   bun run bench:ocr [--models google:gemini-3.8-flash,...] [--concurrency 2] [--only id,id]
-// Needs GOOGLE_GENERATIVE_AI_API_KEY. Fixtures: <id>.{jpg,png,pdf} + <id>.json (ground truth).
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+//   bun run bench:ocr [--models google:gemini-3.8-flash,anthropic:claude-haiku-5-5,...] [--concurrency 2] [--only id,id] [--dry-run]
+// Needs each chosen provider's key (GOOGLE_GENERATIVE_AI_API_KEY, ANTHROPIC_API_KEY); --dry-run needs none
+// and calls nothing. Fixtures: <id>.{jpg,png,pdf} + <id>.json (ground truth); files without one are skipped.
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   costOf,
   extractReceipt,
+  OCR_PROVIDERS,
   OcrCallError,
   ocrModel,
   priceAt,
@@ -37,11 +39,17 @@ type Run = {
 // The single call into packages/ai. Bare model names default to the Google provider.
 const modelId = (model: string) => (model.includes(":") ? model : `google:${model}`) as ModelId;
 
+const keyEnvOf = (model: string) =>
+  OCR_PROVIDERS.find((p) => p.id === ocrModel(modelId(model))?.provider)?.keyEnv ?? null;
+
 async function extract(model: string, bytes: Uint8Array, mimeType: string) {
+  const keys = Object.fromEntries(
+    OCR_PROVIDERS.flatMap((p) => (p.keyEnv ? [[p.id, process.env[p.keyEnv]]] : [])),
+  );
   const { extraction, usage } = await extractReceipt({
     model: modelId(model),
     file: { data: bytes, mediaType: mimeType },
-    keys: { google: process.env.GOOGLE_GENERATIVE_AI_API_KEY },
+    keys,
   });
   return { got: extraction as Receipt, usage };
 }
@@ -51,28 +59,34 @@ function arg(name: string, fallback: string) {
   return i === -1 ? fallback : (process.argv[i + 1] ?? fallback);
 }
 
-if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+const only = arg("only", "").split(",").filter(Boolean);
+const concurrency = Math.max(1, Number(arg("concurrency", "2")) || 2);
+const dryRun = process.argv.includes("--dry-run");
+const models = arg("models", "google:gemini-3.8-flash")
+  .split(",")
+  .map((spec) => {
+    // Allowlisted models only: their prices are what the run is costed with.
+    if (spec === "fixture" || !ocrModel(modelId(spec))) {
+      throw new Error(`unknown model "${spec}" (see OCR_MODELS in packages/ai/src/models.ts)`);
+    }
+    return spec;
+  });
+
+const missingKeys = [...new Set(models.map(keyEnvOf))].filter(
+  (env): env is string => env !== null && !process.env[env],
+);
+if (!dryRun && missingKeys.length > 0) {
   console.error(
-    "bench:ocr needs GOOGLE_GENERATIVE_AI_API_KEY (real provider calls, billed to you).",
+    `bench:ocr needs ${missingKeys.join(", ")} (real provider calls, billed to you). --dry-run estimates the cost without calling.`,
   );
   process.exit(2);
 }
 
-const only = arg("only", "").split(",").filter(Boolean);
-const concurrency = Math.max(1, Number(arg("concurrency", "2")) || 2);
-const models = arg("models", "google:gemini-3.8-flash")
-  .split(",")
-  .map((spec) => {
-    const [provider, ...rest] = spec.split(":");
-    if (provider !== "google" || rest.length === 0) {
-      throw new Error(`unsupported model "${spec}" (only google:<model> today)`);
-    }
-    return rest.join(":");
-  });
-
 const fixtures: Fixture[] = readdirSync(path.join(root, "fixtures"))
   .filter((file) => MIME[path.extname(file)])
   .map((file) => ({ id: path.basename(file, path.extname(file)), file }))
+  // The load test's receipt has no ground truth to score against.
+  .filter(({ id }) => existsSync(path.join(root, "fixtures", `${id}.json`)))
   .filter(({ id }) => only.length === 0 || only.includes(id));
 if (fixtures.length === 0) {
   console.error("no fixtures found in bench/fixtures");
@@ -132,6 +146,60 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 const pct = (n: number) => (Number.isNaN(n) ? "n/a" : `${(n * 100).toFixed(0)}%`);
 const sec = (ms: number) => (Number.isNaN(ms) ? "n/a" : `${(ms / 1000).toFixed(1)}s`);
 
+/**
+ * A rough, generous estimate with no calls: prompt + schema + structured-output
+ * overhead ~2000 tokens; an image about width x height / 750 tokens (Anthropic's
+ * rule; these receipts are too small to be resized), 1600 when the size isn't
+ * read (JPEG, PDF); output the ground truth's JSON at ~3 characters a token plus
+ * 1000 thinking tokens.
+ */
+function printEstimate() {
+  const FIXED_INPUT = 2000;
+  const THINKING = 1000;
+  const imageTokens = (file: string) => {
+    if (path.extname(file) !== ".png") return 1600;
+    const bytes = readFileSync(path.join(root, "fixtures", file));
+    return Math.ceil((bytes.readUInt32BE(16) * bytes.readUInt32BE(20)) / 750);
+  };
+  const now = new Date();
+  const lines = [
+    `Dry run: ${fixtures.length} fixtures x ${models.length} models, no calls made.`,
+    "",
+    "| model | input tokens | output tokens | est. cost |",
+    "|---|---|---|---|",
+  ];
+  let grand = 0;
+  for (const model of models) {
+    let input = 0;
+    let output = 0;
+    let micro = 0;
+    for (const { id, file } of fixtures) {
+      const truth = readFileSync(path.join(root, "fixtures", `${id}.json`), "utf8");
+      const inputTokens = FIXED_INPUT + imageTokens(file);
+      const outputTokens = Math.ceil(truth.length / 3) + THINKING;
+      input += inputTokens;
+      output += outputTokens;
+      const usage = {
+        inputTokens,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens,
+        reasoningTokens: THINKING,
+      };
+      micro += costOf(modelId(model), usage, now).microUsd ?? 0;
+    }
+    grand += micro;
+    lines.push(`| ${model} | ${input} | ${output} | $${(micro / 1e6).toFixed(4)} |`);
+  }
+  lines.push(`| total | | | $${(grand / 1e6).toFixed(4)} |`);
+  console.log(lines.join("\n"));
+}
+
+if (dryRun) {
+  printEstimate();
+  process.exit(0);
+}
+
 const date = new Date().toISOString().slice(0, 10);
 mkdirSync(path.join(root, "results"), { recursive: true });
 const fieldNames = [...EXACT_FIELDS, ...AMOUNT_FIELDS, "merchant", "itemsF1"];
@@ -162,7 +230,7 @@ for (const model of models) {
   md.push(
     `| ${model} | ${fieldNames.map((f) => pct(field(f))).join(" | ")} | ${sec(percentile(latencies, 50))} | ${sec(percentile(latencies, 95))} | ${sec(okRuns[0]?.ms ?? NaN)} | ${runs.length - okRuns.length}/${runs.length} | ${runs.filter((r) => r.timeout).length} | ${tokens.i}/${tokens.o} | ${cost} |`,
   );
-  const raw = path.join(root, "results", `${date}-${model}.json`);
+  const raw = path.join(root, "results", `${date}-${model.replaceAll(":", "_")}.json`);
   writeFileSync(
     raw,
     `${JSON.stringify({ date, model, priceFrom: priceFrom(model), runs }, null, 2)}\n`,
