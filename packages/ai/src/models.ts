@@ -35,6 +35,21 @@ export interface ModelPrice {
   };
 }
 
+/**
+ * A model's reasoning-effort setting: what its API accepts, and what runs when a chain step sets
+ * none. Higher effort costs more and is slower.
+ */
+export interface OcrEffort {
+  /** Accepted values, lowest first. */
+  values: readonly string[];
+  default: string;
+  /**
+   * "app": we send `default` ourselves (transcription needs little reasoning). "provider": we
+   * send nothing and the provider picks `default`, which can change on its side.
+   */
+  defaultFrom: "app" | "provider";
+}
+
 export interface OcrModel {
   id: `${OcrProviderId}:${string}` | "fixture";
   provider: OcrProviderId;
@@ -47,6 +62,8 @@ export interface OcrModel {
    * Default "full".
    */
   schemaMode?: "full" | "no-array-bounds" | "no-bounds";
+  /** Unset: the model has no effort setting. */
+  effort?: OcrEffort;
 }
 
 export const OCR_PROVIDERS: readonly OcrProvider[] = [
@@ -60,11 +77,34 @@ export const OCR_PROVIDERS: readonly OcrProvider[] = [
 
 // Google prices from https://ai.google.dev/gemini-api/docs/pricing (Standard, paid tier),
 // checked 2026-11-06. The earliest `from` is that check, not the model's launch.
+// output_config.effort on Haiku, Sonnet and Opus 5.5
+// (https://platform.claude.com/docs/en/build-with-claude/effort, checked 2026-11-07). The API's own
+// defaults are medium (Haiku, Opus) and high (Sonnet); transcription runs at low.
+// The API also takes xhigh and max, left out on purpose: a chain step is limited to 50 s, in which
+// a model emits about 5-10K tokens, so those levels would mostly time out after the provider has
+// billed the reasoning. Add them back when calls may run longer (e.g. a worker without the
+// serverless time limit); maxOutputTokensFor already has room for them.
+const CLAUDE_EFFORT: OcrEffort = {
+  values: ["low", "medium", "high"],
+  default: "low",
+  defaultFrom: "app",
+};
+
+// reasoning.effort on Luna and Terra (models pages, checked 2026-11-07). The API default is medium.
+// xhigh and max are accepted by the API but left out for the same reason as Claude's, above.
+const OPENAI_EFFORT: OcrEffort = {
+  values: ["none", "low", "medium", "high"],
+  default: "none",
+  defaultFrom: "app",
+};
+
 export const OCR_MODELS: readonly OcrModel[] = [
   {
     id: "google:gemini-3.8-flash",
     provider: "google",
     label: "Gemini 3.8 Flash",
+    // thinkingLevel; https://aistudio.google.com/docs/thinking (checked 2026-11-07). Default medium.
+    effort: { values: ["low", "medium", "high"], default: "medium", defaultFrom: "provider" },
     prices: [
       { from: "2027-01-01", input: 1.5, cachedInput: 0.15, output: 7.5 },
       { from: "2026-11-06", input: 0.75, cachedInput: 0.075, output: 3.75 },
@@ -77,6 +117,12 @@ export const OCR_MODELS: readonly OcrModel[] = [
     // Verified 2026-11-07: a `maxItems` on the schema makes generateContent answer 400
     // INVALID_ARGUMENT ("Request contains an invalid argument.") with no detail.
     schemaMode: "no-array-bounds",
+    // thinkingLevel; same page. Default minimal.
+    effort: {
+      values: ["minimal", "low", "medium", "high"],
+      default: "minimal",
+      defaultFrom: "provider",
+    },
     prices: [{ from: "2026-11-06", input: 0.3, cachedInput: 0.03, output: 2.5 }],
   },
   // Anthropic prices from https://platform.claude.com/docs/en/about-claude/pricing, checked
@@ -84,6 +130,7 @@ export const OCR_MODELS: readonly OcrModel[] = [
   {
     id: "anthropic:claude-haiku-5-5",
     provider: "anthropic",
+    effort: CLAUDE_EFFORT,
     label: "Claude Haiku 5.5",
     // Cache reads 0.1x input, 5-minute cache writes 1.25x input, in both tiers. No request sets
     // cache_control today, so these stay unused until one does.
@@ -107,12 +154,14 @@ export const OCR_MODELS: readonly OcrModel[] = [
   {
     id: "anthropic:claude-sonnet-5-5",
     provider: "anthropic",
+    effort: CLAUDE_EFFORT,
     label: "Claude Sonnet 5.5",
     prices: [{ from: "2026-11-07", input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 10 }],
   },
   {
     id: "anthropic:claude-opus-5-5",
     provider: "anthropic",
+    effort: CLAUDE_EFFORT,
     label: "Claude Opus 5.5",
     prices: [{ from: "2026-11-07", input: 4, cachedInput: 0.2, cacheWrite: 5, output: 20 }],
   },
@@ -127,6 +176,8 @@ export const OCR_MODELS: readonly OcrModel[] = [
     // Groq's docs list no supported keywords for best-effort json_schema, so size bounds are
     // dropped from the request. The reply is still checked against the full schema.
     schemaMode: "no-bounds",
+    // Instruct mode only; the thinking mode is not offered.
+    effort: { values: ["none"], default: "none", defaultFrom: "app" },
     prices: [{ from: "2026-11-07", input: 0.8, output: 4 }],
   },
   // OpenAI: https://developers.openai.com/api/docs/models (checked 2026-11-07). Both take image
@@ -139,6 +190,7 @@ export const OCR_MODELS: readonly OcrModel[] = [
   {
     id: "openai:gpt-6-luna",
     provider: "openai",
+    effort: OPENAI_EFFORT,
     label: "GPT-6 Luna (OpenAI)",
     schemaMode: "no-bounds",
     prices: [
@@ -161,6 +213,7 @@ export const OCR_MODELS: readonly OcrModel[] = [
   {
     id: "openai:gpt-6.1-terra",
     provider: "openai",
+    effort: OPENAI_EFFORT,
     label: "GPT-6.1 Terra (OpenAI)",
     schemaMode: "no-bounds",
     prices: [
@@ -190,6 +243,13 @@ export const OCR_MODELS: readonly OcrModel[] = [
 
 export function ocrModel(id: string): OcrModel | undefined {
   return OCR_MODELS.find((model) => model.id === id);
+}
+
+/** The effort to run: `chosen` when the model accepts it, else the model's default. Null: no setting. */
+export function effortFor(id: string, chosen?: string): string | null {
+  const effort = ocrModel(id)?.effort;
+  if (!effort) return null;
+  return chosen !== undefined && effort.values.includes(chosen) ? chosen : effort.default;
 }
 
 /** Token counts for one model call; null = the provider didn't say (timeout, API error). */

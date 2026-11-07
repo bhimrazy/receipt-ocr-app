@@ -7,7 +7,9 @@ GOOGLE_GENERATIVE_AI_API_KEY=... bun run bench:ocr [--models google:gemini-3.8-f
 ANTHROPIC_API_KEY=... bun run bench:ocr --models anthropic:claude-haiku-5-5,anthropic:claude-sonnet-5-5,anthropic:claude-opus-5-5
 GROQ_API_KEY=... bun run bench:ocr --models groq:qwen/qwen3.8-27b --concurrency 1
 OPENAI_API_KEY=... bun run bench:ocr --models openai:gpt-6-luna,openai:gpt-6.1-terra
+bun run bench:ocr --models openai:gpt-6-luna --effort none,low,medium   # one row per level: model@level
 bun run bench:ocr --dry-run --models anthropic:claude-haiku-5-5,anthropic:claude-sonnet-5-5   # cost estimate, no calls
+# (a dry run costs reasoning at a fixed 1,000 tokens, whatever --effort says)
 # Another fixture set, and a resolution sweep: every model runs once per prep mode.
 bun run bench:ocr --fixtures ~/receipt-ocr-real-receipts/nepal --prep none,app,long:1568,long:2400,short:1000 --dry-run
 # A/B of the extraction prompt (default: the app's PROMPT_VERSION).

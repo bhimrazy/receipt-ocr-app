@@ -16,8 +16,9 @@ import { ArrowDown, ArrowUp, KeyRound, Loader2, Plus, Trash2 } from "lucide-reac
 import { useId, useState } from "react";
 import type { ConnectionRow } from "@receipt-ocr/core";
 import { checkChainProvidersAction, saveOcrAction } from "../actions";
+import { DEFAULT_EFFORT, effortChoices } from "./effort";
 
-type Step = { model: string; enabled: boolean; timeoutMs: number };
+type Step = { model: string; enabled: boolean; timeoutMs: number; effort?: string };
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -65,6 +66,14 @@ export function OcrChainForm({
     });
   const update = (index: number, patch: Partial<Step>) =>
     setChain((c) => c.map((step, i) => (i === index ? { ...step, ...patch } : step)));
+  const setEffort = (index: number, value: string) =>
+    setChain((c) =>
+      c.map((step, i) => {
+        if (i !== index) return step;
+        const next: Step = { model: step.model, enabled: step.enabled, timeoutMs: step.timeoutMs };
+        return value === DEFAULT_EFFORT ? next : { ...next, effort: value };
+      }),
+    );
 
   async function save() {
     setPending(true);
@@ -94,6 +103,7 @@ export function OcrChainForm({
           const hasKey = available[model?.provider ?? ""] === true;
           const position = order.indexOf(step.model);
           const name = model?.label ?? step.model;
+          const effort = effortChoices(model, provider);
           return (
             <li
               className="grid gap-3 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
@@ -126,6 +136,42 @@ export function OcrChainForm({
                       ? "no key needed"
                       : "not available here"}
                 </p>
+                {effort ? (
+                  effort.choosable ? (
+                    <div className="mt-2 flex flex-col gap-1">
+                      <label
+                        className="text-xs text-muted-foreground"
+                        htmlFor={`${id}-effort-${index}`}
+                      >
+                        Effort<span className="sr-only">: {name}</span>
+                      </label>
+                      <Select
+                        items={effort.items}
+                        onValueChange={(next) => setEffort(index, String(next ?? DEFAULT_EFFORT))}
+                        value={step.effort ?? DEFAULT_EFFORT}
+                      >
+                        <SelectTrigger
+                          aria-describedby={`${id}-effort-help`}
+                          className="w-full sm:w-64"
+                          id={`${id}-effort-${index}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent alignItemWithTrigger={false}>
+                          {effort.items.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Effort: {model?.effort?.default} (the only setting this model takes)
+                    </p>
+                  )
+                ) : null}
               </div>
               <div className="flex items-center gap-1">
                 <label className="mr-2 flex min-h-11 items-center gap-2 text-sm md:min-h-9">
@@ -170,6 +216,11 @@ export function OcrChainForm({
           );
         })}
       </ol>
+      <p className="mt-2 text-xs text-muted-foreground" id={`${id}-effort-help`}>
+        Effort is how much a model reasons before it answers. Higher levels cost more and are slower
+        (high raises the output cap to 32K tokens); receipts rarely need them. A call that runs out
+        of time is still billed.
+      </p>
       <p className="sr-only" id={`${id}-nokey`}>
         This provider has no API key on the server, so it can&apos;t be turned on.
       </p>

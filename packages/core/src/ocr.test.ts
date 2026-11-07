@@ -43,7 +43,7 @@ const success = (model: ModelId) =>
 
 /** A fake provider per model: fail with the given error (after `ms` of test time) or succeed. */
 function fakeCall(plan: Partial<Record<ModelId, { error?: OcrFailureKind; ms?: number }>>) {
-  const calls: { model: ModelId; timeoutMs: number; maxRetries: number }[] = [];
+  const calls: { model: ModelId; timeoutMs: number; maxRetries: number; effort?: string }[] = [];
   const call: ExtractCall = (input) =>
     Effect.gen(function* () {
       calls.push(input);
@@ -134,6 +134,12 @@ describe("runChain", () => {
     expect(Exit.isSuccess(exit) && exit.value.model).toBe(A);
     expect(calls.map((c) => c.model)).toEqual([A]);
     expect(calls[0]?.maxRetries).toBe(1);
+  });
+
+  it("hands each step's effort to its call, and none when the step sets none", async () => {
+    const { call, calls } = fakeCall({ [A]: { error: "timeout" } });
+    await run(runChain([{ ...step(A), effort: "high" }, step(B)], call));
+    expect(calls.map((c) => c.effort)).toEqual(["high", undefined]);
   });
 
   it.each([

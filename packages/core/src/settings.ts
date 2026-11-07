@@ -64,19 +64,54 @@ const ocrStepSchema = z.object({
   model: z.string().refine((id) => ocrModel(id) !== undefined, "That model isn't on the list."),
   enabled: z.boolean(),
   timeoutMs: z.number().int().min(5_000).max(50_000).default(DEFAULT_STEP_TIMEOUT_MS),
+  /** Reasoning effort; unset runs the model's default. Checked against the model in the chain. */
+  effort: z.string().optional(),
 });
 
-export const ocrRoutingSchema = z.object({
-  chain: z
-    .array(ocrStepSchema)
+const chainOf = <S extends z.ZodType<{ model: string }>>(step: S) =>
+  z
+    .array(step)
     .min(1)
     .max(5)
     .refine((chain) => new Set(chain.map((s) => s.model)).size === chain.length, {
       message: "Each model can appear once.",
-    }),
+    });
+
+const supportsEffort = (model: string, effort: string) =>
+  ocrModel(model)?.effort?.values.includes(effort) === true;
+
+/** What an admin may save: an effort the model doesn't list is refused. */
+export const ocrRoutingSchema = z.object({
+  chain: chainOf(ocrStepSchema).superRefine((chain, ctx) => {
+    chain.forEach((step, index) => {
+      if (step.effort === undefined || supportsEffort(step.model, step.effort)) return;
+      const model = ocrModel(step.model);
+      const values = model?.effort?.values;
+      ctx.addIssue({
+        code: "custom",
+        path: [index, "effort"],
+        message: values
+          ? `${model!.label} doesn't support effort "${step.effort}". Choose one of: ${values.join(", ")}.`
+          : `${model?.label ?? step.model} has no effort setting.`,
+      });
+    });
+  }),
 });
 
-export type OcrStep = { model: ModelId; enabled: boolean; timeoutMs: number };
+/**
+ * What is read back: a stored effort the model no longer lists (the allowlist changed since the
+ * save) is dropped from that step, so one stale value doesn't send the whole chain back to the
+ * defaults. The step then runs the model's default.
+ */
+export const storedOcrRoutingSchema = z.object({
+  chain: chainOf(
+    ocrStepSchema.transform(({ effort, ...step }) =>
+      effort !== undefined && supportsEffort(step.model, effort) ? { ...step, effort } : step,
+    ),
+  ),
+});
+
+export type OcrStep = { model: ModelId; enabled: boolean; timeoutMs: number; effort?: string };
 /** Ordered: the first enabled step whose provider has a key is the active model; the rest are fallbacks. */
 export type OcrRouting = { chain: OcrStep[] };
 
@@ -197,7 +232,12 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
             ? yield* parse(storedPlanTableSchema, plansRow.value, DEFAULT_PLANS, "plans")
             : DEFAULT_PLANS,
           ocr: ocrRow
-            ? ((yield* parse(ocrRoutingSchema, ocrRow.value, fallbackOcr, "ocr")) as OcrRouting)
+            ? ((yield* parse(
+                storedOcrRoutingSchema,
+                ocrRow.value,
+                fallbackOcr,
+                "ocr",
+              )) as OcrRouting)
             : fallbackOcr,
           saved,
         } satisfies SettingsSnapshot;
@@ -247,7 +287,7 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
             const next = yield* validate(key, value);
             const fallback = key === "plans" ? DEFAULT_PLANS : yield* defaultOcrRouting;
             const schema: z.ZodType<unknown> =
-              key === "plans" ? storedPlanTableSchema : ocrRoutingSchema;
+              key === "plans" ? storedPlanTableSchema : storedOcrRoutingSchema;
             const previous = yield* transact(async (tx) => {
               // Read under a row lock, not from the cache, so `previous` is what this save replaces.
               const [row] = await tx

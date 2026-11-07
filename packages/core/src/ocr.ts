@@ -103,6 +103,7 @@ export type ExtractCall = (input: {
   model: ModelId;
   timeoutMs: number;
   maxRetries: number;
+  effort?: string;
 }) => Effect.Effect<ExtractReceiptResult, StepFailure>;
 
 /**
@@ -131,6 +132,7 @@ export const runChain = (
           model: step.model,
           timeoutMs: Math.min(step.timeoutMs, remaining),
           maxRetries: STEP_MAX_RETRIES,
+          ...(step.effort === undefined ? {} : { effort: step.effort }),
         }),
       );
       const ms = (yield* Clock.currentTimeMillis) - stepStart;
@@ -203,10 +205,10 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
         extract: (file, options) =>
           Effect.gen(function* () {
             const keys = yield* providerKeys;
-            const call: ExtractCall = ({ model, timeoutMs, maxRetries }) =>
+            const call: ExtractCall = ({ model, timeoutMs, maxRetries, effort }) =>
               Effect.tryPromise({
                 try: (abortSignal) =>
-                  extractReceipt({ model, keys, file, timeoutMs, maxRetries, abortSignal }),
+                  extractReceipt({ model, keys, file, timeoutMs, maxRetries, effort, abortSignal }),
                 catch: (cause): StepFailure =>
                   cause instanceof OcrCallError
                     ? // The error itself, not its cause: its message never holds receipt contents.

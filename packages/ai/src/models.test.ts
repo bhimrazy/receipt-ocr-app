@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { costOf, OCR_MODELS, priceAt, priceCall, type ExtractionUsage } from "./models";
+import { costOf, effortFor, OCR_MODELS, priceAt, priceCall, type ExtractionUsage } from "./models";
 
 const usage = (u: Partial<ExtractionUsage>): ExtractionUsage => ({
   inputTokens: null,
@@ -180,5 +180,22 @@ describe("costOf", () => {
       const froms = model.prices.map((p) => p.from);
       expect(froms, model.id).toEqual([...froms].sort().reverse());
     }
+  });
+});
+
+describe("effort", () => {
+  it("lists a default that the model accepts, for every model with a setting", () => {
+    for (const model of OCR_MODELS.filter((m) => m.effort)) {
+      expect(model.effort!.values, model.id).toContain(model.effort!.default);
+    }
+  });
+
+  it("falls back to the model's default for an unset or unsupported value", () => {
+    expect(effortFor("anthropic:claude-haiku-5-5")).toBe("low");
+    expect(effortFor("anthropic:claude-haiku-5-5", "high")).toBe("high");
+    expect(effortFor("google:gemini-3.8-flash", "minimal")).toBe("medium");
+    expect(effortFor("openai:gpt-6-luna", "low")).toBe("low");
+    expect(effortFor("anthropic:claude-haiku-5-5", "max")).toBe("low");
+    expect(effortFor("fixture", "low")).toBeNull();
   });
 });
