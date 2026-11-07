@@ -27,7 +27,7 @@ export default defineConfig({
       testIgnore: /capture\.spec\.ts/,
     },
     {
-      // Phone-sized Chromium with its built-in fake camera, which grants access without a prompt.
+      // Touch, phone-sized Chromium (pointer: coarse) with its built-in fake camera, which grants access without a prompt.
       name: "mobile-camera",
       testMatch: /capture\.spec\.ts/,
       use: {

@@ -149,10 +149,11 @@ describe("providerAvailability", () => {
 });
 
 describe("Settings", () => {
-  it("defaults the chain to GEMINI_MODEL when it is on the allowlist", async () => {
+  it("defaults the chain to Claude Sonnet, then GEMINI_MODEL when it is on the allowlist", async () => {
     const run = settingsWith({ GEMINI_MODEL: "gemini-3.8-flash" });
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
+      "anthropic:claude-sonnet-5-5",
       "google:gemini-3.8-flash",
     ]);
   });
@@ -161,6 +162,7 @@ describe("Settings", () => {
     const run = settingsWith({ GEMINI_MODEL: "gemini-unlisted" });
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
+      "anthropic:claude-sonnet-5-5",
       "google:gemini-3.8-flash",
     ]);
   });
@@ -175,6 +177,7 @@ describe("Settings", () => {
     const run = settingsWith({ GEMINI_MODEL: "gemini-3.8-flash" }, [saved]);
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
+      "anthropic:claude-sonnet-5-5",
       "google:gemini-3.8-flash",
     ]);
   });
@@ -265,6 +268,7 @@ describe("Settings", () => {
     const run = settingsWith({ ANTHROPIC_API_KEY: "k", GOOGLE_GENERATIVE_AI_API_KEY: "k" });
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
+      "anthropic:claude-sonnet-5-5",
       "google:gemini-3.8-flash",
     ]);
   });
