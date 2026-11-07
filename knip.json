@@ -9,5 +9,5 @@
       "ignoreDependencies": ["tailwindcss"]
     }
   },
-  "ignore": ["bench/load/*.js"]
+  "ignore": ["bench/load/*.js", "apps/web/public/*.js"]
 }

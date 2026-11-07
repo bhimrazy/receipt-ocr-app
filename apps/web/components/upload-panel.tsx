@@ -31,6 +31,7 @@ import { browserCameraSupport, hasCamera, type CameraSupport } from "@/lib/captu
 import { postReceipt } from "@/lib/capture/upload-request";
 import { useHydrated } from "@/lib/use-hydrated";
 import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
+import { SharedFilesNotice } from "@/components/shared-files-notice";
 
 // Loaded on first use, so the camera and editor don't weigh on the upload page.
 const loadCamera = () => import("@/components/capture/camera-sheet");
@@ -530,6 +531,7 @@ export function UploadPanel({
         </Button>
       </div>
 
+      <SharedFilesNotice input={inputRef} />
       {notice ? (
         <Alert className="px-4 py-3" variant="warning">
           {notice}

@@ -80,7 +80,7 @@ Steps are in [deployment.md](deployment.md).
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `feat/capture` (#47)           | In-app camera, batch capture (limit per plan, default 10, set in Admin), review with auto-detected four-corner crop, straightening and filters, uploads two at a time                                                               |
 | `feat/size-target-encoder`     | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                                                                                          |
-| `feat/pwa`                     | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                                                                                          |
+| `feat/pwa` (#43)               | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target (files wait for Keep or Discard), install prompt, kill switch in the runbook                                             |
 | `feat/mobile-shell`            | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                                                                                    |
 | `fix/pdf-page-evasions`        | Five remaining ways to hide pages from the PDF page counter                                                                                                                                                                         |
 | `feat/admin-ops`               | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; index only                                                                                       |
@@ -166,6 +166,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Share target: a cross-site form can plant a share in a visitor's cache (the referrer can be hidden). The Keep and
+  Discard prompt, the 10-minute expiry and the size caps are the guard.
 - Encryption key rotation: re-encrypt job + per-version counts + split from the auth secret (see
   [BYOK plan](plans/2026-11-07-byok.md#9-key-rotation-and-encryption-at-rest)).
 - FAQ uses a raw `<details>`; add a server-friendly Disclosure primitive to `packages/ui`.

@@ -224,6 +224,39 @@ A manual **Vercel Production Deployment** run is red at `gate`, with "Production
 2. Check **Admin, Audit log** for admin actions in the same period.
 3. Tell the user to reset their password once the account is safe.
 
+### Disable the service worker
+
+Use this when the service worker itself is the problem: pages stuck on the offline page, a broken share target, or
+anything that looks cached when it should not be.
+
+1. Replace the worker with the kill switch and deploy:
+
+   ```bash
+   cp apps/web/public/sw-killswitch.js apps/web/public/sw.js
+   ```
+
+   Browsers check `/sw.js` on their next visit (it is served with `Cache-Control: no-cache`). The kill switch
+   installs at once, deletes every `receiptocr-*` cache (the offline page and any shared files), unregisters itself
+   and reloads open tabs, which then load straight from the network.
+
+2. Leave it deployed for a few weeks. Devices that have not visited since still run the old worker until they do.
+   The app keeps registering `/sw.js` under `/app`, so each visit installs the kill switch and it removes itself
+   again; that costs one small request and does no harm.
+
+**Deleting `sw.js` is not enough.** When the script returns 404 the browser keeps the installed worker running; it
+only replaces a worker with a new script that loads.
+
+Optionally, for a faster clean-up on browsers that support it, send `Clear-Site-Data: "storage"` for one release, for
+example from the `headers()` list in `apps/web/next.config.ts` on `/app/:path*`. It removes service workers and Cache
+Storage, and also local storage (the install prompt's dismissal), but not cookies, so nobody is signed out. Safari
+support is partial, so use it with the kill switch, not instead of it.
+
+**Warning:** `Clear-Site-Data` runs on every response that carries it, so a visitor loses their local storage and
+caches on each page load while it is deployed, and a share waiting in Cache Storage is deleted. Send it for one
+release only, then remove it.
+
+To turn the worker back on, restore `public/sw.js` from git, bump `VERSION` in it and deploy.
+
 ## Rollback
 
 - **Code on Vercel:** Deployments, pick the last good production deployment, **Promote to Production**. Then revert

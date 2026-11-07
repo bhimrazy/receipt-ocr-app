@@ -1,5 +1,6 @@
 "use client";
 
+import { clearSharedFiles } from "@/lib/share-target";
 import type { PlanTable } from "@receipt-ocr/core/plans";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { ConfirmDialog, type ConfirmDialogProps } from "@receipt-ocr/ui/components/confirm-dialog";
@@ -384,7 +385,10 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
         minLength={10}
         onOpenChange={setImpersonateOpen}
         onSubmit={(reason) =>
-          settle(impersonateUserAction({ userId: user.id, reason }), "Signed in.")
+          settle(
+            clearSharedFiles().then(() => impersonateUserAction({ userId: user.id, reason })),
+            "Signed in.",
+          )
         }
         open={impersonateOpen}
         reasonHint="Kept in the audit log with the start and end time. For example: the support request you are answering."
