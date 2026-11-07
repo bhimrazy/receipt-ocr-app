@@ -86,6 +86,19 @@ describe.skipIf(!enabled)(
         }),
       );
 
+    /** Passes the emailed-code step-up for an account with no factor, reading the code from the mail. */
+    async function emailStepUp(account: { cookie: string }, action: "account.change_email") {
+      const stepUp = await import("./step-up");
+      const headers = new Headers({ cookie: account.cookie });
+      const current = await auth.api.getSession({ headers, query: { disableCookieCache: true } });
+      const who = { session: current!.session, user: current!.user, ip: null, headers };
+      expect(await stepUp.sendStepUpCode(who, action)).toEqual({ ok: true });
+      const code = sent.at(-1)!.text.match(/\b\d{6}\b/)![0];
+      expect(await stepUp.verifyStepUp(who, { action, method: "email", code })).toEqual({
+        ok: true,
+      });
+    }
+
     const requestDeletion = async (account: { email: string; cookie: string }) => {
       const res = await auth.api.deleteUser({
         headers: new Headers({ cookie: account.cookie }),
@@ -292,6 +305,7 @@ describe.skipIf(!enabled)(
       const a = await newUser("email");
       await db.update(user).set({ emailVerified: true }).where(eq(user.id, a.id));
       const newEmail = `${tag}-email-new@example.com`;
+      await emailStepUp(a, "account.change_email");
       await auth.api.changeEmail({
         headers: new Headers({ cookie: a.cookie }),
         body: { newEmail, callbackURL: "/app/settings" },
@@ -318,6 +332,7 @@ describe.skipIf(!enabled)(
       const taken = await newUser("taken");
       await db.update(user).set({ emailVerified: true }).where(eq(user.id, a.id));
       const headers = new Headers({ cookie: a.cookie });
+      await emailStepUp(a, "account.change_email");
       const change = (newEmail: string) => auth.api.changeEmail({ headers, body: { newEmail } });
       for (let i = 0; i < 3; i++) expect(await change(taken.email)).toEqual({ status: true });
       // Nothing was sent for the taken address, yet the cap is used up for both kinds of answer.
@@ -341,6 +356,55 @@ describe.skipIf(!enabled)(
       // The token is untouched, so the confirm page still works.
       expect((await post("/delete-user", a.cookie, { token })).status).toBe(200);
       expect(await exists(a.id)).toBe(false);
+    });
+
+    it("a fresh sign-in alone doesn't confirm an email change, verified or not", async () => {
+      // Unverified: Better Auth would send the only link to the new address.
+      const a = await newUser("email-fresh");
+      const change = () =>
+        auth.api.changeEmail({
+          headers: new Headers({ cookie: a.cookie }),
+          body: { newEmail: `${tag}-email-fresh-new@example.com` },
+        });
+      expect(await errorOf(change())).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+      await db.update(user).set({ emailVerified: true }).where(eq(user.id, a.id));
+      expect(await errorOf(change())).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+      expect(sent.some((m) => m.to === `${tag}-email-fresh-new@example.com`)).toBe(false);
+    });
+
+    it("signing in again from a signed-in browser replaces that session", async () => {
+      const a = await newUser("resign");
+      const [before] = await db
+        .select({ id: session.id, org: session.activeOrganizationId })
+        .from(session)
+        .where(eq(session.userId, a.id));
+      const again = await auth.api.signInEmail({
+        body: { email: a.email, password },
+        headers: new Headers({ cookie: a.cookie }),
+        returnHeaders: true,
+      });
+      const rows = await db
+        .select({ id: session.id, org: session.activeOrganizationId })
+        .from(session)
+        .where(eq(session.userId, a.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.id).not.toBe(before!.id);
+      expect(rows[0]!.org).toBe(before!.org);
+      // The old cookie no longer works; the new one does.
+      expect(await auth.api.getSession({ headers: new Headers({ cookie: a.cookie }) })).toBeNull();
+      expect(
+        await auth.api.getSession({
+          headers: new Headers({ cookie: sessionCookie(again.headers) }),
+        }),
+      ).not.toBeNull();
+
+      // A different user's sign-in leaves this browser's other session alone.
+      const b = await newUser("resign-other");
+      await auth.api.signInEmail({
+        body: { email: a.email, password },
+        headers: new Headers({ cookie: b.cookie }),
+      });
+      expect(await db.select().from(session).where(eq(session.userId, b.id))).toHaveLength(1);
     });
 
     it("a fresh sign-in never stands in for an admin's second factor", async () => {

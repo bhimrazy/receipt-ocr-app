@@ -97,7 +97,10 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
   }
 
   /** Passes an emailed-code step-up (accounts with no factor yet), reading the code from the mail. */
-  async function emailStepUp(headers: Headers, action: "two_factor.enable" | "account.delete") {
+  async function emailStepUp(
+    headers: Headers,
+    action: "two_factor.enable" | "account.delete" | "passkey.add" | "account.unlink",
+  ) {
     const who = await caller(headers);
     expect(await stepUp.sendStepUpCode(who, action)).toEqual({ ok: true });
     const code = sent.at(-1)!.text.match(/\b\d{6}\b/)![0];
@@ -264,15 +267,44 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
     ).toMatchObject({ ok: false, locked: true });
   });
 
-  it("disables only after step-up, forgetting every trusted device", async () => {
+  it("disables only after step-up, forgetting every trusted device and nothing else", async () => {
     const account = await signUp("disable");
     const { key, headers } = await enrol(account.headers);
-    await db.insert(verification).values({
-      id: `${tag}-trust`,
-      identifier: `${tag}-trust-device`,
-      value: account.userId,
-      expiresAt: new Date(Date.now() + 86_400_000),
+    // A real trusted device: Better Auth stores its row under our prefixed hash.
+    const signIn = await auth.api.signInEmail({
+      body: { email: account.email, password },
+      returnHeaders: true,
     });
+    await auth.api.verifyTOTP({
+      body: { code: codeAt(key), trustDevice: true },
+      headers: new Headers({ cookie: cookieFrom(signIn.headers, "two_factor") }),
+    });
+    const trustRows = () =>
+      db
+        .select({ identifier: verification.identifier })
+        .from(verification)
+        .where(
+          and(
+            eq(verification.value, account.userId),
+            sql`${verification.identifier} like 'trust-device:%'`,
+          ),
+        );
+    expect(await trustRows()).toHaveLength(1);
+    // A second device, and a pending reset link (also keyed by the user id) that must survive.
+    await db.insert(verification).values([
+      {
+        id: `${tag}-trust`,
+        identifier: `trust-device:${tag}`,
+        value: account.userId,
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+      {
+        id: `${tag}-reset`,
+        identifier: `${tag}-hashed-reset-token`,
+        value: account.userId,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    ]);
     expect(await failure(auth.api.disableTwoFactor({ body: { password }, headers }))).toEqual({
       status: 403,
       code: "STEP_UP_REQUIRED",
@@ -287,12 +319,70 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
     await auth.api.disableTwoFactor({ body: { password }, headers });
     const [row] = await db.select().from(user).where(eq(user.id, account.userId));
     expect(row?.twoFactorEnabled).toBe(false);
-    const trust = await db
-      .select()
+    expect(await trustRows()).toEqual([]);
+    const kept = await db
+      .select({ id: verification.id })
       .from(verification)
       .where(eq(verification.value, account.userId));
-    expect(trust).toEqual([]);
+    expect(kept.map((row) => row.id)).toEqual([`${tag}-reset`]);
     expect(sent.at(-1)?.subject).toContain("is off");
+  });
+
+  it("never lets a user with a factor fall back to an emailed code, even while fresh", async () => {
+    const account = await signUp("downgrade");
+    const { key, headers } = await enrol(account.headers);
+    const who = await caller(headers);
+    expect(
+      await stepUp.verifyStepUp(who, {
+        action: "account.change_password",
+        method: "totp",
+        code: codeAt(key),
+      }),
+    ).toEqual({ ok: true });
+    sent.length = 0;
+    expect(await stepUp.sendStepUpCode(who, "account.change_password")).toMatchObject({
+      ok: false,
+    });
+    expect(sent).toEqual([]);
+    expect(
+      await stepUp.verifyStepUp(who, {
+        action: "account.change_password",
+        method: "email",
+        code: "123456",
+      }),
+    ).toMatchObject({ ok: false });
+    const [row] = await db
+      .select({ method: session.stepUpMethod })
+      .from(session)
+      .where(eq(session.id, who.session.id));
+    expect(row?.method).toBe("totp");
+  });
+
+  it("adds a passkey after a step-up in a session signed in long ago", async () => {
+    const account = await signUp("passkey-old");
+    await db
+      .update(session)
+      .set({ createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) })
+      .where(eq(session.userId, account.userId));
+    expect(
+      await failure(auth.api.generatePasskeyRegistrationOptions({ headers: account.headers })),
+    ).toMatchObject({ status: 403, code: "STEP_UP_REQUIRED" });
+    await emailStepUp(account.headers, "passkey.add");
+    const options = await auth.api.generatePasskeyRegistrationOptions({ headers: account.headers });
+    expect(options.challenge).toBeTruthy();
+  });
+
+  it("needs a step-up to unlink a sign-in method, even right after sign-in", async () => {
+    const account = await signUp("unlink");
+    const [credential] = await db.execute<{ id: string }>(
+      sql`select id from account where user_id = ${account.userId} and provider_id = 'credential'`,
+    );
+    const unlink = () =>
+      auth.api.unlinkAccount({ headers: account.headers, body: { accountId: credential!.id } });
+    expect(await failure(unlink())).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+    await emailStepUp(account.headers, "account.unlink");
+    // Past the gate, Better Auth itself refuses to remove the only sign-in method.
+    expect((await failure(unlink()))?.code).not.toBe("STEP_UP_REQUIRED");
   });
 
   it("never hands out the TOTP secret again, even to its own session", async () => {
