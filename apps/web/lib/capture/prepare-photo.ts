@@ -19,10 +19,13 @@ const isUnedited = (edit: EditState) =>
  * builds it for a photo they never opened.
  *
  * - The browser can't decode it (HEIC outside Safari): the original goes, and the server judges
- *   it like any upload. Nothing was shown, so nothing is lost.
+ *   it like any upload, unless the user edited it (it decoded in review, then failed here, e.g.
+ *   out of memory).
  * - It decodes but the edit can't be rendered or encoded (canvas memory, no 2D context): an
- *   unedited photo still goes as it is; an edited one throws `EditFailedError`, because sending
- *   the original would silently drop the crop, rotation and filter the user chose.
+ *   unedited photo still goes as it is.
+ *
+ * An edited photo that fails either way throws `EditFailedError`: sending the original would
+ * silently drop the crop, rotation and filter the user chose.
  */
 export async function preparePhoto(
   image: { blob: Blob; name: string },
@@ -33,7 +36,8 @@ export async function preparePhoto(
   let bitmap: ImageBitmap;
   try {
     bitmap = await loadImage(image.blob);
-  } catch {
+  } catch (error) {
+    if (edit && !isUnedited(edit)) throw new EditFailedError(error);
     return original();
   }
   let chosen = edit;

@@ -110,11 +110,23 @@ describe("preparePhoto", () => {
     expect(sentOriginal()).toBe(true);
   });
 
-  it("sends the original when the browser can't decode it", async () => {
+  it("sends the original of an unedited or never-opened photo the browser can't decode", async () => {
     stubCanvas({});
     stubDecode(true);
-    await preparePhoto(photo, rotated, noStartingEdit);
+    await preparePhoto(photo, undefined, noStartingEdit);
     expect(sentOriginal()).toBe(true);
+    prepareFile.mockClear();
+    await preparePhoto(photo, unedited, noStartingEdit);
+    expect(sentOriginal()).toBe(true);
+  });
+
+  it("never sends the original of an edited photo whose decode fails at Read", async () => {
+    stubCanvas({});
+    stubDecode(true);
+    await expect(preparePhoto(photo, rotated, noStartingEdit)).rejects.toBeInstanceOf(
+      EditFailedError,
+    );
+    expect(prepareFile).not.toHaveBeenCalled();
   });
 
   it("builds the starting edit for a photo that was never opened", async () => {
