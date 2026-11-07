@@ -128,6 +128,7 @@ flowchart TD
 - [Retry](flows/retry.md) and the attempt guard
 - [Background jobs](flows/jobs.md): the Postgres queue, leases, retries and cooldowns
 - [Admin actions and the audit log](flows/admin-actions.md)
+- [Admin operations and jobs](flows/admin-operations.md): charts, their sources, and the job actions
 - [Settings cache](flows/settings-cache.md)
 - [CI, deployment and migrations](flows/deployment.md)
 - [ai.md](ai.md) (model boundary, prices), [db.md](db.md), [storage.md](storage.md), [email.md](email.md),

@@ -114,6 +114,21 @@ Symptoms: OCR spend rising, one user or workspace uploading far more than usual.
    **Admin, Settings** for a quicker change.
 4. Set a Gemini project spend cap and a Google Cloud budget alert if they aren't already.
 
+### Jobs stuck or dead
+
+Symptoms: receipts stay "processing", or the **Dead, last 24 hours** tile on **Admin, Operations** is above zero.
+
+1. Open **Admin, Jobs** (filter by state, kind or user). The detail page shows each attempt and its error kind.
+2. Dead because of a provider outage that has passed: **Re-run**. It reads the receipt again in its original round, so
+   the user is not charged, but it still counts against `OCR_DAILY_CAP` and is audited (`job.rerun`).
+3. Not wanted any more: **Cancel** a queued job. To stop new work while you fix something, **Pause** the queue or one
+   kind from Operations; **Resume** when done. A provider cooldown clears itself, or clear it by hand.
+4. Every action appears in **Admin, Audit log** (`job.*`). A user who has retried since is refused: the retry already
+   re-read it.
+
+Past about 1M `jobs` rows, build new `jobs` indexes by hand with `CREATE INDEX CONCURRENTLY` and keep a no-op migration
+so the journal stays in step.
+
 ### Leaked secret
 
 1. Rotate it now, using the [table below](#secret-rotation). Rotate first, investigate after.

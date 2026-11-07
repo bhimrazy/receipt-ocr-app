@@ -54,6 +54,7 @@ Steps are in [deployment.md](deployment.md).
 | `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                           |
 | `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                     |
 | `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                          |
+| `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; migration `0010` (index only)     |
 | `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying) |
 | `feat/consent-analytics`   | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                   |
 
