@@ -14,29 +14,23 @@ import { getUsageSummary } from "@/lib/receipts";
 
 export const metadata: Metadata = { title: "Upload" };
 
-type Search = Promise<Record<string, string | string[] | undefined>>;
-
 /**
- * The upload panel on its own, for the home-screen shortcut (`?capture=1` opens the camera)
- * and the share target (`?shared=1`; the shared files land in review). Home has the same panel.
+ * The upload panel on its own, for the Scan tab and home-screen shortcut (`?capture=1` opens
+ * the camera; the panel reads it from the URL) and the share target (`?shared=1`; the shared
+ * files land in review). Home has the same panel.
  */
-async function Panel({ searchParams }: { searchParams: Search }) {
-  const [params, usage, { policy }] = await Promise.all([
-    searchParams,
-    getUsageSummary(),
-    getCurrentPlan(),
-  ]);
+async function Panel() {
+  const [usage, { policy }] = await Promise.all([getUsageSummary(), getCurrentPlan()]);
   return (
     <UploadPanel
       batchMax={policy.batchMax}
       resetsIn={formatTimeUntil(usage.resetsAt)}
-      startCamera={params.capture === "1"}
       usage={usage}
     />
   );
 }
 
-export default function UploadPage({ searchParams }: { searchParams: Search }) {
+export default function UploadPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader>
@@ -48,7 +42,7 @@ export default function UploadPage({ searchParams }: { searchParams: Search }) {
         </PageHeaderContent>
       </PageHeader>
       <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-        <Panel searchParams={searchParams} />
+        <Panel />
       </Suspense>
     </div>
   );

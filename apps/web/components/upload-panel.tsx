@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import type { ReviewImage } from "@/components/capture/review-sheet";
@@ -157,20 +157,21 @@ export function UploadPanel({
   usage,
   resetsIn,
   batchMax,
-  startCamera = false,
 }: {
   usage: Usage | null;
   /** "in 6 hours", computed on the server so it matches what was rendered. */
   resetsIn: string;
   /** Images in one batch (camera plus picked files), from the plan. */
   batchMax: number;
-  /** Open the camera on arrival (the home-screen shortcut), when this device has one. */
-  startCamera?: boolean;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
-  const [reviewing, setReviewing] = useState<ReviewImage[]>([]);
+  const [reviewing, setReviewingState] = useState<ReviewImage[]>([]);
+  // Mirrors `reviewing` synchronously, with slots held by files still being prepared, so two
+  // adds in quick succession both see the other and can't overfill the batch.
+  const reviewingRef = useRef<ReviewImage[]>([]);
+  const pendingRef = useRef(0);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraFound, setCameraFound] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -195,11 +196,29 @@ export function UploadPanel({
   );
   useEffect(() => {
     if (support !== "ok") return;
+    void hasCamera().then(setCameraFound);
+  }, [support]);
+
+  // `?capture=1` (the Scan tab and the home-screen shortcut) opens the camera on every visit.
+  // The parameter is dropped once used, so the next tap on Scan is a change again, and Back
+  // from an opened receipt returns to the plain page instead of reopening the camera.
+  const captureRequested = useSearchParams().get("capture") === "1";
+  useEffect(() => {
+    if (!captureRequested) return;
+    let cancelled = false;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("capture");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    if (browserCameraSupport() !== "ok") return;
     void hasCamera().then((found) => {
+      if (cancelled) return;
       setCameraFound(found);
-      if (found && startCamera) setCameraOpen(true);
+      if (found) setCameraOpen(true);
     });
-  }, [support, startCamera]);
+    return () => {
+      cancelled = true;
+    };
+  }, [captureRequested]);
 
   // Object URLs for the thumbnails live until their row goes away.
   const previews = useRef(new Set<string>());
@@ -245,6 +264,14 @@ export function UploadPanel({
   const remaining = usage ? Math.max(0, usage.limit - usage.used) : null;
   const inBatch = items.length + reviewing.length;
   const room = Math.max(0, batchMax - inBatch);
+  /** What the batch holds right now, including adds not yet rendered. */
+  const inBatchNow = () =>
+    queue.getSnapshot().items.length + reviewingRef.current.length + pendingRef.current;
+
+  function setReviewing(next: (current: ReviewImage[]) => ReviewImage[]) {
+    reviewingRef.current = next(reviewingRef.current);
+    setReviewingState(reviewingRef.current);
+  }
 
   /** Adds prepared files to the queue; returns how many were accepted. */
   function enqueue(files: File[], rejected: string[]) {
@@ -272,21 +299,28 @@ export function UploadPanel({
       if (rejection) rejected.push(rejection);
       else candidates.push(file);
     }
-    const fit = fitBatch(candidates, inBatch, batchMax);
+    const fit = fitBatch(candidates, inBatchNow(), batchMax);
     setSuccess(null);
     const isPdf = (f: File) => acceptedType(f) === "application/pdf";
     const pdfs = fit.kept.filter(isPdf);
     const photos = fit.kept.filter((f) => !isPdf(f));
-    if (pdfs.length > 0) {
-      setPreparing(true);
-      enqueue(await Promise.all(pdfs.map(prepareFile)), rejected);
-      setPreparing(false);
-    }
     if (photos.length > 0) {
       setReviewing((current) => [
         ...current,
         ...photos.map((file) => ({ id: crypto.randomUUID(), blob: file, name: file.name })),
       ]);
+    }
+    if (pdfs.length > 0) {
+      pendingRef.current += pdfs.length;
+      setPreparing(true);
+      let ready: File[];
+      try {
+        ready = await Promise.all(pdfs.map(prepareFile));
+      } finally {
+        pendingRef.current -= pdfs.length;
+        setPreparing(false);
+      }
+      enqueue(ready, rejected);
     }
     const parts = [rejected.length > 0 ? `Not added: ${rejected.join("; ")}.` : null, fit.notice];
     setNotice(parts.filter(Boolean).join(" ") || null);
@@ -295,7 +329,7 @@ export function UploadPanel({
   function addShots(blobs: Blob[]) {
     setCameraOpen(false);
     const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
-    const fit = fitBatch(blobs, inBatch, batchMax);
+    const fit = fitBatch(blobs, inBatchNow(), batchMax);
     setNotice(fit.notice);
     setSuccess(null);
     setReviewing((current) => [
@@ -315,7 +349,7 @@ export function UploadPanel({
   }
 
   function reviewed(files: File[]) {
-    setReviewing([]);
+    setReviewing(() => []);
     const rejected: string[] = [];
     const added = enqueue(files, rejected);
     setNotice(rejected.length > 0 ? `Not added: ${rejected.join("; ")}.` : null);
@@ -602,7 +636,7 @@ export function UploadPanel({
         <ReviewSheet
           images={reviewing}
           key={reviewing.map((r) => r.id).join()}
-          onCancel={() => setReviewing([])}
+          onCancel={() => setReviewing(() => [])}
           onUpload={reviewed}
         />
       ) : null}
