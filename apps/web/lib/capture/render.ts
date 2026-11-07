@@ -21,12 +21,59 @@ export type RenderBudget = { source: number; output: number };
 export const FULL_RENDER: RenderBudget = { source: SOURCE_BUDGET, output: OUTPUT_BUDGET };
 export const THUMB_RENDER: RenderBudget = { source: 400_000, output: 40_000 };
 
-/** Decodes with EXIF orientation applied, so picked phone photos come out upright. */
+/** Frees a canvas's pixel memory now rather than at garbage collection (iOS caps the total). */
+export function releaseCanvas(canvas: HTMLCanvasElement) {
+  canvas.width = canvas.height = 0;
+}
+
+/** Natural size with EXIF orientation applied, read without decoding the pixels; null if unknown. */
+function naturalSize(blob: Blob): Promise<{ width: number; height: number } | null> {
+  if (typeof Image === "undefined" || typeof URL.createObjectURL !== "function") {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    const done = (size: { width: number; height: number } | null) => {
+      URL.revokeObjectURL(url);
+      img.onload = img.onerror = null;
+      img.src = "";
+      resolve(size);
+    };
+    img.onload = () =>
+      done(img.naturalWidth ? { width: img.naturalWidth, height: img.naturalHeight } : null);
+    img.onerror = () => done(null);
+    img.src = url;
+  });
+}
+
+/**
+ * Decodes with EXIF orientation applied, so picked phone photos come out upright. Photos over
+ * SOURCE_BUDGET are decoded straight to that size (a 48 MP photo would need ~200 MB as a full
+ * bitmap); the size is read from the header first.
+ */
 export async function loadImage(blob: Blob): Promise<ImageBitmap> {
+  const size = await naturalSize(blob);
+  const scale = size ? Math.sqrt(SOURCE_BUDGET / (size.width * size.height)) : 1;
+  if (!size || scale >= 1) return decode(blob);
+  const width = Math.max(1, Math.floor(size.width * scale));
+  const height = Math.max(1, Math.floor(size.height * scale));
+  let bitmap = await decode(blob, { resizeWidth: width, resizeHeight: height });
+  // An engine that resizes before orienting returns the rotated photo squashed: redo it.
+  if (width !== height && bitmap.width === height && bitmap.height === width) {
+    bitmap.close();
+    bitmap = await decode(blob, { resizeWidth: height, resizeHeight: width });
+  }
+  return bitmap;
+}
+
+async function decode(blob: Blob, resize: ImageBitmapOptions = {}): Promise<ImageBitmap> {
+  const sized: ImageBitmapOptions = resize.resizeWidth ? { ...resize, resizeQuality: "high" } : {};
   try {
-    return await createImageBitmap(blob, { imageOrientation: "from-image" });
+    return await createImageBitmap(blob, { imageOrientation: "from-image", ...sized });
   } catch (error) {
     if (!(error instanceof TypeError)) throw error;
+    // Older engines reject the options bag; they orient by default and never see the budget.
     return createImageBitmap(blob);
   }
 }
@@ -37,66 +84,153 @@ function context(canvas: HTMLCanvasElement) {
   return ctx;
 }
 
+function scaledSize(bitmap: { width: number; height: number }, maxPixels: number) {
+  const scale = Math.min(1, Math.sqrt(maxPixels / (bitmap.width * bitmap.height)));
+  return {
+    w: Math.max(1, Math.round(bitmap.width * scale)),
+    h: Math.max(1, Math.round(bitmap.height * scale)),
+  };
+}
+
 /** The image turned by `rotation`, scaled down to at most `maxPixels`. */
 export function rotatedCanvas(bitmap: ImageBitmap, rotation: Rotation, maxPixels: number) {
-  const scale = Math.min(1, Math.sqrt(maxPixels / (bitmap.width * bitmap.height)));
-  const w = Math.max(1, Math.round(bitmap.width * scale));
-  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const { w, h } = scaledSize(bitmap, maxPixels);
   const size = rotatedSize(w, h, rotation);
   const canvas = document.createElement("canvas");
   canvas.width = size.width;
   canvas.height = size.height;
-  const ctx = context(canvas);
-  ctx.translate(size.width / 2, size.height / 2);
-  ctx.rotate((rotation * Math.PI) / 180);
-  ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
-  return canvas;
+  try {
+    const ctx = context(canvas);
+    ctx.translate(size.width / 2, size.height / 2);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
+    return canvas;
+  } catch (error) {
+    releaseCanvas(canvas);
+    throw error;
+  }
 }
 
 /** Finds the receipt outline on a ~256 px copy; the canvas does the downscale. */
 export function detectOnBitmap(bitmap: ImageBitmap): Detection {
   const canvas = rotatedCanvas(bitmap, 0, DETECT_EDGE * DETECT_EDGE);
-  const ctx = context(canvas);
-  return detectQuad(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  try {
+    return detectQuad(context(canvas).getImageData(0, 0, canvas.width, canvas.height));
+  } finally {
+    releaseCanvas(canvas);
+  }
 }
 
-/** Rotates, straightens the crop and applies the filter. */
-export function renderEdit(bitmap: ImageBitmap, edit: EditState, budget: RenderBudget) {
-  const rotated = rotatedCanvas(bitmap, edit.rotation, budget.source);
-  if (isFullFrame(edit.quad) && edit.filter === "original") return rotated;
-  const quad = quadToPixels(edit.quad, rotated.width, rotated.height);
-  // Read only the crop's bounding box, not the whole photo.
+const isPlain = (edit: EditState) => isFullFrame(edit.quad) && edit.filter === "original";
+
+/** The crop's bounding box in the rotated image, and the corners relative to it. */
+function cropBox(edit: EditState, width: number, height: number) {
+  const quad = quadToPixels(edit.quad, width, height);
   const x0 = Math.max(0, Math.floor(Math.min(...quad.map((p) => p.x))));
   const y0 = Math.max(0, Math.floor(Math.min(...quad.map((p) => p.y))));
-  const x1 = Math.min(rotated.width, Math.ceil(Math.max(...quad.map((p) => p.x))));
-  const y1 = Math.min(rotated.height, Math.ceil(Math.max(...quad.map((p) => p.y))));
-  const src = context(rotated).getImageData(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+  const x1 = Math.min(width, Math.ceil(Math.max(...quad.map((p) => p.x))));
+  const y1 = Math.min(height, Math.ceil(Math.max(...quad.map((p) => p.y))));
   const local = quad.map((p) => ({ x: p.x - x0, y: p.y - y0 })) as Quad;
-  const size = straightenedSize(local, budget.output);
-  const pixels = isFullFrame(edit.quad) ? src : warpQuad(src, local, size.width, size.height);
+  return { x0, y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0), local };
+}
+
+/** The size `renderEdit` would produce, without rendering. */
+export function renderedSize(
+  bitmap: { width: number; height: number },
+  edit: EditState,
+  budget: RenderBudget,
+) {
+  const { w, h } = scaledSize(bitmap, budget.source);
+  const rotated = rotatedSize(w, h, edit.rotation);
+  if (isPlain(edit)) return rotated;
+  const box = cropBox(edit, rotated.width, rotated.height);
+  return isFullFrame(edit.quad)
+    ? { width: box.w, height: box.h }
+    : straightenedSize(box.local, budget.output);
+}
+
+/**
+ * Rotates, straightens the crop and applies the filter. Intermediate canvases are released
+ * here; the caller releases the one returned (`releaseCanvas`) once it is encoded.
+ */
+export function renderEdit(bitmap: ImageBitmap, edit: EditState, budget: RenderBudget) {
+  const rotated = rotatedCanvas(bitmap, edit.rotation, budget.source);
+  if (isPlain(edit)) return rotated;
+  let pixels: ImageData | ReturnType<typeof warpQuad>;
+  try {
+    // Read only the crop's bounding box, not the whole photo.
+    const box = cropBox(edit, rotated.width, rotated.height);
+    const src = context(rotated).getImageData(box.x0, box.y0, box.w, box.h);
+    const size = straightenedSize(box.local, budget.output);
+    pixels = isFullFrame(edit.quad) ? src : warpQuad(src, box.local, size.width, size.height);
+  } finally {
+    releaseCanvas(rotated);
+  }
   applyFilter(pixels, edit.filter);
   const out = document.createElement("canvas");
   out.width = pixels.width;
   out.height = pixels.height;
-  context(out).putImageData(
-    new ImageData(pixels.data as Uint8ClampedArray<ArrayBuffer>, pixels.width, pixels.height),
-    0,
-    0,
-  );
-  return out;
+  try {
+    context(out).putImageData(
+      new ImageData(pixels.data as Uint8ClampedArray<ArrayBuffer>, pixels.width, pixels.height),
+      0,
+      0,
+    );
+    return out;
+  } catch (error) {
+    releaseCanvas(out);
+    throw error;
+  }
 }
 
-export function canvasToJpeg(canvas: HTMLCanvasElement, name: string): Promise<File> {
+export function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob(
-      (blob) =>
-        blob
-          ? resolve(new File([blob], name, { type: "image/jpeg", lastModified: Date.now() }))
-          : reject(new Error("encode failed")),
+      (blob) => (blob ? resolve(blob) : reject(new Error("encode failed"))),
       "image/jpeg",
-      OUTPUT_JPEG_QUALITY,
+      quality,
     ),
   );
+}
+
+/** Renders and encodes an edit at full size, releasing the canvas whether or not it encodes. */
+export async function renderToJpeg(bitmap: ImageBitmap, edit: EditState, name: string) {
+  const canvas = renderEdit(bitmap, edit, FULL_RENDER);
+  try {
+    const blob = await canvasToBlob(canvas, OUTPUT_JPEG_QUALITY);
+    return new File([blob], jpegName(name), { type: "image/jpeg", lastModified: Date.now() });
+  } finally {
+    releaseCanvas(canvas);
+  }
+}
+
+/** A small preview as a data URL; the canvas is released straight after. */
+export function renderPreview(bitmap: ImageBitmap, edit: EditState, budget: RenderBudget) {
+  const canvas = renderEdit(bitmap, edit, budget);
+  try {
+    return canvas.toDataURL("image/jpeg", 0.8);
+  } finally {
+    releaseCanvas(canvas);
+  }
+}
+
+/** A small render for the size estimate; released after encoding. */
+export async function renderSmall(
+  bitmap: ImageBitmap,
+  edit: EditState,
+  budget: RenderBudget,
+  quality: number,
+) {
+  const canvas = renderEdit(bitmap, edit, budget);
+  try {
+    return {
+      blob: await canvasToBlob(canvas, quality),
+      width: canvas.width,
+      height: canvas.height,
+    };
+  } finally {
+    releaseCanvas(canvas);
+  }
 }
 
 export function jpegName(name: string) {

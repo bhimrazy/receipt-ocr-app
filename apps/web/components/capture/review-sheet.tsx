@@ -1,9 +1,19 @@
 "use client";
 
+import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { ArrowLeft, Loader2, Maximize, RotateCw, ScanLine, ScanText, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CircleAlert,
+  Loader2,
+  Maximize,
+  RotateCw,
+  ScanLine,
+  ScanText,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   editKey,
@@ -16,16 +26,18 @@ import {
   type EditState,
 } from "@/lib/capture/edit-state";
 import { defaultFilter, FILTER_LABELS, FILTERS, type Filter } from "@/lib/capture/filters";
+import { EditFailedError, preparePhoto } from "@/lib/capture/prepare-photo";
 import {
-  canvasToJpeg,
   detectOnBitmap,
   FULL_RENDER,
-  jpegName,
   loadImage,
-  renderEdit,
+  renderedSize,
+  renderPreview,
+  renderSmall,
   THUMB_RENDER,
+  type RenderBudget,
 } from "@/lib/capture/render";
-import { prepareFile } from "@/lib/upload-prep";
+import { planSize, START_QUALITY, TARGET_BYTES } from "@/lib/upload-prep";
 import { CropEditor } from "./crop-editor";
 import { FullScreen } from "./full-screen";
 
@@ -56,9 +68,20 @@ function startingEdit(bitmap: ImageBitmap): EditState {
   return initialEdit(quad, defaultFilter(rememberedFilter(), quad !== null));
 }
 
-async function encode(bitmap: ImageBitmap, edit: EditState, name: string) {
-  const jpeg = await canvasToJpeg(renderEdit(bitmap, edit, FULL_RENDER), jpegName(name));
-  return prepareFile(jpeg);
+/** About 0.3 MP: a few milliseconds to render, where the full 16 MP render takes seconds. */
+const ESTIMATE_RENDER: RenderBudget = { source: 1_200_000, output: 300_000 };
+
+/**
+ * The upload size, from a small render: its JPEG bytes per pixel at the upload quality, times
+ * the pixels `prepareFile` will keep. A small copy packs more detail per pixel, so this leans
+ * high; `prepareFile` then shrinks anything over TARGET_BYTES, so the estimate is capped there.
+ */
+async function estimateBytes(bitmap: ImageBitmap, edit: EditState) {
+  const small = await renderSmall(bitmap, edit, ESTIMATE_RENDER, START_QUALITY);
+  const full = renderedSize(bitmap, edit, FULL_RENDER);
+  const planned = planSize(full.width, full.height);
+  const bytes = (small.blob.size / (small.width * small.height)) * planned.width * planned.height;
+  return Math.min(TARGET_BYTES, Math.round(bytes));
 }
 
 function formatSize(bytes: number) {
@@ -68,7 +91,8 @@ function formatSize(bytes: number) {
 }
 
 type Loaded = { id: string; bitmap: ImageBitmap };
-type Encoded = { key: string; file: File };
+type Estimate = { key: string; bytes: number };
+type Prepared = { key: string; file: File };
 
 /**
  * Every photo is checked here before upload: corners (detected when possible), rotation,
@@ -88,7 +112,12 @@ export default function ReviewSheet({
   const [edits, setEdits] = useState<Record<string, EditState>>({});
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState<Record<string, boolean>>({});
-  const [encoded, setEncoded] = useState<Record<string, Encoded>>({});
+  const [estimates, setEstimates] = useState<Record<string, Estimate>>({});
+  // Files made by an earlier Read that stopped on a failed photo, reused when nothing changed.
+  const [prepared, setPrepared] = useState<Record<string, Prepared>>({});
+  // Photos whose edit couldn't be encoded; held back until the edit changes or Read succeeds.
+  const [editFailed, setEditFailed] = useState<Record<string, true>>({});
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Partial<Record<Filter, string>>>({});
   const [working, setWorking] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -121,25 +150,25 @@ export default function ReviewSheet({
     };
   }, [current]);
 
-  // The upload size for this edit, by encoding it for real (debounced while dragging).
+  // The upload size for this edit, estimated from a small render (debounced while dragging).
   useEffect(() => {
     if (!bitmap || !edit || !current) return;
     const key = editKey(edit);
-    if (encoded[current.id]?.key === key) return;
+    if (estimates[current.id]?.key === key) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      encode(bitmap, edit, current.name)
-        .then((file) => {
-          if (!cancelled) setEncoded((all) => ({ ...all, [current.id]: { key, file } }));
+      estimateBytes(bitmap, edit)
+        .then((bytes) => {
+          if (!cancelled) setEstimates((all) => ({ ...all, [current.id]: { key, bytes } }));
         })
-        // No estimate this time; the upload encodes again.
+        // No estimate this time; the upload still encodes for real.
         .catch(() => {});
-    }, 400);
+    }, 250);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [bitmap, edit, current, encoded]);
+  }, [bitmap, edit, current, estimates]);
 
   // Small previews of each filter on the current crop.
   const shapeKey = edit ? editKey({ ...edit, filter: "original" }) : "";
@@ -147,11 +176,12 @@ export default function ReviewSheet({
     if (!bitmap || !edit) return;
     const timer = window.setTimeout(() => {
       const next: Partial<Record<Filter, string>> = {};
-      for (const filter of FILTERS) {
-        next[filter] = renderEdit(bitmap, { ...edit, filter }, THUMB_RENDER).toDataURL(
-          "image/jpeg",
-          0.8,
-        );
+      try {
+        for (const filter of FILTERS) {
+          next[filter] = renderPreview(bitmap, { ...edit, filter }, THUMB_RENDER);
+        }
+      } catch {
+        // Out of canvas memory: the buttons still work without their previews.
       }
       setThumbs(next);
     }, 150);
@@ -163,6 +193,13 @@ export default function ReviewSheet({
   function update(next: EditState) {
     if (!current) return;
     setEdits((all) => ({ ...all, [current.id]: next }));
+    const id = current.id;
+    setEditFailed((all) => {
+      if (!all[id]) return all;
+      const rest = { ...all };
+      delete rest[id];
+      return rest;
+    });
   }
 
   function chooseFilter(filter: Filter) {
@@ -179,39 +216,58 @@ export default function ReviewSheet({
     setIndex((i) => Math.min(i, rest.length - 1));
   }
 
+  /**
+   * Encodes every photo. One whose edit can't be encoded is never swapped for the original:
+   * the sheet stays open on it with an error, and nothing is sent until it is fixed or deleted.
+   */
   async function upload() {
     const files: File[] = [];
+    const done: Record<string, Prepared> = {};
+    const failedNow: Record<string, true> = {};
+    setUploadError(null);
     try {
       for (const [i, image] of images.entries()) {
         setWorking(`Preparing ${i + 1} of ${images.length}…`);
         const saved = edits[image.id];
-        const cached = encoded[image.id];
-        if (saved && cached?.key === editKey(saved)) {
+        const key = saved ? editKey(saved) : "";
+        const cached = prepared[image.id];
+        if (saved && cached?.key === key) {
           files.push(cached.file);
           continue;
         }
-        let bmp: ImageBitmap | null = null;
         try {
-          bmp = await loadImage(image.blob);
-          files.push(await encode(bmp, saved ?? startingEdit(bmp), image.name));
-        } catch {
-          // Undecodable here: send the original and let the server judge it, like any upload.
-          files.push(
-            await prepareFile(new File([image.blob], image.name, { type: image.blob.type })),
-          );
-        } finally {
-          bmp?.close();
+          const file = await preparePhoto(image, saved, startingEdit);
+          files.push(file);
+          if (saved) done[image.id] = { key, file };
+        } catch (error) {
+          if (!(error instanceof EditFailedError)) throw error;
+          failedNow[image.id] = true;
         }
       }
     } finally {
       setWorking(null);
     }
+    const failedIds = images.filter((image) => image.id in failedNow).map((image) => image.id);
+    if (failedIds.length > 0) {
+      setPrepared((all) => ({ ...all, ...done }));
+      setEditFailed(failedNow);
+      setIndex(images.findIndex((image) => image.id === failedIds[0]));
+      return;
+    }
     onUpload(files);
   }
 
-  const estimate = current && edit ? encoded[current.id] : undefined;
+  function read() {
+    upload().catch(() => {
+      setWorking(null);
+      setUploadError("The photos couldn't be prepared. Nothing was uploaded. Try again.");
+    });
+  }
+
+  const estimate = current && edit ? estimates[current.id] : undefined;
   const fresh = estimate && edit && estimate.key === editKey(edit);
   const count = images.length;
+  const heldBack = (id: string) => editFailed[id] === true;
 
   return (
     <FullScreen
@@ -327,11 +383,27 @@ export default function ReviewSheet({
           ))}
         </div>
 
+        {current && heldBack(current.id) ? (
+          <Alert className="px-3 py-2 text-sm" variant="destructive">
+            <CircleAlert aria-hidden="true" />
+            <p>
+              This photo&apos;s crop, turn or filter couldn&apos;t be saved on this device, so it
+              wasn&apos;t sent. Try Read again, change the edit, or delete the photo.
+            </p>
+          </Alert>
+        ) : null}
+        {uploadError ? (
+          <Alert className="px-3 py-2 text-sm" variant="destructive">
+            <CircleAlert aria-hidden="true" />
+            <p>{uploadError}</p>
+          </Alert>
+        ) : null}
+
         <p aria-live="polite" className="min-h-4 text-center text-xs text-muted-foreground">
           {fresh ? (
             <>
-              About <span className="font-mono tabular-nums">{formatSize(estimate.file.size)}</span>{" "}
-              to upload.
+              About <span className="font-mono tabular-nums">{formatSize(estimate.bytes)}</span> to
+              upload.
               {edit?.filter === "grey" || edit?.filter === "bw"
                 ? " Greyscale and B&W make the file smaller."
                 : null}
@@ -348,12 +420,14 @@ export default function ReviewSheet({
               <li key={image.id}>
                 <button
                   aria-current={i === index ? "true" : undefined}
-                  aria-label={`Photo ${i + 1}`}
+                  aria-label={heldBack(image.id) ? `Photo ${i + 1}, not sent` : `Photo ${i + 1}`}
                   className={cn(
                     "flex size-11 items-center justify-center rounded-md border-2 font-mono text-xs tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     i === index
                       ? "border-primary text-foreground"
-                      : "border-border text-muted-foreground",
+                      : heldBack(image.id)
+                        ? "border-destructive text-destructive"
+                        : "border-border text-muted-foreground",
                   )}
                   onClick={() => setIndex(i)}
                   type="button"
@@ -365,7 +439,7 @@ export default function ReviewSheet({
           </ul>
         ) : null}
 
-        <Button disabled={working !== null} onClick={() => void upload()} ref={uploadRef} size="lg">
+        <Button disabled={working !== null} onClick={read} ref={uploadRef} size="lg">
           {working ? (
             <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
           ) : (
