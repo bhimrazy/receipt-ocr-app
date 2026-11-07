@@ -472,7 +472,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       expect(await usedToday(c.userId, tight)).toBe(20);
       const refused = await upload();
       expect(Exit.isFailure(refused) && JSON.stringify(refused.cause)).toContain("QuotaExceeded");
-    });
+      // 25 uploads, each read to a dead job: slower than the 5 s default on CI.
+    }, 30_000);
 
     it("M1: successful and failed reads together", async () => {
       const c = await createUser("mixed");
