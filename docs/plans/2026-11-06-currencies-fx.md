@@ -142,7 +142,7 @@ Add `packages/ai/src/currencies.ts`, a dependency-free entry point like `categor
 ### 1.5 Migrations and backfill
 
 Two migrations in two PRs, so the behaviour change and the table rewrite can be reviewed, deployed and rolled back
-apart. Each takes the next free number after `0008` (the passkeys plan also takes numbers). Run both over
+apart. Each takes the next number after the `0000` baseline (the passkeys plan also takes numbers). Run both over
 `DIRECT_URL`, which is the Supabase **session pooler** on port 5432 ([deployment.md](../deployment.md), section 1);
 schema changes fail on the transaction pooler.
 
@@ -620,7 +620,7 @@ columns reproduces every converted amount exactly.
   - New `country`: ISO 3166 alpha-2 or null, from the address, phone prefix or tax number.
 - Prompt (`packages/ai/src/extract.ts`):
   - Return `null` when the receipt doesn't show which currency it is, rather than guessing.
-  - The three-decimal fix to the thousands rule (KWD, BHD, OMR, JOD, TND, LYD, IQD) is shipping separately, by
+  - The three-decimal fix to the thousands rule (KWD, BHD, OMR, JOD, TND, LYD) is shipping separately, by
     another engineer, ahead of this plan. PR 5 builds on it and does not redo it.
   - Use the address, phone and tax numbers to decide an ambiguous symbol.
 - Core, after the call (deterministic, testable):

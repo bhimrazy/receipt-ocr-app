@@ -1,0 +1,25 @@
+{
+  "merchant": [
+    "Yinyang Restaurant & Bar Pvt. Ltd.",
+    "Yinyang Restaurant & Bar",
+    "Yin Yang Restaurant"
+  ],
+  "receiptDate": "2015-03-09",
+  "category": "Meals",
+  "currency": "NPR",
+  "subtotal": 595,
+  "tax": 85.09,
+  "tip": null,
+  "total": 739.59,
+  "items": [
+    {
+      "name": "Kukhura ko Mashu",
+      "quantity": 1,
+      "unitPrice": 595,
+      "totalPrice": 595
+    }
+  ],
+  "_source": "https://commons.wikimedia.org/wiki/File:2015-03-09_Dalbath_Receipt_of_Yin_Yang_Restaurant_in_Thamel,_Kathmandu,_Nepal_%E3%83%80%E3%83%AB%E3%83%90%E3%83%BC%E3%83%88_DSCF6295.JPG",
+  "_license": "CC BY-SA 4.0",
+  "_notes": "Read by me. Real, very dark dot-matrix photo (Nepal). Date shows both 2071/11/25 (Bikram Sambat) and 2015/03/09 (AD); keyed AD. NPR inferred. AMBIGUOUS: item rate/amount look like 595 or 696 (smudged) but Sub Total, Total and the maths (595 + 59.50 service = 654.50 taxable; 13% VAT 85.09) fit 595. Grand total is smudged ('73?.5?'); 739.59 is computed = 654.50+85.09. Service charge 59.50 has no field. Author: 松岡明芳 (Matsuoka Akiyoshi)."
+}

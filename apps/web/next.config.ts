@@ -1,9 +1,11 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { ANALYTICS_PATH_LIST, parseGaMeasurementId } from "./lib/consent/config";
 import { buildContentSecurityPolicy } from "./lib/csp";
 
 const contentSecurityPolicy = buildContentSecurityPolicy(
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+  { googleAnalytics: Boolean(parseGaMeasurementId(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID)) },
 );
 
 const securityHeaders = [
@@ -16,6 +18,20 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
   { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy },
   { key: "Reporting-Endpoints", value: 'csp="/api/csp-report"' },
+];
+
+const noindexHeader = { key: "X-Robots-Tag", value: "noindex" };
+const noindexPaths = [
+  "/app",
+  "/app/:path*",
+  "/admin",
+  "/admin/:path*",
+  "/api/:path*",
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/accept-invitation/:path*",
 ];
 
 const nextConfig: NextConfig = {
@@ -34,7 +50,18 @@ const nextConfig: NextConfig = {
   ],
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Pages where analytics may run send only their origin as Referer: the same-origin /view
+      // fetch and Google then never see a path or a query string (?redirect= can name a receipt).
+      ...ANALYTICS_PATH_LIST.map((source) => ({
+        source,
+        headers: [{ key: "Referrer-Policy", value: "origin" }],
+      })),
+      // As well as the meta tag, so non-HTML responses (CSV exports, JSON) and redirects from
+      // these paths stay out of search results too.
+      ...noindexPaths.map((source) => ({ source, headers: [noindexHeader] })),
+    ];
   },
 };
 

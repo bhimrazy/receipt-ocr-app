@@ -8,6 +8,7 @@ import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
 import { one, PAGE_SIZE, pageOf, pick, type SearchParams } from "../params";
 import { UsersTable } from "./users-table";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Users" };
 
@@ -20,6 +21,7 @@ const SORT_MAP: Record<(typeof SORTS)[number], { sort: UserSort; dir: "asc" | "d
 };
 
 export default async function AdminUsersPage({ searchParams }: { searchParams: SearchParams }) {
+  logPageRender("/admin/users");
   const session = await requireAdmin();
   const params = await searchParams;
   const filters = {

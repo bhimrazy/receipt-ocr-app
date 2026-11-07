@@ -1,0 +1,129 @@
+name: Database Migration
+
+# Applies apps/web/drizzle migrations to one database. The only way migrations reach staging or
+# production: run it by hand from main (Actions → Database Migration → Run workflow), staging-db
+# first, then production-db (needs the owner's approval). production.yml never runs it, and skips
+# its automatic deploy when a release changes migrations. PR previews never run it.
+#
+# The run name is what production.yml and the production-db preflight look up: keep it stable.
+run-name: Migrate ${{ inputs.environment }}
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Database to migrate, from main.
+        type: choice
+        options: [staging-db, production-db]
+        required: true
+
+permissions: {}
+
+jobs:
+  # Runs before the environment's approval, so a run that can't succeed never asks for it.
+  preflight:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: inputs.environment == 'production-db'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Production only gets migrations staging already ran: the newest successful staging-db run
+      # must have the same apps/web/drizzle as this commit. Fails closed if the lookup fails.
+      - name: Require staging on this commit
+        if: inputs.environment == 'production-db'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          fail() {
+            printf '### Production migration refused\n\n%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$1"
+            exit 1
+          }
+          staged=$(.github/scripts/last-migrated-sha.sh staging-db) ||
+            fail "Can't find a successful staging-db migration on main: run staging first on this commit."
+          changed=$(git diff --name-only "$staged" "$GITHUB_SHA" -- apps/web/drizzle/) ||
+            fail "Can't compare with the last staging-db migration (${staged:0:12}): run staging first on this commit."
+          if [ -n "$changed" ]; then
+            fail "Staging last migrated ${staged:0:12}, whose migrations differ from this commit: run staging first on this commit."
+          fi
+          echo "Staging migrated ${staged:0:12} with the same migrations." >> "$GITHUB_STEP_SUMMARY"
+
+  migrate:
+    name: Migrate ${{ inputs.environment }}
+    needs: preflight
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    # One migration per database at a time, never cancelled mid-run: drizzle-kit applies all pending
+    # files in one transaction, but a killed runner should not be the reason to find out. GitHub
+    # keeps one pending run per group, so a newer one cancels the waiting one.
+    concurrency:
+      group: db-migrate-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      # Both environments only admit main. Fail rather than skip, so a run from another ref never
+      # looks like a successful migration.
+      - name: Require main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Migrations run only from main (got $REF)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+
+      # Checks the URL's shape without printing it, and masks the decoded user and password too:
+      # GitHub masks only the secret as stored, errors can show them decoded, and the Supabase user
+      # carries the project ref.
+      - name: Check the secret is set
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          TARGET: ${{ inputs.environment }}
+        run: |
+          bun -e '
+            const target = process.env.TARGET;
+            const raw = process.env.DIRECT_URL ?? "";
+            if (!raw) {
+              console.log(`::error::DIRECT_URL is not set in the ${target} environment.`);
+              process.exit(1);
+            }
+            let url;
+            try {
+              url = new URL(raw);
+            } catch {
+              console.log(`::error::DIRECT_URL in the ${target} environment is not a valid URL.`);
+              process.exit(1);
+            }
+            for (const part of [url.username, url.password]) {
+              if (!part) continue;
+              let decoded = part;
+              try {
+                decoded = decodeURIComponent(part);
+              } catch {}
+              console.log(`::add-mask::${decoded}`);
+            }
+            if (!["postgres:", "postgresql:"].includes(url.protocol) || !url.hostname) {
+              console.log(`::error::DIRECT_URL in the ${target} environment is not a postgres:// URL.`);
+              process.exit(1);
+            }
+          '
+
+      # drizzle.config.ts reads DIRECT_URL (session pooler, port 5432). No --verbose: the URL and
+      # the SQL stay out of the log.
+      - name: Apply migrations
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: bun run db:migrate

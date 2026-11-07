@@ -1,10 +1,12 @@
 import "server-only";
+import { authRateLimitRules } from "./auth-rate-limit";
 import {
   DEFAULT_PLANS,
   ensurePersonalWorkspace,
   policyFor,
   prepareUserDeletion,
   purgeReceiptFiles,
+  releaseMemberGroups,
   userPlan,
 } from "@receipt-ocr/core";
 import { and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
@@ -12,6 +14,7 @@ import {
   invitationEmail,
   passwordResetEmail,
   sendEmail,
+  type EmailLogEvent,
   verificationEmail,
   type SendEmailInput,
 } from "@receipt-ocr/email";
@@ -31,10 +34,11 @@ import {
   authEnv,
   emailEnv,
   isProduction,
+  logUndeliveredMail,
   requireEmailVerification,
   turnstileEnv,
 } from "./env";
-import { logger } from "./log";
+import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 
 export { authEnabled };
@@ -53,7 +57,8 @@ const db = createDb(authEnv.databaseUrl ?? PLACEHOLDER_DATABASE_URL);
 const mailer = {
   apiKey: emailEnv.resendApiKey,
   from: emailEnv.from,
-  logUndelivered: process.env.NODE_ENV === "development",
+  logUndelivered: logUndeliveredMail(),
+  log: (event: EmailLogEvent) => logger.emit(event),
 };
 
 /**
@@ -86,7 +91,12 @@ async function promoteIfBootstrapAdmin(user: {
 /** Removes stored receipt files before the rows they belong to cascade away (U1). */
 async function purgeFiles(owner: { organizationId: string } | { userId: string }) {
   const purged = await runtime.runPromise(purgeReceiptFiles(owner));
-  logger.info({ event: "receipt.files_purged", ...owner, count: purged });
+  logger.info({
+    event: "receipt.files_purged",
+    unit: "log",
+    ...("userId" in owner ? { user_id: owner.userId } : { organization_id: owner.organizationId }),
+    count: purged,
+  });
 }
 
 /**
@@ -97,7 +107,12 @@ async function purgeFiles(owner: { organizationId: string } | { userId: string }
 export async function deleteOwnData(userId: string) {
   const exit = await runtime.runPromiseExit(prepareUserDeletion(userId));
   if (exit._tag === "Success") {
-    logger.info({ event: "user.data_deleted", userId, ...exit.value });
+    logger.info({
+      event: "user.data_deleted",
+      unit: "log",
+      user_id: userId,
+      counts: { workspaces: exit.value.workspacesDeleted, files: exit.value.files },
+    });
     return exit.value;
   }
   const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
@@ -115,7 +130,7 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
-  trustedOrigins: [authEnv.betterAuthUrl],
+  trustedOrigins: authEnv.trustedOrigins,
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
@@ -149,12 +164,7 @@ export const auth = betterAuth({
     // Memory storage resets per serverless instance; the database keeps
     // limits consistent across instances.
     storage: "database",
-    customRules: {
-      "/sign-in/email": { window: 60, max: 5 },
-      "/sign-up/email": { window: 60, max: 3 },
-      // Per IP; auth-guards also caps each inviter.
-      "/organization/invite-member": { window: 60 * 60, max: 20 },
-    },
+    customRules: authRateLimitRules,
   },
   // Reset and verification tokens are stored as hashes: a database read alone can't use them.
   verification: { storeIdentifier: "hashed" },
@@ -252,6 +262,20 @@ export const auth = betterAuth({
         beforeAcceptInvitation: async ({ invitation }) => assertWorkspaceRole(invitation.role),
         beforeAddMember: async ({ member }) => assertWorkspaceRole(member.role),
         beforeUpdateMemberRole: async ({ newRole }) => assertWorkspaceRole(newRole),
+        // Workspace owners remove members through Better Auth, not the admin path.
+        afterRemoveMember: async ({ member: removed, organization }) => {
+          try {
+            await runtime.runPromise(releaseMemberGroups(organization.id, removed.userId));
+          } catch (error) {
+            logger.error({
+              event: "groups.release_member_failed",
+              unit: "log",
+              organization_id: organization.id,
+              user_id: removed.userId,
+              error: errorFields(error),
+            });
+          }
+        },
         beforeDeleteOrganization: async ({ organization }) => {
           await purgeFiles({ organizationId: organization.id });
         },

@@ -18,12 +18,13 @@ import {
   DrawerTrigger,
 } from "@receipt-ocr/ui/components/drawer";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { ChevronsUpDown, LogOut, Settings, ShieldCheck } from "lucide-react";
+import { ChevronsUpDown, Cookie, LogOut, Settings, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { signOutAndClearHint } from "@/lib/auth-client";
 import { CreateWorkspaceDialog, WorkspaceList } from "@/components/workspace-switcher";
+import { openConsentSettingsFrom } from "@/lib/consent/store";
 import type { WorkspaceOption } from "@/lib/workspaces";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
@@ -63,10 +64,12 @@ function useSignOut() {
  */
 export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boolean }) {
   const handleSignOut = useSignOut();
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
+        ref={triggerRef}
         aria-label="Account menu"
         className="flex min-h-12 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-wash"
       >
@@ -93,6 +96,10 @@ export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boole
             Admin
           </DropdownMenuItem>
         ) : null}
+        <DropdownMenuItem onClick={() => openConsentSettingsFrom(triggerRef.current)}>
+          <Cookie aria-hidden="true" />
+          Cookie settings
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut}>
           <LogOut aria-hidden="true" />
@@ -125,11 +132,13 @@ export function AccountSheet({
   const [createOpen, setCreateOpen] = useState(false);
   const handleSignOut = useSignOut();
   const close = () => setOpen(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <>
       <Drawer onOpenChange={setOpen} open={open}>
         <DrawerTrigger
+          ref={triggerRef}
           aria-label="Account and workspace"
           className="flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:opacity-80"
         >
@@ -161,6 +170,15 @@ export function AccountSheet({
                 Admin
               </DrawerAction>
             ) : null}
+            <DrawerAction
+              onClick={() => {
+                close();
+                openConsentSettingsFrom(triggerRef.current);
+              }}
+            >
+              <Cookie aria-hidden="true" />
+              Cookie settings
+            </DrawerAction>
             <DrawerAction onClick={handleSignOut}>
               <LogOut aria-hidden="true" />
               Sign out

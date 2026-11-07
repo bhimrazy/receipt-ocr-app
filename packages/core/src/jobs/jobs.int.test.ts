@@ -116,6 +116,8 @@ const queue = <A, E>(f: (q: typeof JobQueue.Service) => Effect.Effect<A, E>) =>
 /** receipt.extract with millisecond backoff, so retries run inside one test. */
 const fastExtract = { ...receiptExtract, backoff: { baseMs: 100, capMs: 400 } };
 const receiptRegistry = { [fastExtract.kind]: fastExtract };
+/** receipt.extract with its real (seconds) backoff, for tests that make a retry due by hand. */
+const steppedRegistry = { [receiptExtract.kind]: receiptExtract };
 
 const jobsOf = (receiptId: string) =>
   db((d) => d.select().from(jobs).where(eq(jobs.receiptId, receiptId)).orderBy(jobs.createdAt));
@@ -380,6 +382,26 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       merchant: done?.merchant,
     });
     expect((await jobsOf(receipt.id))[0]).toMatchObject({ state: "succeeded", attempts: 2 });
+  });
+
+  it("reaps a running job that started more than 24.8 days ago (no int overflow)", async () => {
+    const { receipt, jobId } = await upload(a);
+    const lease = [{ kind: "receipt.extract", leaseSeconds: 90 }];
+    await queue((q) =>
+      q.claim({ worker: "ancient", kinds: lease, n: 1, ownerCap: 9, ids: [jobId] }),
+    );
+    const longAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ startedAt: longAgo, lockedUntil: new Date(Date.now() - 1000) })
+        .where(eq(jobs.id, jobId)),
+    );
+    const reaped = await queue((q) => q.reap());
+    expect(reaped.map((job) => job.id)).toContain(jobId);
+    const [job] = await jobsOf(receipt.id);
+    const last = (job!.attemptLog as { outcome: string; ms: number }[]).at(-1)!;
+    expect(last.ms).toBeGreaterThan(2 ** 31);
   });
 
   it("a lease that expires on the last attempt kills the job and settles the receipt", async () => {
@@ -754,10 +776,12 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
           .set({ runAt: new Date(0) })
           .where(eq(jobs.id, jobId)),
       );
+      // One attempt per tick: with millisecond backoff a slow runner made the retry due again
+      // inside the same tick and ran it twice.
       const { runs } = await run(
         tick({
           worker: `${tag}-w`,
-          registry: receiptRegistry,
+          registry: steppedRegistry,
           budgetMs: 10_000,
           ids: [jobId],
           waitForRetries: false,

@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   CATEGORY_DESCRIPTIONS,
@@ -42,30 +41,5 @@ describe("normalizeCategory", () => {
     expect(parseCategory("Meals")).toBe("Meals");
     expect(parseCategory("dining")).toBe("Meals");
     expect(parseCategory("Llama grooming")).toBeUndefined();
-  });
-});
-
-describe("0004_canonical_categories.sql backfill", () => {
-  const sql = readFileSync(
-    new URL("../../../apps/web/drizzle/0004_canonical_categories.sql", import.meta.url),
-    "utf8",
-  );
-  const pairs = [...sql.matchAll(/WHEN '([^']+)' THEN '([^']+)'/g)].map(([, from, to]) => [
-    from!,
-    to!,
-  ]);
-
-  it("maps exactly like parseCategory, so old rows match new writes", () => {
-    expect(pairs.length).toBeGreaterThan(RECEIPT_CATEGORIES.length);
-    for (const [from, to] of pairs) {
-      expect(parseCategory(from), from).toBe(to);
-    }
-  });
-
-  it("covers every canonical value, so they are kept as-is", () => {
-    const sources = new Set(pairs.map(([from]) => from));
-    for (const category of RECEIPT_CATEGORIES) {
-      expect(sources.has(category.toLowerCase()), category).toBe(true);
-    }
   });
 });

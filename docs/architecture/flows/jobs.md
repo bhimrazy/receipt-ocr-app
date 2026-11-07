@@ -144,4 +144,4 @@ killed at its time limit. Two things cover that until a worker or cron drain exi
 ## Tables
 
 `jobs` and `job_controls` come from migration
-[`0008_jobs_queue.sql`](../../../apps/web/drizzle/0008_jobs_queue.sql); see the [data model](../data-model.md#background-jobs).
+[`0000_baseline.sql`](../../../apps/web/drizzle/0000_baseline.sql); see the [data model](../data-model.md#background-jobs).

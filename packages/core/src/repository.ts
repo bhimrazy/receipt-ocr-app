@@ -32,6 +32,7 @@ import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-
 import type { QuotaVerdict } from "./quota";
 import { Db } from "./services";
 import { countUsage, lockUserQuota, type UsageCounts, type UsageWindow } from "./usage";
+import { isUuid } from "./ids";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -55,10 +56,8 @@ export type ReceiptScope = {
 export const canManageAnyReceipt = (role: string | undefined) =>
   (role ?? "").split(",").some((r) => r.trim() === "owner" || r.trim() === "admin");
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** Receipt ids are UUIDs; anything else can't match, and Postgres would reject the cast. */
-export const isReceiptId = (id: string) => UUID.test(id);
+export const isReceiptId = isUuid;
 
 export type ReceiptWithItems = Receipt & { items: ReceiptItem[]; imageUrl?: string };
 
@@ -82,6 +81,8 @@ export type ReceiptExportRow = ReceiptSummary & {
   tax: string | null;
   tip: string | null;
   itemCount: number;
+  /** Names of the receipt's groups, alphabetical. */
+  groups: string[];
 };
 
 export type ReceiptFilters = {
@@ -91,6 +92,8 @@ export type ReceiptFilters = {
   /** Inclusive receipt-date bounds, YYYY-MM-DD. */
   from?: string;
   to?: string;
+  /** Group ids: receipts in any of them. */
+  groups?: string[];
 };
 
 /** Fields a user may correct on an extracted receipt. */
@@ -211,6 +214,16 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
   }
   if (filters.from) conditions.push(gte(receipts.receiptDate, filters.from));
   if (filters.to) conditions.push(lte(receipts.receiptDate, filters.to));
+  const groupIds = filters.groups?.filter(isReceiptId) ?? [];
+  if (groupIds.length > 0) {
+    // Qualified by hand, as in exportRows. The group must also be this workspace's.
+    conditions.push(
+      sql`exists (select 1 from receipt_group_members m join receipt_groups g on g.id = m.group_id where m.receipt_id = receipts.id and g.organization_id = ${scope.organizationId} and m.group_id in (${sql.join(
+        groupIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )}))`,
+    );
+  }
   return and(...conditions);
 }
 
@@ -600,6 +613,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               tip: receipts.tip,
               // Qualified by hand: Drizzle renders columns unqualified in a single-table select.
               itemCount: sql<number>`(select count(*)::int from receipt_items where receipt_items.receipt_id = receipts.id)`,
+              groups: sql<
+                string[]
+              >`array(select g.name from receipt_group_members m join receipt_groups g on g.id = m.group_id where m.receipt_id = receipts.id and g.organization_id = ${scope.organizationId} order by lower(g.name))`,
             })
             .from(receipts)
             .where(filterWhere(scope, filters))

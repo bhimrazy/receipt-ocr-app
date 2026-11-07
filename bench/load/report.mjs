@@ -117,7 +117,13 @@ function serverEvents(start, end) {
       statuses[e.status_code ?? e.outcome ?? "n/a"] =
         (statuses[e.status_code ?? e.outcome ?? "n/a"] ?? 0) + 1;
     const steps = {};
-    for (const e of list) for (const s of e.timings ?? []) (steps[s.step] ??= []).push(s.ms);
+    for (const e of list) {
+      // `timings_ms` is a map of step to ms; logs from before the wide-event schema had a `timings` array.
+      const timings = e.timings_ms
+        ? Object.entries(e.timings_ms)
+        : (e.timings ?? []).map((s) => [s.step, s.ms]);
+      for (const [step, ms] of timings) if (Number.isFinite(ms)) (steps[step] ??= []).push(ms);
+    }
     out[name] = {
       count: list.length,
       statuses,

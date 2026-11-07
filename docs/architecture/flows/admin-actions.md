@@ -73,23 +73,26 @@ Errors returned to the browser are safe messages only: Zod's first issue, a core
 
 ## Every action
 
-| Action (audit `action`)                                  | Pattern                | What it does                                                                                     |
-| -------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `setRoleAction` (`user.role`)                            | Better Auth            | Make a user a platform admin or not                                                              |
-| `setPlanAction` (`user.plan`)                            | core                   | Free or Pro; applies on the next request (plans are read from the database, not the session)     |
-| `banUserAction` (`user.ban`)                             | Better Auth            | Ban for 1, 7 or 30 days or indefinitely, with a reason; signs them out everywhere                |
-| `unbanUserAction` (`user.unban`)                         | Better Auth            | Lift a ban                                                                                       |
-| `revokeUserSessionsAction` (`user.sessions_revoke`)      | Better Auth            | Sign out of every device                                                                         |
-| `revokeUserSessionAction` (`user.session_revoke`)        | Better Auth            | Sign out of one session                                                                          |
-| `resendVerificationAction` (`user.verification_resend`)  | Better Auth            | Send a new verification email                                                                    |
-| `deleteUserAction` (`user.delete`)                       | core, then Better Auth | `prepareUserDeletion` with its audit row, then `removeUser`; a failure adds `user.delete_failed` |
-| `impersonateUserAction` (`user.impersonate_start`)       | Better Auth            | Sign in as the user, with a reason of at least 10 characters                                     |
-| `setMemberRoleAction` (`workspace.member_role`)          | core                   | Change a member's workspace role; keeps at least one owner                                       |
-| `removeMemberAction` (`workspace.member_remove`)         | core                   | Remove a member; their receipts stay                                                             |
-| `cancelInvitationAction` (`workspace.invitation_cancel`) | core                   | Cancel a pending invitation                                                                      |
-| `deleteWorkspaceAction` (`workspace.delete`)             | core                   | Delete the workspace (cascade), then its stored files                                            |
-| `savePlansAction` (`settings.plans`)                     | core                   | Save plan limits; see [Settings cache](settings-cache.md)                                        |
-| `saveOcrAction` (`settings.ocr`)                         | core                   | Save the model chain                                                                             |
+| Action (audit `action`)                                                   | Pattern                | What it does                                                                                                  |
+| ------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `setRoleAction` (`user.role`)                                             | Better Auth            | Make a user a platform admin or not                                                                           |
+| `setPlanAction` (`user.plan`)                                             | core                   | Free or Pro; applies on the next request (plans are read from the database, not the session)                  |
+| `banUserAction` (`user.ban`)                                              | Better Auth            | Ban for 1, 7 or 30 days or indefinitely, with a reason; signs them out everywhere                             |
+| `unbanUserAction` (`user.unban`)                                          | Better Auth            | Lift a ban                                                                                                    |
+| `revokeUserSessionsAction` (`user.sessions_revoke`)                       | Better Auth            | Sign out of every device                                                                                      |
+| `revokeUserSessionAction` (`user.session_revoke`)                         | Better Auth            | Sign out of one session                                                                                       |
+| `resendVerificationAction` (`user.verification_resend`)                   | Better Auth            | Send a new verification email                                                                                 |
+| `deleteUserAction` (`user.delete`)                                        | core, then Better Auth | `prepareUserDeletion` with its audit row, then `removeUser`; a failure adds `user.delete_failed`              |
+| `impersonateUserAction` (`user.impersonate_start`)                        | Better Auth            | Sign in as the user, with a reason of at least 10 characters                                                  |
+| `setMemberRoleAction` (`workspace.member_role`)                           | core                   | Change a member's workspace role; keeps at least one owner                                                    |
+| `removeMemberAction` (`workspace.member_remove`)                          | core                   | Remove a member; their receipts stay                                                                          |
+| `cancelInvitationAction` (`workspace.invitation_cancel`)                  | core                   | Cancel a pending invitation                                                                                   |
+| `deleteWorkspaceAction` (`workspace.delete`)                              | core                   | Delete the workspace (cascade), then its stored files                                                         |
+| `savePlansAction` (`settings.plans`)                                      | core                   | Save plan limits; see [Settings cache](settings-cache.md)                                                     |
+| `saveOcrAction` (`settings.ocr`)                                          | core                   | Save the model chain                                                                                          |
+| `rerunJobAction` (`job.rerun`)                                            | core                   | Re-run a dead job in its original round, not charged to the user; see [Admin operations](admin-operations.md) |
+| `cancelJobAction` (`job.cancel`)                                          | core                   | Cancel a queued job                                                                                           |
+| `setQueueControlAction` (`job.pause`, `job.resume`, `job.cooldown_clear`) | core                   | Pause or resume the queue or one kind; clear a provider cooldown                                              |
 
 Core writes are in [`packages/core/src/admin.ts`](../../../packages/core/src/admin.ts) and
 [`settings.ts`](../../../packages/core/src/settings.ts); `insertAudit` and `transact` are in

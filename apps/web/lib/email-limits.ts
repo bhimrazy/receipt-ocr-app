@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { hitRateLimit } from "@receipt-ocr/core";
-import { logger } from "./log";
+import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 
 /** Password-reset or verification emails one address may receive per hour, per kind. */
@@ -24,13 +24,14 @@ export async function allowAuthEmail(kind: AuthEmailKind, email: string): Promis
     const { allowed } = await runtime.runPromise(
       hitRateLimit(`email:${kind}:${digest}`, 60 * 60 * 1000, AUTH_EMAILS_PER_HOUR),
     );
-    if (!allowed) logger.info({ event: "auth.email_rate_limited", kind });
+    if (!allowed) logger.info({ event: "auth.email_rate_limited", unit: "log", kind });
     return allowed;
   } catch (error) {
     logger.error({
       event: "auth.email_rate_limit_failed",
+      unit: "log",
       kind,
-      error: { type: error instanceof Error ? error.name : "Unknown" },
+      error: errorFields(error),
     });
     return true;
   }
