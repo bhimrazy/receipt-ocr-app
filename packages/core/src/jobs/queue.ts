@@ -131,7 +131,7 @@ const appendLog = (entry: SQL) => sql`(
 const logEntry = (outcome: string, errorKind: string | null) =>
   sql`jsonb_build_object('n', j.attempts, 'at', now(), 'outcome', ${outcome}::text,
     'kind', ${errorKind}::text, 'worker', j.locked_by,
-    'ms', (extract(epoch from now() - j.started_at) * 1000)::int)`;
+    'ms', (extract(epoch from now() - j.started_at) * 1000)::bigint)`;
 
 /** A pause (null `until`) or cooldown row that is in force now. */
 const inForce = sql`(c.paused or c.until is not null) and (c.until is null or c.until > now())`;
