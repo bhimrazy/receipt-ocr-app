@@ -6,7 +6,7 @@ import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Privacy policy",
   description:
-    "What receiptOCR collects, who processes it, including Google's Gemini AI, how long it is kept and how to delete it.",
+    "What receiptOCR collects, who processes it, including the Google Gemini and Anthropic Claude AI models, how long it is kept and how to delete it.",
   path: "/privacy",
 });
 
@@ -48,7 +48,7 @@ export default function PrivacyPage() {
         {
           heading: "Who processes your data",
           body: [
-            "Google (Gemini API): every receipt file you upload is sent to Google's Gemini AI model, which reads it and returns the extracted data. Google processes the file under its terms for the Gemini API.",
+            "Google (Gemini API) and Anthropic (Claude API): every receipt file you upload is sent to an AI model, which reads it and returns the extracted data. We try the models in the order shown in your Settings, under Receipt reading, and send the file to the next provider only if the first is slow or unavailable. Each provider processes the file under its terms for its API.",
             "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
             "An email delivery provider sends account emails such as password resets and invitations.",
             "Google and GitHub, only if you choose to sign in with them.",
