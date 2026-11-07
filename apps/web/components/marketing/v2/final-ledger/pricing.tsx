@@ -15,7 +15,7 @@ const schedule = [
     value: `Up to ${plan.receiptsPerDay} / day`,
   },
   { item: "Burst", note: "Per rolling minute", value: "10 / min" },
-  { item: "Upload", note: "Files per upload, read one after another", value: "20" },
+  { item: "Upload", note: "Files per upload, scanned one after another", value: "20" },
   { item: "Image size", note: "PNG, JPG or HEIC", value: "10 MB" },
   { item: "Workspaces", note: "With the people you invite", value: String(plan.workspaces) },
   { item: "Extraction", note: "Merchant, date, items, tax, total, category", value: "Included" },

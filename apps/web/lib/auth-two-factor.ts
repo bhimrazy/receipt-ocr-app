@@ -19,6 +19,7 @@ import { APIError, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { passkey } from "@better-auth/passkey";
 import { authMethodFor } from "./auth-method";
+import { SITE_NAME } from "./site";
 import { emailContext, resetPasswordUrl } from "./env";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
@@ -28,10 +29,9 @@ import { isFactorEndpoint, stepUpActionFor } from "./step-up-paths";
 
 /**
  * The name authenticator apps and passkey managers show. Each entry keeps the label it was
- * enrolled with, so this must be final before launch. Becomes SITE_NAME from lib/site.ts once #108
- * lands.
+ * enrolled with, so it must be the final spelling.
  */
-const ISSUER = "ReceiptOCR";
+const ISSUER = SITE_NAME;
 
 /**
  * Two-factor sign-in and step-up wiring for Better Auth, kept out of auth.ts

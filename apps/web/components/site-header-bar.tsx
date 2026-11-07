@@ -74,7 +74,7 @@ export function SiteHeaderBar({
         )}
       >
         <Link
-          aria-label="receiptOCR home"
+          aria-label="ReceiptOCR home"
           className={join("inline-flex min-h-11 items-center rounded-lg", focusRing)}
           href="/"
         >

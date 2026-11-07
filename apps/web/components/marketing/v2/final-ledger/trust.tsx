@@ -20,7 +20,7 @@ const flow = [
   {
     n: "C",
     where: "Google Gemini",
-    what: "Google's Gemini model reads the image and returns the fields, under Google's Gemini API terms.",
+    what: "Google's Gemini model scans the image and returns the fields, under Google's Gemini API terms.",
     spec: "Named in our privacy policy",
   },
   {
@@ -41,7 +41,7 @@ const enforced = [
 
 const promised = [
   "We don't sell your data or use it for advertising.",
-  "receiptOCR admins access an account only to handle a support request.",
+  "ReceiptOCR admins access an account only to handle a support request.",
   "Export everything as CSV whenever you like, with no export fees.",
 ];
 

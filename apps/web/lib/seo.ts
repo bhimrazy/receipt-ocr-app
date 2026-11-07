@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import { siteUrl } from "@/lib/site";
-
-const SITE_NAME = "receiptOCR";
+import { SITE_NAME, siteUrl } from "@/lib/site";
 
 export const homeDescription =
   "Receipt OCR that turns receipt photos and PDFs into spreadsheet rows: merchant, date, line items, tax and total, with confidence scores. Free to start.";
@@ -12,7 +10,7 @@ const DEFAULT_IMAGE = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: "receiptOCR: Turn receipt photos into spreadsheet rows",
+  alt: `${SITE_NAME}: Turn receipt photos into spreadsheet rows`,
 };
 
 /**
@@ -30,7 +28,7 @@ export function pageMetadata({
   title: string;
   description: string;
   path: string;
-  /** True when `title` is already the full title (skips the "· receiptOCR" template). */
+  /** True when `title` is already the full title (skips the "· ReceiptOCR" template). */
   absoluteTitle?: boolean;
   /** False for pages that must stay out of search results (auth flows). */
   index?: boolean;

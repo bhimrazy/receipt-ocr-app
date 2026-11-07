@@ -6,7 +6,7 @@ import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Terms of service",
   description:
-    "The terms for using receiptOCR: your account, your receipts, the free plan, and checking AI-extracted data before you rely on it.",
+    "The terms for using ReceiptOCR: your account, your receipts, the free plan, and checking AI-extracted data before you rely on it.",
   path: "/terms",
 });
 
@@ -20,13 +20,13 @@ export default async function TermsPage() {
     <LegalPage
       title="Terms of service"
       updated={formatLegalDate(LEGAL_UPDATED.terms)}
-      intro="These terms apply when you use receiptOCR. By creating an account or using the service, you agree to them. receiptOCR is in early access, so some features may change."
+      intro="These terms apply when you use ReceiptOCR. By creating an account or using the service, you agree to them. ReceiptOCR is in early access, so some features may change."
       sections={[
         {
           heading: "The service",
           body: [
-            "receiptOCR reads receipt images you upload and extracts data such as merchant, date, line items, tax and total, which you can review, edit and export.",
-            "Receipts are read by AI models from Google (Gemini) and Anthropic (Claude), and from Groq when it is turned on. We choose the models and may change them. AI can misread or miss information, so check the extracted data before you rely on it for accounting, tax or anything else. The confidence score is a guide, not a guarantee.",
+            "ReceiptOCR scans receipt images you upload and extracts data such as merchant, date, line items, tax and total, which you can review, edit and export.",
+            "Receipts are scanned by AI models from Google (Gemini) and Anthropic (Claude), and from Groq when it is turned on. We choose the models and may change them. AI can misread or miss information, so check the extracted data before you rely on it for accounting, tax or anything else. The confidence score is a guide, not a guarantee.",
           ],
         },
         {
@@ -68,7 +68,7 @@ export default async function TermsPage() {
         {
           heading: "Ending your use",
           body: [
-            "You can stop using receiptOCR and delete your account from Settings at any time. Our Privacy policy explains what deletion removes.",
+            "You can stop using ReceiptOCR and delete your account from Settings at any time. Our Privacy policy explains what deletion removes.",
           ],
         },
         {

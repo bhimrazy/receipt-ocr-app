@@ -146,8 +146,8 @@ function CsvStrip({ sample, count }: { sample: Sample; count: number }) {
       <p className="flex items-baseline justify-between gap-3 px-4 pt-3 font-mono text-xs text-muted-foreground sm:px-5">
         <span className="text-foreground">receipts.csv</span>
         <span>
-          <When state="scanning">Waiting for the read</When>
-          <When state="filling">Waiting for the read</When>
+          <When state="scanning">Waiting for the scan</When>
+          <When state="filling">Waiting for the scan</When>
           <When state="done">1 row added</When>
         </span>
       </p>
@@ -225,7 +225,7 @@ function Panel({ sample }: { sample: Sample }) {
           <div className="flex min-h-6 items-center justify-between gap-3">
             <p className="text-sm font-medium">Extracted data</p>
             <span className="font-mono text-xs text-muted-foreground">
-              <When state="scanning">Reading the photo…</When>
+              <When state="scanning">Scanning the photo…</When>
               <When state="filling">Filling in the fields…</When>
               <When state="done">
                 <ConfidenceBadge value={sample.confidence} />
@@ -259,7 +259,7 @@ function Panel({ sample }: { sample: Sample }) {
           </dl>
 
           <table className="mt-2 w-full table-fixed text-sm">
-            <caption className="sr-only">Line items, with how sure the read is for each</caption>
+            <caption className="sr-only">Line items, with how sure the scan is for each</caption>
             <thead>
               <tr className="text-xs text-muted-foreground">
                 <th className="py-1.5 text-left font-normal" scope="col">
@@ -350,7 +350,7 @@ function Panel({ sample }: { sample: Sample }) {
 
 function announcement(sample: Sample) {
   const low = sample.items.filter((item) => isLow(item.confidence));
-  return `Read ${sample.merchant}: total ${usd(sample.total)}, category ${sample.category}.${
+  return `Scanned ${sample.merchant}: total ${usd(sample.total)}, category ${sample.category}.${
     low.length ? ` Hard to read: ${low.map((item) => item.name).join(", ")}.` : ""
   }`;
 }

@@ -1,5 +1,6 @@
 import "server-only";
 import { authRateLimitRules } from "./auth-rate-limit";
+import { SITE_NAME } from "./site";
 import {
   DEFAULT_PLANS,
   ensurePersonalWorkspace,
@@ -210,7 +211,7 @@ const soleOwnerError = (names: string[], then: string) =>
   });
 
 export const auth = betterAuth({
-  appName: "receiptOCR",
+  appName: SITE_NAME,
   baseURL: authEnv.betterAuthUrl,
   // With BETTER_AUTH_SECRETS set, `secret` is only the legacy key for payloads sealed before it.
   secret: authEnv.betterAuthSecret ?? (authEnv.betterAuthSecrets ? undefined : PLACEHOLDER_SECRET),

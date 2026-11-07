@@ -58,7 +58,7 @@ export function ProcessingPoller({ id, status }: { id: string; status: ReceiptSt
       className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
       role="status"
     >
-      Still reading after a few minutes. Something may have gone wrong.
+      Still scanning after a few minutes. Something may have gone wrong.
       <button
         className="min-h-11 rounded-md font-medium underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-0"
         onClick={() => void checkAgain()}
@@ -71,7 +71,7 @@ export function ProcessingPoller({ id, status }: { id: string; status: ReceiptSt
 }
 
 /**
- * Watches a server-rendered list while any row is still being read. Polls the
+ * Watches a server-rendered list while any row is still being scanned. Polls the
  * light counts endpoint and refreshes the page only when the counts differ from
  * the ones the page was rendered with, so a quiet queue costs no page renders.
  */

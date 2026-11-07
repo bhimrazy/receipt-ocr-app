@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 // Private pages; keep them out of search results even if a link leaks.
 export const metadata: Metadata = {
-  title: { default: "Admin", template: "%s · Admin · receiptOCR" },
+  title: { default: "Admin", template: "%s · Admin · ReceiptOCR" },
   robots: { index: false, follow: false },
 };
 

@@ -79,8 +79,8 @@ export function LineFlag({ score, short = false }: { score: number; short?: bool
 
 const STATUS = {
   done: { label: "Done", icon: CircleCheck, className: "text-primary" },
-  reading: { label: "Reading…", icon: Loader2, className: "text-muted-foreground" },
-  failed: { label: "Couldn't read", icon: CircleAlert, className: "text-destructive" },
+  reading: { label: "Scanning…", icon: Loader2, className: "text-muted-foreground" },
+  failed: { label: "Couldn't scan", icon: CircleAlert, className: "text-destructive" },
 } as const;
 
 export function Status({ status }: { status: keyof typeof STATUS }) {

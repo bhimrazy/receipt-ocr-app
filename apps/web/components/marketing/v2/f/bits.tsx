@@ -12,7 +12,7 @@ export function FBrand() {
       <span className="flex size-9 -rotate-6 items-center justify-center rounded-xl border-2 border-foreground bg-[var(--f-yellow)] text-[var(--f-ink)]">
         <ReceiptText aria-hidden className="size-5" strokeWidth={2.5} />
       </span>
-      <span className="text-xl font-extrabold tracking-tight">receiptOCR</span>
+      <span className="text-xl font-extrabold tracking-tight">ReceiptOCR</span>
     </span>
   );
 }

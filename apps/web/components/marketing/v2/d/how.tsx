@@ -66,7 +66,7 @@ function Export() {
 const steps = [
   {
     title: "Drop them in.",
-    body: "Phone photos or scans: PNG, JPG or HEIC, up to 10 MB each and 20 at a time. They're read one after another while you get a coffee.",
+    body: "Phone photos or scans: PNG, JPG or HEIC, up to 10 MB each and 20 at a time. They're scanned one after another while you get a coffee.",
     visual: <Files />,
   },
   {
@@ -88,7 +88,7 @@ export function HowD() {
         <SectionHead
           eyebrow="How it works"
           id="how"
-          lead="receiptOCR does the reading. You decide what goes in your books."
+          lead="ReceiptOCR does the scanning. You decide what goes in your books."
           title={
             <>
               Three steps. The middle one is <span className="d-wonk">you.</span>

@@ -11,7 +11,7 @@ test("sign up, history, receipt detail, CSV export, sign out and back in", async
   await signUp(page, email);
   // First run: Home explains the flow instead of showing an empty table.
   await expect(
-    page.getByRole("heading", { level: 1, name: "Read your first receipt" }),
+    page.getByRole("heading", { level: 1, name: "Scan your first receipt" }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "How it works" })).toBeVisible();
 

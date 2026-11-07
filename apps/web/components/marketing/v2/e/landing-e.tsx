@@ -53,7 +53,7 @@ function Wordmark() {
           strokeWidth="1.6"
         />
       </svg>
-      receiptOCR
+      ReceiptOCR
     </span>
   );
 }
@@ -63,7 +63,7 @@ function Header() {
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md">
       <div className={cn(container, "flex h-16 items-center justify-between gap-4")}>
         <Link
-          aria-label="receiptOCR home"
+          aria-label="ReceiptOCR home"
           className="inline-flex min-h-11 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
           href="/landing-e"
         >
@@ -115,7 +115,7 @@ function Hero() {
             <span className="block text-balance">Spreadsheet rows out.</span>
           </h1>
           <p className="mt-5 max-w-md text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg">
-            receiptOCR reads the merchant, date, line items, tax and total, points out anything it
+            ReceiptOCR scans the merchant, date, line items, tax and total, points out anything it
             isn&apos;t sure of, and adds each receipt to a CSV.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -176,7 +176,7 @@ function How() {
           className="max-w-2xl text-3xl font-semibold tracking-[-0.025em] text-balance sm:text-4xl"
           id="how-title"
         >
-          After it reads, you stay in control.
+          After it scans, you stay in control.
         </h2>
         <p className="mt-4 max-w-xl text-muted-foreground">
           The demo above is the first step. Here is the rest of the app.
@@ -219,7 +219,7 @@ const flow = [
   },
   {
     title: "Google Gemini",
-    body: "Google's Gemini AI reads the image and returns the fields.",
+    body: "Google's Gemini AI scans the image and returns the fields.",
   },
   {
     title: "Your workspace",

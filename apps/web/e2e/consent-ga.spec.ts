@@ -25,7 +25,7 @@ const dataLayer = (page: Page) =>
     ),
   );
 
-const banner = (page: Page) => page.getByRole("region", { name: "Cookies on receiptOCR" });
+const banner = (page: Page) => page.getByRole("region", { name: "Cookies on ReceiptOCR" });
 
 test("Reject all loads no GA, and the choice persists", async ({ page, context }) => {
   const gtagLoads = await stubGoogle(page);

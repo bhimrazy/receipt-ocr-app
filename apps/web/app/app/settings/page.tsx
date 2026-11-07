@@ -80,13 +80,13 @@ export default async function SettingsPage({
         <PageHeaderContent>
           <PageHeaderTitle>Settings</PageHeaderTitle>
           <PageHeaderDescription>
-            Your plan, your workspace, how receipts are read and your account.
+            Your plan, your workspace, how receipts are scanned and your account.
           </PageHeaderDescription>
         </PageHeaderContent>
       </PageHeader>
 
       <SettingsSection
-        description={`Receipts reset at 00:00 UTC every day. Your first ${FREE_FAILED_ROUNDS} failed reads a day don't count.`}
+        description={`Receipts reset at 00:00 UTC every day. Your first ${FREE_FAILED_ROUNDS} failed scans a day don't count.`}
         id="plan-heading"
         title="Plan and usage"
       >

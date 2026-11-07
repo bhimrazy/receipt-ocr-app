@@ -34,7 +34,7 @@ export function SharedFilesNotice({ input }: { input: RefObject<HTMLInputElement
               ))}
             </ul>
             <p className="mt-2 text-muted-foreground">
-              They were shared to receiptOCR on this device. Keep them only if you shared them.
+              They were shared to ReceiptOCR on this device. Keep them only if you shared them.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button onClick={keep} size="sm">

@@ -38,7 +38,7 @@ export const comingSoon = [
 export const specs: Array<{ label: string; value: string; note: string }> = [
   { label: "Formats", value: "PNG · JPG · HEIC", note: "Photos and scans. PDF is coming." },
   { label: "File size", value: "10 MB", note: "Per image." },
-  { label: "Batch upload", value: "20 files", note: "Queued and read one after another." },
+  { label: "Batch upload", value: "20 files", note: "Queued and scanned one after another." },
   {
     label: "Fields",
     value: "Merchant · date · items · tax · total",
@@ -80,7 +80,7 @@ export const faqs = [
   },
   {
     q: "Who can see my receipts?",
-    a: "Only you and the people you invite to your workspace. receiptOCR admins can access an account only to handle a support request. AI models from Google (Gemini) and Anthropic (Claude), and Groq if it is turned on, read the images to extract the data. You can delete any receipt, or your whole account, from Settings.",
+    a: "Only you and the people you invite to your workspace. ReceiptOCR admins can access an account only to handle a support request. AI models from Google (Gemini) and Anthropic (Claude), and Groq if it is turned on, scan the images to extract the data. You can delete any receipt, or your whole account, from Settings.",
   },
   {
     q: "Can I get my data out?",

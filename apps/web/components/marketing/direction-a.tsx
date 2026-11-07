@@ -59,7 +59,7 @@ const figures = [
   {
     fig: "01",
     title: "Snap it or drop it in",
-    body: "Take a photo on your phone, or drag in up to 20 images at once. Each one is read in the background while you carry on.",
+    body: "Take a photo on your phone, or drag in up to 20 images at once. Each one is scanned in the background while you carry on.",
     visual: <UploadQueue />,
   },
   {
@@ -122,7 +122,7 @@ export function DirectionA() {
                 <span className="text-gradient">Get a spreadsheet.</span>
               </h1>
               <p className="mt-6 max-w-lg text-pretty text-base leading-7 text-foreground/80 md:text-lg md:leading-8">
-                Photograph or upload any receipt. We read the merchant, date, items, tax and total,
+                Photograph or upload any receipt. We scan the merchant, date, items, tax and total,
                 so you can check it, fix it, and export a CSV for your accountant.
               </p>
               <SignUpCta className="mt-9" secondary={{ href: "#how", label: "See how it works" }} />
