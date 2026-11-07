@@ -69,6 +69,12 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Update the relevant page and diagram in [`docs/architecture/`](docs/architecture/README.md) in the same PR as an
   architectural change (new package or service, table or constraint, flow, or external dependency).
 
+## Previews
+
+Until launch, Vercel previews deploy only for PRs labelled `preview` (the free plan's 100 deployments a day are shared
+with production). When a PR with a visible change (UI, copy, flows) is ready for review and CI is green, add the label
+once: `gh pr edit <number> --add-label preview`. Don't add it to docs, CI, test or backend-only PRs.
+
 ## Validation
 
 Before handing off, run what CI runs:
