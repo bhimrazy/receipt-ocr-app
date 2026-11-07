@@ -6,4 +6,9 @@ describe("auth rate limits", () => {
     expect(authRateLimitRules["/sign-up/email"]).toEqual({ window: 60, max: 3 });
     expect(authRateLimitRules["/sign-in/email"]).toEqual({ window: 60, max: 5 });
   });
+
+  it("allows 10 account-deletion and 10 email-change calls an hour per IP", () => {
+    expect(authRateLimitRules["/delete-user"]).toEqual({ window: 3600, max: 10 });
+    expect(authRateLimitRules["/change-email"]).toEqual({ window: 3600, max: 10 });
+  });
 });

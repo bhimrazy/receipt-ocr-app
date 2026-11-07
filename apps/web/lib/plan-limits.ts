@@ -41,6 +41,7 @@ const PLAN_COPY_PAGES = [
   "/sign-up",
   "/forgot-password",
   "/reset-password",
+  "/account-deleted",
 ] as const;
 
 /** Call after saving plan limits, so cached pages show the new numbers. */
