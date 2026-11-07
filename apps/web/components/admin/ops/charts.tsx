@@ -30,7 +30,13 @@ import { OUTCOME } from "./palette";
 
 export type Series = { key: string; label: string; color: string };
 
-const AXIS = { tickLine: false, axisLine: false, fontSize: 11 } as const;
+// Tick text uses the muted foreground token so it keeps AA contrast on the card (recharts defaults to grey).
+const AXIS = {
+  tickLine: false,
+  axisLine: false,
+  fontSize: 11,
+  tick: { fill: "var(--muted-foreground)" },
+} as const;
 const GRID = <CartesianGrid stroke="var(--border)" strokeOpacity={0.6} vertical={false} />;
 
 function Legend({ series, extra }: { series: Series[]; extra?: React.ReactNode }) {
@@ -155,11 +161,34 @@ const configOf = (series: Series[]): ChartConfig =>
   Object.fromEntries(series.map((s) => [s.key, { label: s.label, color: s.color }]));
 
 /** Label only the last non-empty point of a line: its value, in text ink. */
-function endLabel(data: Record<string, unknown>[], key: string, format: (n: number) => string) {
-  let last = -1;
-  data.forEach((d, i) => {
-    if (d[key] != null) last = i;
+function endLabel(
+  data: Record<string, unknown>[],
+  key: string,
+  format: (n: number) => string,
+  keys: string[] = [key],
+) {
+  const lastIndex = (k: string) => {
+    let at = -1;
+    data.forEach((d, i) => {
+      if (d[k] != null) at = i;
+    });
+    return at;
+  };
+  const last = lastIndex(key);
+  // Labels of series that end close together would sit on top of each other:
+  // walk them from highest to lowest and push each one down until it clears the one above.
+  const ends = keys
+    .map((k) => ({ k, v: Number(data[lastIndex(k)]?.[k] ?? Number.NaN) }))
+    .filter((e) => Number.isFinite(e.v))
+    .sort((a, b) => b.v - a.v);
+  const top = ends[0]?.v || 1;
+  const shift = new Map<string, number>();
+  ends.forEach((e, i) => {
+    const prev = ends[i - 1];
+    const prevShift = prev ? (shift.get(prev.k) ?? 0) : 0;
+    shift.set(e.k, prev && (prev.v - e.v) / top < 0.12 ? prevShift + 12 : 0);
   });
+  const nudge = shift.get(key) ?? 0;
   function EndLabel(props: {
     x?: number | string;
     y?: number | string;
@@ -171,7 +200,7 @@ function endLabel(data: Record<string, unknown>[], key: string, format: (n: numb
       <text
         className="fill-foreground text-2xs"
         dx={6}
-        dy={4}
+        dy={4 + nudge}
         x={Number(props.x)}
         y={Number(props.y)}
       >
@@ -350,7 +379,16 @@ export function LatencyChart({
               strokeWidth={2}
               type="monotone"
             >
-              {series.length <= 4 ? <LabelList content={endLabel(data, s.key, formatMs)} /> : null}
+              {series.length <= 4 ? (
+                <LabelList
+                  content={endLabel(
+                    data,
+                    s.key,
+                    formatMs,
+                    series.map((x) => x.key),
+                  )}
+                />
+              ) : null}
             </Line>
           ))}
         </LineChart>

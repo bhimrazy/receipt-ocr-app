@@ -86,7 +86,7 @@ function Row({
 export function QueuePanel({ queue }: { queue: OpsQueue }) {
   const now = new Date(queue.now).getTime();
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid items-start gap-4 lg:grid-cols-2">
       <dl className="divide-y divide-border rounded-lg border border-border bg-card px-4">
         <Row
           label="Queued"

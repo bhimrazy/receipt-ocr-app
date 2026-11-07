@@ -3,6 +3,7 @@
 import {
   Activity,
   Building2,
+  ListChecks,
   LayoutDashboard,
   ScrollText,
   SlidersHorizontal,
@@ -16,6 +17,7 @@ const SECTIONS: NavItem[] = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/workspaces", label: "Workspaces", icon: Building2 },
   { href: "/admin/operations", label: "Operations", icon: Activity },
+  { href: "/admin/jobs", label: "Jobs", icon: ListChecks },
   { href: "/admin/audit", label: "Audit log", icon: ScrollText },
   { href: "/admin/settings", label: "Settings", icon: SlidersHorizontal },
 ];
