@@ -229,7 +229,7 @@ export function HeroDemo() {
       setStep(count);
       const low = next.items.filter((item) => isLow(item.confidence));
       setAnnounce(
-        `Read ${next.merchant}: total ${usd(next.total)}, category ${next.category}.${
+        `Scanned ${next.merchant}: total ${usd(next.total)}, category ${next.category}.${
           low.length ? ` Check this line: ${low.map((item) => item.name).join(", ")}.` : ""
         }`,
       );
@@ -262,9 +262,9 @@ export function HeroDemo() {
   }, [start]);
 
   const status = scanning
-    ? "Reading the photo…"
+    ? "Scanning the photo…"
     : done
-      ? `Read · ${formatConfidence(sample.confidence)} sure overall`
+      ? `Scanned · ${formatConfidence(sample.confidence)} sure overall`
       : "Filling in the fields…";
 
   return (
@@ -310,7 +310,7 @@ export function HeroDemo() {
         <figure className="pp-sheet min-w-0 rounded-xl p-4 max-sm:-mt-3 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:self-start sm:p-5">
           <figcaption className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <span className="pp-mono text-[0.75rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-              Sample · what receiptOCR read
+              Sample · what ReceiptOCR scanned
             </span>
             <span className="text-xs text-muted-foreground">{status}</span>
           </figcaption>
@@ -345,7 +345,7 @@ export function HeroDemo() {
           </dl>
 
           <table className="mt-2 w-full text-sm">
-            <caption className="sr-only">Line items, with how sure the read is for each</caption>
+            <caption className="sr-only">Line items, with how sure the scan is for each</caption>
             <thead>
               <tr className="text-xs text-muted-foreground">
                 <th className="py-1 text-left font-normal" scope="col">

@@ -2,15 +2,15 @@ import { providerNames, readingSentence, type Reader } from "@/lib/receipt-readi
 import Link from "next/link";
 import { SettingsSection } from "./settings-section";
 
-/** Read-only: which model reads the user's receipts. Rendered on the server from the settings service. */
+/** Read-only: which model scans the user's receipts. Rendered on the server from the settings service. */
 export function ReceiptReadingSettings({ readers }: { readers: readonly Reader[] }) {
   const sentence = readingSentence(readers);
   const providers = providerNames(readers);
   return (
     <SettingsSection
-      description="Which AI model reads your receipts."
+      description="Which AI model scans your receipts."
       id="reading-heading"
-      title="Receipt reading"
+      title="Receipt scanning"
     >
       {sentence ? (
         <>
@@ -30,7 +30,7 @@ export function ReceiptReadingSettings({ readers }: { readers: readonly Reader[]
         </>
       ) : (
         <p className="text-sm text-warning">
-          Receipt reading is temporarily unavailable. Uploads will work again once it is back.
+          Receipt scanning is temporarily unavailable. Uploads will work again once it is back.
         </p>
       )}
     </SettingsSection>

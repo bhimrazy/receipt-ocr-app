@@ -9,7 +9,7 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "Account deleted",
-  description: "Your receiptOCR account is deleted.",
+  description: "Your ReceiptOCR account is deleted.",
   path: "/account-deleted",
   index: false,
 });
@@ -19,7 +19,7 @@ export const revalidate = 3600;
 /** Where the deletion confirm page sends the browser once the account and its session are gone. */
 export default function AccountDeletedPage() {
   return (
-    <AuthLayout subtitle="Thanks for trying receiptOCR.">
+    <AuthLayout subtitle="Thanks for trying ReceiptOCR.">
       <AuthMessage
         actions={
           <Link className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full")} href="/">

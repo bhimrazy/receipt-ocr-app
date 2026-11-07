@@ -59,7 +59,7 @@ const features = [
 ];
 
 const stats: Array<[string, string]> = [
-  ["Line items", "Read too, not just the total"],
+  ["Line items", "Scanned too, not just the total"],
   ["Confidence", "Per receipt and per line"],
   ["CSV + JSON", "Export as CSV, copy as JSON"],
   ["$0", "To start, no card required"],
@@ -72,7 +72,7 @@ const steps = [
   },
   {
     title: "Get structured data",
-    desc: "Merchant, date, items, tax, and totals are read in seconds, with a confidence score to show what needs a second look.",
+    desc: "Merchant, date, items, tax, and totals are scanned in seconds, with a confidence score to show what needs a second look.",
   },
   {
     title: "Review, search, export",
@@ -104,7 +104,7 @@ const useCases = [
 ];
 
 const freePlanFeatures = [
-  "A daily allowance of receipt reads",
+  "A daily allowance of receipt scans",
   "Merchant, items, tax & totals extracted",
   "Confidence scores and review flags",
   "Searchable receipt history",

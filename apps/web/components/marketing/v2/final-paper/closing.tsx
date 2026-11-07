@@ -21,7 +21,7 @@ const faqs = sharedFaqs.map((faq) =>
       : faq.q === "Who can see my receipts?"
         ? {
             ...faq,
-            a: "Only you and the people you invite to your workspace. receiptOCR admins can access an account only to handle a support request. Images are read by Google's Gemini AI to extract the data. Deleting a receipt, or your account, deletes the stored images too.",
+            a: "Only you and the people you invite to your workspace. ReceiptOCR admins can access an account only to handle a support request. Images are scanned by Google's Gemini AI to extract the data. Deleting a receipt, or your account, deletes the stored images too.",
           }
         : faq,
 );
@@ -105,7 +105,7 @@ export function FooterPaper() {
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div>
           <Link
-            aria-label="receiptOCR home"
+            aria-label="ReceiptOCR home"
             className={cn("inline-flex min-h-11 items-center rounded-md", focusRing)}
             href="/"
           >

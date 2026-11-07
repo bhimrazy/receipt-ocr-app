@@ -5,7 +5,7 @@ import { Pwa } from "@/components/pwa";
 import { gaMeasurementId } from "@/lib/consent/env";
 import { startupImages } from "@/lib/ios-splash";
 import { buildIsIndexable } from "@/lib/seo-hosts";
-import { siteDescription, siteTitle, siteUrl } from "@/lib/site";
+import { SITE_NAME, siteDescription, siteTitle, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 // The opsz axis gives large headings the tighter display cut; one font load serves both.
@@ -26,14 +26,14 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
     default: siteTitle,
-    template: "%s · receiptOCR",
+    template: `%s · ${SITE_NAME}`,
   },
   description: siteDescription,
-  applicationName: "receiptOCR",
+  applicationName: SITE_NAME,
   openGraph: {
     type: "website",
     url: "/",
-    siteName: "receiptOCR",
+    siteName: SITE_NAME,
     title: siteTitle,
     description: siteDescription,
   },
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black",
-    title: "receiptOCR",
+    title: SITE_NAME,
     startupImage: startupImages,
   },
 };

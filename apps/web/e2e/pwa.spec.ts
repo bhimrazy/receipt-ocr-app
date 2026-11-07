@@ -49,7 +49,7 @@ async function shareFile(page: Page, name: string, type = "image/png") {
   );
 }
 
-// Kept photos open the review sheet (#47) instead of joining the list; nothing uploads until Read.
+// Kept photos open the review sheet (#47) instead of joining the list; nothing uploads until Scan.
 const review = (page: Page) => page.getByRole("dialog", { name: "Review photos" });
 const sharedNotice = (page: Page) => page.getByRole("status", { name: "Shared files" });
 
@@ -258,7 +258,7 @@ test("the upload page explains a share that didn't come through", async ({ page 
   await signUp(page, uniqueEmail("share-failed"));
   await page.goto("/app?shared=unavailable");
   await expect(
-    page.getByText("Sharing to receiptOCR isn't ready on this device yet"),
+    page.getByText("Sharing to ReceiptOCR isn't ready on this device yet"),
   ).toBeVisible();
   await expect(page).toHaveURL(/\/app$/);
   await page.goto("/app?shared=failed");

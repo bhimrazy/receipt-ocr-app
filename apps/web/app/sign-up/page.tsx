@@ -12,7 +12,7 @@ import { redirect as nextRedirect } from "next/navigation";
 export const metadata: Metadata = pageMetadata({
   title: "Create account",
   description:
-    "Create a free receiptOCR account. Photograph a receipt or upload a PDF, check what was read and export a CSV. No card required.",
+    "Create a free ReceiptOCR account. Photograph a receipt or upload a PDF, check what was scanned and export a CSV. No card required.",
   path: "/sign-up",
   index: false,
 });
@@ -34,7 +34,7 @@ export default async function SignUpPage({
   ) as SocialProvider[];
 
   return (
-    <AuthLayout subtitle="Create a free account. Photograph a receipt, check what was read, export a CSV.">
+    <AuthLayout subtitle="Create a free account. Photograph a receipt, check what was scanned, export a CSV.">
       {authEnabled ? (
         <CredentialsForm
           freeReceiptsPerDay={free.receiptsPerDay}

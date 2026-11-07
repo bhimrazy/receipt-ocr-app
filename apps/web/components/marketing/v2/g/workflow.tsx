@@ -12,8 +12,8 @@ const steps = [
   },
   {
     n: "02",
-    title: "Read",
-    body: "Google's Gemini model reads the image and returns every field and line item.",
+    title: "Scan",
+    body: "Google's Gemini model scans the image and returns every field and line item.",
     spec: "Google Gemini",
   },
   {
@@ -249,7 +249,7 @@ export function Workspace() {
           id="g-workspace"
           index="02"
           label="The record"
-          lede="Every receipt lands in one history with its status in plain words. Nothing reads “$0.00” while it's still processing, and a receipt that can't be read says so and offers a retry."
+          lede="Every receipt lands in one history with its status in plain words. Nothing reads “$0.00” while it's still processing, and a receipt that can't be scanned says so and offers a retry."
           title="A history you can hand to your accountant."
         />
         <div className="mt-14 grid gap-x-6 gap-y-10 lg:grid-cols-12">

@@ -79,12 +79,12 @@ function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
       </span>
       <div className="max-w-md">
         <h2 className="text-lg font-semibold">
-          {global ? "Receipt reading is paused for today" : "You've reached today's limit"}
+          {global ? "Receipt scanning is paused for today" : "You've reached today's limit"}
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           {global
-            ? `The service has read as many receipts as it can today, for all accounts. This isn't a limit on your account. Uploads open again at ${reset}, ${resetsIn}.`
-            : `Your plan reads ${plural(usage.limit, "receipt")} a day and you've used all of them. You can upload again at ${reset}, ${resetsIn}. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count.`}
+            ? `The service has scanned as many receipts as it can today, for all accounts. This isn't a limit on your account. Uploads open again at ${reset}, ${resetsIn}.`
+            : `Your plan scans ${plural(usage.limit, "receipt")} a day and you've used all of them. You can upload again at ${reset}, ${resetsIn}. Your first ${FREE_FAILED_ROUNDS} failed scans each day don't count.`}
         </p>
       </div>
       <Link
@@ -125,7 +125,7 @@ function ItemProgress({
           aria-hidden="true"
           className="size-3 shrink-0 animate-spin motion-reduce:animate-none"
         />
-        <span>{pct < 100 ? "Uploading…" : instant ? "Reading…" : "Finishing…"}</span>
+        <span>{pct < 100 ? "Uploading…" : instant ? "Scanning…" : "Finishing…"}</span>
         <span
           aria-label="Upload progress"
           aria-valuemax={100}
@@ -392,11 +392,11 @@ export function UploadPanel({
   const instant = queue.getMode() === "instant";
   const heading = busy
     ? instant
-      ? "Reading"
+      ? "Scanning"
       : "Uploading"
     : items.length > 0 && items.every((i) => i.status === "done")
       ? "Done"
-      : "Ready to read";
+      : "Ready to scan";
   const prefetchCamera = () => void loadCamera();
 
   return (
@@ -533,7 +533,7 @@ export function UploadPanel({
       {snapshot.stopped ? (
         <Alert className="px-4 py-3" variant="destructive">
           <CircleAlert aria-hidden="true" />
-          <p>{snapshot.stopped} The rest are still here; read them when your limit resets.</p>
+          <p>{snapshot.stopped} The rest are still here; scan them when your limit resets.</p>
         </Alert>
       ) : null}
       {success ? (
@@ -541,8 +541,8 @@ export function UploadPanel({
           <Check aria-hidden="true" />
           <p>
             {success.count === 1
-              ? "1 receipt uploaded. It's being read now."
-              : `${success.count} receipts uploaded. They're being read now.`}{" "}
+              ? "1 receipt uploaded. It's being scanned now."
+              : `${success.count} receipts uploaded. They're being scanned now.`}{" "}
             <Link
               className="font-medium underline underline-offset-4 max-md:inline-flex max-md:min-h-11 max-md:items-center"
               href={
@@ -572,7 +572,7 @@ export function UploadPanel({
               Remove all
             </Button>
           </div>
-          <ul aria-label="Receipts to read" className="divide-y divide-border">
+          <ul aria-label="Receipts to scan" className="divide-y divide-border">
             {items.map((item) => {
               return (
                 <li className="flex items-center gap-3 py-2 pr-2 pl-4" key={item.id}>
@@ -628,10 +628,10 @@ export function UploadPanel({
                 ? `Paused for your plan's per-minute limit. Carrying on in ${pausedFor} s.`
                 : busy
                   ? single
-                    ? "Uploading and reading. This takes a few seconds."
-                    : "Uploading two at a time. Keep this page open until every file is uploaded; reading carries on after that."
+                    ? "Uploading and scanning. This takes a few seconds."
+                    : "Uploading two at a time. Keep this page open until every file is uploaded; scanning carries on after that."
                   : overLimit
-                    ? `You have ${plural(remaining, "receipt")} left today, so only the first ${remaining} will be read.`
+                    ? `You have ${plural(remaining, "receipt")} left today, so only the first ${remaining} will be scanned.`
                     : usage
                       ? usageNote(usage)
                       : null}
@@ -644,11 +644,11 @@ export function UploadPanel({
               )}
               {busy
                 ? single
-                  ? "Reading…"
+                  ? "Scanning…"
                   : "Uploading…"
                 : single
-                  ? "Read receipt"
-                  : `Read ${plural(count, "receipt")}`}
+                  ? "Scan receipt"
+                  : `Scan ${plural(count, "receipt")}`}
             </Button>
           </div>
         </Card>

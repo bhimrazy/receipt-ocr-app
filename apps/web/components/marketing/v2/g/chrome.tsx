@@ -29,7 +29,7 @@ function Wordmark() {
         />
         <path d="M7 7h6M7 10h6M7 13h3" stroke="currentColor" strokeWidth="1.5" />
       </svg>
-      receiptOCR
+      ReceiptOCR
     </Link>
   );
 }
@@ -92,7 +92,7 @@ export function Footer() {
           <Link className={linkClass} href="/sign-in">
             Sign in
           </Link>
-          <span className="inline-flex min-h-11 items-center px-3 g-num">© 2026 receiptOCR</span>
+          <span className="inline-flex min-h-11 items-center px-3 g-num">© 2026 ReceiptOCR</span>
         </nav>
       </div>
     </footer>

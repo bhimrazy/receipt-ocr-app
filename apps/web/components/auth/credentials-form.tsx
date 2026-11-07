@@ -195,7 +195,7 @@ export function CredentialsForm({
 
   return (
     <div className={authCardClass}>
-      <AuthHeading title={isSignUp ? "Create your account" : "Sign in to receiptOCR"}>
+      <AuthHeading title={isSignUp ? "Create your account" : "Sign in to ReceiptOCR"}>
         {isSignUp && freeReceiptsPerDay !== undefined
           ? `Free plan: ${freeReceiptsPerDay} receipts a day. No card required.`
           : undefined}
@@ -335,7 +335,7 @@ export function CredentialsForm({
       </form>
 
       <p className="mt-6 border-t border-border pt-5 text-center text-sm text-muted-foreground">
-        {isSignUp ? "Already have an account?" : "New to receiptOCR?"}{" "}
+        {isSignUp ? "Already have an account?" : "New to ReceiptOCR?"}{" "}
         <Link
           className={cn(authLinkClass, "inline-flex min-h-11 min-w-11 items-center justify-center")}
           href={switchHref}

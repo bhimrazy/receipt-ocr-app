@@ -96,7 +96,7 @@ export function DemoPlayer({
   return (
     <>
       <figure
-        aria-label="Sample: a receipt read by receiptOCR"
+        aria-label="Sample: a receipt scanned by ReceiptOCR"
         className="card-sheen relative overflow-hidden rounded-2xl border border-white/10 bg-card/85 shadow-2xl shadow-black/60 backdrop-blur-xl"
         ref={figure}
       >

@@ -76,7 +76,7 @@ export function FooterD() {
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div>
           <Link
-            aria-label="receiptOCR home"
+            aria-label="ReceiptOCR home"
             className={cn("inline-flex min-h-11 items-center rounded-md", focusRing)}
             href="/"
           >

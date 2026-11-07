@@ -6,9 +6,9 @@ import type { ReceiptStatus } from "@/lib/receipts";
 
 const STATUS = {
   completed: { label: "Done", variant: "success", icon: CircleCheck },
-  processing: { label: "Reading…", variant: "secondary", icon: Loader2 },
-  uploaded: { label: "Reading…", variant: "secondary", icon: Loader2 },
-  failed: { label: "Couldn't read", variant: "destructive", icon: CircleAlert },
+  processing: { label: "Scanning…", variant: "secondary", icon: Loader2 },
+  uploaded: { label: "Scanning…", variant: "secondary", icon: Loader2 },
+  failed: { label: "Couldn't scan", variant: "destructive", icon: CircleAlert },
 } as const;
 
 export function isInFlight(status: ReceiptStatus) {

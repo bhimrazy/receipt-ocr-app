@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_NAME } from "@/lib/site";
 import { SHARE_TARGET_FIELD, SHARE_TARGET_PATH } from "@/lib/share-target";
 
 // --background in packages/ui/src/styles.css; the app is dark-only.
@@ -7,8 +8,8 @@ const BACKGROUND = "#0a0a0b";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/app",
-    name: "receiptOCR",
-    short_name: "receiptOCR",
+    name: SITE_NAME,
+    short_name: SITE_NAME,
     description: "Turn receipt photos and PDFs into rows you can check and export as CSV.",
     start_url: "/app",
     scope: "/",

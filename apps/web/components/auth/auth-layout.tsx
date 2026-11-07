@@ -10,7 +10,7 @@ import { AuthMessage } from "./auth-field";
 const valueProps = (freePerDay: number) => [
   {
     icon: ScanLine,
-    title: "Reads the whole receipt",
+    title: "Scans the whole receipt",
     desc: "Merchant, date, line items, tax and total, with a confidence score.",
   },
   {
@@ -48,7 +48,7 @@ export async function AuthLayout({
           className="hero-aurora pointer-events-none absolute left-1/3 top-1/2 size-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60"
         />
         <Link
-          aria-label="receiptOCR home"
+          aria-label="ReceiptOCR home"
           className="relative z-10 inline-flex min-h-11 w-fit items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           href="/"
         >
@@ -75,7 +75,7 @@ export async function AuthLayout({
           </ul>
         </div>
         <p className="relative z-10 text-xs text-muted-foreground">
-          © {new Date().getFullYear()} receiptOCR
+          © {new Date().getFullYear()} ReceiptOCR
         </p>
       </aside>
 
@@ -86,7 +86,7 @@ export async function AuthLayout({
         />
         <div className="relative z-10 flex w-full max-w-md flex-col items-center">
           <Link
-            aria-label="receiptOCR home"
+            aria-label="ReceiptOCR home"
             className="mb-8 inline-flex min-h-11 items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
             href="/"
           >

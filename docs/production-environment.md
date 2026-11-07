@@ -186,7 +186,7 @@ More help: [Domains](https://resend.com/docs/dashboard/domains/introduction),
 | Key              | Example                                           | Kind   |
 | ---------------- | ------------------------------------------------- | ------ |
 | `RESEND_API_KEY` | `re_…`                                            | Secret |
-| `EMAIL_FROM`     | `receiptOCR <noreply@receipt-ocr.bhimraj.com.np>` | Config |
+| `EMAIL_FROM`     | `ReceiptOCR <noreply@receipt-ocr.bhimraj.com.np>` | Config |
 | `SUPPORT_EMAIL`  | `receipt-ocr@bhimraj.com.np`                      | Config |
 
 - `EMAIL_FROM` must use the domain you verified (`receipt-ocr.bhimraj.com.np`).
@@ -225,7 +225,7 @@ request, and Google needs each redirect address listed exactly.
 1. [Google Cloud Console](https://console.cloud.google.com) → your project → **Google Auth Platform** (it used to be
    called "OAuth consent screen") → **Get started**.
 2. **Branding**
-   - App name: `receiptOCR`. User support email: yours.
+   - App name: `ReceiptOCR`. User support email: yours.
    - Home page: `https://receipt-ocr.bhimraj.com.np`. Privacy policy: `…/privacy`. Terms: `…/terms`.
    - Authorised domain: `bhimraj.com.np`.
    - A logo is optional; adding one starts a short Google review.
@@ -266,7 +266,7 @@ Add both to **Production** only. Never paste the production client into Preview.
 
 **One OAuth app per environment.** A GitHub OAuth app allows exactly one callback URL, so production and a staging
 app can't share one anyway. Create the production app now; previews use email and password. If previews ever need it,
-create a second app, `receiptOCR (staging)`, with the callback
+create a second app, `ReceiptOCR (staging)`, with the callback
 `https://preview.receipt-ocr.bhimraj.com.np/api/auth/callback/github`, and add its values to **Preview** only.
 
 <details>
@@ -274,7 +274,7 @@ create a second app, `receiptOCR (staging)`, with the callback
 
 1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**.
 2. Fill in:
-   - Application name: `receiptOCR`
+   - Application name: `ReceiptOCR`
    - Homepage URL: `https://receipt-ocr.bhimraj.com.np`
    - Authorization callback URL: `https://receipt-ocr.bhimraj.com.np/api/auth/callback/github`
    - Leave **Enable Device Flow** off.

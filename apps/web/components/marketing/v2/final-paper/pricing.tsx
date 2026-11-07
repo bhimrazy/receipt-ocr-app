@@ -29,7 +29,7 @@ const schedule = [
     condition: "Merchant, date, category, currency and totals",
     value: "Included",
   },
-  { what: "Line items", condition: "Read and scored", value: "Not editable yet" },
+  { what: "Line items", condition: "Scanned and scored", value: "Not editable yet" },
   { what: "CSV and JSON export", condition: "One receipt or the whole workspace", value: "$0" },
   { what: "Card on file", condition: "Not asked for", value: "None" },
 ];

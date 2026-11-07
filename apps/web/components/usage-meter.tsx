@@ -12,7 +12,7 @@ export type Usage = {
 /** The one line that says how much room is left today, shared by the meter and the upload panel. */
 export function usageNote({ used, limit, resetsAt, blocked }: Usage): string {
   const reset = formatTime(resetsAt);
-  if (blocked === "global") return `Reading is paused for everyone until ${reset}.`;
+  if (blocked === "global") return `Scanning is paused for everyone until ${reset}.`;
   const left = Math.max(0, limit - used);
   if (blocked === "day" || left === 0) return `Daily limit reached. Resets at ${reset}.`;
   return `${left} left today. Resets at ${reset}.`;

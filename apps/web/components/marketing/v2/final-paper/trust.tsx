@@ -18,11 +18,11 @@ const stops = [
   },
   {
     where: "Google's Gemini AI",
-    what: "Gemini reads the image and sends back the merchant, date, items, tax and total.",
+    what: "Gemini scans the image and sends back the merchant, date, items, tax and total.",
   },
   {
     where: "Your workspace",
-    what: "Only you and the people you invite to your workspace. receiptOCR admins can access an account only to handle a support request.",
+    what: "Only you and the people you invite to your workspace. ReceiptOCR admins can access an account only to handle a support request.",
   },
 ];
 

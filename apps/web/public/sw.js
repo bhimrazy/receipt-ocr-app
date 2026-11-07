@@ -1,4 +1,4 @@
-// receiptOCR service worker: offline fallback for page loads and the Web Share Target handoff.
+// ReceiptOCR service worker: offline fallback for page loads and the Web Share Target handoff.
 // Receipts are financial data, so nothing user-specific is stored: no API responses, no signed-in
 // HTML, no receipt images. Only the files below are cached, plus shared files for at most 10 minutes
 // (see lib/share-target.ts). Bump VERSION whenever this file or a precached file changes.

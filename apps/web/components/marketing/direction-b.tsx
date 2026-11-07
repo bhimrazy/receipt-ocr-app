@@ -55,8 +55,8 @@ const acts = [
 const promises = [
   ["Yours only", "Receipts are visible to you and the people you invite. Nobody else."],
   [
-    "Read by Google's Gemini AI",
-    "We send the image to Google's Gemini model to read it. We name it because you should know.",
+    "Scanned by Google's Gemini AI",
+    "We send the image to Google's Gemini model to scan it. We name it because you should know.",
   ],
   [
     "Delete from Settings",
@@ -82,7 +82,7 @@ export function DirectionB() {
               Your receipts, <em className="text-primary">sorted</em> before tax time.
             </h1>
             <p className="mx-auto mt-7 max-w-xl text-pretty text-base leading-7 text-foreground/80 md:text-lg md:leading-8">
-              Photograph or upload any receipt. We read the merchant, date, items, tax and total, so
+              Photograph or upload any receipt. We scan the merchant, date, items, tax and total, so
               you can check it, fix it, and export a CSV for your accountant.
             </p>
             <SignUpCta align="center" className="mx-auto mt-9 max-w-xs sm:max-w-none" />
@@ -133,7 +133,7 @@ export function DirectionB() {
               </div>
               <div className="rounded-2xl bg-primary/[0.05] p-7 ring-1 ring-primary/30">
                 <h3 className="font-mono text-xs uppercase tracking-[0.18em] text-primary">
-                  With receiptOCR
+                  With ReceiptOCR
                 </h3>
                 <ul className="mt-5 flex flex-col gap-4">
                   {newWay.map((line) => (

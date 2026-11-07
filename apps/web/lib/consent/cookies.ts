@@ -12,7 +12,7 @@ export type StorageEntry = {
   /** Exact name; a trailing `*` matches any suffix. */
   name: string;
   kind: "cookie" | "localStorage" | "sessionStorage" | "cache";
-  setBy: "receiptOCR" | "Cloudflare" | "Google";
+  setBy: "ReceiptOCR" | "Cloudflare" | "Google";
   category: StorageCategory;
   purpose: string;
   duration: string;
@@ -28,7 +28,7 @@ export const storageEntries: StorageEntry[] = [
   {
     name: "better-auth.session_token",
     kind: "cookie",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose: "Keeps you signed in. Not readable by page scripts.",
     duration: "7 days, renewed daily while you use the app",
@@ -37,7 +37,7 @@ export const storageEntries: StorageEntry[] = [
   {
     name: "better-auth.state",
     kind: "cookie",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose:
       "Protects Google and GitHub sign-in from forged requests by checking that the reply matches the request you started.",
@@ -47,17 +47,17 @@ export const storageEntries: StorageEntry[] = [
   {
     name: "better-auth.admin_session",
     kind: "cookie",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose:
-      "Only for receiptOCR administrators handling a support request: holds the administrator's own session while they view an account.",
+      "Only for ReceiptOCR administrators handling a support request: holds the administrator's own session while they view an account.",
     duration: "Until the administrator stops, at most 7 days",
     note: secureNote,
   },
   {
     name: "signed_in_hint",
     kind: "cookie",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose:
       'Lets the home page show "Open the app" instead of "Sign in". It holds only the value 1, never who you are.',
@@ -66,7 +66,7 @@ export const storageEntries: StorageEntry[] = [
   {
     name: "tz",
     kind: "cookie",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose:
       'Remembers your browser\'s time zone so the signed-in app shows your data correctly, such as the right "today". It holds only the zone name and is sent nowhere but this app.',
@@ -76,7 +76,7 @@ export const storageEntries: StorageEntry[] = [
   {
     name: "consent",
     kind: "cookie",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose: "Remembers your cookie settings, the policy version you answered and when.",
     duration: "6 months",
@@ -94,7 +94,7 @@ export const storageEntries: StorageEntry[] = [
   {
     name: "receiptocr.install-dismissed",
     kind: "localStorage",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose: "Remembers that you closed the install-the-app prompt, so it doesn't show again.",
     duration: "Until you clear site data",
@@ -102,7 +102,7 @@ export const storageEntries: StorageEntry[] = [
   {
     name: "receipt-ocr.capture.filter",
     kind: "sessionStorage",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose: "Remembers the photo filter you last chose when reviewing a photo before upload.",
     duration: "Until you close the tab",
@@ -110,7 +110,7 @@ export const storageEntries: StorageEntry[] = [
   {
     name: "receiptocr-static-v*",
     kind: "cache",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose: "The installed app's offline page and icons. Never your receipts or account data.",
     duration: "Replaced with each new version of the app",
@@ -118,7 +118,7 @@ export const storageEntries: StorageEntry[] = [
   {
     name: "receiptocr-shared",
     kind: "cache",
-    setBy: "receiptOCR",
+    setBy: "ReceiptOCR",
     category: "necessary",
     purpose:
       "Holds files you share to the installed app from another Android app until the upload screen picks them up.",

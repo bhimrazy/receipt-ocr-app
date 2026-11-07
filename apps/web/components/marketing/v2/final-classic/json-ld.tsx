@@ -1,4 +1,4 @@
-import { siteDescription, siteUrl } from "@/lib/site";
+import { SITE_NAME, siteDescription, siteUrl } from "@/lib/site";
 import { faqs } from "./closing";
 
 const url = new URL("/", siteUrl).toString();
@@ -6,14 +6,14 @@ const url = new URL("/", siteUrl).toString();
 const graph = [
   {
     "@type": "SoftwareApplication",
-    name: "receiptOCR",
+    name: SITE_NAME,
     url,
     description: siteDescription,
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   },
-  { "@type": "WebSite", name: "receiptOCR", url },
+  { "@type": "WebSite", name: SITE_NAME, url },
   {
     "@type": "FAQPage",
     mainEntity: faqs.map((faq) => ({

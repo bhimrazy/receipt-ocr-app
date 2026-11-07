@@ -19,7 +19,7 @@ export function HeroD() {
             </span>
           </h1>
           <p className="mt-5 max-w-xl text-lg sm:mt-7 leading-relaxed text-pretty text-muted-foreground sm:text-xl">
-            Photograph your receipts. receiptOCR reads the merchant, date, line items, tax and
+            Photograph your receipts. ReceiptOCR scans the merchant, date, line items, tax and
             total, points out anything it isn&apos;t sure of, and hands you a tidy spreadsheet.
           </p>
           <Ctas className="mt-7 sm:mt-9" />

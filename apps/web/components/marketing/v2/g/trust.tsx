@@ -21,7 +21,7 @@ const flow = [
   {
     n: "C",
     where: "Google Gemini",
-    what: "Google's Gemini model reads the image and returns the fields, under Google's Gemini API terms.",
+    what: "Google's Gemini model scans the image and returns the fields, under Google's Gemini API terms.",
     spec: "Named in our privacy policy",
   },
   {
