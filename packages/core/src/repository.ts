@@ -74,6 +74,8 @@ export type ReceiptSummary = {
   fileName: string | null;
   errorMessage: string | null;
   createdAt: Date;
+  /** Set on list rows: when a processing receipt's job next runs, if that is still ahead (waiting to retry). */
+  retryAt?: Date | null;
 };
 
 export type ReceiptExportRow = ReceiptSummary & {
@@ -226,6 +228,11 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
   }
   return and(...conditions);
 }
+
+/** A processing receipt's job is queued for later: a retry's backoff or a provider cooldown. */
+const retryAtColumn = sql<
+  Date | string | null
+>`case when ${receipts.status} = 'processing' then (select min(j.run_at) from jobs j where j.receipt_id = receipts.id and j.kind like 'receipt.%' and j.state = 'queued' and j.run_at > now()) end`;
 
 const summaryColumns = {
   id: receipts.id,
@@ -573,7 +580,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           const where = filterWhere(scope, filters);
           const [rows, totals] = await Promise.all([
             db
-              .select(summaryColumns)
+              .select({ ...summaryColumns, retryAt: retryAtColumn })
               .from(receipts)
               .where(where)
               .orderBy(desc(receipts.createdAt), desc(receipts.id))
@@ -581,7 +588,13 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               .offset(page.offset),
             db.select({ value: count() }).from(receipts).where(where),
           ]);
-          return { rows: rows.map(toSummary), total: totals[0]?.value ?? 0 };
+          return {
+            rows: rows.map((row) => ({
+              ...toSummary(row),
+              retryAt: row.retryAt ? new Date(row.retryAt) : null,
+            })),
+            total: totals[0]?.value ?? 0,
+          };
         }),
 
       counts: (scope) =>

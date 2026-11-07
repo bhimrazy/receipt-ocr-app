@@ -1,6 +1,8 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
+import { GitHubIcon } from "@/components/github-icon";
+import { authorName, authorUrl, repoUrl } from "@/lib/site";
 import { CookieSettingsButton } from "@/components/consent/cookie-settings-button";
 
 const columns: Array<{ title: string; links: Array<{ label: string; href: string }> }> = [
@@ -31,6 +33,9 @@ const columns: Array<{ title: string; links: Array<{ label: string; href: string
 
 const linkClass =
   "inline-flex min-h-11 items-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:min-h-8";
+
+const authorLinkClass =
+  "inline-flex min-h-11 items-center rounded-md underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8";
 
 /** `narrow` matches the max-w-3xl column of legal and error pages. */
 export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
@@ -78,9 +83,26 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
             </div>
           ))}
         </div>
-        <p className="mt-10 border-t border-border pt-6 text-xs text-muted-foreground">
-          © {new Date().getFullYear()} receiptOCR
-        </p>
+        <div className="mt-10 flex flex-col gap-x-6 gap-y-1 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center">
+          <p className="sm:mr-auto">© {new Date().getFullYear()} ReceiptOCR</p>
+          <p>
+            A product by{" "}
+            <a className={authorLinkClass} href={authorUrl} rel="noopener" target="_blank">
+              {authorName}
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          </p>
+          <a
+            className={cn(authorLinkClass, "inline-flex items-center gap-1.5")}
+            href={repoUrl}
+            rel="noopener"
+            target="_blank"
+          >
+            <GitHubIcon className="size-3.5" />
+            Open source on GitHub
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        </div>
       </div>
     </footer>
   );

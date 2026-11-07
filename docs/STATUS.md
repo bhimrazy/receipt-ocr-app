@@ -47,6 +47,9 @@ Steps are in [deployment.md](deployment.md).
   `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies the squashed baseline with
   row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
   Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
+- Queue drain (jobs plan Track B): after merge, `CRON_SECRET` is already in Vercel; run the Supabase SQL in
+  [production environment, step 8](production-environment.md#8-queue-drain-cron) (pg_cron + pg_net + Vault), then
+  check `cron.job_run_details` and `net._http_response`. Until then only the daily Vercel cron recovers stuck jobs.
 - Production deploys automatically after CI passes on a push to `main`. Manual runs are allowed only from `main`.
   Once `ci/db-migrations` lands, the automatic deploy skips any release that changes `apps/web/drizzle/` since the
   last successful production deploy run; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
@@ -92,6 +95,7 @@ Steps are in [deployment.md](deployment.md).
 | `feat/admin-check-connections`  | Admin → Settings → Connections: on-demand status check of AI providers (free model-list call), storage (put/get/delete) and a test email to yourself; warns after saving the OCR chain; audited, rate-limited                                                                       |
 | `feat/settings-receipt-reading` | Settings → Receipt reading (read-only): the platform default model chain by friendly label and its providers; privacy policy and terms now name Anthropic as a processor                                                                                                            |
 | `feat/anthropic-provider`       | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet                                                                                                                          |
+| `feat/jobs-drain`               | Track B of the [jobs plan](plans/2026-11-06-jobs-queue.md): `drainOnce` / `runWorkerLoop` in core, `/api/jobs/drain` route (`CRON_SECRET`), daily Vercel cron, Supabase `pg_cron` runbook, "Waiting to retry" in the receipt list. `apps/worker` still to do                        |
 | `feat/prompt-v2`                | Extraction prompt v2: system-prompt rules, schema field definitions, AD dates (BS-only null), injection guard, `ocr.prompt_version`; A/B in bench/results                                                                                                                           |
 | `fix/step-up-verification`      | Account deletion only through an emailed link (1 hour, single use); email change approved by the current address; "password changed" notices; 15-minute fresh session to delete or change email                                                                                     |
 | `feat/email-design`             | Every transactional email rebuilt with React Email, prerendered at build time (no React Email at runtime): light-first and dark-safe, emerald button (red for delete), logo, preheader, short fallback link, footer, plain text; `email:generate` / `email:check` / `email:preview` |
@@ -172,6 +176,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
 13. In-app feedback: "Send feedback" in the account menu and Settings, "Your feedback" list, admin inbox with email
     replies; public board later ([feedback and requests](plans/2026-11-07-feedback-and-requests.md)).
+14. Dual-calendar dates: `receipt_date` as a real AD `date`, BS derived from a vendored month table, the model
+    transcribes dates and code cross-checks AD against the Miti; BS display, `date_bs` CSV, Nepal fiscal-year
+    presets ([dual-calendar dates](plans/2026-11-07-dual-calendar-dates.md)).
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 

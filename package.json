@@ -30,6 +30,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "bun run --filter @receipt-ocr/web test:e2e",
+    "splash:ios": "bun scripts/splash-ios.ts",
     "bench:ocr": "bun bench/ocr.ts",
     "bench:fixtures": "bun bench/make-fixtures.mjs",
     "bench:encode": "bun bench/encode.mjs",

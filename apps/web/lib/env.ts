@@ -129,6 +129,19 @@ export const emailEnv = {
   replyTo: supportAddressValue,
 };
 
+/**
+ * Bearer secret for the queue drain route (`/api/jobs/drain`), sent by Vercel Cron and pg_net.
+ * Read at call time. Optional: without it the route answers 401 and drains nothing.
+ */
+export const cronSecret = (env: Record<string, string | undefined> = process.env) =>
+  env.CRON_SECRET?.trim() || undefined;
+
+if (cronSecret() && cronSecret()!.length < 32 && !isBuild) {
+  console.warn(
+    "CRON_SECRET is shorter than 32 characters; generate a stronger one with `openssl rand -hex 32`.",
+  );
+}
+
 /** Inbox for support-form messages. Unset means the form can't deliver. */
 export const supportEmail = supportAddressValue;
 
