@@ -1,5 +1,12 @@
 import "server-only";
-import { adoptPasskeySession, forgetTrustedDevices, type StepUpAction } from "@receipt-ocr/core";
+import {
+  adoptPasskeySession,
+  forgetTrustedDevices,
+  replacePreviousSession,
+  TRUST_DEVICE_STORED_PREFIX,
+  type StepUpAction,
+} from "@receipt-ocr/core";
+import { createHash } from "node:crypto";
 import {
   backupCodesRegeneratedEmail,
   passkeyAddedEmail,
@@ -31,6 +38,10 @@ const ISSUER = "ReceiptOCR";
  * so that file only plugs these in. Plan: docs/plans/2026-11-06-passkeys-2fa.md.
  */
 
+type HookContext = Parameters<typeof getSessionFromCtx>[0] & { path: string; body?: unknown };
+/** In `hooks.after`, Better Auth puts the endpoint's result on the context. */
+type AfterContext = HookContext & { context: { returned?: unknown } };
+
 type Deliver = (input: SendEmailInput) => Promise<void>;
 
 const BLOCKED = new Set(["/two-factor/get-totp-uri"]);
@@ -61,6 +72,45 @@ export const passkeyPlugin = (appUrl: string) => {
   });
 };
 
+/**
+ * `verification.storeIdentifier` override for trusted-device rows: still a
+ * SHA-256 at rest, under a prefix so forgetTrustedDevices can delete those
+ * rows alone (see TRUST_DEVICE_STORED_PREFIX).
+ */
+export const trustDeviceIdentifier = {
+  hash: async (identifier: string) =>
+    `${TRUST_DEVICE_STORED_PREFIX}${createHash("sha256").update(identifier).digest("base64url")}`,
+};
+
+/** Sign-ins that create a session while the browser may still hold one (passkey: see below). */
+const isSignIn = (path: string) =>
+  path === "/sign-in/email" || path === "/sign-in/social" || path.startsWith("/callback/");
+
+/**
+ * For `hooks.after`: a sign-in from a browser already signed in as the same
+ * user replaces that session instead of leaving it alive next to the new one.
+ */
+export async function replaceSessionOnSignIn(ctx: AfterContext) {
+  if (!isSignIn(ctx.path) || isAPIError(ctx.context.returned)) return;
+  const created = ctx.context.newSession;
+  if (!created) return;
+  const previousToken = await ctx.getSignedCookie(
+    ctx.context.authCookies.sessionToken.name,
+    ctx.context.secret,
+  );
+  if (!previousToken || previousToken === created.session.token) return;
+  const { replaced } = await runtime.runPromise(
+    replacePreviousSession({
+      previousToken,
+      sessionId: created.session.id,
+      userId: created.user.id,
+    }),
+  );
+  if (replaced) {
+    logger.info({ event: "auth.session_replaced", unit: "log", user_id: created.user.id });
+  }
+}
+
 export const authMethodSessionField = {
   authMethod: { type: "string", required: false, input: false },
 } as const;
@@ -84,10 +134,6 @@ async function notify(deliver: Deliver, input: SendEmailInput, kind: string) {
     });
   }
 }
-
-type HookContext = Parameters<typeof getSessionFromCtx>[0] & { path: string; body?: unknown };
-/** In `hooks.after`, Better Auth puts the endpoint's result on the context. */
-type AfterContext = HookContext & { context: { returned?: unknown } };
 
 /**
  * Called first in `hooks.before` for every auth endpoint: refuses factor

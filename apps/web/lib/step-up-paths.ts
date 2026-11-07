@@ -14,6 +14,8 @@ const FIXED: Record<string, StepUpAction> = {
   "/delete-user": "account.delete",
   "/change-email": "account.change_email",
   "/change-password": "account.change_password",
+  // Better Auth's freshAge was its only guard, and freshAge is off (lib/auth.ts).
+  "/unlink-account": "account.unlink",
   "/two-factor/enable": "two_factor.enable",
   "/two-factor/disable": "two_factor.disable",
   "/two-factor/generate-backup-codes": "two_factor.regenerate_backup_codes",

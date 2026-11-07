@@ -36,6 +36,8 @@ import {
   authMethodOf,
   authMethodSessionField,
   factorChangedAfter,
+  replaceSessionOnSignIn,
+  trustDeviceIdentifier,
   passkeyPlugin,
   stepUpGate,
   twoFactorPlugin,
@@ -267,16 +269,19 @@ export const auth = betterAuth({
     customRules: authRateLimitRules,
   },
   // Reset and verification tokens are stored as hashes: a database read alone can't use them.
-  verification: { storeIdentifier: "hashed" },
+  verification: {
+    storeIdentifier: { default: "hashed", overrides: { "trust-device-": trustDeviceIdentifier } },
+  },
   // Rows sealed before this was on stay readable: Better Auth passes non-hex
   // (plaintext) tokens through and seals them on the user's next sign-in.
   account: { encryptOAuthTokens: true },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
-    // Better Auth's own check, on list-sessions, unlink-account and passkey registration (a
-    // sign-in this recent). Important actions use our step-up instead (hooks.before below).
-    freshAge: 15 * 60,
+    // Off: our step-up (hooks.before) is the freshness control. Better Auth's check would refuse
+    // a passkey registration that already passed step-up in an older session; unlink-account,
+    // its only other guarded write, needs step-up instead.
+    freshAge: 0,
     // Off: with the cache on, a revoked or banned session keeps working on
     // /api/auth/* for its maxAge (see GHSA-fvxx). App reads skip it anyway.
     cookieCache: { enabled: false },
@@ -318,6 +323,7 @@ export const auth = betterAuth({
     }),
     after: createAuthMiddleware(async (ctx) => {
       await factorChangedAfter(ctx, deliver);
+      await replaceSessionOnSignIn(ctx);
       const returned = ctx.context.returned as
         { user?: { id: string; email: string }; message?: string } | undefined;
       if (!returned || isAPIError(returned)) return;

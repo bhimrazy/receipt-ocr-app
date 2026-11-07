@@ -240,14 +240,57 @@ export const consumeStepUpCode = (input: { sessionId: string; codeHash: string; 
   });
 
 /**
- * Removes every trace of a user's authenticator: the two_factor row, the flag,
- * trusted-device and pending-challenge rows (all keyed by user id in
- * `verification.value`). Better Auth's own disable only forgets the current device.
+ * Stored identifiers of trusted-device rows start with this. Every other
+ * verification identifier is a bare SHA-256 (base64url, never a colon), so
+ * this prefix tells trust rows apart without unhashing anything. Set by
+ * `trustDeviceIdentifier` in the web app's Better Auth config.
+ */
+export const TRUST_DEVICE_STORED_PREFIX = "trust-device:";
+
+/**
+ * Forgets every trusted device of the user (Better Auth's own disable forgets
+ * only the current one). Only trust rows: the user's pending password-reset
+ * or account-deletion links, keyed by user id too, stay valid.
  */
 export const forgetTrustedDevices = (userId: string) =>
   Effect.flatMap(Db, ({ use }) =>
-    use((db) => db.delete(verification).where(eq(verification.value, userId))),
+    use((db) =>
+      db
+        .delete(verification)
+        .where(
+          and(
+            eq(verification.value, userId),
+            sql`${verification.identifier} like ${`${TRUST_DEVICE_STORED_PREFIX}%`}`,
+          ),
+        ),
+    ),
   );
+
+/**
+ * After a sign-in from a browser that was already signed in as the same user
+ * ("Sign in again", or a second sign-in): the new session keeps the old one's
+ * workspace and the old one is deleted, so re-signing in leaves no second live
+ * session for a thief who had copied the old cookie.
+ */
+export const replacePreviousSession = (input: {
+  previousToken: string;
+  sessionId: string;
+  userId: string;
+}) =>
+  transact(async (tx) => {
+    const [previous] = await tx
+      .select({ id: session.id, activeOrganizationId: session.activeOrganizationId })
+      .from(session)
+      .where(and(eq(session.token, input.previousToken), eq(session.userId, input.userId)))
+      .limit(1);
+    if (!previous || previous.id === input.sessionId) return { replaced: false };
+    await tx
+      .update(session)
+      .set({ activeOrganizationId: previous.activeOrganizationId })
+      .where(and(eq(session.id, input.sessionId), eq(session.userId, input.userId)));
+    await tx.delete(session).where(eq(session.id, previous.id));
+    return { replaced: true };
+  });
 
 /**
  * A passkey check signs in afresh (the plugin creates a new session). The new
@@ -293,6 +336,9 @@ export const adoptPasskeySession = (input: {
 /**
  * Admin reset of a user's sign-in factors: clears the authenticator, passkeys,
  * trusted devices and every session, with the audit row in the same transaction.
+ * It drops every verification row keyed by the user, pending password-reset and
+ * deletion links included, on purpose: the account may be in someone else's
+ * hands, and the user signs in afresh with their password anyway.
  */
 export const resetSecondFactor = (
   target: { id: string; email: string },

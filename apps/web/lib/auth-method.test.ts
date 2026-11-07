@@ -34,6 +34,11 @@ describe("stepUpActionFor", () => {
     ["/delete-user", { token: "abc" }, null],
     ["/change-email", { newEmail: "a@example.com" }, "account.change_email"],
     ["/get-session", undefined, null],
+    ["/unlink-account", { accountId: "a" }, "account.unlink"],
+    // Ending sessions is the victim's way out, so it stays open; renaming a passkey too.
+    ["/revoke-other-sessions", {}, null],
+    ["/revoke-sessions", {}, null],
+    ["/passkey/update-passkey", {}, null],
     ["/change-password", {}, "account.change_password"],
     ["/change-email", {}, "account.change_email"],
     ["/two-factor/disable", {}, "two_factor.disable"],

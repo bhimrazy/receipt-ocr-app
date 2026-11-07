@@ -6,6 +6,7 @@ import {
   markStepUp,
   recordStepUpEvent,
   signInCounts,
+  stepUpMethods,
   STEP_UP_CODE_TTL_MS,
   stepUpLockedFor,
   totpStepUsed,
@@ -21,7 +22,7 @@ import { authEnv, emailContext } from "./env";
 import type { SocialProvider } from "@/components/auth/credentials-form";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
-import { checkStepUp, STEP_UP_MESSAGES } from "./step-up-check";
+import { checkStepUp, STEP_UP_MESSAGES, subjectOf } from "./step-up-check";
 import { matchTotpStep } from "./totp";
 
 /**
@@ -99,8 +100,10 @@ async function admit(caller: Caller, method: StepUpMethod, action: StepUpAction)
   if (!check.ok && check.reason !== "required") {
     return { error: STEP_UP_MESSAGES[check.reason] } as const;
   }
-  const methods = check.ok ? null : check.methods;
-  if (methods && !methods.includes(method)) {
+  // From the enrolled factors even when the session is already fresh, so a user with a factor
+  // can never pass (and refresh) a check with the weaker emailed code.
+  const methods = check.ok ? stepUpMethods(subjectOf(check.row), action) : check.methods;
+  if (!methods.includes(method)) {
     return { error: "That way of confirming isn't available for your account." } as const;
   }
   const lockedFor = await runtime.runPromise(stepUpLockedFor(caller.user.id));
