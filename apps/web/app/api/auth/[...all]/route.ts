@@ -1,6 +1,7 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import { NextResponse } from "next/server";
 import { auth, authEnabled } from "@/lib/auth";
+import { isRoutineAuthRead } from "@/lib/auth-routine";
 import { withRequestEvent } from "@/lib/http";
 import type { WideEvent } from "@/lib/log";
 
@@ -26,9 +27,8 @@ function notConfigured() {
   );
 }
 
-// Session reads are what every page and the client poll; routine like other polls.
 export const GET = withRequestEvent(
-  { event: "auth.request", route: ROUTE, routine: true },
+  { event: "auth.request", route: ROUTE, routine: isRoutineAuthRead },
   (request, _context, event) => {
     annotate(request, event);
     if (!authEnabled) return notConfigured();

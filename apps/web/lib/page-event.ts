@@ -44,6 +44,7 @@ export function logPageRender(route: string): void {
     } else {
       event.outcome = "ok";
     }
-    logger.emit(event, { routine: true });
+    // Like ticks: a render that logged a notice is never sampled away.
+    logger.emit(event, { routine: (event.notices?.length ?? 0) === 0 });
   });
 }

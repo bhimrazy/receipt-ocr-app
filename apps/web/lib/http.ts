@@ -96,9 +96,42 @@ type RequestEventSpec = {
   event: string;
   /** The route pattern, never the raw path: `/api/receipts/[id]`. */
   route: string;
-  /** Frequent, cheap requests (polls, health checks): sampled at LOG_SAMPLE_RATE when fast and successful. */
-  routine?: boolean;
+  /**
+   * Frequent, cheap requests (polls, health checks): sampled at
+   * LOG_SAMPLE_RATE when fast and successful. A predicate decides per request
+   * (auth: only session reads are routine, never a callback or a reset).
+   */
+  routine?: boolean | ((request: Request) => boolean);
 };
+
+/** Events a handler chose not to write (a rate limiter rejecting a flood). */
+const skipped = new WeakSet<WideEvent>();
+
+/**
+ * Drops this request's event. For limiter rejections on endpoints anyone can
+ * hit (CSP reports), where logging each rejection would be the flood.
+ */
+export function skipEvent(event: WideEvent): void {
+  skipped.add(event);
+}
+
+/**
+ * Whether a finished request is routine for sampling. A 429 always is, so a
+ * flood of rejected requests can't flood the logs; anything that logged a
+ * notice never is (the same rule as job ticks).
+ */
+function isRoutine(spec: RequestEventSpec, request: Request, event: WideEvent): boolean {
+  if ((event.notices?.length ?? 0) > 0) return false;
+  if (event.status_code === 429) return true;
+  if (typeof spec.routine === "function") {
+    try {
+      return spec.routine(request);
+    } catch {
+      return false;
+    }
+  }
+  return spec.routine === true;
+}
 
 /**
  * Middleware for route handlers: one wide event per request. It sets the
@@ -106,6 +139,7 @@ type RequestEventSpec = {
  * event once in `finally`; the handler adds business context (ids, plan,
  * mode) to the `event` it is given and passes it to `runRoute`. The response
  * carries the id as `x-request-id`, so a user's report can be found in the logs.
+ * Logging never changes the response: the logger swallows its own failures.
  */
 export function withRequestEvent<C = unknown>(
   spec: RequestEventSpec,
@@ -135,10 +169,12 @@ export function withRequestEvent<C = unknown>(
       event.error ??= errorFields(error);
       throw error;
     } finally {
-      event.duration_ms = Date.now() - startedAt;
-      const status = event.status_code ?? 500;
-      event.outcome ??= status >= 500 ? "error" : status >= 400 ? "rejected" : "ok";
-      logger.emit(event, { routine: spec.routine === true });
+      if (!skipped.has(event)) {
+        event.duration_ms = Date.now() - startedAt;
+        const status = event.status_code ?? 500;
+        event.outcome ??= status >= 500 ? "error" : status >= 400 ? "rejected" : "ok";
+        logger.emit(event, { routine: isRoutine(spec, request, event) });
+      }
     }
   };
 }

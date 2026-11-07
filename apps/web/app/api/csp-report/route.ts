@@ -1,4 +1,4 @@
-import { clientIp, withRequestEvent } from "@/lib/http";
+import { clientIp, skipEvent, withRequestEvent } from "@/lib/http";
 import { createWindowLimiter, parseCspReports, readCappedText } from "@/lib/csp-report";
 import type { WideEvent } from "@/lib/log";
 
@@ -12,6 +12,8 @@ export const POST = withRequestEvent({ event: "csp.violation", route: "/api/csp-
 
 async function report(request: Request, _context: unknown, event: WideEvent) {
   if (!limit(clientIp(request) ?? "unknown")) {
+    // Past the limit nothing is logged: anyone can post reports, so each rejection would be the flood.
+    skipEvent(event);
     await request.body?.cancel().catch(() => {});
     return new Response(null, { status: 429 });
   }

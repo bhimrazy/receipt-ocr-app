@@ -37,10 +37,23 @@ type Sampled = {
   ocr?: { calls?: unknown; model?: unknown } | null;
 };
 
+/**
+ * Client errors that are routine on a routine route: a rate-limited flood
+ * (429) and signed-out polls (401). Counting them as errors would let anyone
+ * fill the logs. Real errors (5xx, an `error` field, level `error`) are kept.
+ */
+const ROUTINE_STATUSES = new Set([401, 429]);
+
 /** Why an event is kept regardless of the rate, or null when it is routine. */
 export function alwaysKeepReason(event: Sampled, config: SamplingConfig): string | null {
   if (event.level === "error") return "error";
-  if (typeof event.status_code === "number" && event.status_code >= 400) return "error";
+  if (
+    typeof event.status_code === "number" &&
+    event.status_code >= 400 &&
+    !ROUTINE_STATUSES.has(event.status_code)
+  ) {
+    return "error";
+  }
   if (event.error) return "error";
   if (typeof event.duration_ms === "number" && event.duration_ms >= config.slowMs) return "slow";
   if ((typeof event.ocr?.calls === "number" && event.ocr.calls > 0) || event.ocr?.model) {

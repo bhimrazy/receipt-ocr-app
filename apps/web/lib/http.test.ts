@@ -11,7 +11,7 @@ vi.mock("./log", async (importOriginal) => ({
 }));
 vi.mock("./env", () => ({ authEnv: { betterAuthUrl: "https://app.example", ipAddress } }));
 
-const { clientIp, crossOriginResponse, discardBody, failureResponse, withRequestEvent } =
+const { clientIp, crossOriginResponse, discardBody, failureResponse, skipEvent, withRequestEvent } =
   await import("./http");
 const { logger } = await import("./log");
 
@@ -117,6 +117,45 @@ describe("withRequestEvent", () => {
       outcome: "error",
       error: { class: "TypeError" },
     });
+  });
+
+  const optionsOf = async (
+    spec: Parameters<typeof withRequestEvent>[0],
+    respond: (event: Parameters<Parameters<typeof withRequestEvent>[1]>[2]) => Response,
+  ) => {
+    vi.mocked(logger.emit).mockClear();
+    await withRequestEvent(spec, (_r, _c, event) => respond(event))(
+      new Request("https://app.example/api/x"),
+    );
+    return vi.mocked(logger.emit).mock.calls[0]?.[1];
+  };
+
+  it("decides routine per request, makes every 429 routine, and never a unit with notices", async () => {
+    const spec = { event: "x", route: "/api/x" };
+    expect(await optionsOf({ ...spec, routine: () => false }, () => new Response())).toEqual({
+      routine: false,
+    });
+    expect(await optionsOf({ ...spec, routine: () => true }, () => new Response())).toEqual({
+      routine: true,
+    });
+    expect(await optionsOf(spec, () => new Response(null, { status: 429 }))).toEqual({
+      routine: true,
+    });
+    expect(
+      await optionsOf({ ...spec, routine: true }, (event) => {
+        event.notices = ["receipt.calls_not_recorded"];
+        return new Response();
+      }),
+    ).toEqual({ routine: false });
+  });
+
+  it("writes nothing for an event the handler skipped", async () => {
+    vi.mocked(logger.emit).mockClear();
+    await withRequestEvent({ event: "x", route: "/api/x" }, (_r, _c, event) => {
+      skipEvent(event);
+      return new Response(null, { status: 429 });
+    })(new Request("https://app.example/api/x"));
+    expect(logger.emit).not.toHaveBeenCalled();
   });
 });
 

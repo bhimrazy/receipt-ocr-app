@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const events = vi.hoisted(() => [] as Record<string, unknown>[]);
+const skipped = vi.hoisted(() => new Set<unknown>());
 vi.mock("@/lib/http", () => ({
   clientIp: (r: Request) => r.headers.get("x-ip"),
+  skipEvent: (event: unknown) => skipped.add(event),
   withRequestEvent:
     (_spec: unknown, handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown) =>
     (request: Request) => {
@@ -28,7 +30,10 @@ const report = (
     }),
   );
 
-beforeEach(() => void (events.length = 0));
+beforeEach(() => {
+  events.length = 0;
+  skipped.clear();
+});
 
 describe("POST /api/csp-report", () => {
   it("logs a redacted summary and answers 204", async () => {
@@ -54,6 +59,9 @@ describe("POST /api/csp-report", () => {
     for (let i = 0; i < 31; i++) statuses.push((await report("3.3.3.3")).status);
     expect(statuses.filter((s) => s === 204)).toHaveLength(30);
     expect(statuses.at(-1)).toBe(429);
+    // The rejected report writes no event; the 30 accepted ones each write one.
+    expect(events.filter((e) => !skipped.has(e))).toHaveLength(30);
+    expect(skipped.size).toBe(1);
     expect((await report("4.4.4.4")).status).toBe(204);
   });
 });
