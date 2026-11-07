@@ -16,6 +16,6 @@ describe("toRole", () => {
 
   it("ranks and labels roles", () => {
     expect(RANK.owner > RANK.admin && RANK.admin > RANK.member).toBe(true);
-    expect(roleLabel("admin")).toBe("Admin");
+    expect(roleLabel("admin")).toBe("Manager");
   });
 });
