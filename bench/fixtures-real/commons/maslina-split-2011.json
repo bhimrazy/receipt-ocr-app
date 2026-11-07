@@ -1,7 +1,7 @@
 {
   "merchant": ["Konoba-Pizzeria Maslina", "Pizzeria Maslina", "Maslina"],
   "receiptDate": "2011-10-23",
-  "category": "Meals",
+  "category": ["Meals"],
   "currency": "HRK",
   "subtotal": null,
   "tax": null,
@@ -41,5 +41,5 @@
   ],
   "_source": "https://commons.wikimedia.org/wiki/File:Croatia_pizza_receipt.jpg",
   "_license": "CC BY-SA 3.0",
-  "_notes": "Read by me. Real photo (Croatia), small 600x690. Date from 'Rn. 0017981 23.10.11'. HRK (kuna) inferred from country/year; no currency printed. 50+43+15+12+14 = 134 (adds up). PDV (VAT) included, amount not printed. Item names are truncated on the receipt. Author: Macic7."
+  "_notes": "Read by me. Real photo (Croatia), small 600x690. Date from 'Rn. 0017981 23.10.11'. HRK (kuna) inferred from country/year; no currency printed. 50+43+15+12+14 = 134 (adds up). PDV (VAT) included, amount not printed. Item names are truncated on the receipt. Author: Macic7. review 2026-11-07: re-read independently; every field agrees with the image and the arithmetic."
 }

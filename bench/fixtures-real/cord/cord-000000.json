@@ -1,5 +1,7 @@
 {
-  "category": "Meals",
+  "merchant": null,
+  "receiptDate": null,
+  "category": ["Meals"],
   "currency": "IDR",
   "subtotal": 1346000,
   "tax": 144695,
@@ -141,5 +143,5 @@
   ],
   "_source": "https://huggingface.co/datasets/Voxel51/consolidated_receipt_dataset (samples.json index 0, data/000000.png; origin CORD v1 train, https://github.com/clovaai/cord)",
   "_license": "CC-BY-4.0 (dataset card and CORD README). Attribution: NAVER CLOVA AI, Park et al. 2019, CORD.",
-  "_notes": "Merchant and date are blurred out in CORD (store info removed), so both are omitted. Currency IDR (Indonesian). Items, qty and totals read from the image and cross-checked against the dataset's menu.nm/cnt/price and subtotal/service/tax/total labels. Long (22 lines), low-light, skewed photo. Service 100,950 and Rounding -45 have no schema field (tax = PB1 144,695). 1,346,000+100,950+144,695-45 = 1,591,600. Printed line amounts are line totals; unit prices derived."
+  "_notes": "Merchant and date are blurred out in CORD (store info removed), so both are null. Currency IDR (Indonesian). Items, qty and totals read from the image and cross-checked against the dataset's menu.nm/cnt/price and subtotal/service/tax/total labels. Long (22 lines), low-light, skewed photo. Service 100,950 and Rounding -45 have no schema field (tax = PB1 144,695). 1,346,000+100,950+144,695-45 = 1,591,600. Printed line amounts are line totals; unit prices derived. review 2026-11-07: merchant and receiptDate null: blurred by the dataset authors (rule: null = not legible on the image)."
 }

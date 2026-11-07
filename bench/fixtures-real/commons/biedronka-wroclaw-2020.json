@@ -1,7 +1,7 @@
 {
   "merchant": ["Biedronka", "Jeronimo Martins Polska S.A."],
   "receiptDate": "2020-01-09",
-  "category": "Groceries",
+  "category": ["Groceries"],
   "currency": "PLN",
   "subtotal": null,
   "tax": 0.39,
@@ -9,19 +9,19 @@
   "total": 8.27,
   "items": [
     {
-      "name": "Chleb Pszen-Zyt 550g",
+      "name": "ChlebPszen-Żyt550g",
       "quantity": 1,
       "unitPrice": 1.99,
       "totalPrice": 1.99
     },
     {
-      "name": "Ser z. Swiat. 150g",
+      "name": "Ser ż.Świat. 150g",
       "quantity": 1,
       "unitPrice": 3.29,
       "totalPrice": 3.29
     },
     {
-      "name": "Poledwica los 100g",
+      "name": "Polędw łos 100g",
       "quantity": 1,
       "unitPrice": 4.99,
       "totalPrice": 2.99
@@ -29,5 +29,5 @@
   ],
   "_source": "https://commons.wikimedia.org/wiki/File:Polish_supermarket_receipt.jpg",
   "_license": "CC BY-SA 4.0",
-  "_notes": "Read by me. Real scan-like photo (Poland, Polish diacritics). Prices are tax-inclusive; PTU 5% 0.39 is already in the 8.27 total. The ham line has a Rabat -2.00 so keyed net 2.99 with unit 4.99 (alternative: gross 4.99 and a separate discount). 1.99+3.29+2.99 = 8.27 (adds up). Subtotal omitted (tax-inclusive). Author: Hippietrail."
+  "_notes": "Read by me. Real scan-like photo (Poland, Polish diacritics). Prices are tax-inclusive; PTU 5% 0.39 is already in the 8.27 total. The ham line has a Rabat -2.00 so keyed net 2.99 with unit 4.99 (alternative: gross 4.99 and a separate discount). 1.99+3.29+2.99 = 8.27 (adds up). Subtotal null (tax-inclusive, no pre-tax line). Author: Hippietrail. review 2026-11-07: Item names now exactly as printed."
 }
