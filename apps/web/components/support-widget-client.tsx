@@ -42,7 +42,6 @@ export function SupportWidgetClient({ email }: { email?: string }) {
   useEffect(() => {
     if (!opened) return;
     let live = true;
-    setFailed(false);
     loadPanel().then(
       (mod) => live && setPanel(() => mod.default),
       () => live && setFailed(true),
@@ -72,7 +71,10 @@ export function SupportWidgetClient({ email }: { email?: string }) {
             <button
               type="button"
               className="mt-2 font-medium underline underline-offset-2"
-              onClick={() => setAttempt((n) => n + 1)}
+              onClick={() => {
+                setFailed(false);
+                setAttempt((n) => n + 1);
+              }}
             >
               Try again
             </button>
