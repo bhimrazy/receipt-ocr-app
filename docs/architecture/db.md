@@ -85,6 +85,9 @@ There are no unit tests in this package; the schema is exercised by the integrat
 4. Apply it locally: `bun run db:migrate` (compose Postgres on port 5433).
 5. Make it safe for the old code: the deploy order is migrate first, then deploy, so the running code must keep
    working against the new schema. Add columns as nullable or with a default; drop columns in a later release.
+   After merging, run **Database Migration** on `staging-db`, then `production-db`, then deploy by hand
+   ([deployment.md](../deployment.md#every-release)); the automatic deploy skips releases with migrations. The PR's
+   preview runs against staging without it.
 6. Add a release note to [deployment.md](../deployment.md#release-notes) and update the [data model](data-model.md).
 
 ### Add a Better Auth plugin that needs tables
