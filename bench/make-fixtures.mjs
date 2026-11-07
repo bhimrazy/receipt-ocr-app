@@ -31,6 +31,8 @@ const receipts = [
   {
     id: "npr-lakh",
     merchant: "Himalayan Electronics Pvt. Ltd.",
+    // The trading name without the company suffix is what the prompt asks for; both are right.
+    otherNames: ["Himalayan Electronics"],
     place: "New Road, Kathmandu",
     date: ["2026-09-14", "14/09/2026"],
     // Electronics: Equipment by the category descriptions; Supplies is a fair reading too.
@@ -167,7 +169,7 @@ try {
     const png = await page.locator(".r").screenshot({ type: "png" });
     writeFileSync(path.join(dir, `${r.id}.png`), png);
     const truth = {
-      merchant: r.merchant,
+      merchant: r.otherNames ? [r.merchant, ...r.otherNames] : r.merchant,
       receiptDate: r.date[0],
       category: r.category,
       currency: r.currency,

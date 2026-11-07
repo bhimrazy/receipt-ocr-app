@@ -1,5 +1,5 @@
 {
-  "merchant": "Himalayan Electronics Pvt. Ltd.",
+  "merchant": ["Himalayan Electronics Pvt. Ltd.", "Himalayan Electronics"],
   "receiptDate": "2026-09-14",
   "category": ["Equipment", "Supplies"],
   "currency": "NPR",
