@@ -15,9 +15,13 @@ describe("iOS startup images", () => {
     expect(new Set(startupImages.map((i) => i.media)).size).toBe(startupImages.length);
   });
 
-  it("swaps pixel width and height for landscape", () => {
-    const [portrait, landscape] = splashDevices.filter((d) => d.w === 1024);
-    expect(splashFile("dark", portrait!)).toBe("dark-2048x2732.png");
-    expect(splashFile("dark", landscape!)).toBe("dark-2732x2048.png");
+  it("is iPhone, portrait and dark only", () => {
+    expect(startupImages).toHaveLength(10);
+    for (const image of startupImages) {
+      expect(image.media).toContain("(orientation: portrait)");
+      expect(image.media).toContain("(prefers-color-scheme: dark)");
+    }
+    const [first] = splashDevices;
+    expect(splashFile("dark", first!)).toBe("dark-1320x2868.png");
   });
 });

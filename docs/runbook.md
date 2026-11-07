@@ -45,20 +45,23 @@ Production runs on Vercel (app), Supabase (Postgres), Cloudflare R2 (receipt fil
 
    Events worth searching for:
 
-   | Event                             | Means                                                                             |
-   | --------------------------------- | --------------------------------------------------------------------------------- |
-   | `receipt.upload`, `receipt.retry` | One upload or retry; `error.type` and `error.kind` say why it failed              |
-   | `job.attempt`                     | One job attempt (was `job.run`); `queue.outcome` is `succeeded`, `retry`, `dead`… |
-   | `job.tick`                        | One queue drain: what it claimed and reaped; `notices` lists `jobs.*_failed`      |
-   | `page.render` with `level:error`  | A server render failed; `error.digest` matches the error page the user saw        |
-   | `request.error`                   | Next.js caught an unhandled render, route or action error                         |
-   | `route.failure`                   | A server action's core call failed with a 5xx or a defect                         |
-   | `health.not_ready`                | A readiness check failed (logged once per fresh check)                            |
-   | `email.send_failed`               | Resend rejected or could not be reached; `error.kind` is Resend's error name      |
-   | `auth.email_rate_limited`         | An address hit 3 reset or verification emails in an hour                          |
-   | `csp.violation`                   | The report-only CSP would have blocked something                                  |
-   | `http.client_ip_unresolved`       | Rate limits can't see client IPs; check `TRUSTED_*` settings                      |
-   | an event with `dropped_fields`    | Code tried to log a field the schema doesn't allow; fix the call site             |
+   | Event                                 | Means                                                                             |
+   | ------------------------------------- | --------------------------------------------------------------------------------- |
+   | `receipt.upload`, `receipt.retry`     | One upload or retry; `error.type` and `error.kind` say why it failed              |
+   | `job.attempt`                         | One job attempt (was `job.run`); `queue.outcome` is `succeeded`, `retry`, `dead`… |
+   | `job.tick`                            | One queue drain: what it claimed and reaped; `notices` lists `jobs.*_failed`      |
+   | `page.render` with `level:error`      | A server render failed; `error.digest` matches the error page the user saw        |
+   | `request.error`                       | Next.js caught an unhandled render, route or action error                         |
+   | `route.failure`                       | A server action's core call failed with a 5xx or a defect                         |
+   | `health.not_ready`                    | A readiness check failed (logged once per fresh check)                            |
+   | `email.send_failed`                   | Resend rejected or could not be reached; `error.kind` is Resend's error name      |
+   | `auth.email_rate_limited`             | An address hit 3 emails of one `kind` (reset, verification, deletion...) an hour  |
+   | `user.delete_requested`               | A deletion link was emailed; `user.deleted` follows only if the link was used     |
+   | `auth.step_up_required`               | A delete or email change was refused until the user signs in again (`action`)     |
+   | `auth.notice_sent`, `delivered:false` | A "password changed" notice did not go out; the change itself went through        |
+   | `csp.violation`                       | The report-only CSP would have blocked something                                  |
+   | `http.client_ip_unresolved`           | Rate limits can't see client IPs; check `TRUSTED_*` settings                      |
+   | an event with `dropped_fields`        | Code tried to log a field the schema doesn't allow; fix the call site             |
 
 ## Incidents
 

@@ -1,6 +1,6 @@
 import { ogSize, renderOgImage } from "@/lib/og-image";
 
-export const alt = "receiptOCR: Turn receipt photos into spreadsheet rows";
+export const alt = "ReceiptOCR: Turn receipt photos into spreadsheet rows";
 export const size = ogSize;
 export const contentType = "image/png";
 

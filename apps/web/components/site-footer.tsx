@@ -84,7 +84,7 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
           ))}
         </div>
         <div className="mt-10 flex flex-col gap-x-6 gap-y-1 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center">
-          <p className="sm:mr-auto">© {new Date().getFullYear()} receiptOCR</p>
+          <p className="sm:mr-auto">© {new Date().getFullYear()} ReceiptOCR</p>
           <p>
             A product by{" "}
             <a className={authorLinkClass} href={authorUrl} rel="noopener" target="_blank">

@@ -2,6 +2,7 @@ import path from "node:path";
 import type { NextConfig } from "next";
 import { ANALYTICS_PATH_LIST, parseGaMeasurementId } from "./lib/consent/config";
 import { buildContentSecurityPolicy } from "./lib/csp";
+import { PRODUCTION_HOST, nonProductionRobotsHeader, onProductionHost } from "./lib/seo-hosts";
 
 const contentSecurityPolicy = buildContentSecurityPolicy(
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
@@ -31,13 +32,11 @@ const noindexPaths = [
   "/sign-up",
   "/forgot-password",
   "/reset-password",
+  "/accept-invitation",
   "/accept-invitation/:path*",
+  "/account-deleted",
+  "/offline.html",
 ];
-
-// Everything but production stays out of search results. Vercel only adds this on *.vercel.app, not on
-// a custom domain such as the fixed preview one. No VERCEL_ENV (Docker) leaves behaviour as it was.
-const notProduction =
-  process.env.VERCEL_ENV !== undefined && process.env.VERCEL_ENV !== "production";
 
 const nextConfig: NextConfig = {
   // Self-contained server bundle for the Docker image. Ignored by Vercel.
@@ -54,12 +53,31 @@ const nextConfig: NextConfig = {
     "@receipt-ocr/ui",
   ],
   poweredByHeader: false,
+  experimental: {
+    // Tab switches within 30 s reuse the page already fetched instead of rendering it again on the
+    // server. Mutations call router.refresh() or a Server Action, which drop the whole client
+    // cache, so edits show at once. Server-side auth checks are untouched: only what the browser
+    // already received is reused, and only briefly.
+    staleTimes: { dynamic: 30 },
+  },
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host" as const, value: `www.${PRODUCTION_HOST}` }],
+        destination: `https://${PRODUCTION_HOST}/:path*`,
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {
         source: "/:path*",
-        headers: notProduction ? [...securityHeaders, noindexHeader] : securityHeaders,
+        headers: securityHeaders,
       },
+      // Every host but production (previews, localhost, a deployment's own vercel.app URL).
+      nonProductionRobotsHeader,
       // Pages where analytics may run send only their origin as Referer: the same-origin /view
       // fetch and Google then never see a path or a query string (?redirect= can name a receipt).
       ...ANALYTICS_PATH_LIST.map((source) => ({
@@ -68,7 +86,11 @@ const nextConfig: NextConfig = {
       })),
       // As well as the meta tag, so non-HTML responses (CSV exports, JSON) and redirects from
       // these paths stay out of search results too.
-      ...noindexPaths.map((source) => ({ source, headers: [noindexHeader] })),
+      ...noindexPaths.map((source) => ({
+        source,
+        has: onProductionHost,
+        headers: [noindexHeader],
+      })),
       // The browser checks for a new worker on each visit; a cached copy would delay updates.
       {
         source: "/sw.js",

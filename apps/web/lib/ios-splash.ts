@@ -2,10 +2,12 @@
 // `bun run splash:ios` renders the PNGs in public/splash; layout.tsx links them.
 // `w` x `h` are portrait CSS points (what iOS reports as device-width and device-height).
 
-export type SplashDevice = { w: number; h: number; dpr: 2 | 3; landscape: boolean };
-export type SplashTheme = "dark" | "light";
+export type SplashDevice = { w: number; h: number; dpr: 2 | 3 };
+export type SplashTheme = "dark";
 
-export const splashThemes: readonly SplashTheme[] = ["dark", "light"];
+// Only 10 images: iPhone, portrait, dark. The app is dark-only and iPhone PWAs are the common
+// install; iPad and landscape fall back to a plain background. Add a light set with the theme switch.
+export const splashThemes: readonly SplashTheme[] = ["dark"];
 
 const iphones: [number, number, 2 | 3][] = [
   [440, 956, 3], // 16 Pro Max
@@ -20,30 +22,11 @@ const iphones: [number, number, 2 | 3][] = [
   [375, 667, 2], // SE 2 and 3, 8
 ];
 
-const ipads: [number, number][] = [
-  [1032, 1376], // 13 inch
-  [834, 1210], // 11 inch M4
-  [820, 1180], // 10.9 inch
-  [834, 1194], // 11 inch
-  [810, 1080], // 10.2 inch
-  [834, 1112], // 10.5 inch
-  [768, 1024], // 9.7 inch, mini 5
-  [744, 1133], // mini 6 and 7
-  [1024, 1366], // 12.9 inch
-];
-
-export const splashDevices: readonly SplashDevice[] = [
-  ...iphones.map(([w, h, dpr]) => ({ w, h, dpr, landscape: false })),
-  ...ipads.flatMap(([w, h]) => [
-    { w, h, dpr: 2 as const, landscape: false },
-    { w, h, dpr: 2 as const, landscape: true },
-  ]),
-];
+export const splashDevices: readonly SplashDevice[] = iphones.map(([w, h, dpr]) => ({ w, h, dpr }));
 
 /** Pixel size of the PNG, which is also its file name. */
 export function splashPixels(d: SplashDevice) {
-  const [a, b] = [d.w * d.dpr, d.h * d.dpr];
-  return d.landscape ? { width: b, height: a } : { width: a, height: b };
+  return { width: d.w * d.dpr, height: d.h * d.dpr };
 }
 
 export function splashFile(theme: SplashTheme, d: SplashDevice) {
@@ -59,7 +42,7 @@ export const startupImages = splashThemes.flatMap((theme) =>
       `(device-width: ${d.w}px)`,
       `(device-height: ${d.h}px)`,
       `(-webkit-device-pixel-ratio: ${d.dpr})`,
-      `(orientation: ${d.landscape ? "landscape" : "portrait"})`,
+      "(orientation: portrait)",
       `(prefers-color-scheme: ${theme})`,
     ].join(" and "),
   })),

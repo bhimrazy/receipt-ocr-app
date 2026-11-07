@@ -3,7 +3,6 @@ import Link from "next/link";
 import { GitHubIcon } from "@/components/github-icon";
 import { SettingsSection } from "@/components/settings-section";
 import { authorName, authorUrl, repoUrl } from "@/lib/site";
-import pkg from "../package.json";
 
 const linkClass =
   "inline-flex min-h-11 items-center rounded-md underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8";
@@ -13,17 +12,14 @@ export function AboutSettings() {
   const commit = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7);
   return (
     <SettingsSection
-      description="Who makes receiptOCR and where to find the code."
+      description="Who makes ReceiptOCR and where to find the code."
       id="about-heading"
       title="About"
     >
       <Card className="flex flex-col gap-1 p-4 text-sm">
         <p className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-medium">receiptOCR</span>
-          <span className="font-mono text-xs text-muted-foreground">
-            v{pkg.version}
-            {commit ? ` · ${commit}` : ""}
-          </span>
+          <span className="font-medium">ReceiptOCR</span>
+          {commit && <span className="font-mono text-xs text-muted-foreground">{commit}</span>}
         </p>
         <p className="text-muted-foreground">
           A product by{" "}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 32">
+  <rect width="32" height="32" rx="7" fill="#34d399" />
+  <g transform="translate(4 4)" fill="none" stroke="#07110d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 3h9l3 3v15l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3z" />
+    <path d="M15 3v3h3" />
+    <path d="M9 7.5h4" />
+    <path d="M2.5 11.5h19" stroke-width="2.6" />
+    <path d="M9 15.5h5" opacity=".45" />
+  </g>
+  <text x="42" y="22" font-family="'Geist Mono', ui-monospace, 'DejaVu Sans Mono', monospace" font-size="19" font-weight="600" letter-spacing="-.5" fill="#e4e4e7">Receipt<tspan fill="#34d399">OCR</tspan></text>
+</svg>
