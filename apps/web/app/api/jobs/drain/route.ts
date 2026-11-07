@@ -6,7 +6,7 @@ import { drainQueue } from "@/lib/jobs";
 import type { WideEvent } from "@/lib/log";
 import { runtime } from "@/lib/runtime";
 
-/** Hobby's limit. `DRAIN_BUDGET_MS` in `lib/jobs.ts` is sized to fit it. */
+/** Matches the pg_net call's 60 s timeout; `DRAIN_BUDGET_MS` in `lib/jobs.ts` fits inside it. */
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
@@ -24,13 +24,12 @@ export const POST = withRequestEvent(spec, drain);
 async function drain(request: Request, _context: unknown, event: WideEvent) {
   const auth = checkCronAuth(request.headers.get("authorization"), cronSecret());
   if (auth !== "ok") {
-    // A notice keeps the event out of sampling.
+    // A notice keeps the event out of sampling and tells the two cases apart in the logs; callers get the
+    // same 401 either way, so they can't learn whether CRON_SECRET is set.
     event.notices = [
       auth === "unconfigured" ? "jobs.drain_unconfigured" : "jobs.drain_unauthorized",
     ];
-    return auth === "unconfigured"
-      ? jsonError(503, "Queue drain is not configured", { "Cache-Control": "no-store" })
-      : jsonError(401, "Unauthorized", { "Cache-Control": "no-store" });
+    return jsonError(401, "Unauthorized", { "Cache-Control": "no-store" });
   }
   const summary = await runtime.runPromise(drainQueue({ request_id: event.request_id }));
   event.count = summary.claimed;

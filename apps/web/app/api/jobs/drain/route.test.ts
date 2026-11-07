@@ -82,10 +82,10 @@ describe("/api/jobs/drain", () => {
     expect(events[0]!.notices).toEqual(["jobs.drain_unauthorized"]);
   });
 
-  it("is 503 when CRON_SECRET is unset, whatever the caller sends", async () => {
+  it("is 401 when CRON_SECRET is unset, whatever the caller sends", async () => {
     state.secret = undefined;
-    expect((await call(GET, `Bearer ${SECRET}`)).status).toBe(503);
-    expect((await call(POST)).status).toBe(503);
+    expect((await call(GET, `Bearer ${SECRET}`)).status).toBe(401);
+    expect((await call(POST)).status).toBe(401);
     expect(runPromise).not.toHaveBeenCalled();
     expect(events[0]!.notices).toEqual(["jobs.drain_unconfigured"]);
   });

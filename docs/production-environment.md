@@ -374,8 +374,9 @@ Add **both keys or neither** in each environment: with only one, the app refuses
 Receipts are read by jobs in the Postgres queue. The upload request runs its own job and its retries in `after()`, but
 a job that was cut off (deploy, crash, the function's time limit) or is waiting for a retry needs something to run it
 without anyone keeping a page open. That is `/api/jobs/drain`: one bounded pass over the queue (reaps expired leases,
-then runs due jobs: at most 10, claiming only in the first 5 s of a 55 s budget so a job at its 50 s OCR deadline
-still finishes inside Vercel Hobby's 60 s limit). It never sleeps for a retry's backoff; that job waits for the next
+then runs due jobs, claiming only in the first 5 s of a 55 s budget so a job at its 50 s OCR deadline still finishes
+within the 60 s limit). The cap is 10 jobs a call, but a receipt job can take up to 50 s, so a busy minute runs only a
+few; the rest wait for the next call. It never sleeps for a retry's backoff; that job waits for the next
 call. Any number of callers at once is safe: jobs are claimed with `FOR UPDATE SKIP LOCKED`.
 
 It is protected by `CRON_SECRET` (`Authorization: Bearer <secret>`). With no secret set it answers `503` and runs
@@ -396,8 +397,10 @@ Two triggers call it:
 
 ### 8b. Supabase (every minute)
 
-Run in the Supabase **SQL Editor** of the production project. Use the **same secret value** as Vercel's. Replace
-`<CRON_SECRET>` once, here; it is stored encrypted in Vault, never in the cron job's SQL.
+Use the **same secret value** as Vercel's. Add it in **Integrations → Vault** (name `cron_secret`) rather than in
+step 2's SQL: the SQL Editor keeps query history, so a pasted secret stays there in plain text. If you do run step 2,
+delete that query from the history afterwards. Then run steps 1 and 3 in the **SQL Editor** of the production project;
+the secret is read from Vault at run time, never stored in the cron job's SQL.
 
 ```sql
 -- 1. Extensions (or Dashboard -> Integrations -> Cron / Database -> Extensions)
@@ -424,7 +427,8 @@ select cron.schedule(
 );
 ```
 
-`cron.schedule` with an existing name replaces that job, so re-running is safe. The job runs as a database role, so
+`cron.schedule` with an existing name replaces that job, so re-running step 3 is safe. `vault.create_secret` is not:
+the name is unique, so to change the secret use `vault.update_secret` (or edit it in the Vault UI). The job runs as a database role, so
 it needs no key in the app.
 
 **Check it works** (after a minute or two):
@@ -441,8 +445,9 @@ select created, status_code, left(content, 200) as body, error_msg
 from net._http_response order by created desc limit 10;
 ```
 
-Expect `status_code` 200 and a body like `{"claimed":0,...}`. `401` means the Vault secret differs from Vercel's;
-`503` means `CRON_SECRET` isn't set on Vercel (or the deployment predates it). `cron.job_run_details` only says the
+Expect `status_code` 200 and a body like `{"claimed":0,...}`. `401` means the Vault secret differs from Vercel's, or
+`CRON_SECRET` isn't set on Vercel (the app's log notice says which: `jobs.drain_unauthorized` or
+`jobs.drain_unconfigured`). A pg_net timeout on a call that ran close to 60 s can still be a successful drain. `cron.job_run_details` only says the
 request was sent; the response is in `net._http_response`.
 
 **Stop it** (pause, or if something goes wrong):

@@ -112,7 +112,7 @@ export const emailEnv = {
 
 /**
  * Bearer secret for the queue drain route (`/api/jobs/drain`), sent by Vercel Cron and pg_net.
- * Read at call time. Optional: without it the route answers 503 and drains nothing.
+ * Read at call time. Optional: without it the route answers 401 and drains nothing.
  */
 export const cronSecret = (env: Record<string, string | undefined> = process.env) =>
   env.CRON_SECRET?.trim() || undefined;
