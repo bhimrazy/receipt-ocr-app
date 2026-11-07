@@ -65,6 +65,135 @@ describe("sanitize (the allowlist)", () => {
   });
 });
 
+describe("sanitize against adversarial input", () => {
+  const EMAIL = "jane.doe@example.com";
+  const leaks = (value: unknown) => {
+    const text = JSON.stringify(value);
+    return ["jane", "example.com", "Smith", "9.50", "secret", "Bearer", "eyJ"].filter((s) =>
+      text.includes(s),
+    );
+  };
+
+  it("drops free text at every depth: nested groups, unknown nested keys, maps and lists", () => {
+    const out = sanitize({
+      event: "receipt.upload",
+      error: {
+        type: "DbError",
+        message: `Failed query: insert ... params: ${EMAIL},Dr Smith Clinic`,
+        stack: `Error: ${EMAIL}\n    at x`,
+        cause: { message: EMAIL, code: "23505" },
+        kind: { nested: EMAIL },
+      },
+      ocr: { model: "m", raw: { text: "TOTAL 9.50" }, items: [{ name: "Dr Smith" }] },
+      queue: { kind: "receipt.extract", payload: { receiptId: "r1", note: EMAIL } },
+      flags: { [EMAIL]: true, merchant: "Dr Smith Clinic", ok: true },
+      counts: { "Dr Smith": 1, items: 2 },
+      timings_ms: { "ai.extract": 10, nested: { deeper: 1 } },
+      notices: ["receipt.calls_not_recorded", EMAIL, "TOTAL 9.50", { x: EMAIL }],
+      violations: [{ directive: "img-src", blocked: EMAIL }, EMAIL, [EMAIL]],
+      file: { size_bytes: 10, media_type: "image/jpeg", name: "jane-doe-receipt.jpg" },
+    });
+    expect(leaks(out)).toEqual([]);
+    expect(out.fields).toMatchObject({
+      error: { type: "DbError" },
+      ocr: { model: "m" },
+      queue: { kind: "receipt.extract" },
+      flags: { ok: true },
+      counts: { items: 2 },
+      timings_ms: { "ai.extract": 10 },
+      notices: ["receipt.calls_not_recorded"],
+      violations: [{ directive: "img-src" }],
+      file: { size_bytes: 10, media_type: "image/jpeg" },
+    });
+  });
+
+  it("drops emails, IPs, tokens, cookies and URLs placed in id, token and route fields", () => {
+    const out = sanitize({
+      event: "x",
+      user_id: EMAIL,
+      organization_id: "Dr Smith Clinic",
+      request_id: "Bearer eyJhbGciOiJIUzI1NiJ9.secret",
+      outcome: "failed for jane.doe@example.com",
+      plan: "a b",
+      route: `/app/receipts/${EMAIL}?token=secret`,
+      action: "session_token=secret; Path=/",
+      kind: "https://x.example.com/?code=secret",
+      worker: "10.0.0.1, 192.168.1.1",
+      ip: "203.0.113.7",
+      cookie: "__Secure-better-auth.session_token=secret",
+      authorization: "Bearer secret",
+      user_agent: "Mozilla/5.0",
+      prompt: "Extract the receipt",
+      text: "TOTAL 9.50",
+    });
+    expect(out.fields).toEqual({ event: "x" });
+    expect(leaks(out)).toEqual([]);
+    expect(out.dropped).toEqual(expect.arrayContaining(["ip", "cookie", "authorization"]));
+  });
+
+  it("refuses objects that aren't plain: class instances, errors, prototype tricks", () => {
+    const error = Object.assign(new Error(EMAIL), { type: "DbError" });
+    const proto = JSON.parse(`{"__proto__": {"user_id": "u1"}, "event": "x"}`);
+    const out = sanitize({
+      ...proto,
+      error,
+      ocr: new Map([["model", EMAIL]]),
+      timings_ms: Object.assign(Object.create({ inherited: 1 }), { own: 2 }),
+    });
+    expect(leaks(out)).toEqual([]);
+    expect(out.fields).toEqual({ event: "x" });
+    expect(Object.prototype).not.toHaveProperty("user_id");
+  });
+
+  it("caps lists, maps and the dropped-path list", () => {
+    const many = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`k${i}`, i]));
+    const out = sanitize({
+      event: "x",
+      counts: many,
+      notices: Array.from({ length: 100 }, (_, i) => `n${i}`),
+      ...Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`junk${i}`, EMAIL])),
+    });
+    expect(Object.keys(out.fields.counts as object)).toHaveLength(32);
+    expect(out.fields.notices).toHaveLength(20);
+    expect(out.dropped).toHaveLength(20);
+  });
+
+  it("errorFields never carries an email from a message, a cause chain or an error name", () => {
+    const named = new Error(`boom ${EMAIL}`);
+    named.name = EMAIL;
+    const chain = new DbError({
+      message: `Failed query: select ... params: ${EMAIL}`,
+      cause: new Error(`wrapped ${EMAIL}`, { cause: new Error(EMAIL) }),
+    });
+    const ocr = new OcrError({
+      message: `Type validation failed: Value: {"merchant":"Dr Smith Clinic","total":9.50}`,
+      kind: "invalid-output",
+      attempts: [],
+    });
+    for (const error of [named, chain, ocr, { message: EMAIL }, EMAIL]) {
+      const fields = errorFields(error);
+      expect(leaks(fields)).toEqual([]);
+      expect(leaks(formatEvent({ event: "x", error: fields })!.line)).toEqual([]);
+    }
+  });
+
+  it("formatEvent scrubs what callers pass straight to logger.error", () => {
+    const line = formatEvent({
+      event: "admin.action_failed",
+      action: "user.ban",
+      error: { message: EMAIL, stack: "at x", type: "Error" } as never,
+      message: String(new Error(`params: ${EMAIL}`)),
+      email: EMAIL,
+    })!.line;
+    expect(leaks(line)).toEqual([]);
+    expect(JSON.parse(line)).toMatchObject({
+      action: "user.ban",
+      error: { type: "Error" },
+      dropped_fields: ["error.message", "error.stack", "message", "email"],
+    });
+  });
+});
+
 describe("errorFields", () => {
   it("describes a typed error by tag, kind, cause class and SQLSTATE, never its message", () => {
     const cause = Object.assign(new Error("params: jane@example.com"), { code: "23505" });
