@@ -10,6 +10,7 @@ import {
   type EditState,
 } from "@/lib/capture/edit-state";
 import { CORNER_NAMES } from "@/lib/capture/geometry";
+import { clipLoupe } from "@/lib/capture/loupe";
 import { releaseCanvas, rotatedCanvas } from "@/lib/capture/render";
 
 /** Preview resolution: sharp enough on a phone, cheap to redraw on rotate. */
@@ -88,7 +89,8 @@ export function CropEditor({
       const cy = dragY * source.height;
       ctx.fillStyle = "#111";
       ctx.fillRect(0, 0, px, px);
-      ctx.drawImage(source, cx - span / 2, cy - span / 2, span, span, 0, 0, px, px);
+      const r = clipLoupe(cx, cy, span, source.width, source.height, px);
+      if (r) ctx.drawImage(source, r.sx, r.sy, r.sw, r.sh, r.dx, r.dy, r.dw, r.dh);
       ctx.strokeStyle = "#34d399";
       ctx.lineWidth = Math.max(1, px / LOUPE);
       ctx.beginPath();
