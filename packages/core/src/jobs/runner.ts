@@ -50,6 +50,8 @@ export type TickOptions<R> = {
   /** Jobs run at once. Default 1. */
   concurrency?: number;
   ownerCap?: number;
+  /** Claim at most this many jobs in total, across all slots. Default: no cap. */
+  maxJobs?: number;
   /** Only these jobs. */
   ids?: readonly string[];
   /**
@@ -157,10 +159,14 @@ const runTick = <R>(options: TickOptions<R>) =>
       start + options.budgetMs - (options.stopClaimingBeforeMs ?? options.budgetMs / 4);
     const waitUntil = Math.min(stopClaimingAt, start + (options.maxWaitMs ?? Infinity));
     const waitFor = options.waitForRetries ?? true;
+    const maxJobs = options.maxJobs ?? Infinity;
+    let claimed = 0;
 
     const slot = Effect.gen(function* () {
       let dueAfterEmptyClaim = false;
-      while ((yield* Clock.currentTimeMillis) < stopClaimingAt) {
+      while ((yield* Clock.currentTimeMillis) < stopClaimingAt && claimed < maxJobs) {
+        // Reserved before the claim, so slots can't overshoot the cap together.
+        claimed += 1;
         const [job] = yield* queue.claim({
           worker: options.worker,
           kinds,
@@ -168,6 +174,7 @@ const runTick = <R>(options: TickOptions<R>) =>
           ownerCap: options.ownerCap ?? DEFAULT_OWNER_CAP,
           ids: options.ids,
         });
+        if (!job) claimed -= 1;
         if (job) {
           dueAfterEmptyClaim = false;
           record(yield* runClaimed(options.registry, job, options.worker, options.context));

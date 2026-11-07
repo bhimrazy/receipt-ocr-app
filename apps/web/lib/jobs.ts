@@ -1,5 +1,5 @@
 import "server-only";
-import { JOB_REGISTRY, tick, type WideEventFields } from "@receipt-ocr/core";
+import { drainOnce, JOB_REGISTRY, tick, type WideEventFields } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { runtime } from "./runtime";
 
@@ -76,3 +76,27 @@ export const runJobNow = (jobId: string, context: WideEventFields) =>
 export async function kickJob(jobId: string, context: WideEventFields): Promise<void> {
   await runtime.runPromise(runJobNow(jobId, context));
 }
+
+/**
+ * The drain route's limits, for `maxDuration = 60` (Hobby). A claimed receipt
+ * job needs up to the OCR deadline (50 s) plus its writes, so claiming closes
+ * 50 s before the budget ends; slots run side by side so that short window
+ * still starts a few jobs. The rest wait for the next call.
+ */
+export const DRAIN_BUDGET_MS = 55_000;
+const DRAIN_STOP_CLAIMING_BEFORE_MS = 50_000;
+export const DRAIN_MAX_JOBS = 10;
+const DRAIN_CONCURRENCY = 3;
+
+/** One bounded pass over the queue for the cron route; never sleeps for backoff. */
+export const drainQueue = (context: WideEventFields) =>
+  drainOnce({
+    worker: workerId(),
+    registry: JOB_REGISTRY,
+    trigger: "drain",
+    budgetMs: DRAIN_BUDGET_MS,
+    stopClaimingBeforeMs: DRAIN_STOP_CLAIMING_BEFORE_MS,
+    maxJobs: DRAIN_MAX_JOBS,
+    concurrency: DRAIN_CONCURRENCY,
+    context,
+  });

@@ -16,6 +16,7 @@ unlocks part of the app, and you can stop after step 3 with a working app.
 | [5. Sign in with GitHub](#5-sign-in-with-github)             | The GitHub button                    | Optional | 5 min  |
 | [6. Bot protection (Turnstile)](#6-bot-protection-turnstile) | Spam protection on sign-up and forms | Optional | 5 min  |
 | [7. Deploy and check](#7-deploy-and-check)                   | Everything above goes live           | Yes      | 5 min  |
+| [8. Queue drain (cron)](#8-queue-drain-cron)                 | Failed or cut-off reads retry alone  | Yes      | 10 min |
 
 The database, auth secret and site URL are already set; see [Already set](#already-set).
 
@@ -368,6 +369,109 @@ Add **both keys or neither** in each environment: with only one, the app refuses
 
 ---
 
+## 8. Queue drain (cron)
+
+Receipts are read by jobs in the Postgres queue. The upload request runs its own job and its retries in `after()`, but
+a job that was cut off (deploy, crash, the function's time limit) or is waiting for a retry needs something to run it
+without anyone keeping a page open. That is `/api/jobs/drain`: one bounded pass over the queue (reaps expired leases,
+then runs due jobs, claiming only in the first 5 s of a 55 s budget so a job at its 50 s OCR deadline still finishes
+within the 60 s limit). The cap is 10 jobs a call, but a receipt job can take up to 50 s, so a busy minute runs only a
+few; the rest wait for the next call. It never sleeps for a retry's backoff; that job waits for the next
+call. Any number of callers at once is safe: jobs are claimed with `FOR UPDATE SKIP LOCKED`.
+
+It is protected by `CRON_SECRET` (`Authorization: Bearer <secret>`). With no secret set it answers `503` and runs
+nothing; a wrong or missing one gets `401`. `GET` and `POST` do the same.
+
+Two triggers call it:
+
+| Trigger                | Schedule         | Why                                                                                   |
+| ---------------------- | ---------------- | ------------------------------------------------------------------------------------- |
+| Vercel Cron (built in) | daily, 03:00 UTC | Backstop. [`apps/web/vercel.json`](../apps/web/vercel.json). Hobby allows once a day. |
+| Supabase `pg_cron`     | every minute     | The real recovery loop. Set up by hand below.                                         |
+
+### 8a. Vercel
+
+1. **Settings → Environment Variables → Add New**: `CRON_SECRET`, a long random value (`openssl rand -hex 32`),
+   **Sensitive**, Production. Vercel Cron sends it as the bearer token by itself.
+2. Redeploy. Under **Settings → Cron Jobs** the daily `/api/jobs/drain` job should be listed.
+
+### 8b. Supabase (every minute)
+
+Use the **same secret value** as Vercel's. Add it in **Integrations → Vault** (name `cron_secret`) rather than in
+step 2's SQL: the SQL Editor keeps query history, so a pasted secret stays there in plain text. If you do run step 2,
+delete that query from the history afterwards. Then run steps 1 and 3 in the **SQL Editor** of the production project;
+the secret is read from Vault at run time, never stored in the cron job's SQL.
+
+```sql
+-- 1. Extensions (or Dashboard -> Integrations -> Cron / Database -> Extensions)
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- 2. The secret, in Vault
+select vault.create_secret('<CRON_SECRET>', 'cron_secret', 'Bearer secret for /api/jobs/drain');
+
+-- 3. Every minute
+select cron.schedule(
+  'drain-jobs',
+  '* * * * *',
+  $$
+  select net.http_post(
+    url := 'https://receipt-ocr.bhimraj.com.np/api/jobs/drain',
+    headers := jsonb_build_object(
+      'Authorization',
+      'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret')
+    ),
+    timeout_milliseconds := 60000
+  );
+  $$
+);
+```
+
+`cron.schedule` with an existing name replaces that job, so re-running step 3 is safe. `vault.create_secret` is not:
+the name is unique, so to change the secret use `vault.update_secret` (or edit it in the Vault UI). The job runs as a database role, so
+it needs no key in the app.
+
+**Check it works** (after a minute or two):
+
+```sql
+-- Did cron fire?
+select start_time, status, return_message
+from cron.job_run_details
+where jobid = (select jobid from cron.job where jobname = 'drain-jobs')
+order by start_time desc limit 10;
+
+-- What did the app answer? (pg_net keeps responses for 6 hours)
+select created, status_code, left(content, 200) as body, error_msg
+from net._http_response order by created desc limit 10;
+```
+
+Expect `status_code` 200 and a body like `{"claimed":0,...}`. `401` means the Vault secret differs from Vercel's, or
+`CRON_SECRET` isn't set on Vercel (the app's log notice says which: `jobs.drain_unauthorized` or
+`jobs.drain_unconfigured`). A pg_net timeout on a call that ran close to 60 s can still be a successful drain. `cron.job_run_details` only says the
+request was sent; the response is in `net._http_response`.
+
+**Stop it** (pause, or if something goes wrong):
+
+```sql
+select cron.unschedule('drain-jobs');
+-- later: remove the secret
+delete from vault.secrets where name = 'cron_secret';
+```
+
+To pause the queue itself without touching cron, use **Admin → Jobs → Pause**: the drain keeps running but claims
+nothing.
+
+**Rotate** the secret: set the new value in Vercel, redeploy, then
+`select vault.update_secret((select id from vault.secrets where name = 'cron_secret'), '<new>');`. Calls fail with
+`401` between the two steps; the next minute after both is fine.
+
+**Later, with a worker:** the same code runs as a long-running process. A future `apps/worker` calls
+`runWorkerLoop({ registry: JOB_REGISTRY, worker, budgetMs, stopClaimingBeforeMs, maxJobs, idleMs, signal })` from
+`@receipt-ocr/core` on the shared runtime and aborts `signal` on SIGTERM. Keep the cron on as a fallback: whatever is
+free does the work.
+
+---
+
 ## Preview environment
 
 Pull-request previews use the staging database, so give them their own storage and keys too. Otherwise test uploads
@@ -419,15 +523,16 @@ password.
 
 These were set when the project was created. Listed so a new environment doesn't miss them.
 
-| Key                   | What                                                           | Kind   |
-| --------------------- | -------------------------------------------------------------- | ------ |
-| `DATABASE_URL`        | Supabase connection (transaction pooler, port 6543)            | Secret |
-| `BETTER_AUTH_SECRET`  | Signs sessions: `openssl rand -base64 32`, one per environment | Secret |
-| `BETTER_AUTH_SECRETS` | Optional, for rotating the secret: `1:<current secret>`        | Secret |
-| `BETTER_AUTH_URL`     | `https://receipt-ocr.bhimraj.com.np` (Production only)         | Config |
-| `ADMIN_EMAILS`        | Who becomes admin on sign-up, comma-separated                  | Config |
-| `LOG_SAMPLE_RATE`     | `0.1`: keep 10% of routine logs (Production)                   | Config |
-| `OCR_DAILY_CAP`       | `200` Production, `50` Preview                                 | Config |
+| Key                   | What                                                                | Kind   |
+| --------------------- | ------------------------------------------------------------------- | ------ |
+| `DATABASE_URL`        | Supabase connection (transaction pooler, port 6543)                 | Secret |
+| `BETTER_AUTH_SECRET`  | Signs sessions: `openssl rand -base64 32`, one per environment      | Secret |
+| `BETTER_AUTH_SECRETS` | Optional, for rotating the secret: `1:<current secret>`             | Secret |
+| `BETTER_AUTH_URL`     | `https://receipt-ocr.bhimraj.com.np` (Production only)              | Config |
+| `ADMIN_EMAILS`        | Who becomes admin on sign-up, comma-separated                       | Config |
+| `LOG_SAMPLE_RATE`     | `0.1`: keep 10% of routine logs (Production)                        | Config |
+| `OCR_DAILY_CAP`       | `200` Production, `50` Preview                                      | Config |
+| `CRON_SECRET`         | Bearer secret for `/api/jobs/drain` ([step 8](#8-queue-drain-cron)) | Secret |
 
 `DIRECT_URL` (for database migrations) never goes to Vercel. It lives in the `staging-db` and `production-db`
 GitHub environments, used only by the **Database Migration** workflow.
