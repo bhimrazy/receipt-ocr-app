@@ -32,6 +32,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { twoFactorDisabledEmail } from "@receipt-ocr/email";
+import { emailContext, resetPasswordUrl } from "@/lib/env";
 import { auth, deliverEmail } from "@/lib/auth";
 import { clientIp } from "@/lib/http";
 import { errorFields, logger } from "@/lib/log";
@@ -410,14 +411,16 @@ export async function resetTwoFactorAction(input: { userId: string; reason: stri
       throw new ActionError("This user has no authenticator app or passkey to reset.");
     }
     await core(resetSecondFactor(target, { ...ctx.audit, reason: parsed.reason }));
-    await deliverEmail({ to: target.email, ...twoFactorDisabledEmail({ byAdmin: true }) }).catch(
-      (error: unknown) =>
-        logger.error({
-          event: "admin.two_factor_reset_email_failed",
-          unit: "log",
-          user_id: parsed.userId,
-          error: errorFields(error),
-        }),
+    await deliverEmail({
+      to: target.email,
+      ...twoFactorDisabledEmail(emailContext, { resetUrl: resetPasswordUrl(), byAdmin: true }),
+    }).catch((error: unknown) =>
+      logger.error({
+        event: "admin.two_factor_reset_email_failed",
+        unit: "log",
+        user_id: parsed.userId,
+        error: errorFields(error),
+      }),
     );
     touchUser(parsed.userId);
   });

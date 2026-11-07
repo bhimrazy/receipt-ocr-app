@@ -9,6 +9,7 @@ const config = [
       "**/dist/**",
       "**/.turbo/**",
       "bench/results/**",
+      "packages/email/src/generated.ts",
       "apps/web/playwright-report/**",
       "apps/web/test-results/**",
       "apps/web/next-env.d.ts",

@@ -12,6 +12,7 @@ import { APIError, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { passkey } from "@better-auth/passkey";
 import { authMethodFor } from "./auth-method";
+import { emailContext, resetPasswordUrl } from "./env";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 import { clientIp } from "./http";
@@ -152,13 +153,28 @@ export async function factorChangedAfter(ctx: AfterContext, deliver: Deliver) {
   if (!user) return;
   if (ctx.path === "/two-factor/generate-backup-codes") {
     logger.info({ event: "auth.backup_codes_regenerated", unit: "log", user_id: user.id });
-    await notify(deliver, { to: user.email, ...backupCodesRegeneratedEmail() }, "backup_codes");
+    await notify(
+      deliver,
+      {
+        to: user.email,
+        ...backupCodesRegeneratedEmail(emailContext, { resetUrl: resetPasswordUrl() }),
+      },
+      "backup_codes",
+    );
   } else if (ctx.path === "/passkey/verify-registration") {
     logger.info({ event: "auth.passkey_added", unit: "log", user_id: user.id });
-    await notify(deliver, { to: user.email, ...passkeyAddedEmail() }, "passkey_added");
+    await notify(
+      deliver,
+      { to: user.email, ...passkeyAddedEmail(emailContext, { resetUrl: resetPasswordUrl() }) },
+      "passkey_added",
+    );
   } else {
     logger.info({ event: "auth.passkey_removed", unit: "log", user_id: user.id });
-    await notify(deliver, { to: user.email, ...passkeyRemovedEmail() }, "passkey_removed");
+    await notify(
+      deliver,
+      { to: user.email, ...passkeyRemovedEmail(emailContext, { resetUrl: resetPasswordUrl() }) },
+      "passkey_removed",
+    );
   }
 }
 
@@ -174,7 +190,14 @@ export const twoFactorUserUpdated =
   ) => {
     if (ctx?.path === "/two-factor/verify-totp" && user.twoFactorEnabled) {
       logger.info({ event: "auth.two_factor_enabled", unit: "log", user_id: user.id });
-      await notify(deliver, { to: user.email, ...twoFactorEnabledEmail() }, "two_factor_enabled");
+      await notify(
+        deliver,
+        {
+          to: user.email,
+          ...twoFactorEnabledEmail(emailContext, { resetUrl: resetPasswordUrl() }),
+        },
+        "two_factor_enabled",
+      );
     }
     if (ctx?.path === "/two-factor/disable" && !user.twoFactorEnabled) {
       // Better Auth forgets only this device's trust; drop the others and any pending challenge.
@@ -189,7 +212,10 @@ export const twoFactorUserUpdated =
       logger.info({ event: "auth.two_factor_disabled", unit: "log", user_id: user.id });
       await notify(
         deliver,
-        { to: user.email, ...twoFactorDisabledEmail({ byAdmin: false }) },
+        {
+          to: user.email,
+          ...twoFactorDisabledEmail(emailContext, { resetUrl: resetPasswordUrl(), byAdmin: false }),
+        },
         "two_factor_disabled",
       );
     }

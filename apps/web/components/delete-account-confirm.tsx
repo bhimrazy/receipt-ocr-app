@@ -63,8 +63,9 @@ export function DeleteAccountConfirm({ token }: { token: string | null }) {
     <Card className="border-destructive/30">
       <CardContent className="flex flex-col gap-3 pt-5">
         <p className="text-sm text-muted-foreground">
-          This permanently removes your account, your workspaces and every receipt in them. You
-          can&apos;t undo this.
+          This permanently removes your account and any workspace only you belong to, with every
+          receipt in it. Receipts you uploaded to shared workspaces stay there. You can&apos;t undo
+          this.
         </p>
         {error ? <Alert variant="destructive">{error}</Alert> : null}
         <div className="flex flex-wrap gap-2">

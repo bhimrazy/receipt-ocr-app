@@ -1,51 +1,28 @@
 /**
- * Plain, dependency-free HTML. Email clients ignore most modern CSS, so these
- * stay table-free, inline-styled, and readable as plain text when the HTML
- * part is stripped.
+ * Transactional messages, filled from the prerendered templates in `generated.ts` (built from
+ * `src/emails/*.tsx` by `bun run email:generate`). Subjects are fixed text; the only variable one
+ * uses an allowlisted contact topic label.
  */
+import { TEMPLATES } from "./generated";
+import {
+  displayUrl,
+  fill,
+  formatDuration,
+  normalizeSlot,
+  SLOT_KINDS,
+  type SlotName,
+} from "./render";
 
-const BRAND = "receiptOCR";
+export { absoluteUrl, isEmailAddress, displayUrl, escapeHtml, formatDuration } from "./render";
 
-/** Escapes text for HTML element content and double- or single-quoted attributes. */
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+export const BRAND = "ReceiptOCR";
 
-/** Collapses control characters and runs of whitespace, so text can't add lines to a plain-text mail. */
-function oneLine(value: string): string {
-  return value.replace(/[\u0000-\u001f\u007f\s]+/g, " ").trim();
-}
-
-/** `heading` and `cta` are text and are escaped here; `bodyHtml` is markup the caller escaped. */
-function layout(heading: string, bodyHtml: string, cta?: { label: string; url: string }) {
-  const h = escapeHtml(heading);
-  const label = cta ? escapeHtml(cta.label) : "";
-  const url = cta ? escapeHtml(cta.url) : "";
-  return `<!doctype html>
-<html lang="en">
-  <body style="margin:0;padding:24px;background:#0a0a0b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#e7e7ea">
-    <div style="max-width:520px;margin:0 auto;background:#141416;border:1px solid #26262b;border-radius:16px;padding:32px">
-      <p style="margin:0 0 24px;font-size:15px;font-weight:600;letter-spacing:-0.01em">${BRAND}</p>
-      <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;font-weight:600">${h}</h1>
-      <div style="font-size:15px;line-height:1.6;color:#a1a1aa">${bodyHtml}</div>
-      ${
-        cta
-          ? `<p style="margin:28px 0 0">
-               <a href="${url}" style="display:inline-block;background:#7c5cff;color:#fff;text-decoration:none;padding:12px 20px;border-radius:999px;font-size:14px;font-weight:500">${label}</a>
-             </p>
-             <p style="margin:20px 0 0;font-size:12px;line-height:1.6;color:#71717a;word-break:break-all">
-               Or paste this into your browser:<br />${url}
-             </p>`
-          : ""
-      }
-    </div>
-  </body>
-</html>`;
+/** Where the app lives and who answers replies. The web app passes these; this package reads no env. */
+export interface EmailContext {
+  /** Absolute origin, e.g. https://receipt-ocr.bhimraj.com.np. Links and the logo hang off it. */
+  appUrl: string;
+  /** Footer and "contact us" lines; without it they point at the in-app support button. */
+  supportEmail?: string;
 }
 
 export interface EmailContent {
@@ -54,187 +31,159 @@ export interface EmailContent {
   text: string;
 }
 
-export function passwordResetEmail(url: string): EmailContent {
+export type TemplateName = keyof typeof TEMPLATES;
+
+/**
+ * The normalized slot values a template is filled with: shared ones from `ctx` plus its own.
+ * Exported for the golden tests, which render the React source with the same values.
+ */
+export function emailSlots(
+  ctx: EmailContext,
+  input: Partial<Record<SlotName, string>>,
+): Record<string, string> {
+  const raw: Partial<Record<SlotName, string>> = { ...input, appOrigin: ctx.appUrl };
+  if (ctx.supportEmail) raw.supportEmail = ctx.supportEmail;
+  const values: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw) as [SlotName, string][]) {
+    values[name] = normalizeSlot(SLOT_KINDS[name], value);
+  }
+  values.appHost = new URL(values.appOrigin).host;
+  if (values.url) values.urlLabel = displayUrl(values.url);
+  if (values.resetUrl) values.resetUrlLabel = displayUrl(values.resetUrl);
+  return values;
+}
+
+function build(
+  name: TemplateName,
+  subject: string,
+  ctx: EmailContext,
+  input: Partial<Record<SlotName, string>>,
+): EmailContent {
+  const values = emailSlots(ctx, input);
+  const template = TEMPLATES[name][values.supportEmail ? "support" : "nosupport"];
   return {
-    subject: `Reset your ${BRAND} password`,
-    html: layout(
-      "Reset your password",
-      "<p style='margin:0'>Someone asked to reset the password for this account. This link expires in one hour. If it wasn't you, you can ignore this email — nothing changes until the link is used.</p>",
-      { label: "Reset password", url },
-    ),
-    text: `Reset your ${BRAND} password.\n\nThis link expires in one hour:\n${url}\n\nIf you didn't request this, ignore this email.`,
+    subject,
+    html: fill(template.html, values, "html"),
+    text: fill(template.text, values, "text"),
   };
 }
 
-export function verificationEmail(url: string): EmailContent {
-  return {
-    subject: `Confirm your ${BRAND} email`,
-    html: layout(
-      "Confirm your email",
-      "<p style='margin:0'>Confirm this address to finish setting up your account.</p>",
-      { label: "Confirm email", url },
-    ),
-    text: `Confirm your ${BRAND} email address:\n${url}`,
-  };
-}
-
-export function invitationEmail(params: {
-  organizationName: string;
-  inviterEmail: string;
+export interface LinkEmailInput {
   url: string;
-}): EmailContent {
-  const organizationName = oneLine(params.organizationName);
-  const inviterEmail = oneLine(params.inviterEmail);
-  const { url } = params;
-  // The subject is fixed: workspace names and addresses are user input, and a
-  // subject line is where a phishing lure would be read first.
-  return {
-    subject: `You're invited to a ${BRAND} workspace`,
-    html: layout(
-      "You're invited to a workspace",
-      `<p style='margin:0'><strong style="color:#e7e7ea">${escapeHtml(inviterEmail)}</strong> invited you to the <strong style="color:#e7e7ea">${escapeHtml(organizationName)}</strong> workspace on ${BRAND}. This invitation expires in 7 days.</p>`,
-      { label: "Accept invitation", url },
-    ),
-    text: `${inviterEmail} invited you to join the "${organizationName}" workspace on ${BRAND}.\n\nAccept (expires in 7 days):\n${url}`,
-  };
+  /** The token lifetime the auth config sets, so the copy can't drift from it. */
+  expiresInSeconds: number;
 }
 
-const SECURITY_FOOTER =
-  "If this wasn't you, reset your password now and contact support by replying to this email.";
+const link = ({ url, expiresInSeconds }: LinkEmailInput) => ({
+  url,
+  expiry: formatDuration(expiresInSeconds),
+});
 
-/** The step-up code for users without a second factor. The code is never in the subject. */
-export function stepUpCodeEmail(code: string): EmailContent {
-  const safe = escapeHtml(code);
-  return {
-    subject: `Your ${BRAND} verification code`,
-    html: layout(
-      "Confirm it's you",
-      `<p style='margin:0 0 16px'>Enter this code to finish what you started in ${BRAND}. It expires in 10 minutes and works once.</p>
-       <p style="margin:0 0 16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;letter-spacing:0.2em;color:#e7e7ea">${safe}</p>
-       <p style='margin:0'>Never share this code. We will never ask you for it. If you didn't ask for it, someone may know your password: change it.</p>`,
-    ),
-    text: `Your ${BRAND} verification code: ${code}\n\nIt expires in 10 minutes and works once. Never share it. If you didn't ask for it, change your password.`,
-  };
+export function verificationEmail(ctx: EmailContext, input: LinkEmailInput): EmailContent {
+  return build("verification", `Confirm your ${BRAND} email`, ctx, link(input));
 }
 
-export function twoFactorEnabledEmail(): EmailContent {
-  return {
-    subject: `Two-step sign-in is on for your ${BRAND} account`,
-    html: layout(
-      "Two-step sign-in is on",
-      `<p style='margin:0 0 16px'>An authenticator app was added to your account. Signing in with your password now also asks for a code from that app.</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
-    ),
-    text: `An authenticator app was added to your ${BRAND} account. Signing in with your password now also asks for a code from it.\n\n${SECURITY_FOOTER}`,
-  };
+export function passwordResetEmail(ctx: EmailContext, input: LinkEmailInput): EmailContent {
+  return build("passwordReset", `Reset your ${BRAND} password`, ctx, link(input));
 }
+
+/**
+ * The subject and preheader are fixed: workspace names and addresses are user input, and the
+ * inbox list is where a phishing lure would be read first.
+ */
+export function invitationEmail(
+  ctx: EmailContext,
+  input: LinkEmailInput & { organizationName: string; inviterEmail: string },
+): EmailContent {
+  return build("invitation", `You're invited to a ${BRAND} workspace`, ctx, {
+    ...link(input),
+    organizationName: input.organizationName,
+    inviterEmail: input.inviterEmail,
+  });
+}
+
+/** A contact-form message to the support inbox; `topicLabel` comes from the app's fixed list. */
+export function supportMessageEmail(
+  ctx: EmailContext,
+  input: { from: string; topicLabel: string; message: string },
+): EmailContent {
+  return build("supportMessage", `[${BRAND} support] ${input.topicLabel}`, ctx, input);
+}
+
+/** The admin console's delivery check. */
+export function testEmail(ctx: EmailContext): EmailContent {
+  return build("test", `[${BRAND}] Test email`, ctx, {});
+}
+
+/** Step-up confirmation before an account is deleted; the link works once. */
+export function deleteAccountEmail(
+  ctx: EmailContext,
+  input: LinkEmailInput & { resetUrl: string },
+): EmailContent {
+  return build("deleteAccount", `Confirm deleting your ${BRAND} account`, ctx, {
+    ...link(input),
+    resetUrl: input.resetUrl,
+  });
+}
+
+/** Security notice after a password change (by the user or an admin). */
+export function passwordChangedEmail(ctx: EmailContext, input: { resetUrl: string }): EmailContent {
+  return build("passwordChanged", `Your ${BRAND} password was changed`, ctx, input);
+}
+
+/**
+ * To the current address, which must approve an email change (`url`, Better Auth's approval link)
+ * before the new address is sent its own verification. The subject is fixed: the new address is
+ * user input.
+ */
+export function emailChangeEmail(
+  ctx: EmailContext,
+  input: LinkEmailInput & { currentEmail: string; newEmail: string; resetUrl: string },
+): EmailContent {
+  return build("emailChange", `Approve your ${BRAND} email change`, ctx, {
+    ...link(input),
+    currentEmail: input.currentEmail,
+    newEmail: input.newEmail,
+    resetUrl: input.resetUrl,
+  });
+}
+
+/** The step-up code for an account with no second factor; never in the subject. */
+export function stepUpCodeEmail(
+  ctx: EmailContext,
+  input: { code: string; expiresInSeconds: number },
+): EmailContent {
+  return build("stepUpCode", `Your ${BRAND} verification code`, ctx, {
+    code: input.code,
+    expiry: formatDuration(input.expiresInSeconds),
+  });
+}
+
+/** Security notices for sign-in factor changes; each links the password reset page. */
+type Notice = (ctx: EmailContext, input: { resetUrl: string }) => EmailContent;
+
+export const twoFactorEnabledEmail: Notice = (ctx, input) =>
+  build("twoFactorEnabled", `Two-step sign-in is on for your ${BRAND} account`, ctx, input);
 
 /** Turned off by the user, or reset by an administrator (who also signed them out everywhere). */
-export function twoFactorDisabledEmail({ byAdmin }: { byAdmin: boolean }): EmailContent {
-  const what = byAdmin
-    ? "An administrator reset two-step sign-in on your account, removing your authenticator app and passkeys, usually because you asked for help after losing them. You've been signed out everywhere; sign in with your password and set them up again in Settings → Security."
-    : "Two-step sign-in was turned off for your account. Signing in now only needs your password.";
-  return {
-    subject: byAdmin
-      ? `Two-step sign-in was reset on your ${BRAND} account`
-      : `Two-step sign-in is off for your ${BRAND} account`,
-    html: layout(
-      byAdmin ? "Two-step sign-in was reset" : "Two-step sign-in is off",
-      `<p style='margin:0 0 16px'>${escapeHtml(what)}</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
-    ),
-    text: `${what}\n\n${SECURITY_FOOTER}`,
-  };
+export function twoFactorDisabledEmail(
+  ctx: EmailContext,
+  input: { resetUrl: string; byAdmin: boolean },
+): EmailContent {
+  return input.byAdmin
+    ? build("twoFactorReset", `Two-step sign-in was reset on your ${BRAND} account`, ctx, {
+        resetUrl: input.resetUrl,
+      })
+    : build("twoFactorDisabled", `Two-step sign-in is off for your ${BRAND} account`, ctx, {
+        resetUrl: input.resetUrl,
+      });
 }
 
-export function backupCodesRegeneratedEmail(): EmailContent {
-  return {
-    subject: `New backup codes for your ${BRAND} account`,
-    html: layout(
-      "New backup codes",
-      `<p style='margin:0 0 16px'>New backup codes were created for your account. The old ones no longer work.</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
-    ),
-    text: `New backup codes were created for your ${BRAND} account. The old ones no longer work.\n\n${SECURITY_FOOTER}`,
-  };
-}
+export const backupCodesRegeneratedEmail: Notice = (ctx, input) =>
+  build("backupCodesRegenerated", `New backup codes for your ${BRAND} account`, ctx, input);
 
-export function passkeyAddedEmail(): EmailContent {
-  return {
-    subject: `A passkey was added to your ${BRAND} account`,
-    html: layout(
-      "New passkey added",
-      `<p style='margin:0 0 16px'>A passkey was added to your account. It can now sign you in and confirm important changes.</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
-    ),
-    text: `A passkey was added to your ${BRAND} account. It can now sign you in and confirm important changes.\n\n${SECURITY_FOOTER}`,
-  };
-}
+export const passkeyAddedEmail: Notice = (ctx, input) =>
+  build("passkeyAdded", `A passkey was added to your ${BRAND} account`, ctx, input);
 
-export function passkeyRemovedEmail(): EmailContent {
-  return {
-    subject: `A passkey was removed from your ${BRAND} account`,
-    html: layout(
-      "Passkey removed",
-      `<p style='margin:0 0 16px'>A passkey was removed from your account and can no longer sign you in.</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
-    ),
-    text: `A passkey was removed from your ${BRAND} account and can no longer sign you in.\n\n${SECURITY_FOOTER}`,
-  };
-}
-
-/** Where to get help in a security notice: the support inbox, else the in-app support form. */
-function supportLine(supportEmail: string | undefined) {
-  const address = supportEmail ? oneLine(supportEmail) : undefined;
-  return {
-    html: address
-      ? `contact us at <a href="mailto:${escapeHtml(address)}" style="color:#e7e7ea">${escapeHtml(address)}</a>`
-      : "contact us from the support button in the app",
-    text: address ? `contact us at ${address}` : "contact us from the support button in the app",
-  };
-}
-
-export function deleteAccountEmail(url: string): EmailContent {
-  return {
-    subject: `Confirm deleting your ${BRAND} account`,
-    html: layout(
-      "Confirm deleting your account",
-      "<p style='margin:0 0 12px'>Someone signed in to your account asked to delete it. Open this link within 1 hour and confirm on the page it opens to permanently delete the account, its workspaces and every receipt in them. Until then, nothing changes. The link works once.</p><p style='margin:0'>If it wasn't you, don't open the link. Change your password, or the password of the Google or GitHub account you sign in with, because someone else can use your account.</p>",
-      { label: "Delete my account", url },
-    ),
-    text: `Confirm deleting your ${BRAND} account.\n\nOpen this link within 1 hour and confirm on the page it opens to permanently delete the account, its workspaces and every receipt in them. Until then, nothing changes. The link works once:\n${url}\n\nIf it wasn't you, don't open the link. Change your password, or the password of the Google or GitHub account you sign in with, because someone else can use your account.`,
-  };
-}
-
-export function passwordChangedEmail(params: {
-  resetUrl: string;
-  supportEmail?: string;
-}): EmailContent {
-  const support = supportLine(params.supportEmail);
-  return {
-    subject: `Your ${BRAND} password was changed`,
-    html: layout(
-      "Your password was changed",
-      `<p style='margin:0'>The password for this account was just changed. If that was you, there's nothing to do. If it wasn't you, reset your password now and ${support.html}.</p>`,
-      { label: "Reset password", url: params.resetUrl },
-    ),
-    text: `The password for your ${BRAND} account was just changed.\n\nIf that was you, there's nothing to do. If it wasn't you, reset your password now and ${support.text}:\n${params.resetUrl}`,
-  };
-}
-
-/** Goes to the current address, which must approve the change before the new one is confirmed. */
-export function emailChangeEmail(params: {
-  newEmail: string;
-  url: string;
-  resetUrl: string;
-  supportEmail?: string;
-}): EmailContent {
-  const newEmail = oneLine(params.newEmail);
-  const support = supportLine(params.supportEmail);
-  const resetUrl = escapeHtml(params.resetUrl);
-  // The subject is fixed: the new address is user input.
-  return {
-    subject: `Approve the email change on your ${BRAND} account`,
-    html: layout(
-      "Approve the email change",
-      `<p style='margin:0 0 12px'>Someone signed in to your account asked to change its email address to <strong style="color:#e7e7ea">${escapeHtml(newEmail)}</strong>. Nothing changes until you approve it with this link and then confirm the new address from the email we send there. The link expires in 1 hour.</p><p style='margin:0'>If it wasn't you, don't open the link. <a href="${resetUrl}" style="color:#e7e7ea">Reset your password</a> and ${support.html}.</p>`,
-      { label: "Approve the change", url: params.url },
-    ),
-    text: `Someone signed in to your ${BRAND} account asked to change its email address to ${newEmail}.\n\nNothing changes until you approve it and then confirm the new address. Approve (expires in 1 hour):\n${params.url}\n\nIf it wasn't you, don't open the link. Reset your password and ${support.text}:\n${params.resetUrl}`,
-  };
-}
+export const passkeyRemovedEmail: Notice = (ctx, input) =>
+  build("passkeyRemoved", `A passkey was removed from your ${BRAND} account`, ctx, input);

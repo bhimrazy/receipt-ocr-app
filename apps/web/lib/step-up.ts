@@ -6,6 +6,7 @@ import {
   markStepUp,
   recordStepUpEvent,
   signInCounts,
+  STEP_UP_CODE_TTL_MS,
   stepUpLockedFor,
   totpStepUsed,
   type StepUpAction,
@@ -16,7 +17,7 @@ import { APIError } from "better-auth/api";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { createHmac, randomInt } from "node:crypto";
 import { auth, deliverEmail } from "./auth";
-import { authEnv } from "./env";
+import { authEnv, emailContext } from "./env";
 import type { SocialProvider } from "@/components/auth/credentials-form";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
@@ -126,7 +127,10 @@ export async function sendStepUpCode(caller: Caller, action: StepUpAction): Prom
     };
   }
   try {
-    await deliverEmail({ to: caller.user.email, ...stepUpCodeEmail(code) });
+    await deliverEmail({
+      to: caller.user.email,
+      ...stepUpCodeEmail(emailContext, { code, expiresInSeconds: STEP_UP_CODE_TTL_MS / 1000 }),
+    });
   } catch (error) {
     logger.error({
       event: "auth.step_up_email_failed",

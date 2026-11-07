@@ -7,3 +7,4 @@ apps/web/playwright-report
 apps/web/test-results
 bench/results
 docs/reviews
+packages/email/src/generated.ts

@@ -33,7 +33,10 @@
     "splash:ios": "bun scripts/splash-ios.ts",
     "bench:ocr": "bun bench/ocr.ts",
     "bench:fixtures": "bun bench/make-fixtures.mjs",
-    "bench:encode": "bun bench/encode.mjs"
+    "bench:encode": "bun bench/encode.mjs",
+    "email:generate": "bun packages/email/scripts/generate.ts",
+    "email:check": "bun packages/email/scripts/generate.ts --check",
+    "email:preview": "bun scripts/email-preview.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
