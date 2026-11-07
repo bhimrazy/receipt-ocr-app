@@ -106,7 +106,7 @@ export const receipts = pgTable(
     // Lets the quota query BitmapOr retries in with created_at instead of scanning.
     index("receipts_last_attempt_at_idx").on(table.lastAttemptAt),
   ],
-);
+).enableRLS();
 
 export const receiptItems = pgTable(
   "receipt_items",
@@ -123,7 +123,7 @@ export const receiptItems = pgTable(
   },
   // Loading a receipt's items and the cascade delete both look up by receipt.
   (table) => [index("receipt_items_receipt_id_idx").on(table.receiptId)],
-);
+).enableRLS();
 
 /**
  * Append-only usage ledger, two tables. `ocr_rounds` gets a row when an
@@ -155,7 +155,7 @@ export const ocrRounds = pgTable(
     // Global cap.
     index("ocr_rounds_created_at_idx").on(table.createdAt),
   ],
-);
+).enableRLS();
 
 /**
  * Allowed `ocr_calls.status` values: "ok", the AI failure kinds (kept in step
@@ -232,7 +232,7 @@ export const ocrCalls = pgTable(
       sql.raw(`status in (${OCR_CALL_STATUSES.map((s) => `'${s}'`).join(", ")})`),
     ),
   ],
-);
+).enableRLS();
 
 /**
  * Background job states. `queued` includes "waiting to retry" (`run_at` in
@@ -255,8 +255,8 @@ const LIVE_JOB = sql`state in ('queued', 'running')`;
  * fenced on `locked_by` and `state = 'running'`, so a worker whose lease
  * expired changes nothing. No free text: `last_error_kind` is a short code and
  * payloads hold ids only, never receipt contents. Storage parameters
- * (fillfactor, autovacuum) are set in migration 0008; drizzle-kit can't
- * express them.
+ * (fillfactor, autovacuum) are set by hand at the end of the baseline migration;
+ * drizzle-kit can't express them.
  */
 export const jobs = pgTable(
   "jobs",
@@ -316,7 +316,7 @@ export const jobs = pgTable(
     // A code such as `rate-limited` or `lease-expired`, never a message.
     check("jobs_last_error_kind_check", sql`last_error_kind ~ '^[a-z0-9.-]{1,40}$'`),
   ],
-);
+).enableRLS();
 
 /**
  * Pauses and cooldowns, one row per scope: `queue`, `kind:<kind>` or
@@ -329,7 +329,7 @@ export const jobControls = pgTable("job_controls", {
   reason: text("reason"),
   updatedBy: text("updated_by"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 /**
  * Reserved for user-provided BYOK credentials. Nothing reads or writes this
@@ -353,7 +353,7 @@ export const userCredentials = pgTable(
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (table) => [index("user_credentials_user_id_idx").on(table.userId)],
-);
+).enableRLS();
 
 /**
  * One row per admin action: who did what to which target, and why. Actor and
@@ -379,7 +379,7 @@ export const adminAuditLog = pgTable(
     index("admin_audit_log_created_at_idx").on(table.createdAt),
     index("admin_audit_log_target_idx").on(table.targetType, table.targetId, table.createdAt),
   ],
-);
+).enableRLS();
 
 /** Runtime settings an admin can change (`plans`, `ocr`). Values are validated on read and write. */
 export const appSettings = pgTable("app_settings", {
@@ -387,7 +387,7 @@ export const appSettings = pgTable("app_settings", {
   value: jsonb("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
-});
+}).enableRLS();
 
 /**
  * A named collection of receipts in a workspace ("Berlin trip", "Taxes 2026").
@@ -411,7 +411,7 @@ export const receiptGroups = pgTable(
   (table) => [
     uniqueIndex("receipt_groups_org_name_idx").on(table.organizationId, sql`lower(${table.name})`),
   ],
-);
+).enableRLS();
 
 /**
  * Receipts in a group (many-to-many). Nothing here checks that the receipt and
@@ -435,7 +435,7 @@ export const receiptGroupMembers = pgTable(
     // Groups of a receipt, the History filter, and the cascade on receipt delete.
     index("receipt_group_members_receipt_id_idx").on(table.receiptId),
   ],
-);
+).enableRLS();
 
 export const receiptsRelations = relations(receipts, ({ many }) => ({
   items: many(receiptItems),

@@ -24,7 +24,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { clientIp } from "@/lib/http";
-import { logger } from "@/lib/log";
+import { errorFields, logger } from "@/lib/log";
 import { revalidatePlanCopy } from "@/lib/plan-limits";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
@@ -75,16 +75,6 @@ async function core<A, E>(effect: Effect.Effect<A, E, AppServices>): Promise<A> 
 
 type Entry = Omit<AuditEntryInput, "actor" | "ip">;
 
-function describe(error: unknown) {
-  if (!(error instanceof Error)) return { message: String(error) };
-  return {
-    type: error.name,
-    message: error.message,
-    stack: error.stack,
-    cause: error.cause === undefined ? undefined : String(error.cause),
-  };
-}
-
 /**
  * Runs a Better Auth change after writing its audit row, so the change can't
  * land unrecorded. If the call fails, a `<action>_failed` row says so.
@@ -111,8 +101,9 @@ async function recordFailure(ctx: Context, entry: Entry, error: unknown) {
   ).catch((auditError: unknown) =>
     logger.error({
       event: "admin.audit_failed",
+      unit: "log",
       action: `${entry.action}_failed`,
-      error: describe(auditError),
+      error: errorFields(auditError),
     }),
   );
 }
@@ -128,7 +119,12 @@ async function run(name: string, body: (ctx: Context) => Promise<void>): Promise
     if (error instanceof z.ZodError) {
       return { ok: false, error: error.issues[0]?.message ?? "Check the values and try again." };
     }
-    logger.error({ event: "admin.action_failed", action: name, error: describe(error) });
+    logger.error({
+      event: "admin.action_failed",
+      unit: "log",
+      action: name,
+      error: errorFields(error),
+    });
     return { ok: false, error: GENERIC };
   }
 }

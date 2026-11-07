@@ -14,6 +14,7 @@ import {
 } from "@/components/admin/ops/format";
 import { AdminPageHeader, AdminSection } from "@/components/admin/page-header";
 import { formatDateTime } from "@/lib/format";
+import { logPageRender } from "@/lib/page-event";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
 import { JobActions } from "../job-buttons";
@@ -44,6 +45,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 /** One job: ids, state, attempt log and the round's model calls. Never receipt contents or images. */
 export default async function AdminJobPage({ params }: { params: Promise<{ id: string }> }) {
+  logPageRender("/admin/jobs/[id]");
   await requireAdmin();
   const { id } = await params;
   const [job, audit] = await runtime.runPromise(

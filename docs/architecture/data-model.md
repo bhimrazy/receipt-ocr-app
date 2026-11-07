@@ -246,7 +246,7 @@ erDiagram
   }
 ```
 
-- `jobs` has storage parameters set by hand in 0008: `fillfactor = 80` (room for HOT heartbeats) and aggressive
+- `jobs` has storage parameters set by hand at the end of the baseline migration: `fillfactor = 80` (room for HOT heartbeats) and aggressive
   per-table autovacuum.
 - `organization_id` and `receipt_id` are plain values: the job record outlives a deleted receipt or workspace.
   `user_id` is set to null when the account is deleted; the payload keeps the id until a retention purge (planned,

@@ -15,6 +15,7 @@ import { Conflict, NotFound } from "./errors";
 import { clearGroupCreator } from "./groups";
 import type { PlanId } from "./plans";
 import { Storage } from "./services";
+import { errorFields } from "./telemetry/redact";
 
 /**
  * Admin writes. Each one makes its change and writes its audit row in the
@@ -72,8 +73,8 @@ const purgeObjects = (keys: string[], context: Record<string, string>) =>
     Effect.catchAll((error) =>
       Effect.logError("admin.purge_failed", {
         ...context,
-        keys: keys.length,
-        error: error.message,
+        count: keys.length,
+        error: errorFields(error),
       }),
     ),
   );
@@ -101,7 +102,7 @@ export const deleteWorkspace = (organizationId: string, audit: AuditActor) =>
       });
       return keys;
     });
-    yield* purgeObjects(keys, { organizationId });
+    yield* purgeObjects(keys, { organization_id: organizationId });
     return { files: keys.length };
   });
 
@@ -160,7 +161,7 @@ export const prepareUserDeletion = (userId: string, audit?: AuditActor) =>
       }
       return { keys, workspacesDeleted: solo.length };
     });
-    yield* purgeObjects(keys, { userId });
+    yield* purgeObjects(keys, { user_id: userId });
     return { workspacesDeleted, files: keys.length };
   });
 

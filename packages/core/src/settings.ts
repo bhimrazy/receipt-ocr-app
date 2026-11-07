@@ -6,6 +6,7 @@ import { insertAudit, transact, type AuditActor } from "./audit";
 import { InvalidInput, type Conflict, type DbError, type NotFound } from "./errors";
 import { DEFAULT_BATCH_MAX, DEFAULT_PLANS, MAX_BATCH, type PlanTable } from "./plans";
 import { Db } from "./services";
+import { errorFields } from "./telemetry/redact";
 
 /**
  * Runtime settings an admin can change: plan limits and the OCR model chain.
@@ -112,10 +113,9 @@ const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
     const wanted = `google:${model}`;
     if (ocrModel(wanted)) return Effect.succeed(wanted as ModelId);
     // An unlisted model would leave the settings page with nothing that can run.
-    return Effect.logWarning("settings.unlisted_model", {
-      model: wanted,
-      using: `google:${DEFAULT_GOOGLE_MODEL}`,
-    }).pipe(Effect.as(`google:${DEFAULT_GOOGLE_MODEL}` as ModelId));
+    return Effect.logWarning("settings.unlisted_model", { ocr: { model: wanted } }).pipe(
+      Effect.as(`google:${DEFAULT_GOOGLE_MODEL}` as ModelId),
+    );
   }),
   Effect.map((model) => ({
     chain: [{ model, enabled: true, timeoutMs: DEFAULT_STEP_TIMEOUT_MS }],
@@ -125,7 +125,7 @@ const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
 const parse = <T>(schema: z.ZodType<T>, value: unknown, fallback: T, key: string) => {
   const result = schema.safeParse(value);
   if (result.success) return Effect.succeed(result.data);
-  return Effect.logWarning("settings.invalid_row", { key }).pipe(Effect.as(fallback));
+  return Effect.logWarning("settings.invalid_row", { kind: key }).pipe(Effect.as(fallback));
 };
 
 const firstIssue = (error: z.ZodError) => error.issues[0]?.message ?? "Those values aren't valid.";
@@ -179,7 +179,7 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
       }).pipe(
         // A database blip must not lift the limits: serve the defaults, briefly.
         Effect.catchAll((error) =>
-          Effect.logError("settings.load_failed", { error: error.message }).pipe(
+          Effect.logError("settings.load_failed", { error: errorFields(error) }).pipe(
             Effect.zipRight(defaultOcrRouting),
             Effect.map((ocr) => ({ plans: DEFAULT_PLANS, ocr, saved: {} })),
           ),

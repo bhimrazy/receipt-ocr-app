@@ -1,0 +1,145 @@
+{
+  "category": "Meals",
+  "currency": "IDR",
+  "subtotal": 1346000,
+  "tax": 144695,
+  "tip": null,
+  "total": 1591600,
+  "items": [
+    {
+      "name": "Nasi Campur Bali",
+      "quantity": 1,
+      "unitPrice": 75000,
+      "totalPrice": 75000
+    },
+    {
+      "name": "Bbk Bengil Nasi",
+      "quantity": 1,
+      "unitPrice": 125000,
+      "totalPrice": 125000
+    },
+    {
+      "name": "MilkShake Starwb",
+      "quantity": 1,
+      "unitPrice": 37000,
+      "totalPrice": 37000
+    },
+    {
+      "name": "Ice Lemon Tea",
+      "quantity": 1,
+      "unitPrice": 24000,
+      "totalPrice": 24000
+    },
+    {
+      "name": "Nasi Ayam Dewata",
+      "quantity": 1,
+      "unitPrice": 70000,
+      "totalPrice": 70000
+    },
+    {
+      "name": "Free Ice Tea",
+      "quantity": 3,
+      "unitPrice": 0,
+      "totalPrice": 0
+    },
+    {
+      "name": "Organic Green Sa",
+      "quantity": 1,
+      "unitPrice": 65000,
+      "totalPrice": 65000
+    },
+    {
+      "name": "Ice Tea",
+      "quantity": 1,
+      "unitPrice": 18000,
+      "totalPrice": 18000
+    },
+    {
+      "name": "Ice Orange",
+      "quantity": 1,
+      "unitPrice": 29000,
+      "totalPrice": 29000
+    },
+    {
+      "name": "Ayam Suir Bali",
+      "quantity": 1,
+      "unitPrice": 85000,
+      "totalPrice": 85000
+    },
+    {
+      "name": "Tahu Goreng",
+      "quantity": 2,
+      "unitPrice": 18000,
+      "totalPrice": 36000
+    },
+    {
+      "name": "Tempe Goreng",
+      "quantity": 2,
+      "unitPrice": 18000,
+      "totalPrice": 36000
+    },
+    {
+      "name": "Tahu Telor Asin",
+      "quantity": 1,
+      "unitPrice": 40000,
+      "totalPrice": 40000
+    },
+    {
+      "name": "Nasi Goreng Samb",
+      "quantity": 1,
+      "unitPrice": 70000,
+      "totalPrice": 70000
+    },
+    {
+      "name": "Bbk Panggang Sam",
+      "quantity": 3,
+      "unitPrice": 122000,
+      "totalPrice": 366000
+    },
+    {
+      "name": "Ayam Sambal Hija",
+      "quantity": 1,
+      "unitPrice": 92000,
+      "totalPrice": 92000
+    },
+    {
+      "name": "Hot Tea",
+      "quantity": 2,
+      "unitPrice": 22000,
+      "totalPrice": 44000
+    },
+    {
+      "name": "Ice Kopi",
+      "quantity": 1,
+      "unitPrice": 32000,
+      "totalPrice": 32000
+    },
+    {
+      "name": "Tahu Telor Asin",
+      "quantity": 1,
+      "unitPrice": 40000,
+      "totalPrice": 40000
+    },
+    {
+      "name": "Free Ice Tea",
+      "quantity": 1,
+      "unitPrice": 0,
+      "totalPrice": 0
+    },
+    {
+      "name": "Bebek Street",
+      "quantity": 1,
+      "unitPrice": 44000,
+      "totalPrice": 44000
+    },
+    {
+      "name": "Ice Tea Tawar",
+      "quantity": 1,
+      "unitPrice": 18000,
+      "totalPrice": 18000
+    }
+  ],
+  "_source": "https://huggingface.co/datasets/Voxel51/consolidated_receipt_dataset (samples.json index 0, data/000000.png; origin CORD v1 train, https://github.com/clovaai/cord)",
+  "_license": "CC-BY-4.0 (dataset card and CORD README). Attribution: NAVER CLOVA AI, Park et al. 2019, CORD.",
+  "_notes": "Merchant and date are blurred out in CORD (store info removed), so both are omitted. Currency IDR (Indonesian). Items, qty and totals read from the image and cross-checked against the dataset's menu.nm/cnt/price and subtotal/service/tax/total labels. Long (22 lines), low-light, skewed photo. Service 100,950 and Rounding -45 have no schema field (tax = PB1 144,695). 1,346,000+100,950+144,695-45 = 1,591,600. Printed line amounts are line totals; unit prices derived."
+}

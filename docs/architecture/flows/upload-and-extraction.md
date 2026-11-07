@@ -142,7 +142,8 @@ sequenceDiagram
   end
 ```
 
-Each attempt logs its own wide event (`job.run`) with the outcome, error kind, model, attempts and cost. A poll that
+Each attempt logs its own wide event (`job.attempt`, see [Observability](observability.md)) with the outcome, error
+kind, queue wait, model, tokens, cost and step timings. A poll that
 finds the job due but not running (its drain ran out of time, or its function was killed) drains it.
 
 ## 4. Inside extraction: the fallback chain

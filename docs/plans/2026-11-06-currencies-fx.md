@@ -142,7 +142,7 @@ Add `packages/ai/src/currencies.ts`, a dependency-free entry point like `categor
 ### 1.5 Migrations and backfill
 
 Two migrations in two PRs, so the behaviour change and the table rewrite can be reviewed, deployed and rolled back
-apart. Each takes the next free number after `0008` (the passkeys plan also takes numbers). Run both over
+apart. Each takes the next number after the `0000` baseline (the passkeys plan also takes numbers). Run both over
 `DIRECT_URL`, which is the Supabase **session pooler** on port 5432 ([deployment.md](../deployment.md), section 1);
 schema changes fail on the transaction pooler.
 

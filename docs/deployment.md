@@ -323,7 +323,53 @@ have to sign in with their provider again.
 
 Steps specific to one release, newest first.
 
-### Admin panel (migration `0006_admin_audit_settings`)
+### Squashed baseline and row-level security (2026-11-07)
+
+- **Migrations were squashed into one `0000_baseline`**, before launch. Both databases must be reset, not migrated.
+  Reset each one (staging first) with the SQL below, then run the **Database Migration** workflow on `staging-db`,
+  then `production-db` (the owner approves), then deploy by hand. Production auto-deploy may be skipped because the
+  release adds a migration. Don't `DROP SCHEMA public`: it would lose Supabase's grants and default ACLs.
+
+  Pre-check, and keep the output:
+
+  ```sql
+  select tablename, tableowner from pg_tables where schemaname = 'public' order by 1;
+  select typname from pg_type t join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typtype = 'e';
+  select current_user;
+  select has_schema_privilege('anon', 'public', 'USAGE') as anon_usage;
+  select 'receipts' as t, count(*) from public.receipts
+    union all select 'user', count(*) from public."user"; -- expect empty or test data only
+  ```
+
+  Reset (no `CASCADE`, no `IF EXISTS`, so anything unexpected rolls it all back):
+
+  ```sql
+  begin;
+  set local lock_timeout = '5s';
+  drop table
+    public.receipt_group_members, public.receipt_groups, public.receipt_items,
+    public.ocr_calls, public.ocr_rounds, public.jobs, public.job_controls,
+    public.admin_audit_log, public.app_settings, public.user_credentials,
+    public.receipts, public.invitation, public.member, public.session,
+    public.account, public.verification, public.rate_limit,
+    public.organization, public."user";
+  drop type public.job_state, public.receipt_status;
+  drop table drizzle.__drizzle_migrations;
+  drop schema drizzle;
+  commit;
+  ```
+
+  Post-check: `pg_tables` for `public` returns no rows, no enum types are left, and
+  `has_schema_privilege('anon', 'public', 'USAGE')` is unchanged from the pre-check.
+
+- **RLS** is enabled on all 19 tables with no policies. The app role (`postgres`) bypasses it. In the Supabase
+  dashboard each table shows the **RLS enabled** badge. The Data API is unused, so also remove `public` from
+  Project Settings, Data API, **Exposed schemas**: then `anon` and `authenticated` cannot reach any table even by
+  mistake. `service_role` bypasses RLS by design, so only removing `public` from the exposed schemas protects
+  against a leaked service-role key.
+
+### Admin panel (earlier release, now part of the baseline)
 
 - **Migration:** adds the `admin_audit_log` and `app_settings` tables and the `receipts.model` column. It also makes
   `receipts.user_id` nullable with `ON DELETE SET NULL`, so receipts outlive a deleted uploader, and adds an index

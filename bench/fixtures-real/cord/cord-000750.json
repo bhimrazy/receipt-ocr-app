@@ -1,0 +1,145 @@
+{
+  "category": "Meals",
+  "currency": "IDR",
+  "subtotal": 505600,
+  "tax": 53088,
+  "tip": null,
+  "total": 583968,
+  "items": [
+    {
+      "name": "Bakpao telur asin",
+      "quantity": 1,
+      "unitPrice": 22800,
+      "totalPrice": 22800
+    },
+    {
+      "name": "Cai Mieo",
+      "quantity": 1,
+      "unitPrice": 15800,
+      "totalPrice": 15800
+    },
+    {
+      "name": "caisim special",
+      "quantity": 1,
+      "unitPrice": 15800,
+      "totalPrice": 15800
+    },
+    {
+      "name": "Carsiupau Ayam",
+      "quantity": 1,
+      "unitPrice": 22800,
+      "totalPrice": 22800
+    },
+    {
+      "name": "Fish Glue",
+      "quantity": 1,
+      "unitPrice": 27800,
+      "totalPrice": 27800
+    },
+    {
+      "name": "Jamur Isi Ayam",
+      "quantity": 1,
+      "unitPrice": 32800,
+      "totalPrice": 32800
+    },
+    {
+      "name": "Jamur Kuping",
+      "quantity": 1,
+      "unitPrice": 21800,
+      "totalPrice": 21800
+    },
+    {
+      "name": "Kailan hongkong",
+      "quantity": 1,
+      "unitPrice": 15800,
+      "totalPrice": 15800
+    },
+    {
+      "name": "Kuah Kaldu Ayam",
+      "quantity": 1,
+      "unitPrice": 0,
+      "totalPrice": 0
+    },
+    {
+      "name": "Kue Macok",
+      "quantity": 1,
+      "unitPrice": 22800,
+      "totalPrice": 22800
+    },
+    {
+      "name": "Pangsit Special",
+      "quantity": 1,
+      "unitPrice": 27800,
+      "totalPrice": 27800
+    },
+    {
+      "name": "Sirloin Roll Enoki",
+      "quantity": 1,
+      "unitPrice": 34800,
+      "totalPrice": 34800
+    },
+    {
+      "name": "Sutake Kombinasi",
+      "quantity": 1,
+      "unitPrice": 31800,
+      "totalPrice": 31800
+    },
+    {
+      "name": "Tahu Jepang",
+      "quantity": 1,
+      "unitPrice": 10800,
+      "totalPrice": 10800
+    },
+    {
+      "name": "Tahu Sandwidh",
+      "quantity": 1,
+      "unitPrice": 26800,
+      "totalPrice": 26800
+    },
+    {
+      "name": "TOM YAM",
+      "quantity": 1,
+      "unitPrice": 0,
+      "totalPrice": 0
+    },
+    {
+      "name": "Udon",
+      "quantity": 1,
+      "unitPrice": 19800,
+      "totalPrice": 19800
+    },
+    {
+      "name": "Chines Tea Green Tea",
+      "quantity": 2,
+      "unitPrice": 10800,
+      "totalPrice": 21600
+    },
+    {
+      "name": "Tahu Isi Ayam",
+      "quantity": 2,
+      "unitPrice": 27800,
+      "totalPrice": 55600
+    },
+    {
+      "name": "Green tea Dingin",
+      "quantity": 5,
+      "unitPrice": 16800,
+      "totalPrice": 84000
+    },
+    {
+      "name": "Nasi Putih",
+      "quantity": 7,
+      "unitPrice": 9800,
+      "totalPrice": 68600
+    },
+    {
+      "name": "Bakso Ikan",
+      "quantity": 1,
+      "unitPrice": 25800,
+      "totalPrice": 25800
+    }
+  ],
+  "_source": "https://huggingface.co/datasets/Voxel51/consolidated_receipt_dataset (samples.json index 750, data/000750.png; origin CORD v1 train, https://github.com/clovaai/cord)",
+  "_license": "CC-BY-4.0 (dataset card and CORD README). Attribution: NAVER CLOVA AI, Park et al. 2019, CORD.",
+  "_notes": "Merchant and date are blurred out in CORD (store info removed), so both are omitted. Currency IDR (Indonesian). Items, qty and totals read from the image and cross-checked against the dataset's menu.nm/cnt/price and subtotal/service/tax/total labels. Hand-held, dim photo, 22 lines. Two lines (Kuah Kaldu Ayam, TOM YAM) have no printed price; keyed 0. ITEMS TOTAL 605,600 - Promo UOB 20% 100,000 = SUBTOTAL 505,600; subtotal keyed as the printed post-promo 505,600 (alternative: 605,600). Service 5% 25,280 and TAX 10% 53,088: 505,600+25,280+53,088 = 583,968 (adds up). Promo and service have no schema field."
+}

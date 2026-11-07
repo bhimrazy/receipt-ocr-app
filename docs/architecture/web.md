@@ -128,7 +128,7 @@ sequenceDiagram
   process. The database pool and the settings cache live in it.
 - [`runRoute`](../../apps/web/lib/http.ts) runs the program and maps failures. Work after the response runs the
   [job queue](flows/jobs.md) through [`lib/jobs.ts`](../../apps/web/lib/jobs.ts) (`runJobNow`, `drainJobs`), which
-  logs one `job.run` event per attempt.
+  logs one `job.attempt` event per attempt and a `job.tick` per drain.
 
 Pages follow the same path without the HTTP mapping: server components call helpers in
 [`lib/receipts.ts`](../../apps/web/lib/receipts.ts), which call `requireActiveScope()` and then `runtime.runPromise`.
@@ -213,10 +213,11 @@ flowchart TD
   action calls it again. Hiding a button in the UI ([`receipt-permissions.ts`](../../apps/web/lib/receipt-permissions.ts)) is
   convenience only; core enforces edit and delete rights.
 - **Safe messages only.** Only `InvalidInput`, `NotFound`, `Conflict` and `QuotaExceeded` messages reach the browser.
-  Causes go to the log, with Drizzle's bound `params:` redacted (`causeDetail`, using `redactDbMessage` in
-  [`lib/log.ts`](../../apps/web/lib/log.ts)).
-- **One wide event per request.** Upload and retry build a `WideEvent` and log it once with timings, model, attempts,
-  cost and outcome. Requests made while impersonating carry `impersonated_by`.
+  The log gets the error's tag, kind, class and SQLSTATE (`errorFields`), never its message.
+- **One wide event per request.** Every route handler is wrapped in `withRequestEvent`
+  ([`lib/http.ts`](../../apps/web/lib/http.ts)) and every `/app` and `/admin` page calls `logPageRender`; each writes
+  one event through the schema allowlist. Requests made while impersonating carry `impersonated_by`. See
+  [Observability](flows/observability.md).
 - **Bodies are capped while streaming.** `readFormData` refuses a declared or streamed body over 10 MB plus 64 KB.
 - **Degrades without config.** With no `DATABASE_URL` or auth secret, `authEnabled` is false, auth endpoints return
   `503` and the auth pages show a "not configured" card. In production off Vercel, the app refuses to start without

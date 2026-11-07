@@ -6,11 +6,13 @@ import {
   PageHeaderTitle,
 } from "@/components/page-header";
 import { getWorkspaceGroups } from "@/lib/groups";
+import { logPageRender } from "@/lib/page-event";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Groups" };
 
 export default async function GroupsPage() {
+  logPageRender("/app/groups");
   const groups = await getWorkspaceGroups();
   return (
     <div className="mx-auto max-w-3xl">
