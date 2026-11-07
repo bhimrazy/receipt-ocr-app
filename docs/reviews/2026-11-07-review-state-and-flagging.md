@@ -116,7 +116,7 @@ work on day one. Owner decision.
 ### Bulk actions, filters, counts
 
 - History: chips _To review_, _Reviewed_, _Flagged_ (replace _Needs review_). Bulk "Mark reviewed" on the selection
-  added for groups. Bulk action skips receipts the member can't edit and says how many it skipped.
+  mode that groups added (#48; per page today). Bulk action skips receipts the member can't edit and says how many it skipped.
 - Home: "To review N" (with "M with warnings"), "Flagged N" for the workspace.
 - CSV: add `reviewed` (yes/no) and `reviewed_at` columns. Export dialog option "Only reviewed" later.
 - Permission: same as editing (`canEditReceipt`): members on their own uploads, admins and owners on all.
