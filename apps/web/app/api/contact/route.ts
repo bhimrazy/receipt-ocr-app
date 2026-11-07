@@ -1,9 +1,11 @@
 import { hitRateLimit } from "@receipt-ocr/core";
 import { sendEmail, type EmailLogEvent } from "@receipt-ocr/email";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { contactEmail, isTopic } from "@/lib/contact-mail";
 import { emailContext, emailEnv, isProduction, logUndeliveredMail, supportEmail } from "@/lib/env";
 import { clientIp, crossOriginResponse, withRequestEvent } from "@/lib/http";
+import { MAX_FORM_JSON_BYTES, readJson } from "@/lib/json-body";
 import { logger, type WideEvent } from "@/lib/log";
 import { runtime } from "@/lib/runtime";
 import { checkTurnstile } from "@/lib/turnstile";
@@ -52,14 +54,13 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
     );
   }
 
-  let data: ContactPayload;
-  try {
-    data = (await request.json()) as ContactPayload;
-  } catch {
-    event.status_code = 400;
-    event.outcome = "invalid_body";
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  const read = await readJson(request, z.record(z.string(), z.unknown()), MAX_FORM_JSON_BYTES);
+  if ("response" in read) {
+    event.status_code = read.response.status;
+    event.outcome = read.response.status === 413 ? "too_large" : "invalid_body";
+    return read.response;
   }
+  const data = read.data as ContactPayload;
 
   // Bots tend to fill every field, including hidden ones. Pretend success, drop it.
   if (typeof data.company === "string" && data.company.trim() !== "") {

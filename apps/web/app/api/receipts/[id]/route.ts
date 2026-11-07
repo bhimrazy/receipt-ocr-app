@@ -2,6 +2,7 @@ import { parseCategory } from "@receipt-ocr/ai/categories";
 import { deleteReceipt, JobQueue, ReceiptRepo, type ReceiptPatch } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
+import { z } from "zod";
 import {
   annotateCaller,
   crossOriginResponse,
@@ -9,6 +10,7 @@ import {
   runRoute,
   withRequestEvent,
 } from "@/lib/http";
+import { MAX_FORM_JSON_BYTES, readJson } from "@/lib/json-body";
 import { kickJob } from "@/lib/jobs";
 import type { WideEvent } from "@/lib/log";
 import { getActiveScope } from "@/lib/session";
@@ -104,12 +106,9 @@ async function update(request: Request, { params }: Params, event: WideEvent) {
 
   const { id } = await params;
   event.receipt_id = id;
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return jsonError(400, "Invalid request body");
-  }
+  const read = await readJson(request, z.record(z.string(), z.unknown()), MAX_FORM_JSON_BYTES);
+  if ("response" in read) return read.response;
+  const body = read.data;
 
   const rawCategory = text(body.category, 40);
   const category = rawCategory ? parseCategory(rawCategory) : rawCategory;
