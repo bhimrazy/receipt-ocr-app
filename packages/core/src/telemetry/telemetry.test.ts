@@ -61,6 +61,7 @@ describe("sanitize (the allowlist)", () => {
     expect(sanitize({ event: "x", receipt_id: null, job_id: undefined })).toEqual({
       fields: { event: "x" },
       dropped: [],
+      redacted: 0,
     });
   });
 });
@@ -429,5 +430,109 @@ describe("annotateEvent and the Effect logger", () => {
       dropped_fields: ["message"],
     });
     expect(String(error.mock.calls[0]![0])).not.toContain("Jane");
+  });
+});
+
+describe("secret denylist", () => {
+  // Built at runtime so the literals don't trip secret scanners.
+  const rep = (c: string, n: number) => c.repeat(n);
+  const SECRETS: Record<string, string> = {
+    gemini: "AIza" + rep("a", 35),
+    anthropic: "sk-ant-api03-" + rep("x", 40),
+    resend: "re_" + rep("A1", 14),
+    hex32: rep("ab", 16),
+    hex64: rep("0f", 32),
+    jwt: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.c2lnbmF0dXJl",
+    postgres: "postgresql://user:hunter2secret@db.example.com:5432/postgres",
+    bearer: "Bearer abc123def456",
+    githubClassic: "ghp_" + rep("Z9", 20),
+    githubPat: "github_pat_" + rep("Q", 30),
+    vercel: "vcp_" + rep("k", 30),
+    pem: "-----BEGIN PRIVATE KEY-----",
+  };
+
+  const legitimate = [
+    "3f1d7c0e-8b1a-4c53-9a3e-0b6f3f1d7c0e",
+    "V1StGXR8_Z5jdHi6B-myT",
+    "cjld2cjxh0000qzrmn831i7rn",
+    "ocr.extract",
+    "google:gemini-3.8-flash",
+    "anthropic:claude-sonnet-5-5",
+    "receipt.upload",
+    "23505",
+    "retry_exhausted",
+    "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6", // 32-char Better Auth id
+  ];
+
+  it.each(Object.entries(SECRETS))("redacts a %s shape from id and token fields", (_n, secret) => {
+    const { fields, redacted } = sanitize({
+      event: "x",
+      outcome: secret,
+      user_id: secret,
+      flags: { mode: secret },
+      route: `/${secret}`,
+    });
+    expect(JSON.stringify(fields)).not.toContain(secret);
+    expect(fields.user_id).toBe("[redacted:secret]");
+    expect(redacted).toBeGreaterThanOrEqual(3);
+  });
+
+  it("keeps legitimate ids and codes", () => {
+    for (const value of legitimate) {
+      const id = sanitize({ event: "x", user_id: value, kind: value.length > 100 ? "x" : "k" });
+      expect(id.redacted, value).toBe(0);
+    }
+    expect(sanitize({ event: "x", receipt_id: legitimate[0] }).fields.receipt_id).toBe(
+      legitimate[0],
+    );
+  });
+
+  it("never names a secret-shaped map key in dropped_fields", () => {
+    const { fields, dropped } = sanitize({ event: "x", flags: { [SECRETS.gemini!]: true } });
+    expect(JSON.stringify({ fields, dropped })).not.toContain("AIza");
+  });
+
+  describe("canary through the real logger", () => {
+    let info: ReturnType<typeof vi.spyOn>;
+    let error: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      info = vi.spyOn(console, "info").mockImplementation(() => {});
+      error = vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it("writes no secret shape and counts the attempts", () => {
+      const secrets = Object.values(SECRETS);
+      for (const secret of secrets) {
+        logger.emit({
+          event: "canary",
+          user_id: secret,
+          outcome: secret,
+          kind: secret,
+          error: { type: secret, code: secret },
+          flags: { [secret]: secret },
+        } as never);
+      }
+      const lines = [...info.mock.calls, ...error.mock.calls].map((c: unknown[]) => String(c[0]));
+      expect(lines).toHaveLength(secrets.length);
+      for (const line of lines) {
+        for (const secret of secrets) expect(line).not.toContain(secret);
+        expect(JSON.parse(line).redacted_secrets).toBeGreaterThanOrEqual(3);
+      }
+    });
+
+    it("also holds for fields added through annotateEvent", async () => {
+      const runtime = ManagedRuntime.make(Layer.mergeAll(WideEventLoggerLive));
+      const secrets = Object.values(SECRETS);
+      for (const secret of secrets) {
+        const event: WideEvent = { event: "canary" };
+        const deep = annotateEvent({ error: { type: secret, kind: secret }, user_id: secret });
+        await runtime.runPromise(deep.pipe(withWideEvent(event)));
+        logger.info(event as never);
+      }
+      const lines = info.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(lines).toHaveLength(secrets.length);
+      for (const line of lines) for (const secret of secrets) expect(line).not.toContain(secret);
+    });
   });
 });

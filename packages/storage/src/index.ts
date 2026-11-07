@@ -5,6 +5,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { CLIENT_CACHE_MAX, configKey, LruCache } from "./client-cache";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export type S3StorageConfig = {
@@ -16,11 +17,14 @@ export type S3StorageConfig = {
   forcePathStyle?: boolean;
 };
 
-const clients = new Map<string, S3Client>();
+const clients = new LruCache<S3Client>(CLIENT_CACHE_MAX);
 
-/** One client per config, so keep-alive connections and TLS sessions are reused. */
+/** The cache keys, for tests: they must never contain the secret. */
+export const s3CacheKeys = () => clients.keys();
+
+/** One client per config (bounded LRU, keyed by a hash), so keep-alive connections and TLS sessions are reused. */
 export function s3Client(config: S3StorageConfig): S3Client {
-  const key = JSON.stringify([
+  const key = configKey([
     config.endpoint,
     config.region,
     config.accessKeyId,

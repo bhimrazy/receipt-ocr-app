@@ -64,6 +64,12 @@ finds a request and every job attempt it caused.
   workspace ids, worker ids) must look like ids (no `@`, no spaces); `token` values like our own codes; `route` values
   lose any query string or hash. Only the schema's own keys count, so `constructor`, `toString` and `__proto__` are
   unknown keys, and map keys that touch a prototype are dropped. Maps and lists are filtered entry by entry and capped (32 keys, 20 items).
+- Secret denylist ([`secrets.ts`](../../../packages/core/src/telemetry/secrets.ts)): before an `id`, `token`, `route`,
+  `tokens` or `token_map` value is accepted, it is checked against known secret shapes (Gemini `AIza`, `sk-` keys
+  incl. Anthropic, Resend `re_`, 32/64-char hex, JWTs, Postgres URLs with a password, `Bearer`, GitHub and Vercel
+  tokens, private-key PEM headers). A match is written as `[redacted:secret]` and counted in `redacted_secrets`, never
+  the value. A 64-hex digest is redacted too: no field logs a file hash, and a new one needs a deliberate kind. A canary
+  test pushes every shape through `logger` and `annotateEvent`.
 - Only plain objects are walked: an `Error`, a `Map` or a class instance in a group is dropped whole.
 - Logging never breaks the work it describes: `logger.emit` and `errorFields` catch their own failures (a throwing
   getter becomes `log.failed` or `error.type: "Unreadable"`).

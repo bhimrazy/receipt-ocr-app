@@ -46,8 +46,9 @@ for AWS), `S3_REGION` (default `auto`, right for R2), `S3_BUCKET`, `S3_ACCESS_KE
 - **Signed URLs pin the response type.** `ResponseContentType` comes from the key's extension, so a changed object's
   metadata can't make the bucket serve HTML. Images are served `inline`; PDFs and anything else as an `attachment`,
   so they never render on the bucket's origin.
-- **One client per config.** Clients are cached by their settings, so keep-alive connections and TLS sessions are
-  reused across requests.
+- **One client per config.** Clients are cached in a 16-entry LRU keyed by a SHA-256 of the settings (never the
+  secret itself), so keep-alive connections and TLS sessions are reused across requests and a heap dump holds no key
+  as a Map key.
 - **Missing config is local.** If `S3_*` is unset, only storage operations fail (`NotConfigured`); receipt pages
   still load without an image.
 
