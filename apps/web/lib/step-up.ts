@@ -51,3 +51,16 @@ export function deleteConfirmUrl(betterAuthLink: string, token: string): string 
 export function isDeleteToken(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-z]{32}$/.test(value);
 }
+
+/** Why the account can't be deleted yet, naming the shared workspaces the user alone owns. */
+export function soleOwnerMessage(workspaces: readonly string[], then: string): string {
+  const names =
+    workspaces.length <= 1
+      ? (workspaces[0] ?? "a workspace")
+      : `${workspaces.slice(0, -1).join(", ")} and ${workspaces.at(-1)}`;
+  const which = workspaces.length > 1 ? "which have" : "which has";
+  const owner = workspaces.length > 1 ? "an owner of each" : "an owner";
+  return `You own ${names}, ${which} other members. Make one of them ${owner}, then ${then}.`;
+}
+
+export const WORKSPACE_NEEDS_OWNER = "WORKSPACE_NEEDS_OWNER";

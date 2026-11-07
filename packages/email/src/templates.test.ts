@@ -57,11 +57,12 @@ describe("escapeHtml", () => {
 });
 
 describe("security notices", () => {
-  it("links the delete confirmation and says it is single use with a one-hour expiry", () => {
+  it("links the delete confirmation page and says nothing changes until the user confirms there", () => {
     const mail = deleteAccountEmail("https://app.example/app/settings/delete-account?token=abc");
     expect(mail.html).toContain('href="https://app.example/app/settings/delete-account?token=abc"');
     expect(mail.text).toContain("https://app.example/app/settings/delete-account?token=abc");
-    expect(mail.text).toMatch(/works once and expires in one hour/);
+    expect(mail.text).toMatch(/within 1 hour and confirm on the page it opens/);
+    expect(mail.text).toContain("Until then, nothing changes. The link works once");
   });
 
   it("points a password change notice at the reset page and the support inbox", () => {

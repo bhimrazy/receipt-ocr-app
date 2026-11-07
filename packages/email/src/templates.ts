@@ -115,10 +115,10 @@ export function deleteAccountEmail(url: string): EmailContent {
     subject: `Confirm deleting your ${BRAND} account`,
     html: layout(
       "Confirm deleting your account",
-      "<p style='margin:0 0 12px'>Someone signed in to your account asked to delete it. Open this link to permanently delete the account, its workspaces and every receipt in them. The link works once and expires in one hour.</p><p style='margin:0'>If it wasn't you, don't open the link. Change your password, or the password of the Google or GitHub account you sign in with, because someone else can use your account.</p>",
+      "<p style='margin:0 0 12px'>Someone signed in to your account asked to delete it. Open this link within 1 hour and confirm on the page it opens to permanently delete the account, its workspaces and every receipt in them. Until then, nothing changes. The link works once.</p><p style='margin:0'>If it wasn't you, don't open the link. Change your password, or the password of the Google or GitHub account you sign in with, because someone else can use your account.</p>",
       { label: "Delete my account", url },
     ),
-    text: `Confirm deleting your ${BRAND} account.\n\nThis permanently deletes the account, its workspaces and every receipt in them. The link works once and expires in one hour:\n${url}\n\nIf it wasn't you, don't open the link. Change your password, or the password of the Google or GitHub account you sign in with, because someone else can use your account.`,
+    text: `Confirm deleting your ${BRAND} account.\n\nOpen this link within 1 hour and confirm on the page it opens to permanently delete the account, its workspaces and every receipt in them. Until then, nothing changes. The link works once:\n${url}\n\nIf it wasn't you, don't open the link. Change your password, or the password of the Google or GitHub account you sign in with, because someone else can use your account.`,
   };
 }
 
@@ -153,9 +153,9 @@ export function emailChangeEmail(params: {
     subject: `Approve the email change on your ${BRAND} account`,
     html: layout(
       "Approve the email change",
-      `<p style='margin:0 0 12px'>Someone signed in to your account asked to change its email address to <strong style="color:#e7e7ea">${escapeHtml(newEmail)}</strong>. Nothing changes until you approve it with this link and then confirm the new address from the email we send there. The link expires in one hour.</p><p style='margin:0'>If it wasn't you, don't open the link. <a href="${resetUrl}" style="color:#e7e7ea">Reset your password</a> and ${support.html}.</p>`,
+      `<p style='margin:0 0 12px'>Someone signed in to your account asked to change its email address to <strong style="color:#e7e7ea">${escapeHtml(newEmail)}</strong>. Nothing changes until you approve it with this link and then confirm the new address from the email we send there. The link expires in 1 hour.</p><p style='margin:0'>If it wasn't you, don't open the link. <a href="${resetUrl}" style="color:#e7e7ea">Reset your password</a> and ${support.html}.</p>`,
       { label: "Approve the change", url: params.url },
     ),
-    text: `Someone signed in to your ${BRAND} account asked to change its email address to ${newEmail}.\n\nNothing changes until you approve it and then confirm the new address. Approve (expires in one hour):\n${params.url}\n\nIf it wasn't you, don't open the link. Reset your password and ${support.text}:\n${params.resetUrl}`,
+    text: `Someone signed in to your ${BRAND} account asked to change its email address to ${newEmail}.\n\nNothing changes until you approve it and then confirm the new address. Approve (expires in 1 hour):\n${params.url}\n\nIf it wasn't you, don't open the link. Reset your password and ${support.text}:\n${params.resetUrl}`,
   };
 }

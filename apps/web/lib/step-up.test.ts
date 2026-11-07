@@ -5,6 +5,7 @@ import {
   isDeleteToken,
   isSessionFresh,
   needsFreshSession,
+  soleOwnerMessage,
 } from "./step-up";
 
 describe("needsFreshSession", () => {
@@ -46,5 +47,16 @@ describe("deleteConfirmUrl", () => {
     expect(isDeleteToken("A".repeat(32))).toBe(false);
     expect(isDeleteToken(["a".repeat(32)])).toBe(false);
     expect(isDeleteToken(undefined)).toBe(false);
+  });
+});
+
+describe("soleOwnerMessage", () => {
+  it("names one workspace or several in plain words", () => {
+    expect(soleOwnerMessage(["Acme"], "request a new link")).toBe(
+      "You own Acme, which has other members. Make one of them an owner, then request a new link.",
+    );
+    expect(soleOwnerMessage(["Acme", "Beta", "Coda"], "try again")).toBe(
+      "You own Acme, Beta and Coda, which have other members. Make one of them an owner of each, then try again.",
+    );
   });
 });
