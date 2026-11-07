@@ -148,7 +148,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    Currency honesty (no USD default, 3-decimal amounts) and conversion to a home currency:
    [currencies and FX](plans/2026-11-06-currencies-fx.md).
 10. Read-only agent access over MCP: personal tokens first, then OAuth for Claude.ai and ChatGPT ([MCP server](plans/2026-11-07-mcp-server.md)).
-11. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
+11. Bring your own AI key (Pro perk, maybe a capped Free on-ramp), then own storage (R2 first), on envelope
+    encryption with rotation ([BYOK plan](plans/2026-11-07-byok.md)). After billing.
+12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
@@ -161,6 +163,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Encryption key rotation: re-encrypt job + per-version counts + split from the auth secret (see
+  [BYOK plan](plans/2026-11-07-byok.md#9-key-rotation-and-encryption-at-rest)).
 - FAQ uses a raw `<details>`; add a server-friendly Disclosure primitive to `packages/ui`.
 - PDF page cap gaps: the hand-written page counter (`packages/core/src/pdf-pages.ts`) can undercount when the word
   `stream` sits inside a string or `/stream` is used as a name, when `endobj` sits inside a string, when comments sit
