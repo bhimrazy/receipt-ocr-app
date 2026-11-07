@@ -134,6 +134,24 @@ function classifyOpenai(error: APICallError): OcrFailureKind | null {
   return IMAGE_COMPLAINT.test(body.message) ? null : "not-configured";
 }
 
+/**
+ * Anthropic's 400 body: `{ type: "error", error: { type, message } }`. An `invalid_request_error`
+ * that doesn't blame the file (a schema keyword, an effort value, a retired model) is our request,
+ * not the photo, so it is `not-configured` and the chain moves on.
+ */
+function classifyAnthropic400(error: APICallError): OcrFailureKind | null {
+  if (!error.url.startsWith("https://api.anthropic.com/") || error.statusCode !== 400) return null;
+  try {
+    const body = (
+      JSON.parse(error.responseBody ?? "") as { error?: { type?: unknown; message?: unknown } }
+    ).error;
+    if (body?.type !== "invalid_request_error") return null;
+    return IMAGE_COMPLAINT.test(String(body.message ?? "")) ? null : "not-configured";
+  } catch {
+    return null;
+  }
+}
+
 /** The cause of a step skipped before any request: this model can't take the file's type or size. */
 export class UnsupportedFileError extends Error {
   override name = "UnsupportedFileError";
@@ -214,6 +232,8 @@ export function classifyOcrError(error: unknown): OcrFailureKind {
   if (APICallError.isInstance(error)) {
     // Our request is wrong for this model, not the photo: configuration, and the next model may work.
     if (isRequestRejection(error)) return "not-configured";
+    const anthropic = classifyAnthropic400(error);
+    if (anthropic) return anthropic;
     const groq = classifyGroq400(error);
     if (groq) return groq;
     const openai = classifyOpenai(error);
