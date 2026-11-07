@@ -1,3 +1,4 @@
+import type { S3Client } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 
 /** Max cached clients: enough for env config plus a few BYO-storage workspaces. */
@@ -10,7 +11,10 @@ export const configKey = (parts: readonly unknown[]): string =>
 /** A minimal LRU: a Map's insertion order is the recency order. */
 export class LruCache<V> {
   private readonly map = new Map<string, V>();
-  constructor(private readonly max: number) {}
+  constructor(
+    private readonly max: number,
+    private readonly onEvict?: (value: V) => void,
+  ) {}
 
   get(key: string): V | undefined {
     const value = this.map.get(key);
@@ -24,10 +28,18 @@ export class LruCache<V> {
   set(key: string, value: V): void {
     this.map.delete(key);
     this.map.set(key, value);
-    if (this.map.size > this.max) this.map.delete(this.map.keys().next().value as string);
+    if (this.map.size > this.max) {
+      const oldest = this.map.keys().next().value as string;
+      const evicted = this.map.get(oldest) as V;
+      this.map.delete(oldest);
+      this.onEvict?.(evicted);
+    }
   }
 
   keys(): string[] {
     return [...this.map.keys()];
   }
 }
+
+/** Evicted clients are destroyed so their sockets close. */
+export const s3Clients = new LruCache<S3Client>(CLIENT_CACHE_MAX, (client) => client.destroy());

@@ -449,6 +449,10 @@ describe("secret denylist", () => {
     githubPat: "github_pat_" + rep("Q", 30),
     vercel: "vcp_" + rep("k", 30),
     pem: "-----BEGIN PRIVATE KEY-----",
+    hex40: rep("1f", 20),
+    googleOauth: "GOCSPX-" + rep("a1", 14),
+    awsKeyId: "AKIA" + rep("Q", 16),
+    prefixed: "x_sk-ant-api03-" + rep("x", 40),
   };
 
   const legitimate = [
@@ -464,17 +468,53 @@ describe("secret denylist", () => {
     "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6", // 32-char Better Auth id
   ];
 
-  it.each(Object.entries(SECRETS))("redacts a %s shape from id and token fields", (_n, secret) => {
+  // Shapes with spaces, `@` or `-----` never fit id/token, so they are dropped instead.
+  const FITS = new Set(
+    Object.keys(SECRETS).filter((n) => !["postgres", "bearer", "pem"].includes(n)),
+  );
+
+  it.each(Object.entries(SECRETS))(
+    "keeps a %s shape out of id and token fields",
+    (name, secret) => {
+      const { fields, redacted, dropped } = sanitize({
+        event: "x",
+        outcome: secret,
+        user_id: secret,
+        flags: { mode: secret },
+        route: `/${secret}?q=1`,
+      });
+      expect(JSON.stringify({ fields, dropped })).not.toContain(secret);
+      if (FITS.has(name)) {
+        expect(fields.user_id).toBe("[redacted:secret]");
+        expect(redacted).toBeGreaterThanOrEqual(3);
+      }
+    },
+  );
+
+  it("does not replace a route whole for a secret in its query string", () => {
     const { fields, redacted } = sanitize({
       event: "x",
-      outcome: secret,
-      user_id: secret,
-      flags: { mode: secret },
-      route: `/${secret}`,
+      route: `/app/history?k=${SECRETS.gemini}`,
     });
-    expect(JSON.stringify(fields)).not.toContain(secret);
-    expect(fields.user_id).toBe("[redacted:secret]");
-    expect(redacted).toBeGreaterThanOrEqual(3);
+    expect(fields.route).toBe("/app/history");
+    expect(redacted).toBe(0);
+  });
+
+  it.each(["eyJ", "postgres://a:", "AIza", "Bearer ", "sk-", "re_", "ghp_", "-----BEGIN "])(
+    "handles 100 KB of %s repeated in well under 50 ms",
+    (unit) => {
+      const big = unit.repeat(Math.ceil(100_000 / unit.length));
+      const start = performance.now();
+      sanitize({ event: "x", user_id: big, outcome: big, route: big, flags: { mode: big } });
+      expect(performance.now() - start).toBeLessThan(50);
+    },
+  );
+
+  it("is linear on accepted near-miss values too", () => {
+    const near = "eyJ".repeat(33);
+    const start = performance.now();
+    for (let i = 0; i < 200; i++) sanitize({ event: "x", user_id: near, outcome: near });
+    expect(performance.now() - start).toBeLessThan(200);
   });
 
   it("keeps legitimate ids and codes", () => {
@@ -517,7 +557,6 @@ describe("secret denylist", () => {
       expect(lines).toHaveLength(secrets.length);
       for (const line of lines) {
         for (const secret of secrets) expect(line).not.toContain(secret);
-        expect(JSON.parse(line).redacted_secrets).toBeGreaterThanOrEqual(3);
       }
     });
 

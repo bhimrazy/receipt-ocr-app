@@ -9,6 +9,13 @@ describe("provider registry cache", () => {
     expect(registryFor({ ...keys, google: "AIza-test-secret-two" })).not.toBe(registryFor(keys));
   });
 
+  it("keys on every provider key, including one this code does not know yet", () => {
+    const base = { google: "g-key", anthropic: "a-key" };
+    const a = registryFor({ ...base, openai: "o-1" } as never);
+    expect(registryFor({ ...base, openai: "o-2" } as never)).not.toBe(a);
+    expect(registryFor({ anthropic: "a-key", openai: "o-1", google: "g-key" } as never)).toBe(a);
+  });
+
   it("keeps no key, or part of one, in the cache keys, and stays bounded", () => {
     const secrets = Array.from({ length: CLIENT_CACHE_MAX + 5 }, (_, i) => `secret-key-${i}-xyz`);
     for (const s of secrets) registryFor({ google: s, anthropic: s });

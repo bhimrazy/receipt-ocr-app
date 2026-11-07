@@ -81,7 +81,7 @@ function buildRegistry(keys: ProviderKeys) {
 
 /** One registry per key set (bounded LRU, keyed by a hash), so provider clients are reused across calls. */
 export function registryFor(keys: ProviderKeys) {
-  const cacheKey = configKey([keys.google, keys.anthropic]);
+  const cacheKey = configKey(Object.entries(keys).sort(([a], [b]) => (a < b ? -1 : 1)));
   let registry = registries.get(cacheKey);
   if (!registry) {
     registry = buildRegistry(keys);
