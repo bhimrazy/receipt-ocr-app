@@ -1,7 +1,7 @@
 // What each provider is sent for a chain step's effort. Values are the ones in each provider's docs
 // (see the effort fields in models.ts); an unset step keeps the behaviour that predates the setting.
 import { describe, expect, it } from "vitest";
-import { providerOptionsFor } from "./extract";
+import { maxOutputTokensFor, providerOptionsFor } from "./extract";
 
 describe("providerOptionsFor effort", () => {
   it("Claude: low unless the step chooses, any of the five levels when it does", () => {
@@ -51,5 +51,16 @@ describe("providerOptionsFor effort", () => {
     expect(providerOptionsFor("openai:gpt-6-luna", "minimal")).toMatchObject({
       openai: { reasoningEffort: "none" },
     });
+  });
+});
+
+describe("maxOutputTokensFor", () => {
+  it("keeps 16,384 up to medium and gives high, xhigh and max more room for reasoning", () => {
+    for (const effort of [null, "none", "minimal", "low", "medium"]) {
+      expect(maxOutputTokensFor(effort)).toBe(16_384);
+    }
+    expect(maxOutputTokensFor("high")).toBe(32_768);
+    expect(maxOutputTokensFor("xhigh")).toBe(65_536);
+    expect(maxOutputTokensFor("max")).toBe(65_536);
   });
 });

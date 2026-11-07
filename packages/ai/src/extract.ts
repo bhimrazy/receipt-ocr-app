@@ -71,6 +71,17 @@ const DEFAULT_MAX_RETRIES = 2;
  */
 const MAX_OUTPUT_TOKENS = 16_384;
 
+/**
+ * The cap for a call at `effort`. Reasoning tokens count toward it, so the top levels get more
+ * room or a long receipt can be billed and then cut off. Every model offered documents at least
+ * 65,536 output tokens, except Groq's fixed "none".
+ */
+export function maxOutputTokensFor(effort: string | null): number {
+  if (effort === "xhigh" || effort === "max") return 65_536;
+  if (effort === "high") return 32_768;
+  return MAX_OUTPUT_TOKENS;
+}
+
 const registries = new LruCache<ReturnType<typeof buildRegistry>>(CLIENT_CACHE_MAX);
 
 /** The cache keys, for tests: they must never contain a key. */
@@ -304,6 +315,7 @@ export async function extractReceipt(input: ExtractReceiptInput): Promise<Extrac
   const result = await extractWith(registryFor(input.keys ?? {}).languageModel(input.model), {
     ...input,
     providerOptions: providerOptionsFor(input.model, input.effort),
+    maxOutputTokens: maxOutputTokensFor(effortFor(input.model, input.effort)),
     schemaMode: ocrModel(input.model)?.schemaMode,
   });
   return { ...result, model: input.model };
@@ -314,6 +326,7 @@ export async function extractWith(
   model: LanguageModel,
   input: Omit<ExtractReceiptInput, "model" | "keys"> & {
     providerOptions?: ProviderOptions;
+    maxOutputTokens?: number;
     schemaMode?: OcrModel["schemaMode"];
     /** For tests: the day v2's no-future-dates rule counts from. */
     now?: Date;
@@ -328,7 +341,7 @@ export async function extractWith(
     const result = await generateText({
       model,
       output: Output.object({ schema: receiptRequestSchema(promptVersion, input.schemaMode) }),
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      maxOutputTokens: input.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
       timeout: { totalMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS },
       maxRetries: input.maxRetries ?? DEFAULT_MAX_RETRIES,
       abortSignal: input.abortSignal,

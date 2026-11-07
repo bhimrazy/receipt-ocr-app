@@ -330,3 +330,11 @@ describe("Anthropic errors", () => {
     expect(error).toMatchObject({ kind: "not-configured" });
   });
 });
+
+describe("a 2xx reply the SDK cannot parse", () => {
+  it("is invalid-output, not bad-image, so the chain moves on", async () => {
+    mockFetch(json({ unexpected: true }));
+    const error = await run("anthropic:claude-haiku-5-5").catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "invalid-output" });
+  });
+});

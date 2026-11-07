@@ -150,7 +150,7 @@ only if the new one is better or equal on totals.
   `from` day is on or before the call's UTC day. A price change is a new row, so old calls keep their old price.
 - **Error messages never contain receipt contents.** `OcrCallError.message` is the kind plus an HTTP status; the AI
   SDK's own messages can embed model output. The original error is kept as a non-enumerable `cause`.
-- **Output is bounded.** `maxOutputTokens` is 16,384, the schema caps string lengths and allows at most 300 items, so
+- **Output is bounded.** `maxOutputTokens` is 16,384 (more at high effort, see Reasoning effort), the schema caps string lengths and allows at most 300 items, so
   a crafted image can't produce unbounded cost or rows.
 - **A refusal is a failure.** A `content-filter` finish (Claude's `stop_reason: "refusal"`, Gemini's safety stop) is
   `refused` with its usage, never an extraction. Text that parses is caught after the call; prose or empty text fails
@@ -265,7 +265,7 @@ against the real API yet; the first benchmark is the check.
   value) is `not-configured`; a 400 that names the image is `bad-image`. The SDK's Responses schema has no refusal
   part, so a refusal is a 2xx it cannot parse; any 2xx parse failure is `invalid-output`, which falls to the next
   model. The key check treats a 429 naming a quota as `no-billing-or-quota`.
-- **Retention (privacy policy):** not used for training unless opted in; abuse-monitoring logs up to 30 days;
+- **Retention (privacy policy):** not used for training unless opted in; abuse-monitoring logs up to 30 days (longer where the law requires it or to protect OpenAI's services or others from harm);
   zero data retention only with OpenAI's prior approval. Use a project key with a spend limit.
 - **Benchmark:** `OPENAI_API_KEY=... bun run bench:ocr --models openai:gpt-6-luna,openai:gpt-6.1-terra`. The dry run
   counts one token per 32 px patch (the docs give no multiplier for these models).
@@ -274,8 +274,10 @@ against the real API yet; the first benchmark is the check.
 
 Each chain step in Admin → Settings → OCR models may set an `effort`; unset runs the model's default. The allowed
 values live on the model (`OcrModel.effort` in [`models.ts`](../../packages/ai/src/models.ts)), settings validation
-rejects any other value on save (`ocrRoutingSchema`), and `providerOptionsFor` maps it to the provider's request. A
-stale saved value the model no longer takes falls back to the default rather than reaching the API. Higher effort
+rejects any other value on save (`ocrRoutingSchema`), and `providerOptionsFor` maps it to the provider's request. When
+the settings are read back (`storedOcrRoutingSchema`), a saved effort the model no longer lists is dropped from that
+step, which then runs the model's default; the rest of the chain is kept, so one stale value never sends the chain
+back to the defaults. A save is still strict. Higher effort
 costs more (reasoning tokens bill as output) and is slower. Docs checked 2026-11-07.
 
 | Provider                  | Request field                  | Values                              | Unset runs                                         |
@@ -290,8 +292,10 @@ Sources: [Claude effort](https://platform.claude.com/docs/en/build-with-claude/e
 [Gemini thinking](https://aistudio.google.com/docs/thinking) (`thinkingLevel` is the setting for Gemini 3 models;
 `thinkingBudget` belongs to 2.5 and is not used), OpenAI model pages
 ([Luna](https://developers.openai.com/api/docs/models/gpt-6-luna),
-[Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra)). Output is capped at 16,384 tokens a call, so
-`xhigh` and `max` on a long receipt can run out of room before the JSON is written (`invalid-output`).
+[Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra)). Reasoning tokens count toward the output cap, so
+`maxOutputTokensFor` scales it: 16,384 up to medium, 32,768 at `high`, 65,536 at `xhigh` and `max`. That is within each
+model's documented maximum (Claude 128K, Gemini 3.8 Flash and 3.5 Flash-Lite 65,536, OpenAI 128K; Groq is fixed at
+`none`). A very long receipt at the top levels can still run out.
 `bun run bench:ocr --effort low,medium` compares levels (one row per model and level); no level has been benchmarked
 yet.
 

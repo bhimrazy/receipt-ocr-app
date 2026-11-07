@@ -53,7 +53,7 @@ describe("OcrChainForm effort", () => {
     ]);
     expect(html.match(/>Effort</g)).toHaveLength(2);
     expect(html).toContain("Default (low)");
-    expect(html).toContain("Higher effort costs more and is slower");
+    expect(html).toContain("Higher levels cost more and are slower");
   });
 
   it("shows a fixed line instead of a select for a single-value model", () => {

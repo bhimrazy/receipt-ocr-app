@@ -217,8 +217,8 @@ export function OcrChainForm({
         })}
       </ol>
       <p className="mt-2 text-xs text-muted-foreground" id={`${id}-effort-help`}>
-        Effort is how much a model reasons before it answers. Higher effort costs more and is
-        slower; receipts rarely need it.
+        Effort is how much a model reasons before it answers. Higher levels cost more and are slower
+        (high and above also raise the output cap to 32K or 64K tokens); receipts rarely need them.
       </p>
       <p className="sr-only" id={`${id}-nokey`}>
         This provider has no API key on the server, so it can&apos;t be turned on.

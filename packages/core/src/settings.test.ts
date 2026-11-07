@@ -1,4 +1,5 @@
 import { ConfigProvider, Effect, Exit, Layer } from "effect";
+import { OCR_MODELS } from "@receipt-ocr/ai";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PLANS, MAX_BATCH } from "./plans";
 import { Db } from "./services";
@@ -7,6 +8,7 @@ import {
   planTableSchema,
   providerAvailability,
   Settings,
+  storedOcrRoutingSchema,
   storedPlanTableSchema,
 } from "./settings";
 
@@ -78,6 +80,17 @@ describe("storedPlanTableSchema", () => {
         storedPlanTableSchema.safeParse({ free: { ...policy, batchMax }, pro: policy }).success,
       ).toBe(false);
     }
+  });
+});
+
+describe("storedOcrRoutingSchema", () => {
+  it("keeps a supported effort and still rejects an unknown model", () => {
+    const step = { model: "openai:gpt-6-luna", enabled: true, effort: "low" };
+    const ok = storedOcrRoutingSchema.parse({ chain: [step] });
+    expect((ok.chain[0] as { effort?: string }).effort).toBe("low");
+    expect(
+      storedOcrRoutingSchema.safeParse({ chain: [{ ...step, model: "openai:made-up" }] }).success,
+    ).toBe(false);
   });
 });
 
@@ -232,6 +245,32 @@ describe("Settings", () => {
       "anthropic:claude-sonnet-5-5",
       "google:gemini-3.8-flash",
     ]);
+  });
+
+  it("keeps a saved chain whose effort the model no longer lists, dropping just that effort", async () => {
+    const model = OCR_MODELS.find((m) => m.id === "google:gemini-3.8-flash")!;
+    const original = model.effort!;
+    const step = { model: model.id, enabled: true, timeoutMs: 20_000, effort: "high" };
+    const other = { model: "anthropic:claude-sonnet-5-5", enabled: true, timeoutMs: 30_000 };
+    const row = {
+      key: "ocr",
+      value: { chain: [other, step] },
+      updatedAt: new Date(),
+      updatedBy: "a",
+    };
+    // The save was valid when it was made.
+    expect(ocrRoutingSchema.safeParse(row.value).success).toBe(true);
+    try {
+      (model as { effort: typeof original }).effort = { ...original, values: ["low", "medium"] };
+      expect(ocrRoutingSchema.safeParse(row.value).success).toBe(false);
+      const exit = await settingsWith({}, [row])(Effect.flatMap(Settings, (s) => s.ocr));
+      expect(Exit.isSuccess(exit) && exit.value.chain).toEqual([
+        other,
+        { model: model.id, enabled: true, timeoutMs: 20_000 },
+      ]);
+    } finally {
+      (model as { effort: typeof original }).effort = original;
+    }
   });
 
   it("saves batchMax and records the change in the audit log", async () => {
