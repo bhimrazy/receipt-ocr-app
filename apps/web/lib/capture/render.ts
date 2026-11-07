@@ -199,7 +199,9 @@ export function renderEdit(bitmap: ImageBitmap, edit: EditState, budget: RenderB
   const base = shared
     ? cachedStraightened(bitmap, edit, budget)
     : straightened(bitmap, edit, budget);
-  const pixels: Pixels = shared ? { ...base, data: new Uint8ClampedArray(base.data) } : base;
+  const pixels: Pixels = shared
+    ? { data: new Uint8ClampedArray(base.data), width: base.width, height: base.height }
+    : base;
   applyFilter(pixels, edit.filter);
   const out = document.createElement("canvas");
   out.width = pixels.width;
