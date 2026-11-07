@@ -197,6 +197,56 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     expect(await status(invite("member"))).toBe(200);
   });
 
+  it("M3: locks sign-in per address after repeated failures, the same for unknown addresses", async () => {
+    const victim = `${tag}-victim@example.com`;
+    const ghost = `${tag}-ghost@example.com`;
+    const created = await auth.api.signUpEmail({ body: { email: victim, password, name: "V" } });
+    const attempt = (address: string, pass: string) =>
+      auth.api.signInEmail({ body: { email: address, password: pass } });
+    const bodyOf = async (promise: Promise<unknown>) => {
+      try {
+        await promise;
+        return null;
+      } catch (error) {
+        return error instanceof APIError
+          ? { code: error.statusCode, message: error.message }
+          : error;
+      }
+    };
+    for (let i = 0; i < 10; i++) {
+      expect(await status(attempt(victim, "wrong-password-1"))).toBe(401);
+      expect(await status(attempt(ghost, "wrong-password-1"))).toBe(401);
+    }
+    const lockedKnown = await bodyOf(attempt(victim, password));
+    const lockedUnknown = await bodyOf(attempt(ghost, password));
+    expect(lockedKnown).toEqual({ code: 429, message: expect.any(String) });
+    expect(lockedKnown).toEqual(lockedUnknown);
+    // Not permanent: ageing the counter past the window reopens sign-in.
+    await db.execute(
+      sql`update rate_limit set last_request = last_request - ${16 * 60 * 1000} where id like 'signin-fail:%'`,
+    );
+    expect(await status(attempt(victim, password))).toBe(200);
+    await db.execute(
+      sql`delete from organization where id in (select organization_id from member where user_id = ${created.user.id})`,
+    );
+    await db.delete(user).where(eq(user.id, created.user.id));
+    await db.execute(sql`delete from rate_limit where id like 'signin-fail:%'`);
+  });
+
+  it("M3: caps password-change attempts per user", async () => {
+    const headers = new Headers({ cookie });
+    const change = () =>
+      auth.api.changePassword({
+        headers,
+        body: { currentPassword: "wrong-password-1", newPassword: `${password}-9` },
+      });
+    const results: number[] = [];
+    for (let i = 0; i < 11; i++) results.push(await status(change()));
+    expect(results.slice(0, 10).every((code) => code !== 429)).toBe(true);
+    expect(results[10]).toBe(429);
+    await db.execute(sql`delete from rate_limit where id = ${`pwchange:${userId}`}`);
+  });
+
   // Last: it deletes this user's sessions.
   it("a revoked session stops working on auth endpoints at once (cookie cache off)", async () => {
     await db.delete(session).where(eq(session.userId, userId));

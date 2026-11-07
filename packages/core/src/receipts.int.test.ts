@@ -28,7 +28,7 @@ import { checkQuota, quotaGate, usageWindow } from "./quota";
 import { ReceiptRepo, STALE_AFTER_MS } from "./repository";
 import { Db, Storage } from "./services";
 import { receiptCalls, usageByDay, usageByModel, usageByWorkspace } from "./usage";
-import { ensurePersonalWorkspace, hitRateLimit, resolveScope } from "./workspace";
+import { ensurePersonalWorkspace, hitRateLimit, rateLimitReached, resolveScope } from "./workspace";
 
 const enabled = process.env.INTEGRATION === "1";
 const runtime = ManagedRuntime.make(AppLayer);
@@ -611,6 +611,23 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(results).toEqual([true, true, true, false]);
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect((await run(hitRateLimit(key, 1, 3))).allowed).toBe(true);
+    await run(
+      Effect.flatMap(Db, ({ use }) =>
+        use((db) => db.execute(sql`delete from rate_limit where id = ${key}`)),
+      ),
+    );
+  });
+
+  it("rateLimitReached reads the counter without counting, and forgets after the window", async () => {
+    const key = `${tag}:peek`;
+    expect(await run(rateLimitReached(key, 60_000, 2))).toBe(false);
+    await run(hitRateLimit(key, 60_000, 2));
+    expect(await run(rateLimitReached(key, 60_000, 2))).toBe(false);
+    await run(hitRateLimit(key, 60_000, 2));
+    expect(await run(rateLimitReached(key, 60_000, 2))).toBe(true);
+    expect(await run(rateLimitReached(key, 60_000, 2))).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(await run(rateLimitReached(key, 1, 2))).toBe(false);
     await run(
       Effect.flatMap(Db, ({ use }) =>
         use((db) => db.execute(sql`delete from rate_limit where id = ${key}`)),

@@ -34,7 +34,13 @@ import { organization as organizationPlugin } from "better-auth/plugins/organiza
 import { isBootstrapAdmin } from "./admin-bootstrap";
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
 import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
-import { allowAuthEmail, type AuthEmailKind } from "./email-limits";
+import {
+  allowAuthEmail,
+  allowPasswordChange,
+  recordSignInFailure,
+  signInBlocked,
+  type AuthEmailKind,
+} from "./email-limits";
 import {
   authEnabled,
   authEnv,
@@ -94,6 +100,13 @@ async function deliver(input: SendEmailInput) {
  * For emails a signed-in user asked for (deletion, email change). Unlike sign-up and reset,
  * refusing says nothing about whether an address has an account, so the user is told.
  */
+const SIGN_IN_LIMITED_MESSAGE = "Too many sign-in attempts. Try again in a few minutes.";
+
+function signInEmail(body: unknown): string | null {
+  const email = (body as { email?: unknown } | undefined)?.email;
+  return typeof email === "string" && email.length > 0 ? email : null;
+}
+
 async function limitSignedInEmail(kind: AuthEmailKind, email: string) {
   if (!(await allowAuthEmail(kind, email))) {
     throw new APIError("TOO_MANY_REQUESTS", {
@@ -279,6 +292,23 @@ export const auth = betterAuth({
     before: createAuthMiddleware(async (ctx) => {
       // Deletes on a single GET; our confirm page posts the token to /delete-user instead.
       if (ctx.path === "/delete-user/callback") throw new APIError("NOT_FOUND");
+      if (ctx.path === "/sign-in/email") {
+        const email = signInEmail(ctx.body);
+        if (email && (await signInBlocked(email))) {
+          throw new APIError("TOO_MANY_REQUESTS", { message: SIGN_IN_LIMITED_MESSAGE });
+        }
+        return;
+      }
+      if (ctx.path === "/change-password") {
+        // Per user, on top of the per-IP rule: a stolen session can't grind the current password.
+        const current = await getSessionFromCtx(ctx);
+        if (current && !(await allowPasswordChange(current.user.id))) {
+          throw new APIError("TOO_MANY_REQUESTS", {
+            message: "Too many password changes. Try again later.",
+          });
+        }
+        return;
+      }
       if (ctx.path === "/delete-user" && !needsFreshSession(ctx.path, ctx.body)) {
         // Better Auth spends the token before beforeDelete can refuse; check first so it survives.
         const current = await getSessionFromCtx(ctx);
@@ -317,6 +347,13 @@ export const auth = betterAuth({
       });
     }),
     after: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === "/sign-in/email") {
+        // 401 is a wrong password or unknown address; a 403 (unverified) has the right password.
+        const failed = isAPIError(ctx.context.returned) && ctx.context.returned.statusCode === 401;
+        const email = signInEmail(ctx.body);
+        if (failed && email) await recordSignInFailure(email);
+        return;
+      }
       const returned = ctx.context.returned as
         { user?: { id: string; email: string }; message?: string } | undefined;
       if (!returned || isAPIError(returned)) return;
