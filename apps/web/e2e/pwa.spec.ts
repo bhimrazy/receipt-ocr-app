@@ -153,7 +153,7 @@ test("the worker registers in the app, never stores API or page responses, and s
   await expect(page.getByRole("heading", { level: 1, name: "History" })).toBeVisible();
 });
 
-test("a shared receipt waits for Keep, then for Read in the review sheet, and is never uploaded on its own", async ({
+test("a shared receipt waits for Keep, then for Upload in the review sheet, and is never uploaded on its own", async ({
   page,
 }) => {
   await signUp(page, uniqueEmail("share"));
@@ -170,7 +170,7 @@ test("a shared receipt waits for Keep, then for Read in the review sheet, and is
 
   await page.getByRole("button", { name: "Keep" }).click();
   await expect(review(page)).toBeVisible();
-  await expect(review(page).getByRole("button", { name: "Read receipt" })).toBeVisible();
+  await expect(review(page).getByRole("button", { name: "Next" })).toBeVisible();
   await expect(sharedNotice(page)).toHaveCount(0);
   await page.waitForTimeout(500);
   expect(uploads.count).toBe(0);
