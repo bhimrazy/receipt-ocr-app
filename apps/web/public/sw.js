@@ -3,7 +3,7 @@
 // HTML, no receipt images. Only the files below are cached, plus shared files for at most 10 minutes
 // (see lib/share-target.ts). Bump VERSION whenever this file or a precached file changes.
 // To switch the worker off in production, see "Disable the service worker" in docs/runbook.md.
-const VERSION = "2";
+const VERSION = "3";
 const STATIC_CACHE = `receiptocr-static-v${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/offline.js", "/icon.svg", "/icons/icon-192.png"];
@@ -58,6 +58,7 @@ self.addEventListener("fetch", (event) => {
   }
   if (request.method !== "GET") return;
   if (request.mode === "navigate") {
+    event.waitUntil(pruneExpiredShares());
     event.respondWith(navigate(event));
     return;
   }
@@ -108,11 +109,9 @@ function acceptable(file) {
  */
 async function receiveShare(request) {
   const redirect = (path) => Response.redirect(new URL(path, self.location.origin).href, 303);
-  // The Android share sheet sends no referrer. A page on another site posting here is dropped
-  // (it can hide its referrer, which is why the panel asks too).
-  if (request.referrer && new URL(request.referrer).origin !== self.location.origin) {
-    return redirect("/app/upload");
-  }
+  // Android apps send no referrer or an android-app:// one. Only a web page on another site is
+  // dropped (it can hide its referrer, which is why the panel asks too).
+  if (isForeignWebPage(request.referrer)) return redirect("/app");
   try {
     await caches.delete(SHARED_CACHE);
     const form = await request.formData();
@@ -120,7 +119,7 @@ async function receiveShare(request) {
       .getAll(SHARE_TARGET_FIELD)
       .filter((value) => typeof value !== "string" && acceptable(value))
       .slice(0, MAX_SHARED_FILES);
-    if (files.length === 0) return redirect("/app/upload?shared=failed");
+    if (files.length === 0) return redirect("/app?shared=failed");
     const cache = await caches.open(SHARED_CACHE);
     const sharedAt = String(Date.now());
     await Promise.all(
@@ -141,6 +140,15 @@ async function receiveShare(request) {
     return redirect("/app/upload?shared=1");
   } catch {
     // Quota or a malformed body: the upload page still opens, with nothing waiting.
-    return redirect("/app/upload?shared=failed");
+    return redirect("/app?shared=failed");
+  }
+}
+
+function isForeignWebPage(referrer) {
+  try {
+    const url = new URL(referrer);
+    return /^https?:$/.test(url.protocol) && url.origin !== self.location.origin;
+  } catch {
+    return false;
   }
 }

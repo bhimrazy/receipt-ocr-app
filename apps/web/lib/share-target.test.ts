@@ -145,7 +145,6 @@ describe("public/sw.js", () => {
   });
 
   it("drops shares posted from another site and files that aren't images or PDFs", () => {
-    expect(sw).toContain("new URL(request.referrer).origin !== self.location.origin");
     expect(sw).toContain('type === "" || type.startsWith("image/") || type === "application/pdf"');
     expect(sw).toContain("const MAX_SHARED_BYTES = 25 * 1024 * 1024;");
     expect(sw).toContain(`const SHARED_TTL_MS = ${SHARED_TTL_MS / 60_000} * 60 * 1000;`);

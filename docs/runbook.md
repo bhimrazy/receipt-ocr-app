@@ -156,6 +156,10 @@ example from the `headers()` list in `apps/web/next.config.ts` on `/app/:path*`.
 Storage, and also local storage (the install prompt's dismissal), but not cookies, so nobody is signed out. Safari
 support is partial, so use it with the kill switch, not instead of it.
 
+**Warning:** `Clear-Site-Data` runs on every response that carries it, so a visitor loses their local storage and
+caches on each page load while it is deployed, and a share waiting in Cache Storage is deleted. Send it for one
+release only, then remove it.
+
 To turn the worker back on, restore `public/sw.js` from git, bump `VERSION` in it and deploy.
 
 ## Rollback

@@ -112,13 +112,13 @@ test("the worker script is served uncached and allowed by the CSP", async ({ req
   expect(response.headers()["content-security-policy-report-only"]).toContain("worker-src 'self'");
 });
 
-test("without a service worker, a share lands on the upload page", async ({ request }) => {
+test("without a service worker, a share lands on the app with a notice", async ({ request }) => {
   const response = await request.post("/share-target", {
     multipart: { receipts: { name: "r.png", mimeType: "image/png", buffer: RECEIPT } },
     maxRedirects: 0,
   });
   expect(response.status()).toBe(303);
-  expect(response.headers().location).toBe("/app/upload?shared=unavailable");
+  expect(response.headers().location).toBe("/app?shared=unavailable");
 });
 
 test("the worker registers in the app, never stores API or page responses, and serves the offline page", async ({

@@ -160,10 +160,10 @@ flowchart TD
   R[Request from a page in scope /] --> O{Same origin?}
   O -- no --> N[Browser default, not handled]
   O -- yes --> S{POST /share-target?}
-  S -- yes --> RF{Referrer from another site?}
-  RF -- yes --> D[303 to /app/upload, nothing stored]
+  S -- yes --> RF{Referrer is a web page on another site?}
+  RF -- yes --> D[303 to /app, nothing stored]
   RF -- no --> F[Keep images, PDFs and untyped files up to 25 MB, at most 20, in the receiptocr-shared cache]
-  F --> U[303 to /app/upload?shared=1]
+  F --> U[303 to /app/upload?shared=1, or /app?shared=failed]
   S -- no --> G{GET?}
   G -- no --> N
   G -- yes --> M{Page navigation?}
@@ -179,7 +179,7 @@ flowchart TD
   only `offline.html`, `offline.js`, `icon.svg` and one icon, fetched past the HTTP cache. `VERSION` in `sw.js`
   names the cache; `activate` deletes older ones.
 - **A share is never uploaded unseen.** Any site can POST a form to `/share-target`, so shared files never join the
-  queue on their own. The worker drops a share whose referrer is another site (a page can hide its referrer, so this
+  queue on their own. The worker drops a share whose referrer is another website (an Android app sends none or an android-app:// one, which passes; a page can hide its referrer, so this
   is only a first check). The upload panel then lists the files, says they were shared on this device, possibly
   before sign-in, and waits for **Keep** or **Discard**. Kept files go through the file input like picked files and
   still need the usual Read click.

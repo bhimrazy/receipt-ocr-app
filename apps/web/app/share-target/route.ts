@@ -1,10 +1,10 @@
 // Reached only when no service worker took the share (first launch before it installed, or a
-// browser without one): the files are not read, and the visitor lands where they can add them.
+// browser without one): the files are not read, and the visitor lands on the app, where a notice explains.
 // A relative Location keeps the host whatever proxy is in front.
 function toUpload() {
   return new Response(null, {
     status: 303,
-    headers: { Location: "/app/upload?shared=unavailable", "Cache-Control": "no-store" },
+    headers: { Location: "/app?shared=unavailable", "Cache-Control": "no-store" },
   });
 }
 
