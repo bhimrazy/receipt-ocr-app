@@ -75,3 +75,10 @@ export async function seedReceipts(email: string, merchants: string[]) {
     await sql.end();
   }
 }
+
+/** Review sheet: Next to the preview, then Upload (the sheet's primary button names the count). */
+export async function uploadFromReview(page: Page) {
+  const review = page.getByRole("dialog", { name: "Review photos" });
+  await review.getByRole("button", { name: "Next" }).click();
+  await review.getByRole("button", { name: /^Upload( \d+ receipts)?$/ }).click();
+}

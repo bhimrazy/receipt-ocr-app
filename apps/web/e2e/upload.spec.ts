@@ -1,6 +1,6 @@
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { signUp, uniqueEmail } from "./helpers";
+import { signUp, uniqueEmail, uploadFromReview } from "./helpers";
 
 // Needs the deterministic fixture OCR provider (OCR_PROVIDER=fixture) so no real model is called.
 // CI sets E2E_UPLOAD=1; locally, export both to run it.
@@ -22,7 +22,7 @@ test("uploading a receipt image shows the extracted merchant and total", async (
     .locator('input[type="file"][multiple]')
     .first()
     .setInputFiles(path.join(import.meta.dirname, "../../../bench/fixtures/npr-lakh.png"));
-  await page.getByRole("button", { name: "Read receipt" }).click();
+  await uploadFromReview(page);
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
   await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("npr-lakh.png");
 });
@@ -68,7 +68,7 @@ test("a phone-sized photo is shrunk in the browser, then uploads", async ({ page
       requests.push(r.postDataBuffer()?.length ?? 0);
     }
   });
-  await page.getByRole("button", { name: "Read receipt" }).click();
+  await uploadFromReview(page);
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 45_000 });
   expect(requests[0]).toBeLessThan(4 * 1024 * 1024);
 });

@@ -73,8 +73,8 @@ export function planSize(
 }
 
 export type Encoder = (width: number, height: number, quality: number) => Promise<Blob>;
-export interface EncodeResult {
-  blob: Blob;
+export interface EncodeResult<B extends { size: number } = Blob> {
+  blob: B;
   width: number;
   height: number;
   quality: number;
@@ -87,8 +87,8 @@ export interface EncodeResult {
  * scaling with the best result still over `ceiling`, it tries RESCUE_QUALITY and keeps scaling down to
  * HARD_MIN_SHORT_EDGE until under the ceiling. Returns the smallest encode it made.
  */
-export async function encodeToTarget(
-  encode: Encoder,
+export async function encodeToTarget<B extends { size: number } = Blob>(
+  encode: (width: number, height: number, quality: number) => Promise<B>,
   size: { width: number; height: number },
   {
     target = TARGET_BYTES,
@@ -96,14 +96,14 @@ export async function encodeToTarget(
     maxAttempts = MAX_ATTEMPTS,
     minShort = MIN_SHORT_EDGE,
   }: { target?: number; ceiling?: number; maxAttempts?: number; minShort?: number } = {},
-): Promise<EncodeResult> {
+): Promise<EncodeResult<B>> {
   const qualities = [START_QUALITY, 0.72, MIN_QUALITY];
   const budget = Math.max(1, maxAttempts);
   let { width, height } = size;
   let floor = Math.min(minShort, width, height);
   let quality = START_QUALITY;
   let rescue = false;
-  let best: Omit<EncodeResult, "attempts"> | undefined;
+  let best: Omit<EncodeResult<B>, "attempts"> | undefined;
   let attempts = 0;
   while (attempts < budget) {
     attempts++;
@@ -129,6 +129,24 @@ export async function encodeToTarget(
     height = h;
   }
   return { ...best!, attempts };
+}
+
+/**
+ * The size an upload will end up at, without encoding: runs the same `encodeToTarget` loop over a
+ * byte model, where a start-quality encode costs `bytesPerPixel` per pixel and lower qualities
+ * scale it down in proportion (an approximation, so the result leans high).
+ */
+export async function predictEncode(
+  size: { width: number; height: number },
+  bytesPerPixel: number,
+) {
+  const { blob, width, height } = await encodeToTarget(
+    async (w, h, q) => ({
+      size: Math.round((bytesPerPixel * w * h * q) / START_QUALITY),
+    }),
+    size,
+  );
+  return { width, height, bytes: blob.size };
 }
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);

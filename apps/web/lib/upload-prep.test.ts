@@ -10,6 +10,8 @@ import {
   CEILING_BYTES,
   HARD_MIN_SHORT_EDGE,
   planSize,
+  predictEncode,
+  TARGET_BYTES,
   type Encoder,
 } from "./upload-prep";
 
@@ -216,5 +218,18 @@ describe("acceptedType", () => {
 describe("UPLOAD_LIMIT_BYTES", () => {
   it("is the deployment body limit, below the app limit", () => {
     expect(UPLOAD_LIMIT_BYTES).toBe(4 * 1024 * 1024);
+  });
+});
+
+describe("predictEncode", () => {
+  it("keeps the planned size when the estimate is under the target", async () => {
+    const out = await predictEncode({ width: 1000, height: 2000 }, 0.1);
+    expect(out).toEqual({ width: 1000, height: 2000, bytes: 200_000 });
+  });
+  it("shrinks in SCALE_STEP steps like the encoder when over the target", async () => {
+    // 0.2 B/px on 3000 x 2000 is 1.2 MB: quality steps alone don't reach 500 KB, two scale steps do.
+    const out = await predictEncode({ width: 3000, height: 2000 }, 0.2);
+    expect(out).toMatchObject({ width: 2168, height: 1445 });
+    expect(out.bytes).toBeLessThanOrEqual(TARGET_BYTES);
   });
 });

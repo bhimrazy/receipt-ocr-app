@@ -151,6 +151,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    Real benchmark set (CORD/CORU committed, SROIE/ReceiptBench local, the owner's 40 Nepal receipts, BS-date and
    Devanagari scoring fixes): [receipt benchmark set](plans/2026-11-07-receipt-benchmark-set.md). Long receipts as
    multi-part receipts: [long receipt capture](plans/2026-11-07-long-receipt-capture.md).
+   Two-tier OCR (LiteParse, OCRia-1, open-weight OCR models): cheap model first, escalate on arithmetic checks; no
+   OCR-first parser ([two-tier OCR review](reviews/2026-11-07-two-tier-ocr.md)).
 5. Second provider: Anthropic wired in (`feat/anthropic-provider`); admitted to the default chain only by the
    benchmark. Then OpenAI.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
