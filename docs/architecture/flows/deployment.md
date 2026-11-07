@@ -25,12 +25,20 @@ sequenceDiagram
   Dev->>GH: squash-merge to main
   GH->>CI: same jobs on the main commit
   CI-->>PR: workflow_run: CI completed with success on a push
-  PR->>M: migrate-staging (environment staging-db)
-  M->>SDB: bun run db:migrate with DIRECT_URL
-  PR->>M: migrate-production (environment production-db), only if staging succeeded
-  M->>DB: bun run db:migrate with DIRECT_URL
-  PR->>PR: deploy-production, only if both migrations succeeded
-  PR->>V: vercel pull, vercel build --prod, vercel deploy --prebuilt --prod
+  PR->>PR: gate: diff apps/web/drizzle against tag production-deployed
+  alt no migration changes
+    PR->>V: vercel pull, vercel build --prod, vercel deploy --prebuilt --prod
+    PR->>GH: record-deploy: move tag production-deployed
+  else migrations changed, or no tag
+    PR->>GH: skip the deploy; summary says to run Database Migration
+    Dev->>M: run by hand on main: staging-db
+    M->>SDB: bun run db:migrate with DIRECT_URL
+    Dev->>M: run by hand on main: production-db (owner approves)
+    M->>DB: bun run db:migrate with DIRECT_URL
+    Dev->>PR: run by hand on main (always deploys)
+    PR->>V: vercel pull, vercel build --prod, vercel deploy --prebuilt --prod
+    PR->>GH: record-deploy: move tag production-deployed
+  end
 ```
 
 - **CI jobs** ([`ci.yml`](../../../.github/workflows/ci.yml)): `static` runs format, lint, dependency pins, knip and
@@ -42,37 +50,41 @@ sequenceDiagram
   The app's origin on a preview is its own host (`VERCEL_BRANCH_URL`, else `VERCEL_URL`) unless `BETTER_AUTH_URL` is
   set, and both preview hosts stay trusted either way ([`lib/env.ts`](../../../apps/web/lib/env.ts)). Dependabot PRs are skipped because they get no secrets.
 - **Production** ([`production.yml`](../../../.github/workflows/production.yml)) runs only after CI succeeded on a
-  push to `main`, or when started by hand from `main` (a manual run on another branch is skipped). It runs one at a
-  time (`cancel-in-progress: false`), migrates and builds the commit CI tested rather than whatever `main` points at
-  by then, and deploys only after both migrations succeed.
+  push to `main` from this repository, or when started by hand from `main` (a manual run on another branch is
+  skipped). It runs one at a time (`cancel-in-progress: false`) and builds the commit CI tested rather than whatever
+  `main` points at by then. Its `gate` job skips the automatic deploy when `apps/web/drizzle/` differs from the
+  `production-deployed` tag, or the tag is missing; a manual run always deploys. `record-deploy`, the only job with
+  `contents: write` and no repository code, moves the tag after each deploy.
 - The Vercel token is given only to the `pull` and `deploy` steps. The build step runs repository code and gets no
   token. Deploys upload one archive (`--archive=tgz`) to stay under the free plan's file-upload quota.
 
-## Migrations run in CI, first
+## Migrations run by hand, first
 
-[`db-migrate.yml`](../../../.github/workflows/db-migrate.yml) is a reusable workflow: given a GitHub environment
-(`staging-db` or `production-db`, both limited to `main`), it checks out the commit, installs with the frozen
-lockfile and runs `bun run db:migrate` with that environment's `DIRECT_URL` secret. Its job-level `concurrency`
-group (`db-migrate-<environment>`, never cancelled while running; a newer queued run replaces a waiting one) keeps
-two runs off the same database, whether they come from the
-pipeline or from a manual **Database Migration** run, which is the recovery path. `drizzle-kit` applies all pending
-files in one transaction, so a failed run changes nothing
-([runbook](../../runbook.md#migration-failed-in-ci)).
+[`db-migrate.yml`](../../../.github/workflows/db-migrate.yml) runs only by `workflow_dispatch` on `main`. Given a GitHub
+environment (`staging-db` or `production-db`, both limited to `main`; `production-db` needs the owner's approval), it
+fails unless the ref is `main`, checks out the commit, installs with the frozen lockfile, validates and masks
+`DIRECT_URL` without printing it, and runs `bun run db:migrate`. Its job-level `concurrency` group
+(`db-migrate-<environment>`, never cancelled while running; a newer queued run replaces a waiting one) keeps two runs
+off the same database. `drizzle-kit` applies all pending files in one transaction, so a failed run changes nothing
+([runbook](../../runbook.md#migration-failed)).
 
 ```mermaid
 flowchart LR
-  ci["CI green on main"] --> s["migrate staging-db"]
-  s -- success --> p["migrate production-db"]
-  p -- success --> d["deploy production"]
-  s -. failure .-> stop["stop: nothing deployed"]
-  p -. failure .-> stop
+  merge["merge to main, CI green"] --> gate{"apps/web/drizzle changed<br/>since production-deployed?"}
+  gate -- no --> d["deploy, move tag"]
+  gate -- "yes, or no tag" --> skip["skip deploy"]
+  skip --> s["Database Migration:<br/>staging-db"]
+  s --> p["Database Migration:<br/>production-db (approve)"]
+  p --> m["production.yml by hand"]
+  m --> d
 ```
 
 The order is **migrate, then deploy**, because:
 
 - the new code may need the new schema, and fails without it;
-- the old code keeps working against the new schema, as long as migrations only add (nullable or defaulted columns,
-  new tables, new indexes) and removals wait for a later release.
+- the old code, still live while migrations run, keeps working against the new schema, as long as migrations stay
+  backward compatible: expand (nullable or defaulted columns, new tables, new indexes), then contract (drops and
+  renames) in a later release.
 
 ```mermaid
 flowchart LR

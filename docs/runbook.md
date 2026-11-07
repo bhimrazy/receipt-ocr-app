@@ -129,16 +129,16 @@ Symptoms: receipts stay "processing", or the **Dead, last 24 hours** tile on **A
 Past about 1M `jobs` rows, build new `jobs` indexes by hand with `CREATE INDEX CONCURRENTLY` and keep a no-op migration
 so the journal stays in step.
 
-### Migration failed in CI
+### Migration failed
 
-The **Vercel Production Deployment** run shows a red `migrate-staging` or `migrate-production` job, and
-`deploy-production` was skipped. Production still runs the previous code. If staging failed, production's schema
-wasn't touched; if production failed, staging already has the migration.
+A **Database Migration** run is red. Production still runs the previous code: the deploy for a release with
+migrations only happens by hand, after both migrations succeed. If staging failed, production's schema wasn't
+touched; if production failed, staging already has the migration.
 
-1. Open the failed job and find the failing step.
+1. Open the failed run and find the failing step.
    - **Require main** failed: the run wasn't started from `main`. Start it again from `main`.
    - **Check the secret is set** failed: the environment or its `DIRECT_URL` secret is missing or malformed
-     (Settings → Environments; see deployment.md, Migrations in CI). The message never includes the URL.
+     (Settings → Environments; see deployment.md, Migrations). The message never includes the URL.
    - **Apply migrations** failed: read the Postgres error. If the log shows only the `drizzle-kit` spinner and
      `exit code 1` with no error, it couldn't connect: check the database is up and not paused, the session pooler
      (port 5432) is reachable, and the password in `DIRECT_URL` is current.
@@ -152,19 +152,25 @@ wasn't touched; if production failed, staging already has the migration.
 3. Fix the cause:
    - **Connection or timeout** (database paused, pooler down, password rotated): fix it, then go to step 4.
    - **The migration itself is wrong** (a constraint existing rows break, a lock timeout): open a PR that fixes it
-     and merge it; the merge runs the whole pipeline again. If staging already applied the file (only production
-     failed), don't edit it, because staging would never re-run it: add a new migration that works on both instead.
-   - **Data damaged:** restore the backup taken before the merge (deployment.md, Every release, step 3).
-4. Retry: Actions → **Database Migration** → Run workflow on `main`, choosing `staging-db` or `production-db`. Then
-   finish the release by re-running the failed **Vercel Production Deployment** run (Re-run failed jobs), or run that
-   workflow by hand on `main`; it migrates both databases again (a no-op when up to date) and deploys.
+     and merge it. If staging already applied the file (only production failed), don't edit it, because staging
+     would never re-run it: add a new migration that works on both instead.
+   - **Data damaged:** restore the backup taken before the migration (deployment.md, Every release, step 3).
+4. Retry: Actions → **Database Migration** → Run workflow on `main`, `staging-db` first, then `production-db`
+   (approve it). Then run **Vercel Production Deployment** by hand on `main`.
 
-Don't start a manual migration while a pipeline migration is waiting for the same database (for example on a
-required reviewer): GitHub keeps one pending run per concurrency group, so the manual run cancels the waiting one and
-that pipeline's deploy is skipped. If it happens, re-run the pipeline afterwards.
+Start one run per database at a time. GitHub keeps one pending run per concurrency group, so a second run started
+while the first waits for approval cancels the waiting one; re-run it if that happens.
 
-If staging and production have drifted (staging migrated, production not), the next pipeline run catches production
-up. Don't run `db:migrate` from a laptop against production unless Actions is down.
+Don't run `db:migrate` from a laptop against production unless Actions is down.
+
+### Deploy skipped after a merge
+
+The **Vercel Production Deployment** run is green but `deploy-production` was skipped, and the summary says why:
+
+- **"This release adds migrations"**: expected. Follow deployment.md, Every release, steps 6 to 8.
+- **"Can't find the last production deploy"**: the `production-deployed` tag is missing. Check production's schema is
+  current (run **Database Migration** on both if unsure; it's a no-op when up to date), then run the workflow by
+  hand on `main`. That deploy sets the tag.
 
 ### Leaked secret
 

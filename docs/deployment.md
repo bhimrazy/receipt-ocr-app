@@ -26,8 +26,8 @@ Create the Postgres database. On Supabase, note both connection strings:
 - **Transaction pooler (port 6543)** for the app: `DATABASE_URL`.
 - **Session pooler (port 5432)** for migrations: `DIRECT_URL`. Schema changes fail on the transaction pooler.
 
-Once the GitHub environments below are set up, CI applies migrations on every push to `main` (see
-[Migrations in CI](#migrations-in-ci)). For a brand-new database you can also apply them from your machine:
+On Vercel, apply migrations with the **Database Migration** workflow (see [Migrations](#migrations)). For a
+brand-new database you can also apply them from your machine:
 
 ```bash
 DIRECT_URL='<session pooler URL>' bun run db:migrate
@@ -99,10 +99,10 @@ on any host: site `1x00000000000000000000AA` with secret `1x00000000000000000000
 
 ### 5. Deploy
 
-**Vercel.** `.github/workflows/production.yml` runs after CI passes on a push to `main`: it migrates staging, then
-production, then deploys. If either migration fails, nothing is deployed. Pull requests get a preview deploy from
-`.github/workflows/preview.yml`. To run the whole pipeline by hand, run the **Vercel Production Deployment** workflow
-from the Actions tab on `main`.
+**Vercel.** `.github/workflows/production.yml` deploys `main` automatically after CI passes on a push, unless the
+release changes migrations (see [Migrations](#migrations)). Pull requests get a preview deploy from
+`.github/workflows/preview.yml`. To deploy by hand, run the **Vercel Production Deployment** workflow from the
+Actions tab on `main`; a manual run always deploys.
 
 Both Vercel workflows use the GitHub environment `vercel`, which holds `VERCEL_TOKEN`, `VERCEL_ORG_ID` and
 `VERCEL_PROJECT_ID`. It has no branch policy, because previews run from PR branches; don't add one, or previews stop.
@@ -122,50 +122,54 @@ production credential and rotate it if a PR workflow might have leaked it.
 (`bun run db:migrate`, as the `migrate` service in `docker-compose.yml` does), then start the image with the
 variables above, `TRUSTED_IP_HEADERS` included.
 
-### Migrations in CI
+### Migrations
 
-[`db-migrate.yml`](../.github/workflows/db-migrate.yml) runs `bun run db:migrate` against one database, reading
-`DIRECT_URL` (the session pooler URL, port 5432) from a GitHub environment. `production.yml` calls it twice:
+Migrations run **only by hand**, through [`db-migrate.yml`](../.github/workflows/db-migrate.yml) (Actions →
+**Database Migration** → Run workflow on `main`, choosing `staging-db` or `production-db`). It runs
+`bun run db:migrate` with that environment's `DIRECT_URL` (the session pooler URL, port 5432). No other workflow runs
+it, and previews never do.
+
+`production.yml` never deploys code whose migrations may not be applied. On its automatic path it compares
+`apps/web/drizzle/` between the commit CI tested and the `production-deployed` tag (moved after every successful
+deploy by its `record-deploy` job). If anything changed there, or the tag is missing, it skips the deploy and the run
+summary says what to do. A manual run skips that check: you ran the migrations first.
 
 ```text
-CI passes on main → migrate staging-db → migrate production-db → deploy production
+push to main → CI → production.yml: no migration changes → deploy, move the tag
+                                    migration changes   → skip ("run Database Migration ...")
 ```
 
-Each step waits for the one before it, so a migration that fails on staging never reaches production, and a failed
-migration never ships code that needs it. `drizzle-kit migrate` applies all pending files in **one transaction**, so a
-failed run leaves that database exactly as it was. The job fails, rather than skips, when run from any ref but `main`.
-The URL isn't printed: GitHub masks the secret, the check step also masks the decoded password, and `drizzle-kit`
-runs without `--verbose`.
+How the migration job behaves:
 
-One migration runs per database at a time (`concurrency: db-migrate-<environment>`, shared by the pipeline and manual
-runs, never cancelled while running). GitHub keeps only one _pending_ run per group, so starting a manual run while a
-pipeline migration is waiting cancels the waiting one, and that pipeline run's deploy is skipped. Re-run it afterwards.
+- `drizzle-kit migrate` applies all pending files in **one transaction**, so a failed run leaves that database exactly
+  as it was.
+- It fails, rather than skips, when started from any ref but `main`.
+- The URL isn't printed: GitHub masks the secret, the check step validates its shape without echoing it and also
+  masks the decoded password, and `drizzle-kit` runs without `--verbose`.
+- One run per database at a time (`concurrency: db-migrate-<environment>`, never cancelled while running). GitHub
+  keeps only one _pending_ run per group, so a second run started while one waits (for example for approval) cancels
+  the waiting one.
 
-Set these up in this order, before merging anything that relies on them (GitHub: Settings → Environments → New
-environment):
+The environments, set up in this order (GitHub: Settings → Environments → New environment):
 
 1. **Create the environments with the branch policy first:** `staging-db` and `production-db`, each with
    Deployment branches → Selected branches → `main` only. Adding a secret to an environment without that policy lets
    any branch's workflow read it.
 2. **Then add the secrets:** `DIRECT_URL` in each.
-3. **Then merge.**
+3. **Then merge** anything that relies on them.
 
-| Environment     | Branch policy                                                | Secret                                                 |
-| --------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
-| `staging-db`    | `main` only                                                  | `DIRECT_URL`: `receipt-ocr-staging` session pooler URL |
-| `production-db` | `main` only; consider a required reviewer for each migration | `DIRECT_URL`: `receipt-ocr` session pooler URL         |
+| Environment     | Branch policy                          | Secret                                                 |
+| --------------- | -------------------------------------- | ------------------------------------------------------ |
+| `staging-db`    | `main` only                            | `DIRECT_URL`: `receipt-ocr-staging` session pooler URL |
+| `production-db` | `main` only; required reviewer (owner) | `DIRECT_URL`: `receipt-ocr` session pooler URL         |
 
-If an environment is missing, GitHub creates an empty one, with no branch policy, on the first run; the job then fails
-at "Check the secret is set" and the deploy doesn't run. With a required reviewer on `production-db`, every deploy
-waits for that approval, including releases without a new migration.
-
-To migrate one database by hand (to retry after a fix, or to bring staging up to date), run **Database Migration**
-from the Actions tab on `main` and choose `staging-db` or `production-db`.
+Both exist today. If one is ever missing, GitHub creates it empty, with no branch policy, on the first run; the job
+then fails at "Check the secret is set".
 
 ### Staging and previews
 
 - **Staging database:** Supabase project `receipt-ocr-staging` (us-east-1, same region as production and the `iad1`
-  functions). It gets every migration from `main` a moment before production does.
+  functions). Migrate it before production on every release with migrations, and check it there first.
 - **Previews:** set the Vercel project's **Preview** variables to staging: `DATABASE_URL` (staging transaction
   pooler), separate storage bucket or prefix, and a different `BETTER_AUTH_SECRET` from production. Leave
   `BETTER_AUTH_URL` unset: on a preview (`VERCEL_ENV=preview`) the app uses `https://$VERCEL_BRANCH_URL`, or
@@ -176,8 +180,8 @@ from the Actions tab on `main` and choose `staging-db` or `production-db`.
 - **Protect previews:** turn on Vercel Deployment Protection (Project → Settings → Deployment Protection, Vercel
   Authentication for preview deployments) so only your team can open them. They hold a working sign-in against the
   staging database.
-- **Previews never run migrations.** A PR that adds a migration has no tables on staging until it merges and the
-  pipeline migrates staging, so pages that touch the new schema fail on that PR's preview. Test those against the
+- **Previews never run migrations.** A PR that adds a migration has no tables on staging until it merges and someone runs
+  **Database Migration** on `staging-db`, so pages that touch the new schema fail on that PR's preview. Test those against the
   local compose stack (`scripts/test.sh`), which applies every migration to a fresh database.
 - **Email:** keep verification on. Give Preview its own `RESEND_API_KEY` and `EMAIL_FROM` (a separate key, and
   Resend's test addresses such as `delivered@resend.dev` for throwaway accounts); previews then send links to the
@@ -223,23 +227,26 @@ On Docker, also cap request bodies in the reverse proxy in front of the image (f
 ## Every release
 
 Code that needs a new migration will fail against the old schema, while the old code keeps working against the new
-schema. So **apply migrations first, then deploy**. The pipeline does that for you on every push to `main`
-([Migrations in CI](#migrations-in-ci)); the steps below are what's left for the owner.
+schema. So **apply migrations first, then deploy**. Migrations therefore run while the previous release is still live,
+and must stay **backward compatible with the code currently in production**: expand, then contract. Add tables,
+nullable or defaulted columns and indexes in one release; drop or rename only in a later release, once no live code
+reads the old shape.
 
-1. **See what's new since the last deploy.** Replace `<deployed>` with the commit currently live (shown in the
-   Vercel deployment):
+A release without migration changes deploys by itself after CI. For one with migrations:
+
+1. **See what's new since the last deploy:**
 
    ```bash
-   git fetch origin
-   git diff --name-only <deployed> origin/main -- apps/web/drizzle '*.env.example'
+   git fetch origin --tags
+   git diff --name-only production-deployed origin/main -- apps/web/drizzle '*.env.example'
    ```
 
    New files in `apps/web/drizzle/` are migrations. Changes to an `.env.example` mean new or changed variables.
 
-2. **Read each new migration.** They are plain SQL files. Look for anything that rewrites or drops data.
+2. **Read each new migration.** They are plain SQL files. Look for anything that rewrites or drops data, or that the
+   live code can't run against.
 
-3. **Back up** before merging a PR with a migration: the merge applies it. On Supabase, check point-in-time recovery or
-   take a backup from the dashboard. Elsewhere:
+3. **Back up** production. On Supabase, check point-in-time recovery or take a backup from the dashboard. Elsewhere:
 
    ```bash
    pg_dump "$DIRECT_URL" --format=custom --file=backup-$(date +%F).dump
@@ -247,13 +254,19 @@ schema. So **apply migrations first, then deploy**. The pipeline does that for y
 
 4. **Add new environment variables** in Vercel or the container before the deploy that needs them.
 
-5. **Merge to `main`.** After CI, the pipeline migrates staging, then production, then deploys. If a migration
-   fails, see [the runbook](runbook.md#migration-failed-in-ci). On Docker, run `bun run db:migrate` with the
+5. **Merge the PR to `main`.** After CI, **Vercel Production Deployment** skips the deploy; its summary says the
+   release adds migrations.
+
+6. **Migrate staging:** Actions → **Database Migration** → Run workflow on `main`, environment `staging-db`. Check
+   staging (sign in on a preview, open the pages the migration touches).
+
+7. **Migrate production:** run **Database Migration** again with `production-db` and approve it in GitHub (required
+   reviewer). If either run fails, see [the runbook](runbook.md#migration-failed).
+
+8. **Deploy:** run **Vercel Production Deployment** by hand on `main`. On Docker, run `bun run db:migrate` with the
    production `DIRECT_URL`, then roll out the new image.
 
-6. **Check the pipeline finished:** all three jobs of the **Vercel Production Deployment** run are green.
-
-7. **Smoke test.** Run the checks from [step 7](#7-check-it-works).
+9. **Smoke test.** Run the checks from [step 7](#7-check-it-works).
 
 ### Rolling back
 

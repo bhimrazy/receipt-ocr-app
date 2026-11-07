@@ -36,14 +36,15 @@ How the system is built (every app and package, the main flows and the data mode
 
 Steps are in [deployment.md](deployment.md).
 
-- Production deploys automatically: after CI passes on a push to `main`, `production.yml` migrates staging, then
-  production, then deploys (once `ci/db-migrations` lands; until then it deploys without migrating). Manual runs are
-  allowed only from `main`. Production and staging are both at migration `0010`.
-- Before `ci/db-migrations` merges, in this order (GitHub: Settings → Environments):
-  1. Create `staging-db` and `production-db` with deployment branches `main` only, **before** adding any secret.
-  2. Add `DIRECT_URL` (Supabase session pooler, port 5432) to each. Consider a required reviewer on `production-db`.
-  3. Point Vercel's Preview variables at `receipt-ocr-staging`, leave `BETTER_AUTH_URL` unset there and turn on
-     Deployment Protection for previews ([deployment.md](deployment.md#staging-and-previews)). Then merge.
+- Production deploys automatically after CI passes on a push to `main`. Manual runs are allowed only from `main`.
+  Once `ci/db-migrations` lands, the automatic deploy skips any release that changes `apps/web/drizzle/` since the
+  `production-deployed` tag; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
+  with the owner's approval), then the deploy is run by hand. Production and staging are both at migration `0010`.
+- `staging-db` and `production-db` exist (`main` only, `DIRECT_URL` set, required reviewer on `production-db`).
+  Still to do for `ci/db-migrations`: point Vercel's Preview variables at `receipt-ocr-staging`, leave
+  `BETTER_AUTH_URL` unset there and turn on Deployment Protection for previews
+  ([deployment.md](deployment.md#staging-and-previews)). After merging, run **Vercel Production Deployment** by hand
+  once: there is no `production-deployed` tag yet, so automatic deploys skip until a deploy creates it.
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
   to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
@@ -58,17 +59,17 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-| Track (branch)             | Work                                                                                                                                                                 |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `feat/capture`             | In-app camera, batch capture (limit per plan, default 10, set in Admin), four-corner crop with auto edge detection and straightening                                 |
-| `feat/size-target-encoder` | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                           |
-| `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                           |
-| `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                     |
-| `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                          |
-| `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; migration `0010` (index only)     |
-| `ci/db-migrations`         | Migrations from CI (staging, then production, then deploy; manual **Database Migration** workflow), preview sign-in on the preview's own host against staging        |
-| `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying) |
-| `feat/dashboard`           | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                          |
+| Track (branch)             | Work                                                                                                                                                                        |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `feat/capture`             | In-app camera, batch capture (limit per plan, default 10, set in Admin), four-corner crop with auto edge detection and straightening                                        |
+| `feat/size-target-encoder` | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                                  |
+| `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                                  |
+| `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                            |
+| `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                                 |
+| `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; migration `0010` (index only)            |
+| `ci/db-migrations`         | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging |
+| `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying)        |
+| `feat/dashboard`           | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                                 |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
