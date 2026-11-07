@@ -4,6 +4,7 @@ import {
   cancelInvitation,
   checkChainProviders,
   checkConnections,
+  countOtherAdmins,
   deleteWorkspace,
   findUser,
   findWorkspace,
@@ -175,6 +176,12 @@ export async function setRoleAction(input: { userId: string; role: "user" | "adm
     const { userId, role } = z.object({ userId: id, role: z.enum(["user", "admin"]) }).parse(input);
     notSelf(ctx, userId, "You can't change your own role. Ask another admin.");
     const target = await loadUser(userId);
+    // Never leave the panel without an admin (two admins demoting each other, a banned actor).
+    if (role === "user" && target.role?.split(",").includes("admin")) {
+      if ((await core(countOtherAdmins(userId))) === 0) {
+        throw new ActionError("This is the last admin. Promote someone else first.");
+      }
+    }
     await audited(
       ctx,
       {
