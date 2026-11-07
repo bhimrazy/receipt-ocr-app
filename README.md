@@ -103,7 +103,7 @@ bun run bench:ocr       # OCR accuracy/latency/cost on bench/fixtures (needs a G
 
 The e2e suite (`apps/web/e2e`) drives the built app through the UI, with receipts seeded in SQL rather than
 through OCR. First run: `bunx playwright install chromium`. The upload spec runs only with `E2E_UPLOAD=1` and the
-fixture OCR provider (`OCR_PROVIDER=fixture`), which CI and `scripts/test.sh` set. Benchmark details and the k6 upload load
+fixture OCR provider (`OCR_PROVIDER=fixture`), which CI and `scripts/test.sh` set. Benchmark details and the k6 load
 test are in [`bench/README.md`](bench/README.md).
 
 CI (`.github/workflows/ci.yml`) runs the checks below, which you can run locally too:

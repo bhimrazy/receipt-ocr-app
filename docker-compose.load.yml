@@ -1,0 +1,41 @@
+# Load-test overlay: the production image on a "small server", with the OCR model faked.
+#
+#   docker compose -p receipt-ocr-load -f docker-compose.yml -f docker-compose.load.yml --profile app up -d
+#
+# scripts/load.sh drives this; use its env knobs (APP_CPUS, APP_MEM, ...) rather than editing here.
+# The project name keeps it apart from your dev stack's containers and volumes.
+
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    cpus: ${PG_CPUS:-1}
+    mem_limit: ${PG_MEM:-512m}
+    # pg_stat_statements gives the per-statement counts and times the report prints.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - max_connections=100
+      - -c
+      - shared_buffers=128MB
+
+  rustfs:
+    cpus: ${S3_CPUS:-1}
+    mem_limit: ${S3_MEM:-512m}
+
+  app:
+    ports: !override
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    cpus: ${APP_CPUS:-1}
+    mem_limit: ${APP_MEM:-1g}
+    # No swap: hitting the memory limit must show up as an OOM kill, not as paging.
+    memswap_limit: ${APP_MEM:-1g}
+    environment:
+      # k6 reaches the app by service name on the compose network, so the origin check sees this URL.
+      BETTER_AUTH_URL: http://app:3000
+      AUTH_REQUIRE_EMAIL_VERIFICATION: "false"
+      OCR_PROVIDER: fixture
+      FIXTURE_LATENCY_MS: ${FIXTURE_LATENCY_MS:-3000}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-5}
