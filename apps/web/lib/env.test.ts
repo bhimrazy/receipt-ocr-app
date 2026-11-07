@@ -18,6 +18,10 @@ const KEYS = [
   "NEXT_PUBLIC_TURNSTILE_SITE_KEY",
   "TURNSTILE_SECRET_KEY",
   "TURNSTILE_ALLOWED_HOSTNAMES",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
 ];
 
 /** Imports a fresh env.ts with exactly these variables set. */
@@ -211,5 +215,62 @@ describe("app URL and trusted origins", () => {
     const env = await loadEnv({ NODE_ENV: "development", VERCEL_URL: "x.vercel.app" });
     expect(env.authEnv.betterAuthUrl).toBe("http://localhost:3000");
     expect(env.authEnv.trustedOrigins).toEqual(["http://localhost:3000"]);
+  });
+});
+
+describe("build with Vercel Sensitive placeholders", () => {
+  // `vercel pull` can't read Sensitive values back, so the build sees placeholders or nothing.
+  const placeholder = "[sensitive]";
+  const build = {
+    NODE_ENV: "production",
+    NEXT_PHASE: "phase-production-build",
+    VERCEL: "1",
+    VERCEL_ENV: "production",
+    DATABASE_URL: placeholder,
+    BETTER_AUTH_URL: placeholder,
+    BETTER_AUTH_SECRET: placeholder,
+    BETTER_AUTH_SECRETS: placeholder,
+    TRUSTED_PROXIES: placeholder,
+    GOOGLE_CLIENT_ID: "client-id.apps.googleusercontent.com",
+    GOOGLE_CLIENT_SECRET: "",
+    TURNSTILE_SECRET_KEY: placeholder,
+  };
+
+  it("never throws on runtime-only secrets and treats malformed ones as unset", async () => {
+    const env = await loadEnv(build);
+    expect(env.authEnv).toMatchObject({
+      databaseUrl: undefined,
+      betterAuthSecrets: undefined,
+      betterAuthUrl: "http://localhost:3000",
+      google: undefined,
+    });
+    expect(env.authEnv.ipAddress.trustedProxies).toBeUndefined();
+    expect(env.turnstileEnv).toBeUndefined();
+  });
+
+  it("builds with every secret missing", async () => {
+    await expect(
+      loadEnv({ NODE_ENV: "production", NEXT_PHASE: "phase-production-build", VERCEL: "1" }),
+    ).resolves.toBeDefined();
+  });
+
+  it("still refuses the same values when the server starts", async () => {
+    const runtime = { ...production, VERCEL: "1" };
+    const cases: [Record<string, string>, RegExp][] = [
+      [{ BETTER_AUTH_SECRETS: placeholder }, /BETTER_AUTH_SECRETS/],
+      [{ DATABASE_URL: placeholder }, /DATABASE_URL is not a valid/],
+      [{ BETTER_AUTH_URL: placeholder }, /BETTER_AUTH_URL must be an absolute URL/],
+      [{ TRUSTED_PROXIES: placeholder }, /TRUSTED_PROXIES/],
+      [{ GOOGLE_CLIENT_ID: "id" }, /Incomplete GOOGLE OAuth config/],
+    ];
+    for (const [vars, error] of cases) {
+      await expect(loadEnv({ ...runtime, ...vars })).rejects.toThrow(error);
+    }
+  });
+
+  it("keeps valid values during the build", async () => {
+    const env = await loadEnv({ ...production, NEXT_PHASE: "phase-production-build" });
+    expect(env.authEnv.databaseUrl).toBe(production.DATABASE_URL);
+    expect(env.authEnv.betterAuthUrl).toBe(production.BETTER_AUTH_URL);
   });
 });
