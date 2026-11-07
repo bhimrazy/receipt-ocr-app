@@ -18,7 +18,7 @@ export function HeroPaper() {
             </span>
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground sm:mt-7 sm:text-xl">
-            Photograph a receipt. receiptOCR reads every line, flags the ones it isn&apos;t sure of,
+            Photograph a receipt. ReceiptOCR scans every line, flags the ones it isn&apos;t sure of,
             and hands you a spreadsheet your accountant will like.
           </p>
           <Ctas className="mt-7 sm:mt-9" />

@@ -73,13 +73,13 @@ Today is 2026-11-06, so releases from 2026-10-30 or earlier qualify.
 
 ```ts
 twoFactor({
-  issuer: "receiptOCR",
+  issuer: SITE_NAME ("ReceiptOCR"),
   // defaults kept: TOTP 6 digits / 30 s, 10 encrypted backup codes,
   // 10-min challenge cookie, 30-day trusted device, lockout 10 fails / 15 min.
 }),
 passkey({
   rpID: new URL(authEnv.betterAuthUrl).hostname,   // or PASSKEY_RP_ID, see decisions
-  rpName: "receiptOCR",
+  rpName: SITE_NAME ("ReceiptOCR"),
   origin: authEnv.betterAuthUrl,
   authenticatorSelection: { residentKey: "required", userVerification: "required" },
   authentication: {

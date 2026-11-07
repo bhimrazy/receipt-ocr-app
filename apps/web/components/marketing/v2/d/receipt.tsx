@@ -62,7 +62,7 @@ export function ThermalReceipt({ className }: { className?: string }) {
   );
 }
 
-/** What receiptOCR read off that receipt, as the results view shows it. */
+/** What ReceiptOCR scanned off that receipt, as the results view shows it. */
 export function ReadCard({ className }: { className?: string }) {
   const r = demoReceipt;
   const fields = [
@@ -76,7 +76,7 @@ export function ReadCard({ className }: { className?: string }) {
       <figcaption className="flex items-start justify-between gap-3">
         <span>
           <span className="d-mono block text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-            What receiptOCR read
+            What ReceiptOCR scanned
           </span>
           <span className="d-display mt-1 block text-lg leading-tight font-medium">
             {r.merchant}

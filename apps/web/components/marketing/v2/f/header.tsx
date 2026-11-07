@@ -15,7 +15,7 @@ export function FHeader() {
     <header className="relative z-20 px-4 pt-4 sm:px-6">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3">
         <Link
-          aria-label="receiptOCR home"
+          aria-label="ReceiptOCR home"
           className={cn("inline-flex min-h-11 items-center rounded-xl", ring)}
           href="/landing-f"
         >

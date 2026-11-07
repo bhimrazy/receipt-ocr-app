@@ -1,4 +1,4 @@
-# Security contact for receiptOCR. See RFC 9116.
+# Security contact for ReceiptOCR. See RFC 9116.
 Contact: https://github.com/bhimrazy/receipt-ocr-app/security/advisories/new
 Contact: https://github.com/bhimrazy/receipt-ocr-app/blob/main/SECURITY.md
 Policy: https://github.com/bhimrazy/receipt-ocr-app/blob/main/SECURITY.md

@@ -121,7 +121,7 @@ services:
       S3_SECRET_ACCESS_KEY: rustfsadmin
       S3_FORCE_PATH_STYLE: "true"
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      EMAIL_FROM: ${EMAIL_FROM:-receiptOCR <onboarding@resend.dev>}
+      EMAIL_FROM: ${EMAIL_FROM:-ReceiptOCR <onboarding@resend.dev>}
       # Required in production off Vercel. Locally nothing sits in front of the
       # app, so the header is client-set; behind a real proxy use the header it
       # overwrites, or list the proxy in TRUSTED_PROXIES if it appends.

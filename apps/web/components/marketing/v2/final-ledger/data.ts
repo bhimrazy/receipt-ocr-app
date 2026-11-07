@@ -226,7 +226,7 @@ export const faqs = sharedFaqs.map((faq) =>
   faq.q === "Who can see my receipts?"
     ? {
         q: faq.q,
-        a: "You and the people you invite to your workspace. receiptOCR admins access an account only to handle a support request. Images are read by Google's Gemini AI to extract the data. You can delete any receipt, or your whole account, from Settings.",
+        a: "You and the people you invite to your workspace. ReceiptOCR admins access an account only to handle a support request. Images are scanned by Google's Gemini AI to extract the data. You can delete any receipt, or your whole account, from Settings.",
       }
     : faq.q === "What are the limits on the free plan?"
       ? {

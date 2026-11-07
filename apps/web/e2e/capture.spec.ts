@@ -405,7 +405,7 @@ test("a failed upload shows Retry, and the retry goes through", async ({ page })
   });
   await page.goto("/app");
   await readBatch(page, 2);
-  const list = page.getByRole("list", { name: "Receipts to read" });
+  const list = page.getByRole("list", { name: "Receipts to scan" });
   await expect(list.getByText("Something went wrong on our side.")).toBeVisible({
     timeout: 30_000,
   });
@@ -459,9 +459,9 @@ test("a daily 429 stops the batch and keeps the rest", async ({ page }) => {
   await expect(
     page.getByRole("alert").filter({ hasText: "The rest are still here" }),
   ).toContainText("You've reached today's limit.", { timeout: 30_000 });
-  const list = page.getByRole("list", { name: "Receipts to read" });
+  const list = page.getByRole("list", { name: "Receipts to scan" });
   await expect(list.getByRole("listitem")).toHaveCount(3);
   // Two were in flight when the limit came back; the third was never sent.
   await expect.poll(() => calls).toBe(2);
-  await expect(page.getByRole("button", { name: "Read 3 receipts" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Scan 3 receipts" })).toBeEnabled();
 });

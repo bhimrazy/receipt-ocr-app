@@ -110,8 +110,9 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
 Logo: "Scan line" (receipt crossed by a bar that overshoots both edges; keep the overshoot in every drawing). Palette:
 refined emerald (the current one; light-context tile `#047857` with a white glyph). Wordmark: `Receipt` + emerald
 `OCR`, mono. Masters and the asset table: [`apps/web/brand/README.md`](../apps/web/brand/README.md); regenerate with
-`bun run brand:assets`. Planned, not done: respell receiptOCR to ReceiptOCR everywhere in copy (one constant), and
-"scanned" wording in copy. The wordmark component and asset alt text already use ReceiptOCR.
+`bun run brand:assets`. Done: the name is spelled ReceiptOCR everywhere users see it (one constant, `SITE_NAME` in
+`apps/web/lib/site.ts`; emails use `BRAND`), and copy says "scanned", not "read", where the app processes a receipt
+(admin screens keep "reads" as operational jargon). "Receipt OCR" stays only as the category phrase in descriptions.
 
 ## Decisions waiting on the owner
 

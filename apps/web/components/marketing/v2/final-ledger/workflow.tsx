@@ -8,7 +8,7 @@ const steps = [
     n: "01",
     who: "You",
     title: "Drop them in",
-    body: "Photos from your phone or scans from the office, up to 20 per upload. Each one is read for the merchant, date, every line, tax and total.",
+    body: "Photos from your phone or scans from the office, up to 20 per upload. Each one is scanned for the merchant, date, every line, tax and total.",
     spec: "PNG · JPG · HEIC",
   },
   {
@@ -260,7 +260,7 @@ export function Workspace() {
           id="fl-workspace"
           index="02"
           label="The record"
-          lede="Every receipt lands in one history and says what it's doing in plain words. If one can't be read, it tells you and offers a retry, instead of pretending it cost $0.00."
+          lede="Every receipt lands in one history and says what it's doing in plain words. If one can't be scanned, it tells you and offers a retry, instead of pretending it cost $0.00."
           title="One place for every receipt. Your bookkeeper can open it too."
         />
         <div className="mt-12 grid gap-x-6 gap-y-10 lg:grid-cols-12">
@@ -283,7 +283,7 @@ export function Workspace() {
             <dl className="divide-y divide-border border-y border-border text-sm">
               {[
                 ["You can fix", "Merchant, date, category, currency and amounts"],
-                ["Line items", "Read and scored; not editable yet"],
+                ["Line items", "Scanned and scored; not editable yet"],
                 ["Export", "One receipt, or everything in the workspace"],
                 ["Per receipt", "Copy the full record as JSON"],
               ].map(([k, v]) => (

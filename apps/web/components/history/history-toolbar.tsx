@@ -23,8 +23,8 @@ import type { HistoryFilters } from "@/lib/receipts";
 const STATUS_CHIPS = [
   { value: undefined, label: "All" },
   { value: "needs-review", label: "Needs review" },
-  { value: "failed", label: "Couldn't read" },
-  { value: "processing", label: "Reading" },
+  { value: "failed", label: "Couldn't scan" },
+  { value: "processing", label: "Scanning" },
 ] as const;
 
 const CATEGORY_ITEMS = [

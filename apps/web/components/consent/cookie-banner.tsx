@@ -59,7 +59,7 @@ export function CookieBanner({
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         <div>
           <h2 className="text-sm font-semibold" id="cookie-banner-title">
-            Cookies on receiptOCR
+            Cookies on ReceiptOCR
           </h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             We use necessary cookies to keep you signed in. With your permission we also use Google

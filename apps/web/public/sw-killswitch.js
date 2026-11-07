@@ -1,4 +1,4 @@
-// Kill switch for the receiptOCR service worker. Not used in normal operation.
+// Kill switch for the ReceiptOCR service worker. Not used in normal operation.
 //
 // To switch the worker off for everyone, publish this file as /sw.js:
 //   cp apps/web/public/sw-killswitch.js apps/web/public/sw.js

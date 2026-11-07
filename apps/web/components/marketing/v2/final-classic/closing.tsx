@@ -11,10 +11,10 @@ import { Ctas, Label, Section, SectionHead, focusRing, sectionLinks } from "./pr
 // resets, who can access an account, and how export works.
 const answers: Record<string, string> = {
   "How accurate is it?":
-    "receiptOCR uses Google's Gemini AI to extract data from receipts. Each receipt gets an overall confidence score, and each line item gets its own. Low scores show you what to check against the photo. You can fix the merchant, date, category, currency and totals before you export. Line items are read and scored, but you can't edit them yet.",
+    "ReceiptOCR uses Google's Gemini AI to extract data from receipts. Each receipt gets an overall confidence score, and each line item gets its own. Low scores show you what to check against the photo. You can fix the merchant, date, category, currency and totals before you export. Line items are scanned and scored, but you can't edit them yet.",
   "What are the limits on the free plan?": `Up to ${PLANS.free.receiptsPerDay} receipts a day, counted from 00:00 UTC, and ${PLANS.free.workspaces} workspace. On busy days a service-wide daily cap can apply first. Need more? Use Contact us and tell us what you need.`,
   "Who can see my receipts?":
-    "Only you and the people you invite to your workspace. receiptOCR admins can access a workspace to handle a support request. Google's Gemini AI reads the images to extract the data. Deleting a receipt, or your account, also deletes the stored images.",
+    "Only you and the people you invite to your workspace. ReceiptOCR admins can access a workspace to handle a support request. Google's Gemini AI scans the images to extract the data. Deleting a receipt, or your account, also deletes the stored images.",
   "Can I get my data out?":
     "Yes, at any time. You can export one receipt to CSV, or all the receipts in your workspace, or copy a receipt's data as JSON. There are no export fees.",
 };
@@ -22,8 +22,8 @@ const answers: Record<string, string> = {
 /** Rendered by Faq and reused for the FAQPage JSON-LD, so the two never differ. */
 export const faqs = [
   {
-    q: "What is receiptOCR?",
-    a: "receiptOCR is a web app that reads receipt photos and exports the data as CSV or JSON. Upload a photo or a scan, check what it read, and fix anything that is wrong before you export.",
+    q: "What is ReceiptOCR?",
+    a: "ReceiptOCR is a web app that scans receipt photos and exports the data as CSV or JSON. Upload a photo or a scan, check what it scanned, and fix anything that is wrong before you export.",
   },
   ...sharedFaqs.map((faq) => ({ ...faq, a: answers[faq.q] ?? faq.a })),
 ];
@@ -110,7 +110,7 @@ export function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div>
           <Link
-            aria-label="receiptOCR home"
+            aria-label="ReceiptOCR home"
             className={cn("inline-flex min-h-11 items-center rounded-md", focusRing)}
             href="/"
           >

@@ -18,7 +18,7 @@ export function HeaderPaper() {
     <header className="sticky top-0 z-40 border-b border-border bg-background">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
         <Link
-          aria-label="receiptOCR home"
+          aria-label="ReceiptOCR home"
           className={cn("inline-flex min-h-11 items-center rounded-md", focusRing)}
           href="/"
         >

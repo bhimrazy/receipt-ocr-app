@@ -5,7 +5,7 @@ import { takeSharedFiles } from "@/lib/share-target";
 const SHARE_PROBLEMS: Record<string, string> = {
   failed: "The shared files didn't come through. Add them here instead.",
   unavailable:
-    "Sharing to receiptOCR isn't ready on this device yet. Add the files here instead; sharing works after the app has been opened once.",
+    "Sharing to ReceiptOCR isn't ready on this device yet. Add the files here instead; sharing works after the app has been opened once.",
 };
 
 /** The notice for a `?shared=` value; own keys only, so `__proto__` and `constructor` show nothing. */

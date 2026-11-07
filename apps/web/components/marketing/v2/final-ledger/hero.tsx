@@ -5,7 +5,7 @@ import { HeroDemo } from "./demo";
 import { Fig, container } from "./parts";
 
 const outcomes = [
-  { head: "Every line, read", body: "Merchant, date, each item, tax and total. No typing." },
+  { head: "Every line, scanned", body: "Merchant, date, each item, tax and total. No typing." },
   {
     head: "Only the doubtful ones",
     body: "Low-confidence lines say “Check this line”, so you know where to look.",
@@ -45,7 +45,7 @@ export function Hero() {
             Stop typing in receipts.
           </h1>
           <p className="mt-6 max-w-[44ch] text-[18px] leading-7 text-(--fl-ink-2) text-pretty">
-            Snap a photo or drop in a scan. receiptOCR reads every line, flags the few it isn&apos;t
+            Snap a photo or drop in a scan. ReceiptOCR scans every line, flags the few it isn&apos;t
             sure of, and gives you rows ready for your books, or to hand to your bookkeeper.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -63,7 +63,7 @@ export function Hero() {
           <HeroDemo />
           <div className="mt-3">
             <Fig n="1">
-              A scripted sample, played in your browser. The receipt is read line by line, the
+              A scripted sample, played in your browser. The receipt is scanned line by line, the
               record fills in, and a row lands in the export.
             </Fig>
           </div>

@@ -5,7 +5,7 @@ import Link from "next/link";
 const link =
   "rounded-md font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
 
-/** Receipts exist, but none has been read yet: say what's happening and what to do. */
+/** Receipts exist, but none has been scanned yet: say what's happening and what to do. */
 export function NoReadReceipts({ inFlight, failed }: { inFlight: number; failed: number }) {
   return (
     <Card className="flex items-start gap-3 p-5">
@@ -14,17 +14,17 @@ export function NoReadReceipts({ inFlight, failed }: { inFlight: number; failed:
         className="mt-0.5 size-5 shrink-0 text-muted-foreground"
       />
       <div className="text-sm">
-        <p className="font-medium">Spending shows here once a receipt has been read.</p>
+        <p className="font-medium">Spending shows here once a receipt has been scanned.</p>
         <ul className="mt-2 flex flex-col gap-1 text-muted-foreground">
           {inFlight > 0 ? (
             <li>
-              {inFlight} {inFlight === 1 ? "receipt is" : "receipts are"} being read now. No action
-              needed.
+              {inFlight} {inFlight === 1 ? "receipt is" : "receipts are"} being scanned now. No
+              action needed.
             </li>
           ) : null}
           {failed > 0 ? (
             <li>
-              {failed} {failed === 1 ? "receipt" : "receipts"} couldn&apos;t be read.{" "}
+              {failed} {failed === 1 ? "receipt" : "receipts"} couldn&apos;t be scanned.{" "}
               <Link className={link} href="/app/history?status=failed">
                 Try again
               </Link>

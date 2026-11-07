@@ -10,7 +10,7 @@ import { redirect as nextRedirect } from "next/navigation";
 
 export const metadata: Metadata = pageMetadata({
   title: "Sign in",
-  description: "Sign in to receiptOCR to upload receipts, check what was read and export a CSV.",
+  description: "Sign in to ReceiptOCR to upload receipts, check what was scanned and export a CSV.",
   path: "/sign-in",
   index: false,
 });
@@ -35,7 +35,7 @@ export default async function SignInPage({
   ) as SocialProvider[];
 
   return (
-    <AuthLayout subtitle="Sign in to upload receipts, check what was read and export a CSV.">
+    <AuthLayout subtitle="Sign in to upload receipts, check what was scanned and export a CSV.">
       {authEnabled ? (
         <CredentialsForm
           initialError={callbackErrorMessage(error)}

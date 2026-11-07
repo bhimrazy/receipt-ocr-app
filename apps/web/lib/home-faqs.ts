@@ -10,11 +10,11 @@ export const homeFaqs = [
   },
   {
     q: "Where is my receipt data stored?",
-    a: "Receipt files are kept in private cloud storage and the extracted data in our database. Receipts are read by Google Gemini; see the privacy policy for details. You can export your data at any time.",
+    a: "Receipt files are kept in private cloud storage and the extracted data in our database. Receipts are scanned by Google Gemini; see the privacy policy for details. You can export your data at any time.",
   },
   {
     q: "Is it really free to start?",
-    a: "Yes. The free plan needs no credit card and includes a daily allowance of receipt reads. If you need more, contact us.",
+    a: "Yes. The free plan needs no credit card and includes a daily allowance of receipt scans. If you need more, contact us.",
   },
   {
     q: "Can I export what gets extracted?",

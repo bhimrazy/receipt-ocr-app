@@ -82,7 +82,7 @@ export function ForgotPasswordForm() {
   return (
     <div className={authCardClass}>
       <AuthHeading title="Reset your password">
-        Enter the email you use for receiptOCR and we&apos;ll send you a link to choose a new
+        Enter the email you use for ReceiptOCR and we&apos;ll send you a link to choose a new
         password.
       </AuthHeading>
       <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit}>

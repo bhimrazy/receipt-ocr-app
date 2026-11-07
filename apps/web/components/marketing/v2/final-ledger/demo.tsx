@@ -19,11 +19,11 @@ const reducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function statusText(key: string | null) {
-  if (!key) return "Reading…";
-  if (key.startsWith("item-")) return "Reading line items…";
+  if (!key) return "Scanning…";
+  if (key.startsWith("item-")) return "Scanning line items…";
   if (key === "category" || key === "row") return "Categorising…";
-  if (key === "merchant" || key === "date") return "Reading the header…";
-  return "Reading totals…";
+  if (key === "merchant" || key === "date") return "Scanning the header…";
+  return "Scanning totals…";
 }
 
 /** Holds a value's space until it is read, so nothing shifts. `w` sizes the bar. */
@@ -58,7 +58,7 @@ function PaperLine({
   );
 }
 
-/** The thermal receipt being read. The pencil ring marks the line the model is unsure of. */
+/** The thermal receipt being scanned. The pencil ring marks the line the model is unsure of. */
 function Paper({
   sample,
   active,
@@ -212,7 +212,7 @@ export function HeroDemo() {
     setLanded(s.id);
     const flagged = s.items.find((item) => tier(item.confidence) === "review");
     setAnnounce(
-      `${s.merchant} read: total ${usd(s.total)}, category ${s.category}.${
+      `${s.merchant} scanned: total ${usd(s.total)}, category ${s.category}.${
         flagged ? ` ${flagged.name} is flagged to check.` : ""
       } Row added to the export.`,
     );
@@ -275,7 +275,7 @@ export function HeroDemo() {
   const padRows = MAX_ITEMS - sample.items.length;
 
   return (
-    <figure aria-label="Sample: a receipt read line by line" className="relative">
+    <figure aria-label="Sample: a receipt scanned line by line" className="relative">
       <div className="overflow-hidden rounded-xl border border-(--fl-rule-strong) bg-card shadow-(--fl-shadow)">
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
@@ -514,7 +514,7 @@ export function HeroDemo() {
                     aria-hidden="true"
                     className="mt-0.5 size-3.5 shrink-0 text-primary"
                   />
-                  Every line read with high confidence. Ready to export.
+                  Every line scanned with high confidence. Ready to export.
                 </>
               ) : null}
             </p>

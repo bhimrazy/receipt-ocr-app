@@ -222,7 +222,7 @@ export function JsonBlock({ className }: { className?: string }) {
 
 const queue = [
   { name: "IMG_4021.HEIC", state: "Done", icon: Check },
-  { name: "IMG_4022.HEIC", state: "Reading…", icon: LoaderCircle },
+  { name: "IMG_4022.HEIC", state: "Scanning…", icon: LoaderCircle },
   { name: "scan-taxi.jpg", state: "Queued", icon: FileImage },
 ];
 
@@ -230,7 +230,7 @@ export function UploadQueue({ className }: { className?: string }) {
   return (
     <div
       role="img"
-      aria-label="Upload queue: three photos, one done, one being read, one queued"
+      aria-label="Upload queue: three photos, one done, one being scanned, one queued"
       className={cn("rounded-xl bg-card p-4 ring-1 ring-white/10", className)}
     >
       <div aria-hidden>
@@ -254,7 +254,7 @@ export function UploadQueue({ className }: { className?: string }) {
                 )}
               >
                 <Icon
-                  className={cn("size-3.5", state === "Reading…" && "motion-safe:animate-spin")}
+                  className={cn("size-3.5", state === "Scanning…" && "motion-safe:animate-spin")}
                 />
                 {state}
               </span>
