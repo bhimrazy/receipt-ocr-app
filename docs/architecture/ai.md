@@ -116,20 +116,25 @@ once `ANTHROPIC_API_KEY` is set. The request settings live in `ANTHROPIC_OPTIONS
   Opus 5.5) and `high` (Sonnet 5.5). Raise it per model only if the benchmark shows a gain worth the tokens.
 - **No `thinking` field, no sampling parameters.** Thinking stays adaptive (Sonnet 5.5 and Opus 5.5 reject
   `disabled` and `budget_tokens`); non-default temperature, top-p or top-k are a 400. No assistant prefill.
+- **Skipped steps:** a pre-flight skip throws an `OcrCallError` with `skipped: true` (its cause is an
+  `UnsupportedFileError`): no request was sent. Core records it with no model (see
+  [data model](data-model.md)). A 413 is `unsupported-file` but not skipped: the request reached the provider.
 - **Files:** images as base64 image blocks (JPEG, PNG, GIF, WebP); PDFs as a base64 `document` block, inside the
   32 MB request and 600-page limits (uploads are at most 10 MB and 10 pages). An image may be at most 10 MB
   base64-encoded ([vision docs](https://platform.claude.com/docs/en/build-with-claude/vision), checked 2026-11-07),
-  about 7.5 MB raw, while uploads may be 10 MB raw. HEIC/HEIF and over-limit images fail before any request as
-  `unsupported-file`, so the chain moves on to a model that can read them. Pixel dimensions (8000 px max) are not
-  checked; the browser shrinks photos well below that.
+  about 7.5 MB raw, while uploads may be 10 MB raw, and at most 8000 px on either edge (read from the PNG, JPEG,
+  WebP or GIF header by [`image-size.ts`](../../packages/ai/src/image-size.ts); a larger image is a 400). HEIC/HEIF
+  and over-limit images fail before any request as `unsupported-file`, so the chain moves on to a model that can
+  read them.
 - **Errors:** 429 is `rate-limited` with its `retry-after`; 529 and other 5xx `provider-error`; 400 `bad-image`
   (the SDK does not retry it); 401/402/403 `not-configured`; 413 `unsupported-file`; a refusal `refused`.
 - **Usage:** Anthropic's `input_tokens` exclude cache reads and writes; the ledger's `inputTokens` is their sum,
   with `cache_read_input_tokens` and `cache_creation_input_tokens` split out, and thinking tokens inside output.
 - **Prices:** Haiku 5.5 $0.10 / $0.50 per MTok up to a 100K-token prompt and $0.50 / $2.50 for the whole call
-  beyond (`longContext`); Sonnet 5.5 $2 / $10 and Opus 5.5 $4 / $20, cache reads $0.20 for both. Haiku 5.5 has no
-  published cache-read rate, so it is unset and cache reads would be charged as input (an upper bound); no request
-  sets `cache_control`, so there are none today. Cache writes are likewise unset (charged as input).
+  beyond (`longContext`); Sonnet 5.5 $2 / $10 and Opus 5.5 $4 / $20, cache reads $0.20 for both. Haiku 5.5 cache reads
+  are 0.1x input ($0.01, $0.05 past 100K). 5-minute cache writes are 1.25x input on all three. No request sets
+  `cache_control`, so there are no cache reads or writes today. A row without a cache rate charges those tokens as
+  input.
 - **Not used:** Anthropic's server-side refusal `fallbacks`. Core's chain is the fallback, and a fallback served by
   another model inside one call would be recorded under the wrong model and price.
 

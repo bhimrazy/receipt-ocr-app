@@ -98,11 +98,12 @@ sequenceDiagram
 
 ## Retries, dead jobs and cooldowns
 
-| Failure                                                                                                             | Next                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `timeout`, `rate-limited`, `provider-error`, storage, DB                                                            | Retry after backoff, up to 4 attempts                                                                   |
-| `invalid-output`, `bad-image`, `not-configured`, `refused`, `unsupported-file`, unreadable stored file, bad payload | Dead now (`refused` and `unsupported-file` already tried every model; each has its own receipt message) |
-| Every provider in the chain cooling down                                                                            | Back to `queued` at the cooldown end, attempt not spent                                                 |
+| Failure                                                                                                                                 | Next                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `timeout`, `rate-limited`, `provider-error`, storage, DB                                                                                | Retry after backoff, up to 4 attempts                                                                   |
+| `invalid-output`, `bad-image`, `not-configured`, `refused`, `unsupported-file`, unreadable stored file, bad payload                     | Dead now (`refused` and `unsupported-file` already tried every model; each has its own receipt message) |
+| A chain where any step hit `timeout`, `rate-limited` or `provider-error`, whatever the last step's kind (e.g. a 429, then HEIC skipped) | Retry after backoff, as that transient kind                                                             |
+| Every provider in the chain cooling down                                                                                                | Back to `queued` at the cooldown end, attempt not spent                                                 |
 
 - Backoff: `min(10 min, 10 s x 2^(attempt-1))`, jittered to 50 to 100%. A provider's Retry-After is a floor (capped
   at 10 min). Delays are computed with the database's `now()`, so app and database clock skew doesn't matter.

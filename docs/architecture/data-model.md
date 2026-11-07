@@ -142,7 +142,9 @@ How the ledger is used:
 
 - One `ocr_rounds` row per accepted upload or retry, written under the quota check and the per-user lock.
 - One `ocr_calls` row per model call when the round ends, or a single row with a null model when it failed before
-  any model ran (no stored file, nothing configured).
+  any model ran (no stored file, nothing configured). A step skipped before any request (`unsupported-file`, e.g.
+  HEIC on Claude) also has a null model, with its provider and step kept: `model is not null` means "a model was
+  called" to quota, the global cap, latency and cost rollups, and a skip costs nothing.
 - Quota, the global daily cap and cost rollups read only these two tables. See
   [core: quota ledger semantics](core.md#design-principles-and-invariants).
 - Neither table has free-text columns, so neither can hold receipt contents or provider messages.
