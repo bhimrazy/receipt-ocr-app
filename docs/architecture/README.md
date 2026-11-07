@@ -48,6 +48,8 @@ flowchart LR
 | Google Gemini         | Reading the receipt into the extraction schema               | `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_MODEL`, Admin → Settings |
 | Resend                | Verification, password reset, invitation and support mail    | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`                  |
 | Google, GitHub OAuth  | Optional social sign-in                                      | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`       |
+| Google Analytics 4    | Optional visit counts on public pages, only after consent    | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))              |
+| Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                | automatic when `VERCEL=1`                                        |
 
 Every service except Postgres and auth is optional at runtime: without a Gemini key the app still serves history and
 exports, and without Resend mail is logged instead of sent. The full variable list is in
