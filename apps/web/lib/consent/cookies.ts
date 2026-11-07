@@ -64,6 +64,15 @@ export const storageEntries: StorageEntry[] = [
     duration: "30 days",
   },
   {
+    name: "tz",
+    kind: "cookie",
+    setBy: "receiptOCR",
+    category: "necessary",
+    purpose:
+      'Remembers your browser\'s time zone so the dashboard shows the right "today". It holds only the zone name and is sent nowhere but this app.',
+    duration: "12 months",
+  },
+  {
     name: "consent",
     kind: "cookie",
     setBy: "receiptOCR",
