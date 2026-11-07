@@ -72,7 +72,7 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   `.enableRLS()`, and `rls.int.test.ts` checks the migrated database, including that the app role owns every table.
 - **`user_credentials` and `receipts.storage_source` are unused.** Reserved for bring-your-own-key; nothing reads or
   writes them, and no encryption exists for the ciphertext column (see [byok-key-management.md](../byok-key-management.md)
-  and decision 9 in [STATUS](../STATUS.md)).
+  and decision 8 in [STATUS](../STATUS.md)).
 
 ## How to test it
 

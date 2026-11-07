@@ -20,13 +20,16 @@ sequenceDiagram
 
   Dev->>GH: open or update a PR
   GH->>CI: static, checks, e2e jobs
-  GH->>PV: vercel pull, build, deploy preview (Preview env: staging DB, no migration)
+  Dev->>GH: add the preview label (optional)
+  GH->>PV: labeled: vercel pull, build, deploy once (Preview env: staging DB, no migration)
   PV->>GH: comment with the preview URL
   Dev->>GH: squash-merge to main
   GH->>CI: same jobs on the main commit
   CI-->>PR: workflow_run: CI completed with success on a push
   PR->>PR: gate: diff apps/web/drizzle against the last successful deploy run
-  alt no migration changes
+  alt nothing that ships changed (docs, tests, CI only)
+    PR->>GH: skip the deploy; summary says why
+  else no migration changes
     PR->>V: vercel pull, vercel build --prod, vercel deploy --prebuilt --prod
   else migrations changed, or no previous deploy
     PR->>GH: skip the deploy; summary says to run Database Migration
@@ -44,7 +47,11 @@ sequenceDiagram
   audit; `checks` runs typecheck, unit tests and build; `e2e` starts Postgres and RustFS as services, applies every
   migration to an empty database, runs the core and web integration suites, builds, and runs Playwright with the
   fixture OCR provider.
-- **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) run in the GitHub environment `vercel`, like production, and use the Vercel project's preview environment,
+- **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) are label-only until launch, because the free Vercel plan
+  allows 100 deployments a day, shared with production. A PR gets one only when it carries the `preview` label, and the
+  deploy runs once, when the label is added; later pushes don't redeploy. To refresh, remove and re-add the label. The
+  repository variable `PREVIEW_MODE=auto` also deploys pushes to ready-for-review PRs that change something the app
+  ships, and a push to the `preview` branch always deploys the fixed preview domains. They run in the GitHub environment `vercel`, like production, and use the Vercel project's preview environment,
   which points at the staging database. They never migrate it, so a PR's own migration isn't there until it merges.
   The app's origin on a preview is its own host (`VERCEL_BRANCH_URL`, else `VERCEL_URL`) unless `BETTER_AUTH_URL` is
   set, and both preview hosts stay trusted either way ([`lib/env.ts`](../../../apps/web/lib/env.ts)). Dependabot PRs are skipped because they get no secrets.
@@ -53,7 +60,9 @@ sequenceDiagram
   skipped). It runs one at a time (`cancel-in-progress: false`) and builds the commit CI tested rather than whatever
   `main` points at by then. Its `gate` job skips the automatic deploy when `apps/web/drizzle/` differs from the
   commit of the last run whose `deploy-production` job succeeded (found with `last-deployed-sha.sh` through the Actions
-  API; no git tag), or that run can't be found; a manual run deploys only if CI passed on its commit and the newest
+  API; no git tag), or that run can't be found; it also skips when no file that ships changed since that commit
+  (`shipped-files.sh` ignores docs, Markdown, tests, benchmarks, repo scripts and CI config, but counts the Vercel CLI
+  lockfile); a manual run deploys only if CI passed on its commit and the newest
   successful `production-db` migration run had the same `apps/web/drizzle/`.
 - The Vercel token is given only to the `pull` and `deploy` steps. The build step runs repository code and gets no
   token. Deploys upload one archive (`--archive=tgz`) to stay under the free plan's file-upload quota.
@@ -71,7 +80,9 @@ off the same database. `drizzle-kit` applies all pending files in one transactio
 
 ```mermaid
 flowchart LR
-  merge["merge to main, CI green"] --> gate{"apps/web/drizzle changed<br/>since the last deploy run?"}
+  merge["merge to main, CI green"] --> ship{"any shipped file changed<br/>since the last deploy?"}
+  ship -- "no (docs, tests, CI)" --> none["skip: nothing to deploy"]
+  ship -- yes --> gate{"apps/web/drizzle changed<br/>since the last deploy run?"}
   gate -- no --> d["deploy"]
   gate -- "yes, or no previous deploy" --> skip["skip deploy"]
   skip --> s["Database Migration:<br/>staging-db"]
@@ -126,5 +137,5 @@ After boot, `onRequestError` in the same file logs any render, route or action f
 message (database params redacted) and digest only, and [`app/global-error.tsx`](../../../apps/web/app/global-error.tsx)
 renders the last-resort error page.
 
-**Planned:** branch protection on `main` requiring CI (decision 8 in [STATUS](../../STATUS.md)), and source-map upload
+**Planned:** branch protection on `main` requiring CI (decision 7 in [STATUS](../../STATUS.md)), and source-map upload
 in `production.yml` with the [observability plan](../../plans/2026-11-06-observability.md).
