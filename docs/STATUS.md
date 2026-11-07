@@ -43,7 +43,7 @@ are empty and get reset. **From the first real user onward we never squash again
 
 Steps are in [deployment.md](deployment.md).
 
-- Reset `staging-db` and `production-db` (drop schemas `public` and `drizzle`), run **Database Migration** on
+- Reset `staging-db` and `production-db` (the explicit SQL in [deployment.md](deployment.md#release-notes), not `DROP SCHEMA public`), run **Database Migration** on
   `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies the squashed baseline with
   row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
   Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).

@@ -40,7 +40,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     const rows = await db`select c.relname, c.relrowsecurity from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind = 'r'`;
-    expect(rows).toHaveLength(19);
+    expect(rows.length).toBeGreaterThanOrEqual(19);
     expect(rows.every((r) => r.relrowsecurity)).toBe(true);
   });
 

@@ -63,11 +63,13 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
 - **Auth tables follow Better Auth's model.** Field names (for example `rate_limit.key`, `count`, `last_request`)
   must match what the Drizzle adapter expects. Columns are snake_case, timestamps are `timestamptz`.
 - **Row-level security is on for every table, with no policies.** Each `pgTable(...)` ends in `.enableRLS()`. The app
-  connects as `postgres`, which owns the tables and has `BYPASSRLS`, so nothing changes for it. The point is defence
-  in depth: Supabase's Data API (PostgREST) exposes the `public` schema as `anon` and `authenticated`, and with RLS on
-  and no policy they read and write no rows even if someone later grants them access. Do not add `FORCE ROW LEVEL
-SECURITY` (it would apply RLS to the owner the app uses) and do not add policies unless the app starts using the Data
-  API. `rls.test.ts` fails when a table lacks `.enableRLS()`, and `rls.int.test.ts` checks the migrated database.
+  connects as `postgres`, which owns the tables, so nothing changes for it (on Supabase it also has `BYPASSRLS`). The
+  point is defence in depth: Supabase's Data API (PostgREST) exposes the `public` schema as `anon` and
+  `authenticated`, and with RLS on and no policy they read and write no rows even if someone later grants them access.
+  `service_role` bypasses RLS by design, so only removing `public` from the Data API's exposed schemas protects
+  against a leaked service-role key. Do not add `FORCE ROW LEVEL SECURITY` (it would apply RLS to the owner the app
+  uses) and do not add policies unless the app starts using the Data API. `rls.test.ts` fails when a table lacks
+  `.enableRLS()`, and `rls.int.test.ts` checks the migrated database, including that the app role owns every table.
 - **`user_credentials` and `receipts.storage_source` are unused.** Reserved for bring-your-own-key; nothing reads or
   writes them, and no encryption exists for the ciphertext column (see [byok-key-management.md](../byok-key-management.md)
   and decision 9 in [STATUS](../STATUS.md)).

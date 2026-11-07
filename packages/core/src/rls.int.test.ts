@@ -33,6 +33,14 @@ describe.skipIf(!enabled)("row-level security against Postgres", () => {
     expect(rows.filter((r) => r.forced).map((r) => r.name)).toEqual([]);
   });
 
+  it("is owned by the app role, which is what lets it through RLS", async () => {
+    const rows = await db((d) =>
+      d.execute<{ n: number }>(sql`select count(*)::int as n from pg_tables
+        where schemaname = 'public' and tableowner <> current_user`),
+    );
+    expect(rows[0]?.n).toBe(0);
+  });
+
   it("lets the app role read and write", async () => {
     const id = `rls-${Date.now()}`;
     const slug = id;

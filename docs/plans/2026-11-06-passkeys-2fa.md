@@ -131,7 +131,7 @@ Follow repo conventions: snake_case, timestamptz, explicit indexes, cascade dele
 | new `two_factor` | `id text pk`, `secret text not null`, `backup_codes text not null`, `user_id text not null → user.id on delete cascade`, `verified boolean not null default true`, `failed_verification_count integer not null default 0`, `locked_until timestamptz`; **unique** index on `user_id`                                                                      |
 | new `passkey`    | `id text pk`, `name text`, `public_key text not null`, `user_id text not null → user.id cascade`, `credential_id text not null`, `counter bigint(mode number) not null`, `device_type text not null`, `backed_up boolean not null`, `transports text`, `created_at timestamptz default now()`, `aaguid text`; index `user_id`, **unique** `credential_id` |
 
-Migrations: Two migrations, numbered after the latest one when each PR is written (`0007` is the usage ledger and `0008` the job queue): `two_factor` (PR A: user column, session column, `two_factor`) and `passkey` (PR B).
+Migrations: Two migrations, each takes the next number after the `0000` baseline when its PR is written: `two_factor` (PR A: user column, session column, `two_factor`) and `passkey` (PR B).
 Create them with `bun run db:generate`. They only add tables and nullable or defaulted columns, so there's no backfill
 and they're safe to run before the deploy. Running them against production needs the owner's go (DB migration).
 
