@@ -12,7 +12,10 @@ vi.mock("@/lib/session", () => ({ requireAdmin }));
 vi.mock("@/lib/runtime", () => ({ runtime: { runPromiseExit } }));
 vi.mock("@/lib/auth", () => ({ auth: { api: authApi } }));
 vi.mock("@/lib/http", () => ({ clientIp: () => null }));
-vi.mock("@/lib/log", () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
+vi.mock("@/lib/log", async () => ({
+  logger: { info: vi.fn(), error: vi.fn() },
+  errorFields: (await import("@receipt-ocr/core/telemetry")).errorFields,
+}));
 vi.mock("@/lib/plan-limits", () => ({ revalidatePlanCopy: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));

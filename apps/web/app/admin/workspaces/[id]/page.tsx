@@ -9,10 +9,12 @@ import { formatDate } from "@/lib/format";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
 import { DeleteWorkspace, InvitationsList, MembersTable } from "./workspace-actions";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Workspace" };
 
 export default async function AdminWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
+  logPageRender("/admin/workspaces/[id]");
   await requireAdmin();
   const { id } = await params;
   const [workspace, audit] = await runtime.runPromise(

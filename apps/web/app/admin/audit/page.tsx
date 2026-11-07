@@ -7,10 +7,12 @@ import { Pager } from "@/components/admin/pager";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
 import { one, PAGE_SIZE, pageOf, pick, type SearchParams } from "../params";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Audit log" };
 
 export default async function AdminAuditPage({ searchParams }: { searchParams: SearchParams }) {
+  logPageRender("/admin/audit");
   await requireAdmin();
   const params = await searchParams;
   const q = one(params.q);

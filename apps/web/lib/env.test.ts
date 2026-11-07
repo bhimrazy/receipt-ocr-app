@@ -274,3 +274,19 @@ describe("build with Vercel Sensitive placeholders", () => {
     expect(env.authEnv.betterAuthUrl).toBe(production.BETTER_AUTH_URL);
   });
 });
+
+describe("logUndeliveredMail", () => {
+  it("logs full undelivered mail only in local development", async () => {
+    const { logUndeliveredMail } = await loadEnv({});
+    expect(logUndeliveredMail({ NODE_ENV: "development" })).toBe(true);
+    for (const env of [
+      { NODE_ENV: "production" },
+      { NODE_ENV: "test" },
+      {},
+      { NODE_ENV: "development", VERCEL_ENV: "production" },
+      { NODE_ENV: "development", VERCEL_ENV: "preview" },
+    ]) {
+      expect(logUndeliveredMail(env), JSON.stringify(env)).toBe(false);
+    }
+  });
+});

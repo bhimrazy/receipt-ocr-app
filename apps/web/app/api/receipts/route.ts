@@ -6,12 +6,21 @@ import {
   PRIORITY_BULK,
   PRIORITY_INTERACTIVE,
   type ReceiptExtractResult,
+  sniffMediaType,
 } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
-import { crossOriginResponse, discardBody, jsonError, readFormData, runRoute } from "@/lib/http";
+import {
+  annotateCaller,
+  crossOriginResponse,
+  discardBody,
+  jsonError,
+  readFormData,
+  runRoute,
+  withRequestEvent,
+} from "@/lib/http";
 import { drainJobs, ROUTE_BUDGET_MS, runJobNow } from "@/lib/jobs";
-import { logger, type WideEvent } from "@/lib/log";
+import type { WideEvent } from "@/lib/log";
 import { enforceUploadQuota } from "@/lib/quota";
 import { getActiveScope, getSession } from "@/lib/session";
 
@@ -22,51 +31,36 @@ import { getActiveScope, getSession } from "@/lib/session";
  */
 export const maxDuration = 300;
 
-export async function POST(request: Request) {
+export const POST = withRequestEvent({ event: "receipt.upload", route: "/api/receipts" }, upload);
+
+async function upload(request: Request, _context: unknown, event: WideEvent) {
   const startedAt = Date.now();
-  const requestId = crypto.randomUUID();
-  const event: WideEvent = {
-    event: "receipt.upload",
-    method: "POST",
-    path: "/api/receipts",
-    request_id: requestId,
-  };
-  const respond = (response: Response) => {
-    event.status_code ??= response.status;
-    event.duration_ms = Date.now() - startedAt;
-    (event.outcome === "error" ? logger.error : logger.info)(event);
-    return response;
-  };
+  const requestId = event.request_id ?? crypto.randomUUID();
 
   const forbidden = crossOriginResponse(request);
-  if (forbidden) return respond(discardBody(request, forbidden));
+  if (forbidden) return discardBody(request, forbidden);
 
   // Session and workspace come before the body: an anonymous client must not
   // make the server buffer up to MAX_UPLOAD_BYTES (security audit L1).
   const [session, scope] = await Promise.all([getSession(), getActiveScope()]);
-  if (!session) return respond(discardBody(request, jsonError(401, "Unauthorized")));
-  event.user_id = session.user.id;
-  // Requests made while an admin impersonates carry the admin's id (security review).
-  if (session.session.impersonatedBy) event.impersonated_by = session.session.impersonatedBy;
+  if (!session) return discardBody(request, jsonError(401, "Unauthorized"));
+  annotateCaller(event, { session, scope });
   if (!scope) {
-    return respond(
-      discardBody(
-        request,
-        jsonError(409, "No active workspace. Pick or create one before uploading."),
-      ),
+    return discardBody(
+      request,
+      jsonError(409, "No active workspace. Pick or create one before uploading."),
     );
   }
-  event.organization_id = scope.organizationId;
 
   const form = await readFormData(request, MAX_UPLOAD_BYTES);
-  if (form instanceof Response) return respond(form);
+  if (form instanceof Response) return form;
   const file = form.get("file");
-  if (!(file instanceof File)) return respond(jsonError(400, "A receipt file is required"));
+  if (!(file instanceof File)) return jsonError(400, "A receipt file is required");
   const mode = form.get("mode") === "queued" ? "queued" : "instant";
   event.mode = mode;
-  event.file = { size_bytes: file.size, declared_type: file.type };
-
   const body = new Uint8Array(await file.arrayBuffer());
+  // The type sniffed from the bytes, from the upload allowlist; never the client's `file.type`.
+  event.file = { size_bytes: file.size, media_type: sniffMediaType(body) ?? "unsupported" };
   // Check quota and OCR config first, so nothing is stored for an upload that can't be read.
   const ingest = enforceUploadQuota(session.user.id).pipe(
     Effect.tap(({ plan }) => void (event.plan = plan)),
@@ -82,18 +76,17 @@ export async function POST(request: Request) {
       }),
     ),
   );
-  const jobContext = { request_id: requestId, user_id: scope.userId };
+  const jobContext = { request_id: requestId, trigger: "upload" };
   // Runs queued work (this upload, its retries, anything else due) after the response.
   const drainAfter = (jobId: string) =>
     after(() => drainJobs(startedAt + ROUTE_BUDGET_MS, jobContext, [jobId]));
 
   if (mode === "queued") {
-    const response = await runRoute(
+    return runRoute(
       ingest,
       (ingested) => {
         const receiptId = ingested.receipt.id;
         event.receipt_id = receiptId;
-        event.timings = ingested.timings;
         event.outcome = "queued";
         event.job_id = ingested.jobId;
         // The job runs after the response; the client polls GET /api/receipts/:id.
@@ -105,10 +98,9 @@ export async function POST(request: Request) {
       },
       event,
     );
-    return respond(response);
   }
 
-  const response = await runRoute(
+  return runRoute(
     Effect.gen(function* () {
       const ingested = yield* ingest;
       event.receipt_id = ingested.receipt.id;
@@ -118,15 +110,11 @@ export async function POST(request: Request) {
       return { receiptId: ingested.receipt.id, ingested, run };
     }),
     ({ receiptId, ingested, run }) => {
-      event.timings = ingested.timings;
+      // Model, tokens and cost are on the attempt's `job.attempt` event.
       const result = run?.result as ReceiptExtractResult | undefined;
       if (run?.outcome === "succeeded" && result?.kind === "completed") {
         event.outcome = "success";
         event.status_code = 200;
-        event.model = result.model;
-        event.cost_micro_usd = result.costMicroUsd;
-        event.confidence = result.confidence;
-        event.items_count = result.itemsCount;
         return NextResponse.json({
           receiptId,
           status: "completed",
@@ -159,5 +147,4 @@ export async function POST(request: Request) {
     },
     event,
   );
-  return respond(response);
 }

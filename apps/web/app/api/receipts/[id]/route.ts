@@ -2,8 +2,15 @@ import { parseCategory } from "@receipt-ocr/ai/categories";
 import { deleteReceipt, JobQueue, ReceiptRepo, type ReceiptPatch } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
-import { crossOriginResponse, jsonError, runRoute } from "@/lib/http";
+import {
+  annotateCaller,
+  crossOriginResponse,
+  jsonError,
+  runRoute,
+  withRequestEvent,
+} from "@/lib/http";
 import { kickJob } from "@/lib/jobs";
+import type { WideEvent } from "@/lib/log";
 import { getActiveScope } from "@/lib/session";
 
 type Params = { params: Promise<{ id: string }> };
@@ -19,10 +26,17 @@ export const maxDuration = 120;
  * time, or its function was killed) runs that job after the response. A job
  * nobody polls for still waits for the next drain.
  */
-export async function GET(_request: Request, { params }: Params) {
+export const GET = withRequestEvent(
+  { event: "receipt.poll", route: "/api/receipts/[id]", routine: true },
+  poll,
+);
+
+async function poll(_request: Request, { params }: Params, event: WideEvent) {
   const scope = await getActiveScope();
   if (!scope) return jsonError(401, "Unauthorized");
+  annotateCaller(event, { scope });
   const { id } = await params;
+  event.receipt_id = id;
   return runRoute(
     Effect.gen(function* () {
       const receipt = yield* Effect.flatMap(ReceiptRepo, (repo) => repo.get(id, scope));
@@ -36,7 +50,8 @@ export async function GET(_request: Request, { params }: Params) {
     }),
     ({ receipt, dueJob }) => {
       if (dueJob) {
-        after(() => kickJob(dueJob, { user_id: scope.userId, kicked_by: "poll" }));
+        event.job_id = dueJob;
+        after(() => kickJob(dueJob, { request_id: event.request_id, trigger: "poll" }));
       }
       return receipt
         ? NextResponse.json({
@@ -49,6 +64,7 @@ export async function GET(_request: Request, { params }: Params) {
           })
         : notFound();
     },
+    event,
   );
 }
 
@@ -74,13 +90,20 @@ function text(value: unknown, maxLength = 200): string | null | undefined {
  * are accepted: never status, confidence, ownership or the raw extraction.
  * Members may edit only their own uploads (enforced in ReceiptRepo).
  */
-export async function PATCH(request: Request, { params }: Params) {
+export const PATCH = withRequestEvent(
+  { event: "receipt.update", route: "/api/receipts/[id]" },
+  update,
+);
+
+async function update(request: Request, { params }: Params, event: WideEvent) {
   const forbidden = crossOriginResponse(request);
   if (forbidden) return forbidden;
   const scope = await getActiveScope();
   if (!scope) return jsonError(401, "Unauthorized");
+  annotateCaller(event, { scope });
 
   const { id } = await params;
+  event.receipt_id = id;
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -112,18 +135,34 @@ export async function PATCH(request: Request, { params }: Params) {
     total: decimal(body.total),
   };
 
+  // Which fields changed, never their values.
+  event.flags = Object.fromEntries(
+    Object.entries(patch).flatMap(([key, value]) => (value === undefined ? [] : [[key, true]])),
+  );
   return runRoute(
     Effect.flatMap(ReceiptRepo, (repo) => repo.update(id, scope, patch)),
     (updated) => (updated ? NextResponse.json({ ok: true }) : notFound()),
+    event,
   );
 }
 
 /** Deletes the receipt and its stored file. Members may delete only their own uploads. */
-export async function DELETE(request: Request, { params }: Params) {
+export const DELETE = withRequestEvent(
+  { event: "receipt.delete", route: "/api/receipts/[id]" },
+  remove,
+);
+
+async function remove(request: Request, { params }: Params, event: WideEvent) {
   const forbidden = crossOriginResponse(request);
   if (forbidden) return forbidden;
   const scope = await getActiveScope();
   if (!scope) return jsonError(401, "Unauthorized");
+  annotateCaller(event, { scope });
   const { id } = await params;
-  return runRoute(deleteReceipt({ receiptId: id, scope }), () => NextResponse.json({ ok: true }));
+  event.receipt_id = id;
+  return runRoute(
+    deleteReceipt({ receiptId: id, scope }),
+    () => NextResponse.json({ ok: true }),
+    event,
+  );
 }

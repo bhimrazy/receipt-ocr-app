@@ -32,6 +32,7 @@ import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-
 import type { QuotaVerdict } from "./quota";
 import { Db } from "./services";
 import { countUsage, lockUserQuota, type UsageCounts, type UsageWindow } from "./usage";
+import { isUuid } from "./ids";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -55,10 +56,8 @@ export type ReceiptScope = {
 export const canManageAnyReceipt = (role: string | undefined) =>
   (role ?? "").split(",").some((r) => r.trim() === "owner" || r.trim() === "admin");
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** Receipt ids are UUIDs; anything else can't match, and Postgres would reject the cast. */
-export const isReceiptId = (id: string) => UUID.test(id);
+export const isReceiptId = isUuid;
 
 export type ReceiptWithItems = Receipt & { items: ReceiptItem[]; imageUrl?: string };
 

@@ -1,5 +1,6 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { REQUESTED_PATH_HEADER } from "@/lib/redirect";
+import { REQUEST_ID_HEADER } from "@/lib/request-id";
 import { SIGNED_IN_HINT_COOKIE } from "@/lib/signed-in-hint";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -21,6 +22,7 @@ export default function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   let signedIn = false;
   requestHeaders.delete(REQUESTED_PATH_HEADER);
+  requestHeaders.set(REQUEST_ID_HEADER, crypto.randomUUID());
   if (isGuarded) {
     requestHeaders.set(REQUESTED_PATH_HEADER, `${pathname}${request.nextUrl.search}`);
     const sessionCookie = getSessionCookie(request);

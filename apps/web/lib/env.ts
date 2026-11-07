@@ -9,6 +9,17 @@ import { isIP } from "node:net";
 export const isProduction = process.env.NODE_ENV === "production";
 
 /**
+ * Whether an undelivered email (no mailer) may be logged in full, link included. Development
+ * only: those links are credentials. A deployed Vercel environment never qualifies, even with a
+ * mis-set NODE_ENV.
+ */
+export const logUndeliveredMail = (env: Record<string, string | undefined> = process.env) =>
+  env.NODE_ENV !== "production" &&
+  env.NODE_ENV === "development" &&
+  env.VERCEL_ENV !== "production" &&
+  env.VERCEL_ENV !== "preview";
+
+/**
  * Email/password sign-up needs a verified address in production, so nobody can squat someone
  * else's email. `AUTH_REQUIRE_EMAIL_VERIFICATION=false` turns it off for CI's e2e run, which has
  * no mailer; local dev has no mailer either, so it is off there by default.

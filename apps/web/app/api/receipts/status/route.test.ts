@@ -14,6 +14,11 @@ vi.mock("@/lib/http", async () => {
   const { NextResponse } = await import("next/server");
   return {
     jsonError: (status: number, error: string) => NextResponse.json({ error }, { status }),
+    annotateCaller: () => {},
+    withRequestEvent:
+      (_spec: unknown, handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown) =>
+      (request: Request, context?: unknown) =>
+        handler(request, context, { event: "test" }),
     runRoute: async (
       program: import("effect").Effect.Effect<unknown, never, never>,
       ok: (value: never) => Response,
@@ -38,14 +43,14 @@ beforeEach(() => {
 describe("GET /api/receipts/status", () => {
   it("is 401 without a workspace scope", async () => {
     state.scope = null;
-    expect((await GET()).status).toBe(401);
+    expect((await GET(new Request("https://app.example/api/receipts/status"))).status).toBe(401);
     expect(counts).not.toHaveBeenCalled();
   });
 
   it("returns the counts for the caller's scope, uncached", async () => {
     const { Effect } = await import("effect");
     counts.mockReturnValue(Effect.succeed(counts_));
-    const res = await GET();
+    const res = await GET(new Request("https://app.example/api/receipts/status"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(counts_);
     expect(counts).toHaveBeenCalledWith(scope);
