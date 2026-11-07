@@ -155,6 +155,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
 13. In-app feedback: "Send feedback" in the account menu and Settings, "Your feedback" list, admin inbox with email
     replies; public board later ([feedback and requests](plans/2026-11-07-feedback-and-requests.md)).
+14. Dual-calendar dates: `receipt_date` as a real AD `date`, BS derived from a vendored month table, the model
+    transcribes dates and code cross-checks AD against the Miti; BS display, `date_bs` CSV, Nepal fiscal-year
+    presets ([dual-calendar dates](plans/2026-11-07-dual-calendar-dates.md)).
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
