@@ -79,7 +79,9 @@ describe("/api/jobs/drain", () => {
     }
     expect((await call(POST, "Bearer wrong")).status).toBe(401);
     expect(runPromise).not.toHaveBeenCalled();
-    expect(events[0]!.notices).toEqual(["jobs.drain_unauthorized"]);
+    // No notice: a notice would exempt these events from sampling, a free log flood.
+    expect(events[0]!.notices).toBeUndefined();
+    expect(events[0]!.outcome).toBe("unauthorized");
   });
 
   it("is 401 when CRON_SECRET is unset, whatever the caller sends", async () => {

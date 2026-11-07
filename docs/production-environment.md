@@ -446,8 +446,7 @@ from net._http_response order by created desc limit 10;
 ```
 
 Expect `status_code` 200 and a body like `{"claimed":0,...}`. `401` means the Vault secret differs from Vercel's, or
-`CRON_SECRET` isn't set on Vercel (the app's log notice says which: `jobs.drain_unauthorized` or
-`jobs.drain_unconfigured`). A pg_net timeout on a call that ran close to 60 s can still be a successful drain. `cron.job_run_details` only says the
+`CRON_SECRET` isn't set on Vercel (an unset secret logs the `jobs.drain_unconfigured` notice; a wrong one logs a sampled `outcome: unauthorized`). A pg_net timeout on a call that ran close to 60 s can still be a successful drain. `cron.job_run_details` only says the
 request was sent; the response is in `net._http_response`.
 
 **Stop it** (pause, or if something goes wrong):
