@@ -98,6 +98,14 @@ Steps are in [deployment.md](deployment.md).
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
 
+## Brand decisions (owner, 2026-11-07)
+
+Logo: "Scan line" (receipt crossed by a bar that overshoots both edges; keep the overshoot in every drawing). Palette:
+refined emerald (the current one; light-context tile `#047857` with a white glyph). Wordmark: `Receipt` + emerald
+`OCR`, mono. Masters and the asset table: [`apps/web/brand/README.md`](../apps/web/brand/README.md); regenerate with
+`bun run brand:assets`. Planned, not done: respell receiptOCR to ReceiptOCR everywhere in copy (one constant), and
+"scanned" wording in copy. The wordmark component and asset alt text already use ReceiptOCR.
+
 ## Decisions waiting on the owner
 
 1. **Remove the Better Auth cooldown exemption after 2026-11-12.** Approved 2026-11-07 to take 1.7.18 (security

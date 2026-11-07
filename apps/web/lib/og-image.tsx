@@ -40,8 +40,8 @@ export function renderOgImage({
           }}
         >
           <svg
-            width="44"
-            height="44"
+            width="48"
+            height="48"
             viewBox="0 0 24 24"
             fill="none"
             stroke="#07110d"
@@ -49,14 +49,15 @@ export function renderOgImage({
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
-            <path d="M14 8H8" />
-            <path d="M16 12H8" />
-            <path d="M13 16H8" />
+            <path d="M6 3h9l3 3v15l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3z" />
+            <path d="M15 3v3h3" />
+            <path d="M9 7.5h4" />
+            <path d="M2.5 11.5h19" strokeWidth="2.6" />
+            <path d="M9 15.5h5" opacity="0.45" />
           </svg>
         </div>
         <div style={{ display: "flex", fontSize: 44, fontWeight: 700 }}>
-          <span>receipt</span>
+          <span>Receipt</span>
           <span style={{ color: "#34d399" }}>OCR</span>
         </div>
       </div>

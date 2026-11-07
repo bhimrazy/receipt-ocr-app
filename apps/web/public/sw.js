@@ -3,7 +3,7 @@
 // HTML, no receipt images. Only the files below are cached, plus shared files for at most 10 minutes
 // (see lib/share-target.ts). Bump VERSION whenever this file or a precached file changes.
 // To switch the worker off in production, see "Disable the service worker" in docs/runbook.md.
-const VERSION = "4";
+const VERSION = "5";
 const STATIC_CACHE = `receiptocr-static-v${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/offline.js", "/icon.svg", "/icons/icon-192.png"];
