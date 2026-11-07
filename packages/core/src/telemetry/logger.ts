@@ -72,7 +72,7 @@ export function formatEvent(
     random,
   );
   if (!decision.keep) return null;
-  const { fields, dropped } = sanitize(event);
+  const { fields, dropped, redacted } = sanitize(event);
   delete fields.level;
   const name = fields.event ?? "unknown";
   delete fields.event;
@@ -84,6 +84,7 @@ export function formatEvent(
     ...fields,
     ...(decision.rate < 1 ? { sample_rate: decision.rate } : {}),
     ...(dropped.length > 0 ? { dropped_fields: dropped } : {}),
+    ...(redacted > 0 ? { redacted_secrets: redacted } : {}),
   });
   return { level, line };
 }

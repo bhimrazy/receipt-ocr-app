@@ -49,14 +49,14 @@ extractReceipt({
 
 ## Key modules
 
-| File                                                   | What it holds                                                                                                                     |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| [`extract.ts`](../../packages/ai/src/extract.ts)       | The prompt, the provider registry (one per key set), per-model Claude options, `generateText` with `Output.object`, usage mapping |
-| [`schema.ts`](../../packages/ai/src/schema.ts)         | `receiptExtractionSchema`: the single definition of an extraction, with length caps                                               |
-| [`errors.ts`](../../packages/ai/src/errors.ts)         | `OCR_FAILURE_KINDS`, `classifyOcrError`, `OcrCallError`                                                                           |
-| [`models.ts`](../../packages/ai/src/models.ts)         | Providers, the model allowlist, effective-dated prices, `costOf`                                                                  |
-| [`categories.ts`](../../packages/ai/src/categories.ts) | The twelve canonical categories and their descriptions (fed to the model)                                                         |
-| [`fixture.ts`](../../packages/ai/src/fixture.ts)       | Offline provider: same bytes give the same canned receipt; bytes containing `FIXTURE_FAIL` fail                                   |
+| File                                                   | What it holds                                                                                                                                                                       |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`extract.ts`](../../packages/ai/src/extract.ts)       | The prompt, the provider registry (one per key set, in a 16-entry LRU keyed by a SHA-256 of the keys), per-model Claude options, `generateText` with `Output.object`, usage mapping |
+| [`schema.ts`](../../packages/ai/src/schema.ts)         | `receiptExtractionSchema`: the single definition of an extraction, with length caps                                                                                                 |
+| [`errors.ts`](../../packages/ai/src/errors.ts)         | `OCR_FAILURE_KINDS`, `classifyOcrError`, `OcrCallError`                                                                                                                             |
+| [`models.ts`](../../packages/ai/src/models.ts)         | Providers, the model allowlist, effective-dated prices, `costOf`                                                                                                                    |
+| [`categories.ts`](../../packages/ai/src/categories.ts) | The twelve canonical categories and their descriptions (fed to the model)                                                                                                           |
+| [`fixture.ts`](../../packages/ai/src/fixture.ts)       | Offline provider: same bytes give the same canned receipt; bytes containing `FIXTURE_FAIL` fail                                                                                     |
 
 ## Data flow
 

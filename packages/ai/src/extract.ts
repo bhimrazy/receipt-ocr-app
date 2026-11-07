@@ -9,6 +9,7 @@ import {
   type LanguageModel,
   type LanguageModelUsage,
 } from "ai";
+import { CLIENT_CACHE_MAX, configKey, LruCache } from "./client-cache";
 import { CATEGORY_DESCRIPTIONS, RECEIPT_CATEGORIES } from "./categories";
 import { classifyOcrError, OcrCallError, UnsupportedFileError } from "./errors";
 import { fixtureExtraction, fixtureLatencyMs } from "./fixture";
@@ -66,7 +67,10 @@ const PROMPT = [
   "Confidence values must be between 0 and 1 and reflect how legible each value was.",
 ].join(" ");
 
-const registries = new Map<string, ReturnType<typeof buildRegistry>>();
+const registries = new LruCache<ReturnType<typeof buildRegistry>>(CLIENT_CACHE_MAX);
+
+/** The cache keys, for tests: they must never contain a key. */
+export const registryCacheKeys = () => registries.keys();
 
 function buildRegistry(keys: ProviderKeys) {
   return createProviderRegistry({
@@ -75,9 +79,9 @@ function buildRegistry(keys: ProviderKeys) {
   } satisfies Record<RegistryProviderId, unknown>);
 }
 
-/** One registry per key set, so provider clients are reused across calls. */
-function registryFor(keys: ProviderKeys) {
-  const cacheKey = JSON.stringify(keys);
+/** One registry per key set (bounded LRU, keyed by a hash), so provider clients are reused across calls. */
+export function registryFor(keys: ProviderKeys) {
+  const cacheKey = configKey(Object.entries(keys).sort(([a], [b]) => (a < b ? -1 : 1)));
   let registry = registries.get(cacheKey);
   if (!registry) {
     registry = buildRegistry(keys);
