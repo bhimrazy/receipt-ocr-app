@@ -110,6 +110,8 @@ services:
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      OCR_PROVIDER: ${OCR_PROVIDER:-google}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
       S3_ENDPOINT: http://rustfs:9000
       S3_REGION: us-east-1
       S3_BUCKET: receipt-ocr

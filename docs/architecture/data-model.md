@@ -242,7 +242,7 @@ erDiagram
   }
 ```
 
-- `jobs` has storage parameters set by hand in 0008: `fillfactor = 80` (room for HOT heartbeats) and aggressive
+- `jobs` has storage parameters set by hand at the end of the baseline migration: `fillfactor = 80` (room for HOT heartbeats) and aggressive
   per-table autovacuum.
 - `organization_id` and `receipt_id` are plain values: the job record outlives a deleted receipt or workspace.
   `user_id` is set to null when the account is deleted; the payload keeps the id until a retention purge (planned,
@@ -277,7 +277,7 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `jobs`                  | `jobs_idempotency_idx` on `idempotency_key`, where queued or running                         | A replayed upload or double-clicked retry enqueues nothing                                                                                                          |
 | `jobs`                  | `jobs_receipt_live_idx` on `receipt_id`, where queued or running and `kind like 'receipt.%'` | At most one live job per receipt; also serves every live-job lookup by receipt                                                                                      |
 | `jobs`                  | `jobs_last_error_kind_check`: `~ '^[a-z0-9.-]{1,40}$'`                                       | Error codes only, never a message that could hold receipt contents                                                                                                  |
-| `ocr_calls`             | `ocr_calls_status_check`: `status in (...)`                                                  | Only `ok`, the eight AI failure kinds and `storage-error` (`0011` added `refused`, `unsupported-file`)                                                              |
+| `ocr_calls`             | `ocr_calls_status_check`: `status in (...)`                                                  | Only `ok`, the eight AI failure kinds and `storage-error` (`0001` added `refused`, `unsupported-file`)                                                              |
 | `receipt_groups`        | `receipt_groups_org_name_idx` on `(organization_id, lower(name))`                            | Group names are unique per workspace, ignoring case                                                                                                                 |
 | `receipt_group_members` | Primary key on `(group_id, receipt_id)`                                                      | A receipt is in a group once                                                                                                                                        |
 | `app_settings`          | Primary key on `key`                                                                         | One row per setting, upserted on save                                                                                                                               |
