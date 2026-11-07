@@ -288,7 +288,7 @@ const passwordChanged: EmailDefinition = {
  * address gets its own verification email. The reset link is the "wasn't you?" path.
  */
 const emailChange: EmailDefinition = {
-  slots: ["url", "urlLabel", "expiry", "newEmail", "resetUrl"],
+  slots: ["url", "urlLabel", "expiry", "currentEmail", "newEmail", "resetUrl"],
   render(v, shared) {
     const heading = "Approve your email change";
     const expiry = `This link expires in ${v.expiry}.`;
@@ -305,8 +305,8 @@ const emailChange: EmailDefinition = {
           reason={reason}
         >
           <P>
-            We got a request to change the email for your {BRAND} account to{" "}
-            <Strong>{v.newEmail}</Strong>. {tail}
+            We got a request to change the email for your {BRAND} account from{" "}
+            <Strong>{v.currentEmail}</Strong> to <Strong>{v.newEmail}</Strong>. {tail}
           </P>
           <Action label="Approve email change" url={v.url} urlLabel={v.urlLabel} expiry={expiry} />
           <Note>
@@ -319,7 +319,7 @@ const emailChange: EmailDefinition = {
       text: plainText(shared, {
         heading,
         body: [
-          `We got a request to change the email for your ${BRAND} account to ${v.newEmail}. ${tail}`,
+          `We got a request to change the email for your ${BRAND} account from ${v.currentEmail} to ${v.newEmail}. ${tail}`,
         ],
         action: { label: "Approve email change", url: v.url, expiry },
         note: `Didn't ask for this? Don't open the link. Your address stays the same. Someone may have access to your account, so reset your password (${v.resetUrl}) and ${help.text}.`,

@@ -7,18 +7,18 @@ whether an undelivered message is an error.
 
 ## Public API
 
-| Export (from [`src/index.ts`](../../packages/email/src/index.ts) and [`src/templates.ts`](../../packages/email/src/templates.ts)) | Does                                                                                              |
-| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `sendEmail(config, { to, subject, html, text, replyTo? })` (`config.replyTo`, set from `SUPPORT_EMAIL`, is the default Reply-To)  | Returns `{ delivered: true, id }` or `{ delivered: false, reason: "not_configured" or "failed" }` |
-| `verificationEmail(ctx, { url, expiresInSeconds })`                                                                               | `{ subject, html, text }` for "confirm your email"                                                |
-| `passwordResetEmail(ctx, { url, expiresInSeconds })`                                                                              | Same for a reset link                                                                             |
-| `invitationEmail(ctx, { organizationName, inviterEmail, url, expiresInSeconds })`                                                 | Same for a workspace invitation                                                                   |
-| `deleteAccountEmail(ctx, { url, expiresInSeconds, resetUrl })`                                                                    | The account-deletion confirmation link (single use; red button)                                   |
-| `passwordChangedEmail(ctx, { resetUrl })`                                                                                         | "Your password was changed", with the reset page and support contact                              |
-| `emailChangeEmail(ctx, { newEmail, url, resetUrl, expiresInSeconds })`                                                            | To the current address: approve a change to `newEmail` (`url` is Better Auth's approval link)     |
-| `supportMessageEmail(ctx, { from, topicLabel, message })`                                                                         | A contact-form message for the support inbox                                                      |
-| `testEmail(ctx)`                                                                                                                  | The admin console's delivery check                                                                |
-| `escapeHtml(value)`, `absoluteUrl(value)`                                                                                         | The escaping and link check the templates use                                                     |
+| Export (from [`src/index.ts`](../../packages/email/src/index.ts) and [`src/templates.ts`](../../packages/email/src/templates.ts)) | Does                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `sendEmail(config, { to, subject, html, text, replyTo? })` (`config.replyTo`, set from `SUPPORT_EMAIL`, is the default Reply-To)  | Returns `{ delivered: true, id }` or `{ delivered: false, reason: "not_configured" or "failed" }`                 |
+| `verificationEmail(ctx, { url, expiresInSeconds })`                                                                               | `{ subject, html, text }` for "confirm your email"                                                                |
+| `passwordResetEmail(ctx, { url, expiresInSeconds })`                                                                              | Same for a reset link                                                                                             |
+| `invitationEmail(ctx, { organizationName, inviterEmail, url, expiresInSeconds })`                                                 | Same for a workspace invitation                                                                                   |
+| `deleteAccountEmail(ctx, { url, expiresInSeconds, resetUrl })`                                                                    | The account-deletion confirmation link (single use; red button)                                                   |
+| `passwordChangedEmail(ctx, { resetUrl })`                                                                                         | "Your password was changed", with the reset page and support contact                                              |
+| `emailChangeEmail(ctx, { currentEmail, newEmail, url, resetUrl, expiresInSeconds })`                                              | To the current address: approve a change from `currentEmail` to `newEmail` (`url` is Better Auth's approval link) |
+| `supportMessageEmail(ctx, { from, topicLabel, message })`                                                                         | A contact-form message for the support inbox                                                                      |
+| `testEmail(ctx)`                                                                                                                  | The admin console's delivery check                                                                                |
+| `escapeHtml(value)`, `absoluteUrl(value)`                                                                                         | The escaping and link check the templates use                                                                     |
 
 All template functions are synchronous. `ctx` is an `EmailContext`: `{ appUrl, supportEmail? }`. The package reads no
 environment; the web app builds it once as `emailContext` in [`lib/env.ts`](../../apps/web/lib/env.ts) from

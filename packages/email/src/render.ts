@@ -26,6 +26,7 @@ export const SLOT_KINDS = {
   organizationName: "line",
   inviterEmail: "line",
   newEmail: "line",
+  currentEmail: "line",
   from: "line",
   topicLabel: "line",
   message: "multiline",
@@ -60,7 +61,10 @@ export function absoluteUrl(value: string): string {
   return url.toString();
 }
 
+/** The shape the `email` slot kind accepts; the app checks SUPPORT_EMAIL against it. */
 const ADDRESS = /^[^\s@"'<>&?#/\\]+@[^\s@"'<>&?#/\\]+$/;
+
+export const isEmailAddress = (value: string) => ADDRESS.test(oneLine(value));
 
 export function normalizeSlot(kind: SlotKind, value: string): string {
   switch (kind) {
@@ -70,7 +74,7 @@ export function normalizeSlot(kind: SlotKind, value: string): string {
       return absoluteUrl(value);
     case "email": {
       const address = oneLine(value);
-      if (!ADDRESS.test(address)) throw new Error("Not an email address");
+      if (!isEmailAddress(address)) throw new Error("Not an email address");
       return address;
     }
     case "line":

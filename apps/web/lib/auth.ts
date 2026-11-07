@@ -375,6 +375,7 @@ export const auth = betterAuth({
           to: user.email,
           // Better Auth's approval link is signed with the verification lifetime.
           ...emailChangeEmail(emailContext, {
+            currentEmail: user.email,
             newEmail,
             url,
             expiresInSeconds: VERIFY_LINK_SECONDS,

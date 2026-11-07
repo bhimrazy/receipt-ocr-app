@@ -13,7 +13,7 @@ import {
   type SlotName,
 } from "./render";
 
-export { absoluteUrl, displayUrl, escapeHtml, formatDuration } from "./render";
+export { absoluteUrl, isEmailAddress, displayUrl, escapeHtml, formatDuration } from "./render";
 
 export const BRAND = "ReceiptOCR";
 
@@ -138,10 +138,11 @@ export function passwordChangedEmail(ctx: EmailContext, input: { resetUrl: strin
  */
 export function emailChangeEmail(
   ctx: EmailContext,
-  input: LinkEmailInput & { newEmail: string; resetUrl: string },
+  input: LinkEmailInput & { currentEmail: string; newEmail: string; resetUrl: string },
 ): EmailContent {
   return build("emailChange", `Approve your ${BRAND} email change`, ctx, {
     ...link(input),
+    currentEmail: input.currentEmail,
     newEmail: input.newEmail,
     resetUrl: input.resetUrl,
   });

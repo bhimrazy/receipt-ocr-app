@@ -283,7 +283,7 @@ describe.skipIf(!enabled)(
 
       const notice = sent.filter((m) => m.to === a.email).at(-1);
       expect(notice?.subject).toBe("Approve your ReceiptOCR email change");
-      expect(notice?.text).toContain(newEmail);
+      expect(notice?.text).toContain(`from ${a.email} to ${newEmail}`);
       expect(sent.some((m) => m.to === newEmail)).toBe(false);
 
       const open = (link: string) =>

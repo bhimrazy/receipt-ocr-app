@@ -84,8 +84,14 @@ const cases: Record<
   },
   emailChange: {
     make: (ctx) =>
-      emailChangeEmail(ctx, { newEmail: hostile, url, resetUrl, expiresInSeconds: hour }),
-    input: { newEmail: hostile, url, resetUrl, expiry: "1 hour" },
+      emailChangeEmail(ctx, {
+        currentEmail: "old@example.com",
+        newEmail: hostile,
+        url,
+        resetUrl,
+        expiresInSeconds: hour,
+      }),
+    input: { currentEmail: "old@example.com", newEmail: hostile, url, resetUrl, expiry: "1 hour" },
   },
 };
 
@@ -198,6 +204,7 @@ describe("link emails", () => {
     for (const mail of [
       verificationEmail(withSupport, { url, expiresInSeconds: hour }),
       emailChangeEmail(withSupport, {
+        currentEmail: "o@example.com",
         newEmail: "n@example.com",
         url,
         resetUrl,
@@ -315,6 +322,7 @@ describe("security notices", () => {
 
   it("email change: approval link is the button, reset link is in the note, address escaped", () => {
     const mail = emailChangeEmail(withSupport, {
+      currentEmail: "old@example.com",
       newEmail: '"><h1>locked</h1>@evil.example\r\nBcc: x',
       url,
       resetUrl,
@@ -326,9 +334,15 @@ describe("security notices", () => {
     const button = mail.html.match(/<a[^>]*href="([^"]+)"[^>]*>[\s\S]*?Approve email change/)?.[1];
     expect(button).toBe(escapeHtml(url));
     expect(mail.html).toContain(`href="${resetUrl}"`);
+    expect(mail.text).toContain("from old@example.com to ");
     expect(mail.text).toContain("expires in 1 hour");
     expect(mail.text).toContain(resetUrl);
     expect(mail.text).not.toMatch(/\r|\n\s*Bcc/);
+  });
+
+  it("verification to the new address never names the old one", () => {
+    const mail = verificationEmail(withSupport, { url, expiresInSeconds: hour });
+    expect(mail.text + mail.html).not.toContain("old@example.com");
   });
 });
 

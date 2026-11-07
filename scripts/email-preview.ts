@@ -60,6 +60,7 @@ const emails: Record<string, EmailContent> = {
   }),
   "password-changed": passwordChangedEmail(ctx, { resetUrl: `${appUrl}/forgot-password` }),
   "email-change": emailChangeEmail(ctx, {
+    currentEmail: "ada@example.com",
     newEmail: "ada.new@example.com",
     url: `${appUrl}/api/auth/verify-email?token=${token}&callbackURL=%2Fapp%2Fsettings`,
     resetUrl: `${appUrl}/forgot-password`,
