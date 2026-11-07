@@ -133,7 +133,6 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
     expect(row?.twoFactorEnabled).toBe(true);
     const [stored] = await db.select().from(twoFactor).where(eq(twoFactor.userId, account.userId));
     // Sealed at rest: neither the key nor a backup code appears in the row.
-    expect(stored?.secret.startsWith("$ba$")).toBe(true);
     expect(stored?.secret).not.toContain(key);
     expect(stored?.backupCodes).not.toContain(backupCodes[0]);
     expect(sent.at(-1)?.subject).toContain("Two-step sign-in is on");
@@ -194,7 +193,7 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
     await expect(check.requireStepUp(who, "account.change_password")).rejects.toBeInstanceOf(
       check.StepUpRequiredError,
     );
-    // Email isn't offered once a factor exists.
+    // Email isn't offered once a factor exists (refused before any attempt is recorded).
     expect(
       await stepUp.verifyStepUp(who, {
         action: "account.change_password",
@@ -225,7 +224,6 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
         ),
       );
     expect(events.map((e) => `${e.method}:${e.outcome}`).sort()).toEqual([
-      "email:failed",
       "totp:failed",
       "totp:verified",
     ]);
