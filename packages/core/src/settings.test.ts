@@ -2,7 +2,7 @@ import { ConfigProvider, Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PLANS, MAX_BATCH } from "./plans";
 import { Db } from "./services";
-import { ocrRoutingSchema, planTableSchema, Settings } from "./settings";
+import { ocrRoutingSchema, planTableSchema, Settings, storedPlanTableSchema } from "./settings";
 
 const policy = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10, batchMax: 10 };
 
@@ -49,6 +49,27 @@ describe("planTableSchema batchMax", () => {
     for (const batchMax of [0, 21, 50, 2.5]) {
       expect(
         planTableSchema.safeParse({ free: { ...policy, batchMax }, pro: policy }).success,
+      ).toBe(false);
+    }
+  });
+});
+
+describe("storedPlanTableSchema", () => {
+  it("clamps a stored batchMax over the cap and keeps the other limits", () => {
+    const stored = {
+      free: { ...policy, receiptsPerDay: 42, batchMax: 50 },
+      pro: { ...policy, batchMax: 15 },
+    };
+    expect(planTableSchema.safeParse(stored).success).toBe(false);
+    const read = storedPlanTableSchema.parse(stored);
+    expect(read.free).toEqual({ ...policy, receiptsPerDay: 42, batchMax: MAX_BATCH });
+    expect(read.pro.batchMax).toBe(15);
+  });
+
+  it("still rejects a batchMax that isn't a positive whole number", () => {
+    for (const batchMax of [0, 2.5, "10"]) {
+      expect(
+        storedPlanTableSchema.safeParse({ free: { ...policy, batchMax }, pro: policy }).success,
       ).toBe(false);
     }
   });
@@ -159,6 +180,22 @@ describe("Settings", () => {
       metadata: { from: DEFAULT_PLANS, to: table },
     });
     expect(writes).toHaveLength(2);
+  });
+
+  it("reads a saved row with batchMax over the cap as the cap, keeping its other limits", async () => {
+    const saved = {
+      key: "plans",
+      value: { free: { ...policy, receiptsPerDay: 42, batchMax: 50 }, pro: policy },
+      updatedAt: new Date(),
+      updatedBy: "a",
+    };
+    const run = settingsWith({}, [saved]);
+    const exit = await run(Effect.flatMap(Settings, (s) => s.plans));
+    expect(Exit.isSuccess(exit) && exit.value.free).toEqual({
+      ...policy,
+      receiptsPerDay: 42,
+      batchMax: MAX_BATCH,
+    });
   });
 
   it("refuses a batchMax over the cap without writing", async () => {
