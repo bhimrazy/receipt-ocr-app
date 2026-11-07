@@ -16,7 +16,14 @@ export {
   type ProviderKeys,
 } from "./extract";
 export { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, FixtureFailureError } from "./fixture";
-export { receiptExtractionSchema, type ReceiptExtraction } from "./schema";
+export { FIELD_DESCRIPTIONS, receiptExtractionSchema, type ReceiptExtraction } from "./schema";
+export {
+  INJECTION_GUARD,
+  PROMPT_VERSION,
+  PROMPT_VERSIONS,
+  promptFor,
+  type PromptVersion,
+} from "./prompt";
 export {
   CHECK_TIMEOUT_MS,
   checkProvider,

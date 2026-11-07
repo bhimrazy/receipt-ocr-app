@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { OcrCallError, retryAfterMs } from "./errors";
 import { extractReceipt, type ModelId } from "./extract";
 import { FIXTURE_RECEIPTS } from "./fixture";
+import { FIELD_DESCRIPTIONS } from "./schema";
+import { INJECTION_GUARD } from "./prompt";
 
 const RECEIPT = FIXTURE_RECEIPTS[0]!;
 const keys = { anthropic: "test-key-not-real" };
@@ -102,25 +104,51 @@ describe("the Anthropic request body", () => {
         expect(body).not.toHaveProperty(key);
       }
 
-      // One user turn with the prompt and the image; no assistant prefill.
+      // The rules as the system prompt, then one user turn with the image before its text
+      // (Claude's vision guidance); no assistant prefill.
+      expect(JSON.stringify(body.system)).toContain(INJECTION_GUARD);
       const messages = body.messages as Array<{
         role: string;
         content: Array<Record<string, unknown>>;
       }>;
       expect(messages.map((m) => m.role)).toEqual(["user"]);
-      expect(messages[0]!.content.map((part) => part.type)).toEqual(["text", "image"]);
-      expect(messages[0]!.content[1]).toMatchObject({
+      expect(messages[0]!.content.map((part) => part.type)).toEqual(["image", "text"]);
+      expect(messages[0]!.content[0]).toMatchObject({
         source: { type: "base64", media_type: "image/jpeg", data: "/9j/4A==" },
       });
     },
   );
+
+  it("sends the v2 field definitions in the schema, and v1 as it was for the A/B", async () => {
+    const calls = mockFetch(json(message()));
+    const v2 = await run("anthropic:claude-haiku-5-5");
+    expect(v2.promptVersion).toBe("v2");
+    const format = (i: number) =>
+      JSON.stringify((calls[i]!.body.output_config as { format: unknown }).format);
+    expect(format(0)).toContain(JSON.stringify(FIELD_DESCRIPTIONS.subtotal));
+    expect(format(0)).toContain(JSON.stringify(FIELD_DESCRIPTIONS.totalPrice));
+
+    const v1 = await extractReceipt({
+      model: "anthropic:claude-haiku-5-5",
+      keys,
+      file: jpeg,
+      maxRetries: 0,
+      promptVersion: "v1",
+    });
+    expect(v1.promptVersion).toBe("v1");
+    expect(format(1)).not.toContain(JSON.stringify(FIELD_DESCRIPTIONS.subtotal));
+    expect(calls[1]!.body).not.toHaveProperty("system");
+    const content = (calls[1]!.body.messages as Array<{ content: Array<{ type: string }> }>)[0]!
+      .content;
+    expect(content.map((part) => part.type)).toEqual(["text", "image"]);
+  });
 
   it("sends a PDF as a base64 document block", async () => {
     const calls = mockFetch(json(message()));
     const pdf = { data: new TextEncoder().encode("%PDF-1.7"), mediaType: "application/pdf" };
     await run("anthropic:claude-haiku-5-5", pdf);
     const messages = calls[0]!.body.messages as Array<{ content: Array<Record<string, unknown>> }>;
-    expect(messages[0]!.content[1]).toMatchObject({
+    expect(messages[0]!.content[0]).toMatchObject({
       type: "document",
       source: { type: "base64", media_type: "application/pdf", data: "JVBERi0xLjc=" },
     });

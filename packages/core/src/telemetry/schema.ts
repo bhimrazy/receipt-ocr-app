@@ -119,6 +119,8 @@ export const EVENT_SCHEMA = {
       calls: "int",
       /** A fallback model was called. */
       fallback: "bool",
+      /** The extraction prompt version (`v2`), from `@receipt-ocr/ai`'s `PROMPT_VERSION`. Our constant, no PII. */
+      prompt_version: "token",
       tokens_in: "int",
       tokens_out: "int",
       tokens_cached: "int",

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { extractReceipt } from "./extract";
 import { OCR_MODELS } from "./models";
+import { INJECTION_GUARD, PROMPT_VERSIONS } from "./prompt";
+import { FIELD_DESCRIPTIONS } from "./schema";
 
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 const keys = { google: "test-key-google-shape" };
@@ -36,7 +38,11 @@ const answer = (extraction: unknown) =>
   });
 
 function mockFetch(respond: () => Response) {
-  const bodies: Array<{ generationConfig: Record<string, unknown> }> = [];
+  const bodies: Array<{
+    generationConfig: Record<string, unknown>;
+    systemInstruction?: unknown;
+    contents: Array<{ parts: Array<Record<string, unknown>> }>;
+  }> = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (_url: unknown, init?: RequestInit) => {
@@ -77,6 +83,32 @@ describe("Gemini request shape per model", () => {
       expect(hasKeyword(config.responseJsonSchema, "enum")).toBe(true);
     },
   );
+
+  it.each(PROMPT_VERSIONS)("Flash-Lite drops maxItems under prompt %s too", async (version) => {
+    const bodies = mockFetch(() => answer(receipt(1)));
+    const result = await extractReceipt({
+      model: "google:gemini-3.5-flash-lite",
+      file: { data: png, mediaType: "image/png" },
+      keys,
+      maxRetries: 0,
+      promptVersion: version,
+    });
+    expect(result.promptVersion).toBe(version);
+    const { generationConfig, systemInstruction, contents } = bodies[0]!;
+    expect(hasKeyword(generationConfig.responseJsonSchema, "maxItems")).toBe(false);
+    const schema = JSON.stringify(generationConfig.responseJsonSchema);
+    const parts = contents[0]!.parts.map((part) => ("inlineData" in part ? "file" : "text"));
+    if (version === "v1") {
+      expect(systemInstruction).toBeUndefined();
+      expect(schema).not.toContain(JSON.stringify(FIELD_DESCRIPTIONS.tax));
+      expect(parts).toEqual(["text", "file"]);
+    } else {
+      // Gemini reads the rules as its system instruction and the field definitions in the schema.
+      expect(JSON.stringify(systemInstruction)).toContain(INJECTION_GUARD);
+      expect(schema).toContain(JSON.stringify(FIELD_DESCRIPTIONS.tax));
+      expect(parts).toEqual(["file", "text"]);
+    }
+  });
 
   it("Flash-Lite still enforces the item cap on the reply", async () => {
     mockFetch(() => answer(receipt(301)));

@@ -76,6 +76,7 @@ const ScriptedOcr = Layer.succeed(Ocr, {
           extraction: FIXTURE_RECEIPTS[0]!,
           usage: ZERO,
           model: MODEL,
+          promptVersion: "v2" as const,
           attempts: [{ model: MODEL, step: 0, kind: "ok" as const, ms: 1, usage: ZERO }],
         };
       }

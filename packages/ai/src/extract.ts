@@ -10,12 +10,12 @@ import {
   type LanguageModelUsage,
 } from "ai";
 import { CLIENT_CACHE_MAX, configKey, LruCache } from "./client-cache";
-import { CATEGORY_DESCRIPTIONS, RECEIPT_CATEGORIES } from "./categories";
 import { classifyOcrError, OcrCallError, UnsupportedFileError } from "./errors";
 import { fixtureExtraction, fixtureLatencyMs } from "./fixture";
 import { imageSize } from "./image-size";
 import { ocrModel, type ExtractionUsage, type OcrModel, type OcrProviderId } from "./models";
-import { receiptExtractionSchema, receiptRequestSchema, type ReceiptExtraction } from "./schema";
+import { PROMPT_VERSION, promptFor, type PromptVersion } from "./prompt";
+import { receiptRequestSchema, type ReceiptExtraction } from "./schema";
 
 /** Providers reached through the AI SDK registry; `fixture` is handled locally. */
 type RegistryProviderId = Exclude<OcrProviderId, "fixture">;
@@ -36,12 +36,16 @@ export type ExtractReceiptInput = {
   /** Retries on transient provider errors within this one call. */
   maxRetries?: number;
   abortSignal?: AbortSignal;
+  /** Defaults to `PROMPT_VERSION`; the benchmark passes an older one for an A/B. */
+  promptVersion?: PromptVersion;
 };
 
 export type ExtractReceiptResult = {
   extraction: ReceiptExtraction;
   usage: ExtractionUsage;
   model: ModelId;
+  /** The prompt and schema version that read the receipt. */
+  promptVersion: PromptVersion;
 };
 
 /**
@@ -56,16 +60,6 @@ const DEFAULT_MAX_RETRIES = 2;
  * well above what a long receipt's JSON needs.
  */
 const MAX_OUTPUT_TOKENS = 16_384;
-
-const PROMPT = [
-  "Extract this receipt into structured data.",
-  "Use null for missing numeric/date fields; receiptDate must be ISO (YYYY-MM-DD) when present.",
-  "currency must be an ISO 4217 code such as USD or EUR.",
-  // Observed: an IDR receipt reading 31.000 (31 thousand) came back as 31.00. Three-decimal currencies are the exception.
-  "Numbers use locale-specific separators. Decide from the receipt's own locale and currency whether '.' or ',' is the decimal mark, and emit every amount as a plain number with a '.' decimal point and no grouping separators. A trailing group of exactly three digits after a separator is almost always thousands, not cents (IDR \"25.000\" is 25000), unless the currency has three minor-unit digits: for KWD, BHD, OMR, JOD, TND and LYD (judge by symbol, code such as KD, BD, RO, JD or DT, or country), three digits after the decimal mark are the fraction (KWD \"1.250\" is 1.25, \"1,250.500 KD\" is 1250.5).",
-  `category must be exactly one of: ${RECEIPT_CATEGORIES.map((c) => `${c} (${CATEGORY_DESCRIPTIONS[c]})`).join("; ")}.`,
-  "Confidence values must be between 0 and 1 and reflect how legible each value was.",
-].join(" ");
 
 const registries = new LruCache<ReturnType<typeof buildRegistry>>(CLIENT_CACHE_MAX);
 
@@ -191,21 +185,19 @@ export async function extractReceipt(input: ExtractReceiptInput): Promise<Extrac
         extraction: fixtureExtraction(input.file.data),
         usage: NO_USAGE,
         model: input.model,
+        promptVersion: input.promptVersion ?? PROMPT_VERSION,
       };
     } catch (error) {
       throw new OcrCallError(classifyOcrError(error), null, error);
     }
   }
   checkFile(input.model, input.file);
-  const { extraction, usage } = await extractWith(
-    registryFor(input.keys ?? {}).languageModel(input.model),
-    {
-      ...input,
-      providerOptions: providerOptionsFor(input.model),
-      schemaMode: ocrModel(input.model)?.schemaMode,
-    },
-  );
-  return { extraction, usage, model: input.model };
+  const result = await extractWith(registryFor(input.keys ?? {}).languageModel(input.model), {
+    ...input,
+    providerOptions: providerOptionsFor(input.model),
+    schemaMode: ocrModel(input.model)?.schemaMode,
+  });
+  return { ...result, model: input.model };
 }
 
 /** The model call itself, separate from the registry so tests can pass a mock model. */
@@ -214,30 +206,26 @@ export async function extractWith(
   input: Omit<ExtractReceiptInput, "model" | "keys"> & {
     providerOptions?: ProviderOptions;
     schemaMode?: OcrModel["schemaMode"];
+    /** For tests: the day v2's no-future-dates rule counts from. */
+    now?: Date;
   },
 ): Promise<Omit<ExtractReceiptResult, "model">> {
+  const promptVersion = input.promptVersion ?? PROMPT_VERSION;
+  const prompt = promptFor(promptVersion, input.now);
+  const text = { type: "text" as const, text: prompt.text };
+  const file = { type: "file" as const, data: input.file.data, mediaType: input.file.mediaType };
   let usage: ExtractionUsage | null = null;
   try {
     const result = await generateText({
       model,
-      output: Output.object({
-        schema:
-          input.schemaMode === "no-array-bounds" ? receiptRequestSchema() : receiptExtractionSchema,
-      }),
+      output: Output.object({ schema: receiptRequestSchema(promptVersion, input.schemaMode) }),
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       timeout: { totalMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS },
       maxRetries: input.maxRetries ?? DEFAULT_MAX_RETRIES,
       abortSignal: input.abortSignal,
       providerOptions: input.providerOptions,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: PROMPT },
-            { type: "file", data: input.file.data, mediaType: input.file.mediaType },
-          ],
-        },
-      ],
+      instructions: prompt.system,
+      messages: [{ role: "user", content: prompt.fileFirst ? [file, text] : [text, file] }],
     });
     // Before `output`: reading it throws on an empty or truncated reply, which was still billed.
     usage = toUsage(result.usage);
@@ -247,7 +235,7 @@ export async function extractWith(
     if (result.finishReason === "content-filter") {
       throw new OcrCallError("refused", usage, new RefusalError("model refused"));
     }
-    return { extraction: result.output, usage };
+    return { extraction: result.output, usage, promptVersion };
   } catch (error) {
     if (error instanceof OcrCallError) throw error;
     throw new OcrCallError(classifyOcrError(error), usageOf(error) ?? usage, error);

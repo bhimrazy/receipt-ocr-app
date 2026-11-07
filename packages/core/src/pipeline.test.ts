@@ -1,4 +1,4 @@
-import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS } from "@receipt-ocr/ai";
+import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, PROMPT_VERSION } from "@receipt-ocr/ai";
 import type { Receipt } from "@receipt-ocr/db";
 import { Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
@@ -166,6 +166,7 @@ function harness(
         extraction: FIXTURE_RECEIPTS[0]!,
         usage: USAGE,
         model: "google:gemini-3.8-flash" as const,
+        promptVersion: PROMPT_VERSION,
         attempts: [
           { model: "google:gemini-3.8-flash", step: 0, kind: "ok" as const, ms: 1.6, usage: USAGE },
         ],
@@ -447,7 +448,13 @@ describe("ocrCallRows", () => {
       latencyMs: 0,
     });
     expect(rows[1]).toMatchObject({ step: 1, model: "google:gemini-3.8-flash", status: "ok" });
-    expect(ocrFields(rows)).toMatchObject({ calls: 1, model: "google:gemini-3.8-flash" });
+    expect(ocrFields(rows)).toMatchObject({
+      calls: 1,
+      model: "google:gemini-3.8-flash",
+      prompt_version: PROMPT_VERSION,
+    });
+    // Only skips: no model read anything, so no prompt version either.
+    expect(ocrFields(rows.slice(0, 1)).prompt_version).toBeUndefined();
   });
 
   it("keeps the model on a 413, which did reach the provider", () => {

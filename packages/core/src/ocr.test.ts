@@ -34,7 +34,12 @@ const failure = (kind: OcrFailureKind) => ({
 });
 
 const success = (model: ModelId) =>
-  Effect.succeed({ extraction: FIXTURE_RECEIPTS[0]!, usage: USAGE, model });
+  Effect.succeed({
+    extraction: FIXTURE_RECEIPTS[0]!,
+    usage: USAGE,
+    model,
+    promptVersion: "v2" as const,
+  });
 
 /** A fake provider per model: fail with the given error (after `ms` of test time) or succeed. */
 function fakeCall(plan: Partial<Record<ModelId, { error?: OcrFailureKind; ms?: number }>>) {
@@ -148,7 +153,12 @@ describe("runChain", () => {
     const call: ExtractCall = ({ model }) =>
       model === A
         ? Effect.fail({ kind: "unsupported-file", usage: null, cause: undefined, skipped: true })
-        : Effect.succeed({ extraction: FIXTURE_RECEIPTS[0]!, usage: USAGE, model });
+        : Effect.succeed({
+            extraction: FIXTURE_RECEIPTS[0]!,
+            usage: USAGE,
+            model,
+            promptVersion: "v2" as const,
+          });
     const exit = await run(runChain([step(A), step(B)], call));
     expect(Exit.isSuccess(exit) && exit.value.attempts).toMatchObject([
       { model: A, kind: "unsupported-file", skipped: true },
