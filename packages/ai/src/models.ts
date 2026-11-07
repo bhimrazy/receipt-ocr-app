@@ -77,18 +77,23 @@ export const OCR_PROVIDERS: readonly OcrProvider[] = [
 
 // Google prices from https://ai.google.dev/gemini-api/docs/pricing (Standard, paid tier),
 // checked 2026-11-06. The earliest `from` is that check, not the model's launch.
-// output_config.effort, all five levels on Haiku, Sonnet and Opus 5.5
+// output_config.effort on Haiku, Sonnet and Opus 5.5
 // (https://platform.claude.com/docs/en/build-with-claude/effort, checked 2026-11-07). The API's own
 // defaults are medium (Haiku, Opus) and high (Sonnet); transcription runs at low.
+// The API also takes xhigh and max, left out on purpose: a chain step is limited to 50 s, in which
+// a model emits about 5-10K tokens, so those levels would mostly time out after the provider has
+// billed the reasoning. Add them back when calls may run longer (e.g. a worker without the
+// serverless time limit); maxOutputTokensFor already has room for them.
 const CLAUDE_EFFORT: OcrEffort = {
-  values: ["low", "medium", "high", "xhigh", "max"],
+  values: ["low", "medium", "high"],
   default: "low",
   defaultFrom: "app",
 };
 
 // reasoning.effort on Luna and Terra (models pages, checked 2026-11-07). The API default is medium.
+// xhigh and max are accepted by the API but left out for the same reason as Claude's, above.
 const OPENAI_EFFORT: OcrEffort = {
-  values: ["none", "low", "medium", "high", "xhigh", "max"],
+  values: ["none", "low", "medium", "high"],
   default: "none",
   defaultFrom: "app",
 };

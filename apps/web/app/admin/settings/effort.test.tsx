@@ -14,14 +14,7 @@ describe("effortChoices", () => {
   it("names the default we set ourselves", () => {
     const choices = effortChoices(model("anthropic:claude-sonnet-5-5"), provider("anthropic"))!;
     expect(choices.defaultLabel).toBe("Default (low)");
-    expect(choices.items.map((i) => i.value)).toEqual([
-      "default",
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-    ]);
+    expect(choices.items.map((i) => i.value)).toEqual(["default", "low", "medium", "high"]);
   });
 
   it("says when the provider chooses the default", () => {

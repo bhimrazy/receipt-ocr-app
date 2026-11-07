@@ -8,7 +8,7 @@ describe("providerOptionsFor effort", () => {
     expect(providerOptionsFor("anthropic:claude-sonnet-5-5")).toEqual({
       anthropic: { structuredOutputMode: "outputFormat", effort: "low" },
     });
-    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+    for (const effort of ["low", "medium", "high"]) {
       expect(providerOptionsFor("anthropic:claude-opus-5-5", effort)).toEqual({
         anthropic: { structuredOutputMode: "outputFormat", effort },
       });
@@ -29,8 +29,8 @@ describe("providerOptionsFor effort", () => {
     expect(providerOptionsFor("openai:gpt-6-luna")).toMatchObject({
       openai: { reasoningEffort: "none", store: false },
     });
-    expect(providerOptionsFor("openai:gpt-6.1-terra", "xhigh")).toMatchObject({
-      openai: { reasoningEffort: "xhigh", store: false },
+    expect(providerOptionsFor("openai:gpt-6.1-terra", "high")).toMatchObject({
+      openai: { reasoningEffort: "high", store: false },
     });
   });
 
@@ -40,6 +40,15 @@ describe("providerOptionsFor effort", () => {
     });
     expect(providerOptionsFor("groq:qwen/qwen3.8-27b", "high")).toMatchObject({
       groq: { reasoningEffort: "none" },
+    });
+  });
+
+  it("xhigh and max are not offered: they fall back to the default", () => {
+    expect(providerOptionsFor("anthropic:claude-opus-5-5", "max")).toMatchObject({
+      anthropic: { effort: "low" },
+    });
+    expect(providerOptionsFor("openai:gpt-6-luna", "xhigh")).toMatchObject({
+      openai: { reasoningEffort: "none" },
     });
   });
 

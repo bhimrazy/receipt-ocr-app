@@ -127,10 +127,10 @@ describe("the OpenAI request body", () => {
     expect(calls[0]!.body.max_output_tokens).toBe(16_384);
   });
 
-  it("gives xhigh room to reason: a 65,536 token cap", async () => {
+  it("gives high room to reason: a 32,768 token cap", async () => {
     const calls = mockFetch(json(response()));
-    await extractReceipt({ model: MODEL, keys, file: jpeg, maxRetries: 0, effort: "xhigh" });
-    expect(calls[0]!.body.max_output_tokens).toBe(65_536);
+    await extractReceipt({ model: MODEL, keys, file: jpeg, maxRetries: 0, effort: "high" });
+    expect(calls[0]!.body.max_output_tokens).toBe(32_768);
   });
 
   it("sends a PDF as an input_file", async () => {

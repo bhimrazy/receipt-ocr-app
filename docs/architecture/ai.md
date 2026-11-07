@@ -257,7 +257,7 @@ against the real API yet; the first benchmark is the check.
   2x input and cache and 1.5x output, as `longContext` rows. Batch and Flex are half price (not used). `gpt-6.1-sol`
   ($2 / $10) and `gpt-6-astra` ($10 / $50) are not offered: too dear for transcription.
 - **Reasoning:** `reasoning.effort: "none"` (`OPENAI_OPTIONS`). Luna and Terra accept `none`, `low`, `medium`, `high`,
-  `xhigh`, `max`; the default is `medium`. Receipt reading is transcription, so no reasoning tokens are billed.
+  `xhigh`, `max` (not offered, see Reasoning effort); the default is `medium`. Receipt reading is transcription, so no reasoning tokens are billed.
   "none" is not benchmarked against "low" yet; compare them before relying on it.
 - **Structured output:** `text.format` `json_schema` with `strict: true`. Strict mode wants every key in `required`
   and `additionalProperties: false`, which the zod schema already gives. The docs list `pattern`, `format`,
@@ -292,22 +292,27 @@ step, which then runs the model's default; the rest of the chain is kept, so one
 back to the defaults. A save is still strict. Higher effort
 costs more (reasoning tokens bill as output) and is slower. Docs checked 2026-11-07.
 
-| Provider                  | Request field                  | Values                              | Unset runs                                         |
-| ------------------------- | ------------------------------ | ----------------------------------- | -------------------------------------------------- |
-| Claude (all three)        | `output_config.effort`         | low, medium, high, xhigh, max       | `low` (our setting; API default is medium or high) |
-| Gemini 3.8 Flash          | `thinkingConfig.thinkingLevel` | low, medium, high                   | nothing sent: Google's default (medium)            |
-| Gemini 3.5 Flash-Lite     | `thinkingConfig.thinkingLevel` | minimal, low, medium, high          | nothing sent: Google's default (minimal)           |
-| GPT-6 Luna, GPT-6.1 Terra | `reasoning.effort`             | none, low, medium, high, xhigh, max | `none` (our setting; API default is medium)        |
-| Groq Qwen 3.8 27B         | `reasoning_effort`             | none (instruct mode only)           | `none`                                             |
+| Provider                  | Request field                  | Values                     | Unset runs                                         |
+| ------------------------- | ------------------------------ | -------------------------- | -------------------------------------------------- |
+| Claude (all three)        | `output_config.effort`         | low, medium, high          | `low` (our setting; API default is medium or high) |
+| Gemini 3.8 Flash          | `thinkingConfig.thinkingLevel` | low, medium, high          | nothing sent: Google's default (medium)            |
+| Gemini 3.5 Flash-Lite     | `thinkingConfig.thinkingLevel` | minimal, low, medium, high | nothing sent: Google's default (minimal)           |
+| GPT-6 Luna, GPT-6.1 Terra | `reasoning.effort`             | none, low, medium, high    | `none` (our setting; API default is medium)        |
+| Groq Qwen 3.8 27B         | `reasoning_effort`             | none (instruct mode only)  | `none`                                             |
 
 Sources: [Claude effort](https://platform.claude.com/docs/en/build-with-claude/effort),
 [Gemini thinking](https://aistudio.google.com/docs/thinking) (`thinkingLevel` is the setting for Gemini 3 models;
 `thinkingBudget` belongs to 2.5 and is not used), OpenAI model pages
 ([Luna](https://developers.openai.com/api/docs/models/gpt-6-luna),
 [Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra)). Reasoning tokens count toward the output cap, so
-`maxOutputTokensFor` scales it: 16,384 up to medium, 32,768 at `high`, 65,536 at `xhigh` and `max`. That is within each
-model's documented maximum (Claude 128K, Gemini 3.8 Flash and 3.5 Flash-Lite 65,536, OpenAI 128K; Groq is fixed at
-`none`). A very long receipt at the top levels can still run out.
+`maxOutputTokensFor` scales it: 16,384 up to medium, 32,768 at `high`, 65,536 at `xhigh` and `max` (within each
+model's documented maximum: Claude 128K, Gemini 65,536, OpenAI 128K).
+
+**`xhigh` and `max` are not offered** (Claude and OpenAI take them; neither the select nor validation lists them). A
+chain step is limited to 50 s, in which a model emits about 5-10K tokens, so those levels would mostly end as
+`timeout` with no usage recorded while the provider still bills the reasoning. Gemini `high` and Claude/OpenAI `high`
+can hit the same limit on long receipts. The levels return when calls may run longer, for example a worker without the
+serverless time limit; the cap already has room for them. A saved `xhigh` or `max` is dropped on read.
 `bun run bench:ocr --effort low,medium` compares levels (one row per model and level); no level has been benchmarked
 yet.
 

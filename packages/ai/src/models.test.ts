@@ -192,9 +192,10 @@ describe("effort", () => {
 
   it("falls back to the model's default for an unset or unsupported value", () => {
     expect(effortFor("anthropic:claude-haiku-5-5")).toBe("low");
-    expect(effortFor("anthropic:claude-haiku-5-5", "max")).toBe("max");
+    expect(effortFor("anthropic:claude-haiku-5-5", "high")).toBe("high");
     expect(effortFor("google:gemini-3.8-flash", "minimal")).toBe("medium");
     expect(effortFor("openai:gpt-6-luna", "low")).toBe("low");
+    expect(effortFor("anthropic:claude-haiku-5-5", "max")).toBe("low");
     expect(effortFor("fixture", "low")).toBeNull();
   });
 });

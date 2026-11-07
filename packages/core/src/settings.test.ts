@@ -120,12 +120,12 @@ describe("ocrRoutingSchema", () => {
     });
 
     it.each([
-      ["anthropic:claude-haiku-5-5", "xhigh"],
-      ["anthropic:claude-opus-5-5", "max"],
+      ["anthropic:claude-haiku-5-5", "high"],
+      ["anthropic:claude-opus-5-5", "medium"],
       ["google:gemini-3.8-flash", "high"],
       ["google:gemini-3.5-flash-lite", "minimal"],
       ["openai:gpt-6-luna", "none"],
-      ["openai:gpt-6.1-terra", "max"],
+      ["openai:gpt-6.1-terra", "high"],
       ["groq:qwen/qwen3.8-27b", "none"],
     ])("accepts %s at %s", (model, effort) => {
       const result = withEffort(model, effort);
@@ -137,6 +137,10 @@ describe("ocrRoutingSchema", () => {
       ["anthropic:claude-sonnet-5-5", "minimal"],
       ["google:gemini-3.8-flash", "minimal"],
       ["google:gemini-3.8-flash", "xhigh"],
+      ["anthropic:claude-opus-5-5", "xhigh"],
+      ["anthropic:claude-opus-5-5", "max"],
+      ["openai:gpt-6.1-terra", "xhigh"],
+      ["openai:gpt-6-luna", "max"],
       ["openai:gpt-6-luna", "minimal"],
       ["groq:qwen/qwen3.8-27b", "low"],
       ["google:gemini-3.8-flash", "HIGH"],
