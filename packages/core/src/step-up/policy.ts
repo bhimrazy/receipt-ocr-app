@@ -21,6 +21,7 @@ export const STEP_UP_ACTIONS = [
   "account.delete",
   "account.change_email",
   "account.change_password",
+  "account.unlink",
   "two_factor.enable",
   "two_factor.disable",
   "two_factor.regenerate_backup_codes",
@@ -78,16 +79,13 @@ export interface StepUpState {
 
 /**
  * Actions a recent sign-in may confirm for a user with no factor, because each
- * is confirmed again on its own: deletion by an emailed link, an email change
- * by the current address, a password change by the current password. Adding a
- * factor is not one of them: a stolen fresh session could otherwise enrol the
- * thief's authenticator and lock the owner out.
+ * is confirmed again on its own: deletion by an emailed link, a password change
+ * by the current password. Not an email change: Better Auth asks the current
+ * address to approve only when it is verified, so for an unverified account the
+ * link goes to the new (attacker's) address alone. Not adding a factor either:
+ * a stolen fresh session could enrol the thief's authenticator.
  */
-const SIGN_IN_CONFIRMS = new Set<string>([
-  "account.delete",
-  "account.change_email",
-  "account.change_password",
-]);
+const SIGN_IN_CONFIRMS = new Set<string>(["account.delete", "account.change_password"]);
 
 /** Whether "sign in again" passes this check: the user's method is the emailed code. */
 export const signInCounts = (allowed: readonly StepUpMethod[], action?: string) =>

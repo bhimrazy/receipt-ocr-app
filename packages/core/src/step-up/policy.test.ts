@@ -63,7 +63,7 @@ describe("stepUpFresh", () => {
   describe("a recent sign-in", () => {
     const signedIn = (ms: number) => ({ stepUpAt: null, stepUpMethod: null, createdAt: ago(ms) });
 
-    it.each(["account.delete", "account.change_email", "account.change_password"])(
+    it.each(["account.delete", "account.change_password"])(
       "confirms %s for 10 minutes for a user with no factor",
       (action) => {
         expect(stepUpFresh(signedIn(60_000), ["email"], now, action)).toBe(true);
@@ -73,12 +73,18 @@ describe("stepUpFresh", () => {
       },
     );
 
-    it.each(["two_factor.enable", "passkey.add", "workspace.delete", "admin.ban-user", undefined])(
-      "never confirms %s, which needs the emailed code",
-      (action) => {
-        expect(stepUpFresh(signedIn(1000), ["email"], now, action)).toBe(false);
-      },
-    );
+    it.each([
+      // An unverified account's email change is approved by the new address alone.
+      "account.change_email",
+      "account.unlink",
+      "two_factor.enable",
+      "passkey.add",
+      "workspace.delete",
+      "admin.ban-user",
+      undefined,
+    ])("never confirms %s, which needs the emailed code", (action) => {
+      expect(stepUpFresh(signedIn(1000), ["email"], now, action)).toBe(false);
+    });
 
     it("never counts for a user with a factor, or an admin who must enrol", () => {
       expect(stepUpFresh(signedIn(1000), ["totp", "backup_code"], now, "account.delete")).toBe(
