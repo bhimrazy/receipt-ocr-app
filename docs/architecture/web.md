@@ -32,8 +32,8 @@ HTTP.
 | [`drizzle`](../../apps/web/drizzle)                                                                                                                                                                | SQL migrations, generated from [packages/db](db.md)                                                                                                                                                                  |
 | [`e2e`](../../apps/web/e2e)                                                                                                                                                                        | Playwright suite                                                                                                                                                                                                     |
 
-The upload panel lives on Home (`/app`) and on `/app/upload`, which the home-screen shortcut (`?capture=1` opens the
-camera) and the share target (`?shared=1`) land on. Capture, review and upload in the browser are described in
+The upload panel lives on Home (`/app`) and on `/app/upload`, which the Scan tab and the home-screen shortcut (`?capture=1`
+opens the camera on each visit, then is dropped from the URL with `history.replaceState`) and the share target (`?shared=1`) land on. Capture, review and upload in the browser are described in
 [Upload, extraction and result](flows/upload-and-extraction.md#1-in-the-browser):
 
 ```mermaid

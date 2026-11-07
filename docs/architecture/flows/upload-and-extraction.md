@@ -65,9 +65,15 @@ flowchart LR
   confident, the crop is the whole image. Corners drag with pointer events or move with arrow keys; rotation is in
   quarter turns. `geometry.ts` solves the homography from the four corners and warps the crop straight on a canvas.
   Filters (Original, Enhance, Greyscale, B&W) apply after the warp; Enhance is the default when a receipt was found,
-  and the last choice is remembered for the session. The expected upload size comes from encoding the edit for real.
-- Each edited photo becomes a JPEG at quality 0.92 from the canvas, so it carries no EXIF, then goes through
-  `prepareFile` like any picked image. Photos and frames stay on the device until upload.
+  and the last choice is remembered for the session. The expected upload size is estimated from a ~0.3 MP render
+  (its JPEG bytes per pixel times the pixels `prepareFile` keeps, capped at the 500 KB target), so editing never
+  waits on a full-size render.
+- Photos over 16 MP are decoded straight to 16 MP (`createImageBitmap` resize, size read from the header first), and
+  every canvas is released (`width = height = 0`) as soon as its pixels are used, to stay within iOS canvas memory.
+- On Read, each edited photo becomes a JPEG at quality 0.92 from the canvas, so it carries no EXIF, then goes through
+  `prepareFile` like any picked image. If the browser can't decode a photo, the original goes. If it decodes but the
+  edit can't be rendered or encoded, an edited photo is held back with an error on it (sending the original would drop
+  the crop, rotation and filter); an unedited one goes as it is. Photos and frames stay on the device until upload.
 - Every image the browser can decode is oriented, sized to a pixel budget (about 3 MP, the short edge kept at 1,000 px
   or more where the source has it, long edge capped at 6,000 px, never upscaled) and re-encoded as JPEG. Quality starts
   at 0.85 and steps down to 0.6, then the image shrinks 15% at a time (never under the short-edge floor), up to 6
