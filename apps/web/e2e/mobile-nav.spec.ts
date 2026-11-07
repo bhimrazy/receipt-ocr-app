@@ -91,6 +91,17 @@ test("Back returns from a receipt to History", async ({ page }) => {
   await expect(page).toHaveURL(/\/app\/history$/);
 });
 
+test("Back is named for the page you came from", async ({ page }) => {
+  await page.goto("/app");
+  await page
+    .getByRole("link", { name: /Phone Market/ })
+    .first()
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/app/receipts/${receiptId}$`));
+  await page.getByRole("link", { name: "Back to Home" }).click();
+  await expect(page).toHaveURL(/\/app$/);
+});
+
 test("account sheet opens, and closes with Escape or a tap outside", async ({ page }) => {
   await page.goto("/app");
   const trigger = page.getByRole("button", { name: "Account and workspace" });
@@ -128,4 +139,16 @@ test("receipt actions sheet offers edit, export and delete", async ({ page }) =>
   await sheet.getByRole("button", { name: "Edit details" }).click();
   await expect(sheet).toBeHidden();
   await expect(page.getByLabel("Merchant")).toBeFocused();
+});
+
+test("Delete moves focus from the sheet to the confirm dialog", async ({ page }) => {
+  await page.goto(`/app/receipts/${receiptId}`);
+  await page.getByRole("button", { name: "Receipt actions" }).click();
+  await page
+    .getByRole("dialog", { name: "Phone Market" })
+    .getByRole("button", { name: "Delete receipt" })
+    .click();
+  await expect(page.getByRole("button", { name: "Keep receipt" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Receipt actions" })).toBeFocused();
 });

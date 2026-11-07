@@ -25,7 +25,7 @@ export const APP_NAV: NavItem[] = [
 
 export const ADMIN_NAV_ITEM: NavItem = { href: "/admin", label: "Admin", icon: ShieldCheck };
 
-/** Opens the camera once the capture flow handles `capture=1`; until then, the upload panel. */
+/** Opens the camera; depends on `/app/upload` handling `capture=1` (PR #47). */
 export const SCAN_HREF = "/app/upload?capture=1";
 
 const SCAN_ITEM: NavItem = { href: "/app/upload", label: "Scan", icon: ScanLine };
@@ -183,10 +183,17 @@ export function backFor(pathname: string): Back | null {
   return null;
 }
 
-// The current and previous paths in this tab, so Back can return to the list the person came
-// from (with its filters and scroll position) rather than open a fresh one.
-let currentPath: string | null = null;
-let previousPath: string | null = null;
+/** Names a page a person can come back to; null for anything else. */
+function labelFor(pathname: string): string | null {
+  const known: Record<string, string> = {
+    "/app": "Home",
+    "/app/history": "History",
+    "/app/settings": "Settings",
+    "/admin/users": "Users",
+    "/admin/workspaces": "Workspaces",
+  };
+  return known[pathname] ?? null;
+}
 
 /**
  * The page h1's text once it has scrolled under the bar, else null: the large-title pattern,
@@ -250,17 +257,26 @@ export function MobileTopBar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const back = backFor(pathname);
+  const parent = backFor(pathname);
   const title = useScrolledTitle(pathname);
+  // The page before this one, kept in state (adjusted during render) so Back can name it and
+  // return to it with its filters and scroll position rather than open a fresh list.
+  const [visit, setVisit] = useState<{ path: string; previous: string | null }>({
+    path: pathname,
+    previous: null,
+  });
+  if (visit.path !== pathname) setVisit({ path: pathname, previous: visit.path });
+  const previousLabel = visit.previous ? labelFor(visit.previous) : null;
+  const cameFrom =
+    visit.previous && previousLabel ? { href: visit.previous, label: previousLabel } : null;
 
-  useEffect(() => {
-    if (pathname === currentPath) return;
-    previousPath = currentPath;
-    currentPath = pathname;
-  }, [pathname]);
+  const back = parent && cameFrom && cameFrom.href !== pathname ? cameFrom : parent;
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+    <header
+      className="sticky top-[var(--banner-h,0px)] z-30 border-b border-border bg-background/95 pt-[var(--top-inset,env(safe-area-inset-top))] backdrop-blur md:hidden"
+      data-slot="app-bar"
+    >
       <div className="flex h-14 items-center gap-1 pr-3 pl-1">
         {back ? (
           <Link
@@ -268,7 +284,7 @@ export function MobileTopBar({
             className="flex min-h-11 min-w-11 shrink-0 items-center gap-0.5 rounded-full pr-3 pl-1 text-sm font-medium text-primary outline-none select-none focus-visible:ring-2 focus-visible:ring-ring active:bg-wash"
             href={back.href}
             onClick={(event) => {
-              if (previousPath !== back.href) return;
+              if (visit.previous !== back.href) return;
               event.preventDefault();
               router.back();
             }}

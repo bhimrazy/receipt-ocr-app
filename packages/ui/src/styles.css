@@ -144,6 +144,17 @@ html {
   :root:has([data-slot="tab-bar"]) {
     --tabbar-h: 4rem;
     --app-bottom-inset: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    /* Keep focused fields and #anchors clear of the sticky bars. */
+    scroll-padding-bottom: var(--app-bottom-inset);
+  }
+  /* The impersonation banner carries the status-bar inset, so the app bar below it adds none. */
+  :root:has([data-slot="impersonation-banner"]) {
+    --top-inset: 0px;
+  }
+  :root:has([data-slot="app-bar"]) {
+    scroll-padding-top: calc(
+      var(--banner-h, 0px) + var(--top-inset, env(safe-area-inset-top)) + 3.5rem + 0.5rem
+    );
   }
 }
 

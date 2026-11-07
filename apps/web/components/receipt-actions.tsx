@@ -112,6 +112,9 @@ export function ReceiptActions({
   const editing = useContext(EditingContext);
   // Set by "Edit details", so closing the sheet focuses the form instead of the trigger.
   const focusForm = useRef(false);
+  // Set by "Delete receipt": the confirm opens once the sheet has returned focus to its trigger,
+  // so the dialog remembers a real element and Cancel (not <body>) gets focus.
+  const confirmAfterSheet = useRef(false);
   const completed = receipt.status === "completed";
 
   async function copyJson() {
@@ -163,6 +166,11 @@ export function ReceiptActions({
       </AppBarActions>
       <DrawerContent
         finalFocus={() => {
+          if (confirmAfterSheet.current) {
+            confirmAfterSheet.current = false;
+            setTimeout(() => setConfirmOpen(true), 0);
+            return true;
+          }
           if (!focusForm.current) return true;
           focusForm.current = false;
           return document.getElementById("merchant") ?? true;
@@ -212,7 +220,13 @@ export function ReceiptActions({
         </DrawerGroup>
         {canEdit ? (
           <DrawerGroup>
-            <DrawerAction destructive onClick={fromSheet(() => setConfirmOpen(true))}>
+            <DrawerAction
+              destructive
+              onClick={() => {
+                confirmAfterSheet.current = true;
+                setSheetOpen(false);
+              }}
+            >
               <Trash2 aria-hidden="true" />
               Delete receipt
             </DrawerAction>

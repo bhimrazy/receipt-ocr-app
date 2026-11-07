@@ -3,7 +3,7 @@
 import { stopImpersonatingAction } from "@/lib/impersonation-actions";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { UserCog } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Persistent banner shown while an admin is impersonating another user
@@ -12,6 +12,22 @@ import { useState } from "react";
  */
 export function ImpersonationBanner({ email }: { email: string }) {
   const [pending, setPending] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // The phone app bar sticks below this banner: publish its height (styles.css reads it too).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const sync = () => root.style.setProperty("--banner-h", `${el.offsetHeight}px`);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--banner-h");
+    };
+  }, []);
 
   // Server action: it writes the audit row, then redirects to the user's admin page.
   async function stop() {
@@ -22,7 +38,11 @@ export function ImpersonationBanner({ email }: { email: string }) {
 
   return (
     // Opaque outer layer so the tinted banner stays readable while content scrolls under it.
-    <div className="sticky top-0 z-50 bg-background">
+    <div
+      className="sticky top-0 z-50 bg-background pt-[env(safe-area-inset-top)]"
+      data-slot="impersonation-banner"
+      ref={ref}
+    >
       <div
         className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm text-warning md:px-5"
         role="status"

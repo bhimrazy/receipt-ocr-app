@@ -48,6 +48,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: "#0a0a0b",
   colorScheme: "dark",
+  // Draw under the notch and home indicator; the shell pads itself with env(safe-area-inset-*).
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
