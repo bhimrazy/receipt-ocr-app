@@ -131,7 +131,7 @@ export function twoFactorEnabledEmail(): EmailContent {
 /** Turned off by the user, or reset by an administrator (who also signed them out everywhere). */
 export function twoFactorDisabledEmail({ byAdmin }: { byAdmin: boolean }): EmailContent {
   const what = byAdmin
-    ? "An administrator reset two-step sign-in on your account, usually because you asked for help after losing your authenticator. You've been signed out everywhere; sign in again and turn it back on in Settings → Security."
+    ? "An administrator reset two-step sign-in on your account, removing your authenticator app and passkeys, usually because you asked for help after losing them. You've been signed out everywhere; sign in with your password and set them up again in Settings → Security."
     : "Two-step sign-in was turned off for your account. Signing in now only needs your password.";
   return {
     subject: byAdmin
@@ -153,5 +153,27 @@ export function backupCodesRegeneratedEmail(): EmailContent {
       `<p style='margin:0 0 16px'>New backup codes were created for your account. The old ones no longer work.</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
     ),
     text: `New backup codes were created for your ${BRAND} account. The old ones no longer work.\n\n${SECURITY_FOOTER}`,
+  };
+}
+
+export function passkeyAddedEmail(): EmailContent {
+  return {
+    subject: `A passkey was added to your ${BRAND} account`,
+    html: layout(
+      "New passkey added",
+      `<p style='margin:0 0 16px'>A passkey was added to your account. It can now sign you in and confirm important changes.</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
+    ),
+    text: `A passkey was added to your ${BRAND} account. It can now sign you in and confirm important changes.\n\n${SECURITY_FOOTER}`,
+  };
+}
+
+export function passkeyRemovedEmail(): EmailContent {
+  return {
+    subject: `A passkey was removed from your ${BRAND} account`,
+    html: layout(
+      "Passkey removed",
+      `<p style='margin:0 0 16px'>A passkey was removed from your account and can no longer sign you in.</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
+    ),
+    text: `A passkey was removed from your ${BRAND} account and can no longer sign you in.\n\n${SECURITY_FOOTER}`,
   };
 }

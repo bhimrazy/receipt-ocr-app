@@ -6,4 +6,8 @@ describe("auth rate limits", () => {
     expect(authRateLimitRules["/sign-up/email"]).toEqual({ window: 60, max: 3 });
     expect(authRateLimitRules["/sign-in/email"]).toEqual({ window: 60, max: 5 });
   });
+
+  it("limits passkey sign-in attempts per IP", () => {
+    expect(authRateLimitRules["/passkey/verify-authentication"]).toEqual({ window: 60, max: 10 });
+  });
 });

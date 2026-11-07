@@ -2,11 +2,11 @@
 
 import { Button } from "@receipt-ocr/ui/components/button";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { Loader2 } from "lucide-react";
+import { Fingerprint, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
-import { authErrorMessage } from "@/lib/auth-errors";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { authErrorMessage, passkeyErrorMessage } from "@/lib/auth-errors";
 import { Turnstile, useTurnstile } from "@/components/turnstile";
 import { authClient } from "@/lib/auth-client";
 import { DEFAULT_REDIRECT } from "@/lib/redirect";
@@ -99,7 +99,7 @@ export function CredentialsForm({
   const [password, setPassword] = useState("");
   const [error, setError] = useState<FormError | null>(null);
   const [callbackError, setCallbackError] = useState(initialError);
-  const [pending, setPending] = useState<"credentials" | SocialProvider | null>(null);
+  const [pending, setPending] = useState<"credentials" | "passkey" | SocialProvider | null>(null);
   const [checkEmail, setCheckEmail] = useState<"sign-up" | "sign-in" | null>(null);
 
   const isSignUp = mode === "sign-up";
@@ -173,6 +173,38 @@ export function CredentialsForm({
     router.refresh();
   }
 
+  // Passkey autofill: browsers that support it offer saved passkeys in the email field.
+  useEffect(() => {
+    if (isSignUp || typeof window === "undefined" || !window.PublicKeyCredential) return;
+    let live = true;
+    void PublicKeyCredential.isConditionalMediationAvailable?.().then(async (available) => {
+      if (!available || !live) return;
+      const { error: autofillError } = await authClient.signIn.passkey({ autoFill: true });
+      // Aborted when the button starts its own prompt, or simply never used: stay quiet.
+      if (!autofillError && live) {
+        router.push(redirectTo);
+        router.refresh();
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [isSignUp, redirectTo, router]);
+
+  async function handlePasskey() {
+    setError(null);
+    setCallbackError(undefined);
+    setPending("passkey");
+    const { error: passkeyError } = await authClient.signIn.passkey();
+    if (passkeyError) {
+      setPending(null);
+      setError({ message: passkeyErrorMessage(passkeyError) });
+      return;
+    }
+    router.push(redirectTo);
+    router.refresh();
+  }
+
   async function handleSocial(provider: SocialProvider) {
     setError(null);
     setCallbackError(undefined);
@@ -219,9 +251,25 @@ export function CredentialsForm({
       ) : null}
       {callbackError ? <AuthError className="mt-5">{callbackError}</AuthError> : null}
 
+      {!isSignUp ? (
+        <Button
+          className="mt-6 h-11 w-full"
+          disabled={busy}
+          onClick={handlePasskey}
+          type="button"
+          variant="outline"
+        >
+          {pending === "passkey" ? (
+            <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
+          ) : (
+            <Fingerprint aria-hidden className="size-4" />
+          )}
+          Use a passkey
+        </Button>
+      ) : null}
       {providers.length > 0 ? (
         <>
-          <div className="mt-6 flex flex-col gap-2.5">
+          <div className={cn("flex flex-col gap-2.5", isSignUp ? "mt-6" : "mt-2.5")}>
             {providers.map((provider) => {
               const Icon = providerIcons[provider];
               return (
@@ -248,8 +296,10 @@ export function CredentialsForm({
           </div>
           <AuthDivider>or with email</AuthDivider>
         </>
-      ) : (
+      ) : isSignUp ? (
         <div className="mt-6" />
+      ) : (
+        <AuthDivider>or with email</AuthDivider>
       )}
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit} data-ready={hydrated}>
@@ -265,6 +315,8 @@ export function CredentialsForm({
           />
         ) : null}
         <EmailField
+          // "webauthn" lets the browser offer saved passkeys here (passkey autofill).
+          autoComplete={isSignUp ? "email" : "username webauthn"}
           id="auth-email"
           label="Email"
           onChange={(event) => setEmail(event.target.value)}

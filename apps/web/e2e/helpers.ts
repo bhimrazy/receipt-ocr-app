@@ -85,9 +85,12 @@ export const totpCode = (key: string) => totpFromBase32(key);
  * manual key off the page, enter a code, tick "saved" for the backup codes. Returns the key and
  * the backup codes.
  */
-export async function enrolAuthenticator(page: Page, email: string) {
-  // Enrolling asks for a fresh check, which for an account with no factor is an emailed code. The
-  // e2e build has no mailer, so the check is recorded on the session directly, as if it passed.
+/**
+ * Adding a factor asks for a fresh check, which for an account with no factor is an emailed code.
+ * The e2e build has no mailer, so the check is recorded on the user's sessions directly, as if it
+ * had passed. Integration tests cover the emailed code itself.
+ */
+export async function markSteppedUp(email: string) {
   const sql = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
   try {
     await sql`update session set step_up_at = now(), step_up_method = 'email'
@@ -95,6 +98,10 @@ export async function enrolAuthenticator(page: Page, email: string) {
   } finally {
     await sql.end();
   }
+}
+
+export async function enrolAuthenticator(page: Page, email: string) {
+  await markSteppedUp(email);
   await page.goto("/app/settings/security");
   await page.getByRole("button", { name: "Set up authenticator app" }).click();
   await page.getByLabel(/Confirm your password/).fill(PASSWORD);

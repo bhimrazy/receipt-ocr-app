@@ -31,6 +31,7 @@ import {
   authMethodOf,
   authMethodSessionField,
   twoFactorAfterHook,
+  passkeyPlugin,
   twoFactorBeforeHook,
   twoFactorPlugin,
   twoFactorUserUpdated,
@@ -327,6 +328,7 @@ export const auth = betterAuth({
     }),
     // two-factor + step-up (feat/two-factor)
     twoFactorPlugin(),
+    passkeyPlugin(authEnv.betterAuthUrl),
     // Reads the token from `x-captcha-response` and the client IP from advanced.ipAddress. A
     // missing token is a 400, a rejected one a 403, and a siteverify failure or timeout (10 s) a
     // 500: all fail closed.

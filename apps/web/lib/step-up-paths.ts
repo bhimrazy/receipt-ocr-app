@@ -17,6 +17,9 @@ const FIXED: Record<string, StepUpAction> = {
   "/two-factor/disable": "two_factor.disable",
   "/two-factor/generate-backup-codes": "two_factor.regenerate_backup_codes",
   "/passkey/delete-passkey": "passkey.remove",
+  // Adding a passkey is checked, or a stolen session could add the thief's own.
+  "/passkey/generate-register-options": "passkey.add",
+  "/passkey/verify-registration": "passkey.add",
   "/organization/delete": "workspace.delete",
 };
 

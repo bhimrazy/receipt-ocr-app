@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   authErrorMessage,
   callbackErrorMessage,
+  passkeyErrorMessage,
   SUSPENDED_MESSAGE,
   twoFactorRestart,
 } from "./auth-errors";
@@ -52,6 +53,26 @@ describe("two-step sign-in errors", () => {
     expect(twoFactorRestart({ code: "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE" })).toBe(true);
     expect(twoFactorRestart({ code: "INVALID_TWO_FACTOR_COOKIE" })).toBe(true);
     expect(twoFactorRestart({ code: "INVALID_CODE" })).toBe(false);
+  });
+});
+
+describe("passkeyErrorMessage", () => {
+  it("treats a dismissed or timed-out prompt as a cancel", () => {
+    for (const code of [
+      "AUTH_CANCELLED",
+      "ERROR_CEREMONY_ABORTED",
+      "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY",
+    ]) {
+      expect(passkeyErrorMessage({ code })).toBe("Cancelled or timed out. Try again.");
+    }
+  });
+
+  it("explains a duplicate, an unknown passkey and a stale session", () => {
+    expect(passkeyErrorMessage({ code: "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" })).toMatch(
+      /already on your account/,
+    );
+    expect(passkeyErrorMessage({ code: "PASSKEY_NOT_FOUND" })).toMatch(/didn't work here/);
+    expect(passkeyErrorMessage({ code: "SESSION_NOT_FRESH" })).toMatch(/sign out and in again/);
   });
 });
 

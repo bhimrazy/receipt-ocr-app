@@ -55,6 +55,16 @@ export const storageEntries: StorageEntry[] = [
     note: secureNote,
   },
   {
+    name: "better-auth.better-auth-passkey",
+    kind: "cookie",
+    setBy: "receiptOCR",
+    category: "necessary",
+    purpose:
+      "While you sign in with or add a passkey: ties your device's answer to the challenge we sent. Signed, holds no key.",
+    duration: "5 minutes",
+    note: secureNote,
+  },
+  {
     name: "better-auth.trust_device",
     kind: "cookie",
     setBy: "receiptOCR",

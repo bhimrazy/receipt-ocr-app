@@ -78,7 +78,14 @@ function details(entry: AdminAuditEntry): string | null {
       return meta.days ? `For ${meta.days} ${meta.days === 1 ? "day" : "days"}` : "Permanent";
     case "user.two_factor_reset": {
       const sessions = Number(meta.sessions ?? 0);
-      return `Signed out of ${sessions} ${sessions === 1 ? "session" : "sessions"}`;
+      const passkeys = Number(meta.passkeys ?? 0);
+      return [
+        meta.authenticator ? "Authenticator app removed" : null,
+        passkeys ? `${passkeys} passkey${passkeys === 1 ? "" : "s"} removed` : null,
+        `signed out of ${sessions} ${sessions === 1 ? "session" : "sessions"}`,
+      ]
+        .filter(Boolean)
+        .join(", ");
     }
     case "workspace.member_role":
       return `${meta.member}: ${cap(meta.from)} → ${cap(meta.to)}`;

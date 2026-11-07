@@ -3,6 +3,8 @@ import {
   backupCodesRegeneratedEmail,
   escapeHtml,
   invitationEmail,
+  passkeyAddedEmail,
+  passkeyRemovedEmail,
   passwordResetEmail,
   stepUpCodeEmail,
   twoFactorDisabledEmail,
@@ -72,6 +74,8 @@ describe("security emails", () => {
       twoFactorEnabledEmail(),
       twoFactorDisabledEmail({ byAdmin: false }),
       backupCodesRegeneratedEmail(),
+      passkeyAddedEmail(),
+      passkeyRemovedEmail(),
     ]) {
       expect(mail.text).toContain("If this wasn't you");
       expect(mail.html.match(/<a /g)).toBeNull();

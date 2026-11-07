@@ -8,6 +8,7 @@ export function UserBadges({
   banned,
   emailVerified,
   twoFactorEnabled,
+  passkeys,
   showPlan = false,
 }: {
   role: string;
@@ -15,13 +16,14 @@ export function UserBadges({
   banned: boolean;
   emailVerified: boolean;
   twoFactorEnabled: boolean;
+  passkeys: number;
   showPlan?: boolean;
 }) {
   return (
     <span className="flex flex-wrap items-center gap-1.5">
       {banned ? <Badge variant="destructive">Banned</Badge> : null}
       {role === "admin" ? <Badge>Admin</Badge> : null}
-      {role === "admin" && !twoFactorEnabled ? (
+      {role === "admin" && !twoFactorEnabled && passkeys === 0 ? (
         <Badge variant="warning">Admin without 2FA</Badge>
       ) : null}
       {!emailVerified ? <Badge variant="warning">Email not verified</Badge> : null}

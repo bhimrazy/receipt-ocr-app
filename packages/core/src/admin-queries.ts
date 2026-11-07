@@ -10,6 +10,7 @@ import {
   member,
   or,
   organization,
+  passkey,
   receipts,
   sql,
   user,
@@ -143,6 +144,7 @@ export const adminOverview = (plans: PlanTable, now = new Date()) =>
           plan: user.plan,
           emailVerified: user.emailVerified,
           twoFactorEnabled: user.twoFactorEnabled,
+          passkeys: sql<number>`(select count(*)::int from ${passkey} p where p.user_id = ${USER_ID})`,
           createdAt: user.createdAt,
         })
         .from(user)
@@ -204,6 +206,8 @@ export type AdminUserRow = {
   emailVerified: boolean;
   /** An authenticator app is enrolled (never the secret or codes). */
   twoFactorEnabled: boolean;
+  /** How many passkeys (never the keys). */
+  passkeys: number;
   createdAt: Date;
   usedToday: number;
   workspaces: number;
@@ -248,6 +252,7 @@ export const listUsers = (filters: UserFilters, page: Page, now = new Date()) =>
           banExpires: user.banExpires,
           emailVerified: user.emailVerified,
           twoFactorEnabled: user.twoFactorEnabled,
+          passkeys: sql<number>`(select count(*)::int from ${passkey} p where p.user_id = ${USER_ID})`,
           createdAt: user.createdAt,
           usedToday,
           workspaces: sql<number>`(select count(*)::int from ${member} m where m.user_id = ${USER_ID})`,
@@ -300,6 +305,7 @@ export const userDetail = (id: string, now = new Date()) =>
           banExpires: user.banExpires,
           emailVerified: user.emailVerified,
           twoFactorEnabled: user.twoFactorEnabled,
+          passkeys: sql<number>`(select count(*)::int from ${passkey} p where p.user_id = ${USER_ID})`,
           createdAt: user.createdAt,
           usedToday: usedSince(USER_ID, today),
         })
@@ -572,6 +578,7 @@ export type AdminTargetUser = {
   role: string | null;
   emailVerified: boolean;
   twoFactorEnabled: boolean;
+  passkeys: number;
 };
 
 /** The fields an admin action checks before acting on a user; null when the user is gone. */
@@ -585,6 +592,7 @@ export const findUser = (id: string) =>
           role: user.role,
           emailVerified: user.emailVerified,
           twoFactorEnabled: user.twoFactorEnabled,
+          passkeys: sql<number>`(select count(*)::int from ${passkey} p where p.user_id = ${user.id})`,
         })
         .from(user)
         .where(eq(user.id, id))

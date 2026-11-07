@@ -1,16 +1,20 @@
 import "server-only";
-import { forgetTrustedDevices } from "@receipt-ocr/core";
+import { adoptPasskeySession, forgetTrustedDevices } from "@receipt-ocr/core";
 import {
   backupCodesRegeneratedEmail,
+  passkeyAddedEmail,
+  passkeyRemovedEmail,
   twoFactorDisabledEmail,
   twoFactorEnabledEmail,
   type SendEmailInput,
 } from "@receipt-ocr/email";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins/two-factor";
+import { passkey } from "@better-auth/passkey";
 import { authMethodFor } from "./auth-method";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
+import { clientIp } from "./http";
 import { checkStepUp, STEP_UP_MESSAGES, STEP_UP_REQUIRED } from "./step-up-check";
 import { isFactorEndpoint, stepUpActionFor } from "./step-up-paths";
 
@@ -32,6 +36,22 @@ export const twoFactorPlugin = () =>
     // Opt-in per sign-in ("Trust this device for 30 days"); revoked in full on disable or reset.
     trustDeviceMaxAge: 30 * 24 * 60 * 60,
   });
+
+/**
+ * Passkeys for the site's own host only: rpID and origin come from
+ * BETTER_AUTH_URL (production: receipt-ocr.bhimraj.com.np). Changing the host
+ * later orphans every passkey. A preview works only on the host its
+ * BETTER_AUTH_URL names. User verification (PIN, fingerprint, face) is required.
+ */
+export const passkeyPlugin = (appUrl: string) => {
+  const url = new URL(appUrl);
+  return passkey({
+    rpID: url.hostname,
+    rpName: "receiptOCR",
+    origin: url.origin,
+    authenticatorSelection: { residentKey: "required", userVerification: "required" },
+  });
+};
 
 export const authMethodSessionField = {
   authMethod: { type: "string", required: false, input: false },
@@ -92,15 +112,50 @@ export const twoFactorBeforeHook = createAuthMiddleware(async (ctx) => {
   });
 });
 
-/** After a successful backup-code regeneration: tell the user. */
+const AFTER_PATHS = new Set([
+  "/two-factor/generate-backup-codes",
+  "/passkey/verify-authentication",
+  "/passkey/verify-registration",
+  "/passkey/delete-passkey",
+]);
+
+/**
+ * After a successful factor change: tell the user. After a passkey check: the
+ * new session counts as a passed step-up and replaces the one it came from.
+ */
 export const twoFactorAfterHook = (deliver: Deliver) =>
   createAuthMiddleware(async (ctx) => {
-    if (ctx.path !== "/two-factor/generate-backup-codes") return;
-    if (isAPIError(ctx.context.returned)) return;
+    if (!AFTER_PATHS.has(ctx.path) || isAPIError(ctx.context.returned)) return;
+    if (ctx.path === "/passkey/verify-authentication") {
+      const created = ctx.context.newSession;
+      if (!created) return;
+      const previousToken = await ctx.getSignedCookie(
+        ctx.context.authCookies.sessionToken.name,
+        ctx.context.secret,
+      );
+      await runtime.runPromise(
+        adoptPasskeySession({
+          previousToken:
+            previousToken && previousToken !== created.session.token ? previousToken : null,
+          sessionId: created.session.id,
+          userId: created.user.id,
+          ip: ctx.headers ? clientIp({ headers: ctx.headers }) : null,
+        }),
+      );
+      return;
+    }
     const user = ctx.context.session?.user;
     if (!user) return;
-    logger.info({ event: "auth.backup_codes_regenerated", unit: "log", user_id: user.id });
-    await notify(deliver, { to: user.email, ...backupCodesRegeneratedEmail() }, "backup_codes");
+    if (ctx.path === "/two-factor/generate-backup-codes") {
+      logger.info({ event: "auth.backup_codes_regenerated", unit: "log", user_id: user.id });
+      await notify(deliver, { to: user.email, ...backupCodesRegeneratedEmail() }, "backup_codes");
+    } else if (ctx.path === "/passkey/verify-registration") {
+      logger.info({ event: "auth.passkey_added", unit: "log", user_id: user.id });
+      await notify(deliver, { to: user.email, ...passkeyAddedEmail() }, "passkey_added");
+    } else {
+      logger.info({ event: "auth.passkey_removed", unit: "log", user_id: user.id });
+      await notify(deliver, { to: user.email, ...passkeyRemovedEmail() }, "passkey_removed");
+    }
   });
 
 /**

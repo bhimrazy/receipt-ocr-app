@@ -11,7 +11,7 @@ import {
 } from "@receipt-ocr/ui/components/dialog";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Fingerprint, Loader2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -20,6 +20,8 @@ import {
   verifyStepUpAction,
 } from "@/lib/step-up-actions";
 import type { StepUpOptions } from "@/lib/step-up";
+import { authClient } from "@/lib/auth-client";
+import { passkeyErrorMessage } from "@/lib/auth-errors";
 
 /**
  * "Verify it's you": one form (dialog or page) and one helper, `withStepUp`,
@@ -73,7 +75,7 @@ export function StepUpForm({
   const [method, setMethod] = useState<Method | null>(null);
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
-  const [pending, setPending] = useState<"send" | "verify" | null>(null);
+  const [pending, setPending] = useState<"send" | "verify" | "passkey" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -84,7 +86,15 @@ export function StepUpForm({
         if (!live) return;
         if (next.ok && next.fresh) return onVerified();
         setOptions(next);
-        if (next.ok) setMethod(next.methods.includes("totp") ? "totp" : "email");
+        if (next.ok) {
+          setMethod(
+            next.methods.includes("totp")
+              ? "totp"
+              : next.methods.includes("email")
+                ? "email"
+                : null,
+          );
+        }
       })
       .catch(() => live && setOptions({ ok: false, error: "Couldn't load this. Try again." }));
     return () => {
@@ -97,6 +107,16 @@ export function StepUpForm({
   useEffect(() => {
     if (autoFocus && (method !== "email" || sent)) inputRef.current?.focus();
   }, [autoFocus, method, sent]);
+
+  async function usePasskey() {
+    setPending("passkey");
+    setError(null);
+    // Signs in again with the passkey; the server counts that session as verified.
+    const { error: passkeyError } = await authClient.signIn.passkey();
+    setPending(null);
+    if (passkeyError) return setError(passkeyErrorMessage(passkeyError));
+    onVerified();
+  }
 
   async function send() {
     setPending("send");
@@ -149,6 +169,47 @@ export function StepUpForm({
     );
   }
 
+  const hasPasskey = options.methods.includes("passkey");
+  const passkeyButton = hasPasskey ? (
+    <Button
+      className="w-full sm:w-auto"
+      disabled={pending !== null}
+      onClick={usePasskey}
+      type="button"
+      variant={method ? "outline" : "default"}
+    >
+      {pending === "passkey" ? (
+        <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+      ) : (
+        <Fingerprint aria-hidden="true" />
+      )}
+      Use your passkey
+    </Button>
+  ) : null;
+  if (!method) {
+    return (
+      <div className="flex flex-col gap-4">
+        {passkeyButton}
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {onCancel ? (
+          <Button
+            className="self-end"
+            disabled={pending !== null}
+            onClick={onCancel}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
   const isEmail = method === "email";
   const isBackup = method === "backup_code";
   const showCode = !isEmail || sent;
@@ -157,6 +218,12 @@ export function StepUpForm({
 
   return (
     <form className="flex flex-col gap-4" noValidate onSubmit={verify}>
+      {passkeyButton ? (
+        <>
+          {passkeyButton}
+          <p className="text-xs text-muted-foreground">Or enter a code:</p>
+        </>
+      ) : null}
       {isEmail && !sent ? (
         <p className="text-sm text-muted-foreground">
           We&apos;ll email a 6-digit code to{" "}

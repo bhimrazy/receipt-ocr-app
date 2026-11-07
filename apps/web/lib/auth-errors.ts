@@ -89,3 +89,25 @@ export function twoFactorRestart(error: AuthErrorLike | null | undefined): boole
   const code = error?.code?.toUpperCase();
   return code === "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE" || code === "INVALID_TWO_FACTOR_COOKIE";
 }
+
+/** Copy for a failed passkey ceremony; a cancel or timeout is the common case. */
+export function passkeyErrorMessage(error: AuthErrorLike | null | undefined): string {
+  const code = error?.code?.toUpperCase() ?? "";
+  // SimpleWebAuthn reports a dismissed or timed-out prompt (NotAllowedError) as a passthrough.
+  if (
+    code === "AUTH_CANCELLED" ||
+    code === "ERROR_CEREMONY_ABORTED" ||
+    code === "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY"
+  ) {
+    return "Cancelled or timed out. Try again.";
+  }
+  if (code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" || code === "PREVIOUSLY_REGISTERED") {
+    return "This passkey is already on your account.";
+  }
+  if (code === "SESSION_NOT_FRESH")
+    return "For your safety, sign out and in again, then add the passkey.";
+  if (code === "PASSKEY_NOT_FOUND" || code === "AUTHENTICATION_FAILED") {
+    return "That passkey didn't work here. Use another one, or sign in with your password.";
+  }
+  return authErrorMessage(error);
+}

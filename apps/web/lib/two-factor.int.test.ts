@@ -113,14 +113,15 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
     });
     await emailStepUp(headers, "two_factor.enable");
     const enabledResult = await auth.api.enableTwoFactor({ body: { password }, headers });
-    const key = new URL(enabledResult.totpURI!).searchParams.get("secret")!;
+    if (enabledResult.method !== "totp") throw new Error("expected a TOTP enrolment");
+    const key = new URL(enabledResult.totpURI).searchParams.get("secret")!;
     const verified = await auth.api.verifyTOTP({
       body: { code: codeAt(key) },
       headers,
       returnHeaders: true,
     });
     const rotated = new Headers({ cookie: cookieFrom(verified.headers, "session_token") });
-    return { key, backupCodes: enabledResult.backupCodes!, headers: rotated };
+    return { key, backupCodes: enabledResult.backupCodes, headers: rotated };
   }
 
   it("enrols, signs in with a code (auth_method mfa), and a backup code works once", async () => {

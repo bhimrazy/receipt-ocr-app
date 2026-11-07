@@ -23,6 +23,7 @@ import {
   invitation,
   member,
   organization,
+  passkey,
   rateLimit,
   session,
   twoFactor,
@@ -539,6 +540,7 @@ export const schema = {
   invitation,
   rateLimit,
   twoFactor,
+  passkey,
 };
 
 /**

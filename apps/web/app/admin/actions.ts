@@ -406,8 +406,8 @@ export async function resetTwoFactorAction(input: { userId: string; reason: stri
     const parsed = z.object({ userId: id, reason: reason(10, "for the reset") }).parse(input);
     notSelf(ctx, parsed.userId, "Reset your own two-step sign-in from Settings → Security.");
     const target = await loadUser(parsed.userId);
-    if (!target.twoFactorEnabled) {
-      throw new ActionError("Two-step sign-in is already off for this user.");
+    if (!target.twoFactorEnabled && target.passkeys === 0) {
+      throw new ActionError("This user has no authenticator app or passkey to reset.");
     }
     await core(resetSecondFactor(target, { ...ctx.audit, reason: parsed.reason }));
     await deliverEmail({ to: target.email, ...twoFactorDisabledEmail({ byAdmin: true }) }).catch(

@@ -19,8 +19,8 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1794056844973,
-      "tag": "0002_two_factor_step_up",
+      "when": 1794060548446,
+      "tag": "0002_two_factor_passkey_step_up",
       "breakpoints": true
     }
   ]

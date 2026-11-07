@@ -32,6 +32,8 @@ describe("stepUpActionFor", () => {
     ["/two-factor/disable", {}, "two_factor.disable"],
     ["/two-factor/generate-backup-codes", {}, "two_factor.regenerate_backup_codes"],
     ["/passkey/delete-passkey", {}, "passkey.remove"],
+    ["/passkey/generate-register-options", undefined, "passkey.add"],
+    ["/passkey/verify-authentication", {}, null],
     ["/organization/delete", {}, "workspace.delete"],
     ["/organization/update-member-role", { role: "owner" }, "workspace.transfer_ownership"],
     [

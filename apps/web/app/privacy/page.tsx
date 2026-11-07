@@ -28,6 +28,7 @@ export default function PrivacyPage() {
             "Receipts: the photos and PDFs you upload and the data we extract from them, such as merchant, date, line items, tax, total, category and a confidence score, plus any corrections you make.",
             "Workspace details: the workspaces you create or join, their members and the invitations you send.",
             "Sign-in security: if you turn on two-step sign-in, the secret behind your authenticator app's codes and your backup codes, both encrypted. When you confirm it's you before an important change, a record of when, how (app code, backup code or emailed code), what it was for and the IP address; an emailed code is stored only as a one-way hash and expires after 10 minutes.",
+            "Passkeys: if you add one, its public key, a credential ID, the authenticator model when your device shares it, whether it syncs between your devices, and when you added it. Your fingerprint, face or device PIN never leave your device.",
             "Messages: if you write to us through the support button, your email address and your message.",
             "Technical data: a session cookie that keeps you signed in and a few other necessary cookies (all listed in the cookie policy), server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors, and short-lived counters that limit how often we send account emails to one address (they hold a one-way hash of the address, not the address).",
           ],

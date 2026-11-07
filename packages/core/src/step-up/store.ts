@@ -5,6 +5,7 @@ import {
   gt,
   gte,
   isNull,
+  passkey,
   session,
   sql,
   stepUpCodes,
@@ -32,7 +33,6 @@ export interface StepUpSessionRow {
   userId: string;
   role: string;
   twoFactorEnabled: boolean;
-  /** Always 0 until the passkey table lands; the policy already accepts passkeys. */
   passkeys: number;
   authMethod: string | null;
   stepUpAt: Date | null;
@@ -54,12 +54,13 @@ export const loadStepUpSession = (sessionId: string) =>
           stepUpAt: session.stepUpAt,
           stepUpMethod: session.stepUpMethod,
           impersonatedBy: session.impersonatedBy,
+          passkeys: sql<number>`(select count(*)::int from ${passkey} p where p.user_id = ${session.userId})`,
         })
         .from(session)
         .innerJoin(user, eq(user.id, session.userId))
         .where(eq(session.id, sessionId))
         .limit(1);
-      return row ? { ...row, passkeys: 0 } : null;
+      return row ?? null;
     }),
   );
 
@@ -247,7 +248,48 @@ export const forgetTrustedDevices = (userId: string) =>
   );
 
 /**
- * Admin reset of a user's two-factor sign-in: clears the authenticator, its
+ * A passkey check signs in afresh (the plugin creates a new session). The new
+ * session counts as verified, keeps the workspace the old one had, and replaces
+ * it, so a step-up doesn't leave a stray session behind.
+ */
+export const adoptPasskeySession = (input: {
+  previousToken: string | null;
+  sessionId: string;
+  userId: string;
+  ip?: string | null;
+}) =>
+  transact(async (tx) => {
+    const [previous] = input.previousToken
+      ? await tx
+          .select({ id: session.id, activeOrganizationId: session.activeOrganizationId })
+          .from(session)
+          .where(and(eq(session.token, input.previousToken), eq(session.userId, input.userId)))
+          .limit(1)
+      : [];
+    await tx
+      .update(session)
+      .set({
+        stepUpAt: new Date(),
+        stepUpMethod: "passkey",
+        ...(previous ? { activeOrganizationId: previous.activeOrganizationId } : {}),
+      })
+      .where(and(eq(session.id, input.sessionId), eq(session.userId, input.userId)));
+    if (previous && previous.id !== input.sessionId) {
+      await tx.delete(session).where(eq(session.id, previous.id));
+    }
+    await tx.insert(stepUpEvents).values({
+      userId: input.userId,
+      sessionId: input.sessionId,
+      action: previous ? "passkey.step_up" : "passkey.sign_in",
+      method: "passkey",
+      outcome: "verified",
+      ip: input.ip ?? null,
+    });
+    return { replaced: Boolean(previous) };
+  });
+
+/**
+ * Admin reset of a user's sign-in factors: clears the authenticator, passkeys,
  * trusted devices and every session, with the audit row in the same transaction.
  */
 export const resetSecondFactor = (
@@ -259,6 +301,10 @@ export const resetSecondFactor = (
       .delete(twoFactor)
       .where(eq(twoFactor.userId, target.id))
       .returning({ id: twoFactor.id });
+    const passkeys = await tx
+      .delete(passkey)
+      .where(eq(passkey.userId, target.id))
+      .returning({ id: passkey.id });
     await tx.update(user).set({ twoFactorEnabled: false }).where(eq(user.id, target.id));
     await tx.delete(verification).where(eq(verification.value, target.id));
     const sessions = await tx
@@ -272,7 +318,15 @@ export const resetSecondFactor = (
       targetId: target.id,
       targetLabel: target.email,
       reason: audit.reason,
-      metadata: { authenticator: removed.length > 0, sessions: sessions.length },
+      metadata: {
+        authenticator: removed.length > 0,
+        passkeys: passkeys.length,
+        sessions: sessions.length,
+      },
     });
-    return { authenticator: removed.length > 0, sessions: sessions.length };
+    return {
+      authenticator: removed.length > 0,
+      passkeys: passkeys.length,
+      sessions: sessions.length,
+    };
   });

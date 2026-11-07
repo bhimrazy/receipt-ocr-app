@@ -38,6 +38,7 @@ export type ActionUser = {
   banExpires: string | null;
   emailVerified: boolean;
   twoFactorEnabled: boolean;
+  passkeys: number;
   /** Workspaces only this user belongs to: deleted with them. */
   soloWorkspaces: number;
 };
@@ -265,14 +266,14 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
           hint={
             isSelf
               ? "Manage yours in Settings → Security in the app."
-              : user.twoFactorEnabled
-                ? "On. Reset it only after checking who is asking; it also signs them out everywhere."
+              : user.twoFactorEnabled || user.passkeys > 0
+                ? `${[user.twoFactorEnabled ? "Authenticator app" : null, user.passkeys > 0 ? `${user.passkeys} passkey${user.passkeys === 1 ? "" : "s"}` : null].filter(Boolean).join(" and ")}. Reset only after checking who is asking; it also signs them out everywhere.`
                 : "Off for this user."
           }
           label="Two-step sign-in"
         >
           <Button
-            disabled={isSelf || !user.twoFactorEnabled}
+            disabled={isSelf || (!user.twoFactorEnabled && user.passkeys === 0)}
             onClick={() => setResetOpen(true)}
             size="sm"
             variant="outline"
@@ -411,7 +412,7 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
 
       <ReasonDialog
         confirmLabel="Reset 2FA"
-        description="Removes their authenticator app and trusted devices, and signs them out everywhere. They're emailed, and can turn it on again after signing in with their password. You never see their codes."
+        description="Removes their authenticator app, passkeys and trusted devices, and signs them out everywhere. They're emailed, and can turn it on again after signing in with their password. You never see their codes."
         destructive
         minLength={10}
         onOpenChange={setResetOpen}
