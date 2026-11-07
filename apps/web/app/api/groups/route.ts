@@ -1,6 +1,7 @@
 import { createGroup, createGroupSchema, listGroups } from "@receipt-ocr/core";
 import { NextResponse } from "next/server";
 import { crossOriginResponse, jsonError, runRoute } from "@/lib/http";
+import { logGroupEvent } from "@/lib/group-log";
 import { readJson } from "@/lib/json-body";
 import { getActiveScope } from "@/lib/session";
 
@@ -21,7 +22,8 @@ export async function POST(request: Request) {
   if (!scope) return jsonError(401, "Unauthorized");
   const body = await readJson(request, createGroupSchema);
   if ("response" in body) return body.response;
-  return runRoute(createGroup(scope, body.data), (group) =>
-    NextResponse.json({ group }, { status: 201 }),
-  );
+  return runRoute(createGroup(scope, body.data), (group) => {
+    logGroupEvent("group.created", scope, { groupId: group.id });
+    return NextResponse.json({ group }, { status: 201 });
+  });
 }

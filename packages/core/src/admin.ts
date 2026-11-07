@@ -6,13 +6,13 @@ import {
   isNotNull,
   member,
   organization,
-  receiptGroups,
   receipts,
   user,
 } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { insertAudit, transact, type AuditActor, type Tx } from "./audit";
 import { Conflict, NotFound } from "./errors";
+import { clearGroupCreator } from "./groups";
 import type { PlanId } from "./plans";
 import { Storage } from "./services";
 
@@ -209,15 +209,7 @@ export const removeMember = (organizationId: string, memberId: string, audit: Au
     }
     await tx.delete(member).where(eq(member.id, memberId));
     // Their groups stay for the workspace; only the creator link goes.
-    await tx
-      .update(receiptGroups)
-      .set({ createdBy: null })
-      .where(
-        and(
-          eq(receiptGroups.organizationId, organizationId),
-          eq(receiptGroups.createdBy, current.userId),
-        ),
-      );
+    await clearGroupCreator(tx, organizationId, current.userId);
     const names = await labels(tx, organizationId, current.userId);
     await insertAudit(tx, {
       ...audit,

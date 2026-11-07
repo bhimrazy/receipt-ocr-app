@@ -1,6 +1,7 @@
 import { groupsOfReceipt, receiptGroupBodySchema, setReceiptGroup } from "@receipt-ocr/core";
 import { NextResponse } from "next/server";
 import { crossOriginResponse, jsonError, runRoute } from "@/lib/http";
+import { logGroupEvent } from "@/lib/group-log";
 import { readJson } from "@/lib/json-body";
 import { getActiveScope } from "@/lib/session";
 
@@ -25,9 +26,14 @@ async function change(request: Request, { params }: Params, action: "add" | "rem
   const body = await readJson(request, receiptGroupBodySchema);
   if ("response" in body) return body.response;
   const { id } = await params;
-  return runRoute(setReceiptGroup(scope, id, body.data.groupId, action), (groups) =>
-    NextResponse.json({ groups }),
-  );
+  return runRoute(setReceiptGroup(scope, id, body.data.groupId, action), (groups) => {
+    logGroupEvent(action === "add" ? "group.receipt_added" : "group.receipt_removed", scope, {
+      groupId: body.data.groupId,
+      receiptId: id,
+      receiptGroups: groups.length,
+    });
+    return NextResponse.json({ groups });
+  });
 }
 
 export const POST = (request: Request, context: Params) => change(request, context, "add");

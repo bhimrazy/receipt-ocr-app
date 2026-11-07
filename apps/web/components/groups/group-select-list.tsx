@@ -116,6 +116,9 @@ export function GroupSelectList({
             />
             Select all on this page
           </label>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Selection is per page; it resets when you change page.
+          </span>
         </div>
         <ul aria-label="Receipts to select" className="divide-y divide-border">
           {receipts.map((receipt) => {

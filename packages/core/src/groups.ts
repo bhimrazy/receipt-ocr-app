@@ -90,7 +90,7 @@ const hasCode = (error: unknown, code: string): boolean => {
 /** A receipt or group deleted between the check and the insert: foreign key violation. */
 const isForeignKeyViolation = (error: unknown) => hasCode(error, "23503");
 
-const notFoundOnForeignKey = (error: unknown): never => {
+export const notFoundOnForeignKey = (error: unknown): never => {
   throw isForeignKeyViolation(error)
     ? new NotFound({ message: "Receipt or group not found" })
     : error;
@@ -154,9 +154,23 @@ export const listGroups = (scope: ReceiptScope) =>
     }),
   );
 
-/** One structured line per mutation: ids and counts, never group names. */
-const logMutation = (event: string, scope: ReceiptScope, fields: Record<string, unknown>) =>
-  Effect.logInfo(event, { organizationId: scope.organizationId, actorId: scope.userId, ...fields });
+/**
+ * A member leaves a workspace: its groups stay, but they no longer name the
+ * member as creator (in this workspace only). Call inside the removal's
+ * transaction where there is one; Better Auth's own removal calls
+ * `releaseMemberGroups` from its `afterRemoveMember` hook.
+ */
+export const clearGroupCreator = (tx: Tx, organizationId: string, userId: string) =>
+  tx
+    .update(receiptGroups)
+    .set({ createdBy: null })
+    .where(
+      and(eq(receiptGroups.organizationId, organizationId), eq(receiptGroups.createdBy, userId)),
+    )
+    .returning({ id: receiptGroups.id });
+
+export const releaseMemberGroups = (organizationId: string, userId: string) =>
+  transact(async (tx) => (await clearGroupCreator(tx, organizationId, userId)).length);
 
 export const createGroup = (scope: ReceiptScope, input: CreateGroupInput) =>
   Effect.flatMap(decode(createGroupSchema, input), ({ name, color }) =>
@@ -186,7 +200,7 @@ export const createGroup = (scope: ReceiptScope, input: CreateGroupInput) =>
       } catch (error) {
         throw isUniqueViolation(error) ? nameTaken(name) : error;
       }
-    }).pipe(Effect.tap((group) => logMutation("group.created", scope, { groupId: group.id }))),
+    }),
   );
 
 /** Renames and/or recolours. Creator, owner or admin only. */
@@ -214,15 +228,7 @@ export const updateGroup = (scope: ReceiptScope, groupId: string, input: UpdateG
         } catch (error) {
           throw isUniqueViolation(error) ? nameTaken(patch.name ?? group.name) : error;
         }
-      }).pipe(
-        Effect.tap(() =>
-          logMutation("group.updated", scope, {
-            groupId: id,
-            renamed: patch.name !== undefined,
-            recoloured: patch.color !== undefined,
-          }),
-        ),
-      ),
+      }),
     ),
   );
 
@@ -239,7 +245,7 @@ export const deleteGroup = (scope: ReceiptScope, groupId: string) =>
       if (!canManageGroup(scope, group.createdBy)) throw forbidden("delete");
       await tx.delete(receiptGroups).where(inWorkspace(id, scope));
       return { id, name: group.name };
-    }).pipe(Effect.tap(() => logMutation("group.deleted", scope, { groupId: id }))),
+    }),
   );
 
 /**
@@ -296,11 +302,7 @@ export const addReceiptsToGroup = (scope: ReceiptScope, groupId: string, receipt
           atLimit: fresh.length - addable.length,
           notFound: ids.length - rows.length,
         };
-      }).pipe(
-        Effect.tap((change) =>
-          logMutation("group.receipts_added", scope, { groupId: id, ...change }),
-        ),
-      ),
+      }),
     ),
   );
 
@@ -335,11 +337,7 @@ export const removeReceiptsFromGroup = (
           atLimit: 0,
           notFound: ids.length - inWorkspaceCount,
         };
-      }).pipe(
-        Effect.tap((change) =>
-          logMutation("group.receipts_removed", scope, { groupId: id, ...change }),
-        ),
-      ),
+      }),
     ),
   );
 
@@ -409,15 +407,7 @@ export const setReceiptGroup = (
           )
           .orderBy(sql`lower(${receiptGroups.name})`);
         return rows.map((row) => ({ ...row, color: row.color as GroupColor }));
-      }).pipe(
-        Effect.tap((groups) =>
-          logMutation(action === "add" ? "group.receipt_added" : "group.receipt_removed", scope, {
-            groupId: gid,
-            receiptId: rid,
-            receiptGroups: groups.length,
-          }),
-        ),
-      ),
+      }),
     ),
   );
 

@@ -5,6 +5,7 @@ import {
   policyFor,
   prepareUserDeletion,
   purgeReceiptFiles,
+  releaseMemberGroups,
   userPlan,
 } from "@receipt-ocr/core";
 import { and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
@@ -252,6 +253,18 @@ export const auth = betterAuth({
         beforeAcceptInvitation: async ({ invitation }) => assertWorkspaceRole(invitation.role),
         beforeAddMember: async ({ member }) => assertWorkspaceRole(member.role),
         beforeUpdateMemberRole: async ({ newRole }) => assertWorkspaceRole(newRole),
+        // Workspace owners remove members through Better Auth, not the admin path.
+        afterRemoveMember: async ({ member: removed, organization }) => {
+          try {
+            await runtime.runPromise(releaseMemberGroups(organization.id, removed.userId));
+          } catch (error) {
+            logger.error({
+              event: "groups.release_member_failed",
+              organizationId: organization.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        },
         beforeDeleteOrganization: async ({ organization }) => {
           await purgeFiles({ organizationId: organization.id });
         },

@@ -21,7 +21,9 @@ import {
   groupsOfReceipt,
   listGroups,
   MAX_GROUPS_PER_RECEIPT,
+  notFoundOnForeignKey,
   MAX_GROUPS_PER_WORKSPACE,
+  releaseMemberGroups,
   removeReceiptsFromGroup,
   setReceiptGroup,
   updateGroup,
@@ -433,9 +435,25 @@ describe.skipIf(!enabled)("receipt groups against Postgres", () => {
     for (const id of [g.id, ...ids]) await run(deleteGroup(owner, id));
   });
 
-  it("a receipt deleted mid-insert is NotFound, not a database error", async () => {
-    const doomed = await seedReceipt(owner, "Vanishing");
+  it("a foreign key violation from a receipt deleted between check and insert is NotFound", async () => {
+    // Postgres reports the race as 23503; provoke the real error and map it.
     const g = await create(owner, "Vanishing group");
+    const ghost = crypto.randomUUID();
+    const error = await db((d) =>
+      d
+        .insert(receiptGroupMembers)
+        .values({ groupId: g.id, receiptId: ghost, addedBy: owner.userId })
+        .then(
+          () => null,
+          (e: unknown) => e,
+        ),
+    );
+    expect(() => notFoundOnForeignKey(error)).toThrowError(
+      expect.objectContaining({ _tag: "NotFound" }),
+    );
+    expect(() => notFoundOnForeignKey(new Error("other"))).toThrowError("other");
+    // A receipt that is already gone is NotFound through the whole call as well.
+    const doomed = await seedReceipt(owner, "Vanishing");
     await db((d) => d.delete(receipts).where(eq(receipts.id, doomed)));
     expect(await outcome(setReceiptGroup(owner, doomed, g.id, "add"))).toMatchObject({
       tag: "NotFound",
@@ -491,5 +509,33 @@ describe.skipIf(!enabled)("receipt groups against Postgres", () => {
     // Owners and admins can still manage the orphaned group; plain members can't.
     expect(groups.find((x) => x.id === kept.id)?.canManage).toBe(true);
     expect((await run(listGroups(memberA))).find((x) => x.id === kept.id)?.canManage).toBe(false);
+  });
+
+  it("releaseMemberGroups (the Better Auth removal hook) clears the creator link in that workspace only", async () => {
+    const gone = await joinAs(owner, "gone", "member");
+    const home = await createUser("gone-home");
+    const mine = await create(gone, "Gone group");
+    const [stays] = await db((d) =>
+      d
+        .insert(receiptGroups)
+        .values({
+          organizationId: home.organizationId,
+          name: "Gone stays",
+          color: "green",
+          createdBy: gone.userId,
+        })
+        .returning({ id: receiptGroups.id }),
+    );
+    expect(await run(releaseMemberGroups(owner.organizationId, gone.userId))).toBe(1);
+    expect((await run(listGroups(owner))).find((x) => x.id === mine.id)?.createdBy).toBeNull();
+    const [row] = await db((d) =>
+      d
+        .select({ c: receiptGroups.createdBy })
+        .from(receiptGroups)
+        .where(eq(receiptGroups.id, stays!.id)),
+    );
+    expect(row?.c).toBe(gone.userId);
+    // Running it again changes nothing.
+    expect(await run(releaseMemberGroups(owner.organizationId, gone.userId))).toBe(0);
   });
 });

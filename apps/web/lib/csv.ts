@@ -2,15 +2,15 @@ import type { ReceiptExportRow, ReceiptWithItems } from "@receipt-ocr/core";
 
 const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
 
+/** Group names are typed by members: neutralise formula prefixes before they are joined into one cell. */
+const guardFormula = (text: string) => (/^[=+\-@\t\r]/.test(text) ? `'${text}` : text);
+
 /**
  * RFC 4180 quoting. Also guards against CSV injection: a cell starting with
  * =, +, -, or @ is executed as a formula by Excel and Sheets, and receipt
  * merchant names come from OCR of an untrusted image. Plain numbers are left
  * alone so refunds (-5.00) stay numeric.
  */
-/** Group names are typed by members: neutralise formula prefixes before they are joined into one cell. */
-const guardFormula = (text: string) => (/^[=+\-@\t\r]/.test(text) ? `'${text}` : text);
-
 function cell(value: unknown): string {
   if (value === null || value === undefined) return "";
   let text = String(value);
