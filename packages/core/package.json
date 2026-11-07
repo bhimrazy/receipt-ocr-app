@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test:int": "INTEGRATION=1 vitest run --root ../.. --no-file-parallelism packages/core/src/receipts.int.test.ts packages/core/src/admin.int.test.ts packages/core/src/admin-ops.int.test.ts packages/core/src/analytics/spend.int.test.ts packages/core/src/jobs/jobs.int.test.ts packages/core/src/groups.int.test.ts"
+    "test:int": "INTEGRATION=1 vitest run --root ../.. --no-file-parallelism packages/core/src/receipts.int.test.ts packages/core/src/admin.int.test.ts packages/core/src/admin-ops.int.test.ts packages/core/src/analytics/spend.int.test.ts packages/core/src/jobs/jobs.int.test.ts packages/core/src/groups.int.test.ts packages/core/src/rls.int.test.ts"
   },
   "dependencies": {
     "@receipt-ocr/ai": "workspace:0.0.0",

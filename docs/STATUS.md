@@ -32,19 +32,30 @@ How the system is built (every app and package, the main flows and the data mode
 | #38           | Hardening: session check before the upload body, PDF page cap, per-email auth limits, CSP reports, health endpoints, SECURITY.md, [runbook](runbook.md)                                                                |
 | #40           | Load test suite on a 1 vCPU / 1 GB server (`scripts/load.sh`, manual `load.yml`); [results](../bench/results/load-2026-11-06.md)                                                                                       |
 
+## Migrations squashed (2026-11-07)
+
+Pre-launch, all migrations `0000`-`0010` were squashed into one `0000_baseline` that also enables row-level security on
+every table (no policies; the app role bypasses it, so it is defence in depth for Supabase's Data API). Both databases
+are empty and get reset. **From the first real user onward we never squash again.** Details:
+[data layer](architecture/db.md#migrations).
+
 ## Production to-dos (owner)
 
 Steps are in [deployment.md](deployment.md).
 
+- Reset `staging-db` and `production-db` (the explicit SQL in [deployment.md](deployment.md#release-notes), not `DROP SCHEMA public`), run **Database Migration** on
+  `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies the squashed baseline with
+  row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
+  Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
 - Production deploys automatically after CI passes on a push to `main`. Manual runs are allowed only from `main`.
   Once `ci/db-migrations` lands, the automatic deploy skips any release that changes `apps/web/drizzle/` since the
   `production-deployed` tag; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
-  with the owner's approval), then the deploy is run by hand. Production and staging are both at migration `0010`.
+  with the owner's approval), then the deploy is run by hand. Production and staging are reset to the squashed baseline.
 - `staging-db` and `production-db` exist (`main` only, `DIRECT_URL` set, required reviewer on `production-db`).
   Still to do for `ci/db-migrations`: point Vercel's Preview variables at `receipt-ocr-staging`, leave
   `BETTER_AUTH_URL` unset there and turn on Deployment Protection for previews
   ([deployment.md](deployment.md#staging-and-previews)). After merging, once: run **Database Migration** for
-  `staging-db`, then `production-db` (no-ops at `0010`), then **Vercel Production Deployment** by hand. Manual
+  `staging-db`, then `production-db` (applies the baseline), then **Vercel Production Deployment** by hand. Manual
   deploys need a successful `production-db` run with the same migrations, and there is no `production-deployed` tag
   yet, so automatic deploys skip until that deploy creates it.
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
@@ -68,8 +79,8 @@ Steps are in [deployment.md](deployment.md).
 | `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                                                                                          |
 | `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                                                                                    |
 | `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                                                                                         |
-| `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; migration `0010` (index only)                                                                    |
-| `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying)                                                                |
+| `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; index only                                                                                       |
+| `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; apply its migration before deploying                                                                     |
 | `feat/dashboard`           | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                                                                                         |
 | `ci/db-migrations`         | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging                                                         |
 | `feat/consent-analytics`   | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                                                                                  |
@@ -121,7 +132,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    multi-part receipts: [long receipt capture](plans/2026-11-07-long-receipt-capture.md).
 5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
-   Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations take the next free numbers after `0008` (job queue).
+   Security; PR B passkeys (primary sign-in) + admin enforcement. Each adds a migration after the baseline.
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
 8. Load test: `scripts/load.sh` (by hand, and from `.github/workflows/load.yml` on demand) runs the production image on
    1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
