@@ -76,6 +76,21 @@ async function extract(receiptId: string) {
   throw new Error(`receipt ${receiptId}'s job never finished`);
 }
 
+/**
+ * `extract` with a single attempt: the receipt's job dies on its first failure.
+ * For tests about rounds (quota), where retries only add work: a round is one
+ * failed read however many attempts it took.
+ */
+async function extractOnce(receiptId: string) {
+  await db((d) =>
+    d
+      .update(jobs)
+      .set({ maxAttempts: 1 })
+      .where(and(eq(jobs.receiptId, receiptId), inArray(jobs.state, ["queued", "running"]))),
+  );
+  await extract(receiptId);
+}
+
 /** Ends a receipt's live job without running it, as a lost final write would leave it. */
 const dropJob = (receiptId: string) =>
   db((d) =>
@@ -458,31 +473,35 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       );
     });
 
-    it("M1: failed reads past the free allowance count toward the day", async () => {
-      const c = await createUser("junk");
-      const tight = { perMinute: 1000, perDay: 20 };
-      const upload = () =>
-        runExit(ingestUpload({ scope: c, fileName: "j.jpg", body: FAILING_JPEG, limits: tight }));
-      // used = max(0, failed − FREE_FAILED_ROUNDS): 25 failures fit under 20, the 26th upload doesn't.
-      for (let i = 0; i < 20 + FREE_FAILED_ROUNDS; i++) {
-        const exit = await upload();
-        if (!Exit.isSuccess(exit)) throw new Error(`upload ${i + 1} was refused`);
-        await extract(exit.value.receipt.id);
-      }
-      expect(await usedToday(c.userId, tight)).toBe(20);
-      const refused = await upload();
-      expect(Exit.isFailure(refused) && JSON.stringify(refused.cause)).toContain("QuotaExceeded");
-      // 25 uploads, each read to a dead job: slower than the 5 s default on CI.
-    }, 30_000);
+    // Many uploads in a row: given room for CI, where `next build` runs alongside these tests.
+    it(
+      "M1: failed reads past the free allowance count toward the day",
+      { timeout: 20_000 },
+      async () => {
+        const c = await createUser("junk");
+        const tight = { perMinute: 1000, perDay: 20 };
+        const upload = () =>
+          runExit(ingestUpload({ scope: c, fileName: "j.jpg", body: FAILING_JPEG, limits: tight }));
+        // used = max(0, failed − FREE_FAILED_ROUNDS): 25 failures fit under 20, the 26th upload doesn't.
+        for (let i = 0; i < 20 + FREE_FAILED_ROUNDS; i++) {
+          const exit = await upload();
+          if (!Exit.isSuccess(exit)) throw new Error(`upload ${i + 1} was refused`);
+          await extractOnce(exit.value.receipt.id);
+        }
+        expect(await usedToday(c.userId, tight)).toBe(20);
+        const refused = await upload();
+        expect(Exit.isFailure(refused) && JSON.stringify(refused.cause)).toContain("QuotaExceeded");
+      },
+    );
 
-    it("M1: successful and failed reads together", async () => {
+    it("M1: successful and failed reads together", { timeout: 20_000 }, async () => {
       const c = await createUser("mixed");
       const tight = { perMinute: 1000, perDay: 3 };
       const read = async (body: Uint8Array) => {
         const exit = await runExit(
           ingestUpload({ scope: c, fileName: "m.jpg", body, limits: tight }),
         );
-        if (Exit.isSuccess(exit)) await extract(exit.value.receipt.id);
+        if (Exit.isSuccess(exit)) await extractOnce(exit.value.receipt.id);
         return exit;
       };
       for (const body of [JPEG, JPEG]) expect(Exit.isSuccess(await read(body))).toBe(true);
