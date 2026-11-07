@@ -1,6 +1,8 @@
-# Vercel environment setup
+# Production environment setup
 
-How to give a Vercel environment the keys it needs, one service at a time. Follow the steps in order: each one
+How to give an environment (Production or Preview) the keys it needs, one service at a time. The services and
+variables are the same wherever the app runs; the steps for adding them are written for Vercel, where it runs today.
+On Docker or a VPS, set the same variables in the container's environment instead. Follow the steps in order: each one
 unlocks part of the app, and you can stop after step 3 with a working app.
 
 ## Checklist
@@ -193,7 +195,19 @@ More help: [Domains](https://resend.com/docs/dashboard/domains/introduction),
 
 ## 4. Sign in with Google
 
-**Unlocks:** the "Continue with Google" button. Production only: preview addresses change with every pull request.
+**Unlocks:** the "Continue with Google" button.
+
+**One client per environment, in separate Google Cloud projects.** A leaked or rotated preview secret then never
+touches production, each client lists only its own redirect address, and the consent screen (which belongs to the
+project) can stay in **Testing** for staging while production is published.
+
+| Google Cloud project            | Holds                                                                                                                       | Status                                    |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `receipt-ocr` (Production)      | Published consent screen, the production web client, the production Gemini key                                              | Set up now                                |
+| `receipt-ocr-staging` (Preview) | Consent screen left in Testing (test users only), a client for the preview domain, a preview Gemini key with a small budget | Only if previews ever need Google sign-in |
+
+Today only Production gets Google sign-in. Previews use email and password: their addresses change with every pull
+request, and Google needs each redirect address listed exactly.
 
 <details>
 <summary><b>Create the sign-in client in Google Cloud</b></summary>
@@ -215,6 +229,11 @@ More help: [Domains](https://resend.com/docs/dashboard/domains/introduction),
 6. **Create**, then copy the **Client ID** and **Client secret**. Download the JSON as a backup: the secret may not
    be shown again.
 
+For a staging client later, repeat in the `receipt-ocr-staging` project with the origin
+`https://preview.receipt-ocr.bhimraj.com.np` and the redirect URI
+`https://preview.receipt-ocr.bhimraj.com.np/api/auth/callback/google`. Leave its audience in **Testing** and add
+yourself as a test user. The authorised domain `bhimraj.com.np` already covers the preview subdomain.
+
 More help: [Google Auth Platform](https://support.google.com/cloud/answer/15544987),
 [Better Auth: Google](https://www.better-auth.com/docs/authentication/google).
 
@@ -225,13 +244,20 @@ More help: [Google Auth Platform](https://support.google.com/cloud/answer/155449
 | `GOOGLE_CLIENT_ID`     | `1234…-abc….apps.googleusercontent.com` | Config |
 | `GOOGLE_CLIENT_SECRET` | `GOCSPX-…`                              | Secret |
 
+Add both to **Production** only. Never paste the production client into Preview.
+
 **Check:** the sign-in page shows the Google button, and signing in returns you to the app.
 
 ---
 
 ## 5. Sign in with GitHub
 
-**Unlocks:** the "Continue with GitHub" button. Production only.
+**Unlocks:** the "Continue with GitHub" button.
+
+**One OAuth app per environment.** A GitHub OAuth app allows exactly one callback URL, so production and a staging
+app can't share one anyway. Create the production app now; previews use email and password. If previews ever need it,
+create a second app, `receiptOCR (staging)`, with the callback
+`https://preview.receipt-ocr.bhimraj.com.np/api/auth/callback/github`, and add its values to **Preview** only.
 
 <details>
 <summary><b>Create the sign-in app in GitHub</b></summary>
@@ -253,6 +279,8 @@ More help: [Creating an OAuth app](https://docs.github.com/en/apps/oauth-apps/bu
 | ---------------------- | --------------------- | ------ |
 | `GITHUB_CLIENT_ID`     | `Ov23li…`             | Config |
 | `GITHUB_CLIENT_SECRET` | 40 letters and digits | Secret |
+
+Add both to **Production** only.
 
 **Check:** the sign-in page shows the GitHub button.
 

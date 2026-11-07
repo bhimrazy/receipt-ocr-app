@@ -150,6 +150,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 10. Read-only agent access over MCP: personal tokens first, then OAuth for Claude.ai and ChatGPT ([MCP server](plans/2026-11-07-mcp-server.md)).
 11. Bring your own AI key (Pro perk, maybe a capped Free on-ramp), then own storage (R2 first), on envelope
     encryption with rotation ([BYOK plan](plans/2026-11-07-byok.md)). After billing.
+12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
