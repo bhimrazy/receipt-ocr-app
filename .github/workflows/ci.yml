@@ -8,11 +8,48 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR cancels its running CI. Runs on main are never cancelled: production.yml deploys
+# the commit whose CI succeeded.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Decides which jobs a PR needs. Pushes to main always run everything. Skipped jobs count as passed,
+  # and `ci-ok` is the single job to require.
+  changes:
+    name: Changed files
+    runs-on: ubuntu-26.04
+    timeout-minutes: 3
+    outputs:
+      # Anything but docs and Markdown: typecheck, unit tests, build.
+      code: ${{ steps.diff.outputs.code }}
+      # Anything the running app, its tests or its build depend on: e2e jobs.
+      app: ${{ steps.diff.outputs.app }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The merge commit and its first parent (the base) are enough to list the PR's files.
+          fetch-depth: 2
+          persist-credentials: false
+      - id: diff
+        run: |
+          code=true app=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            files=$(git diff --name-only HEAD^1 HEAD)
+            if [ -n "$files" ]; then
+              echo "$files"
+              # `|| true`: grep -v exits 1 when every file is filtered out.
+              rest=$(echo "$files" | grep -vE '^docs/|\.md$' || true)
+              [ -n "$rest" ] || code=false
+              rest=$(echo "$files" | grep -vE '^(docs|bench)/|\.md$|^\.github/(workflows/(db-migrate|load|preview|production)\.yml|vercel-cli/|dependabot\.yml|ISSUE_TEMPLATE/)' || true)
+              [ -n "$rest" ] || app=false
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "code=$code app=$app"
+
   static:
     name: Lint, format, dependencies
     runs-on: ubuntu-26.04
@@ -41,6 +78,8 @@ jobs:
 
   checks:
     name: Typecheck, test, build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
@@ -48,12 +87,17 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-bun
+      - uses: ./.github/actions/next-cache
+        with:
+          scope: checks
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
 
   e2e:
     name: E2E (Playwright)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     services:
@@ -110,12 +154,22 @@ jobs:
             --user rustfsadmin:rustfsadmin -X PUT http://localhost:9000/receipt-ocr)
           case "$code" in 200|409) ;; *) echo "bucket create failed: HTTP $code" >&2; exit 1 ;; esac
       - run: bun run db:migrate
-      - name: Integration tests (Postgres + RustFS)
-        run: bun run --filter @receipt-ocr/core test:int && bun run --filter @receipt-ocr/web test:int
+      - uses: ./.github/actions/next-cache
+        with:
+          scope: e2e
+      - uses: ./.github/actions/playwright
+      # The build doesn't touch the database, so it overlaps the integration suites.
+      - name: Integration tests (Postgres + RustFS) and build
+        run: |
+          bun run build > "$RUNNER_TEMP/build.log" 2>&1 &
+          build=$!
+          status=0
+          bun run --filter @receipt-ocr/core test:int && bun run --filter @receipt-ocr/web test:int || status=$?
+          wait "$build" || status=$?
+          cat "$RUNNER_TEMP/build.log"
+          exit "$status"
         env:
           INTEGRATION: "1"
-      - run: bun run build
-      - run: bunx playwright install --with-deps chromium
       - run: bun run test:e2e
       # The GA id is inlined at build time, so the consent flow with GA needs its own build.
       - name: Build with a test GA measurement id
@@ -138,6 +192,8 @@ jobs:
 
   e2e-turnstile:
     name: E2E (Turnstile test keys)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     services:
@@ -197,8 +253,11 @@ jobs:
             --user rustfsadmin:rustfsadmin -X PUT http://localhost:9000/receipt-ocr)
           case "$code" in 200|409) ;; *) echo "bucket create failed: HTTP $code" >&2; exit 1 ;; esac
       - run: bun run db:migrate
+      - uses: ./.github/actions/next-cache
+        with:
+          scope: turnstile
+      - uses: ./.github/actions/playwright
       - run: bun run build
-      - run: bunx playwright install --with-deps chromium
       - name: Turnstile e2e, always-pass secret
         working-directory: apps/web
         run: bunx playwright test e2e/turnstile.spec.ts
@@ -219,3 +278,17 @@ jobs:
             apps/web/playwright-report/
             apps/web/test-results/
           retention-days: 7
+
+  # The one check to require: a skipped job (docs-only PR) passes, a failed or cancelled one fails.
+  ci-ok:
+    name: CI OK
+    needs: [changes, static, checks, e2e, e2e-turnstile]
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          case " $RESULTS " in *" failure "*|*" cancelled "*) exit 1 ;; esac
