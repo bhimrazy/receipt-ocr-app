@@ -53,14 +53,27 @@ const F = "fixture" as const;
 describe("activeChain", () => {
   it("keeps the saved order and skips disabled steps and providers without a key", () => {
     const chain = [step(B), step(A, 30_000, false), step(F), step("google:model-c")];
-    expect(activeChain({ chain }, { google: true, fixture: false }).map((s) => s.model)).toEqual([
-      B,
-      "google:model-c",
-    ]);
-    expect(activeChain({ chain }, { google: false, fixture: true }).map((s) => s.model)).toEqual([
-      F,
-    ]);
-    expect(activeChain({ chain }, { google: false, fixture: false })).toEqual([]);
+    expect(
+      activeChain({ chain }, { google: true, anthropic: false, fixture: false }).map(
+        (s) => s.model,
+      ),
+    ).toEqual([B, "google:model-c"]);
+    expect(
+      activeChain({ chain }, { google: false, anthropic: false, fixture: true }).map(
+        (s) => s.model,
+      ),
+    ).toEqual([F]);
+    expect(activeChain({ chain }, { google: false, anthropic: false, fixture: false })).toEqual([]);
+  });
+
+  it("mixes providers in one chain, each gated on its own key", () => {
+    const claude = "anthropic:claude-haiku-5-5" as const;
+    const chain = [step(A), step(claude)];
+    const only = (available: { google: boolean; anthropic: boolean }) =>
+      activeChain({ chain }, { ...available, fixture: false }).map((s) => s.model);
+    expect(only({ google: true, anthropic: true })).toEqual([A, claude]);
+    expect(only({ google: false, anthropic: true })).toEqual([claude]);
+    expect(only({ google: true, anthropic: false })).toEqual([A]);
   });
 });
 

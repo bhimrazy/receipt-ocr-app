@@ -1,6 +1,7 @@
 import {
   classifyOcrError,
   extractReceipt,
+  OCR_PROVIDERS,
   OcrCallError,
   retryAfterMs,
   type ExtractionUsage,
@@ -9,6 +10,7 @@ import {
   type ModelId,
   type OcrFailureKind,
   type OcrProviderId,
+  type ProviderKeys,
 } from "@receipt-ocr/ai";
 import { Clock, Config, Context, Effect, Layer, Option } from "effect";
 import { NotConfigured, OcrError, ProvidersCooling, type OcrAttempt } from "./errors";
@@ -140,10 +142,15 @@ export const runChain = (
     });
   });
 
-const googleKey = Config.option(Config.string("GOOGLE_GENERATIVE_AI_API_KEY")).pipe(
-  Config.map(Option.getOrUndefined),
-  Effect.orElseSucceed(() => undefined),
-);
+/** Every provider's key from its `keyEnv`; unset keys are left out. */
+const providerKeys: Effect.Effect<ProviderKeys> = Effect.forEach(
+  OCR_PROVIDERS.flatMap((p) => (p.keyEnv ? [{ id: p.id, env: p.keyEnv }] : [])),
+  ({ id, env }) =>
+    Config.option(Config.string(env)).pipe(
+      Config.map((value) => [id, Option.getOrUndefined(value)] as const),
+      Effect.orElseSucceed(() => [id, undefined] as const),
+    ),
+).pipe(Effect.map((entries) => Object.fromEntries(entries) as ProviderKeys));
 
 /** Grace on top of the SDK's own timeout, in case a provider ignores the abort. */
 const ABORT_GRACE_MS = 1_000;
@@ -172,7 +179,7 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
         ),
         extract: (file, options) =>
           Effect.gen(function* () {
-            const keys = { google: yield* googleKey };
+            const keys = yield* providerKeys;
             const call: ExtractCall = ({ model, timeoutMs, maxRetries }) =>
               Effect.tryPromise({
                 try: (abortSignal) =>
