@@ -196,6 +196,13 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - HEIC conversion untested (no fixture or Safari in CI); add a WebKit e2e project later.
 - Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.
 - Better Auth: verify the OAuth callback turns a banned user into `?error=BANNED_USER`.
+- Better Auth 1.7.18 (#90): `runInBackgroundOrAwait` now logs and drops errors thrown in email callbacks
+  (`sendResetPassword`, `sendVerificationEmail`, `sendDeleteAccountVerification`, `sendChangeEmailConfirmation`), so
+  `deliver()`'s "undelivered fails the request in production" no longer holds there: the user is told to check their
+  inbox anyway. Refusals that must reach the user (sole owner, per-address caps for deletion and email change) run in
+  `hooks.before` instead. Decide whether to surface delivery failures some other way.
+- Settings → Delete account: in the type-your-email confirm dialog, Tab can move focus out while the confirm button
+  is disabled (Base UI focus guards with a disabled last button; not reproduced locally).
 - Account deletion grace period: soft-delete for 7 days with an undo link before the data goes (today the emailed
   link deletes at once).
 - E2E for account deletion and email change: the e2e harness doesn't capture email yet (the dev mail log only goes to
