@@ -73,7 +73,9 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 
 Until launch, Vercel previews deploy only for PRs labelled `preview` (the free plan's 100 deployments a day are shared
 with production). When a PR with a visible change (UI, copy, flows) is ready for review and CI is green, add the label
-once: `gh pr edit <number> --add-label preview`. Don't add it to docs, CI, test or backend-only PRs.
+once: `gh pr edit <number> --add-label preview`. It deploys once; later pushes don't. After a fix round the owner needs
+to see, re-add it (`--remove-label` then `--add-label`); otherwise leave it. Don't add it to docs, CI, test or
+backend-only PRs.
 
 ## Validation
 

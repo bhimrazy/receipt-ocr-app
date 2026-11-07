@@ -66,6 +66,34 @@ function isRequestRejection(error: unknown): boolean {
   }
 }
 
+/** Groq's error body: `{ error: { message, type, code } }`. Only these fields are read. */
+function groqErrorOf(error: APICallError): { code: string; message: string } | null {
+  if (!error.url.startsWith("https://api.groq.com/")) return null;
+  try {
+    const body = (
+      JSON.parse(error.responseBody ?? "") as { error?: { code?: unknown; message?: unknown } }
+    ).error;
+    return { code: String(body?.code ?? ""), message: String(body?.message ?? "") };
+  } catch {
+    return { code: "", message: "" };
+  }
+}
+
+/**
+ * Groq answers 400 for more than a bad image. By its `code`: best-effort output that broke the
+ * schema is `invalid-output`; a retired model, or a request rejected for a reason that doesn't
+ * blame the file (an unsupported schema keyword), is `not-configured`, so the chain moves on.
+ */
+function classifyGroq400(error: APICallError): OcrFailureKind | null {
+  const body = groqErrorOf(error);
+  if (!body || error.statusCode !== 400) return null;
+  if (body.code === "json_validate_failed") return "invalid-output";
+  if (body.code === "model_decommissioned" || body.code === "model_not_found") {
+    return "not-configured";
+  }
+  return IMAGE_COMPLAINT.test(body.message) ? null : "not-configured";
+}
+
 /** The cause of a step skipped before any request: this model can't take the file's type or size. */
 export class UnsupportedFileError extends Error {
   override name = "UnsupportedFileError";
@@ -146,6 +174,8 @@ export function classifyOcrError(error: unknown): OcrFailureKind {
   if (APICallError.isInstance(error)) {
     // Our request is wrong for this model, not the photo: configuration, and the next model may work.
     if (isRequestRejection(error)) return "not-configured";
+    const groq = classifyGroq400(error);
+    if (groq) return groq;
     return error.statusCode === undefined ? "provider-error" : fromStatus(error.statusCode);
   }
   // A refusal with prose (or no) text fails parsing before the caller sees the finish reason.

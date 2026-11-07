@@ -91,7 +91,7 @@ Failure kinds and how they are decided ([`errors.ts`](../../packages/ai/src/erro
 | `not-configured`   | HTTP 401, 402 (Anthropic billing), 403, 404, missing key, unknown model or provider                                                  | Yes                 |
 | `refused`          | A `content-filter` finish (Claude's refusal, Gemini's safety stop), whether its text parses, is prose or is empty                    | Yes (job: dead now) |
 | `unsupported-file` | HTTP 413, or before any request: a type or size this model can't take (HEIC, a PDF on Groq, or an image over 10 MB base64 on Claude) | Yes (job: dead now) |
-| `invalid-output`   | No object, no content, schema or JSON parse failure                                                                                  | No                  |
+| `invalid-output`   | No object, no content, schema or JSON parse failure (Groq `json_validate_failed`)                                                    | Yes                 |
 | `bad-image`        | Any other 4xx (400, 422): the provider refused the input                                                                             | No                  |
 
 ## The prompt
@@ -213,13 +213,16 @@ API yet; the first benchmark is the check.
 - **Structured output:** `response_format: json_schema` with `strict: false` (best-effort), set by `GROQ_OPTIONS`.
   Qwen also supports `strict: true` (constrained decoding), which needs every keyword in the schema to be supported;
   switch to it only after a benchmark shows the schema is accepted. `maxItems` is dropped from the request
-  (`schemaMode: "no-array-bounds"`), and the reply is validated against the full zod schema either way. No tools.
+  (`schemaMode: "no-bounds"`: no `maxItems`, `maxLength`, `minimum` and the like; Groq's docs list no supported keywords for best-effort mode), and the reply is validated against the full zod schema either way. No tools.
 - **Reasoning:** `reasoning_effort: "none"` (instruct mode) so transcription does not burn the token-per-minute budget.
 - **Files:** images only (JPEG, PNG, GIF, WebP); the SDK rejects other file parts. PDFs and HEIC fail before any
   request as `unsupported-file`, so the chain moves on. Groq documents a 20 MB limit on a request with an image (a
   400 beyond it), checked on the base64 size; it states no pixel limit or base64-specific limit.
 - **Errors:** 429 is `rate-limited` with `retry-after` (seconds), which makes the provider cool; 5xx `provider-error`;
-  401/403/404 `not-configured`; 413 `unsupported-file`; 400 `bad-image`. The key check treats a 429 naming a daily
+  401/403/404 `not-configured`; 413 `unsupported-file`. A 400 is read by its `error.code`: `json_validate_failed`
+  (best-effort output broke the schema) is `invalid-output`, which now falls through to the next model;
+  `model_decommissioned` (Groq answers 400, not 404, for a retired model) and any other `invalid_request_error` that
+  doesn't blame the image are `not-configured`; a 400 that names the image is `bad-image`. The key check treats a 429 naming a daily
   cap (TPD, RPD) as `no-billing-or-quota`.
 - **Benchmark:** `GROQ_API_KEY=... bun run bench:ocr --models groq:qwen/qwen3.8-27b --concurrency 1`.
 

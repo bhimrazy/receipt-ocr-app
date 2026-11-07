@@ -90,6 +90,15 @@ jobs:
             skip "This release adds migrations: run Database Migration for staging-db, then production-db, then run this workflow by hand. Changed since ${last:0:12}: $(echo "$changed" | tr '\n' ' ')"
             exit 0
           fi
+          # Docs, tests and CI-only merges don't change the app; the next real change deploys them too.
+          if ! shipped=$(.github/scripts/shipped-files.sh "$last" "$HEAD_SHA"); then
+            skip "Can't compare with the last production deploy (${last:0:12})."
+            exit 0
+          fi
+          if [ -z "$shipped" ]; then
+            skip "Nothing that ships changed since ${last:0:12} (docs, tests or CI only)."
+            exit 0
+          fi
           echo "deploy=true" >> "$GITHUB_OUTPUT"
           echo "No migration changes since ${last:0:12}; deploying." >> "$GITHUB_STEP_SUMMARY"
 

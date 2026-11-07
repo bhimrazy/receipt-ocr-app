@@ -78,31 +78,37 @@ const receiptExtractionSchemaV1 = buildSchema(false);
 
 export type ReceiptExtraction = z.infer<typeof receiptExtractionSchema>;
 
-function withoutKeyword(node: unknown, keyword: string): unknown {
-  if (Array.isArray(node)) return node.map((child) => withoutKeyword(child, keyword));
+function withoutKeywords(node: unknown, keywords: readonly string[]): unknown {
+  if (Array.isArray(node)) return node.map((child) => withoutKeywords(child, keywords));
   if (node && typeof node === "object") {
     return Object.fromEntries(
       Object.entries(node)
-        .filter(([key]) => key !== keyword)
-        .map(([key, value]) => [key, withoutKeyword(value, keyword)]),
+        .filter(([key]) => !keywords.includes(key))
+        .map(([key, value]) => [key, withoutKeywords(value, keywords)]),
     );
   }
   return node;
 }
 
 /**
- * The schema sent to the model for a prompt version. With `schemaMode` "no-array-bounds" it is
- * the same JSON schema minus `maxItems`; the reply is still validated against
- * `receiptExtractionSchema`, bounds included.
+ * The schema sent to the model for a prompt version. "no-array-bounds" is the same JSON schema
+ * minus `maxItems`; "no-bounds" also drops string and number bounds. The reply is still
+ * validated against `receiptExtractionSchema`, bounds included.
  */
+const DROPPED_KEYWORDS = {
+  "no-array-bounds": ["maxItems"],
+  "no-bounds": ["maxItems", "minItems", "maxLength", "minLength", "minimum", "maximum"],
+} as const;
+
 export function receiptRequestSchema(
   version: PromptVersion,
-  schemaMode: "full" | "no-array-bounds" = "full",
+  schemaMode: "full" | keyof typeof DROPPED_KEYWORDS = "full",
 ): Schema<ReceiptExtraction> {
   const wire = version === "v1" ? receiptExtractionSchemaV1 : receiptExtractionSchema;
   if (schemaMode === "full") return zodSchema(wire);
   return jsonSchema<ReceiptExtraction>(
-    async () => withoutKeyword(await zodSchema(wire).jsonSchema, "maxItems") as never,
+    async () =>
+      withoutKeywords(await zodSchema(wire).jsonSchema, DROPPED_KEYWORDS[schemaMode]) as never,
     {
       validate: (value) => {
         const parsed = receiptExtractionSchema.safeParse(value);

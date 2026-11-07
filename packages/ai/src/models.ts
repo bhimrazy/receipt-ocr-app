@@ -46,7 +46,7 @@ export interface OcrModel {
    * `maxItems` from the request (the reply is still checked against the full schema).
    * Default "full".
    */
-  schemaMode?: "full" | "no-array-bounds";
+  schemaMode?: "full" | "no-array-bounds" | "no-bounds";
 }
 
 export const OCR_PROVIDERS: readonly OcrProvider[] = [
@@ -123,9 +123,9 @@ export const OCR_MODELS: readonly OcrModel[] = [
     id: "groq:qwen/qwen3.8-27b",
     provider: "groq",
     label: "Qwen 3.8 27B (Groq, preview)",
-    // Groq's json_schema support is best-effort here; `maxItems` is dropped from the request in
-    // case it is refused. The reply is still checked against the full schema.
-    schemaMode: "no-array-bounds",
+    // Groq's docs list no supported keywords for best-effort json_schema, so size bounds are
+    // dropped from the request. The reply is still checked against the full schema.
+    schemaMode: "no-bounds",
     prices: [{ from: "2026-11-07", input: 0.8, output: 4 }],
   },
   {

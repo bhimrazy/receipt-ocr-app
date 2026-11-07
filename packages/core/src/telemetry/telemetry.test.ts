@@ -439,6 +439,7 @@ describe("secret denylist", () => {
   const SECRETS: Record<string, string> = {
     gemini: "AIza" + rep("a", 35),
     anthropic: "sk-ant-api03-" + rep("x", 40),
+    groq: "gsk_" + rep("a", 52),
     resend: "re_" + rep("A1", 14),
     hex32: rep("ab", 16),
     hex64: rep("0f", 32),
@@ -500,7 +501,7 @@ describe("secret denylist", () => {
     expect(redacted).toBe(0);
   });
 
-  it.each(["eyJ", "postgres://a:", "AIza", "Bearer ", "sk-", "re_", "ghp_", "-----BEGIN "])(
+  it.each(["eyJ", "postgres://a:", "AIza", "Bearer ", "sk-", "gsk_", "re_", "ghp_", "-----BEGIN "])(
     "handles 100 KB of %s repeated in well under 50 ms",
     (unit) => {
       const big = unit.repeat(Math.ceil(100_000 / unit.length));
