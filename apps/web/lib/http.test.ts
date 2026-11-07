@@ -88,9 +88,10 @@ describe("withRequestEvent", () => {
         return new Response(null, { status: 404 });
       },
     );
-    await handler(new Request("https://app.example/api/receipts/r-1?x=1"));
+    const response = await handler(new Request("https://app.example/api/receipts/r-1?x=1"));
     expect(logger.emit).toHaveBeenCalledTimes(1);
     const [event, options] = vi.mocked(logger.emit).mock.calls[0]!;
+    expect(response.headers.get("x-request-id")).toBe(event.request_id);
     expect(event).toMatchObject({
       event: "receipt.poll",
       unit: "request",

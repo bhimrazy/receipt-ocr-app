@@ -5,6 +5,7 @@ import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
 import { authEnv } from "./env";
 import { errorFields, logger, type WideEvent } from "./log";
+import { REQUEST_ID_HEADER } from "./request-id";
 import { runtime } from "./runtime";
 
 const STATUS: Record<AppError["_tag"], number> = {
@@ -103,7 +104,8 @@ type RequestEventSpec = {
  * Middleware for route handlers: one wide event per request. It sets the
  * request id, route, method, status, duration and outcome, and writes the
  * event once in `finally`; the handler adds business context (ids, plan,
- * mode) to the `event` it is given and passes it to `runRoute`.
+ * mode) to the `event` it is given and passes it to `runRoute`. The response
+ * carries the id as `x-request-id`, so a user's report can be found in the logs.
  */
 export function withRequestEvent<C = unknown>(
   spec: RequestEventSpec,
@@ -121,6 +123,11 @@ export function withRequestEvent<C = unknown>(
     try {
       const response = await handler(request, context as C, event);
       event.status_code ??= response.status;
+      try {
+        response.headers.set(REQUEST_ID_HEADER, event.request_id!);
+      } catch {
+        // A response with immutable headers (a proxied fetch) keeps its own.
+      }
       return response;
     } catch (error) {
       // Next's redirect() and notFound() also throw; they still end the request.
