@@ -9,7 +9,14 @@ vi.mock("./log", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./log")>()),
   logger: { error: vi.fn(), info: vi.fn() },
 }));
-vi.mock("./env", () => ({ authEnv: { betterAuthUrl: "https://app.example", ipAddress } }));
+vi.mock("./env", () => ({
+  authEnv: {
+    betterAuthUrl: "https://app.example",
+    // A preview trusts its branch alias and its deployment host.
+    trustedOrigins: ["https://app.example", "https://app-git-pr.vercel.app"],
+    ipAddress,
+  },
+}));
 
 const { causeDetail, clientIp, crossOriginResponse, discardBody } = await import("./http");
 
@@ -46,6 +53,7 @@ describe("crossOriginResponse (L4)", () => {
 
   it("allows the app's own origin", () => {
     expect(crossOriginResponse(mutation({ origin: "https://app.example" }))).toBeNull();
+    expect(crossOriginResponse(mutation({ origin: "https://app-git-pr.vercel.app" }))).toBeNull();
   });
 
   it("rejects another origin and a missing one", () => {

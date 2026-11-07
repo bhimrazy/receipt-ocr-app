@@ -117,7 +117,7 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
-  trustedOrigins: [authEnv.betterAuthUrl],
+  trustedOrigins: authEnv.trustedOrigins,
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
