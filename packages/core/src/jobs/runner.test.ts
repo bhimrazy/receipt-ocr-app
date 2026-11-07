@@ -157,8 +157,11 @@ describe("job.tick events", () => {
   });
 
   it("samples idle ticks as routine, and writes none for a tick filtered to its own job", async () => {
-    vi.stubEnv("LOG_SAMPLE_RATE", "0");
+    // The rate floor is 0.01, so pin the draw above it.
+    vi.stubEnv("LOG_SAMPLE_RATE", "0.01");
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
     await runTick(() => Effect.succeed(null), undefined, []);
+    random.mockRestore();
     expect(lines).toEqual([]);
     vi.stubEnv("LOG_SAMPLE_RATE", "1");
     await runTick(() => Effect.succeed(null), undefined, []);
