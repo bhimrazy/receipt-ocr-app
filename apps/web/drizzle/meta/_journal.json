@@ -64,13 +64,6 @@
       "when": 1793948588549,
       "tag": "0008_jobs_queue",
       "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1793953533627,
-      "tag": "0009_jobs_created_at",
-      "breakpoints": true
     }
   ]
 }
