@@ -367,16 +367,23 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     const [x, y] = await Promise.all([pass("drain-x"), pass("drain-y")]);
     expect(x.claimed).toBeLessThanOrEqual(5);
     expect(y.claimed).toBeLessThanOrEqual(5);
-    expect(x.claimed + y.claimed).toBe(10);
-    expect(ids.filter((id) => counts.get(id) === 1)).toHaveLength(10);
+    // Not exactly 10: a drain that finds every due row locked by the other (SKIP LOCKED) stops early.
+    expect(x.claimed + y.claimed).toBeGreaterThan(0);
     expect(ids.every((id) => (counts.get(id) ?? 0) <= 1)).toBe(true);
-    // The two left over are for the next pass.
-    const rest = await pass("drain-z");
-    expect(rest).toMatchObject({ claimed: 2, capped: false });
+    // Later passes pick up the rest; across all of them each job ran exactly once.
+    let left = 12 - x.claimed - y.claimed;
+    for (let n = 0; left > 0 && n < 5; n++) left -= (await pass(`drain-z${n}`)).claimed;
+    expect(left).toBe(0);
     expect(ids.every((id) => counts.get(id) === 1)).toBe(true);
   });
 
   it("a drain reclaims a job whose worker died mid-run, without anyone touching the receipt", async () => {
+    // Only this test's job may be due, so the counts below are exact.
+    await db((d) =>
+      d
+        .delete(jobs)
+        .where(sql`${jobs.kind} in (${COUNT}, ${SLOW}) and ${jobs.state} in ('queued', 'running')`),
+    );
     const [stale] = await db((d) =>
       d
         .insert(jobs)
