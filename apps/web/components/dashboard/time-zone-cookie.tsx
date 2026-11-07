@@ -21,7 +21,7 @@ export function TimeZoneCookie({ current }: { current: string }) {
     }
     if (!zone || zone === current) return;
     const secure = location.protocol === "https:" ? "; secure" : "";
-    document.cookie = `${TIME_ZONE_COOKIE}=${encodeURIComponent(zone)}; path=/; max-age=31536000; samesite=lax${secure}`;
+    document.cookie = `${TIME_ZONE_COOKIE}=${encodeURIComponent(zone)}; path=/; max-age=2592000; samesite=lax${secure}`;
     // Cookies can be blocked; refreshing then would only repeat on every visit.
     const stuck = document.cookie
       .split("; ")
