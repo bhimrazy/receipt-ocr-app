@@ -100,10 +100,25 @@ on any host: site `1x00000000000000000000AA` with secret `1x00000000000000000000
 ### 5. Deploy
 
 **Vercel.** `.github/workflows/production.yml` runs after CI passes on a push to `main`: it migrates staging, then
-production, then deploys. If either migration fails, nothing is deployed. It needs these secrets in the repository's
-`vercel` environment: `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`, plus the two database environments in
-[Migrations in CI](#migrations-in-ci). Pull requests get a preview deploy from `.github/workflows/preview.yml`. To run
-the whole pipeline by hand, run the **Vercel Production Deployment** workflow from the Actions tab on `main`.
+production, then deploys. If either migration fails, nothing is deployed. Pull requests get a preview deploy from
+`.github/workflows/preview.yml`. To run the whole pipeline by hand, run the **Vercel Production Deployment** workflow
+from the Actions tab on `main`.
+
+The two Vercel workflows use separate GitHub environments, each holding the same three secrets (`VERCEL_TOKEN`,
+`VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`):
+
+| Environment      | Used by          | Branch policy             | Notes                                                       |
+| ---------------- | ---------------- | ------------------------- | ----------------------------------------------------------- |
+| `vercel`         | `production.yml` | `main` only (recommended) | Consider a required reviewer: every production deploy waits |
+| `vercel-preview` | `preview.yml`    | None (every PR)           | Kept apart so a reviewer on `vercel` never blocks previews  |
+
+**Every production secret is stored as Vercel _Sensitive_.** Sensitive values can't be read back, so `vercel pull` in
+CI gets empty or placeholder values for them and the build must not depend on them: `lib/env.ts` treats a malformed
+runtime-only secret as unset during `next build` and refuses it only when the server starts. This is also what limits
+the Vercel token: it reaches same-repository PR runs (preview.yml), and while it can deploy, it can't read production
+secrets. Mark any new production secret Sensitive when you add it. A required reviewer on `vercel` plus its `main`-only
+policy keeps PR runs from using that environment at all; the token itself stays account-wide, so treat it like a
+production credential and rotate it if a PR workflow might have leaked it.
 
 **Docker.** Build `docker/Dockerfile.prod`, run migrations once with the `builder` stage
 (`bun run db:migrate`, as the `migrate` service in `docker-compose.yml` does), then start the image with the
@@ -119,19 +134,32 @@ CI passes on main → migrate staging-db → migrate production-db → deploy pr
 ```
 
 Each step waits for the one before it, so a migration that fails on staging never reaches production, and a failed
-migration never ships code that needs it. One migration runs per database at a time (`concurrency`), across the
-pipeline and manual runs. The URL isn't printed: GitHub masks the secret, and `drizzle-kit` runs without `--verbose`.
+migration never ships code that needs it. `drizzle-kit migrate` applies all pending files in **one transaction**, so a
+failed run leaves that database exactly as it was. The job fails, rather than skips, when run from any ref but `main`.
+The URL isn't printed: GitHub masks the secret, the check step also masks the decoded password, and `drizzle-kit`
+runs without `--verbose`.
 
-Create these once, before merging anything that relies on them (GitHub: Settings → Environments → New environment):
+One migration runs per database at a time (`concurrency: db-migrate-<environment>`, shared by the pipeline and manual
+runs, never cancelled while running). GitHub keeps only one _pending_ run per group, so starting a manual run while a
+pipeline migration is waiting cancels the waiting one, and that pipeline run's deploy is skipped. Re-run it afterwards.
+
+Set these up in this order, before merging anything that relies on them (GitHub: Settings → Environments → New
+environment):
+
+1. **Create the environments with the branch policy first:** `staging-db` and `production-db`, each with
+   Deployment branches → Selected branches → `main` only. Adding a secret to an environment without that policy lets
+   any branch's workflow read it.
+2. **Then add the secrets:** `DIRECT_URL` in each.
+3. **Then merge.**
 
 | Environment     | Branch policy                                                | Secret                                                 |
 | --------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
-| `staging-db`    | Deployment branches: selected branches, `main` only          | `DIRECT_URL`: `receipt-ocr-staging` session pooler URL |
-| `production-db` | Same; consider a required reviewer to approve each migration | `DIRECT_URL`: `receipt-ocr` session pooler URL         |
+| `staging-db`    | `main` only                                                  | `DIRECT_URL`: `receipt-ocr-staging` session pooler URL |
+| `production-db` | `main` only; consider a required reviewer for each migration | `DIRECT_URL`: `receipt-ocr` session pooler URL         |
 
-If an environment is missing, GitHub creates an empty one on the first run; the job then fails at "Check the secret
-is set" and the deploy doesn't run. With a required reviewer on `production-db`, every deploy waits for that approval,
-including releases without a new migration.
+If an environment is missing, GitHub creates an empty one, with no branch policy, on the first run; the job then fails
+at "Check the secret is set" and the deploy doesn't run. With a required reviewer on `production-db`, every deploy
+waits for that approval, including releases without a new migration.
 
 To migrate one database by hand (to retry after a fix, or to bring staging up to date), run **Database Migration**
 from the Actions tab on `main` and choose `staging-db` or `production-db`.
@@ -143,20 +171,27 @@ from the Actions tab on `main` and choose `staging-db` or `production-db`.
 - **Previews:** set the Vercel project's **Preview** variables to staging: `DATABASE_URL` (staging transaction
   pooler), separate storage bucket or prefix, and a different `BETTER_AUTH_SECRET` from production. Leave
   `BETTER_AUTH_URL` unset: on a preview (`VERCEL_ENV=preview`) the app uses `https://$VERCEL_BRANCH_URL`, or
-  `https://$VERCEL_URL` when there is no branch alias, and trusts both hosts. Sign-in, invite, verification and reset
-  links then point at the preview, never at production. Production ignores both variables and always uses
-  `BETTER_AUTH_URL`.
+  `https://$VERCEL_URL` when there is no branch alias. Sign-in, invite, verification and reset links then point at the
+  preview, never at production. The preview's own hosts are trusted on a preview even when `BETTER_AUTH_URL` is set
+  there (it then only changes the canonical origin and email links). Production ignores both variables and always
+  uses exactly `BETTER_AUTH_URL`.
+- **Protect previews:** turn on Vercel Deployment Protection (Project → Settings → Deployment Protection, Vercel
+  Authentication for preview deployments) so only your team can open them. They hold a working sign-in against the
+  staging database.
 - **Previews never run migrations.** A PR that adds a migration has no tables on staging until it merges and the
   pipeline migrates staging, so pages that touch the new schema fail on that PR's preview. Test those against the
   local compose stack (`scripts/test.sh`), which applies every migration to a fresh database.
-- **Email:** with `RESEND_API_KEY` and `EMAIL_FROM` set for Preview, previews send real mail with preview links. Without
-  them, set `AUTH_REQUIRE_EMAIL_VERIFICATION=false` for Preview, or email sign-up can't complete.
+- **Email:** keep verification on. Give Preview its own `RESEND_API_KEY` and `EMAIL_FROM` (a separate key, and
+  Resend's test addresses such as `delivered@resend.dev` for throwaway accounts); previews then send links to the
+  preview. Without a mailer, email sign-up can't complete on a preview.
 - **Google and GitHub sign-in** need each preview host registered as a callback URL, which the random hosts make
   impractical. Leave the OAuth variables unset for Preview so the buttons are hidden, and use email and password.
 - **Turnstile:** tokens must come from one of the preview's hosts. Use Cloudflare's test keys for Preview, or leave
   Turnstile off there.
 - **Site URL:** `NEXT_PUBLIC_SITE_URL` only sets canonical links, the sitemap and social cards. Setting the production
-  URL for Preview is fine (Vercel marks preview deployments `noindex`); left unset, previews omit canonical links.
+  URL for Preview is fine: Vercel sends `X-Robots-Tag: noindex` on its generated preview URLs (`*.vercel.app`). That
+  header isn't added for a custom domain assigned to a branch, so don't give previews one without adding your own
+  noindex. Left unset, previews omit canonical links.
 
 ### 6. First admin
 

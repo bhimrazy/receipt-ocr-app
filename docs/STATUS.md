@@ -39,10 +39,19 @@ Steps are in [deployment.md](deployment.md).
 - Production deploys automatically: after CI passes on a push to `main`, `production.yml` migrates staging, then
   production, then deploys (once `ci/db-migrations` lands; until then it deploys without migrating). Manual runs are
   allowed only from `main`. Production and staging are both at migration `0010`.
-- Before `ci/db-migrations` merges: create GitHub environments `staging-db` and `production-db` (Settings →
-  Environments, deployment branches `main` only), add a `DIRECT_URL` secret (Supabase session pooler, port 5432) to
-  each, and consider a required reviewer on `production-db`. Then point Vercel's Preview variables at
-  `receipt-ocr-staging` and leave `BETTER_AUTH_URL` unset there ([deployment.md](deployment.md#staging-and-previews)).
+- Before `ci/db-migrations` merges, in this order (GitHub: Settings → Environments):
+  1. Create `staging-db` and `production-db` with deployment branches `main` only, **before** adding any secret.
+  2. Add `DIRECT_URL` (Supabase session pooler, port 5432) to each. Consider a required reviewer on `production-db`.
+  3. Create `vercel-preview` (no branch policy; previews run on every PR) with the same `VERCEL_TOKEN`,
+     `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as `vercel`.
+  4. Point Vercel's Preview variables at `receipt-ocr-staging`, leave `BETTER_AUTH_URL` unset there and turn on
+     Deployment Protection for previews ([deployment.md](deployment.md#staging-and-previews)). Then merge.
+- `vercel` environment (review P2-1): it has no branch policy and its token reaches same-repo PR runs. Mitigations:
+  every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and previews now use
+  `vercel-preview`, so `vercel` can get a `main`-only policy and a required reviewer for production deploys
+  (recommended). The token is still account-wide: rotate it if a PR workflow could have leaked it.
+- Keep every new production secret Sensitive in Vercel. The build tolerates their placeholders (fix in
+  `ci/db-migrations`); `BETTER_AUTH_SECRETS` was removed from Vercel as a stopgap and can go back once it lands.
 - Set `OCR_DAILY_CAP` in production as a spend guard.
 - Vercel env: `NEXT_PUBLIC_SITE_URL`, `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`; recommended
   `BETTER_AUTH_SECRETS=1:<current BETTER_AUTH_SECRET>`.

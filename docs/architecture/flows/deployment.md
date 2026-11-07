@@ -37,10 +37,10 @@ sequenceDiagram
   audit; `checks` runs typecheck, unit tests and build; `e2e` starts Postgres and RustFS as services, applies every
   migration to an empty database, runs the core and web integration suites, builds, and runs Playwright with the
   fixture OCR provider.
-- **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) use the Vercel project's preview environment,
+- **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) run in the GitHub environment `vercel-preview` (production uses `vercel`) and use the Vercel project's preview environment,
   which points at the staging database. They never migrate it, so a PR's own migration isn't there until it merges.
   The app's origin on a preview is its own host (`VERCEL_BRANCH_URL`, else `VERCEL_URL`) unless `BETTER_AUTH_URL` is
-  set ([`lib/env.ts`](../../../apps/web/lib/env.ts)). Dependabot PRs are skipped because they get no secrets.
+  set, and both preview hosts stay trusted either way ([`lib/env.ts`](../../../apps/web/lib/env.ts)). Dependabot PRs are skipped because they get no secrets.
 - **Production** ([`production.yml`](../../../.github/workflows/production.yml)) runs only after CI succeeded on a
   push to `main`, or when started by hand from `main` (a manual run on another branch is skipped). It runs one at a
   time (`cancel-in-progress: false`), migrates and builds the commit CI tested rather than whatever `main` points at
@@ -53,8 +53,10 @@ sequenceDiagram
 [`db-migrate.yml`](../../../.github/workflows/db-migrate.yml) is a reusable workflow: given a GitHub environment
 (`staging-db` or `production-db`, both limited to `main`), it checks out the commit, installs with the frozen
 lockfile and runs `bun run db:migrate` with that environment's `DIRECT_URL` secret. Its job-level `concurrency`
-group (`db-migrate-<environment>`, never cancelled) keeps two runs off the same database, whether they come from the
-pipeline or from a manual **Database Migration** run, which is the recovery path
+group (`db-migrate-<environment>`, never cancelled while running; a newer queued run replaces a waiting one) keeps
+two runs off the same database, whether they come from the
+pipeline or from a manual **Database Migration** run, which is the recovery path. `drizzle-kit` applies all pending
+files in one transaction, so a failed run changes nothing
 ([runbook](../../runbook.md#migration-failed-in-ci)).
 
 ```mermaid

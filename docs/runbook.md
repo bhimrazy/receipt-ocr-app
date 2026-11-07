@@ -135,10 +135,15 @@ The **Vercel Production Deployment** run shows a red `migrate-staging` or `migra
 `deploy-production` was skipped. Production still runs the previous code. If staging failed, production's schema
 wasn't touched; if production failed, staging already has the migration.
 
-1. Open the failed job's **Apply migrations** step and read the Postgres error. "DIRECT_URL is not set" means the
-   environment or its secret is missing (Settings → Environments; see deployment.md, Migrations in CI).
-2. Check what was applied. `drizzle-kit` runs each migration file in a transaction, so a failed file leaves no partial
-   change, but earlier files in the same run stay applied. In the Supabase SQL editor:
+1. Open the failed job and find the failing step.
+   - **Require main** failed: the run wasn't started from `main`. Start it again from `main`.
+   - **Check the secret is set** failed: the environment or its `DIRECT_URL` secret is missing or malformed
+     (Settings → Environments; see deployment.md, Migrations in CI). The message never includes the URL.
+   - **Apply migrations** failed: read the Postgres error. If the log shows only the `drizzle-kit` spinner and
+     `exit code 1` with no error, it couldn't connect: check the database is up and not paused, the session pooler
+     (port 5432) is reachable, and the password in `DIRECT_URL` is current.
+2. Check what was applied. `drizzle-kit migrate` applies all pending files in **one transaction**, so a failed run
+   rolls back the whole run: that database is exactly as it was before. In the Supabase SQL editor:
 
    ```sql
    SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at DESC LIMIT 5;
@@ -146,13 +151,17 @@ wasn't touched; if production failed, staging already has the migration.
 
 3. Fix the cause:
    - **Connection or timeout** (database paused, pooler down, password rotated): fix it, then go to step 4.
-   - **The migration itself is wrong** (a constraint existing rows break, a lock timeout): don't edit an applied
-     file. Open a PR that changes the unapplied migration, or adds a new one that repairs it, and merge it. The
-     merge runs the whole pipeline again.
+   - **The migration itself is wrong** (a constraint existing rows break, a lock timeout): open a PR that fixes it
+     and merge it; the merge runs the whole pipeline again. If staging already applied the file (only production
+     failed), don't edit it, because staging would never re-run it: add a new migration that works on both instead.
    - **Data damaged:** restore the backup taken before the merge (deployment.md, Every release, step 3).
 4. Retry: Actions → **Database Migration** → Run workflow on `main`, choosing `staging-db` or `production-db`. Then
    finish the release by re-running the failed **Vercel Production Deployment** run (Re-run failed jobs), or run that
    workflow by hand on `main`; it migrates both databases again (a no-op when up to date) and deploys.
+
+Don't start a manual migration while a pipeline migration is waiting for the same database (for example on a
+required reviewer): GitHub keeps one pending run per concurrency group, so the manual run cancels the waiting one and
+that pipeline's deploy is skipped. If it happens, re-run the pipeline afterwards.
 
 If staging and production have drifted (staging migrated, production not), the next pipeline run catches production
 up. Don't run `db:migrate` from a laptop against production unless Actions is down.
@@ -196,8 +205,8 @@ them once a year, and at once when someone with access leaves.
 | `RESEND_API_KEY`                                                                                                         | Vercel / container                                                                                | Resend, API Keys: create a sending key, deploy, revoke the old one                                               | Account emails until redeployed                                                                |
 | `GOOGLE_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | Google Cloud Console, Credentials, the OAuth client: add a secret, deploy, disable the old one                   | Google sign-ins in progress during the switch                                                  |
 | `GITHUB_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | GitHub, Developer settings, OAuth Apps: generate a new secret, deploy, delete the old one                        | GitHub sign-ins in progress during the switch                                                  |
-| `VERCEL_TOKEN`                                                                                                           | GitHub Actions secret                                                                             | Vercel, Account settings, Tokens: create a token, update the repository secret, delete the old token             | Deploys from Actions until updated                                                             |
-| `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                                                     | GitHub Actions secret                                                                             | Identifiers, not credentials; change only when the project moves                                                 | Nothing                                                                                        |
+| `VERCEL_TOKEN`                                                                                                           | GitHub environments `vercel` and `vercel-preview`                                                 | Vercel, Account settings, Tokens: create a token, update it in both environments, delete the old token           | Deploys from Actions until updated                                                             |
+| `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                                                     | GitHub environments `vercel` and `vercel-preview`                                                 | Identifiers, not credentials; change only when the project moves                                                 | Nothing                                                                                        |
 | `TURNSTILE_SECRET_KEY` (site key `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is inlined at build time: changing it needs a rebuild) | Vercel / container                                                                                | Cloudflare, Turnstile, the widget: rotate the secret key, deploy; rebuild if the site key changed                | Protected forms until redeployed                                                               |
 
 Not secrets, but worth checking after a leak: `ADMIN_EMAILS` (who becomes admin on sign-up) and `SUPPORT_EMAIL`.
