@@ -59,7 +59,7 @@ sequenceDiagram
   push to `main` from this repository, or when started by hand from `main` (a manual run on another branch is
   skipped). It runs one at a time (`cancel-in-progress: false`) and builds the commit CI tested rather than whatever
   `main` points at by then. Its `gate` job skips the automatic deploy when `apps/web/drizzle/` differs from the
-  commit production runs (found with `last-deployed-sha.sh`: the `commit` from the live `/api/health`; the gate skips if it can't be read; no git tag), or that run can't be found; it also skips when no file that ships changed since that commit
+  commit production runs (found with `last-deployed-sha.sh`: the `commit` from the live `/api/health`; the gate skips if it can't be read; no git tag); it also skips when no file that ships changed since that commit
   (`shipped-files.sh` ignores docs, Markdown, tests, benchmarks, repo scripts and CI config, but counts the Vercel CLI
   lockfile); a manual run deploys only if CI passed on its commit and the newest
   successful `production-db` migration run had the same `apps/web/drizzle/`.
