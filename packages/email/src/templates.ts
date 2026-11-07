@@ -98,3 +98,60 @@ export function invitationEmail(params: {
     text: `${inviterEmail} invited you to join the "${organizationName}" workspace on ${BRAND}.\n\nAccept (expires in 7 days):\n${url}`,
   };
 }
+
+const SECURITY_FOOTER =
+  "If this wasn't you, reset your password now and contact support by replying to this email.";
+
+/** The step-up code for users without a second factor. The code is never in the subject. */
+export function stepUpCodeEmail(code: string): EmailContent {
+  const safe = escapeHtml(code);
+  return {
+    subject: `Your ${BRAND} verification code`,
+    html: layout(
+      "Confirm it's you",
+      `<p style='margin:0 0 16px'>Enter this code to finish what you started in ${BRAND}. It expires in 10 minutes and works once.</p>
+       <p style="margin:0 0 16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;letter-spacing:0.2em;color:#e7e7ea">${safe}</p>
+       <p style='margin:0'>Never share this code. We will never ask you for it. If you didn't ask for it, someone may know your password: change it.</p>`,
+    ),
+    text: `Your ${BRAND} verification code: ${code}\n\nIt expires in 10 minutes and works once. Never share it. If you didn't ask for it, change your password.`,
+  };
+}
+
+export function twoFactorEnabledEmail(): EmailContent {
+  return {
+    subject: `Two-step sign-in is on for your ${BRAND} account`,
+    html: layout(
+      "Two-step sign-in is on",
+      `<p style='margin:0 0 16px'>An authenticator app was added to your account. Signing in with your password now also asks for a code from that app.</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
+    ),
+    text: `An authenticator app was added to your ${BRAND} account. Signing in with your password now also asks for a code from it.\n\n${SECURITY_FOOTER}`,
+  };
+}
+
+/** Turned off by the user, or reset by an administrator (who also signed them out everywhere). */
+export function twoFactorDisabledEmail({ byAdmin }: { byAdmin: boolean }): EmailContent {
+  const what = byAdmin
+    ? "An administrator reset two-step sign-in on your account, usually because you asked for help after losing your authenticator. You've been signed out everywhere; sign in again and turn it back on in Settings → Security."
+    : "Two-step sign-in was turned off for your account. Signing in now only needs your password.";
+  return {
+    subject: byAdmin
+      ? `Two-step sign-in was reset on your ${BRAND} account`
+      : `Two-step sign-in is off for your ${BRAND} account`,
+    html: layout(
+      byAdmin ? "Two-step sign-in was reset" : "Two-step sign-in is off",
+      `<p style='margin:0 0 16px'>${escapeHtml(what)}</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
+    ),
+    text: `${what}\n\n${SECURITY_FOOTER}`,
+  };
+}
+
+export function backupCodesRegeneratedEmail(): EmailContent {
+  return {
+    subject: `New backup codes for your ${BRAND} account`,
+    html: layout(
+      "New backup codes",
+      `<p style='margin:0 0 16px'>New backup codes were created for your account. The old ones no longer work.</p><p style='margin:0'>${SECURITY_FOOTER}</p>`,
+    ),
+    text: `New backup codes were created for your ${BRAND} account. The old ones no longer work.\n\n${SECURITY_FOOTER}`,
+  };
+}

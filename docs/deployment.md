@@ -79,6 +79,7 @@ Set these in Vercel (Project → Settings → Environment Variables, Production)
 | `TURNSTILE_SECRET_KEY`                     | No                | Turnstile secret key. Server only.                                                                                                                                                                   |
 | `NEXT_PUBLIC_GA_MEASUREMENT_ID`            | No                | GA4 id (`G-…`): cookie banner, then GA after consent; see [Analytics and cookie consent](#analytics-and-cookie-consent). Build time; an invalid value leaves GA off.                                 |
 | `AUTH_REQUIRE_EMAIL_VERIFICATION`          | No                | Defaults to `true` in production. Set `false` only for tests.                                                                                                                                        |
+| `ADMIN_MFA_ENFORCE`                        | No                | Defaults to on in production: admins need two-step sign-in. `false` is the emergency off switch (see [Admin locked out](#admin-locked-out-of-two-step-sign-in)).                                     |
 | `OCR_PROVIDER`                             | No                | `fixture` returns canned results. Tests only.                                                                                                                                                        |
 
 ### Bot protection (Turnstile)
@@ -333,6 +334,23 @@ To rotate:
 
 Changing the current version signs everyone out. Losing every secret makes stored OAuth tokens unreadable, so users
 have to sign in with their provider again.
+
+**Two-step sign-in secrets are sealed with these keys too, and never re-sealed.** Keep every version listed for as long
+as any `two_factor` row was written under it: removing one makes those authenticators unreadable, and their users can
+then only sign in after an admin reset. To check what is still in use:
+`select split_part(secret, '$', 3) as version, count(*) from two_factor group by 1;` (rows without a `$ba$` prefix use
+the legacy `BETTER_AUTH_SECRET`). Emailed step-up codes are keyed by the current secret, so a rotation only invalidates
+codes sent in the last 10 minutes.
+
+### Admin locked out of two-step sign-in
+
+- **Another admin exists:** they open Admin → Users → the admin → Reset 2FA (after checking it is really them). The
+  locked-out admin signs in with their password and enrols again.
+- **Only admin, lost the authenticator and the backup codes:** in the Supabase SQL editor (production needs the
+  owner's go), `delete from two_factor where user_id = '<id>'; update "user" set two_factor_enabled = false where id = '<id>';`.
+  They sign in with their password and enrol again in Settings → Security; enrolling needs no admin access.
+- **Emergency, enforcement itself is in the way** (a bug, not a lost phone): `ADMIN_MFA_ENFORCE=false` in Vercel and
+  redeploy. Admin changes still need step-up, so the admin still needs a factor for those.
 
 ## Release notes
 
