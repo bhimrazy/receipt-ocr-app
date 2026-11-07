@@ -215,9 +215,46 @@ describe("checkProvider groq", () => {
   });
 });
 
+describe("checkProvider openai", () => {
+  const MODELS = ["openai:gpt-6-luna"];
+  const list = (...ids: string[]) => json({ object: "list", data: ids.map((id) => ({ id })) });
+
+  it("sends the key as a bearer token, and is ok when the model is listed", async () => {
+    const f = stub(list("gpt-6-luna", "other"));
+    expect(
+      (await checkProvider("openai", { apiKey: KEY, models: MODELS, fetch: f.fetch })).status,
+    ).toBe("ok");
+    expect(String(f.mock.calls[0]![0])).toBe("https://api.openai.com/v1/models");
+    expect(new Headers(f.mock.calls[0]![1]?.headers).get("authorization")).toBe(`Bearer ${KEY}`);
+  });
+
+  it("is model-not-available when the key cannot see the model", async () => {
+    const f = stub(list("gpt-6.1-terra"));
+    expect(
+      (await checkProvider("openai", { apiKey: KEY, models: MODELS, fetch: f.fetch })).status,
+    ).toBe("model-not-available");
+  });
+
+  it.each([
+    [401, {}, "invalid-key"],
+    [429, { error: { code: "rate_limit_exceeded" } }, "rate-limited"],
+    [
+      429,
+      { error: { type: "insufficient_quota", code: "insufficient_quota" } },
+      "no-billing-or-quota",
+    ],
+    [500, {}, "unreachable"],
+  ])("maps HTTP %i %j to %s", async (status, body, expected) => {
+    const f = stub(json(body, status));
+    expect(
+      (await checkProvider("openai", { apiKey: KEY, models: MODELS, fetch: f.fetch })).status,
+    ).toBe(expected);
+  });
+});
+
 describe("checkProvider results", () => {
   it("never contain the key, whatever the provider says", async () => {
-    for (const id of ["google", "anthropic", "groq"] as const) {
+    for (const id of ["google", "anthropic", "groq", "openai"] as const) {
       for (const status of [200, 400, 401, 402, 429, 500]) {
         const f = stub(
           json({ error: { message: `key ${KEY} rejected` }, models: [], data: [] }, status),

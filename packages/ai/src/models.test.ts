@@ -22,6 +22,17 @@ describe("costOf", () => {
     expect(cost).toEqual({ microUsd: 3375, priceFrom: "2026-11-06" });
   });
 
+  it("prices OpenAI's Luna and Terra with cached input, and the long-context rate over 272K", () => {
+    const u = usage({ inputTokens: 3000, cachedInputTokens: 1000, outputTokens: 400 });
+    // (3000 - 1000) x 0.10 + 1000 x 0.01 + 400 x 0.50 = 200 + 10 + 200
+    expect(costOf("openai:gpt-6-luna", u, day("2026-11-07")).microUsd).toBe(410);
+    // 2000 x 1 + 1000 x 0.05 + 400 x 5 = 2000 + 50 + 2000
+    expect(costOf("openai:gpt-6.1-terra", u, day("2026-11-07")).microUsd).toBe(4050);
+    const long = usage({ inputTokens: 300_000, outputTokens: 1000 });
+    // 300000 x 0.2 + 1000 x 0.75
+    expect(costOf("openai:gpt-6-luna", long, day("2026-11-07")).microUsd).toBe(60_750);
+  });
+
   it("does not add reasoning on top of output, which already includes it", () => {
     const without = costOf(
       "google:gemini-3.8-flash",

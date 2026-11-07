@@ -440,6 +440,8 @@ describe("secret denylist", () => {
     gemini: "AIza" + rep("a", 35),
     anthropic: "sk-ant-api03-" + rep("x", 40),
     groq: "gsk_" + rep("a", 52),
+    openaiProject: "sk-proj-" + rep("A1", 30) + "_-" + rep("z", 8),
+    openai: "sk-" + rep("Ab1", 16),
     resend: "re_" + rep("A1", 14),
     hex32: rep("ab", 16),
     hex64: rep("0f", 32),

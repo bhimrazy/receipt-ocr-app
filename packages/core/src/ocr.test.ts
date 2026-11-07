@@ -66,7 +66,7 @@ describe("receiptReaders", () => {
   const claude = "anthropic:claude-sonnet-5-5" as const;
   const flash = "google:gemini-3.8-flash" as const;
   const lite = "google:gemini-3.5-flash-lite" as const;
-  const keys = { google: true, anthropic: true, groq: false, fixture: false };
+  const keys = { google: true, anthropic: true, groq: false, openai: false, fixture: false };
 
   it("lists friendly labels in chain order, skipping disabled steps and missing keys", () => {
     const chain = [step(claude), step(flash, 30_000, false), step(lite)];
@@ -78,7 +78,10 @@ describe("receiptReaders", () => {
       { label: "Gemini 3.5 Flash-Lite", provider: "google" },
     ]);
     expect(
-      receiptReaders({ chain }, { google: false, anthropic: false, groq: false, fixture: false }),
+      receiptReaders(
+        { chain },
+        { google: false, anthropic: false, groq: false, openai: false, fixture: false },
+      ),
     ).toEqual([]);
   });
 
@@ -92,17 +95,22 @@ describe("activeChain", () => {
   it("keeps the saved order and skips disabled steps and providers without a key", () => {
     const chain = [step(B), step(A, 30_000, false), step(F), step("google:model-c")];
     expect(
-      activeChain({ chain }, { google: true, anthropic: false, groq: false, fixture: false }).map(
-        (s) => s.model,
-      ),
+      activeChain(
+        { chain },
+        { google: true, anthropic: false, groq: false, openai: false, fixture: false },
+      ).map((s) => s.model),
     ).toEqual([B, "google:model-c"]);
     expect(
-      activeChain({ chain }, { google: false, anthropic: false, groq: false, fixture: true }).map(
-        (s) => s.model,
-      ),
+      activeChain(
+        { chain },
+        { google: false, anthropic: false, groq: false, openai: false, fixture: true },
+      ).map((s) => s.model),
     ).toEqual([F]);
     expect(
-      activeChain({ chain }, { google: false, anthropic: false, groq: false, fixture: false }),
+      activeChain(
+        { chain },
+        { google: false, anthropic: false, groq: false, openai: false, fixture: false },
+      ),
     ).toEqual([]);
   });
 
@@ -110,7 +118,9 @@ describe("activeChain", () => {
     const claude = "anthropic:claude-haiku-5-5" as const;
     const chain = [step(A), step(claude)];
     const only = (available: { google: boolean; anthropic: boolean }) =>
-      activeChain({ chain }, { ...available, groq: false, fixture: false }).map((s) => s.model);
+      activeChain({ chain }, { ...available, groq: false, openai: false, fixture: false }).map(
+        (s) => s.model,
+      );
     expect(only({ google: true, anthropic: true })).toEqual([A, claude]);
     expect(only({ google: false, anthropic: true })).toEqual([claude]);
     expect(only({ google: true, anthropic: false })).toEqual([A]);

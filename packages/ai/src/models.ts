@@ -4,7 +4,7 @@
  * with its prices, to offer another model.
  */
 
-export type OcrProviderId = "google" | "anthropic" | "groq" | "fixture";
+export type OcrProviderId = "google" | "anthropic" | "groq" | "openai" | "fixture";
 
 export interface OcrProvider {
   id: OcrProviderId;
@@ -53,6 +53,7 @@ export const OCR_PROVIDERS: readonly OcrProvider[] = [
   { id: "google", label: "Google Gemini", keyEnv: "GOOGLE_GENERATIVE_AI_API_KEY" },
   { id: "anthropic", label: "Anthropic Claude", keyEnv: "ANTHROPIC_API_KEY" },
   { id: "groq", label: "Groq", keyEnv: "GROQ_API_KEY" },
+  { id: "openai", label: "OpenAI", keyEnv: "OPENAI_API_KEY" },
   // Deterministic offline stand-in; only offered when OCR_PROVIDER=fixture (tests, local).
   { id: "fixture", label: "Offline fixture", keyEnv: null },
 ];
@@ -127,6 +128,57 @@ export const OCR_MODELS: readonly OcrModel[] = [
     // dropped from the request. The reply is still checked against the full schema.
     schemaMode: "no-bounds",
     prices: [{ from: "2026-11-07", input: 0.8, output: 4 }],
+  },
+  // OpenAI: https://developers.openai.com/api/docs/models (checked 2026-11-07). Both take image
+  // input, structured outputs and PDFs on the Responses API. Standard rates; prompts over 272K
+  // input tokens cost 2x input and cache, 1.5x output (a receipt never gets near that).
+  // Strict structured outputs documents `pattern`, `format`, `minimum`/`maximum` and
+  // `minItems`/`maxItems` as supported, and lists length bounds as unsupported only for fine-tuned
+  // models; that is unproven here, so every bound is dropped from the request and the reply is
+  // still checked against the full schema. Loosen to "full" after a live check.
+  {
+    id: "openai:gpt-6-luna",
+    provider: "openai",
+    label: "GPT-6 Luna (OpenAI)",
+    schemaMode: "no-bounds",
+    prices: [
+      {
+        from: "2026-11-07",
+        input: 0.1,
+        cachedInput: 0.01,
+        cacheWrite: 0.125,
+        output: 0.5,
+        longContext: {
+          aboveInputTokens: 272_000,
+          input: 0.2,
+          cachedInput: 0.02,
+          cacheWrite: 0.25,
+          output: 0.75,
+        },
+      },
+    ],
+  },
+  {
+    id: "openai:gpt-6.1-terra",
+    provider: "openai",
+    label: "GPT-6.1 Terra (OpenAI)",
+    schemaMode: "no-bounds",
+    prices: [
+      {
+        from: "2026-11-07",
+        input: 1,
+        cachedInput: 0.05,
+        cacheWrite: 1.25,
+        output: 5,
+        longContext: {
+          aboveInputTokens: 272_000,
+          input: 2,
+          cachedInput: 0.1,
+          cacheWrite: 2.5,
+          output: 7.5,
+        },
+      },
+    ],
   },
   {
     id: "fixture",

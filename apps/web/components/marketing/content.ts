@@ -80,7 +80,7 @@ export const faqs = [
   },
   {
     q: "Who can see my receipts?",
-    a: "Only you and the people you invite to your workspace. receiptOCR admins can access an account only to handle a support request. AI models from Google (Gemini) and Anthropic (Claude), and Groq if it is turned on, read the images to extract the data. You can delete any receipt, or your whole account, from Settings.",
+    a: "Only you and the people you invite to your workspace. receiptOCR admins can access an account only to handle a support request. AI models from Google (Gemini) and Anthropic (Claude), and Groq or OpenAI if one is turned on, read the images to extract the data. You can delete any receipt, or your whole account, from Settings.",
   },
   {
     q: "Can I get my data out?",
