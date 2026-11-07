@@ -84,6 +84,12 @@ describe("imageTokens", () => {
     expect(imageTokens("groq", 1000, 1000)).toBe(2048);
   });
 
+  it("counts OpenAI images as 32 px patches within a 2048 px side and 2,500 patches", () => {
+    expect(imageTokens("openai", 1024, 1024)).toBe(1024);
+    expect(imageTokens("openai", 4000, 3000)).toBeLessThanOrEqual(2500);
+    expect(imageTokens("openai", 4000, 3000)).toBeGreaterThan(2000);
+  });
+
   it("matches the Claude high-resolution examples in the vision docs", () => {
     expect(imageTokens("anthropic", 1000, 1000)).toBe(1296);
     expect(imageTokens("anthropic", 1920, 1080)).toBe(2691);

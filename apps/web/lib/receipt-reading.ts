@@ -17,6 +17,11 @@ export function readingSentence(readers: readonly Reader[]): string | null {
 
 /** Provider names once each, in first-use order, as the company users should look up in the policy. */
 export function providerNames(readers: readonly Reader[]): string[] {
-  const names: Record<string, string> = { google: "Google", anthropic: "Anthropic", groq: "Groq" };
+  const names: Record<string, string> = {
+    google: "Google",
+    anthropic: "Anthropic",
+    groq: "Groq",
+    openai: "OpenAI",
+  };
   return [...new Set(readers.map((r) => names[r.provider]).filter((n): n is string => !!n))];
 }

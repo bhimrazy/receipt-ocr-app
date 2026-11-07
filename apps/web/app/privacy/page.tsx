@@ -6,7 +6,7 @@ import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Privacy policy",
   description:
-    "What ReceiptOCR collects, who processes it (including Google Gemini, Anthropic Claude and, if enabled, Groq AI), how long it is kept and how to delete it.",
+    "What ReceiptOCR collects, who processes it (Gemini, Claude and, if enabled, Groq or OpenAI), how long it is kept and how to delete it.",
   path: "/privacy",
 });
 
@@ -50,6 +50,7 @@ export default function PrivacyPage() {
           body: [
             "Google (Gemini API) and Anthropic (Claude API): every receipt file you upload is sent to an AI model from one of these providers, which scans it and returns the extracted data. We choose the models and the order they are tried in, and we may change them. A file goes to the next provider only if the first can't scan it, for example because it is slow, busy or unavailable, declines the file, can't take its type or size, or returns an answer we can't use. If a scan is retried, the file may be sent again. Each provider handles the file under the terms of its paid API. Under those terms, neither provider uses your receipts to train its models, and each keeps a copy for a limited time only to check for misuse.",
             "Groq (GroqCloud API), only if we or your workspace turn it on: the receipt file is sent to a model Groq hosts, which scans it the same way. Groq doesn't keep the file or the result by default, but may log them for up to 30 days to keep the service reliable and to check for misuse, stored in the United States. On our own Groq account we turn on Groq's zero data retention setting, which stops that logging.",
+            "OpenAI (OpenAI API), only if we or your workspace turn it on: the receipt file is sent to a model OpenAI hosts, which scans it the same way. OpenAI doesn't use data sent to its API to train its models unless a customer opts in, and we don't. It may keep requests and responses for up to 30 days to check for abuse, unless the law requires longer. We ask OpenAI not to store the response for reuse. Zero data retention is available only with OpenAI's prior approval and is not part of this setup.",
             "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
             "An email delivery provider sends account emails such as password resets and invitations.",
             "Google and GitHub, only if you choose to sign in with them.",

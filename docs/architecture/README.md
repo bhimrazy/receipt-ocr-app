@@ -30,6 +30,7 @@ flowchart LR
   gemini[Google Gemini<br/>through the AI SDK]
   claude[Anthropic Claude<br/>optional, through the AI SDK]
   groq[Groq<br/>optional, through the AI SDK]
+  openai[OpenAI<br/>optional, through the AI SDK]
   resend[Resend<br/>transactional email]
   oauth[Google and GitHub<br/>OAuth]
 
@@ -51,6 +52,7 @@ flowchart LR
 | Google Gemini         | Reading the receipt into the extraction schema               | `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_MODEL`, Admin → Settings |
 | Anthropic Claude      | Optional OCR models an admin can add to the chain            | `ANTHROPIC_API_KEY`, Admin → Settings                            |
 | Groq                  | Optional OCR model (Qwen 3.8 27B, free tier) in the chain    | `GROQ_API_KEY`, Admin → Settings                                 |
+| OpenAI                | Optional OCR models (GPT-6 Luna, GPT-6.1 Terra) in the chain | `OPENAI_API_KEY`, Admin → Settings                               |
 | Resend                | Verification, password reset, invitation and support mail    | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`                  |
 | Google, GitHub OAuth  | Optional social sign-in                                      | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`       |
 | Google Analytics 4    | Optional visit counts on public pages, only after consent    | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))              |

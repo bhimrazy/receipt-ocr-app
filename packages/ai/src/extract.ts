@@ -1,6 +1,7 @@
 import { createAnthropic, type AnthropicLanguageModelOptions } from "@ai-sdk/anthropic";
 import { createGoogle } from "@ai-sdk/google";
 import { createGroq, type GroqLanguageModelOptions } from "@ai-sdk/groq";
+import { createOpenAI, type OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
 import {
   createProviderRegistry,
   generateText,
@@ -72,6 +73,7 @@ function buildRegistry(keys: ProviderKeys) {
     google: createGoogle({ apiKey: keys.google }),
     anthropic: createAnthropic({ apiKey: keys.anthropic }),
     groq: createGroq({ apiKey: keys.groq }),
+    openai: createOpenAI({ apiKey: keys.openai }),
   } satisfies Record<RegistryProviderId, unknown>);
 }
 
@@ -134,6 +136,34 @@ const GROQ_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image
  */
 const GROQ_MAX_IMAGE_BASE64_BYTES = 20_000_000;
 
+/**
+ * OpenAI request settings (Responses API, the provider's default).
+ * - `reasoningEffort: "none"`: reading a receipt is transcription, so no reasoning tokens are
+ *   billed. Both offered models accept it (Luna and Terra: none, low, medium, high, xhigh, max;
+ *   default medium). Not benchmarked against "low" yet; `bun run bench:ocr` can compare them.
+ * - `store: false`: the Responses API otherwise keeps the response as application state for 30
+ *   days (https://developers.openai.com/api/docs/guides/your-data). Nothing here reads it back.
+ * - Strict JSON schema (the provider's default); the model's `schemaMode` drops keywords it may refuse.
+ */
+const OPENAI_OPTIONS: OpenAILanguageModelResponsesOptions = {
+  reasoningEffort: "none",
+  store: false,
+  strictJsonSchema: true,
+};
+
+/** Image types OpenAI reads (GIF only when not animated, which is not checked here). */
+const OPENAI_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/**
+ * OpenAI's vision docs reject an image over 30,000 patches of 32 px
+ * (https://developers.openai.com/api/docs/guides/images-vision, checked 2026-11-07) and give no
+ * per-file byte cap. A rejection is a 400 that would read as bad-image and stop the chain.
+ */
+const OPENAI_MAX_IMAGE_PATCHES = 30_000;
+
+/** PDF input docs: each file under 50 MB, 50 MB combined (checked 2026-11-07). */
+const OPENAI_MAX_PDF_BYTES = 50_000_000;
+
 /** The model stopped on a safety refusal; whatever it returned is not an extraction. */
 export class RefusalError extends Error {
   override name = "RefusalError";
@@ -142,6 +172,7 @@ export class RefusalError extends Error {
 function providerOptionsFor(model: Exclude<ModelId, "fixture">): ProviderOptions | undefined {
   const [provider, ...rest] = model.split(":");
   if (provider === "groq") return { groq: GROQ_OPTIONS } satisfies ProviderOptions;
+  if (provider === "openai") return { openai: OPENAI_OPTIONS } satisfies ProviderOptions;
   if (provider !== "anthropic") return undefined;
   const options = ANTHROPIC_OPTIONS[rest.join(":")];
   return options ? ({ anthropic: options } satisfies ProviderOptions) : undefined;
@@ -158,6 +189,21 @@ function checkFile(model: Exclude<ModelId, "fixture">, file: ExtractReceiptInput
     if (!GROQ_IMAGE_TYPES.has(file.mediaType)) throw unsupported(`no ${file.mediaType}`);
     if (Math.ceil(file.data.byteLength / 3) * 4 > GROQ_MAX_IMAGE_BASE64_BYTES) {
       throw unsupported("image over 20 MB");
+    }
+    return;
+  }
+  if (model.startsWith("openai:")) {
+    if (file.mediaType === "application/pdf") {
+      if (file.data.byteLength > OPENAI_MAX_PDF_BYTES) throw unsupported("PDF over 50 MB");
+      return;
+    }
+    if (!OPENAI_IMAGE_TYPES.has(file.mediaType)) throw unsupported(`no ${file.mediaType}`);
+    const size = imageSize(file.data);
+    if (
+      size &&
+      Math.ceil(size.width / 32) * Math.ceil(size.height / 32) > OPENAI_MAX_IMAGE_PATCHES
+    ) {
+      throw unsupported(`image over ${OPENAI_MAX_IMAGE_PATCHES} patches`);
     }
     return;
   }

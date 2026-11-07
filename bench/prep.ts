@@ -128,6 +128,15 @@ export function imageTokens(provider: string, width: number | null, height: numb
   // Groq docs: each image counts as 2048 input tokens (qwen/qwen3.8-27b).
   if (provider === "groq") return 2048;
   if (width === null || height === null) return null;
+  // OpenAI patch models (high detail): 32 px patches, scaled down to a 2048 px side and 2,500
+  // patches (https://developers.openai.com/api/docs/guides/images-vision, checked 2026-11-07).
+  // The docs give no multiplier for the offered models, so this counts 1 token per patch.
+  if (provider === "openai") {
+    const patches = (s: number) => Math.ceil((width * s) / 32) * Math.ceil((height * s) / 32);
+    let scale = Math.min(1, 2048 / Math.max(width, height));
+    while (patches(scale) > 2500) scale *= 0.99;
+    return patches(scale);
+  }
   const tokens = (s: number) => Math.ceil((width * s) / 28) * Math.ceil((height * s) / 28);
   let scale = Math.min(1, 2576 / Math.max(width, height));
   while (tokens(scale) > 4784) scale *= 0.99;

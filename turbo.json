@@ -20,6 +20,7 @@
         "NEXT_OUTPUT",
         "NEXT_PUBLIC_*",
         "OCR_*",
+        "OPENAI_*",
         "RESEND_API_KEY",
         "S3_*",
         "SUPPORT_EMAIL",

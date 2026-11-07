@@ -11,7 +11,7 @@ It does not choose models, retry across models, enforce deadlines across a chain
 
 `checkProvider(providerId, { apiKey, models })` in [`check.ts`](../../packages/ai/src/check.ts) calls the provider's
 free model-list endpoint (Gemini `GET /v1beta/models` with `x-goog-api-key`, Anthropic `GET /v1/models` with
-`x-api-key`, Groq `GET /openai/v1/models` with a bearer token), so no tokens are spent. It returns a status only (`ok`, `invalid-key`, `no-billing-or-quota`,
+`x-api-key`, Groq `GET /openai/v1/models` and OpenAI `GET /v1/models`, each with a bearer token), so no tokens are spent. It returns a status only (`ok`, `invalid-key`, `no-billing-or-quota`,
 `rate-limited`, `unreachable`, `model-not-available`) and a latency; response bodies are read for keywords and
 dropped, because they can echo the key. The AI SDK providers expose no model-list call, hence plain `fetch` with a
 5 s timeout. Used by Admin → Settings → Connections.
@@ -74,6 +74,7 @@ flowchart LR
   sdk -- HTTPS --> gemini[Gemini API]
   sdk -- HTTPS --> claude[Anthropic Messages API]
   sdk -- HTTPS --> groq[Groq chat completions]
+  sdk -- HTTPS --> openai[OpenAI Responses API]
   sdk -- "valid object" --> ok([extraction, usage, model])
   fixture --> ok
   fixture -- "FIXTURE_FAIL" --> classify
@@ -83,16 +84,16 @@ flowchart LR
 
 Failure kinds and how they are decided ([`errors.ts`](../../packages/ai/src/errors.ts)):
 
-| Kind               | From                                                                                                                                 | Core falls back?    |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
-| `timeout`          | HTTP 408, `TimeoutError` or `AbortError`                                                                                             | Yes                 |
-| `rate-limited`     | HTTP 429                                                                                                                             | Yes                 |
-| `provider-error`   | HTTP 5xx (Anthropic 529 overloaded included), network errors, the fixture's simulated failure, anything unrecognised                 | Yes                 |
-| `not-configured`   | HTTP 401, 402 (Anthropic billing), 403, 404, missing key, unknown model or provider                                                  | Yes                 |
-| `refused`          | A `content-filter` finish (Claude's refusal, Gemini's safety stop), whether its text parses, is prose or is empty                    | Yes (job: dead now) |
-| `unsupported-file` | HTTP 413, or before any request: a type or size this model can't take (HEIC, a PDF on Groq, or an image over 10 MB base64 on Claude) | Yes (job: dead now) |
-| `invalid-output`   | No object, no content, schema or JSON parse failure (Groq `json_validate_failed`)                                                    | Yes                 |
-| `bad-image`        | Any other 4xx (400, 422): the provider refused the input                                                                             | No                  |
+| Kind               | From                                                                                                                                                                | Core falls back?    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `timeout`          | HTTP 408, `TimeoutError` or `AbortError`                                                                                                                            | Yes                 |
+| `rate-limited`     | HTTP 429                                                                                                                                                            | Yes                 |
+| `provider-error`   | HTTP 5xx (Anthropic 529 overloaded included), network errors, the fixture's simulated failure, anything unrecognised                                                | Yes                 |
+| `not-configured`   | HTTP 401, 402 (Anthropic billing), 403, 404, missing key, unknown model or provider                                                                                 | Yes                 |
+| `refused`          | A `content-filter` finish (Claude's refusal, Gemini's safety stop), whether its text parses, is prose or is empty                                                   | Yes (job: dead now) |
+| `unsupported-file` | HTTP 413, or before any request: a type or size this model can't take (HEIC, a PDF on Groq, an image over 10 MB base64 on Claude, or over 30,000 patches on OpenAI) | Yes (job: dead now) |
+| `invalid-output`   | No object, no content, schema or JSON parse failure (Groq `json_validate_failed`; an OpenAI 2xx the SDK cannot parse, such as a refusal)                            | Yes                 |
+| `bad-image`        | Any other 4xx (400, 422): the provider refused the input                                                                                                            | No                  |
 
 ## The prompt
 
@@ -226,12 +227,55 @@ API yet; the first benchmark is the check.
   cap (TPD, RPD) as `no-billing-or-quota`.
 - **Benchmark:** `GROQ_API_KEY=... bun run bench:ocr --models groq:qwen/qwen3.8-27b --concurrency 1`.
 
+## OpenAI
+
+Two models, not in the default chain: `openai:gpt-6-luna` ("GPT-6 Luna", cheap and fast) and `openai:gpt-6.1-terra`
+("GPT-6.1 Terra", stronger). An admin adds them in **Admin → Settings → OCR models** once `OPENAI_API_KEY` is set. It
+uses `@ai-sdk/openai` 4.0.106 (Vercel, `vercel/ai`, published 2026-10-30) over the Responses API, the provider's default.
+Facts below are from OpenAI's docs ([models](https://developers.openai.com/api/docs/models),
+[images and vision](https://developers.openai.com/api/docs/guides/images-vision),
+[PDF files](https://developers.openai.com/api/docs/guides/pdf-files),
+[structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs),
+[error codes](https://developers.openai.com/api/docs/guides/error-codes),
+[your data](https://developers.openai.com/api/docs/guides/your-data)), checked 2026-11-07. Nothing here has run
+against the real API yet; the first benchmark is the check.
+
+- **Which models and prices** (per MTok, standard): Luna $0.10 input / $0.01 cached / $0.50 output; Terra $1.00 /
+  $0.05 / $5.00. Both take text and image input, 1.05M context, 128K max output. Prompts over 272K input tokens cost
+  2x input and cache and 1.5x output, as `longContext` rows. Batch and Flex are half price (not used). `gpt-6.1-sol`
+  ($2 / $10) and `gpt-6-astra` ($10 / $50) are not offered: too dear for transcription.
+- **Reasoning:** `reasoning.effort: "none"` (`OPENAI_OPTIONS`). Luna and Terra accept `none`, `low`, `medium`, `high`,
+  `xhigh`, `max`; the default is `medium`. Receipt reading is transcription, so no reasoning tokens are billed.
+  "none" is not benchmarked against "low" yet; compare them before relying on it.
+- **Structured output:** `text.format` `json_schema` with `strict: true`. Strict mode wants every key in `required`
+  and `additionalProperties: false`, which the zod schema already gives. The docs list `pattern`, `format`,
+  `minimum`/`maximum` and `minItems`/`maxItems` as supported and length bounds as unsupported "for fine-tuned models
+  only", which is not proof for these models, so `schemaMode: "no-bounds"` sends none of them and the reply is
+  validated against the full zod schema. Loosen to `"full"` after a live check.
+- **Data:** `store: false`, so the response is not kept as application state (otherwise 30 days).
+- **Files:** JPEG, PNG, WebP and GIF (non-animated; not checked). The docs set no per-file byte cap on an image
+  (512 MB a request) but reject one over 30,000 patches of 32 px after processing; a larger one is skipped as
+  `unsupported-file` before any request (checked from the header). PDFs are accepted on vision-capable models through
+  the Responses API (`input_file`), up to 50 MB; the API reads both the text and the page images. HEIC is skipped.
+- **Errors** (body `{ error: { message, type, param, code } }`, read only when the request URL is `api.openai.com`):
+  429 `rate_limit_exceeded` / `slow_down` is `rate-limited` with `retry-after`, which makes the provider cool; a 429
+  with `insufficient_quota`, `credit_balance_exhausted` or a spend/usage-limit code is `not-configured` (waiting does
+  not help); 5xx (`server_is_overloaded` is 503) `provider-error`; 401/403/404 `not-configured`; 413 and 400
+  `context_length_exceeded` `unsupported-file`; any other 400 that doesn't name the image (a schema keyword, an effort
+  value) is `not-configured`; a 400 that names the image is `bad-image`. The SDK's Responses schema has no refusal
+  part, so a refusal is a 2xx it cannot parse; any 2xx parse failure is `invalid-output`, which falls to the next
+  model. The key check treats a 429 naming a quota as `no-billing-or-quota`.
+- **Retention (privacy policy):** not used for training unless opted in; abuse-monitoring logs up to 30 days;
+  zero data retention only with OpenAI's prior approval. Use a project key with a spend limit.
+- **Benchmark:** `OPENAI_API_KEY=... bun run bench:ocr --models openai:gpt-6-luna,openai:gpt-6.1-terra`. The dry run
+  counts one token per 32 px patch (the docs give no multiplier for these models).
+
 ## How to test it
 
 `bun run test` runs [`extract.test.ts`](../../packages/ai/src/extract.test.ts) (with a mock model through
 `extractWith`), [`extract.anthropic.test.ts`](../../packages/ai/src/extract.anthropic.test.ts) (the real Anthropic
 provider over a mocked `fetch`: the request body each Claude model gets, usage, refusal and HTTP error mapping),
-[`extract.groq.test.ts`](../../packages/ai/src/extract.groq.test.ts) (the same for Groq), [`errors.test.ts`](../../packages/ai/src/errors.test.ts),
+[`extract.groq.test.ts`](../../packages/ai/src/extract.groq.test.ts) and [`extract.openai.test.ts`](../../packages/ai/src/extract.openai.test.ts) (the same for Groq and OpenAI), [`errors.test.ts`](../../packages/ai/src/errors.test.ts),
 [`models.test.ts`](../../packages/ai/src/models.test.ts) and
 [`categories.test.ts`](../../packages/ai/src/categories.test.ts). None calls a provider. For real accuracy, latency
 and cost, use the [OCR benchmark](tooling.md#ocr-benchmark).

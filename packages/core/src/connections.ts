@@ -91,7 +91,7 @@ export const checkAiProviders = (
     return yield* Effect.forEach(
       providers,
       (provider): Effect.Effect<ConnectionRow> => {
-        const apiKey = keys[provider.id as "google" | "anthropic" | "groq"];
+        const apiKey = keys[provider.id as "google" | "anthropic" | "groq" | "openai"];
         const row = (status: ConnectionStatus, latencyMs: number | null): ConnectionRow => ({
           id: `ai:${provider.id}`,
           label: provider.label,
