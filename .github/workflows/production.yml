@@ -3,7 +3,7 @@ name: Vercel Production Deployment
 # Deploys main to production. Automatic after CI passes on a push to main, unless the release
 # changes apps/web/drizzle since the last production deploy: migrations run only by hand (Database
 # Migration workflow), so such a release waits for them and a manual run of this workflow. A manual
-# run from main always deploys. See docs/deployment.md, Every release.
+# run from main deploys once CI passed on its commit and production-db ran the same migrations. See docs/deployment.md, Every release.
 on:
   workflow_run:
     workflows: [CI]
@@ -30,6 +30,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
     outputs:
       deploy: ${{ steps.check.outputs.deploy }}
     steps:
@@ -45,15 +46,33 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           skip() {
             echo "deploy=false" >> "$GITHUB_OUTPUT"
             printf '### Production deploy skipped\n\n%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
             echo "::warning::$1"
           }
+          # A manual run refuses (red) rather than skips: someone is waiting on it.
+          refuse() {
+            printf '### Production deploy refused\n\n%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$1"
+            exit 1
+          }
           if [ "$EVENT" = "workflow_dispatch" ]; then
+            passed=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+              -f head_sha="$HEAD_SHA" -f event=push -f status=success --jq '.total_count') ||
+              refuse "Can't check CI for ${HEAD_SHA:0:12}."
+            [ "$passed" -gt 0 ] || refuse "CI hasn't passed on ${HEAD_SHA:0:12} (a push to main)."
+            migrated=$(.github/scripts/last-migrated-sha.sh production-db) ||
+              refuse "Can't find a successful production-db migration on main: run Database Migration for production-db first."
+            changed=$(git diff --name-only "$migrated" "$HEAD_SHA" -- apps/web/drizzle/) ||
+              refuse "Can't compare with the last production-db migration (${migrated:0:12})."
+            if [ -n "$changed" ]; then
+              refuse "main has migrations production hasn't run: run Database Migration for production-db first."
+            fi
             echo "deploy=true" >> "$GITHUB_OUTPUT"
-            echo "Manual run: deploying without the migration check (run migrations first)." >> "$GITHUB_STEP_SUMMARY"
+            echo "Manual run: CI passed and production-db last migrated ${migrated:0:12} with the same migrations; deploying." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           # Moved by the record-deploy job after every successful deploy.
