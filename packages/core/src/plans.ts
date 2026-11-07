@@ -30,6 +30,11 @@ export type PlanTable = Record<PlanId, PlanPolicy>;
 export const DEFAULT_PLAN: PlanId = "free";
 
 export const DEFAULT_BATCH_MAX = 10;
+/**
+ * The most an admin can allow in one batch. Every photo is decoded, edited and encoded on the
+ * phone before upload, and a bigger batch holds more full-size captures in memory at once.
+ */
+export const MAX_BATCH = 20;
 
 export const DEFAULT_PLANS: PlanTable = {
   free: { workspaces: 1, receiptsPerDay: 20, receiptsPerMinute: 10, batchMax: DEFAULT_BATCH_MAX },
