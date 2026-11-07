@@ -117,7 +117,8 @@ jobs:
       - name: No React Email in the server bundle
         run: |
           du -sh apps/web/.next/server
-          if grep -rlE --include='*.js' '@react-email_|react-email\.element|__react-email-' apps/web/.next/server; then
+          # Code fingerprints only: the prerendered HTML itself carries data-id="__react-email-column".
+          if grep -rlE --include='*.js' '@react-email_|react-email\.element|pixelBasedPreset|sanitizeNonInlinableRules' apps/web/.next/server; then
             echo "React Email reached the server bundle (see the files above)." >&2
             exit 1
           fi
