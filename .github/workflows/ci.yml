@@ -106,6 +106,16 @@ jobs:
       - run: bun run build
       - run: bunx playwright install --with-deps chromium
       - run: bun run test:e2e
+      # The GA id is inlined at build time, so the consent flow with GA needs its own build.
+      - name: Build with a test GA measurement id
+        run: bun run build
+        env:
+          NEXT_PUBLIC_GA_MEASUREMENT_ID: G-E2ETEST01
+      - name: Consent e2e (GA build; Google is stubbed)
+        working-directory: apps/web
+        run: bunx playwright test e2e/consent-ga.spec.ts
+        env:
+          E2E_GA: "1"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:

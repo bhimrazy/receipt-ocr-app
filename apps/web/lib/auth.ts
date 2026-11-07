@@ -1,4 +1,5 @@
 import "server-only";
+import { authRateLimitRules } from "./auth-rate-limit";
 import {
   DEFAULT_PLANS,
   ensurePersonalWorkspace,
@@ -163,12 +164,7 @@ export const auth = betterAuth({
     // Memory storage resets per serverless instance; the database keeps
     // limits consistent across instances.
     storage: "database",
-    customRules: {
-      "/sign-in/email": { window: 60, max: 5 },
-      "/sign-up/email": { window: 60, max: 3 },
-      // Per IP; auth-guards also caps each inviter.
-      "/organization/invite-member": { window: 60 * 60, max: 20 },
-    },
+    customRules: authRateLimitRules,
   },
   // Reset and verification tokens are stored as hashes: a database read alone can't use them.
   verification: { storeIdentifier: "hashed" },

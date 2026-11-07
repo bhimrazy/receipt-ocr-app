@@ -1,6 +1,7 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
+import { CookieSettingsButton } from "@/components/consent/cookie-settings-button";
 
 const columns: Array<{ title: string; links: Array<{ label: string; href: string }> }> = [
   {
@@ -23,6 +24,7 @@ const columns: Array<{ title: string; links: Array<{ label: string; href: string
     links: [
       { label: "Privacy", href: "/privacy" },
       { label: "Terms", href: "/terms" },
+      { label: "Cookies", href: "/cookies" },
     ],
   },
 ];
@@ -62,6 +64,16 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
                     </Link>
                   </li>
                 ))}
+                {column.title === "Legal" && (
+                  <li>
+                    <CookieSettingsButton
+                      className={cn(
+                        linkClass,
+                        "h-auto justify-start px-0 font-normal hover:bg-transparent",
+                      )}
+                    />
+                  </li>
+                )}
               </ul>
             </div>
           ))}

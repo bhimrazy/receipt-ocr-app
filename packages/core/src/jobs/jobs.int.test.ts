@@ -116,6 +116,8 @@ const queue = <A, E>(f: (q: typeof JobQueue.Service) => Effect.Effect<A, E>) =>
 /** receipt.extract with millisecond backoff, so retries run inside one test. */
 const fastExtract = { ...receiptExtract, backoff: { baseMs: 100, capMs: 400 } };
 const receiptRegistry = { [fastExtract.kind]: fastExtract };
+/** receipt.extract with its real (seconds) backoff, for tests that make a retry due by hand. */
+const steppedRegistry = { [receiptExtract.kind]: receiptExtract };
 
 const jobsOf = (receiptId: string) =>
   db((d) => d.select().from(jobs).where(eq(jobs.receiptId, receiptId)).orderBy(jobs.createdAt));
@@ -774,10 +776,12 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
           .set({ runAt: new Date(0) })
           .where(eq(jobs.id, jobId)),
       );
+      // One attempt per tick: with millisecond backoff a slow runner made the retry due again
+      // inside the same tick and ran it twice.
       const { runs } = await run(
         tick({
           worker: `${tag}-w`,
-          registry: receiptRegistry,
+          registry: steppedRegistry,
           budgetMs: 10_000,
           ids: [jobId],
           waitForRetries: false,
