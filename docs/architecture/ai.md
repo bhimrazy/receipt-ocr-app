@@ -194,7 +194,9 @@ never date-suffixed). Sonnet 5.5 is the first step of the [default chain](#defau
   WebP or GIF header by [`image-size.ts`](../../packages/ai/src/image-size.ts); a larger image is a 400). HEIC/HEIF
   and over-limit images fail before any request as `unsupported-file`, so the chain moves on to a model that can
   read them.
-- **Errors:** 429 is `rate-limited` with its `retry-after`; 529 and other 5xx `provider-error`; 400 `bad-image`
+- **Errors:** 429 is `rate-limited` with its `retry-after`; 529 and other 5xx `provider-error`; a 400
+  `invalid_request_error` that doesn't blame the image (a schema keyword, an effort value, a retired model) is
+  `not-configured`, so the chain moves on; a 400 that names the image or PDF stays `bad-image`
   (the SDK does not retry it); 401/402/403 `not-configured`; 413 `unsupported-file`; a refusal `refused`.
 - **Usage:** Anthropic's `input_tokens` exclude cache reads and writes; the ledger's `inputTokens` is their sum,
   with `cache_read_input_tokens` and `cache_creation_input_tokens` split out, and thinking tokens inside output.
