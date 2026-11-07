@@ -38,7 +38,7 @@ const flag = (value: string | null) => (value === "1" ? true : value === "0" ? f
 
 /**
  * Null when there is no usable choice: missing, malformed, saved under another policy version,
- * dated in the future, or older than the 12-month lifetime. Null means "ask again".
+ * dated in the future, or older than the 6-month lifetime. Null means "ask again".
  */
 export function parseConsent(raw: string | undefined, nowSeconds: number): ConsentRecord | null {
   if (!raw) return null;

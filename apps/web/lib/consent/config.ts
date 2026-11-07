@@ -12,7 +12,7 @@ export function isAnalyticsPath(pathname: string): boolean {
 /** Bump when the optional categories or what they do change; everyone is asked again. */
 export const CONSENT_VERSION = 1;
 export const CONSENT_COOKIE = "consent";
-export const CONSENT_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
+export const CONSENT_MAX_AGE_SECONDS = 60 * 60 * 24 * 183;
 
 /**
  * GA4 measurement ids look like `G-XXXXXXXXXX`. Anything else (a pasted API secret, a UA- id) is

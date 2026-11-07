@@ -52,7 +52,7 @@ function ConsentForm({ features }: { features: ConsentFeatures }) {
         <DialogTitle>Cookie settings</DialogTitle>
         <DialogDescription>
           {optional
-            ? "Choose which optional tools may run. Necessary cookies are always on. Your choice is saved on this device for 12 months."
+            ? "Choose which optional tools may run. Necessary cookies are always on. Your choice is saved on this device for 6 months."
             : "receiptOCR uses only necessary cookies on this site. There is nothing optional to turn on or off."}
         </DialogDescription>
       </DialogHeader>

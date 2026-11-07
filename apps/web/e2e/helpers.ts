@@ -7,12 +7,39 @@ export function uniqueEmail(tag: string) {
   return `e2e-${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.com`;
 }
 
+/**
+ * Fills a credentials form and submits it. The inputs are controlled React fields: text typed
+ * before the page hydrates is wiped when React takes over, and the browser's `required` check then
+ * blocks the submit silently, leaving the page on /sign-up. So wait for the network to settle,
+ * and if the click went nowhere, fill again and retry (a swallowed click sent nothing).
+ */
+async function submitCredentials(
+  page: Page,
+  fields: Array<[string, string, boolean]>,
+  button: string,
+) {
+  await page.waitForLoadState("networkidle");
+  const url = page.url();
+  await expect(async () => {
+    for (const [label, value, exact] of fields) {
+      await page.getByLabel(label, { exact }).fill(value);
+    }
+    await page.getByRole("button", { name: button }).click();
+    await expect.poll(() => page.url(), { timeout: 4_000 }).not.toBe(url);
+  }).toPass({ timeout: 25_000 });
+}
+
 export async function signUp(page: Page, email: string) {
   await page.goto("/sign-up");
-  await page.getByLabel("Name").fill("E2E User");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await submitCredentials(
+    page,
+    [
+      ["Name", "E2E User", false],
+      ["Email", email, false],
+      ["Password", PASSWORD, true],
+    ],
+    "Create account",
+  );
   await expect(page).toHaveURL(/\/app(\/|\?|$)/);
 }
 
@@ -24,9 +51,14 @@ export async function signOut(page: Page) {
 
 export async function signIn(page: Page, email: string) {
   await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await submitCredentials(
+    page,
+    [
+      ["Email", email, false],
+      ["Password", PASSWORD, true],
+    ],
+    "Sign in",
+  );
   await expect(page).toHaveURL(/\/app(\/|\?|$)/);
 }
 

@@ -68,7 +68,7 @@ export default function CookiesPage() {
         {
           heading: "Changing your choice",
           body: [
-            "Use Cookie settings, below or at the bottom of every page, to change your choice at any time. Your choice is saved for 12 months, and we ask again sooner if this policy changes what optional tools do. Turning analytics off also deletes the Google Analytics cookies on this site.",
+            "Use Cookie settings, below or at the bottom of every page, to change your choice at any time. Your choice is saved for 6 months, and we ask again sooner if this policy changes what optional tools do. Turning analytics off also deletes the Google Analytics cookies on this site.",
           ],
           links: [{ label: "Privacy policy", href: "/privacy" }],
         },

@@ -165,7 +165,7 @@ flowchart TD
   M -->|allowed + public page| V[Vercel Analytics, beforeSend strips query, drops non-public]
 ```
 
-- **Choice.** The `consent` cookie holds version, timestamp and one flag per category (12 months, `SameSite=Lax`,
+- **Choice.** The `consent` cookie holds version, timestamp and one flag per category (6 months, `SameSite=Lax`,
   `Secure` on HTTPS). A different `CONSENT_VERSION` or an older timestamp means no choice, so the banner asks again.
   [`lib/consent/state.ts`](../../apps/web/lib/consent/state.ts) holds the pure rules;
   [`lib/consent/store.ts`](../../apps/web/lib/consent/store.ts) is the browser store. `POST /api/consent` re-sets the

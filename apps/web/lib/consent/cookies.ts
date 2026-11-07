@@ -69,7 +69,7 @@ export const storageEntries: StorageEntry[] = [
     setBy: "receiptOCR",
     category: "necessary",
     purpose: "Remembers your cookie settings, the policy version you answered and when.",
-    duration: "12 months",
+    duration: "6 months",
   },
   {
     name: "cf_clearance, cf_chl_*",

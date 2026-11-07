@@ -35,7 +35,7 @@ describe("consent record", () => {
     expect(parseConsent(value, now)).toBeNull();
   });
 
-  it("expires after 12 months and refuses future dates", () => {
+  it("expires after 6 months and refuses future dates", () => {
     const value = serializeConsent(makeRecord(ACCEPT_ALL, now));
     expect(parseConsent(value, now + CONSENT_MAX_AGE_SECONDS)).not.toBeNull();
     expect(parseConsent(value, now + CONSENT_MAX_AGE_SECONDS + 1)).toBeNull();
