@@ -64,6 +64,8 @@ const ocrStepSchema = z.object({
   model: z.string().refine((id) => ocrModel(id) !== undefined, "That model isn't on the list."),
   enabled: z.boolean(),
   timeoutMs: z.number().int().min(5_000).max(50_000).default(DEFAULT_STEP_TIMEOUT_MS),
+  /** Reasoning effort; unset runs the model's default. Checked against the model in the chain. */
+  effort: z.string().optional(),
 });
 
 export const ocrRoutingSchema = z.object({
@@ -73,10 +75,25 @@ export const ocrRoutingSchema = z.object({
     .max(5)
     .refine((chain) => new Set(chain.map((s) => s.model)).size === chain.length, {
       message: "Each model can appear once.",
+    })
+    .superRefine((chain, ctx) => {
+      chain.forEach((step, index) => {
+        if (step.effort === undefined) return;
+        const model = ocrModel(step.model);
+        const values = model?.effort?.values;
+        if (values?.includes(step.effort)) return;
+        ctx.addIssue({
+          code: "custom",
+          path: [index, "effort"],
+          message: values
+            ? `${model!.label} doesn't support effort "${step.effort}". Choose one of: ${values.join(", ")}.`
+            : `${model?.label ?? step.model} has no effort setting.`,
+        });
+      });
     }),
 });
 
-export type OcrStep = { model: ModelId; enabled: boolean; timeoutMs: number };
+export type OcrStep = { model: ModelId; enabled: boolean; timeoutMs: number; effort?: string };
 /** Ordered: the first enabled step whose provider has a key is the active model; the rest are fallbacks. */
 export type OcrRouting = { chain: OcrStep[] };
 

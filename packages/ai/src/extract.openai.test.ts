@@ -120,6 +120,12 @@ describe("the OpenAI request body", () => {
     expect(user[0]).toMatchObject({ image_url: "data:image/jpeg;base64,/9j/4A==" });
   });
 
+  it("sends the chain step's effort", async () => {
+    const calls = mockFetch(json(response()));
+    await extractReceipt({ model: MODEL, keys, file: jpeg, maxRetries: 0, effort: "medium" });
+    expect(calls[0]!.body.reasoning).toMatchObject({ effort: "medium" });
+  });
+
   it("sends a PDF as an input_file", async () => {
     const calls = mockFetch(json(response()));
     await run({ data: new Uint8Array([0x25, 0x50, 0x44, 0x46]), mediaType: "application/pdf" });

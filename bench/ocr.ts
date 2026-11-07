@@ -1,7 +1,9 @@
 // OCR accuracy, latency and cost benchmark.
 //   bun run bench:ocr [--models google:gemini-3.8-flash,anthropic:claude-haiku-5-5,...]
 //     [--fixtures bench/fixtures] [--prep none,app,long:1568,short:1000] [--only id,id]
-//     [--concurrency 2] [--prompt v1|v2] [--dry-run]
+//     [--concurrency 2] [--prompt v1|v2] [--effort low,medium] [--dry-run]
+// --effort runs every model once per level it supports (a model without that level is skipped);
+// without it each runs at its default. Rows read `model@level`.
 // Needs each chosen provider's key (GOOGLE_GENERATIVE_AI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, OPENAI_API_KEY); --dry-run needs none
 // and calls nothing. Fixtures: <id>.{png,jpg,jpeg,webp,pdf} + <id>.json (ground truth); images without one
 // are skipped. Every model runs on every prep mode; images are prepared in memory, sources never change.
@@ -68,7 +70,7 @@ const providerOf = (model: string) => ocrModel(modelId(model))?.provider ?? "goo
 const keyEnvOf = (model: string) =>
   OCR_PROVIDERS.find((p) => p.id === providerOf(model))?.keyEnv ?? null;
 
-async function extract(model: string, sent: Prepared) {
+async function extract(model: string, sent: Prepared, effort?: string) {
   const keys = Object.fromEntries(
     OCR_PROVIDERS.flatMap((p) => (p.keyEnv ? [[p.id, process.env[p.keyEnv]]] : [])),
   );
@@ -77,6 +79,7 @@ async function extract(model: string, sent: Prepared) {
     file: { data: sent.data, mediaType: sent.mediaType },
     keys,
     promptVersion,
+    effort,
   });
   return { got: extraction as Predicted, usage };
 }
@@ -94,6 +97,7 @@ if (!PROMPT_VERSIONS.includes(promptVersion)) {
   console.error(`unknown prompt "${promptVersion}" (one of ${PROMPT_VERSIONS.join(", ")})`);
   process.exit(2);
 }
+const efforts = arg("effort", "").split(",").filter(Boolean);
 const fixtureDir = path.resolve(arg("fixtures", path.join(root, "fixtures")));
 // Names the result files, so runs over different sets don't overwrite each other.
 const setName = path.basename(fixtureDir);
@@ -107,6 +111,22 @@ const models = arg("models", "google:gemini-3.8-flash")
     }
     return spec;
   });
+
+// One entry per model and effort. A level a model doesn't take is skipped, not sent: the API would 400.
+const entries = models.flatMap((model) =>
+  (efforts.length ? efforts : [undefined]).flatMap((effort) => {
+    if (effort === undefined) return [{ model, effort, label: model }];
+    if (ocrModel(modelId(model))?.effort?.values.includes(effort)) {
+      return [{ model, effort, label: `${model}@${effort}` }];
+    }
+    console.error(`skipping ${model}: no effort "${effort}"`);
+    return [];
+  }),
+);
+if (entries.length === 0) {
+  console.error("no model supports any of the --effort levels");
+  process.exit(2);
+}
 
 const missingKeys = [...new Set(models.map(keyEnvOf))].filter(
   (env): env is string => env !== null && !process.env[env],
@@ -147,7 +167,12 @@ for (const spec of preps) {
   }
 }
 
-async function runOne(model: string, prep: string, { id }: Fixture): Promise<Run> {
+async function runOne(
+  model: string,
+  effort: string | undefined,
+  prep: string,
+  { id }: Fixture,
+): Promise<Run> {
   const sent = prepared.get(`${prep}|${id}`)!;
   const base = {
     fixture: id,
@@ -160,7 +185,7 @@ async function runOne(model: string, prep: string, { id }: Fixture): Promise<Run
   };
   const started = performance.now();
   try {
-    const { got, usage } = await extract(model, sent);
+    const { got, usage } = await extract(model, sent, effort);
     return {
       ...base,
       ok: true,
@@ -188,11 +213,12 @@ async function runOne(model: string, prep: string, { id }: Fixture): Promise<Run
   }
 }
 
-async function runModel(model: string, prep: string) {
+async function runModel(model: string, effort: string | undefined, prep: string) {
   const runs: Run[] = [];
   const queue = [...fixtures];
   const worker = async () => {
-    for (let f = queue.shift(); f; f = queue.shift()) runs.push(await runOne(model, prep, f));
+    for (let f = queue.shift(); f; f = queue.shift())
+      runs.push(await runOne(model, effort, prep, f));
   };
   await Promise.all(Array.from({ length: concurrency }, worker));
   return runs.sort((a, b) => a.fixture.localeCompare(b.fixture));
@@ -223,13 +249,13 @@ function printEstimate() {
   const THINKING = 1000;
   const now = new Date();
   const lines = [
-    `Dry run: ${fixtures.length} fixtures in ${setName} x ${models.length} models x ${preps.length} prep modes, prompt ${promptVersion}, no calls made.`,
+    `Dry run: ${fixtures.length} fixtures in ${setName} x ${entries.length} models x ${preps.length} prep modes, prompt ${promptVersion}, no calls made.`,
     "",
     "| model | prep | avg bytes | avg size | input tokens | output tokens | est. cost |",
     "|---|---|---|---|---|---|---|",
   ];
   let grand = 0;
-  for (const model of models) {
+  for (const { model, label } of entries) {
     for (const spec of preps) {
       const prep = prepLabel(spec);
       const sent = fixtures.map(({ id }) => prepared.get(`${prep}|${id}`)!);
@@ -256,7 +282,7 @@ function printEstimate() {
       grand += micro;
       const bytes = kb(mean(sent.map((s) => s.data.byteLength)));
       lines.push(
-        `| ${model} | ${prep} | ${bytes} | ${mp(sent)} | ${input} | ${output} | $${(micro / 1e6).toFixed(4)} |`,
+        `| ${label} | ${prep} | ${bytes} | ${mp(sent)} | ${input} | ${output} | $${(micro / 1e6).toFixed(4)} |`,
       );
     }
   }
@@ -282,11 +308,11 @@ const md = [
   `|${"---|".repeat(fieldNames.length + 12)}`,
 ];
 
-for (const model of models) {
+for (const { model, effort, label } of entries) {
   for (const spec of preps) {
     const prep = prepLabel(spec);
-    console.log(`running ${model}, prep ${prep}, on ${fixtures.length} fixtures...`);
-    const runs = await runModel(model, prep);
+    console.log(`running ${label}, prep ${prep}, on ${fixtures.length} fixtures...`);
+    const runs = await runModel(model, effort, prep);
     const okRuns = runs.filter((r) => r.ok);
     const latencies = okRuns.map((r) => r.ms);
     const field = (f: string) =>
@@ -303,12 +329,12 @@ for (const model of models) {
     const cost =
       unpriced === runs.length ? "n/a" : `$${(micro / 1e6).toFixed(4)}${unpriced ? "*" : ""}`;
     md.push(
-      `| ${model} | ${prep} | ${fieldNames.map((f) => pct(field(f))).join(" | ")} | ${sec(percentile(latencies, 50))} | ${sec(percentile(latencies, 95))} | ${sec(okRuns[0]?.ms ?? NaN)} | ${runs.length - okRuns.length}/${runs.length} | ${runs.filter((r) => r.timeout).length} | ${kb(mean(runs.map((r) => r.bytesSent)))} | ${mp(runs)} | ${Number.isNaN(avgIn) ? "n/a" : Math.round(avgIn)} | ${tokens.i}/${tokens.o} | ${cost} |`,
+      `| ${label} | ${prep} | ${fieldNames.map((f) => pct(field(f))).join(" | ")} | ${sec(percentile(latencies, 50))} | ${sec(percentile(latencies, 95))} | ${sec(okRuns[0]?.ms ?? NaN)} | ${runs.length - okRuns.length}/${runs.length} | ${runs.filter((r) => r.timeout).length} | ${kb(mean(runs.map((r) => r.bytesSent)))} | ${mp(runs)} | ${Number.isNaN(avgIn) ? "n/a" : Math.round(avgIn)} | ${tokens.i}/${tokens.o} | ${cost} |`,
     );
-    const raw = path.join(root, "results", `${runId}-${safe(model)}-${safe(prep)}.json`);
+    const raw = path.join(root, "results", `${runId}-${safe(label)}-${safe(prep)}.json`);
     writeFileSync(
       raw,
-      `${JSON.stringify({ date, set: setName, model, prep, promptVersion, priceFrom: priceFrom(model), runs }, null, 2)}\n`,
+      `${JSON.stringify({ date, set: setName, model, effort: effort ?? null, prep, promptVersion, priceFrom: priceFrom(model), runs }, null, 2)}\n`,
     );
     for (const r of runs.filter((r) => !r.ok)) console.error(`  ${r.fixture}: ${r.error}`);
   }

@@ -97,6 +97,49 @@ describe("ocrRoutingSchema", () => {
     expect(ocrRoutingSchema.safeParse({ chain: [] }).success).toBe(false);
   });
 
+  describe("effort", () => {
+    const withEffort = (model: string, effort?: string) =>
+      ocrRoutingSchema.safeParse({ chain: [{ model, enabled: true, effort }] });
+
+    it("is optional: a chain saved before it existed still parses, and unset stays unset", () => {
+      const result = ocrRoutingSchema.parse({ chain: [step] });
+      expect(result.chain[0]).not.toHaveProperty("effort");
+    });
+
+    it.each([
+      ["anthropic:claude-haiku-5-5", "xhigh"],
+      ["anthropic:claude-opus-5-5", "max"],
+      ["google:gemini-3.8-flash", "high"],
+      ["google:gemini-3.5-flash-lite", "minimal"],
+      ["openai:gpt-6-luna", "none"],
+      ["openai:gpt-6.1-terra", "max"],
+      ["groq:qwen/qwen3.8-27b", "none"],
+    ])("accepts %s at %s", (model, effort) => {
+      const result = withEffort(model, effort);
+      expect(result.success && result.data.chain[0]?.effort).toBe(effort);
+    });
+
+    it.each([
+      ["anthropic:claude-sonnet-5-5", "none"],
+      ["anthropic:claude-sonnet-5-5", "minimal"],
+      ["google:gemini-3.8-flash", "minimal"],
+      ["google:gemini-3.8-flash", "xhigh"],
+      ["openai:gpt-6-luna", "minimal"],
+      ["groq:qwen/qwen3.8-27b", "low"],
+      ["google:gemini-3.8-flash", "HIGH"],
+    ])("rejects %s at %s, naming what it takes", (model, effort) => {
+      const result = withEffort(model, effort);
+      expect(result.success).toBe(false);
+      expect(!result.success && result.error.issues[0]?.message).toMatch(/doesn't support effort/);
+    });
+
+    it("rejects an effort on a model with no setting", () => {
+      const result = withEffort("fixture", "low");
+      expect(result.success).toBe(false);
+      expect(!result.success && result.error.issues[0]?.message).toMatch(/no effort setting/);
+    });
+  });
+
   it("bounds the step timeout", () => {
     expect(ocrRoutingSchema.safeParse({ chain: [{ ...step, timeoutMs: 1_000 }] }).success).toBe(
       false,

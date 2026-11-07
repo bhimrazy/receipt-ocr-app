@@ -270,6 +270,31 @@ against the real API yet; the first benchmark is the check.
 - **Benchmark:** `OPENAI_API_KEY=... bun run bench:ocr --models openai:gpt-6-luna,openai:gpt-6.1-terra`. The dry run
   counts one token per 32 px patch (the docs give no multiplier for these models).
 
+## Reasoning effort
+
+Each chain step in Admin → Settings → OCR models may set an `effort`; unset runs the model's default. The allowed
+values live on the model (`OcrModel.effort` in [`models.ts`](../../packages/ai/src/models.ts)), settings validation
+rejects any other value on save (`ocrRoutingSchema`), and `providerOptionsFor` maps it to the provider's request. A
+stale saved value the model no longer takes falls back to the default rather than reaching the API. Higher effort
+costs more (reasoning tokens bill as output) and is slower. Docs checked 2026-11-07.
+
+| Provider                  | Request field                  | Values                              | Unset runs                                         |
+| ------------------------- | ------------------------------ | ----------------------------------- | -------------------------------------------------- |
+| Claude (all three)        | `output_config.effort`         | low, medium, high, xhigh, max       | `low` (our setting; API default is medium or high) |
+| Gemini 3.8 Flash          | `thinkingConfig.thinkingLevel` | low, medium, high                   | nothing sent: Google's default (medium)            |
+| Gemini 3.5 Flash-Lite     | `thinkingConfig.thinkingLevel` | minimal, low, medium, high          | nothing sent: Google's default (minimal)           |
+| GPT-6 Luna, GPT-6.1 Terra | `reasoning.effort`             | none, low, medium, high, xhigh, max | `none` (our setting; API default is medium)        |
+| Groq Qwen 3.8 27B         | `reasoning_effort`             | none (instruct mode only)           | `none`                                             |
+
+Sources: [Claude effort](https://platform.claude.com/docs/en/build-with-claude/effort),
+[Gemini thinking](https://aistudio.google.com/docs/thinking) (`thinkingLevel` is the setting for Gemini 3 models;
+`thinkingBudget` belongs to 2.5 and is not used), OpenAI model pages
+([Luna](https://developers.openai.com/api/docs/models/gpt-6-luna),
+[Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra)). Output is capped at 16,384 tokens a call, so
+`xhigh` and `max` on a long receipt can run out of room before the JSON is written (`invalid-output`).
+`bun run bench:ocr --effort low,medium` compares levels (one row per model and level); no level has been benchmarked
+yet.
+
 ## How to test it
 
 `bun run test` runs [`extract.test.ts`](../../packages/ai/src/extract.test.ts) (with a mock model through
