@@ -1,6 +1,6 @@
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { signUp, uniqueEmail } from "./helpers";
+import { signUp, uniqueEmail, uploadFromReview } from "./helpers";
 
 // Runs in the `mobile-camera` project (touch, 390x844 Chromium with a fake camera; the camera
 // button is touch-only, see capture-desktop.spec.ts for desktop). Uploads need the
@@ -66,8 +66,9 @@ test("take two photos, edit one, and upload both", async ({ page }) => {
   await expect(camera).toHaveCount(0);
 
   const review = page.getByRole("dialog", { name: "Review photos" });
-  await expect(review.getByText("1 of 2")).toBeVisible();
-  // Rotate, then move a corner with the keyboard.
+  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
+  await expect(review.getByText("Photo 1 of 2").filter({ visible: true })).toBeVisible();
+  // Step 1: rotate, then move a corner with the keyboard.
   await review.getByRole("button", { name: "Rotate" }).click();
   const corner = review.getByRole("button", { name: /^Top-left corner/ });
   const before = await corner.getAttribute("aria-label");
@@ -76,19 +77,27 @@ test("take two photos, edit one, and upload both", async ({ page }) => {
   await page.keyboard.press("Shift+ArrowDown");
   await expect(corner).not.toHaveAttribute("aria-label", before!);
   await expect(review.getByRole("button", { name: "Use full image" })).toBeEnabled();
+  // Step 2: the flattened page, with filters and the planned size.
+  await review.getByRole("button", { name: "Next" }).click();
+  await expect(review.getByRole("heading", { name: "Preview" })).toBeVisible();
   await review.getByRole("button", { name: "Greyscale" }).click();
   await expect(review.getByRole("button", { name: "Greyscale" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
-  await expect(review.getByText(/to upload\. Greyscale and B&W make the file smaller/)).toBeVisible(
-    { timeout: 15_000 },
-  );
-  // Delete is per photo; go to the second and back.
+  await expect(review.getByTestId("resolution")).toHaveText(/^\d+ × \d+ px · about \d+ (KB|MB)$/, {
+    timeout: 15_000,
+  });
+  await expect(review.getByText(/Greyscale and B&W make the file smaller/)).toBeVisible();
+  // Escape goes back to the corners, not out of the sheet.
+  await page.keyboard.press("Escape");
+  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
+  await review.getByRole("button", { name: "Next" }).click();
+  // Photos switch in place; the filter is per photo.
   await review.getByRole("button", { name: "Photo 2" }).click();
-  await expect(review.getByText("2 of 2")).toBeVisible();
+  await expect(review.getByText("Photo 2 of 2").filter({ visible: true })).toBeVisible();
 
-  await review.getByRole("button", { name: "Read 2 receipts" }).click();
+  await review.getByRole("button", { name: "Upload 2 receipts" }).click();
   await expect(page.getByText("2 receipts uploaded.")).toBeVisible({ timeout: 30_000 });
   const files = await uploaded();
   expect(files).toHaveLength(2);
@@ -106,13 +115,159 @@ test("a picked photo is reviewed, then read and opened", async ({ page }) => {
   await expect(page.locator("[data-ready]")).toBeAttached();
   await page.locator('input[type="file"][multiple]').setInputFiles(receipt);
   const review = page.getByRole("dialog", { name: "Review photos" });
-  await expect(review.getByText("Check the photo")).toBeVisible();
+  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
   await expect(
     review.getByRole("button", { name: "Bottom-right corner, 100% across, 100% down" }),
   ).toBeVisible();
-  await review.getByRole("button", { name: "Read receipt" }).click();
+  await uploadFromReview(page);
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
 });
+
+/** Two copies of the receipt fixture, opened in the review sheet on its corners step. */
+async function pickTwo(page: Page) {
+  await page.goto("/app");
+  await expect(page.locator("[data-ready]")).toBeAttached();
+  await page.locator('input[type="file"][multiple]').setInputFiles([receipt, receipt]);
+  const review = page.getByRole("dialog", { name: "Review photos" });
+  await expect(review.getByRole("button", { name: /^Top-left corner/ })).toBeVisible({
+    timeout: 15_000,
+  });
+  return review;
+}
+
+test("the preview shows the chosen filter on the cropped image, swapped without unmounting", async ({
+  page,
+}) => {
+  await signUp(page, uniqueEmail("preview-filter"));
+  const review = await pickTwo(page);
+  await review.getByRole("button", { name: "Next" }).click();
+  const preview = review.getByRole("img", { name: /^Receipt preview/ });
+  await expect(preview).toBeVisible({ timeout: 15_000 });
+  await review.getByRole("button", { name: "Original" }).click();
+  await expect(preview).toHaveAttribute("data-filter", "original");
+  const original = await preview.getAttribute("src");
+
+  // A removed preview image would be a flash: count removals while the filter changes.
+  await preview.evaluate((img) => {
+    const w = window as unknown as { removed: number };
+    w.removed = 0;
+    new MutationObserver((records) => {
+      for (const r of records) for (const n of r.removedNodes) if (n.contains(img)) w.removed++;
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await review.getByRole("button", { name: "B&W" }).click();
+  await expect(preview).toHaveAttribute("data-filter", "bw");
+  await expect.poll(() => preview.getAttribute("src")).not.toBe(original);
+
+  // Black and white: every pixel is grey and almost all are near black or near white.
+  const stats = await preview.evaluate(async (img: HTMLImageElement) => {
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(img, 0, 0);
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let extreme = 0;
+    let coloured = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const [r, g, b] = [data[i]!, data[i + 1]!, data[i + 2]!];
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 12) coloured++;
+      if (r < 50 || r > 205) extreme++;
+    }
+    const n = data.length / 4;
+    return { extreme: extreme / n, coloured: coloured / n };
+  });
+  expect(stats.coloured).toBeLessThan(0.01);
+  expect(stats.extreme).toBeGreaterThan(0.95);
+  expect(await page.evaluate(() => (window as unknown as { removed: number }).removed)).toBe(0);
+});
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 1280, height: 800 },
+]) {
+  test(`no action moves the stage or the controls (${viewport.width}px)`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await signUp(page, uniqueEmail("layout"));
+    const review = await pickTwo(page);
+    const spots = {
+      stage: review.getByTestId("stage"),
+      primary: review.getByRole("button", { name: /^(Next|Upload)/ }),
+      photos: review.getByRole("list", { name: "Photos to upload" }),
+    };
+    const rects = async (extra: Record<string, ReturnType<typeof review.locator>> = {}) => {
+      const out: Record<string, string> = {};
+      for (const [name, loc] of Object.entries({ ...spots, ...extra })) {
+        const box = await loc.boundingBox();
+        out[name] = box
+          ? [box.x, box.y, box.width, box.height].map((n) => Math.round(n)).join(",")
+          : "none";
+      }
+      return out;
+    };
+    // Rects may differ by 1px from rounding; compare each number within 1.
+    const same = (a: Record<string, string>, b: Record<string, string>) => {
+      for (const key of Object.keys(a)) {
+        const x = a[key]!.split(",").map(Number);
+        const y = b[key]!.split(",").map(Number);
+        expect(x.length, key).toBe(y.length);
+        x.forEach((n, i) =>
+          expect(Math.abs(n - y[i]!), `${key} ${a[key]} vs ${b[key]}`).toBeLessThanOrEqual(1),
+        );
+      }
+    };
+    const settle = () => page.waitForTimeout(400);
+    const controls = { controls: review.getByTestId("controls") };
+
+    // Step 1.
+    const base = await rects(controls);
+    for (const name of ["Rotate", "Rotate", "Use full image", "Reset to detected"]) {
+      const button = review.getByRole("button", { name });
+      if (await button.isEnabled()) await button.click();
+      await settle();
+      same(base, await rects(controls));
+    }
+    const corner = review.getByRole("button", { name: /^Top-left corner/ });
+    const box = (await corner.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 + 30, { steps: 4 });
+    await expect(review.getByTestId("loupe")).toBeVisible();
+    same(base, await rects(controls));
+    await page.mouse.up();
+    await expect(review.getByTestId("loupe")).toHaveCount(0);
+    await review.getByRole("button", { name: "Photo 2" }).click();
+    await expect(review.getByText("Photo 2 of 2").filter({ visible: true })).toBeVisible();
+    await settle();
+    same(base, await rects(controls));
+
+    // Step 2: every filter, then a photo switch and back to step 1.
+    await review.getByRole("button", { name: "Next" }).click();
+    await expect(review.getByRole("img", { name: /^Receipt preview/ })).toBeVisible({
+      timeout: 15_000,
+    });
+    const filters = {
+      controls: review.getByTestId("controls"),
+      hint: review.getByTestId("resolution"),
+    };
+    const preview = await rects(filters);
+    for (const name of ["Original", "Enhance", "Greyscale", "B&W", "Original"]) {
+      await review.getByRole("button", { name, exact: true }).click();
+      await settle();
+      same(preview, await rects(filters));
+    }
+    await review.getByRole("button", { name: "Photo 1" }).click();
+    await expect(review.getByText("Photo 1 of 2").filter({ visible: true })).toBeVisible();
+    await settle();
+    same(preview, await rects(filters));
+    const stageBefore = (await spots.stage.boundingBox())!;
+    await review.getByRole("button", { name: "Adjust corners", exact: true }).click();
+    await settle();
+    const stageAfter = (await spots.stage.boundingBox())!;
+    expect(stageAfter).toEqual(stageBefore);
+  });
+}
 
 test("picking more than the batch limit keeps the first ones and says so", async ({ page }) => {
   await signUp(page, uniqueEmail("batch-limit"));
@@ -135,8 +290,7 @@ test("without getUserMedia, Take photos opens the phone's camera app", async ({ 
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Take photos" }).click();
   await (await chooser).setFiles(receipt);
-  const review = page.getByRole("dialog", { name: "Review photos" });
-  await review.getByRole("button", { name: "Read receipt" }).click();
+  await uploadFromReview(page);
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
 });
 
@@ -193,10 +347,7 @@ test("the camera link opens once: Back from the receipt doesn't reopen it", asyn
   await expect(page).toHaveURL(/\/app\/upload$/);
   await shutter.click();
   await camera.getByRole("button", { name: /Done/ }).click();
-  await page
-    .getByRole("dialog", { name: "Review photos" })
-    .getByRole("button", { name: "Read receipt" })
-    .click();
+  await uploadFromReview(page);
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
   await page.goBack();
   await expect(page).toHaveURL(/\/app\/upload$/);
@@ -213,7 +364,8 @@ async function readBatch(page: Page, count: number) {
     .setInputFiles(Array.from({ length: count }, () => receipt));
   const review = page.getByRole("dialog", { name: "Review photos" });
   await expect(review).toBeVisible();
-  await review.getByRole("button", { name: `Read ${count} receipts` }).click();
+  await review.getByRole("button", { name: "Next" }).click();
+  await review.getByRole("button", { name: `Upload ${count} receipts` }).click();
 }
 
 const accepted = (n: number) => ({

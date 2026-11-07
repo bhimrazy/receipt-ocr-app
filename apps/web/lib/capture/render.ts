@@ -19,6 +19,7 @@ const OUTPUT_BUDGET = 6_000_000;
 
 export type RenderBudget = { source: number; output: number };
 export const FULL_RENDER: RenderBudget = { source: SOURCE_BUDGET, output: OUTPUT_BUDGET };
+export const PREVIEW_RENDER: RenderBudget = { source: 2_000_000, output: 1_500_000 };
 export const THUMB_RENDER: RenderBudget = { source: 400_000, output: 40_000 };
 
 /** Frees a canvas's pixel memory now rather than at garbage collection (iOS caps the total). */
@@ -205,10 +206,15 @@ export async function renderToJpeg(bitmap: ImageBitmap, edit: EditState, name: s
 }
 
 /** A small preview as a data URL; the canvas is released straight after. */
-export function renderPreview(bitmap: ImageBitmap, edit: EditState, budget: RenderBudget) {
+export function renderPreview(
+  bitmap: ImageBitmap,
+  edit: EditState,
+  budget: RenderBudget,
+  quality = 0.8,
+) {
   const canvas = renderEdit(bitmap, edit, budget);
   try {
-    return canvas.toDataURL("image/jpeg", 0.8);
+    return canvas.toDataURL("image/jpeg", quality);
   } finally {
     releaseCanvas(canvas);
   }

@@ -14,7 +14,7 @@ import {
   ScanText,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   editKey,
   initialEdit,
@@ -40,6 +40,9 @@ import {
 import { planSize, START_QUALITY, TARGET_BYTES } from "@/lib/upload-prep";
 import { CropEditor } from "./crop-editor";
 import { FullScreen } from "./full-screen";
+import { ResultPreview } from "./result-preview";
+
+type Step = "adjust" | "preview";
 
 export type ReviewImage = { id: string; blob: Blob; name: string };
 
@@ -78,25 +81,37 @@ const ESTIMATE_RENDER: RenderBudget = { source: 1_200_000, output: 300_000 };
  */
 async function estimateBytes(bitmap: ImageBitmap, edit: EditState) {
   const small = await renderSmall(bitmap, edit, ESTIMATE_RENDER, START_QUALITY);
-  const full = renderedSize(bitmap, edit, FULL_RENDER);
-  const planned = planSize(full.width, full.height);
+  const planned = outputSize(bitmap, edit);
   const bytes = (small.blob.size / (small.width * small.height)) * planned.width * planned.height;
   return Math.min(TARGET_BYTES, Math.round(bytes));
 }
 
+/** The pixel size the upload will have: the same plan `prepareFile` applies to the rendered crop. */
+function outputSize(bitmap: ImageBitmap, edit: EditState) {
+  const full = renderedSize(bitmap, edit, FULL_RENDER);
+  return planSize(full.width, full.height);
+}
+
+/** Number and unit apart, so only the number is set in the mono face (its wide space gaps "500 KB"). */
 function formatSize(bytes: number) {
   return bytes < 1024 * 1024
-    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    ? { value: `${Math.max(1, Math.round(bytes / 1024))}`, unit: "KB" }
+    : { value: (bytes / (1024 * 1024)).toFixed(1), unit: "MB" };
 }
+
+const Mono = ({ children }: { children: React.ReactNode }) => (
+  <span className="font-mono tabular-nums">{children}</span>
+);
 
 type Loaded = { id: string; bitmap: ImageBitmap };
 type Estimate = { key: string; bytes: number };
 type Prepared = { key: string; file: File };
 
 /**
- * Every photo is checked here before upload: corners (detected when possible), rotation,
- * filter, delete. The result goes through the same `prepareFile` as any picked file.
+ * Every photo is checked here before upload, in two steps like a document scanner: adjust the
+ * corners (and turn), then preview the flattened page with a filter. The result goes through
+ * the same `prepareFile` as any picked file. The layout never changes size between actions:
+ * the stage is a fixed box, and every row around it reserves its space.
  */
 export default function ReviewSheet({
   images: initial,
@@ -115,19 +130,21 @@ export default function ReviewSheet({
 }) {
   const [images, setImages] = useState(initial);
   const [index, setIndex] = useState(0);
+  const [step, setStep] = useState<Step>("adjust");
   const [edits, setEdits] = useState<Record<string, EditState>>({});
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState<Record<string, boolean>>({});
   const [estimates, setEstimates] = useState<Record<string, Estimate>>({});
-  // Files made by an earlier Read that stopped on a failed photo, reused when nothing changed.
+  // Files made by an earlier Upload that stopped on a failed photo, reused when nothing changed.
   const [prepared, setPrepared] = useState<Record<string, Prepared>>({});
-  // Photos whose edit couldn't be encoded; held back until the edit changes or Read succeeds.
+  // Photos whose edit couldn't be encoded; held back until the edit changes or Upload succeeds.
   const [editFailed, setEditFailed] = useState<Record<string, true>>({});
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Partial<Record<Filter, string>>>({});
   const [working, setWorking] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
-  const uploadRef = useRef<HTMLButtonElement>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const primaryRef = useRef<HTMLButtonElement>(null);
 
   const current = images[Math.min(index, images.length - 1)];
   const edit = current ? edits[current.id] : undefined;
@@ -156,9 +173,9 @@ export default function ReviewSheet({
     };
   }, [current]);
 
-  // The upload size for this edit, estimated from a small render (debounced while dragging).
+  // The upload size for this edit, estimated from a small render (preview step only).
   useEffect(() => {
-    if (!bitmap || !edit || !current) return;
+    if (step !== "preview" || !bitmap || !edit || !current) return;
     const key = editKey(edit);
     if (estimates[current.id]?.key === key) return;
     let cancelled = false;
@@ -169,17 +186,17 @@ export default function ReviewSheet({
         })
         // No estimate this time; the upload still encodes for real.
         .catch(() => {});
-    }, 250);
+    }, 100);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [bitmap, edit, current, estimates]);
+  }, [step, bitmap, edit, current, estimates]);
 
-  // Small previews of each filter on the current crop.
+  // Small previews of each filter on the flattened crop (preview step only).
   const shapeKey = edit ? editKey({ ...edit, filter: "original" }) : "";
   useEffect(() => {
-    if (!bitmap || !edit) return;
+    if (step !== "preview" || !bitmap || !edit) return;
     const timer = window.setTimeout(() => {
       const next: Partial<Record<Filter, string>> = {};
       try {
@@ -190,11 +207,13 @@ export default function ReviewSheet({
         // Out of canvas memory: the buttons still work without their previews.
       }
       setThumbs(next);
-    }, 150);
+    }, 50);
     return () => window.clearTimeout(timer);
     // Filters only depend on the shape of the crop, not the chosen filter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bitmap, shapeKey]);
+  }, [step, bitmap, shapeKey]);
+
+  const planned = useMemo(() => (bitmap && edit ? outputSize(bitmap, edit) : null), [bitmap, edit]);
 
   function update(next: EditState) {
     if (!current) return;
@@ -220,6 +239,12 @@ export default function ReviewSheet({
     if (rest.length === 0) return onCancel();
     setImages(rest);
     setIndex((i) => Math.min(i, rest.length - 1));
+  }
+
+  /** Back one step, then close: the header arrow and Escape do the same. */
+  function back() {
+    if (step === "preview") setStep("adjust");
+    else setConfirmClose(true);
   }
 
   /**
@@ -263,11 +288,16 @@ export default function ReviewSheet({
     onUpload(files);
   }
 
-  function read() {
+  function send() {
     upload().catch(() => {
       setWorking(null);
       setUploadError("The photos couldn't be prepared. Nothing was uploaded. Try again.");
     });
+  }
+
+  function primary() {
+    if (step === "adjust") setStep("preview");
+    else send();
   }
 
   const estimate = current && edit ? estimates[current.id] : undefined;
@@ -275,194 +305,307 @@ export default function ReviewSheet({
   const count = images.length;
   const total = count + alsoReading.length;
   const heldBack = (id: string) => editFailed[id] === true;
+  const position = Math.min(index, count - 1) + 1;
+  const adjusting = step === "adjust";
+  const size = fresh ? formatSize(estimate.bytes) : null;
+
+  const tool = "min-h-11 flex-1 px-1 text-xs md:justify-start md:px-3 md:text-sm";
 
   return (
     <FullScreen
       className="bg-background"
-      initialFocus={uploadRef}
-      onClose={() => setConfirmClose(true)}
+      initialFocus={primaryRef}
+      onClose={back}
       open
       title="Review photos"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-2 md:hidden">
         <Button
-          aria-label="Back without uploading"
-          onClick={() => setConfirmClose(true)}
+          aria-label={adjusting ? "Back without uploading" : "Back to adjust corners"}
+          onClick={back}
           size="icon"
           variant="ghost"
         >
           <ArrowLeft aria-hidden="true" />
         </Button>
-        <h2 className="text-sm font-medium">
-          {count > 1 ? (
-            <>
-              Photo{" "}
-              <span className="font-mono tabular-nums">
-                {Math.min(index, count - 1) + 1} of {count}
-              </span>
-            </>
-          ) : (
-            "Check the photo"
-          )}
-        </h2>
-        <Button aria-label="Delete this photo" onClick={remove} size="icon" variant="ghost">
+        <div className="min-w-0 text-center">
+          <h2 className="text-sm font-medium">{adjusting ? "Adjust corners" : "Preview"}</h2>
+          <p className="h-4 text-xs text-muted-foreground tabular-nums">
+            {count > 1 ? `Photo ${position} of ${count}` : null}
+          </p>
+        </div>
+        <Button
+          aria-label="Delete this photo"
+          onClick={() => setConfirmDelete(true)}
+          size="icon"
+          variant="ghost"
+        >
           <Trash2 aria-hidden="true" />
         </Button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col bg-muted/40">
-        {current && failed[current.id] ? (
-          <p className="m-auto max-w-xs px-6 text-center text-sm text-muted-foreground">
-            This photo can&apos;t be shown in this browser. It uploads as it is.
-          </p>
-        ) : bitmap && edit ? (
-          <CropEditor bitmap={bitmap} edit={edit} onChange={update} />
-        ) : (
-          <p className="m-auto flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2
-              aria-hidden="true"
-              className="size-4 animate-spin motion-reduce:animate-none"
-            />
-            Finding the receipt…
-          </p>
-        )}
-      </div>
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div
+          className="relative h-[clamp(14rem,46dvh,34rem)] shrink-0 bg-muted/40 md:h-auto md:min-w-0 md:flex-1"
+          data-testid="stage"
+        >
+          <div className="absolute inset-0 flex flex-col">
+            {current && failed[current.id] ? (
+              <p className="m-auto max-w-xs px-6 text-center text-sm text-muted-foreground">
+                This photo can&apos;t be shown in this browser. It uploads as it is.
+              </p>
+            ) : bitmap && edit ? (
+              adjusting ? (
+                <CropEditor bitmap={bitmap} edit={edit} onChange={update} />
+              ) : (
+                <ResultPreview bitmap={bitmap} edit={edit} />
+              )
+            ) : (
+              <p className="m-auto flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2
+                  aria-hidden="true"
+                  className="size-4 animate-spin motion-reduce:animate-none"
+                />
+                Finding the receipt…
+              </p>
+            )}
+          </div>
+        </div>
 
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-3 pt-3 pb-3">
-        <div className="flex flex-wrap items-center justify-center gap-1">
-          <Button
-            disabled={!edit}
-            onClick={() => edit && update(rotateClockwise(edit))}
-            size="sm"
-            variant="ghost"
-          >
-            <RotateCw aria-hidden="true" />
-            Rotate
-          </Button>
-          {edit?.detected ? (
+        <div className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col gap-3 px-3 pt-3 pb-3 md:max-w-none md:flex-none md:basis-88 md:overflow-y-auto md:border-l md:border-border md:p-5">
+          <div className="hidden items-start gap-2 md:flex">
             <Button
-              disabled={isDetected(edit)}
-              onClick={() => update(resetToDetected(edit))}
-              size="sm"
+              aria-label={adjusting ? "Back without uploading" : "Back to adjust corners"}
+              className="-ml-2"
+              onClick={back}
+              size="icon"
               variant="ghost"
             >
-              <ScanLine aria-hidden="true" />
-              Reset to detected
+              <ArrowLeft aria-hidden="true" />
             </Button>
-          ) : null}
-          <Button
-            disabled={!edit || isFullFrame(edit.quad)}
-            onClick={() => edit && update(fullImage(edit))}
-            size="sm"
-            variant="ghost"
-          >
-            <Maximize aria-hidden="true" />
-            Use full image
-          </Button>
-        </div>
-
-        <div aria-label="Filter" className="grid grid-cols-4 gap-2" role="group">
-          {FILTERS.map((filter) => (
-            <button
-              aria-pressed={edit?.filter === filter}
-              className={cn(
-                "flex flex-col items-center gap-1 rounded-lg p-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                edit?.filter === filter ? "text-foreground" : "text-muted-foreground",
-              )}
-              disabled={!edit}
-              key={filter}
-              onClick={() => chooseFilter(filter)}
-              type="button"
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-medium">{adjusting ? "Adjust corners" : "Preview"}</h2>
+              <p className="h-4 text-xs text-muted-foreground tabular-nums">
+                {count > 1 ? `Photo ${position} of ${count}` : null}
+              </p>
+            </div>
+            <Button
+              aria-label="Delete this photo"
+              onClick={() => setConfirmDelete(true)}
+              size="icon"
+              variant="ghost"
             >
-              <span
-                className={cn(
-                  "block h-14 w-full overflow-hidden rounded-md border-2 bg-muted",
-                  edit?.filter === filter ? "border-primary" : "border-transparent",
-                )}
+              <Trash2 aria-hidden="true" />
+            </Button>
+          </div>
+
+          {adjusting ? (
+            <div className="grid grid-cols-3 gap-1 md:grid-cols-1" data-testid="controls">
+              <Button
+                className={tool}
+                disabled={!edit}
+                onClick={() => edit && update(rotateClockwise(edit))}
+                variant="ghost"
               >
-                {thumbs[filter] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img alt="" className="size-full object-cover" src={thumbs[filter]} />
-                ) : null}
-              </span>
-              {FILTER_LABELS[filter]}
-            </button>
-          ))}
-        </div>
-
-        {current && heldBack(current.id) ? (
-          <Alert className="px-3 py-2 text-sm" variant="destructive">
-            <CircleAlert aria-hidden="true" />
-            <p>
-              This photo&apos;s crop, turn or filter couldn&apos;t be saved on this device, so it
-              wasn&apos;t sent. Try Read again, change the edit, or delete the photo.
-            </p>
-          </Alert>
-        ) : null}
-        {uploadError ? (
-          <Alert className="px-3 py-2 text-sm" variant="destructive">
-            <CircleAlert aria-hidden="true" />
-            <p>{uploadError}</p>
-          </Alert>
-        ) : null}
-
-        <p aria-live="polite" className="min-h-4 text-center text-xs text-muted-foreground">
-          {fresh ? (
-            <>
-              About <span className="font-mono tabular-nums">{formatSize(estimate.bytes)}</span> to
-              upload.
-              {edit?.filter === "grey" || edit?.filter === "bw"
-                ? " Greyscale and B&W make the file smaller."
-                : null}
-            </>
-          ) : edit ? (
-            "Working out the upload size…"
-          ) : null}
-          {edit?.filter === "bw" ? " B&W suits faded receipts but can lose light print." : null}
-        </p>
-
-        {count > 1 ? (
-          <ul aria-label="Photos to upload" className="flex justify-center gap-2 overflow-x-auto">
-            {images.map((image, i) => (
-              <li key={image.id}>
-                <button
-                  aria-current={i === index ? "true" : undefined}
-                  aria-label={heldBack(image.id) ? `Photo ${i + 1}, not sent` : `Photo ${i + 1}`}
-                  className={cn(
-                    "flex size-11 items-center justify-center rounded-md border-2 font-mono text-xs tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    i === index
-                      ? "border-primary text-foreground"
-                      : heldBack(image.id)
-                        ? "border-destructive text-destructive"
-                        : "border-border text-muted-foreground",
-                  )}
-                  onClick={() => setIndex(i)}
-                  type="button"
-                >
-                  {i + 1}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {alsoReading.length > 0 ? (
-          <p className="text-center text-xs text-muted-foreground">
-            Also reading, as picked: <span className="font-mono">{alsoReading.join(", ")}</span>
-          </p>
-        ) : null}
-
-        <Button disabled={working !== null || preparing} onClick={read} ref={uploadRef} size="lg">
-          {working ? (
-            <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+                <RotateCw aria-hidden="true" />
+                Rotate
+              </Button>
+              <Button
+                aria-label="Reset to detected"
+                className={tool}
+                disabled={!edit?.detected || isDetected(edit)}
+                onClick={() => edit && update(resetToDetected(edit))}
+                variant="ghost"
+              >
+                <ScanLine aria-hidden="true" />
+                Reset
+              </Button>
+              <Button
+                aria-label="Use full image"
+                className={tool}
+                disabled={!edit || isFullFrame(edit.quad)}
+                onClick={() => edit && update(fullImage(edit))}
+                variant="ghost"
+              >
+                <Maximize aria-hidden="true" />
+                Full image
+              </Button>
+            </div>
           ) : (
-            <ScanText aria-hidden="true" />
+            <div data-testid="controls">
+              <div
+                aria-label="Filter"
+                className="grid grid-cols-4 gap-2 md:grid-cols-2"
+                role="group"
+              >
+                {FILTERS.map((filter) => (
+                  <button
+                    aria-pressed={edit?.filter === filter}
+                    className={cn(
+                      "flex flex-col items-center gap-1 rounded-lg p-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      edit?.filter === filter ? "text-foreground" : "text-muted-foreground",
+                    )}
+                    disabled={!edit}
+                    key={filter}
+                    onClick={() => chooseFilter(filter)}
+                    type="button"
+                  >
+                    <span
+                      className={cn(
+                        "block h-14 w-full overflow-hidden rounded-md border-2 bg-muted md:h-24",
+                        edit?.filter === filter ? "border-primary" : "border-transparent",
+                      )}
+                    >
+                      {thumbs[filter] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img alt="" className="size-full object-cover" src={thumbs[filter]} />
+                      ) : null}
+                    </span>
+                    {FILTER_LABELS[filter]}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
-          {working ??
-            (total === 1 ? "Read receipt" : preparing ? "Preparing…" : `Read ${total} receipts`)}
-        </Button>
+
+          {adjusting ? (
+            <p className="min-h-8 text-center text-xs text-muted-foreground md:text-left">
+              Drag a corner to the edge of the receipt, or select one and use the arrow keys.
+            </p>
+          ) : (
+            <div
+              aria-live="polite"
+              className="text-center text-xs text-muted-foreground md:text-left"
+            >
+              <p className="h-4 whitespace-nowrap" data-testid="resolution">
+                {planned ? (
+                  <>
+                    <Mono>{planned.width}</Mono> × <Mono>{planned.height}</Mono> px ·{" "}
+                    {size ? (
+                      <>
+                        about <Mono>{size.value}</Mono> {size.unit}
+                      </>
+                    ) : (
+                      "sizing…"
+                    )}
+                  </>
+                ) : null}
+              </p>
+              <p className="mt-1 h-12">
+                {edit?.filter === "grey" || edit?.filter === "bw"
+                  ? "Greyscale and B&W make the file smaller."
+                  : null}
+                {edit?.filter === "bw"
+                  ? " B&W suits faded receipts but can lose light print."
+                  : null}
+              </p>
+            </div>
+          )}
+
+          {current && heldBack(current.id) ? (
+            <Alert className="px-3 py-2 text-sm" variant="destructive">
+              <CircleAlert aria-hidden="true" />
+              <p>
+                This photo&apos;s crop, turn or filter couldn&apos;t be saved on this device, so it
+                wasn&apos;t sent. Try Upload again, change the edit, or delete the photo.
+              </p>
+            </Alert>
+          ) : null}
+          {uploadError ? (
+            <Alert className="px-3 py-2 text-sm" variant="destructive">
+              <CircleAlert aria-hidden="true" />
+              <p>{uploadError}</p>
+            </Alert>
+          ) : null}
+
+          <div className="mt-auto flex flex-col gap-2">
+            {count > 1 ? (
+              <ul
+                aria-label="Photos to upload"
+                className="flex justify-center gap-2 overflow-x-auto md:flex-wrap md:justify-start"
+              >
+                {images.map((image, i) => (
+                  <li key={image.id}>
+                    <button
+                      aria-current={i === index ? "true" : undefined}
+                      aria-label={
+                        heldBack(image.id) ? `Photo ${i + 1}, not sent` : `Photo ${i + 1}`
+                      }
+                      className={cn(
+                        "flex size-11 items-center justify-center rounded-md border-2 font-mono text-xs tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        i === index
+                          ? "border-primary text-foreground"
+                          : heldBack(image.id)
+                            ? "border-destructive text-destructive"
+                            : "border-border text-muted-foreground",
+                      )}
+                      onClick={() => setIndex(i)}
+                      type="button"
+                    >
+                      {i + 1}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {alsoReading.length > 0 ? (
+              <p className="text-center text-xs text-muted-foreground md:text-left">
+                Also uploading, as picked:{" "}
+                <span className="font-mono">{alsoReading.join(", ")}</span>
+              </p>
+            ) : null}
+
+            <Button
+              disabled={working !== null || (!adjusting && preparing)}
+              onClick={primary}
+              ref={primaryRef}
+              size="lg"
+            >
+              {working ? (
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : adjusting ? null : (
+                <ScanText aria-hidden="true" />
+              )}
+              {working ??
+                (adjusting
+                  ? "Next"
+                  : total === 1
+                    ? "Upload"
+                    : preparing
+                      ? "Preparing…"
+                      : `Upload ${total} receipts`)}
+            </Button>
+            <Button
+              className={cn("min-h-11", adjusting && "invisible")}
+              disabled={adjusting}
+              onClick={() => setStep("adjust")}
+              tabIndex={adjusting ? -1 : undefined}
+              variant="ghost"
+            >
+              Adjust corners
+            </Button>
+          </div>
+        </div>
       </div>
 
+      <ConfirmDialog
+        cancelLabel="Keep it"
+        confirmLabel="Delete photo"
+        description={
+          count === 1
+            ? "This was the only photo, so the review closes. Nothing has been uploaded."
+            : "It won't be uploaded. Photos taken here aren't saved anywhere else."
+        }
+        destructive
+        onConfirm={() => {
+          setConfirmDelete(false);
+          remove();
+        }}
+        onOpenChange={setConfirmDelete}
+        open={confirmDelete}
+        title={`Delete photo ${position}?`}
+      />
       <ConfirmDialog
         cancelLabel="Keep editing"
         confirmLabel="Discard"
