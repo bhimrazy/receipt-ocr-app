@@ -27,6 +27,17 @@ jobs:
       - run: bun run check:deps
       - run: bun run knip
       - run: bun run audit
+      # A schema change without its migration fails here. drizzle-kit generate diffs the schema
+      # against the committed snapshots and never connects to a database.
+      - name: Migrations match the schema
+        timeout-minutes: 3
+        run: |
+          bun run db:generate
+          if [ -n "$(git status --porcelain -- apps/web/drizzle)" ]; then
+            git status --short -- apps/web/drizzle
+            echo "::error::packages/db schema changed without a migration: run bun run db:generate and commit apps/web/drizzle."
+            exit 1
+          fi
 
   checks:
     name: Typecheck, test, build
