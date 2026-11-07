@@ -5,8 +5,9 @@ name: Vercel Preview Deployment
 #
 # The free Vercel plan allows 100 deployments a day (production deploys included) and 10 GB of
 # function storage. Until launch, a PR gets a preview only when it carries the `preview` label
-# (repository variable PREVIEW_MODE unset or `label`). Set PREVIEW_MODE=auto to also deploy every
-# ready-for-review PR that changes something the app ships.
+# (repository variable PREVIEW_MODE unset or `label`), and only when the label is added: later pushes
+# don't redeploy. To refresh a preview, remove and re-add the label. Set PREVIEW_MODE=auto to also
+# deploy every push to a ready-for-review PR that changes something the app ships.
 #
 # A push to the `preview` branch always deploys and aliases the fixed preview domains (docs/production-environment.md).
 # Only the owner should push there.
@@ -21,9 +22,10 @@ on:
 permissions: {}
 
 concurrency:
-  # A newer push cancels the deploy in flight. A run for some other label gets its own group, so it
-  # can't cancel a deploy.
-  group: ${{ github.event_name == 'push' && format('vercel-preview-branch-{0}', github.ref_name) || format('vercel-preview-{0}{1}', github.event.pull_request.number, github.event.action == 'labeled' && github.event.label.name != 'preview' && format('-ignored-{0}', github.run_id) || '') }}
+  # A newer push cancels the deploy in flight. Label runs get their own group, so a push right after
+  # labelling (which doesn't deploy in label mode) can't cancel the label's deploy, and a run for some
+  # other label can't cancel anything.
+  group: ${{ github.event_name == 'push' && format('vercel-preview-branch-{0}', github.ref_name) || format('vercel-preview-{0}{1}', github.event.pull_request.number, github.event.action == 'labeled' && (github.event.label.name != 'preview' && format('-ignored-{0}', github.run_id) || '-labeled') || '') }}
   cancel-in-progress: true
 
 jobs:
@@ -51,17 +53,15 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
-          FORCED: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
+          # The label deploys once, when added; pushes after that don't use up the daily deploys.
+          FORCED: ${{ github.event.action == 'labeled' && github.event.label.name == 'preview' }}
           MODE: ${{ vars.PREVIEW_MODE || 'label' }}
         run: |
           deploy=false
           if [ "$EVENT" = workflow_dispatch ] || [ "$EVENT" = push ] || [ "$FORCED" = true ]; then
             deploy=true
           elif [ "$MODE" = auto ] && [ "$DRAFT" != true ]; then
-            # Any file outside docs, Markdown, tests, benchmarks, scripts and CI config changes what ships
-            # (preview.yml itself and the Vercel CLI lockfile do: they change the deploy).
-            shipped=$(git diff --name-only --no-renames HEAD^1 HEAD | tee /dev/stderr \
-              | grep -vE '^(docs|bench|scripts)/|\.md$|\.test\.tsx?$|^apps/web/e2e/|^\.github/(workflows/(ci|db-migrate|load|production)\.yml|actions/|dependabot\.yml|ISSUE_TEMPLATE/)|^(knip\.json|\.prettier[a-z]*|\.gitignore)$' || true)
+            shipped=$(.github/scripts/shipped-files.sh HEAD^1 HEAD)
             [ -n "$shipped" ] && deploy=true
           fi
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
