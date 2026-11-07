@@ -54,6 +54,7 @@ Steps are in [deployment.md](deployment.md).
 | `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                                                                                          |
 | `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                                                                                    |
 | `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                                                                                         |
+| `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; migration `0010` (index only)                                                                    |
 | `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying)                                                                |
 | `feat/wide-events` (#52)   | [Wide events](architecture/flows/observability.md): one event per request, page render, job attempt and tick; schema allowlist, tail sampling (`LOG_SAMPLE_RATE`, `LOG_SLOW_MS`); `job.run` is now `job.attempt`. Next: OTLP export |
 
@@ -111,6 +112,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- FAQ uses a raw `<details>`; add a server-friendly Disclosure primitive to `packages/ui`.
 - PDF page cap gaps: the hand-written page counter (`packages/core/src/pdf-pages.ts`) can undercount when the word
   `stream` sits inside a string or `/stream` is used as a name, when `endobj` sits inside a string, when comments sit
   inside a dictionary, and for encrypted object streams. The list is not exhaustive. The cap is a
@@ -142,6 +144,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   in the 24/36/48 ladder after #38, profiles both, replaces the quota count with something cheaper, and runs a
   30-minute soak. The app also holds up to 10 connections against a pool max of 5. Pages emit `page.render` events
   from #52 on.
+
+- Perf/SEO follow-ups from [the audit](reviews/2026-11-06-perf-seo.md) on files other tracks own: root layout
+  preloads DM Sans with the `opsz` axis (62 KB) and JetBrains Mono (40 KB) on every page, and its `openGraph.url: "/"`
+  and 179-char description reach pages without their own metadata (PWA track); receipt page `<img>` has no
+  width/height and its `dl` wraps `dt`/`dd` in extra divs, and the history search box is the LCP element after
+  hydration (mobile shell track).
 
 ## How to resume on another machine
 

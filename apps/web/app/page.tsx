@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { LandingPage } from "@/components/landing-page";
-import { canonicalFor, siteTitle } from "@/lib/site";
+import { homeDescription, pageMetadata } from "@/lib/seo";
+import { siteTitle } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: { absolute: siteTitle },
-  alternates: canonicalFor("/"),
-};
+export const metadata: Metadata = pageMetadata({
+  title: siteTitle,
+  absoluteTitle: true,
+  description: homeDescription,
+  path: "/",
+});
 
 export default function Page() {
   return <LandingPage />;

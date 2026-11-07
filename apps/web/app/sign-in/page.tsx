@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 import { AuthLayout, AuthNotConfiguredCard } from "@/components/auth/auth-layout";
 import { CredentialsForm, type SocialProvider } from "@/components/auth/credentials-form";
 import { authEnabled, authEnv } from "@/lib/env";
@@ -7,7 +8,12 @@ import { safeRedirect } from "@/lib/redirect";
 import { getSession } from "@/lib/session";
 import { redirect as nextRedirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Sign in", robots: { index: false, follow: true } };
+export const metadata: Metadata = pageMetadata({
+  title: "Sign in",
+  description: "Sign in to receiptOCR to upload receipts, check what was read and export a CSV.",
+  path: "/sign-in",
+  index: false,
+});
 
 export default async function SignInPage({
   searchParams,

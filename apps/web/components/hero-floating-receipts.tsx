@@ -1,7 +1,5 @@
-"use client";
-
 import { Check } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { HeroParallax } from "@/components/hero-parallax";
 
 const receiptCards = [
   {
@@ -43,38 +41,10 @@ const receiptCards = [
   },
 ] as const;
 
+/** Decorative cards around the hero, shown from xl up. Server-rendered; only the parallax is client. */
 export function HeroFloatingReceipts() {
-  const layerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const layer = layerRef.current;
-    if (!layer) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    let frame = 0;
-    const onMove = (event: MouseEvent) => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const nx = (event.clientX / window.innerWidth - 0.5) * 2;
-        const ny = (event.clientY / window.innerHeight - 0.5) * 2;
-        layer.style.setProperty("--mx", nx.toFixed(3));
-        layer.style.setProperty("--my", ny.toFixed(3));
-      });
-    };
-
-    window.addEventListener("mousemove", onMove, { passive: true });
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("mousemove", onMove);
-    };
-  }, []);
-
   return (
-    <div
-      ref={layerRef}
-      className="pointer-events-none absolute inset-0 hidden [--mx:0] [--my:0] xl:block"
-      aria-hidden
-    >
+    <HeroParallax className="pointer-events-none absolute inset-0 hidden [--mx:0] [--my:0] xl:block">
       {receiptCards.map((card) => (
         <div
           key={card.merchant}
@@ -104,6 +74,6 @@ export function HeroFloatingReceipts() {
           </div>
         </div>
       ))}
-    </div>
+    </HeroParallax>
   );
 }

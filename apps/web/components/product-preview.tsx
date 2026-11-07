@@ -55,7 +55,7 @@ export function ProductPreview() {
         {/* Extracted data side */}
         <div className="bg-card">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
-            <h3 className="text-sm font-medium">Extracted data</h3>
+            <p className="text-sm font-medium">Extracted data</p>
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 font-mono text-2xs text-primary">
               <Check className="size-3" /> 98% confidence
             </span>

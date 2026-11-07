@@ -38,3 +38,4 @@ export type AppServices = Layer.Layer.Success<typeof AppLayer>;
 export * from "./admin";
 export * from "./audit";
 export * from "./admin-queries";
+export * from "./admin-ops";

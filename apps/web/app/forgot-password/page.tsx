@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 import { AuthLayout, AuthNotConfiguredCard } from "@/components/auth/auth-layout";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 import { authEnabled } from "@/lib/env";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Reset password",
-  robots: { index: false, follow: true },
-};
+  description: "Send yourself a link to reset your receiptOCR password.",
+  path: "/forgot-password",
+  index: false,
+});
 
 // The layout shows the free plan's limit; an admin save also revalidates (revalidatePlanCopy).
 export const revalidate = 3600;
