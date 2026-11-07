@@ -2,21 +2,72 @@ name: Vercel Preview Deployment
 
 # Previews use the staging database (Vercel's Preview env vars) and never run migrations: a PR whose
 # migration hasn't merged yet won't find its tables there. See docs/deployment.md.
+#
+# The free Vercel plan allows 100 deployments a day and 10 GB of function storage, so a PR gets a
+# preview only when it is ready for review (not a draft) and changes something the app ships. The
+# `preview` label forces one, drafts and docs-only PRs included.
+#
+# A push to the `preview` branch always deploys and aliases the fixed preview domains (docs/production-environment.md).
+# Only the owner should push there.
 on:
+  push:
+    branches: [preview]
   # Every PR, including stacked ones whose base isn't main.
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, labeled]
   workflow_dispatch:
 
 permissions: {}
 
 concurrency:
-  group: vercel-preview-${{ github.event.pull_request.number }}
+  # A newer push cancels the deploy in flight. A run for some other label gets its own group, so it
+  # can't cancel a deploy.
+  group: ${{ github.event_name == 'push' && format('vercel-preview-branch-{0}', github.ref_name) || format('vercel-preview-{0}{1}', github.event.pull_request.number, github.event.action == 'labeled' && github.event.label.name != 'preview' && format('-ignored-{0}', github.run_id) || '') }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Needs a preview?
+    # Dependabot and fork PRs get no secrets, so a preview could only fail.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.actor != 'dependabot[bot]' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (github.event.action != 'labeled' || github.event.label.name == 'preview'))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    outputs:
+      deploy: ${{ steps.decide.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          FORCED: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
+        run: |
+          deploy=false
+          if [ "$EVENT" = workflow_dispatch ] || [ "$EVENT" = push ] || [ "$FORCED" = true ]; then
+            deploy=true
+          elif [ "$DRAFT" != true ]; then
+            # Any file outside docs, Markdown, tests, benchmarks, scripts and CI config changes what ships
+            # (preview.yml itself and the Vercel CLI lockfile do: they change the deploy).
+            shipped=$(git diff --name-only --no-renames HEAD^1 HEAD | tee /dev/stderr \
+              | grep -vE '^(docs|bench|scripts)/|\.md$|\.test\.tsx?$|^apps/web/e2e/|^\.github/(workflows/(ci|db-migrate|load|production)\.yml|actions/|dependabot\.yml|ISSUE_TEMPLATE/)|^(knip\.json|\.prettier[a-z]*|\.gitignore)$' || true)
+            [ -n "$shipped" ] && deploy=true
+          fi
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+          echo "deploy=$deploy"
+
   deploy-preview:
-    # Dependabot PRs get no secrets, so a preview could only fail.
-    if: github.actor != 'dependabot[bot]'
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     environment: vercel
@@ -24,6 +75,7 @@ jobs:
       contents: read
       pull-requests: write
     env:
+      VERCEL_BIN: ${{ github.workspace }}/.github/vercel-cli/node_modules/.bin/vercel
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
@@ -35,16 +87,17 @@ jobs:
       - name: Install Vercel CLI (pinned, own lockfile)
         run: |
           bun install --frozen-lockfile --cwd .github/vercel-cli
-          echo "$GITHUB_WORKSPACE/.github/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Pull Vercel environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel pull --yes --environment=preview
+        run: |
+          "$VERCEL_BIN" pull --yes --environment=preview
 
       # No token for the build step: it runs repository code, which only needs the pulled settings.
       - name: Build project
-        run: vercel build
+        run: |
+          "$VERCEL_BIN" build
 
       - name: Deploy to Vercel
         id: deploy
@@ -52,10 +105,23 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           # One archive upload instead of one request per build file (free plan: 5000 uploads/day).
-          url=$(vercel deploy --prebuilt --archive=tgz)
+          url=$("$VERCEL_BIN" deploy --prebuilt --archive=tgz)
           echo "preview_url=$url" >> "$GITHUB_OUTPUT"
 
+      # Branch domains follow git metadata that a CLI deploy may not carry, so point them explicitly.
+      # `alias set` is idempotent.
+      - name: Alias the fixed preview domains
+        if: github.event_name == 'push'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          for domain in preview.receipt-ocr.bhimraj.com.np preview-receipt-ocr.vercel.app; do
+            "$VERCEL_BIN" alias set "$DEPLOYMENT_URL" "$domain"
+          done
+
       - name: Find existing preview comment
+        if: github.event_name == 'pull_request'
         id: find-comment
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         with:
@@ -64,6 +130,7 @@ jobs:
           body-includes: <!-- vercel-preview-comment -->
 
       - name: Post or update preview comment
+        if: github.event_name == 'pull_request'
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}

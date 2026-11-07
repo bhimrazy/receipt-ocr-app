@@ -34,6 +34,11 @@ const noindexPaths = [
   "/accept-invitation/:path*",
 ];
 
+// Everything but production stays out of search results. Vercel only adds this on *.vercel.app, not on
+// a custom domain such as the fixed preview one. No VERCEL_ENV (Docker) leaves behaviour as it was.
+const notProduction =
+  process.env.VERCEL_ENV !== undefined && process.env.VERCEL_ENV !== "production";
+
 const nextConfig: NextConfig = {
   // Self-contained server bundle for the Docker image. Ignored by Vercel.
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
@@ -51,7 +56,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [
-      { source: "/:path*", headers: securityHeaders },
+      {
+        source: "/:path*",
+        headers: notProduction ? [...securityHeaders, noindexHeader] : securityHeaders,
+      },
       // Pages where analytics may run send only their origin as Referer: the same-origin /view
       // fetch and Google then never see a path or a query string (?redirect= can name a receipt).
       ...ANALYTICS_PATH_LIST.map((source) => ({

@@ -8,6 +8,13 @@
       "when": 1794035016259,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794038936805,
+      "tag": "0001_ocr_call_refused_unsupported",
+      "breakpoints": true
     }
   ]
 }

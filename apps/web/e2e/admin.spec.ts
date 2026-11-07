@@ -1,6 +1,6 @@
 import { expect, test, type Browser } from "@playwright/test";
 import postgres from "postgres";
-import { PASSWORD, signIn, signOut, signUp, uniqueEmail } from "./helpers";
+import { PASSWORD, signIn, signOut, signUp, uniqueEmail, waitForAuthForm } from "./helpers";
 
 async function sql<T>(run: (db: postgres.Sql) => Promise<T>) {
   const db = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
@@ -76,6 +76,7 @@ test("admin finds a user, bans them with a reason, and the audit log shows it", 
 
   // Customer side: the banned user is refused with a plain message.
   await target.page.goto("/sign-in");
+  await waitForAuthForm(target.page);
   await target.page.getByLabel("Email").fill(target.email);
   await target.page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await target.page.getByRole("button", { name: "Sign in" }).click();

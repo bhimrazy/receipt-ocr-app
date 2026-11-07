@@ -4,6 +4,7 @@ export {
   OCR_FAILURE_KINDS,
   OcrCallError,
   retryAfterMs,
+  UnsupportedFileError,
   type OcrFailureKind,
 } from "./errors";
 export * from "./models";

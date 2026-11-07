@@ -142,7 +142,9 @@ How the ledger is used:
 
 - One `ocr_rounds` row per accepted upload or retry, written under the quota check and the per-user lock.
 - One `ocr_calls` row per model call when the round ends, or a single row with a null model when it failed before
-  any model ran (no stored file, nothing configured).
+  any model ran (no stored file, nothing configured). A step skipped before any request (`unsupported-file`, e.g.
+  HEIC on Claude) also has a null model, with its provider and step kept: `model is not null` means "a model was
+  called" to quota, the global cap, latency and cost rollups, and a skip costs nothing.
 - Quota, the global daily cap and cost rollups read only these two tables. See
   [core: quota ledger semantics](core.md#design-principles-and-invariants).
 - Neither table has free-text columns, so neither can hold receipt contents or provider messages.
@@ -277,7 +279,7 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `jobs`                  | `jobs_idempotency_idx` on `idempotency_key`, where queued or running                         | A replayed upload or double-clicked retry enqueues nothing                                                                                                          |
 | `jobs`                  | `jobs_receipt_live_idx` on `receipt_id`, where queued or running and `kind like 'receipt.%'` | At most one live job per receipt; also serves every live-job lookup by receipt                                                                                      |
 | `jobs`                  | `jobs_last_error_kind_check`: `~ '^[a-z0-9.-]{1,40}$'`                                       | Error codes only, never a message that could hold receipt contents                                                                                                  |
-| `ocr_calls`             | `ocr_calls_status_check`: `status in (...)`                                                  | Only `ok`, the six AI failure kinds and `storage-error`                                                                                                             |
+| `ocr_calls`             | `ocr_calls_status_check`: `status in (...)`                                                  | Only `ok`, the eight AI failure kinds and `storage-error` (`0001` added `refused`, `unsupported-file`)                                                              |
 | `receipt_groups`        | `receipt_groups_org_name_idx` on `(organization_id, lower(name))`                            | Group names are unique per workspace, ignoring case                                                                                                                 |
 | `receipt_group_members` | Primary key on `(group_id, receipt_id)`                                                      | A receipt is in a group once                                                                                                                                        |
 | `app_settings`          | Primary key on `key`                                                                         | One row per setting, upserted on save                                                                                                                               |

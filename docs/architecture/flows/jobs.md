@@ -98,14 +98,17 @@ sequenceDiagram
 
 ## Retries, dead jobs and cooldowns
 
-| Failure                                                                              | Next                                                    |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------- |
-| `timeout`, `rate-limited`, `provider-error`, storage, DB                             | Retry after backoff, up to 4 attempts                   |
-| `invalid-output`, `bad-image`, `not-configured`, unreadable stored file, bad payload | Dead now                                                |
-| Every provider in the chain cooling down                                             | Back to `queued` at the cooldown end, attempt not spent |
+| Failure                                                                                                                                 | Next                                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `timeout`, `rate-limited`, `provider-error`, storage, DB                                                                                | Retry after backoff, up to 4 attempts                                                                           |
+| `invalid-output`, `bad-image`, `not-configured`, `refused`, `unsupported-file`, unreadable stored file, bad payload                     | Dead now (`refused` and `unsupported-file` already tried every model; each has its own receipt message)         |
+| A chain where any step hit `timeout`, `rate-limited` or `provider-error`, whatever the last step's kind (e.g. a 429, then HEIC skipped) | Retry after backoff, as that transient kind                                                                     |
+| Steps left out for a cooling provider and the rest failed for good (`refused`, `unsupported-file`, ...)                                 | Retry, as `providers-cooling`, once the first left-out provider is back (spends an attempt, so the cap ends it) |
+| Every provider in the chain cooling down                                                                                                | Back to `queued` at the cooldown end, attempt not spent                                                         |
 
-- Backoff: `min(10 min, 10 s x 2^(attempt-1))`, jittered to 50 to 100%. A provider's Retry-After is a floor (capped
-  at 10 min). Delays are computed with the database's `now()`, so app and database clock skew doesn't matter.
+- Backoff: `min(10 min, 10 s x 2^(attempt-1))`, jittered to 50 to 100%. A provider's Retry-After (a header, or
+  Gemini's `RetryInfo.retryDelay` in the 429 body) is a floor, and so is the cooldown the failure starts (30 s for a
+  429 with no hint), so a retry never runs while its own provider is still left out (capped at 10 min). Delays are computed with the database's `now()`, so app and database clock skew doesn't matter.
 - A 429 writes a cooldown for the whole provider (`job_controls` scope `provider:<id>`, Retry-After or 30 s, at most
   10 min). Every job reads cooldowns before calling the model and skips cooling providers, so one 429 slows every job
   for that provider, not only the one that hit it.

@@ -49,15 +49,19 @@ Steps are in [deployment.md](deployment.md).
   Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
 - Production deploys automatically after CI passes on a push to `main`. Manual runs are allowed only from `main`.
   Once `ci/db-migrations` lands, the automatic deploy skips any release that changes `apps/web/drizzle/` since the
-  `production-deployed` tag; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
+  last successful production deploy run; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
   with the owner's approval), then the deploy is run by hand. Production and staging are reset to the squashed baseline.
 - `staging-db` and `production-db` exist (`main` only, `DIRECT_URL` set, required reviewer on `production-db`).
   Still to do for `ci/db-migrations`: point Vercel's Preview variables at `receipt-ocr-staging`, leave
   `BETTER_AUTH_URL` unset there and turn on Deployment Protection for previews
   ([deployment.md](deployment.md#staging-and-previews)). After merging, once: run **Database Migration** for
   `staging-db`, then `production-db` (applies the baseline), then **Vercel Production Deployment** by hand. Manual
-  deploys need a successful `production-db` run with the same migrations, and there is no `production-deployed` tag
-  yet, so automatic deploys skip until that deploy creates it.
+  deploys need a successful `production-db` run with the same migrations. The automatic gate compares with the last
+  run of the workflow on `main` whose `deploy-production` job succeeded; CI creates no git tags (tags are for real
+  releases, later).
+- `feat/anthropic-provider` adds migration `0001_ocr_call_refused_unsupported` (widens `ocr_calls_status_check`
+  with `refused` and `unsupported-file`; existing rows stay valid). Run **Database Migration** before deploying it:
+  without it, a refused or skipped call fails its ledger insert.
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
   to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
@@ -85,6 +89,7 @@ Steps are in [deployment.md](deployment.md).
 | `ci/db-migrations`         | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging                                                         |
 | `feat/consent-analytics`   | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                                                                                  |
 | `feat/wide-events` (#52)   | [Wide events](architecture/flows/observability.md): one event per request, page render, job attempt and tick; schema allowlist, tail sampling (`LOG_SAMPLE_RATE`, `LOG_SLOW_MS`); `job.run` is now `job.attempt`. Next: OTLP export |
+| `feat/anthropic-provider`  | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet                                                                          |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -99,7 +104,8 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
    [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
 4. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
-5. Second AI provider (recommended: Anthropic Haiku), direct keys vs Vercel AI Gateway.
+5. Anthropic (direct key, `ANTHROPIC_API_KEY`): approve the Claude benchmark spend (dry-run estimate about $0.34 for
+   the six fixtures on all three models), then which Claude model, if any, joins the production chain and where.
 6. PostHog: server-only first (recommended) or browser too; Sentry tracing off; source-map upload approach.
 7. Members: free seats 3 or 5, single owner + transfer, pending invites count. See
    [members plan](plans/2026-11-06-members-admin-plan.md).
@@ -130,7 +136,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    Real benchmark set (CORD/CORU committed, SROIE/ReceiptBench local, the owner's 40 Nepal receipts, BS-date and
    Devanagari scoring fixes): [receipt benchmark set](plans/2026-11-07-receipt-benchmark-set.md). Long receipts as
    multi-part receipts: [long receipt capture](plans/2026-11-07-long-receipt-capture.md).
-5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
+5. Second provider: Anthropic wired in (`feat/anthropic-provider`); admitted to the default chain only by the
+   benchmark. Then OpenAI.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
    Security; PR B passkeys (primary sign-in) + admin enforcement. Each adds a migration after the baseline.
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
@@ -140,13 +147,24 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
    Currency honesty (no USD default, 3-decimal amounts) and conversion to a home currency:
    [currencies and FX](plans/2026-11-06-currencies-fx.md).
+10. Read-only agent access over MCP: personal tokens first, then OAuth for Claude.ai and ChatGPT ([MCP server](plans/2026-11-07-mcp-server.md)).
+11. Bring your own AI key (Pro perk, maybe a capped Free on-ramp), then own storage (R2 first), on envelope
+    encryption with rotation ([BYOK plan](plans/2026-11-07-byok.md)). After billing.
+12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
+
+## Later, once the app is stable (owner notes, 2026-11-07)
+
+- **Release-based deploys.** Today every push to `main` deploys after CI (migrations by hand). Move to deploying
+  tagged releases (for example `v0.x.y` with release notes), so `main` can take merges without each one going live.
+- **Self-hosting.** Vercel's free (Hobby) plan is for non-commercial use and has hard monthly limits; a busy month or
+  paying users outgrow it. The exit is already built: the Docker image (`docker/Dockerfile.prod`, Bun runtime), the
+  compose stack and the 1 vCPU / 1 GB load test. Decide between Vercel Pro and a small VPS (plus managed Postgres and
+  R2, which stay as they are) when traffic or billing makes it necessary.
 
 ## Known follow-ups
 
-- Deploy record (review P3-1, P3-2 on #55): the `production-deployed` tag is moved by `record-deploy` with
-  `GITHUB_TOKEN`. Consider a tag ruleset (only Actions may move it) or GitHub Deployments as the record, and watch the
-  first `record-deploy` after a release that changes workflows.
-
+- Encryption key rotation: re-encrypt job + per-version counts + split from the auth secret (see
+  [BYOK plan](plans/2026-11-07-byok.md#9-key-rotation-and-encryption-at-rest)).
 - FAQ uses a raw `<details>`; add a server-friendly Disclosure primitive to `packages/ui`.
 - PDF page cap gaps: the hand-written page counter (`packages/core/src/pdf-pages.ts`) can undercount when the word
   `stream` sits inside a string or `/stream` is used as a name, when `endobj` sits inside a string, when comments sit

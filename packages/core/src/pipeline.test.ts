@@ -3,7 +3,15 @@ import type { Receipt } from "@receipt-ocr/db";
 import { Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { NotConfigured, OcrError, StorageError } from "./errors";
-import { claimRetry, deleteReceipt, ingestUpload, runExtraction, settleFailure } from "./pipeline";
+import {
+  claimRetry,
+  deleteReceipt,
+  ingestUpload,
+  ocrCallRows,
+  ocrFields,
+  runExtraction,
+  settleFailure,
+} from "./pipeline";
 import {
   EXTRACTION_FAILED_MESSAGE,
   ReceiptRepo,
@@ -394,5 +402,67 @@ describe("deleteReceipt (U1)", () => {
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(h.rows.size).toBe(0);
     expect(h.objects.size).toBe(0);
+  });
+});
+
+describe("ocrCallRows", () => {
+  const context = {
+    receiptId: "r1",
+    scope: { organizationId: "o1", userId: "u1" },
+    round: 1,
+    jobAttempt: 1,
+    at: new Date("2026-11-07T12:00:00Z"),
+  };
+  const usage = {
+    inputTokens: 1000,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 200,
+    reasoningTokens: 0,
+  };
+
+  it("records a skipped step with its provider but no model, free and instant", () => {
+    const rows = ocrCallRows(
+      [
+        {
+          model: "anthropic:claude-haiku-5-5",
+          step: 0,
+          kind: "unsupported-file",
+          ms: 3,
+          usage: null,
+          skipped: true,
+        },
+        { model: "google:gemini-3.8-flash", step: 1, kind: "ok", ms: 2100, usage },
+      ],
+      context,
+    );
+    // `model is not null` is what quota (failedPaid, roundsSince), latency and the unpriced count
+    // read as "a model was called"; a skip must not match it.
+    expect(rows[0]).toMatchObject({
+      step: 0,
+      model: null,
+      provider: "anthropic",
+      status: "unsupported-file",
+      costMicroUsd: 0,
+      latencyMs: 0,
+    });
+    expect(rows[1]).toMatchObject({ step: 1, model: "google:gemini-3.8-flash", status: "ok" });
+    expect(ocrFields(rows)).toMatchObject({ calls: 1, model: "google:gemini-3.8-flash" });
+  });
+
+  it("keeps the model on a 413, which did reach the provider", () => {
+    const [row] = ocrCallRows(
+      [
+        {
+          model: "anthropic:claude-haiku-5-5",
+          step: 0,
+          kind: "unsupported-file",
+          ms: 400,
+          usage: null,
+        },
+      ],
+      context,
+    );
+    expect(row).toMatchObject({ model: "anthropic:claude-haiku-5-5", latencyMs: 400 });
   });
 });

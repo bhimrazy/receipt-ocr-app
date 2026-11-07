@@ -11,7 +11,12 @@ import {
 import { withoutCooling } from "../ocr";
 import type { OcrStep } from "../settings";
 import { backoffMs } from "./backoff";
-import { classifyExtractionError, cooldownsFrom } from "./kinds/receipt-extract";
+import {
+  classifyExtractionError,
+  cooldownsFrom,
+  EXTRACTION_REFUSED_MESSAGE,
+  finalFailureMessage,
+} from "./kinds/receipt-extract";
 import { receiptExtractJob, receiptExtractPayload } from "./receipt-extract-job";
 import { JOB_REGISTRY } from "./registry";
 
@@ -54,7 +59,122 @@ const attempt = (kind: OcrError["kind"] | "ok", retryAfterMs?: number) => ({
 const ocrError = (kind: OcrError["kind"], attempts = [attempt(kind)]) =>
   new OcrError({ message: "x", kind, attempts });
 
+describe("a 429 with no Retry-After, then a step that fails for good", () => {
+  const G = "google:gemini-3.8-flash";
+  const C = "anthropic:claude-haiku-5-5";
+  const chain: OcrStep[] = [
+    { model: G, enabled: true, timeoutMs: 20_000 },
+    { model: C, enabled: true, timeoutMs: 20_000 },
+  ];
+  const at = (model: string, step: number, kind: OcrError["kind"]) => ({
+    model,
+    step,
+    kind,
+    ms: 5,
+    usage: null,
+  });
+  const now = Date.parse("2026-11-07T12:00:00Z");
+
+  it("waits out the cooldown it starts, so the retry includes Gemini again", async () => {
+    const first = new OcrError({
+      message: "x",
+      kind: "unsupported-file",
+      attempts: [at(G, 0, "rate-limited"), { ...at(C, 1, "unsupported-file"), skipped: true }],
+    });
+    const failure = classifyExtractionError(first, now);
+    const cooldown = cooldownsFrom(first).get("google")!;
+    expect(failure).toMatchObject({ _tag: "RetryableJobError", kind: "rate-limited" });
+    if (failure._tag !== "RetryableJobError") return;
+    expect(failure.retryAfterMs).toBe(cooldown);
+    // Even the shortest jittered delay is past the cooldown, so attempt 2 has Gemini back.
+    const delay = backoffMs(1, policy, failure.retryAfterMs, () => 0);
+    expect(delay).toBeGreaterThanOrEqual(cooldown);
+    const cooling = new Map([["google" as const, new Date(now + cooldown)]]);
+    const next = await Effect.runPromise(withoutCooling(chain, cooling, now + delay));
+    expect(next.map((step) => step.model)).toEqual([G, C]);
+  });
+
+  it("retries when cooling left steps out and the rest failed for good", () => {
+    const error = new OcrError({
+      message: "x",
+      kind: "refused",
+      attempts: [at(C, 1, "refused")],
+      coolingUntil: new Date(now + 12_000),
+    });
+    expect(classifyExtractionError(error, now)).toMatchObject({
+      _tag: "RetryableJobError",
+      kind: "providers-cooling",
+      retryAfterMs: 12_000,
+    });
+  });
+
+  it("still gives up on an all-terminal chain when nothing was cooling", () => {
+    const error = new OcrError({
+      message: "x",
+      kind: "unsupported-file",
+      attempts: [at(G, 0, "invalid-output"), { ...at(C, 1, "unsupported-file"), skipped: true }],
+    });
+    expect(classifyExtractionError(error, now)).toMatchObject({
+      _tag: "NonRetryableJobError",
+      kind: "unsupported-file",
+    });
+  });
+});
+
+describe("finalFailureMessage", () => {
+  it("tells the user a refusal won't change on a retry", () => {
+    expect(finalFailureMessage("refused")).toBe(EXTRACTION_REFUSED_MESSAGE);
+    expect(EXTRACTION_REFUSED_MESSAGE.toLowerCase()).not.toContain("try again");
+  });
+
+  it("names the file as the problem when no model could take it", () => {
+    expect(finalFailureMessage("unsupported-file")).toMatch(/too large or in a format/);
+  });
+
+  it("leaves other kinds to the generic message", () => {
+    expect(finalFailureMessage("invalid-output")).toBeUndefined();
+    expect(finalFailureMessage("constructor")).toBeUndefined();
+  });
+});
+
 describe("classifyExtractionError", () => {
+  const chainOf = (...kinds: OcrError["kind"][]) =>
+    ocrError(
+      kinds.at(-1)!,
+      kinds.map((kind, step) => ({
+        ...attempt(kind, kind === "rate-limited" ? 5_000 : undefined),
+        step,
+      })),
+    );
+
+  it.each([
+    [["rate-limited", "unsupported-file"], "rate-limited"],
+    [["timeout", "refused"], "timeout"],
+    [["provider-error", "bad-image"], "provider-error"],
+  ] as const)("retries a chain %j that hit a transient failure first", (kinds, retryKind) => {
+    expect(classifyExtractionError(chainOf(...kinds))).toMatchObject({
+      _tag: "RetryableJobError",
+      kind: retryKind,
+    });
+  });
+
+  it("keeps the provider's Retry-After when a later step was skipped", () => {
+    expect(classifyExtractionError(chainOf("rate-limited", "unsupported-file"))).toMatchObject({
+      retryAfterMs: 5_000,
+    });
+  });
+
+  it.each([
+    [["not-configured", "unsupported-file"]],
+    [["refused", "refused"]],
+    [["unsupported-file", "invalid-output"]],
+  ] as const)("gives up on an all-terminal chain %j", (kinds) => {
+    expect(classifyExtractionError(chainOf(...kinds))).toMatchObject({
+      _tag: "NonRetryableJobError",
+      kind: kinds.at(-1),
+    });
+  });
+
   it.each(["timeout", "rate-limited", "provider-error"] as const)("retries %s", (kind) => {
     expect(classifyExtractionError(ocrError(kind))).toMatchObject({
       _tag: "RetryableJobError",
@@ -62,15 +182,20 @@ describe("classifyExtractionError", () => {
     });
   });
 
-  it.each(["invalid-output", "bad-image", "not-configured"] as const)(
-    "gives up on %s at once",
-    (kind) => {
-      expect(classifyExtractionError(ocrError(kind))).toMatchObject({
-        _tag: "NonRetryableJobError",
-        kind,
-      });
-    },
-  );
+  // refused and unsupported-file already fell through every model in the chain;
+  // re-running it would only pay for the same answers again.
+  it.each([
+    "invalid-output",
+    "bad-image",
+    "not-configured",
+    "refused",
+    "unsupported-file",
+  ] as const)("gives up on %s at once", (kind) => {
+    expect(classifyExtractionError(ocrError(kind))).toMatchObject({
+      _tag: "NonRetryableJobError",
+      kind,
+    });
+  });
 
   it("retries storage and database errors, not an unreadable stored file or missing config", () => {
     expect(classifyExtractionError(new StorageError({ message: "x" }))._tag).toBe(
