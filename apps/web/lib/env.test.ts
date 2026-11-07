@@ -6,6 +6,9 @@ const KEYS = [
   "NODE_ENV",
   "NEXT_PHASE",
   "VERCEL",
+  "VERCEL_ENV",
+  "VERCEL_URL",
+  "VERCEL_BRANCH_URL",
   "DATABASE_URL",
   "BETTER_AUTH_URL",
   "BETTER_AUTH_SECRET",
@@ -146,5 +149,67 @@ describe("versioned auth secrets", () => {
     await expect(loadEnv({ ...dev, BETTER_AUTH_SECRETS: value })).rejects.toThrow(
       /BETTER_AUTH_SECRETS/,
     );
+  });
+});
+
+describe("app URL and trusted origins", () => {
+  const vercel = {
+    ...production,
+    VERCEL: "1",
+    VERCEL_URL: "receipt-ocr-abc123-team.vercel.app",
+    VERCEL_BRANCH_URL: "receipt-ocr-git-feature-team.vercel.app",
+  };
+  const preview = { ...vercel, VERCEL_ENV: "preview", BETTER_AUTH_URL: "" };
+
+  it("uses exactly BETTER_AUTH_URL in production and never the Vercel hosts", async () => {
+    const env = await loadEnv({ ...vercel, VERCEL_ENV: "production" });
+    expect(env.authEnv.betterAuthUrl).toBe("https://app.example");
+    expect(env.authEnv.trustedOrigins).toEqual(["https://app.example"]);
+    await expect(
+      loadEnv({ ...vercel, VERCEL_ENV: "production", BETTER_AUTH_URL: "" }),
+    ).rejects.toThrow(/BETTER_AUTH_URL must be set in production/);
+  });
+
+  it("derives a preview's URL from its branch alias and trusts both hosts", async () => {
+    const env = await loadEnv(preview);
+    expect(env.authEnv.betterAuthUrl).toBe("https://receipt-ocr-git-feature-team.vercel.app");
+    expect(env.authEnv.trustedOrigins).toEqual([
+      "https://receipt-ocr-git-feature-team.vercel.app",
+      "https://receipt-ocr-abc123-team.vercel.app",
+    ]);
+  });
+
+  it("falls back to the deployment host when a preview has no branch alias", async () => {
+    const env = await loadEnv({ ...preview, VERCEL_BRANCH_URL: "" });
+    expect(env.authEnv.betterAuthUrl).toBe("https://receipt-ocr-abc123-team.vercel.app");
+    expect(env.authEnv.trustedOrigins).toEqual(["https://receipt-ocr-abc123-team.vercel.app"]);
+  });
+
+  it("keeps an explicit BETTER_AUTH_URL on a preview and still trusts the preview hosts", async () => {
+    const env = await loadEnv({ ...preview, BETTER_AUTH_URL: "https://staging.example" });
+    expect(env.authEnv.betterAuthUrl).toBe("https://staging.example");
+    expect(env.authEnv.trustedOrigins).toEqual([
+      "https://staging.example",
+      "https://receipt-ocr-git-feature-team.vercel.app",
+      "https://receipt-ocr-abc123-team.vercel.app",
+    ]);
+  });
+
+  it("pins Turnstile to every trusted host on a preview", async () => {
+    const env = await loadEnv({
+      ...preview,
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: "site",
+      TURNSTILE_SECRET_KEY: "secret",
+    });
+    expect(env.turnstileEnv?.allowedHostnames).toEqual([
+      "receipt-ocr-git-feature-team.vercel.app",
+      "receipt-ocr-abc123-team.vercel.app",
+    ]);
+  });
+
+  it("defaults to localhost in local development, ignoring a stray VERCEL_URL", async () => {
+    const env = await loadEnv({ NODE_ENV: "development", VERCEL_URL: "x.vercel.app" });
+    expect(env.authEnv.betterAuthUrl).toBe("http://localhost:3000");
+    expect(env.authEnv.trustedOrigins).toEqual(["http://localhost:3000"]);
   });
 });
