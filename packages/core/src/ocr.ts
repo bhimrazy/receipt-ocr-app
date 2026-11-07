@@ -148,7 +148,7 @@ export const runChain = (
   });
 
 /** Every provider's key from its `keyEnv`; unset keys are left out. */
-const providerKeys: Effect.Effect<ProviderKeys> = Effect.forEach(
+export const providerKeys: Effect.Effect<ProviderKeys> = Effect.forEach(
   OCR_PROVIDERS.flatMap((p) => (p.keyEnv ? [{ id: p.id, env: p.keyEnv }] : [])),
   ({ id, env }) =>
     Config.option(Config.string(env)).pipe(

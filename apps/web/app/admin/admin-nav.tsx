@@ -12,7 +12,7 @@ import {
 import { BottomTabBar, SidebarNav, type NavItem } from "@/components/app-nav";
 
 // Defined here, not in the server layout: icon components can't cross the server/client boundary.
-const SECTIONS: NavItem[] = [
+export const SECTIONS: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/workspaces", label: "Workspaces", icon: Building2 },
@@ -26,6 +26,10 @@ export function AdminSidebarNav() {
   return <SidebarNav items={SECTIONS} label="Admin" />;
 }
 
+/** Phone tab bars hold five slots: four sections and More, which holds the rest. */
+export const TAB_SECTIONS = SECTIONS.slice(0, 4);
+export const MORE_SECTIONS = SECTIONS.slice(4);
+
 export function AdminTabBar() {
-  return <BottomTabBar items={SECTIONS} label="Admin" />;
+  return <BottomTabBar items={TAB_SECTIONS} label="Admin" more={MORE_SECTIONS} />;
 }

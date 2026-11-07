@@ -189,11 +189,9 @@ function ThisMonthCard({
       summary={
         <>
           {plural(month.count, "receipt")} so far.{" "}
-          {month.lastMonthToDate > 0
-            ? `By this day in ${lastName}: ${money(month.lastMonthToDate)}. ${lastName} in all: ${money(month.lastMonthTotal)}.`
-            : month.lastMonthTotal > 0
-              ? `Nothing by this day in ${lastName}; ${lastName} in all: ${money(month.lastMonthTotal)}.`
-              : `Nothing in ${lastName}.`}
+          {month.lastMonthTotal > 0
+            ? `${lastName} in all: ${money(month.lastMonthTotal)}.`
+            : `Nothing in ${lastName}.`}
         </>
       }
       table={

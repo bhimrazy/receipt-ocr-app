@@ -7,6 +7,7 @@ HTTP.
 ## Contents
 
 - [Layout of the app](#layout-of-the-app)
+- [Navigation](#navigation)
 - [Public API](#public-api)
 - [How a request reaches core](#how-a-request-reaches-core)
 - [Key modules](#key-modules)
@@ -45,6 +46,40 @@ flowchart LR
   encode --> queue["Batch queue (2 at a time)"]
   queue --> api["POST /api/receipts"]
 ```
+
+## Navigation
+
+The signed-in shell ([`app/app/layout.tsx`](../../apps/web/app/app/layout.tsx)) has two arrangements, switched at the
+`md` breakpoint (768 px) with CSS only, so the server renders both and nothing depends on JavaScript to pick one.
+
+```mermaid
+flowchart TB
+  subgraph desktop["md and wider"]
+    sidebar["Sidebar: brand, workspace switcher (dropdown),<br/>Home / History / Settings, Platform: Admin,<br/>usage meter, account menu (dropdown)"]
+  end
+  subgraph phone["Below md"]
+    bar["Top app bar (sticky): brand or Back, workspace name or<br/>scrolled page title, page actions slot, account button"]
+    sheet["Account sheet: account, workspaces (switch, create),<br/>usage meter, Admin, sign out"]
+    tabs["Bottom tab bar (fixed): Home, History, Scan, Settings"]
+    bar -- "account button" --> sheet
+  end
+  tabs -- "Scan" --> scan["/app/upload?capture=1"]
+```
+
+| Piece                                        | Where                                                                                  | Notes                                                                                                                                                                                                                                        |
+| -------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AppSidebarNav`, `SidebarNav`                | [`components/app-nav.tsx`](../../apps/web/components/app-nav.tsx)                      | `aria-current="page"` on the active link. A receipt page counts as History. Admin sits in its own "Platform" group                                                                                                                           |
+| `AppTabBar`, `BottomTabBar`                  | same                                                                                   | 4rem tall (`--tabbar-h`) plus `env(safe-area-inset-bottom)`; `--app-bottom-inset` is the total, set in [`styles.css`](../../packages/ui/src/styles.css) only while a tab bar is on the page. `<main>` and toasts clear it with that variable |
+| `MobileTopBar`                               | same                                                                                   | Back on detail pages (`backFor(pathname)`): returns with `router.back()` when the previous page was the parent list, so filters and scroll survive, else links to it. Shows the page `<h1>` text once it scrolls under the bar               |
+| `AppBarActions`                              | same                                                                                   | Portals a page's own phone actions into the app bar (the receipt page's "Receipt actions" sheet)                                                                                                                                             |
+| `UserMenu` (desktop), `AccountSheet` (phone) | [`components/user-menu.tsx`](../../apps/web/components/user-menu.tsx)                  | The sheet holds `WorkspaceList` from [`workspace-switcher.tsx`](../../apps/web/components/workspace-switcher.tsx); `CreateWorkspaceDialog` is outside the sheet so closing it doesn't unmount the form                                       |
+| `Drawer`                                     | [`packages/ui/src/components/drawer.tsx`](../../packages/ui/src/components/drawer.tsx) | Bottom sheet on Base UI's Drawer: swipe down, Escape or a tap outside closes it. `DrawerAction` is a 48 px row                                                                                                                               |
+
+The admin shell ([`app/admin/layout.tsx`](../../apps/web/app/admin/layout.tsx)) uses the same pieces with its own five
+tabs and no Scan action, and keeps "App" in the top bar.
+
+Phone details: `touch-action: manipulation` on `<html>` (no double-tap delay), and in standalone (installed) mode
+`overscroll-behavior-y: none`, so there is no rubber band or pull-to-refresh.
 
 ## Public API
 

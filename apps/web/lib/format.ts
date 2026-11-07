@@ -1,6 +1,9 @@
 // Fixed locale and time zone so server and client render identical strings
 // (a runtime-default locale causes hydration mismatches).
 const LOCALE = "en-GB";
+
+/** ICU's en-GB spells September "Sept"; every other short month is three letters. */
+export const threeLetterMonth = (formatted: string) => formatted.replace(/\bSept\b/, "Sep");
 const TIME_ZONE = "UTC";
 
 function toNumber(value?: string | number | null): number | null {
@@ -85,7 +88,7 @@ export function formatDate(value: string | Date | null | undefined): string | nu
       ? new Date(`${value}T00:00:00Z`)
       : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return dateFormatter.format(date);
+  return threeLetterMonth(dateFormatter.format(date));
 }
 
 /** "27 Oct 2026, 14:05 UTC". */
@@ -93,7 +96,7 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  const formatted = dateTimeFormatter.format(date);
+  const formatted = threeLetterMonth(dateTimeFormatter.format(date));
   return `${formatted} UTC`;
 }
 

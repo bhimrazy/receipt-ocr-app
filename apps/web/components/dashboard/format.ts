@@ -6,6 +6,8 @@
 /** One prop for every figure a chart shows. */
 export type ValueFormat = { kind: "money"; currency: string } | { kind: "count" } | { kind: "ms" };
 
+import { threeLetterMonth } from "@/lib/format";
+
 const LOCALE = "en-US";
 
 /**
@@ -137,11 +139,11 @@ const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "U
 const at = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
 /** "8 Oct". */
-export const formatDay = (iso: string) => day.format(at(iso));
+export const formatDay = (iso: string) => threeLetterMonth(day.format(at(iso)));
 /** "8 Oct 2026". */
-export const formatDate = (iso: string) => dayYear.format(at(iso));
+export const formatDate = (iso: string) => threeLetterMonth(dayYear.format(at(iso)));
 /** "Oct". */
-export const formatMonthShort = (iso: string) => monthShort.format(at(iso));
+export const formatMonthShort = (iso: string) => threeLetterMonth(monthShort.format(at(iso)));
 /** "October 2026". */
 export const formatMonth = (iso: string) => monthYear.format(at(iso));
 /** "Monday" for ISO day 1. 2024-01-01 was a Monday. */

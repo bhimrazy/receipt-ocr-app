@@ -54,14 +54,17 @@ export class Storage extends Context.Tag("@receipt-ocr/core/Storage")<
 >() {
   static readonly Live = Layer.succeed(Storage, {
     put: (key, body, contentType) =>
-      call("Failed to store the receipt file", (config) =>
-        putObject(config, { key, body, contentType }),
+      call("Failed to store the receipt file", (config, signal) =>
+        putObject(config, { key, body, contentType }, signal),
       ),
-    get: (key) => call("Failed to read the receipt file", (config) => getObject(config, key)),
+    get: (key) =>
+      call("Failed to read the receipt file", (config, signal) => getObject(config, key, signal)),
     remove: (keys) =>
       keys.length === 0
         ? Effect.void
-        : call("Failed to delete the receipt file", (config) => deleteObjects(config, keys)),
+        : call("Failed to delete the receipt file", (config, signal) =>
+            deleteObjects(config, keys, signal),
+          ),
     signedUrl: (key) =>
       call("Failed to sign the receipt image URL", (config) => signedGetUrl(config, key)),
   });
@@ -70,11 +73,12 @@ export class Storage extends Context.Tag("@receipt-ocr/core/Storage")<
 /** Config is read per call so a missing bucket only fails storage operations. */
 const call = <A>(
   message: string,
-  run: (config: Effect.Effect.Success<typeof loadStorageConfig>) => Promise<A>,
+  run: (config: Effect.Effect.Success<typeof loadStorageConfig>, signal: AbortSignal) => Promise<A>,
 ) =>
   Effect.flatMap(loadStorageConfig, (config) =>
     Effect.tryPromise({
-      try: () => run(config),
+      // The signal aborts the request when the fiber is interrupted (a timeout).
+      try: (signal) => run(config, signal),
       catch: (cause) => new StorageError({ message, cause }),
     }),
   );
