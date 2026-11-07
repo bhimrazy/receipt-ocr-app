@@ -236,6 +236,11 @@ test("a share made while signed out waits for sign-in, and sign-out clears a wai
   await page.getByRole("button", { name: "Keep" }).click();
   await expect(review(page)).toBeVisible();
   await review(page).getByRole("button", { name: "Back without uploading" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Discard this photo?" })
+    .getByRole("button", { name: "Discard" })
+    .click();
+  await expect(review(page)).toHaveCount(0);
 
   // A share nobody picked up must not survive into the next account.
   await page.evaluate(async () => {
