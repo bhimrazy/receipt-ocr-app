@@ -169,8 +169,8 @@ nobody can finish signing up.
 <details>
 <summary><b>Verify your domain and get a key from Resend</b></summary>
 
-1. [Resend](https://resend.com) → **Domains → Add domain** → `bhimraj.com.np` (or a subdomain such as
-   `mail.bhimraj.com.np`, which keeps this app's mail settings apart).
+1. [Resend](https://resend.com) → **Domains → Add domain** → `receipt-ocr.bhimraj.com.np`, the app's own
+   subdomain (not the apex `bhimraj.com.np`), so this app's mail settings and reputation stay apart.
 2. Resend lists a few DNS records. Add each one at your DNS provider (where the domain is managed), exactly as shown.
    Also add a DMARC record if you don't have one: name `_dmarc`, type `TXT`, value `v=DMARC1; p=none;`.
 3. Back in Resend, press **Verify DNS records** and wait for **Verified**. It usually takes minutes, sometimes a few
@@ -182,13 +182,18 @@ More help: [Domains](https://resend.com/docs/dashboard/domains/introduction),
 
 </details>
 
-| Key              | Example                                   | Kind   |
-| ---------------- | ----------------------------------------- | ------ |
-| `RESEND_API_KEY` | `re_…`                                    | Secret |
-| `EMAIL_FROM`     | `receiptOCR <receipt-ocr@bhimraj.com.np>` | Config |
-| `SUPPORT_EMAIL`  | `receipt-ocr@bhimraj.com.np`              | Config |
+| Key              | Example                                           | Kind   |
+| ---------------- | ------------------------------------------------- | ------ |
+| `RESEND_API_KEY` | `re_…`                                            | Secret |
+| `EMAIL_FROM`     | `receiptOCR <noreply@receipt-ocr.bhimraj.com.np>` | Config |
+| `SUPPORT_EMAIL`  | `receipt-ocr@bhimraj.com.np`                      | Config |
 
-- `EMAIL_FROM` must use the domain you verified.
+- `EMAIL_FROM` must use the domain you verified (`receipt-ocr.bhimraj.com.np`).
+- Roles: **From** is `EMAIL_FROM`, a noreply address on the verified domain, for every automated email.
+  **Reply-To** is `SUPPORT_EMAIL` on all of them, so replies reach a human. `SUPPORT_EMAIL` is also where
+  support-form messages go; those carry the visitor's address as Reply-To instead. Unset, no Reply-To is sent.
+- If you ever send marketing or newsletters, use a separate subdomain (for example
+  `news.receipt-ocr.bhimraj.com.np`) so complaints there cannot hurt transactional deliverability.
 - `SUPPORT_EMAIL` is where support-form messages go, so it must be an inbox you read. Resend only sends mail; to
   receive at that address, set up a mailbox or forwarding (for example Cloudflare Email Routing to your Gmail).
 - On Preview, only send to Resend's test address `delivered@resend.dev`.

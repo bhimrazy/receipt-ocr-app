@@ -31,7 +31,7 @@ vi.mock("@/lib/http", () => ({
 vi.mock("@/lib/turnstile", () => ({ checkTurnstile: async () => env.turnstile }));
 vi.mock("@/lib/log", () => ({ logger: { info: vi.fn() } }));
 vi.mock("@/lib/env", () => ({
-  emailEnv: { resendApiKey: "key", from: "x <noreply@example.com>" },
+  emailEnv: { resendApiKey: "key", from: "x <noreply@example.com>", replyTo: "help@example.com" },
   logUndeliveredMail: () => false,
   get isProduction() {
     return env.isProduction;
@@ -76,6 +76,7 @@ describe("POST /api/contact", () => {
     expect(res.status).toBe(200);
     const input = sendEmail.mock.calls[0][1];
     expect(input).toMatchObject({ to: "help@example.com", replyTo: "me@example.com" });
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({ replyTo: "help@example.com" });
     expect(input.subject).toBe("[receiptOCR support] Feature request");
   });
 

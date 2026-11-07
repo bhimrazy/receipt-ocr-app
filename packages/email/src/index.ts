@@ -56,6 +56,8 @@ export interface MailerConfig {
   apiKey?: string;
   /** e.g. `receiptOCR <noreply@yourdomain.com>` */
   from?: string;
+  /** Reply-To for messages that set none (e.g. the support inbox, since `from` is noreply). */
+  replyTo?: string;
   /** Log the full message when no provider is configured. Development only. */
   logUndelivered?: boolean;
   /** Where events go; the web app passes the wide-event logger. Defaults to a JSON line on the console. */
@@ -88,6 +90,7 @@ export async function sendEmail(
     return { delivered: false, reason: "not_configured" };
   }
 
+  const replyTo = input.replyTo ?? config.replyTo;
   try {
     const { data, error } = await resend(config.apiKey).emails.send({
       from: config.from,
@@ -95,7 +98,7 @@ export async function sendEmail(
       subject: input.subject,
       html: input.html,
       text: input.text,
-      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+      ...(replyTo ? { replyTo } : {}),
     });
     if (error) {
       log({ event: "email.send_failed", unit: "log", level: "error", error: errorOf(error) });
