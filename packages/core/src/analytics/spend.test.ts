@@ -32,9 +32,16 @@ const base = {
 };
 
 describe("minorUnits", () => {
-  it("knows currencies with 0, 2 and 3 decimals and falls back to 2", () => {
-    expect([minorUnits("JPY"), minorUnits("USD"), minorUnits("KWD")]).toEqual([0, 2, 3]);
-    expect(minorUnits("???")).toBe(2);
+  it("is a fixed ISO 4217 table, the same in every runtime", () => {
+    expect(["JPY", "KRW", "VND", "CLP"].map(minorUnits)).toEqual([0, 0, 0, 0]);
+    expect(["KWD", "BHD", "OMR", "JOD", "TND", "LYD", "IQD"].map(minorUnits)).toEqual([
+      3, 3, 3, 3, 3, 3, 3,
+    ]);
+    // Runtimes disagree on these through Intl; ISO says 2.
+    expect(["IDR", "HUF", "PKR", "USD", "EUR", "NPR", "???"].map(minorUnits)).toEqual([
+      2, 2, 2, 2, 2, 2, 2,
+    ]);
+    expect(minorUnits("kwd")).toBe(3);
   });
 });
 

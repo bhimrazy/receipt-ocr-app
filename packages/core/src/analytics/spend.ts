@@ -300,14 +300,36 @@ function dashboardSql(scope: AnalyticsScope, w: Windows): SQL {
 
 const num = (value: string | null | undefined) => Number(value ?? 0);
 
-/** Decimal places of a currency's minor unit (JPY 0, USD 2, KWD 3); 2 when Intl doesn't know it. */
+const ZERO_DECIMALS = new Set([
+  "BIF",
+  "CLP",
+  "DJF",
+  "GNF",
+  "ISK",
+  "JPY",
+  "KMF",
+  "KRW",
+  "PYG",
+  "RWF",
+  "UGX",
+  "UYI",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+]);
+const THREE_DECIMALS = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
+
+/**
+ * ISO 4217 minor-unit digits (JPY 0, USD 2, KWD 3). A fixed table, not Intl:
+ * Node and Bun carry different CLDR data (IDR, HUF, PKR), and the server's
+ * rounding must not depend on the runtime. The web app keeps a copy for
+ * display; a test keeps the two equal.
+ */
 export function minorUnits(currency: string) {
-  try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency }).resolvedOptions()
-      .maximumFractionDigits!;
-  } catch {
-    return 2;
-  }
+  const code = currency.toUpperCase();
+  return ZERO_DECIMALS.has(code) ? 0 : THREE_DECIMALS.has(code) ? 3 : 2;
 }
 
 /** Rounds to the currency's minor unit, so sums don't drift or lose a third decimal. */

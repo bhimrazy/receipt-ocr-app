@@ -15,8 +15,10 @@ import { requireActiveScope } from "./session";
 import { TIME_ZONE_COOKIE } from "./time-zone-cookie";
 
 /** The viewer's zone from the cookie when it is a real one, else UTC (first visit, bots). */
+const ZONE_SHAPE = /^(?:[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+)+|UTC)$/;
+
 export function viewerTimeZone(value: string | undefined) {
-  return value && value.length <= 64 && isTimeZone(value) ? value : "UTC";
+  return value && value.length <= 64 && ZONE_SHAPE.test(value) && isTimeZone(value) ? value : "UTC";
 }
 
 export type SpendView = { search: SpendSearch; dashboard: SpendDashboard };

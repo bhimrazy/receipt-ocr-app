@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { change, formatChange, formatMoney, formatSpan, formatValue, niceTicks } from "./format";
+import { minorUnits } from "@receipt-ocr/core";
+import {
+  change,
+  currencyDigits,
+  formatChange,
+  formatMoney,
+  formatSpan,
+  formatValue,
+  niceTicks,
+} from "./format";
 
 describe("formatMoney", () => {
   it("uses each currency's own decimals", () => {
@@ -58,5 +67,16 @@ describe("whole-unit currencies", () => {
   it("fixes the fraction digits for both whole and fractional IDR amounts", () => {
     expect(formatMoney(150000, "IDR")).toMatch(/150,000$/);
     expect(formatMoney(150000.5, "IDR")).toMatch(/150,000\.50$/);
+  });
+});
+
+describe("currency digits", () => {
+  it("match core's table, and fix the output the same in every runtime", () => {
+    for (const code of ["JPY", "KRW", "KWD", "BHD", "IDR", "HUF", "PKR", "USD", "NPR", "XYZ"]) {
+      expect(currencyDigits(code)).toBe(minorUnits(code));
+    }
+    expect(formatMoney(1234.5, "HUF")).toMatch(/1,234\.50$/);
+    expect(formatMoney(1234.5, "PKR")).toMatch(/1,234\.50$/);
+    expect(formatMoney(1234, "JPY")).toMatch(/1,234$/);
   });
 });

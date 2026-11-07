@@ -14,6 +14,34 @@ const LOCALE = "en-US";
  */
 const WHOLE_UNITS = new Set(["IDR", "NPR"]);
 
+/**
+ * ISO 4217 minor-unit digits, a fixed copy of core's `minorUnits` (the browser
+ * can't import core). Intl's own defaults differ between Node, Bun and
+ * browsers, so every amount sets its digits explicitly.
+ */
+const ZERO_DECIMALS = new Set([
+  "BIF",
+  "CLP",
+  "DJF",
+  "GNF",
+  "ISK",
+  "JPY",
+  "KMF",
+  "KRW",
+  "PYG",
+  "RWF",
+  "UGX",
+  "UYI",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+]);
+const THREE_DECIMALS = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
+export const currencyDigits = (code: string) =>
+  ZERO_DECIMALS.has(code) ? 0 : THREE_DECIMALS.has(code) ? 3 : 2;
+
 const formatters = new Map<string, Intl.NumberFormat | null>();
 
 function moneyFormatter(currency: string, compact: boolean, whole: boolean) {
@@ -28,10 +56,10 @@ function moneyFormatter(currency: string, compact: boolean, whole: boolean) {
       currencyDisplay: "narrowSymbol",
       ...(compact
         ? { notation: "compact", maximumFractionDigits: 1 }
-        : WHOLE_UNITS.has(currency)
-          ? // Explicit either way, so the server and the browser never pick their own default.
-            { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 }
-          : {}),
+        : (() => {
+            const digits = whole ? 0 : currencyDigits(currency);
+            return { minimumFractionDigits: digits, maximumFractionDigits: digits };
+          })()),
     });
   } catch {
     // Not a currency Intl knows (a manual edit); show the code instead.
