@@ -22,7 +22,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: receipt_ocr
     ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       # Postgres 18 keeps data in a versioned subdirectory, so mount the parent.
       - postgres18-data:/var/lib/postgresql
@@ -99,7 +99,7 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
     environment: &app-env
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
       DIRECT_URL: postgres://postgres:postgres@postgres:5432/receipt_ocr
@@ -138,7 +138,7 @@ services:
       dockerfile: docker/Dockerfile.dev
     depends_on: *app-depends
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
     environment:
       <<: *app-env
       NODE_ENV: development
