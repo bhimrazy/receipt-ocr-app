@@ -141,15 +141,19 @@ describe("runChain", () => {
     expect(Exit.isSuccess(exit) && exit.value.attempts.map((a) => a.kind)).toEqual([error, "ok"]);
   });
 
-  it.each(["invalid-output", "bad-image"] as const)(
-    "stops on %s without paying for a second model",
-    async (kind) => {
-      const { call, calls } = fakeCall({ [A]: { error: kind } });
-      const exit = await run(runChain([step(A), step(B)], call));
-      expect(calls.map((c) => c.model)).toEqual([A]);
-      expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(`"kind":"${kind}"`);
-    },
-  );
+  it("stops on bad-image without paying for a second model", async () => {
+    const { call, calls } = fakeCall({ [A]: { error: "bad-image" } });
+    const exit = await run(runChain([step(A), step(B)], call));
+    expect(calls.map((c) => c.model)).toEqual([A]);
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain('"kind":"bad-image"');
+  });
+
+  it("tries the next model after invalid-output", async () => {
+    const { call, calls } = fakeCall({ [A]: { error: "invalid-output" } });
+    const exit = await run(runChain([step(A), step(B)], call));
+    expect(calls.map((c) => c.model)).toEqual([A, B]);
+    expect(Exit.isSuccess(exit)).toBe(true);
+  });
 
   it("marks a step skipped before any request on its attempt", async () => {
     const call: ExtractCall = ({ model }) =>

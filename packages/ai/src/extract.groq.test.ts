@@ -91,8 +91,10 @@ describe("the Groq request body", () => {
       type: "object",
       properties: { merchant: expect.anything(), total: expect.anything() },
     });
-    // maxItems is left out of the request (schemaMode), though the reply is still checked against it.
-    expect(JSON.stringify(format.json_schema.schema)).not.toContain("maxItems");
+    // Size bounds are left out of the request (schemaMode), though the reply is still checked against them.
+    for (const keyword of ["maxItems", "maxLength", "minimum", "maximum"]) {
+      expect(JSON.stringify(format.json_schema.schema)).not.toContain(keyword);
+    }
     expect(body).not.toHaveProperty("tools");
 
     const messages = body.messages as Array<{ role: string; content: unknown }>;
@@ -187,16 +189,77 @@ describe("Groq errors", () => {
     expect(error).toMatchObject({ kind: "not-configured" });
   });
 
+  it("400 model_decommissioned (Groq's answer for a retired preview model): not-configured", async () => {
+    mockFetch(
+      json(
+        {
+          error: {
+            message:
+              "The model `qwen/qwen3.8-27b` has been decommissioned and is no longer supported. Please refer to https://console.groq.com/docs/deprecations for a recommendation on which model to use instead.",
+            type: "invalid_request_error",
+            code: "model_decommissioned",
+          },
+        },
+        400,
+      ),
+    );
+    const error = await run().catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "not-configured" });
+  });
+
+  it("400 json_validate_failed: invalid-output (not bad-image), without retrying", async () => {
+    const calls = mockFetch(
+      json(
+        {
+          error: {
+            message:
+              "Generated JSON does not match the expected schema. Please adjust your prompt. See 'failed_generation' for more details.",
+            type: "invalid_request_error",
+            code: "json_validate_failed",
+            failed_generation: '{"merchant": 12}',
+          },
+        },
+        400,
+      ),
+    );
+    const error = await run(jpeg, 2).catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "invalid-output" });
+    expect((error as Error).message).toBe("OCR call failed: invalid-output (HTTP 400)");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("400 for a request the API rejects but not the image (a schema keyword): not-configured", async () => {
+    mockFetch(
+      json(
+        {
+          error: {
+            message: "response_format.json_schema.schema: unsupported keyword 'nullable'",
+            type: "invalid_request_error",
+          },
+        },
+        400,
+      ),
+    );
+    const error = await run().catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "not-configured" });
+  });
+
+  it("400 that names the image: bad-image", async () => {
+    mockFetch(
+      json(
+        {
+          error: { message: "invalid image data", type: "invalid_request_error" },
+        },
+        400,
+      ),
+    );
+    const error = await run().catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "bad-image" });
+  });
+
   it("413: unsupported-file, a request rather than a skip", async () => {
     mockFetch(apiError(413, "request_too_large"));
     const error = await run().catch((e: unknown) => e);
     expect(error).toMatchObject({ kind: "unsupported-file", skipped: false });
-  });
-
-  it("400: bad-image, and the SDK does not retry it", async () => {
-    const calls = mockFetch(apiError(400, "invalid_request_error"));
-    const error = await run(jpeg, 2).catch((e: unknown) => e);
-    expect(error).toMatchObject({ kind: "bad-image" });
-    expect(calls).toHaveLength(1);
   });
 });

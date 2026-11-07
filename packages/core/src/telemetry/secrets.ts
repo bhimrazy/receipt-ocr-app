@@ -8,6 +8,7 @@ export const REDACTED = "[redacted:secret]";
 const SECRET_SHAPES: readonly RegExp[] = [
   /AIza[0-9A-Za-z_-]{35}/, // Google / Gemini API key
   /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}/, // Anthropic (`sk-ant-`) and OpenAI-style keys
+  /\bgsk_[A-Za-z0-9]{20,}/, // Groq
   /(?<![A-Za-z0-9])re_[A-Za-z0-9]{16,}/, // Resend
   /(?<![A-Za-z0-9])(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})(?![A-Za-z0-9])/i, // R2/S3 secrets, GitHub client secret, digests
   /eyJ[A-Za-z0-9_-]{4,200}\.[A-Za-z0-9_-]{4,200}\.[A-Za-z0-9_-]{0,200}/, // JWT
