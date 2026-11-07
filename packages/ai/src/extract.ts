@@ -1,5 +1,6 @@
 import { createAnthropic, type AnthropicLanguageModelOptions } from "@ai-sdk/anthropic";
 import { createGoogle } from "@ai-sdk/google";
+import { createGroq, type GroqLanguageModelOptions } from "@ai-sdk/groq";
 import {
   createProviderRegistry,
   generateText,
@@ -70,6 +71,7 @@ function buildRegistry(keys: ProviderKeys) {
   return createProviderRegistry({
     google: createGoogle({ apiKey: keys.google }),
     anthropic: createAnthropic({ apiKey: keys.anthropic }),
+    groq: createGroq({ apiKey: keys.groq }),
   } satisfies Record<RegistryProviderId, unknown>);
 }
 
@@ -115,13 +117,31 @@ const ANTHROPIC_MAX_IMAGE_BASE64_BYTES = 10_000_000;
 /** Same page: larger images are a 400, which would read as bad-image and stop the chain. */
 const ANTHROPIC_MAX_IMAGE_EDGE = 8000;
 
+/**
+ * Groq request settings. `qwen/qwen3.8-27b` thinks by default; "none" is its instruct mode, so
+ * transcription does not spend the free plan's 8K tokens a minute on reasoning. JSON schema is
+ * sent best-effort (`strict: false`): strict mode wants every keyword supported, and the reply
+ * is checked against the full zod schema either way.
+ */
+const GROQ_OPTIONS: GroqLanguageModelOptions = { reasoningEffort: "none", strictJsonSchema: false };
+
+/** Images only: the AI SDK's Groq provider rejects any other file part. */
+const GROQ_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/**
+ * Groq's vision docs cap a request with an image at 20 MB (checked 2026-11-07) and say a larger
+ * one is a 400, which would read as bad-image and stop the chain. Counted on the base64 size.
+ */
+const GROQ_MAX_IMAGE_BASE64_BYTES = 20_000_000;
+
 /** The model stopped on a safety refusal; whatever it returned is not an extraction. */
 export class RefusalError extends Error {
   override name = "RefusalError";
 }
 
-function providerOptionsFor(model: Exclude<ModelId, "fixture">) {
+function providerOptionsFor(model: Exclude<ModelId, "fixture">): ProviderOptions | undefined {
   const [provider, ...rest] = model.split(":");
+  if (provider === "groq") return { groq: GROQ_OPTIONS } satisfies ProviderOptions;
   if (provider !== "anthropic") return undefined;
   const options = ANTHROPIC_OPTIONS[rest.join(":")];
   return options ? ({ anthropic: options } satisfies ProviderOptions) : undefined;
@@ -132,9 +152,16 @@ function providerOptionsFor(model: Exclude<ModelId, "fixture">) {
  * `bad-image`: the file may be fine for the next model, so the chain goes on.
  */
 function checkFile(model: Exclude<ModelId, "fixture">, file: ExtractReceiptInput["file"]) {
-  if (!model.startsWith("anthropic:")) return;
   const unsupported = (why: string) =>
     new OcrCallError("unsupported-file", null, new UnsupportedFileError(`${model}: ${why}`));
+  if (model.startsWith("groq:")) {
+    if (!GROQ_IMAGE_TYPES.has(file.mediaType)) throw unsupported(`no ${file.mediaType}`);
+    if (Math.ceil(file.data.byteLength / 3) * 4 > GROQ_MAX_IMAGE_BASE64_BYTES) {
+      throw unsupported("image over 20 MB");
+    }
+    return;
+  }
+  if (!model.startsWith("anthropic:")) return;
   if (file.mediaType === "application/pdf") return;
   if (!ANTHROPIC_IMAGE_TYPES.has(file.mediaType)) throw unsupported(`no ${file.mediaType}`);
   if (Math.ceil(file.data.byteLength / 3) * 4 > ANTHROPIC_MAX_IMAGE_BASE64_BYTES) {

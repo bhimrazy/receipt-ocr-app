@@ -45,6 +45,7 @@ const get = (url: string, headers: Record<string, string>, fetcher: typeof fetch
 
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/models";
+const GROQ_URL = "https://api.groq.com/openai/v1/models";
 
 type Adapter = {
   list: Lister;
@@ -126,6 +127,29 @@ const adapters: Record<Exclude<OcrProviderId, "fixture">, Adapter> = {
     },
     // Lists may carry dated snapshots (`claude-x-20260101`) of the bare id we allowlist.
     matches: (listed, wanted) => listed === wanted || listed.startsWith(`${wanted}-`),
+  },
+  groq: {
+    // OpenAI-compatible list: one page, `data[].id`.
+    list: async (fetcher, apiKey, _cursor, signal) => {
+      const response = await get(GROQ_URL, { authorization: `Bearer ${apiKey}` }, fetcher, signal);
+      return {
+        response,
+        page: async () => {
+          const json = (await response.json()) as { data?: { id?: string }[] };
+          return { ids: (json.data ?? []).flatMap((m) => (m.id ? [m.id] : [])), next: null };
+        },
+      };
+    },
+    classify: (status, body) => {
+      if (status === 401 || status === 403) return "invalid-key";
+      if (status === 402) return "no-billing-or-quota";
+      if (status === 429) {
+        // Groq's daily caps name themselves ("per day (TPD)", "(RPD)"); a minute cap clears itself.
+        return /\(T?RPD\)|\(TPD\)|per day/i.test(body) ? "no-billing-or-quota" : "rate-limited";
+      }
+      return "unreachable";
+    },
+    matches: (listed, wanted) => listed === wanted,
   },
 };
 

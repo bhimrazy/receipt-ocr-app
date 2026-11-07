@@ -107,6 +107,12 @@ describe("costOf", () => {
     ).toEqual(none);
   });
 
+  it("prices Groq's Qwen at its paid rate", () => {
+    const u = usage({ inputTokens: 2400, outputTokens: 380 });
+    // 2400 x 0.8 + 380 x 4 = 3440 micro-USD
+    expect(costOf("groq:qwen/qwen3.8-27b", u, day("2026-11-07")).microUsd).toBe(3440);
+  });
+
   it("prices Claude at the per-model rates", () => {
     const u = usage({ inputTokens: 2000, cachedInputTokens: 500, outputTokens: 400 });
     const at = day("2026-11-07");
