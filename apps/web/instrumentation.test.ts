@@ -17,7 +17,13 @@ const fail = (routePath: string, routeType: "render" | "route" = "render") =>
       method: "GET",
       headers: { "x-request-id": "0f8fad5b-d9cb-469f-a165-70867728950e" },
     },
-    { routerKind: "App Router", routePath, routeType, renderSource: "react-server-components" },
+    {
+      routerKind: "App Router",
+      routePath,
+      routeType,
+      renderSource: "react-server-components",
+      revalidateReason: undefined,
+    },
   );
 
 beforeEach(() => {
