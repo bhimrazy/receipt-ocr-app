@@ -1,6 +1,6 @@
-import { clientIp } from "@/lib/http";
+import { clientIp, skipEvent, withRequestEvent } from "@/lib/http";
 import { createWindowLimiter, parseCspReports, readCappedText } from "@/lib/csp-report";
-import { logger } from "@/lib/log";
+import type { WideEvent } from "@/lib/log";
 
 /** Real reports are a few hundred bytes; a batch of them stays well under this. */
 const MAX_BODY_BYTES = 16 * 1024;
@@ -8,8 +8,12 @@ const MAX_BODY_BYTES = 16 * 1024;
 const limit = createWindowLimiter(60_000, 30);
 
 /** Receives CSP violation reports (`report-uri` and `report-to`) and logs a redacted summary. */
-export async function POST(request: Request) {
+export const POST = withRequestEvent({ event: "csp.violation", route: "/api/csp-report" }, report);
+
+async function report(request: Request, _context: unknown, event: WideEvent) {
   if (!limit(clientIp(request) ?? "unknown")) {
+    // Past the limit nothing is logged: anyone can post reports, so each rejection would be the flood.
+    skipEvent(event);
     await request.body?.cancel().catch(() => {});
     return new Response(null, { status: 429 });
   }
@@ -23,8 +27,7 @@ export async function POST(request: Request) {
     return new Response(null, { status: 400 });
   }
   const violations = parseCspReports(payload);
-  if (violations.length > 0) {
-    logger.info({ event: "csp.violation", count: violations.length, violations });
-  }
+  event.count = violations.length;
+  if (violations.length > 0) event.violations = violations;
   return new Response(null, { status: 204 });
 }

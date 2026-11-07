@@ -17,6 +17,7 @@ import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
 import { OcrChainForm } from "./ocr-chain-form";
 import { PlanLimitsForm } from "./plan-limits-form";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -28,6 +29,7 @@ async function savedLine(saved?: { updatedAt: Date; updatedBy: string | null }) 
 }
 
 export default async function AdminSettingsPage() {
+  logPageRender("/admin/settings");
   await requireAdmin();
   const [snapshot, available, cap] = await runtime.runPromise(
     Effect.all([

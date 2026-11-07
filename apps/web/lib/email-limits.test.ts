@@ -12,7 +12,10 @@ const logger = vi.hoisted(() => ({ info: vi.fn(), error: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/core", () => ({ hitRateLimit }));
 vi.mock("./runtime", () => ({ runtime: { runPromise } }));
-vi.mock("./log", () => ({ logger }));
+vi.mock("./log", async () => ({
+  logger,
+  errorFields: (await import("@receipt-ocr/core/telemetry")).errorFields,
+}));
 
 const { AUTH_EMAILS_PER_HOUR, allowAuthEmail } = await import("./email-limits");
 
@@ -48,10 +51,11 @@ describe("allowAuthEmail", () => {
   });
 
   it("lets the email through and logs when the limiter fails", async () => {
-    runPromise.mockRejectedValueOnce(new Error("db down"));
+    runPromise.mockRejectedValueOnce(new Error("db down for a@example.com"));
     expect(await allowAuthEmail("verification", "a@example.com")).toBe(true);
     expect(logger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ event: "auth.email_rate_limit_failed" }),
+      expect.objectContaining({ event: "auth.email_rate_limit_failed", kind: "verification" }),
     );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("example.com");
   });
 });

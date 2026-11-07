@@ -18,6 +18,7 @@ import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
 import { SessionsList, type AdminSession } from "./sessions-list";
 import { AccountControls, DangerZone, type ActionUser } from "./user-actions";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "User" };
 
@@ -36,6 +37,7 @@ const STATUS: Record<string, string> = {
 };
 
 export default async function AdminUserPage({ params }: { params: Promise<{ id: string }> }) {
+  logPageRender("/admin/users/[id]");
   const viewer = await requireAdmin();
   const { id } = await params;
   const [plans, data, sessionOutcome] = await Promise.all([

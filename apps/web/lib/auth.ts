@@ -14,6 +14,7 @@ import {
   invitationEmail,
   passwordResetEmail,
   sendEmail,
+  type EmailLogEvent,
   verificationEmail,
   type SendEmailInput,
 } from "@receipt-ocr/email";
@@ -33,10 +34,11 @@ import {
   authEnv,
   emailEnv,
   isProduction,
+  logUndeliveredMail,
   requireEmailVerification,
   turnstileEnv,
 } from "./env";
-import { logger } from "./log";
+import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 
 export { authEnabled };
@@ -55,7 +57,8 @@ const db = createDb(authEnv.databaseUrl ?? PLACEHOLDER_DATABASE_URL);
 const mailer = {
   apiKey: emailEnv.resendApiKey,
   from: emailEnv.from,
-  logUndelivered: process.env.NODE_ENV === "development",
+  logUndelivered: logUndeliveredMail(),
+  log: (event: EmailLogEvent) => logger.emit(event),
 };
 
 /**
@@ -88,7 +91,12 @@ async function promoteIfBootstrapAdmin(user: {
 /** Removes stored receipt files before the rows they belong to cascade away (U1). */
 async function purgeFiles(owner: { organizationId: string } | { userId: string }) {
   const purged = await runtime.runPromise(purgeReceiptFiles(owner));
-  logger.info({ event: "receipt.files_purged", ...owner, count: purged });
+  logger.info({
+    event: "receipt.files_purged",
+    unit: "log",
+    ...("userId" in owner ? { user_id: owner.userId } : { organization_id: owner.organizationId }),
+    count: purged,
+  });
 }
 
 /**
@@ -99,7 +107,12 @@ async function purgeFiles(owner: { organizationId: string } | { userId: string }
 export async function deleteOwnData(userId: string) {
   const exit = await runtime.runPromiseExit(prepareUserDeletion(userId));
   if (exit._tag === "Success") {
-    logger.info({ event: "user.data_deleted", userId, ...exit.value });
+    logger.info({
+      event: "user.data_deleted",
+      unit: "log",
+      user_id: userId,
+      counts: { workspaces: exit.value.workspacesDeleted, files: exit.value.files },
+    });
     return exit.value;
   }
   const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
@@ -256,8 +269,10 @@ export const auth = betterAuth({
           } catch (error) {
             logger.error({
               event: "groups.release_member_failed",
-              organizationId: organization.id,
-              error: error instanceof Error ? error.message : String(error),
+              unit: "log",
+              organization_id: organization.id,
+              user_id: removed.userId,
+              error: errorFields(error),
             });
           }
         },

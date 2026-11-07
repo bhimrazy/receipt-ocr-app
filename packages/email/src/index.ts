@@ -17,11 +17,35 @@ export type SendEmailResult =
 
 let client: Resend | null = null;
 
-/** Logs carry the recipient's domain only: addresses are personal data and logs outlive mail. */
-function recipientDomain(to: string): string {
-  const at = to.lastIndexOf("@");
-  return at === -1 ? "unknown" : to.slice(at + 1).toLowerCase();
+/**
+ * What this package logs: the event name, and for a failure the error's
+ * name (`validation_error`, `TypeError`), never its message, the subject,
+ * the recipient or their domain. Resend and network messages can quote the
+ * address, and subjects can carry a workspace or inviter name.
+ */
+export type EmailLogEvent = {
+  event: "email.sent" | "email.send_failed" | "email.not_configured";
+  unit: "log";
+  level: "info" | "error";
+  error?: { type: string; kind?: string };
+};
+
+const CODE = /^[A-Za-z0-9_.-]{1,64}$/;
+const code = (value: unknown) =>
+  typeof value === "string" && CODE.test(value) ? value : undefined;
+
+function errorOf(cause: unknown): { type: string; kind?: string } {
+  if (cause instanceof Error) return { type: code(cause.name) ?? "Error" };
+  const name = code((cause as { name?: unknown } | null)?.name);
+  return { type: "ResendError", ...(name ? { kind: name } : {}) };
 }
+
+/** Without a `log` sink: one JSON line with the same fields, for local runs and tests. */
+const consoleLog = (event: EmailLogEvent) => {
+  const line = JSON.stringify({ timestamp: new Date().toISOString(), ...event });
+  if (event.level === "error") console.error(line);
+  else console.info(line);
+};
 
 function resend(apiKey: string): Resend {
   if (!client) client = new Resend(apiKey);
@@ -34,6 +58,8 @@ export interface MailerConfig {
   from?: string;
   /** Log the full message when no provider is configured. Development only. */
   logUndelivered?: boolean;
+  /** Where events go; the web app passes the wide-event logger. Defaults to a JSON line on the console. */
+  log?: (event: EmailLogEvent) => void;
 }
 
 /**
@@ -49,16 +75,16 @@ export async function sendEmail(
   config: MailerConfig,
   input: SendEmailInput,
 ): Promise<SendEmailResult> {
+  const log = config.log ?? consoleLog;
   if (!config.apiKey || !config.from) {
-    const development = config.logUndelivered === true;
-    const line = JSON.stringify({
-      level: development ? "info" : "error",
-      event: "email.not_configured",
-      subject: input.subject,
-      ...(development ? { to: input.to, text: input.text } : {}),
-    });
-    if (development) console.info(line);
-    else console.error(line);
+    if (config.logUndelivered === true) {
+      // Development only: the link in the mail is the way to finish a local sign-up.
+      console.info(
+        JSON.stringify({ event: "email.not_configured", to: input.to, text: input.text }),
+      );
+    } else {
+      log({ event: "email.not_configured", unit: "log", level: "error" });
+    }
     return { delivered: false, reason: "not_configured" };
   }
 
@@ -72,38 +98,17 @@ export async function sendEmail(
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     });
     if (error) {
-      console.error(
-        JSON.stringify({
-          level: "error",
-          event: "email.send_failed",
-          to_domain: recipientDomain(input.to),
-          subject: input.subject,
-          error: error.message,
-        }),
-      );
+      log({ event: "email.send_failed", unit: "log", level: "error", error: errorOf(error) });
       return { delivered: false, reason: "failed", error: error.message };
     }
-    console.info(
-      JSON.stringify({
-        level: "info",
-        event: "email.sent",
-        to_domain: recipientDomain(input.to),
-        subject: input.subject,
-        id: data?.id,
-      }),
-    );
+    log({ event: "email.sent", unit: "log", level: "info" });
     return { delivered: true, id: data?.id };
   } catch (cause) {
-    const message = cause instanceof Error ? cause.message : String(cause);
-    console.error(
-      JSON.stringify({
-        level: "error",
-        event: "email.send_failed",
-        to_domain: recipientDomain(input.to),
-        subject: input.subject,
-        error: message,
-      }),
-    );
-    return { delivered: false, reason: "failed", error: message };
+    log({ event: "email.send_failed", unit: "log", level: "error", error: errorOf(cause) });
+    return {
+      delivered: false,
+      reason: "failed",
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
   }
 }
