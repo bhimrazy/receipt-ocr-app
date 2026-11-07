@@ -109,9 +109,25 @@ test("signed-in pages send noindex, and signed-out visits redirect with it too",
   }
 });
 
+test("every crawlable noindex path also sends the header, and the invitation page has the meta tag", async ({
+  page,
+  request,
+}) => {
+  for (const path of ["/admin", "/admin/users", "/api/health", "/accept-invitation/none"]) {
+    const res = await request.get(path, { maxRedirects: 0 });
+    expect(res.headers()["x-robots-tag"], path).toContain("noindex");
+  }
+  await page.goto("/accept-invitation/none");
+  expect(await meta(page, 'meta[name="robots"]')).toContain("noindex");
+});
+
 test("robots.txt and the sitemap agree with what is indexable", async ({ request }) => {
   const robots = await (await request.get("/robots.txt")).text();
   expect(robots).toContain("Disallow: /api/");
+  // Crawlers must be able to fetch these pages to see their noindex, so none may be disallowed.
+  for (const path of ["/app", "/admin", ...NOINDEX_PUBLIC, "/accept-invitation"]) {
+    expect(robots, path).not.toMatch(new RegExp(`Disallow: ${path}(\\s|$)`));
+  }
   const sitemap = await (await request.get("/sitemap.xml")).text();
   const paths = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]!).pathname);
   expect(paths.sort()).toEqual([...INDEXABLE].sort());
