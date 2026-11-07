@@ -57,6 +57,7 @@ export function receiptObjectKey(userId: string, receiptId: string, mediaType: s
 export async function putObject(
   config: S3StorageConfig,
   input: { key: string; body: Uint8Array; contentType: string },
+  signal?: AbortSignal,
 ): Promise<void> {
   await s3Client(config).send(
     new PutObjectCommand({
@@ -65,12 +66,18 @@ export async function putObject(
       Body: input.body,
       ContentType: input.contentType,
     }),
+    { abortSignal: signal },
   );
 }
 
-export async function getObject(config: S3StorageConfig, key: string): Promise<Uint8Array> {
+export async function getObject(
+  config: S3StorageConfig,
+  key: string,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
   const response = await s3Client(config).send(
     new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+    { abortSignal: signal },
   );
   if (!response.Body) throw new Error(`Object ${key} has no body`);
   return response.Body.transformToByteArray();
@@ -97,6 +104,7 @@ export async function probeBucket(config: S3StorageConfig, signal?: AbortSignal)
 export async function deleteObjects(
   config: S3StorageConfig,
   keys: readonly string[],
+  signal?: AbortSignal,
 ): Promise<void> {
   for (let i = 0; i < keys.length; i += 1000) {
     const batch = keys.slice(i, i + 1000);
@@ -105,6 +113,7 @@ export async function deleteObjects(
         Bucket: config.bucket,
         Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
       }),
+      { abortSignal: signal },
     );
     if (result.Errors?.length) {
       throw new Error(

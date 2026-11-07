@@ -44,6 +44,7 @@ export function OcrChainForm({
   const [adding, setAdding] = useState<string>("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
   const [warnings, setWarnings] = useState<ConnectionRow[]>([]);
   const dirty = JSON.stringify(chain) !== JSON.stringify(saved);
 
@@ -78,8 +79,10 @@ export function OcrChainForm({
     setSaved(chain);
     toast.add({ title: "OCR models saved.", type: "success" });
     // Advisory only: the save stands even if a provider is briefly down.
-    setWarnings(await checkChainProvidersAction({ chain }).catch(() => []));
     setPending(false);
+    setChecking(true);
+    setWarnings(await checkChainProvidersAction({ chain }).catch(() => []));
+    setChecking(false);
   }
 
   return (
@@ -226,6 +229,11 @@ export function OcrChainForm({
       {error ? (
         <p className="mt-3 text-sm text-destructive" role="alert">
           {error}
+        </p>
+      ) : null}
+      {checking ? (
+        <p className="mt-3 text-xs text-muted-foreground" role="status">
+          Checking the providers&hellip;
         </p>
       ) : null}
       {warnings.length > 0 ? (

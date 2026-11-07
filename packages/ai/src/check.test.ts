@@ -54,9 +54,28 @@ describe("checkProvider google", () => {
     [402, {}, "no-billing-or-quota"],
     [
       429,
-      { error: { status: "RESOURCE_EXHAUSTED", message: "You exceeded your current quota" } },
+      {
+        error: {
+          details: [{ violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel" }] }],
+        },
+      },
       "no-billing-or-quota",
     ],
+    [
+      429,
+      {
+        error: {
+          details: [{ violations: [{ quotaId: "GenerateRequestsPerMinutePerProjectPerModel" }] }],
+        },
+      },
+      "rate-limited",
+    ],
+    [
+      429,
+      { error: { message: "You exceeded your current quota", details: [{ limit: 0 }] } },
+      "no-billing-or-quota",
+    ],
+    [429, { error: { message: "You exceeded your current quota" } }, "rate-limited"],
     [429, { error: { message: "Too many requests" } }, "rate-limited"],
     [500, {}, "unreachable"],
     [400, {}, "unreachable"],

@@ -46,13 +46,13 @@ const aiHint = (provider: OcrProvider, status: ConnectionStatus): string => {
   const env = provider.keyEnv ?? "the API key";
   switch (status) {
     case "ok":
-      return "Key accepted and the chosen models are available.";
+      return "Key accepted and the chosen models are visible. Billing isn't checked.";
     case "invalid-key":
       return `Key rejected: check ${env} in Vercel.`;
     case "no-billing-or-quota":
       return `Billing or quota problem: check the plan and credit for ${provider.label}.`;
     case "rate-limited":
-      return `${provider.label} is rate-limiting this key. Try again in a minute.`;
+      return `${provider.label} is limiting this key (rate limit). Try again in a minute; if it persists, check its quota.`;
     case "model-not-available":
       return `This key can't see a model in your list. Remove it from the OCR models or use another key (${env}).`;
     case "not-configured":

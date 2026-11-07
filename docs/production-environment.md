@@ -78,6 +78,10 @@ More help: [Create buckets](https://developers.cloudflare.com/r2/buckets/create-
 
 **Check:** after deploying, `/api/health/ready` shows `"storage":"ok"`.
 
+**Lifecycle rule for `_health/`:** the Connections check writes a tiny object under `_health/` and deletes it. If
+a run is cut off, one can be left behind. In the bucket's **Settings → Object lifecycle rules**, add a rule for the
+prefix `_health/` that deletes objects after 1 day.
+
 **CORS: leave it unset.** The browser never calls R2 directly: uploads go through the app, and images load in a
 plain `<img>` from a signed link, which needs no CORS. With no policy, no website's scripts can read the bucket's
 responses, which is the strictest setting. Add one only when a feature needs it (direct browser uploads to R2, or a
@@ -324,7 +328,8 @@ Add **both or neither**: with only one, the app refuses to start.
    `"database":"ok"` and `"storage":"ok"`.
 3. Sign in as an admin, open **Admin → Settings → Connections** and press **Check now**. Each AI provider, file
    storage and its read/write access should say **Working**; a problem shows a short hint naming the variable to
-   fix. Press **Send test email** to get one message at your own address. Nothing is shown but statuses, so keys
+   fix. For AI providers, Working means the key is accepted and the models are visible; billing and credit are not
+   checked. Press **Send test email** to get one message at your own address. Nothing is shown but statuses, so keys
    stay private.
 4. Sign up with a fresh email, confirm it, and upload a receipt.
 

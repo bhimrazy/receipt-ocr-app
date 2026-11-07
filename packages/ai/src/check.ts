@@ -83,9 +83,10 @@ const adapters: Record<Exclude<OcrProviderId, "fixture">, Adapter> = {
       if (status === 401 || status === 403 || /API_KEY_INVALID/.test(body)) return "invalid-key";
       if (status === 402) return "no-billing-or-quota";
       if (status === 429) {
-        return /quota|billing|exceeded your current/i.test(body)
-          ? "no-billing-or-quota"
-          : "rate-limited";
+        // Per-minute and per-day 429s share the "exceeded your current quota" text. The quota
+        // id in the details tells them apart: a daily cap, or a limit of 0 (no access on this
+        // tier), is a quota problem; anything else is treated as a rate limit.
+        return /PerDay|"limit"\s*:\s*"?0"?\b/.test(body) ? "no-billing-or-quota" : "rate-limited";
       }
       return "unreachable";
     },

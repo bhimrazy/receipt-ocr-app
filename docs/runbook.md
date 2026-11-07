@@ -75,7 +75,7 @@ Production runs on Vercel (app), Supabase (Postgres), Cloudflare R2 (receipt fil
 Symptoms: uploads end as failed, `job.attempt` events with `error.type: "OcrError"` and `error.kind` such as
 `rate-limited`, `timeout` or `provider-error`.
 
-Quick check: In **Admin, Settings, Connections** press **Check now**: it says whether the key is rejected, out of billing or quota, rate-limited or unreachable, without spending tokens.
+Quick check: in **Admin, Settings, Connections** press **Check now**. It says whether the key is accepted and the models are visible, or the key is rejected, rate-limited or unreachable. It does not check billing or credit, so a key that shows Working can still fail for lack of credit; check the provider's usage page.
 
 1. Check <https://aistudio.google.com/status> and the Gemini project's quota page.
 2. In **Admin, Settings**, change the OCR model chain to a model that is answering, or put a lighter model first.
