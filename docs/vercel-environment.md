@@ -275,7 +275,11 @@ Add **both or neither**: with only one, the app refuses to start.
    request.
 2. When it finishes, open `https://receipt-ocr.bhimraj.com.np/api/health/ready`. You should see
    `"database":"ok"` and `"storage":"ok"`.
-3. Sign up with a fresh email, confirm it, and upload a receipt.
+3. Sign in as an admin, open **Admin → Settings → Connections** and press **Check now**. Each AI provider, file
+   storage and its read/write access should say **Working**; a problem shows a short hint naming the variable to
+   fix. Press **Send test email** to get one message at your own address. Nothing is shown but statuses, so keys
+   stay private.
+4. Sign up with a fresh email, confirm it, and upload a receipt.
 
 ### If something's wrong
 
@@ -283,6 +287,8 @@ Add **both or neither**: with only one, the app refuses to start.
 | -------------------------------------------------- | --------------------------------------------------------------------------- |
 | `"storage":"not_configured"`                       | An `S3_` variable is missing, or no deploy since you added it.              |
 | `"storage"` is anything else (not `ok`)            | Wrong endpoint, a typo in a key, or the token isn't allowed on that bucket. |
+| Connections says **Key rejected**                  | The key is wrong or revoked: paste a fresh one, save, and deploy again.     |
+| Connections says **Billing or quota**              | The provider account needs credit or a higher limit.                        |
 | Admin shows **no API key** for a provider          | The key isn't set for this environment, or no deploy since.                 |
 | Uploads go in but receipts fail to read            | The key is wrong or has no billing; check the provider's usage page.        |
 | No verification email                              | Domain not verified in Resend, or `EMAIL_FROM` uses a different domain.     |

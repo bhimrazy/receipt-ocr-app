@@ -75,6 +75,8 @@ Production runs on Vercel (app), Supabase (Postgres), Cloudflare R2 (receipt fil
 Symptoms: uploads end as failed, `job.attempt` events with `error.type: "OcrError"` and `error.kind` such as
 `rate-limited`, `timeout` or `provider-error`.
 
+Quick check: In **Admin, Settings, Connections** press **Check now**: it says whether the key is rejected, out of billing or quota, rate-limited or unreachable, without spending tokens.
+
 1. Check <https://aistudio.google.com/status> and the Gemini project's quota page.
 2. In **Admin, Settings**, change the OCR model chain to a model that is answering, or put a lighter model first.
    This takes effect on the next upload without a deploy.
@@ -98,6 +100,8 @@ Symptoms: `/api/health/ready` returns `"database":"down"`, pages fail, `DbError`
 
 Symptoms: `"storage":"down"`, uploads fail with `StorageError`, receipt images don't load.
 
+Quick check: **Admin, Settings, Connections, Check now** writes, reads and deletes a small object under `_health/` and tells you which step failed.
+
 1. Check <https://www.cloudflarestatus.com> (R2) or the provider's status page.
 2. Check the bucket and token in the Cloudflare dashboard: the token may have expired or lost access to the bucket.
 3. Receipt data stays readable without storage; only uploads and images are affected. Nothing to do in the app until
@@ -107,6 +111,8 @@ Symptoms: `"storage":"down"`, uploads fail with `StorageError`, receipt images d
 
 Symptoms: `email.send_failed` in logs; in production, sign-up, password reset and invitations return an error
 because an undelivered email fails the request.
+
+Quick check: **Admin, Settings, Connections, Send test email** sends one message to your own address (3 per hour) and says sent, not configured or failed.
 
 1. Check <https://resend-status.com> and the Resend dashboard (domain verification, API key, daily limit). Resend
    Free allows 100 emails a day.
