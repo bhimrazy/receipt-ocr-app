@@ -26,7 +26,8 @@ Create the Postgres database. On Supabase, note both connection strings:
 - **Transaction pooler (port 6543)** for the app: `DATABASE_URL`.
 - **Session pooler (port 5432)** for migrations: `DIRECT_URL`. Schema changes fail on the transaction pooler.
 
-Apply every migration from your machine:
+Once the GitHub environments below are set up, CI applies migrations on every push to `main` (see
+[Migrations in CI](#migrations-in-ci)). For a brand-new database you can also apply them from your machine:
 
 ```bash
 DIRECT_URL='<session pooler URL>' bun run db:migrate
@@ -54,10 +55,10 @@ Set these in Vercel (Project → Settings → Environment Variables, Production)
 | Variable                                   | Required          | Notes                                                                                                                                                                                                |
 | ------------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`                             | Yes               | Transaction pooler URL on Supabase.                                                                                                                                                                  |
-| `DIRECT_URL`                               | For migrations    | Session pooler URL. Not needed by the running app.                                                                                                                                                   |
+| `DIRECT_URL`                               | For migrations    | Session pooler URL. Not needed by the running app; CI reads it from the `staging-db` and `production-db` GitHub environments, not from Vercel.                                                       |
 | `BETTER_AUTH_SECRET`                       | Yes               | `openssl rand -base64 32`. See [Rotating the auth secret](#rotating-the-auth-secret).                                                                                                                |
 | `BETTER_AUTH_SECRETS`                      | No                | Versioned secrets for rotation, current first: `2:<new>,1:<old>`.                                                                                                                                    |
-| `BETTER_AUTH_URL`                          | Yes               | The exact origin users visit, e.g. `https://receiptocr.example.com`. Requests from any other host (such as a `*.vercel.app` alias) are refused.                                                      |
+| `BETTER_AUTH_URL`                          | Yes               | The exact origin users visit, e.g. `https://receiptocr.example.com`. Requests from any other host (such as a `*.vercel.app` alias) are refused. Leave it unset for Vercel previews.                  |
 | `NEXT_PUBLIC_SITE_URL`                     | Yes               | Same origin. Used for canonical URLs, the sitemap and social cards.                                                                                                                                  |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`    | Yes               | For R2, `S3_REGION=auto`.                                                                                                                                                                            |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Yes               |                                                                                                                                                                                                      |
@@ -98,14 +99,64 @@ on any host: site `1x00000000000000000000AA` with secret `1x00000000000000000000
 
 ### 5. Deploy
 
-**Vercel.** `.github/workflows/production.yml` deploys `main` after CI passes on a push. It needs these secrets in
-the repository's `vercel` environment: `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`. Pull requests get a
-preview deploy from `.github/workflows/preview.yml`. To deploy by hand, run the **Vercel Production Deployment**
-workflow from the Actions tab.
+**Vercel.** `.github/workflows/production.yml` runs after CI passes on a push to `main`: it migrates staging, then
+production, then deploys. If either migration fails, nothing is deployed. It needs these secrets in the repository's
+`vercel` environment: `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`, plus the two database environments in
+[Migrations in CI](#migrations-in-ci). Pull requests get a preview deploy from `.github/workflows/preview.yml`. To run
+the whole pipeline by hand, run the **Vercel Production Deployment** workflow from the Actions tab on `main`.
 
 **Docker.** Build `docker/Dockerfile.prod`, run migrations once with the `builder` stage
 (`bun run db:migrate`, as the `migrate` service in `docker-compose.yml` does), then start the image with the
 variables above, `TRUSTED_IP_HEADERS` included.
+
+### Migrations in CI
+
+[`db-migrate.yml`](../.github/workflows/db-migrate.yml) runs `bun run db:migrate` against one database, reading
+`DIRECT_URL` (the session pooler URL, port 5432) from a GitHub environment. `production.yml` calls it twice:
+
+```text
+CI passes on main → migrate staging-db → migrate production-db → deploy production
+```
+
+Each step waits for the one before it, so a migration that fails on staging never reaches production, and a failed
+migration never ships code that needs it. One migration runs per database at a time (`concurrency`), across the
+pipeline and manual runs. The URL isn't printed: GitHub masks the secret, and `drizzle-kit` runs without `--verbose`.
+
+Create these once, before merging anything that relies on them (GitHub: Settings → Environments → New environment):
+
+| Environment     | Branch policy                                                | Secret                                                 |
+| --------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
+| `staging-db`    | Deployment branches: selected branches, `main` only          | `DIRECT_URL`: `receipt-ocr-staging` session pooler URL |
+| `production-db` | Same; consider a required reviewer to approve each migration | `DIRECT_URL`: `receipt-ocr` session pooler URL         |
+
+If an environment is missing, GitHub creates an empty one on the first run; the job then fails at "Check the secret
+is set" and the deploy doesn't run. With a required reviewer on `production-db`, every deploy waits for that approval,
+including releases without a new migration.
+
+To migrate one database by hand (to retry after a fix, or to bring staging up to date), run **Database Migration**
+from the Actions tab on `main` and choose `staging-db` or `production-db`.
+
+### Staging and previews
+
+- **Staging database:** Supabase project `receipt-ocr-staging` (us-east-1, same region as production and the `iad1`
+  functions). It gets every migration from `main` a moment before production does.
+- **Previews:** set the Vercel project's **Preview** variables to staging: `DATABASE_URL` (staging transaction
+  pooler), separate storage bucket or prefix, and a different `BETTER_AUTH_SECRET` from production. Leave
+  `BETTER_AUTH_URL` unset: on a preview (`VERCEL_ENV=preview`) the app uses `https://$VERCEL_BRANCH_URL`, or
+  `https://$VERCEL_URL` when there is no branch alias, and trusts both hosts. Sign-in, invite, verification and reset
+  links then point at the preview, never at production. Production ignores both variables and always uses
+  `BETTER_AUTH_URL`.
+- **Previews never run migrations.** A PR that adds a migration has no tables on staging until it merges and the
+  pipeline migrates staging, so pages that touch the new schema fail on that PR's preview. Test those against the
+  local compose stack (`scripts/test.sh`), which applies every migration to a fresh database.
+- **Email:** with `RESEND_API_KEY` and `EMAIL_FROM` set for Preview, previews send real mail with preview links. Without
+  them, set `AUTH_REQUIRE_EMAIL_VERIFICATION=false` for Preview, or email sign-up can't complete.
+- **Google and GitHub sign-in** need each preview host registered as a callback URL, which the random hosts make
+  impractical. Leave the OAuth variables unset for Preview so the buttons are hidden, and use email and password.
+- **Turnstile:** tokens must come from one of the preview's hosts. Use Cloudflare's test keys for Preview, or leave
+  Turnstile off there.
+- **Site URL:** `NEXT_PUBLIC_SITE_URL` only sets canonical links, the sitemap and social cards. Setting the production
+  URL for Preview is fine (Vercel marks preview deployments `noindex`); left unset, previews omit canonical links.
 
 ### 6. First admin
 
@@ -139,7 +190,8 @@ On Docker, also cap request bodies in the reverse proxy in front of the image (f
 ## Every release
 
 Code that needs a new migration will fail against the old schema, while the old code keeps working against the new
-schema. So **apply migrations first, then deploy**.
+schema. So **apply migrations first, then deploy**. The pipeline does that for you on every push to `main`
+([Migrations in CI](#migrations-in-ci)); the steps below are what's left for the owner.
 
 1. **See what's new since the last deploy.** Replace `<deployed>` with the commit currently live (shown in the
    Vercel deployment):
@@ -153,7 +205,8 @@ schema. So **apply migrations first, then deploy**.
 
 2. **Read each new migration.** They are plain SQL files. Look for anything that rewrites or drops data.
 
-3. **Back up.** On Supabase, check point-in-time recovery or take a backup from the dashboard. Elsewhere:
+3. **Back up** before merging a PR with a migration: the merge applies it. On Supabase, check point-in-time recovery or
+   take a backup from the dashboard. Elsewhere:
 
    ```bash
    pg_dump "$DIRECT_URL" --format=custom --file=backup-$(date +%F).dump
@@ -161,13 +214,11 @@ schema. So **apply migrations first, then deploy**.
 
 4. **Add new environment variables** in Vercel or the container before the deploy that needs them.
 
-5. **Apply migrations:**
+5. **Merge to `main`.** After CI, the pipeline migrates staging, then production, then deploys. If a migration
+   fails, see [the runbook](runbook.md#migration-failed-in-ci). On Docker, run `bun run db:migrate` with the
+   production `DIRECT_URL`, then roll out the new image.
 
-   ```bash
-   DIRECT_URL='<session pooler URL>' bun run db:migrate
-   ```
-
-6. **Deploy.** Merge to `main` (Vercel deploys after CI) or roll out the new image.
+6. **Check the pipeline finished:** all three jobs of the **Vercel Production Deployment** run are green.
 
 7. **Smoke test.** Run the checks from [step 7](#7-check-it-works).
 

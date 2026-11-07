@@ -24,7 +24,7 @@ How the system is built (every app and package, the main flows and the data mode
 | #27           | OCR usage ledger: `ocr_rounds` + `ocr_calls` with per-call tokens, cost and latency; quota counted from the ledger under a per-user lock (deletes no longer refund; first 5 failed reads a day free); migration `0007` |
 | #29, #30, #33 | Status updates, working principles, Next.js/React/shadcn reviews, job queue plan, security audit                                                                                                                       |
 | #31           | Streaming app pages, fewer client auth fetches, polling paused while hidden, lab pages hidden in production, skip link, global error page                                                                              |
-| #32           | Better Auth mitigations: exact workspace roles (GHSA-c85h), cookie cache off (revoked sessions stop at once), manual deploys only from `main`                                                                          |
+| #32           | Better Auth mitigations: exact workspace roles (GHSA-c85h), cookie cache off (revoked sessions stop at once), manual deploy runs only from `main`                                                                      |
 | #34           | [Architecture guide](architecture/README.md) with per-package pages, flows and diagrams                                                                                                                                |
 | #35           | Optional Cloudflare Turnstile on sign-up, sign-in, password reset, resend verification and the support form, with hostname pinning                                                                                     |
 | #36           | UX sweep: honest landing copy, no sideways scroll at 390 px, quota wording that matches the ledger                                                                                                                     |
@@ -36,9 +36,13 @@ How the system is built (every app and package, the main flows and the data mode
 
 Steps are in [deployment.md](deployment.md).
 
-- Run `bun run db:migrate` against production for `0006_admin_audit_settings` (admin panel) and
-  `0007_ocr_usage_ledger` (usage ledger), then `0008_jobs_queue` (job queue) before deploying #37 or later. After `0007`,
-  everyone's "used today" restarts once (the ledger starts empty).
+- Production deploys automatically: after CI passes on a push to `main`, `production.yml` migrates staging, then
+  production, then deploys (once `ci/db-migrations` lands; until then it deploys without migrating). Manual runs are
+  allowed only from `main`. Production and staging are both at migration `0010`.
+- Before `ci/db-migrations` merges: create GitHub environments `staging-db` and `production-db` (Settings →
+  Environments, deployment branches `main` only), add a `DIRECT_URL` secret (Supabase session pooler, port 5432) to
+  each, and consider a required reviewer on `production-db`. Then point Vercel's Preview variables at
+  `receipt-ocr-staging` and leave `BETTER_AUTH_URL` unset there ([deployment.md](deployment.md#staging-and-previews)).
 - Set `OCR_DAILY_CAP` in production as a spend guard.
 - Vercel env: `NEXT_PUBLIC_SITE_URL`, `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`; recommended
   `BETTER_AUTH_SECRETS=1:<current BETTER_AUTH_SECRET>`.
@@ -55,6 +59,7 @@ Steps are in [deployment.md](deployment.md).
 | `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                     |
 | `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                          |
 | `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; migration `0010` (index only)     |
+| `ci/db-migrations`         | Migrations from CI (staging, then production, then deploy; manual **Database Migration** workflow), preview sign-in on the preview's own host against staging        |
 | `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying) |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),

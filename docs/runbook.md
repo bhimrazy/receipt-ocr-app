@@ -129,6 +129,34 @@ Symptoms: receipts stay "processing", or the **Dead, last 24 hours** tile on **A
 Past about 1M `jobs` rows, build new `jobs` indexes by hand with `CREATE INDEX CONCURRENTLY` and keep a no-op migration
 so the journal stays in step.
 
+### Migration failed in CI
+
+The **Vercel Production Deployment** run shows a red `migrate-staging` or `migrate-production` job, and
+`deploy-production` was skipped. Production still runs the previous code. If staging failed, production's schema
+wasn't touched; if production failed, staging already has the migration.
+
+1. Open the failed job's **Apply migrations** step and read the Postgres error. "DIRECT_URL is not set" means the
+   environment or its secret is missing (Settings → Environments; see deployment.md, Migrations in CI).
+2. Check what was applied. `drizzle-kit` runs each migration file in a transaction, so a failed file leaves no partial
+   change, but earlier files in the same run stay applied. In the Supabase SQL editor:
+
+   ```sql
+   SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at DESC LIMIT 5;
+   ```
+
+3. Fix the cause:
+   - **Connection or timeout** (database paused, pooler down, password rotated): fix it, then go to step 4.
+   - **The migration itself is wrong** (a constraint existing rows break, a lock timeout): don't edit an applied
+     file. Open a PR that changes the unapplied migration, or adds a new one that repairs it, and merge it. The
+     merge runs the whole pipeline again.
+   - **Data damaged:** restore the backup taken before the merge (deployment.md, Every release, step 3).
+4. Retry: Actions → **Database Migration** → Run workflow on `main`, choosing `staging-db` or `production-db`. Then
+   finish the release by re-running the failed **Vercel Production Deployment** run (Re-run failed jobs), or run that
+   workflow by hand on `main`; it migrates both databases again (a no-op when up to date) and deploys.
+
+If staging and production have drifted (staging migrated, production not), the next pipeline run catches production
+up. Don't run `db:migrate` from a laptop against production unless Actions is down.
+
 ### Leaked secret
 
 1. Rotate it now, using the [table below](#secret-rotation). Rotate first, investigate after.
@@ -159,17 +187,17 @@ Names only; values live in Vercel (Production environment), the container enviro
 After any rotation, redeploy and run the smoke test from [deployment.md](deployment.md#7-check-it-works). Rotate all of
 them once a year, and at once when someone with access leaves.
 
-| Secret                                                                                                                   | Where it lives                                  | How to rotate                                                                                             | What breaks                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`, `BETTER_AUTH_SECRETS`                                                                              | Vercel / container                              | Versioned: see [Rotating the auth secret](deployment.md#rotating-the-auth-secret)                         | Nothing if versioned; changing the current version signs everyone out                          |
-| `DATABASE_URL`, `DIRECT_URL`                                                                                             | Vercel / container; your machine for migrations | Supabase, Database settings, reset the database password; update both URLs                                | Every instance until redeployed with the new URL                                               |
-| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`                                                                               | Vercel / container                              | Cloudflare R2, Manage API tokens: create a new token for the bucket, deploy it, then delete the old one   | Uploads and images until redeployed; signed image URLs already issued expire within 10 minutes |
-| `GOOGLE_GENERATIVE_AI_API_KEY`                                                                                           | Vercel / container                              | Google AI Studio or Cloud Console, API keys: create a key in the paid project, deploy, delete the old key | OCR until redeployed                                                                           |
-| `RESEND_API_KEY`                                                                                                         | Vercel / container                              | Resend, API Keys: create a sending key, deploy, revoke the old one                                        | Account emails until redeployed                                                                |
-| `GOOGLE_CLIENT_SECRET`                                                                                                   | Vercel / container                              | Google Cloud Console, Credentials, the OAuth client: add a secret, deploy, disable the old one            | Google sign-ins in progress during the switch                                                  |
-| `GITHUB_CLIENT_SECRET`                                                                                                   | Vercel / container                              | GitHub, Developer settings, OAuth Apps: generate a new secret, deploy, delete the old one                 | GitHub sign-ins in progress during the switch                                                  |
-| `VERCEL_TOKEN`                                                                                                           | GitHub Actions secret                           | Vercel, Account settings, Tokens: create a token, update the repository secret, delete the old token      | Deploys from Actions until updated                                                             |
-| `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                                                     | GitHub Actions secret                           | Identifiers, not credentials; change only when the project moves                                          | Nothing                                                                                        |
-| `TURNSTILE_SECRET_KEY` (site key `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is inlined at build time: changing it needs a rebuild) | Vercel / container                              | Cloudflare, Turnstile, the widget: rotate the secret key, deploy; rebuild if the site key changed         | Protected forms until redeployed                                                               |
+| Secret                                                                                                                   | Where it lives                                                                                    | How to rotate                                                                                                    | What breaks                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_SECRETS`                                                                              | Vercel / container                                                                                | Versioned: see [Rotating the auth secret](deployment.md#rotating-the-auth-secret)                                | Nothing if versioned; changing the current version signs everyone out                          |
+| `DATABASE_URL`, `DIRECT_URL`                                                                                             | Vercel / container; `DIRECT_URL` also in the `staging-db` and `production-db` GitHub environments | Supabase, Database settings, reset the database password; update both URLs, in Vercel and the GitHub environment | Every instance until redeployed with the new URL                                               |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`                                                                               | Vercel / container                                                                                | Cloudflare R2, Manage API tokens: create a new token for the bucket, deploy it, then delete the old one          | Uploads and images until redeployed; signed image URLs already issued expire within 10 minutes |
+| `GOOGLE_GENERATIVE_AI_API_KEY`                                                                                           | Vercel / container                                                                                | Google AI Studio or Cloud Console, API keys: create a key in the paid project, deploy, delete the old key        | OCR until redeployed                                                                           |
+| `RESEND_API_KEY`                                                                                                         | Vercel / container                                                                                | Resend, API Keys: create a sending key, deploy, revoke the old one                                               | Account emails until redeployed                                                                |
+| `GOOGLE_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | Google Cloud Console, Credentials, the OAuth client: add a secret, deploy, disable the old one                   | Google sign-ins in progress during the switch                                                  |
+| `GITHUB_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | GitHub, Developer settings, OAuth Apps: generate a new secret, deploy, delete the old one                        | GitHub sign-ins in progress during the switch                                                  |
+| `VERCEL_TOKEN`                                                                                                           | GitHub Actions secret                                                                             | Vercel, Account settings, Tokens: create a token, update the repository secret, delete the old token             | Deploys from Actions until updated                                                             |
+| `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                                                     | GitHub Actions secret                                                                             | Identifiers, not credentials; change only when the project moves                                                 | Nothing                                                                                        |
+| `TURNSTILE_SECRET_KEY` (site key `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is inlined at build time: changing it needs a rebuild) | Vercel / container                                                                                | Cloudflare, Turnstile, the widget: rotate the secret key, deploy; rebuild if the site key changed                | Protected forms until redeployed                                                               |
 
 Not secrets, but worth checking after a leak: `ADMIN_EMAILS` (who becomes admin on sign-up) and `SUPPORT_EMAIL`.

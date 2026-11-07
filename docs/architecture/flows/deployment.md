@@ -13,18 +13,23 @@ sequenceDiagram
   participant CI as ci.yml
   participant PV as preview.yml
   participant PR as production.yml
-  participant V as Vercel
+  participant M as db-migrate.yml
+  participant SDB as Staging Postgres
   participant DB as Production Postgres
+  participant V as Vercel
 
   Dev->>GH: open or update a PR
   GH->>CI: static, checks, e2e jobs
-  GH->>PV: vercel pull, build, deploy preview
+  GH->>PV: vercel pull, build, deploy preview (Preview env: staging DB, no migration)
   PV->>GH: comment with the preview URL
-  Dev->>DB: bun run db:migrate with DIRECT_URL, if the release has a migration
   Dev->>GH: squash-merge to main
   GH->>CI: same jobs on the main commit
   CI-->>PR: workflow_run: CI completed with success on a push
-  PR->>PR: check out the exact commit CI tested
+  PR->>M: migrate-staging (environment staging-db)
+  M->>SDB: bun run db:migrate with DIRECT_URL
+  PR->>M: migrate-production (environment production-db), only if staging succeeded
+  M->>DB: bun run db:migrate with DIRECT_URL
+  PR->>PR: deploy-production, only if both migrations succeeded
   PR->>V: vercel pull, vercel build --prod, vercel deploy --prebuilt --prod
 ```
 
@@ -32,20 +37,33 @@ sequenceDiagram
   audit; `checks` runs typecheck, unit tests and build; `e2e` starts Postgres and RustFS as services, applies every
   migration to an empty database, runs the core and web integration suites, builds, and runs Playwright with the
   fixture OCR provider.
-- **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) use the Vercel project's preview environment.
-  Dependabot PRs are skipped because they get no secrets.
+- **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) use the Vercel project's preview environment,
+  which points at the staging database. They never migrate it, so a PR's own migration isn't there until it merges.
+  The app's origin on a preview is its own host (`VERCEL_BRANCH_URL`, else `VERCEL_URL`) unless `BETTER_AUTH_URL` is
+  set ([`lib/env.ts`](../../../apps/web/lib/env.ts)). Dependabot PRs are skipped because they get no secrets.
 - **Production** ([`production.yml`](../../../.github/workflows/production.yml)) runs only after CI succeeded on a
-  push to `main`, or when started by hand from `main` (a manual run on another branch is skipped), deploys one at a time (`cancel-in-progress: false`), and builds the
-  commit CI tested rather than whatever `main` points at by then.
+  push to `main`, or when started by hand from `main` (a manual run on another branch is skipped). It runs one at a
+  time (`cancel-in-progress: false`), migrates and builds the commit CI tested rather than whatever `main` points at
+  by then, and deploys only after both migrations succeed.
 - The Vercel token is given only to the `pull` and `deploy` steps. The build step runs repository code and gets no
   token. Deploys upload one archive (`--archive=tgz`) to stay under the free plan's file-upload quota.
 
-## Migrations are manual, and first
+## Migrations run in CI, first
 
-No workflow runs migrations against production. The owner runs them from a machine:
+[`db-migrate.yml`](../../../.github/workflows/db-migrate.yml) is a reusable workflow: given a GitHub environment
+(`staging-db` or `production-db`, both limited to `main`), it checks out the commit, installs with the frozen
+lockfile and runs `bun run db:migrate` with that environment's `DIRECT_URL` secret. Its job-level `concurrency`
+group (`db-migrate-<environment>`, never cancelled) keeps two runs off the same database, whether they come from the
+pipeline or from a manual **Database Migration** run, which is the recovery path
+([runbook](../../runbook.md#migration-failed-in-ci)).
 
-```bash
-DIRECT_URL='<Supabase session pooler URL, port 5432>' bun run db:migrate
+```mermaid
+flowchart LR
+  ci["CI green on main"] --> s["migrate staging-db"]
+  s -- success --> p["migrate production-db"]
+  p -- success --> d["deploy production"]
+  s -. failure .-> stop["stop: nothing deployed"]
+  p -. failure .-> stop
 ```
 
 The order is **migrate, then deploy**, because:
