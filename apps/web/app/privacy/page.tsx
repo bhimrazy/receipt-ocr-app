@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { gaMeasurementId, turnstileOn } from "@/lib/consent/env";
-import { canonicalFor } from "@/lib/site";
+import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Privacy policy",
   description:
-    "What receiptOCR collects, who processes it, including Google's Gemini AI, and how to delete it.",
-  alternates: canonicalFor("/privacy"),
-};
+    "What receiptOCR collects, who processes it, including Google's Gemini AI, how long it is kept and how to delete it.",
+  path: "/privacy",
+});
 
 const googleAnalytics = Boolean(gaMeasurementId);
 // Vercel Web Analytics runs only in Vercel builds.
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy policy"
-      updated="November 6, 2026"
+      updated={formatLegalDate(LEGAL_UPDATED.privacy)}
       intro="receiptOCR reads the receipts you upload and turns them into data you can check and export. This policy explains what we collect, who processes it on our behalf, and how you can remove it."
       sections={[
         {

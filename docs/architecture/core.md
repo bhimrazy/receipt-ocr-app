@@ -63,17 +63,18 @@ shared, so there is one pool and one settings cache per process.
 Everything is exported from `@receipt-ocr/core`. Two import-free entry points exist for client components:
 `@receipt-ocr/core/plans` (plan defaults) and `@receipt-ocr/core/upload-limits` (size and type limits).
 
-| Area        | Exports                                                                                                                     |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Pipeline    | `ingestUpload`, `runExtraction`, `settleFailure`, `claimRetry`, `deleteReceipt`, `purgeReceiptFiles`, `getReceiptWithImage` |
-| Jobs        | `JobQueue`, `enqueueJob`, `tick`, `cancelJob`, `JOB_REGISTRY`, `receiptExtract`, `backoffMs`, job errors                    |
-| Quota       | `userPlan`, `quotaLimits`, `checkQuota`, `enforceQuota`, `quotaGate`, `decideQuota`, `quotaMessage`                         |
-| Usage       | `countUsage`, `lockUserQuota`, `usageByDay`, `usageByModel`, `usageByWorkspace`, `receiptCalls`, `receiptsReadSince`        |
-| Workspace   | `resolveScope`, `ensurePersonalWorkspace`, `hitRateLimit`, `parseWorkspaceName`, `personalWorkspaceName`                    |
-| Admin       | `deleteWorkspace`, `prepareUserDeletion`, `setMemberRole`, `removeMember`, `cancelInvitation`, `setUserPlan`, `recordAudit` |
-| Admin reads | `adminOverview`, `listUsers`, `userDetail`, `listWorkspaces`, `workspaceDetail`, `listAudit`, `findUser`, `findWorkspace`   |
-| Settings    | `Settings`, `providerAvailability`, `planTableSchema`, `ocrRoutingSchema`                                                   |
-| Errors      | `InvalidInput`, `NotFound`, `Conflict`, `QuotaExceeded`, `NotConfigured`, `DbError`, `StorageError`, `OcrError`             |
+| Area        | Exports                                                                                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pipeline    | `ingestUpload`, `runExtraction`, `settleFailure`, `claimRetry`, `deleteReceipt`, `purgeReceiptFiles`, `getReceiptWithImage`                                                                 |
+| Jobs        | `JobQueue`, `enqueueJob`, `tick`, `cancelJob`, `JOB_REGISTRY`, `receiptExtract`, `backoffMs`, job errors                                                                                    |
+| Quota       | `userPlan`, `quotaLimits`, `checkQuota`, `enforceQuota`, `quotaGate`, `decideQuota`, `quotaMessage`                                                                                         |
+| Usage       | `countUsage`, `lockUserQuota`, `usageByDay`, `usageByModel`, `usageByWorkspace`, `receiptCalls`, `receiptsReadSince`                                                                        |
+| Workspace   | `resolveScope`, `ensurePersonalWorkspace`, `hitRateLimit`, `parseWorkspaceName`, `personalWorkspaceName`                                                                                    |
+| Admin       | `deleteWorkspace`, `prepareUserDeletion`, `setMemberRole`, `removeMember`, `cancelInvitation`, `setUserPlan`, `recordAudit`                                                                 |
+| Admin reads | `adminOverview`, `listUsers`, `userDetail`, `listWorkspaces`, `workspaceDetail`, `listAudit`, `findUser`, `findWorkspace`                                                                   |
+| Settings    | `Settings`, `providerAvailability`, `planTableSchema`, `ocrRoutingSchema`                                                                                                                   |
+| Groups      | `listGroups`, `createGroup`, `updateGroup`, `deleteGroup`, `addReceiptsToGroup`, `removeReceiptsFromGroup`, `groupsOfReceipt`, `canManageGroup`, the schemas and limits in `group-rules.ts` |
+| Errors      | `InvalidInput`, `NotFound`, `Forbidden`, `Conflict`, `QuotaExceeded`, `NotConfigured`, `DbError`, `StorageError`, `OcrError`                                                                |
 
 ## Key modules
 
@@ -91,6 +92,8 @@ Everything is exported from `@receipt-ocr/core`. Two import-free entry points ex
 | [`workspace.ts`](../../packages/core/src/workspace.ts)                                         | Scope resolution, personal workspace creation, a fixed-window rate limiter                                |
 | [`admin.ts`](../../packages/core/src/admin.ts), [`audit.ts`](../../packages/core/src/audit.ts) | Admin writes with their audit row in one transaction                                                      |
 | [`admin-queries.ts`](../../packages/core/src/admin-queries.ts)                                 | Reads for the admin pages                                                                                 |
+| [`groups.ts`](../../packages/core/src/groups.ts)                                               | Receipt groups: CRUD, bulk membership, permission checks, limits under a per-workspace lock               |
+| [`group-rules.ts`](../../packages/core/src/group-rules.ts)                                     | Group palette, limits, Zod schemas and types; no database code, so the browser imports it too             |
 | [`config.ts`](../../packages/core/src/config.ts)                                               | `DATABASE_URL`, `S3_*`, `OCR_DAILY_CAP` via Effect `Config`                                               |
 
 ## Data flow
@@ -178,6 +181,28 @@ workspace (`FOR UPDATE`) so the "at least one owner" check can't race another ad
 **Files after rows.** Deletes remove database rows first and stored objects afterwards. A failed object delete is
 logged with its key (`receipt.object_delete_failed`, `admin.purge_failed`) rather than failing the request; an
 orphaned object costs storage only. On ingest, if the insert fails the just-stored object is removed.
+
+## Receipt groups
+
+A group is a named collection of receipts in a workspace; a receipt can be in several
+([data model](data-model.md#receipt-groups)).
+
+- **Who may do what.** Any member lists groups, creates them and adds or removes receipts (anyone's). Renaming,
+  recolouring and deleting is for the group's creator and the workspace's `owner` and `admin` roles
+  (`canManageGroup`, which fails closed like `canManageAnyReceipt`). Refusals are `Forbidden` (HTTP 403). A group whose
+  creator was deleted can only be managed by owners and admins. Deleting a group never deletes receipts.
+- **Scoping in SQL.** Every query filters on `organization_id`. A bulk add inserts with `insert ... select` from
+  `receipts` joined to `receipt_groups` on `organization_id`, so ids from another workspace are counted as
+  `notFound` and never linked. A group from another workspace is `NotFound`.
+- **Limits.** `MAX_GROUPS_PER_WORKSPACE` (100) and `MAX_GROUPS_PER_RECEIPT` (20). Every group write takes a
+  per-workspace advisory lock (namespace `7302`), so the counts and the case-insensitive name check can't be raced.
+  A bulk add skips receipts already in 20 groups and reports them as `atLimit` instead of failing the call.
+- **Input.** Names are trimmed, inner whitespace collapsed, 1 to 60 characters, no control or format characters
+  (bidi overrides, zero-width). Colours come from `GROUP_COLORS`. Bulk calls take 1 to 100 UUIDs, deduplicated. Core
+  validates with the same Zod schemas the routes use.
+- **History and export.** `ReceiptFilters.groups` matches receipts in any of the given groups; `exportRows` adds the
+  receipt's group names.
+- **Audit.** Group changes are workspace actions, not platform admin actions, so they write no `admin_audit_log` rows.
 
 ## How to test it
 

@@ -3,14 +3,14 @@ import { CookieSettingsButton } from "@/components/consent/cookie-settings-butto
 import { LegalPage } from "@/components/legal-page";
 import { entriesFor, type StorageCategory, type StorageEntry } from "@/lib/consent/cookies";
 import { gaMeasurementId, turnstileOn } from "@/lib/consent/env";
-import { canonicalFor } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Cookie policy",
   description:
     "Every cookie and storage key receiptOCR uses, what it is for, how long it lasts, and how to change your choice.",
-  alternates: canonicalFor("/cookies"),
-};
+  path: "/cookies",
+});
 
 const googleAnalytics = Boolean(gaMeasurementId);
 const pageCounts = process.env.VERCEL === "1";
