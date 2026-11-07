@@ -181,9 +181,43 @@ describe("checkProvider anthropic", () => {
   });
 });
 
+describe("checkProvider groq", () => {
+  const MODELS = ["groq:qwen/qwen3.8-27b"];
+  const list = (...ids: string[]) => json({ object: "list", data: ids.map((id) => ({ id })) });
+
+  it("sends the key as a bearer token, and is ok when the model is listed", async () => {
+    const f = stub(list("qwen/qwen3.8-27b", "other"));
+    expect(
+      (await checkProvider("groq", { apiKey: KEY, models: MODELS, fetch: f.fetch })).status,
+    ).toBe("ok");
+    expect(String(f.mock.calls[0]![0])).toBe("https://api.groq.com/openai/v1/models");
+    expect(new Headers(f.mock.calls[0]![1]?.headers).get("authorization")).toBe(`Bearer ${KEY}`);
+  });
+
+  it.each([
+    [401, {}, "invalid-key"],
+    [
+      429,
+      { error: { message: "Rate limit reached for model on tokens per minute (TPM)" } },
+      "rate-limited",
+    ],
+    [
+      429,
+      { error: { message: "Rate limit reached on tokens per day (TPD)" } },
+      "no-billing-or-quota",
+    ],
+    [500, {}, "unreachable"],
+  ])("maps HTTP %i %j to %s", async (status, body, expected) => {
+    const f = stub(json(body, status));
+    expect(
+      (await checkProvider("groq", { apiKey: KEY, models: MODELS, fetch: f.fetch })).status,
+    ).toBe(expected);
+  });
+});
+
 describe("checkProvider results", () => {
   it("never contain the key, whatever the provider says", async () => {
-    for (const id of ["google", "anthropic"] as const) {
+    for (const id of ["google", "anthropic", "groq"] as const) {
       for (const status of [200, 400, 401, 402, 429, 500]) {
         const f = stub(
           json({ error: { message: `key ${KEY} rejected` }, models: [], data: [] }, status),

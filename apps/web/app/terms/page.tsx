@@ -26,7 +26,7 @@ export default async function TermsPage() {
           heading: "The service",
           body: [
             "ReceiptOCR scans receipt images you upload and extracts data such as merchant, date, line items, tax and total, which you can review, edit and export.",
-            "Receipts are scanned by AI models from Google (Gemini) and Anthropic (Claude). We choose the models and may change them. AI can misread or miss information, so check the extracted data before you rely on it for accounting, tax or anything else. The confidence score is a guide, not a guarantee.",
+            "Receipts are scanned by AI models from Google (Gemini) and Anthropic (Claude), and from Groq when it is turned on. We choose the models and may change them. AI can misread or miss information, so check the extracted data before you rely on it for accounting, tax or anything else. The confidence score is a guide, not a guarantee.",
           ],
         },
         {
