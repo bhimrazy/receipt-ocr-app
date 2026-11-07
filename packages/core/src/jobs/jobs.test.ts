@@ -76,6 +76,43 @@ describe("finalFailureMessage", () => {
 });
 
 describe("classifyExtractionError", () => {
+  const chainOf = (...kinds: OcrError["kind"][]) =>
+    ocrError(
+      kinds.at(-1)!,
+      kinds.map((kind, step) => ({
+        ...attempt(kind, kind === "rate-limited" ? 5_000 : undefined),
+        step,
+      })),
+    );
+
+  it.each([
+    [["rate-limited", "unsupported-file"], "rate-limited"],
+    [["timeout", "refused"], "timeout"],
+    [["provider-error", "bad-image"], "provider-error"],
+  ] as const)("retries a chain %j that hit a transient failure first", (kinds, retryKind) => {
+    expect(classifyExtractionError(chainOf(...kinds))).toMatchObject({
+      _tag: "RetryableJobError",
+      kind: retryKind,
+    });
+  });
+
+  it("keeps the provider's Retry-After when a later step was skipped", () => {
+    expect(classifyExtractionError(chainOf("rate-limited", "unsupported-file"))).toMatchObject({
+      retryAfterMs: 5_000,
+    });
+  });
+
+  it.each([
+    [["not-configured", "unsupported-file"]],
+    [["refused", "refused"]],
+    [["unsupported-file", "invalid-output"]],
+  ] as const)("gives up on an all-terminal chain %j", (kinds) => {
+    expect(classifyExtractionError(chainOf(...kinds))).toMatchObject({
+      _tag: "NonRetryableJobError",
+      kind: kinds.at(-1),
+    });
+  });
+
   it.each(["timeout", "rate-limited", "provider-error"] as const)("retries %s", (kind) => {
     expect(classifyExtractionError(ocrError(kind))).toMatchObject({
       _tag: "RetryableJobError",

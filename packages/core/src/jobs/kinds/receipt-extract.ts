@@ -61,16 +61,23 @@ const MAX_COOLDOWN_MS = 10 * 60_000;
  *   once keys are fixed), refused and unsupported-file (every model in the
  *   chain was already tried), and an unreadable stored file;
  * - deferred, without spending an attempt: every provider is cooling down.
+ * The chain reports its last step's kind, but a transient failure anywhere in
+ * it makes the whole round worth retrying: [429, HEIC skipped] is a 429.
  */
 export function classifyExtractionError(error: ExtractionError): JobFailure {
   switch (error._tag) {
     case "OcrError": {
-      if (!RETRYABLE_OCR.has(error.kind)) return new NonRetryableJobError({ kind: error.kind });
+      const transient = RETRYABLE_OCR.has(error.kind)
+        ? error.kind
+        : error.attempts.find((a) => a.kind !== "ok" && RETRYABLE_OCR.has(a.kind))?.kind;
+      if (transient === undefined) {
+        return new NonRetryableJobError({ kind: error.kind });
+      }
       const waits = error.attempts.flatMap((a) =>
         a.retryAfterMs === undefined ? [] : [a.retryAfterMs],
       );
       return new RetryableJobError({
-        kind: error.kind,
+        kind: transient,
         ...(waits.length > 0 ? { retryAfterMs: Math.max(...waits) } : {}),
       });
     }
