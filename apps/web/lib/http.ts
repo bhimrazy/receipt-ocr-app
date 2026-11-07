@@ -96,7 +96,7 @@ function logFailure(cause: Cause.Cause<AppError>) {
   logger.error(event);
 }
 
-const appOrigin = new URL(authEnv.betterAuthUrl).origin;
+const appOrigins = new Set(authEnv.trustedOrigins);
 
 /**
  * Rejects cross-site mutations. Browsers send Origin on every POST, PATCH and
@@ -104,7 +104,8 @@ const appOrigin = new URL(authEnv.betterAuthUrl).origin;
  * one is refused rather than assumed to be same-site.
  */
 export function crossOriginResponse(request: Request): Response | null {
-  if (request.headers.get("origin") === appOrigin) return null;
+  const origin = request.headers.get("origin");
+  if (origin && appOrigins.has(origin)) return null;
   return jsonError(403, "Cross-origin request rejected");
 }
 
