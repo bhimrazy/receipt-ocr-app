@@ -1,247 +1,319 @@
-# Setting up environment variables on Vercel
+# Vercel environment setup
 
-A step-by-step for a new Vercel environment (Production, Preview, or a new project). It goes in the order that makes
-the app usable: storage, then OCR, then email, then the optional extras. Every variable is explained in
-`apps/web/.env.example`, and [deployment.md](deployment.md#4-environment-variables) has the full table. Each provider's
-console steps are in a collapsed block: open the one you're working on.
+How to give a Vercel environment the keys it needs, one service at a time. Follow the steps in order: each one
+unlocks part of the app, and you can stop after step 3 with a working app.
 
-Where to add them: Vercel → project → **Settings → Environment Variables → Add**. For each one, set:
+## Checklist
 
-- **Key** and **Value**.
-- **Environments**: tick **Production** for the live site, **Preview** for PR previews (which use the staging
-  database and their own keys). Development isn't used.
-- **[Secret]**: turn on **Sensitive**. The value can never be read back, not even by you, so keep a copy in your
-  password manager. **[Config]**: leave Sensitive off. These values aren't secret, and seeing them helps debugging.
+| Step                                                         | Unlocks                              | Needed?  | Time   |
+| ------------------------------------------------------------ | ------------------------------------ | -------- | ------ |
+| [1. Storage (Cloudflare R2)](#1-storage-cloudflare-r2)       | Uploading receipts                   | Yes      | 10 min |
+| [2. AI keys (Gemini, Claude)](#2-ai-keys)                    | Reading receipts                     | Yes      | 10 min |
+| [3. Email (Resend)](#3-email-resend)                         | Sign-up verification, password reset | Yes      | 15 min |
+| [4. Sign in with Google](#4-sign-in-with-google)             | The Google button                    | Optional | 15 min |
+| [5. Sign in with GitHub](#5-sign-in-with-github)             | The GitHub button                    | Optional | 5 min  |
+| [6. Bot protection (Turnstile)](#6-bot-protection-turnstile) | Spam protection on sign-up and forms | Optional | 5 min  |
+| [7. Deploy and check](#7-deploy-and-check)                   | Everything above goes live           | Yes      | 5 min  |
 
-Nothing changes until the next deploy: run **Vercel Production Deployment** from the Actions tab (or redeploy in
-Vercel). Then check `https://<your domain>/api/health/ready`.
+The database, auth secret and site URL are already set; see [Already set](#already-set).
 
-A variable that is set but wrong is worse than one that's unset: the app then believes a provider or mailer is ready.
-Leave a variable out until you have its real value. Use separate keys for Production and Preview everywhere, so a
-leaked preview key can't touch production.
+## How to add a variable
 
-Console screens change; if a button has moved, the provider's own docs (linked in each block) are the reference.
+1. Vercel → the project → **Settings → Environment Variables → Add New**.
+2. Type the **Key** and paste the **Value**.
+3. Tick the environment: **Production** (the live site) or **Preview** (pull-request previews). Give each its own
+   value: separate keys mean a leaked preview key can't touch production.
+4. If the table below says **Secret**, switch on **Sensitive**, then **Save**.
 
-## 1. Storage: Cloudflare R2 (required: uploads fail without it)
+- **Secret**: a password or API key. Sensitive values can never be read back, not even by you, so save a copy in
+  your password manager first.
+- **Config**: a setting that isn't secret (a bucket name, an email address). Leave Sensitive off so you can see it
+  later.
+
+Nothing changes on the live site until the next deploy ([step 7](#7-deploy-and-check)).
+
+> Only add a variable once you have its real value. A placeholder is worse than nothing: the app thinks the service
+> is ready and then fails on every request.
+
+---
+
+## 1. Storage: Cloudflare R2
+
+**Unlocks:** uploading receipts. Without it, every upload fails.
 
 <details>
-<summary><b>Create the bucket and token in Cloudflare</b></summary>
+<summary><b>Get the values from Cloudflare</b> (bucket, endpoint, access keys)</summary>
 
-Docs: [R2 buckets](https://developers.cloudflare.com/r2/buckets/create-buckets/),
-[R2 API tokens](https://developers.cloudflare.com/r2/api/tokens/).
-
-1. Cloudflare dashboard → **R2 Object Storage** (enable R2 on the account the first time; it asks for a payment
-   method even on the free allowance).
-2. **Create bucket.** Production: `receipt-ocr`. Preview: `receipt-ocr-staging`. Location hint: **Eastern North
-   America** (Vercel functions run in `iad1`). Leave public access off and add no custom domain: images are served
-   through short-lived signed URLs, so no CORS rule is needed either.
-3. Note the **Account ID** (R2 overview page, right side). The endpoint is
+1. Open the Cloudflare dashboard → **R2 Object Storage**. The first time, turn R2 on (it asks for a payment method
+   even for the free allowance).
+2. **Create bucket**
+   - Name: `receipt-ocr` for Production, `receipt-ocr-staging` for Preview.
+   - Location: **Eastern North America** (close to Vercel's servers).
+   - Leave public access **off** and add no custom domain. The app shows images through short-lived private links.
+3. Copy your **Account ID** from the right-hand side of the R2 page. Your endpoint is
    `https://<account-id>.r2.cloudflarestorage.com`.
-4. **R2 → Manage API tokens → Create API token.**
+4. **Manage API tokens → Create API token**
    - Permissions: **Object Read & Write**.
-   - Specify bucket(s): **Apply to specific buckets only**, and pick the one bucket.
-   - TTL: forever, or a date you'll remember to rotate on.
-5. **Create**, then copy the **Access Key ID** and **Secret Access Key**. The secret is shown once.
-6. Repeat 4–5 for the other bucket, so each environment has its own token.
+   - Buckets: **Apply to specific buckets only** → pick the one bucket.
+5. **Create API token** and copy the **Access Key ID** and **Secret Access Key** straight away. The secret is shown
+   only once.
+6. Do steps 2, 4 and 5 again for the other environment's bucket.
+
+More help: [Create buckets](https://developers.cloudflare.com/r2/buckets/create-buckets/),
+[API tokens](https://developers.cloudflare.com/r2/api/tokens/).
 
 </details>
 
-| Key                    | Value                                                        | Type     |
-| ---------------------- | ------------------------------------------------------------ | -------- |
-| `S3_ENDPOINT`          | `https://<account-id>.r2.cloudflarestorage.com`              | [Config] |
-| `S3_REGION`            | `auto`                                                       | [Config] |
-| `S3_BUCKET`            | `receipt-ocr` (Production) / `receipt-ocr-staging` (Preview) | [Config] |
-| `S3_ACCESS_KEY_ID`     | The token's Access Key ID (32 hex characters)                | [Secret] |
-| `S3_SECRET_ACCESS_KEY` | The token's Secret Access Key (64 hex characters)            | [Secret] |
+**Add to Vercel**
 
-Leave `S3_FORCE_PATH_STYLE` unset: R2 accepts path-style requests, which is the default. Check: `/api/health/ready`
-shows `"storage":"ok"`.
+| Key                    | Example                                                       | Kind   |
+| ---------------------- | ------------------------------------------------------------- | ------ |
+| `S3_ENDPOINT`          | `https://<account-id>.r2.cloudflarestorage.com`               | Config |
+| `S3_REGION`            | `auto`                                                        | Config |
+| `S3_BUCKET`            | `receipt-ocr` (Production) or `receipt-ocr-staging` (Preview) | Config |
+| `S3_ACCESS_KEY_ID`     | 32 letters and digits                                         | Secret |
+| `S3_SECRET_ACCESS_KEY` | 64 letters and digits                                         | Secret |
 
-## 2. OCR: AI provider keys (required: nothing is read without one)
+**Check:** after deploying, `/api/health/ready` shows `"storage":"ok"`.
 
-### Gemini (the default chain)
+---
+
+## 2. AI keys
+
+**Unlocks:** reading receipts. Gemini is the default; Claude is an optional second choice the app falls back to.
+
+### Gemini
 
 <details>
-<summary><b>Create a paid Gemini API key in Google</b></summary>
+<summary><b>Get a paid Gemini key from Google</b></summary>
 
-Docs: [Gemini API keys](https://ai.google.dev/gemini-api/docs/api-key),
-[billing](https://ai.google.dev/gemini-api/docs/billing).
+Use a **paid** key. On the free tier Google may use what you send to improve its products, and receipts are personal
+data.
 
-Use a **paid** key: on the free tier Google may use prompts and images to improve its products, and receipts are
-personal data.
+1. [Google Cloud Console](https://console.cloud.google.com) → create a project (e.g. `receipt-ocr`) or pick yours.
+2. **Billing** → link a billing account to that project.
+3. [Google AI Studio](https://aistudio.google.com) → **Get API key → Create API key** → choose the same project.
+   The key list should say **Paid**. If it says Free, billing isn't linked yet (step 2).
+4. Lock the key to Gemini: Cloud Console → **APIs & Services → Credentials** → your key → **API restrictions →
+   Restrict key** → tick **Generative Language API** → **Save**.
+5. Recommended: **Billing → Budgets & alerts** → a monthly budget that emails you at 50%, 90% and 100%.
 
-1. [Google Cloud Console](https://console.cloud.google.com) → create a project for this app (e.g. `receipt-ocr`), or
-   pick the existing one. One project per environment if you want separate keys and bills.
-2. **Billing** → link a billing account to the project.
-3. [Google AI Studio](https://aistudio.google.com) → **Get API key → Create API key** → choose that project. The key
-   list should show the project on the **paid** tier; if it says free, check step 2.
-4. Restrict the key: Cloud Console → **APIs & Services → Credentials** → the key → **API restrictions → Restrict
-   key** → **Generative Language API** only. (Leave application restrictions at none: the calls come from Vercel's
-   servers, whose IPs change.)
-5. Optional, recommended: **Billing → Budgets & alerts** → a monthly budget with email alerts at 50% / 90% / 100%.
+More help: [API keys](https://ai.google.dev/gemini-api/docs/api-key),
+[Billing](https://ai.google.dev/gemini-api/docs/billing).
 
 </details>
 
-| Key                            | Value   | Type     |
-| ------------------------------ | ------- | -------- |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | `AIza…` | [Secret] |
+| Key                            | Example | Kind   |
+| ------------------------------ | ------- | ------ |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | `AIza…` | Secret |
 
-### Claude (optional second provider)
+### Claude (optional)
 
 <details>
-<summary><b>Create an Anthropic API key with a spend limit</b></summary>
+<summary><b>Get a Claude key with a spending limit</b></summary>
 
-Docs: [Anthropic Console](https://console.anthropic.com), [workspaces](https://docs.anthropic.com/en/api/workspaces).
+1. [Anthropic Console](https://console.anthropic.com) → **Settings → Workspaces → Create workspace** (e.g.
+   `receipt-ocr-production`; make another for Preview).
+2. Open the workspace → **Limits** → set a **monthly spend limit**. When it's reached, the app simply moves to the
+   next model.
+3. **API keys → Create key** inside that workspace, and copy it. It's shown only once.
 
-1. Console → **Settings → Workspaces → Create workspace** (e.g. `receipt-ocr-production`; another for preview).
-2. In the workspace → **Limits** → set a **monthly spend limit**. Requests fail cleanly when it's reached, and the
-   app falls back to the next model in the chain.
-3. **API keys → Create key** inside that workspace. Copy it; it's shown once.
-4. Never reuse a personal or development key here.
+Don't reuse a personal or development key.
+
+More help: [Workspaces](https://docs.anthropic.com/en/api/workspaces).
 
 </details>
 
-| Key                 | Value      | Type     |
-| ------------------- | ---------- | -------- |
-| `ANTHROPIC_API_KEY` | `sk-ant-…` | [Secret] |
+| Key                 | Example    | Kind   |
+| ------------------- | ---------- | ------ |
+| `ANTHROPIC_API_KEY` | `sk-ant-…` | Secret |
 
-Then **Admin → Settings → OCR models**: each provider shows "API key set" once its key is there. Choose and order the
-models. Keys are never entered or shown in the admin UI.
+**Check:** after deploying, **Admin → Settings → OCR models** shows **API key set** next to each provider. Pick and
+order the models there. Keys are never typed into or shown in the admin page.
 
-Spend guards, optional: `OCR_DAILY_CAP` (rounds per UTC day across all users, e.g. `200`) and
-`OCR_MONTHLY_BUDGET_USD` (e.g. `50`), both [Config].
+**Optional spend guards** (Config): `OCR_DAILY_CAP`, the most receipts read per day across everyone (e.g. `200`), and
+`OCR_MONTHLY_BUDGET_USD`, the monthly budget the admin page tracks (e.g. `50`).
 
-## 3. Email: Resend (required: sign-up verification needs it)
+---
+
+## 3. Email: Resend
+
+**Unlocks:** verification emails at sign-up, password resets, workspace invites and the support form. Without it,
+nobody can finish signing up.
 
 <details>
-<summary><b>Verify the domain and create a key in Resend</b></summary>
+<summary><b>Verify your domain and get a key from Resend</b></summary>
 
-Docs: [Resend domains](https://resend.com/docs/dashboard/domains/introduction),
+1. [Resend](https://resend.com) → **Domains → Add domain** → `bhimraj.com.np` (or a subdomain such as
+   `mail.bhimraj.com.np`, which keeps this app's mail settings apart).
+2. Resend lists a few DNS records. Add each one at your DNS provider (where the domain is managed), exactly as shown.
+   Also add a DMARC record if you don't have one: name `_dmarc`, type `TXT`, value `v=DMARC1; p=none;`.
+3. Back in Resend, press **Verify DNS records** and wait for **Verified**. It usually takes minutes, sometimes a few
+   hours.
+4. **API Keys → Create API key** → permission **Sending access** → domain: the one you just verified. Copy it.
+
+More help: [Domains](https://resend.com/docs/dashboard/domains/introduction),
 [API keys](https://resend.com/docs/dashboard/api-keys/introduction).
 
-1. [Resend](https://resend.com) → **Domains → Add domain**: `bhimraj.com.np`, or a subdomain such as
-   `mail.bhimraj.com.np` (keeps this app's mail records apart from the main domain's). Region: the one nearest the
-   users, or us-east-1 next to Vercel.
-2. Add the DNS records it lists at your DNS provider: the DKIM `TXT`, and the SPF `MX` + `TXT` on the `send`
-   subdomain. Optional but recommended: a DMARC `TXT` at `_dmarc` (e.g. `v=DMARC1; p=none;`).
-3. **Verify DNS records**; wait until the domain shows **Verified** (minutes, sometimes hours).
-4. **API Keys → Create API key**: permission **Sending access**, domain: the one above. One key per environment.
-
 </details>
 
-| Key              | Value                                             | Type     |
-| ---------------- | ------------------------------------------------- | -------- |
-| `RESEND_API_KEY` | `re_…`                                            | [Secret] |
-| `EMAIL_FROM`     | `receiptOCR <receipt-ocr@bhimraj.com.np>`         | [Config] |
-| `SUPPORT_EMAIL`  | `receipt-ocr@bhimraj.com.np` (support-form inbox) | [Config] |
+| Key              | Example                                   | Kind   |
+| ---------------- | ----------------------------------------- | ------ |
+| `RESEND_API_KEY` | `re_…`                                    | Secret |
+| `EMAIL_FROM`     | `receiptOCR <receipt-ocr@bhimraj.com.np>` | Config |
+| `SUPPORT_EMAIL`  | `receipt-ocr@bhimraj.com.np`              | Config |
 
-`EMAIL_FROM` must use the verified domain. Mail is sent only when both `RESEND_API_KEY` and `EMAIL_FROM` are set.
-For Preview, send only to Resend's test addresses (`delivered@resend.dev`). `SUPPORT_EMAIL` must be a real inbox you
-read (Resend only sends; receiving needs a mailbox or forwarding, e.g. Cloudflare Email Routing).
+- `EMAIL_FROM` must use the domain you verified.
+- `SUPPORT_EMAIL` is where support-form messages go, so it must be an inbox you read. Resend only sends mail; to
+  receive at that address, set up a mailbox or forwarding (for example Cloudflare Email Routing to your Gmail).
+- On Preview, only send to Resend's test address `delivered@resend.dev`.
 
-## 4. Already set by the first deploy
+**Check:** sign up with a new address and the verification email arrives.
 
-These are in place on this project; listed so a new environment doesn't miss them.
+---
 
-| Key                    | Value                                                  | Type     |
-| ---------------------- | ------------------------------------------------------ | -------- |
-| `DATABASE_URL`         | Supabase **transaction pooler** URL (port 6543)        | [Secret] |
-| `BETTER_AUTH_SECRET`   | `openssl rand -base64 32`, different per environment   | [Secret] |
-| `BETTER_AUTH_SECRETS`  | Optional rotation list, `1:<current secret>`           | [Secret] |
-| `BETTER_AUTH_URL`      | `https://receipt-ocr.bhimraj.com.np` (Production only) | [Config] |
-| `NEXT_PUBLIC_SITE_URL` | Same origin                                            | [Config] |
-| `ADMIN_EMAILS`         | Comma-separated admin emails (Production)              | [Config] |
-| `LOG_SAMPLE_RATE`      | `0.1` (Production)                                     | [Config] |
+## 4. Sign in with Google
 
-`DIRECT_URL` never goes to Vercel: only the **Database Migration** workflow uses it, from the `staging-db` and
-`production-db` GitHub environments.
-
-## 5. Optional
-
-### Sign in with Google
+**Unlocks:** the "Continue with Google" button. Production only: preview addresses change with every pull request.
 
 <details>
-<summary><b>Create the OAuth client in Google Cloud</b></summary>
+<summary><b>Create the sign-in client in Google Cloud</b></summary>
 
-Docs: [Google Auth Platform](https://support.google.com/cloud/answer/15544987),
-[Better Auth: Google](https://www.better-auth.com/docs/authentication/google).
-
-1. [Google Cloud Console](https://console.cloud.google.com) → the app's project → **Google Auth Platform** (formerly
-   "OAuth consent screen") → **Get started**.
-2. **Branding**: app name `receiptOCR`, user support email, logo (optional; a logo triggers Google's brand review),
-   home page `https://receipt-ocr.bhimraj.com.np`, privacy policy `…/privacy`, terms `…/terms`, and authorised domain
-   `bhimraj.com.np`.
-3. **Audience**: **External**. While it's in **Testing**, only listed test users can sign in; **Publish app** to
-   open it to everyone. The scopes used (`openid`, `email`, `profile`) are non-sensitive, so publishing needs no
-   Google verification beyond the branding check.
-4. **Data access**: add the scopes `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`.
-5. **Clients → Create client** → type **Web application**:
+1. [Google Cloud Console](https://console.cloud.google.com) → your project → **Google Auth Platform** (it used to be
+   called "OAuth consent screen") → **Get started**.
+2. **Branding**
+   - App name: `receiptOCR`. User support email: yours.
+   - Home page: `https://receipt-ocr.bhimraj.com.np`. Privacy policy: `…/privacy`. Terms: `…/terms`.
+   - Authorised domain: `bhimraj.com.np`.
+   - A logo is optional; adding one starts a short Google review.
+3. **Audience** → **External**. While it says **Testing**, only the test users you list can sign in. Press
+   **Publish app** to open it to everyone. No extra Google review is needed for the basic scopes this app uses.
+4. **Data access → Add or remove scopes** → tick `openid`, `.../auth/userinfo.email` and
+   `.../auth/userinfo.profile`.
+5. **Clients → Create client** → **Web application**
    - Authorised JavaScript origins: `https://receipt-ocr.bhimraj.com.np`
    - Authorised redirect URIs: `https://receipt-ocr.bhimraj.com.np/api/auth/callback/google`
-6. **Create**, then copy the **Client ID** and **Client secret** (download the JSON if you want a backup; the secret
-   may not be shown again).
+6. **Create**, then copy the **Client ID** and **Client secret**. Download the JSON as a backup: the secret may not
+   be shown again.
 
-Production only: preview hosts change per PR, and Google needs every redirect URI listed.
-
-</details>
-
-| Key                    | Value                                   | Type     |
-| ---------------------- | --------------------------------------- | -------- |
-| `GOOGLE_CLIENT_ID`     | `1234…-abc….apps.googleusercontent.com` | [Config] |
-| `GOOGLE_CLIENT_SECRET` | `GOCSPX-…`                              | [Secret] |
-
-### Sign in with GitHub
-
-<details>
-<summary><b>Create the OAuth app in GitHub</b></summary>
-
-Docs: [Creating an OAuth app](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app),
-[Better Auth: GitHub](https://www.better-auth.com/docs/authentication/github).
-
-1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App** (an organisation's settings work too).
-2. Application name `receiptOCR`, homepage `https://receipt-ocr.bhimraj.com.np`, authorization callback URL
-   `https://receipt-ocr.bhimraj.com.np/api/auth/callback/github`. Leave device flow off.
-3. **Register application** → copy the **Client ID** → **Generate a new client secret** and copy it (shown once).
-4. Optional: upload a logo so the consent screen looks trustworthy.
+More help: [Google Auth Platform](https://support.google.com/cloud/answer/15544987),
+[Better Auth: Google](https://www.better-auth.com/docs/authentication/google).
 
 </details>
 
-| Key                    | Value     | Type     |
-| ---------------------- | --------- | -------- |
-| `GITHUB_CLIENT_ID`     | `Ov23li…` | [Config] |
-| `GITHUB_CLIENT_SECRET` | 40 hex    | [Secret] |
+| Key                    | Example                                 | Kind   |
+| ---------------------- | --------------------------------------- | ------ |
+| `GOOGLE_CLIENT_ID`     | `1234…-abc….apps.googleusercontent.com` | Config |
+| `GOOGLE_CLIENT_SECRET` | `GOCSPX-…`                              | Secret |
 
-A provider's button appears only when both of its values are set.
+**Check:** the sign-in page shows the Google button, and signing in returns you to the app.
 
-### Bot protection: Cloudflare Turnstile
+---
+
+## 5. Sign in with GitHub
+
+**Unlocks:** the "Continue with GitHub" button. Production only.
 
 <details>
-<summary><b>Create the Turnstile widget in Cloudflare</b></summary>
+<summary><b>Create the sign-in app in GitHub</b></summary>
 
-Docs: [Turnstile get started](https://developers.cloudflare.com/turnstile/get-started/).
+1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**.
+2. Fill in:
+   - Application name: `receiptOCR`
+   - Homepage URL: `https://receipt-ocr.bhimraj.com.np`
+   - Authorization callback URL: `https://receipt-ocr.bhimraj.com.np/api/auth/callback/github`
+   - Leave **Enable Device Flow** off.
+3. **Register application** → copy the **Client ID**.
+4. **Generate a new client secret** → copy it. It's shown only once.
+
+More help: [Creating an OAuth app](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
+
+</details>
+
+| Key                    | Example               | Kind   |
+| ---------------------- | --------------------- | ------ |
+| `GITHUB_CLIENT_ID`     | `Ov23li…`             | Config |
+| `GITHUB_CLIENT_SECRET` | 40 letters and digits | Secret |
+
+**Check:** the sign-in page shows the GitHub button.
+
+---
+
+## 6. Bot protection: Turnstile
+
+**Unlocks:** an invisible human check on sign-up, sign-in, password reset and the support form.
+
+<details>
+<summary><b>Create the widget in Cloudflare</b></summary>
 
 1. Cloudflare dashboard → **Turnstile → Add widget**.
-2. Name `receipt-ocr`, hostnames `receipt-ocr.bhimraj.com.np` (add a preview host only if previews should use it;
-   otherwise leave Preview without Turnstile or give it Cloudflare's test keys).
-3. Widget mode **Managed**. Pre-clearance: no.
+2. Name: `receipt-ocr`. Hostname: `receipt-ocr.bhimraj.com.np`.
+3. Widget mode: **Managed**. Pre-clearance: **No**.
 4. **Create**, then copy the **Site key** and **Secret key**.
+
+For Preview, either leave Turnstile out or use Cloudflare's
+[test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
+
+More help: [Get started](https://developers.cloudflare.com/turnstile/get-started/).
 
 </details>
 
-| Key                              | Value         | Type     |
-| -------------------------------- | ------------- | -------- |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | `0x4AAAAAAA…` | [Config] |
-| `TURNSTILE_SECRET_KEY`           | `0x4AAAAAAA…` | [Secret] |
+| Key                              | Example       | Kind   |
+| -------------------------------- | ------------- | ------ |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | `0x4AAAAAAA…` | Config |
+| `TURNSTILE_SECRET_KEY`           | `0x4AAAAAAA…` | Secret |
 
-Set both or neither: the app refuses to start with one. The site key is built into the page, so it takes effect only
-after a new build. More in [Bot protection](deployment.md#bot-protection-turnstile).
+Add **both or neither**: with only one, the app refuses to start.
 
-### Analytics
+**Check:** the sign-up page loads, and signing up still works.
 
-`NEXT_PUBLIC_GA_MEASUREMENT_ID` ([Config], build time). See
-[Analytics and cookie consent](deployment.md#analytics-and-cookie-consent).
+---
 
-## From a terminal instead
+## 7. Deploy and check
 
-The owner's Codespace has a helper that pushes filled-in values from a private file, skips empty ones and never
-prints a value: `python3 ~/receipt-ocr-push-vercel.py prod` (dry run), then `--apply`. It isn't in the repository.
+1. GitHub → **Actions → Vercel Production Deployment → Run workflow** (branch `main`). For Preview, push to any pull
+   request.
+2. When it finishes, open `https://receipt-ocr.bhimraj.com.np/api/health/ready`. You should see
+   `"database":"ok"` and `"storage":"ok"`.
+3. Sign up with a fresh email, confirm it, and upload a receipt.
+
+### If something's wrong
+
+| You see                                            | Likely cause                                                                |
+| -------------------------------------------------- | --------------------------------------------------------------------------- |
+| `"storage":"not_configured"`                       | An `S3_` variable is missing, or no deploy since you added it.              |
+| `"storage"` is anything else (not `ok`)            | Wrong endpoint, a typo in a key, or the token isn't allowed on that bucket. |
+| Admin shows **no API key** for a provider          | The key isn't set for this environment, or no deploy since.                 |
+| Uploads go in but receipts fail to read            | The key is wrong or has no billing; check the provider's usage page.        |
+| No verification email                              | Domain not verified in Resend, or `EMAIL_FROM` uses a different domain.     |
+| Google says "Access blocked" or "app not verified" | The app is still in **Testing**: publish it (step 4.3).                     |
+| Google says "redirect_uri_mismatch"                | The redirect URI doesn't match exactly (https, no trailing slash).          |
+| The site won't start after adding Turnstile        | Only one of the two Turnstile keys is set.                                  |
+
+---
+
+## Already set
+
+These were set when the project was created. Listed so a new environment doesn't miss them.
+
+| Key                    | What                                                           | Kind   |
+| ---------------------- | -------------------------------------------------------------- | ------ |
+| `DATABASE_URL`         | Supabase connection (transaction pooler, port 6543)            | Secret |
+| `BETTER_AUTH_SECRET`   | Signs sessions: `openssl rand -base64 32`, one per environment | Secret |
+| `BETTER_AUTH_SECRETS`  | Optional, for rotating the secret: `1:<current secret>`        | Secret |
+| `BETTER_AUTH_URL`      | `https://receipt-ocr.bhimraj.com.np` (Production only)         | Config |
+| `NEXT_PUBLIC_SITE_URL` | The same address                                               | Config |
+| `ADMIN_EMAILS`         | Who becomes admin on sign-up, comma-separated                  | Config |
+| `LOG_SAMPLE_RATE`      | `0.1`: keep 10% of routine logs (Production)                   | Config |
+| `OCR_DAILY_CAP`        | `200` Production, `50` Preview                                 | Config |
+
+`DIRECT_URL` (for database migrations) never goes to Vercel. It lives in the `staging-db` and `production-db`
+GitHub environments, used only by the **Database Migration** workflow.
+
+Every variable is also explained in `apps/web/.env.example`, and [deployment.md](deployment.md#4-environment-variables)
+has the full reference.
+
+## From a terminal
+
+The owner's Codespace has a helper that pushes values from a private file, skips empty ones and never prints a value:
+`python3 ~/receipt-ocr-push-vercel.py prod` to preview, then add `--apply`. It isn't part of the repository.
