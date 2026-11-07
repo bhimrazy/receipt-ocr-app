@@ -113,8 +113,10 @@ const models = arg("models", "google:gemini-3.8-flash")
   });
 
 // One entry per model and effort. A level a model doesn't take is skipped, not sent: the API would 400.
-const entries = models.flatMap((model) =>
-  (efforts.length ? efforts : [undefined]).flatMap((effort) => {
+type Entry = { model: string; effort: string | undefined; label: string };
+const levels: (string | undefined)[] = efforts.length ? efforts : [undefined];
+const entries: Entry[] = models.flatMap((model) =>
+  levels.flatMap((effort): Entry[] => {
     if (effort === undefined) return [{ model, effort, label: model }];
     if (ocrModel(modelId(model))?.effort?.values.includes(effort)) {
       return [{ model, effort, label: `${model}@${effort}` }];
