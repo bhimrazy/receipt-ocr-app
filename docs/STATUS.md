@@ -140,6 +140,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
    Currency honesty (no USD default, 3-decimal amounts) and conversion to a home currency:
    [currencies and FX](plans/2026-11-06-currencies-fx.md).
+10. Read-only agent access over MCP: personal tokens first, then OAuth for Claude.ai and ChatGPT ([MCP server](plans/2026-11-07-mcp-server.md)).
 
 ## Known follow-ups
 
