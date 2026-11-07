@@ -39,6 +39,7 @@ import type { JobDefinition } from "./definition";
 import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
 import { tickScope } from "./live";
 import { JobQueue } from "./queue";
+import { drainOnce } from "./drain";
 import { cancelJob, resetTickMarks, tick, type JobRunRecord } from "./runner";
 
 const enabled = process.env.INTEGRATION === "1";
@@ -339,6 +340,118 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
         .groupBy(jobs.state, jobs.attempts),
     );
     expect(states).toEqual([{ state: "succeeded", attempts: 1, n: 200 }]);
+  });
+
+  it("two concurrent drains share the queue, each respects its cap, and no job runs twice", async () => {
+    const ids = await db(async (d) => {
+      const rows = await d
+        .insert(jobs)
+        .values(
+          Array.from({ length: 12 }, (_, n) => ({ kind: COUNT, payload: { n }, maxAttempts: 3 })),
+        )
+        .returning({ id: jobs.id });
+      return rows.map((r) => r.id);
+    });
+    const pass = (worker: string) =>
+      run(
+        drainOnce({
+          worker: `${tag}-${worker}`,
+          trigger: "drain",
+          registry: testRegistry,
+          budgetMs: 30_000,
+          stopClaimingBeforeMs: 1_000,
+          maxJobs: 5,
+          concurrency: 2,
+        }),
+      );
+    const [x, y] = await Promise.all([pass("drain-x"), pass("drain-y")]);
+    expect(x.claimed).toBeLessThanOrEqual(5);
+    expect(y.claimed).toBeLessThanOrEqual(5);
+    expect(x.claimed + y.claimed).toBe(10);
+    expect(ids.filter((id) => counts.get(id) === 1)).toHaveLength(10);
+    expect(ids.every((id) => (counts.get(id) ?? 0) <= 1)).toBe(true);
+    // The two left over are for the next pass.
+    const rest = await pass("drain-z");
+    expect(rest).toMatchObject({ claimed: 2, capped: false });
+    expect(ids.every((id) => counts.get(id) === 1)).toBe(true);
+  });
+
+  it("a drain reclaims a job whose worker died mid-run, without anyone touching the receipt", async () => {
+    const [stale] = await db((d) =>
+      d
+        .insert(jobs)
+        .values({
+          kind: COUNT,
+          payload: { n: 0 },
+          maxAttempts: 3,
+          state: "running",
+          attempts: 1,
+          lockedBy: `${tag}-dead`,
+          lockedUntil: new Date(Date.now() - 5_000),
+        })
+        .returning({ id: jobs.id }),
+    );
+    const summary = await run(
+      drainOnce({
+        worker: `${tag}-drain-r`,
+        trigger: "drain",
+        registry: testRegistry,
+        budgetMs: 30_000,
+        stopClaimingBeforeMs: 1_000,
+        maxJobs: 10,
+      }),
+    );
+    expect(summary).toMatchObject({ reaped: 1, claimed: 1, succeeded: 1 });
+    expect(counts.get(stale!.id)).toBe(1);
+    expect(await queue((q) => q.get(stale!.id))).toMatchObject({ state: "succeeded", attempts: 2 });
+  });
+
+  it("a paused queue is not drained", async () => {
+    await db((d) => d.insert(jobs).values({ kind: COUNT, payload: { n: 1 }, maxAttempts: 3 }));
+    await queue((q) => q.pause("queue", { reason: "test" }));
+    const summary = await run(
+      drainOnce({
+        worker: `${tag}-drain-p`,
+        trigger: "drain",
+        registry: testRegistry,
+        budgetMs: 10_000,
+        stopClaimingBeforeMs: 1_000,
+        maxJobs: 10,
+      }),
+    );
+    expect(summary.claimed).toBe(0);
+    await db((d) => d.delete(jobControls).where(sql`${jobControls.scope} not like 'tick:%'`));
+    // Leave nothing queued for later tests.
+    await run(
+      drainOnce({
+        worker: `${tag}-drain-p`,
+        trigger: "drain",
+        registry: testRegistry,
+        budgetMs: 10_000,
+        stopClaimingBeforeMs: 1_000,
+        maxJobs: 10,
+      }),
+    );
+  });
+
+  it("lists a processing receipt as waiting to retry only while its job is queued for later", async () => {
+    const { receipt, jobId } = await upload(b);
+    const list = async () =>
+      (
+        await run(Effect.flatMap(ReceiptRepo, (r) => r.list(b, {}, { limit: 50, offset: 0 })))
+      ).rows.find((r) => r.id === receipt.id);
+    expect((await list())?.retryAt).toBeNull();
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ runAt: new Date(Date.now() + 60_000) })
+        .where(eq(jobs.id, jobId)),
+    );
+    const waiting = await list();
+    expect(waiting?.status).toBe("processing");
+    expect(waiting?.retryAt).toBeInstanceOf(Date);
+    expect(waiting!.retryAt!.getTime()).toBeGreaterThan(Date.now());
+    await run(cancelJob(receiptRegistry, jobId));
   });
 
   it("a crashed worker's job is reaped and resumed; its late writes change nothing", async () => {
