@@ -110,6 +110,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- FAQ uses a raw `<details>`; add a server-friendly Disclosure primitive to `packages/ui`.
 - PDF page cap gaps: the hand-written page counter (`packages/core/src/pdf-pages.ts`) can undercount when the word
   `stream` sits inside a string or `/stream` is used as a name, when `endobj` sits inside a string, when comments sit
   inside a dictionary, and for encrypted object streams. The list is not exhaustive. The cap is a
@@ -140,6 +141,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   upload) is still the top Postgres statement, with the job queue queries next. Next: a performance track that fills
   in the 24/36/48 ladder after #38, profiles both, replaces the quota count with something cheaper, and runs a
   30-minute soak. The app also holds up to 10 connections against a pool max of 5, and pages emit no wide events.
+
+- Perf/SEO follow-ups from [the audit](reviews/2026-11-06-perf-seo.md) on files other tracks own: root layout
+  preloads DM Sans with the `opsz` axis (62 KB) and JetBrains Mono (40 KB) on every page, and its `openGraph.url: "/"`
+  and 179-char description reach pages without their own metadata (PWA track); receipt page `<img>` has no
+  width/height and its `dl` wraps `dt`/`dd` in extra divs, and the history search box is the LCP element after
+  hydration (mobile shell track).
 
 ## How to resume on another machine
 
