@@ -102,6 +102,7 @@ test("take two photos, edit one, and upload both", async ({ page }) => {
 test("a picked photo is reviewed, then read and opened", async ({ page }) => {
   await signUp(page, uniqueEmail("pick-review"));
   await page.goto("/app");
+  await expect(page.locator("[data-ready]")).toBeAttached();
   await page.locator('input[type="file"][multiple]').setInputFiles(receipt);
   const review = page.getByRole("dialog", { name: "Review photos" });
   await expect(review.getByText("Check the photo")).toBeVisible();
@@ -115,6 +116,7 @@ test("a picked photo is reviewed, then read and opened", async ({ page }) => {
 test("picking more than the batch limit keeps the first ones and says so", async ({ page }) => {
   await signUp(page, uniqueEmail("batch-limit"));
   await page.goto("/app");
+  await expect(page.locator("[data-ready]")).toBeAttached();
   const files = Array.from({ length: 51 }, () => receipt);
   await page.locator('input[type="file"][multiple]').setInputFiles(files);
   await expect(
@@ -203,12 +205,13 @@ test("the camera link opens once: Back from the receipt doesn't reopen it", asyn
 
 /** Picks `count` copies of the receipt and sends them from review, as one queued batch. */
 async function readBatch(page: Page, count: number) {
+  // Files set before hydration land on an input with no change handler and are lost.
+  await expect(page.locator("[data-ready]")).toBeAttached();
   await page
     .locator('input[type="file"][multiple]')
     .setInputFiles(Array.from({ length: count }, () => receipt));
-  // The review sheet is a lazy chunk; on a busy runner it can take a while to arrive.
   const review = page.getByRole("dialog", { name: "Review photos" });
-  await expect(review).toBeVisible({ timeout: 30_000 });
+  await expect(review).toBeVisible();
   await review.getByRole("button", { name: `Read ${count} receipts` }).click();
 }
 
@@ -219,7 +222,6 @@ const accepted = (n: number) => ({
 });
 
 test("a failed upload shows Retry, and the retry goes through", async ({ page }) => {
-  test.setTimeout(60_000);
   await signUp(page, uniqueEmail("batch-retry"));
   let calls = 0;
   await page.route("**/api/receipts", (route) => {
@@ -248,7 +250,6 @@ test("a failed upload shows Retry, and the retry goes through", async ({ page })
 });
 
 test("a per-minute 429 pauses the batch, then it carries on by itself", async ({ page }) => {
-  test.setTimeout(60_000);
   await signUp(page, uniqueEmail("batch-pause"));
   let calls = 0;
   await page.route("**/api/receipts", (route) => {
@@ -273,7 +274,6 @@ test("a per-minute 429 pauses the batch, then it carries on by itself", async ({
 });
 
 test("a daily 429 stops the batch and keeps the rest", async ({ page }) => {
-  test.setTimeout(60_000);
   await signUp(page, uniqueEmail("batch-stop"));
   let calls = 0;
   await page.route("**/api/receipts", (route) => {

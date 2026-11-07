@@ -189,6 +189,12 @@ export function UploadPanel({
   useEffect(() => () => queue.dispose(), [queue]);
   const pausedFor = useCountdown(snapshot.pausedUntil);
 
+  // False in the server HTML, true once hydrated: until then the file inputs have no handlers.
+  const hydrated = useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );
   const support = useSyncExternalStore<CameraSupport>(
     noSubscription,
     browserCameraSupport,
@@ -384,7 +390,7 @@ export function UploadPanel({
   const prefetchCamera = () => void loadCamera();
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" data-ready={hydrated ? "" : undefined}>
       <Card
         aria-describedby="upload-hint"
         aria-label="Add receipt photos or PDFs"
