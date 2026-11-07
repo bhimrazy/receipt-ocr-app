@@ -116,16 +116,16 @@ jobs:
       - name: Pull Vercel environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: $VERCEL_BIN pull --yes --environment=production
+        run: "$VERCEL_BIN" pull --yes --environment=production
 
       # No token for the build step: it runs repository code, which only needs the pulled settings.
       - name: Build project
-        run: $VERCEL_BIN build --prod
+        run: "$VERCEL_BIN" build --prod
 
       - name: Deploy to production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: $VERCEL_BIN deploy --prebuilt --prod --archive=tgz
+        run: "$VERCEL_BIN" deploy --prebuilt --prod --archive=tgz
 
   # Records what's live, for the next run's gate. Separate job: the only one with write access, and
   # it runs no repository code.

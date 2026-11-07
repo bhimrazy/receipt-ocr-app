@@ -52,7 +52,7 @@ jobs:
           elif [ "$DRAFT" != true ]; then
             # Any file outside docs, Markdown, tests, benchmarks, scripts and CI config changes what ships
             # (preview.yml itself and the Vercel CLI lockfile do: they change the deploy).
-            shipped=$(git diff --name-only HEAD^1 HEAD | tee /dev/stderr \
+            shipped=$(git diff --name-only --no-renames HEAD^1 HEAD | tee /dev/stderr \
               | grep -vE '^(docs|bench|scripts)/|\.md$|\.test\.tsx?$|^apps/web/e2e/|^\.github/(workflows/(ci|db-migrate|load|production)\.yml|actions/|dependabot\.yml|ISSUE_TEMPLATE/)|^(knip\.json|\.prettier[a-z]*|\.gitignore)$' || true)
             [ -n "$shipped" ] && deploy=true
           fi
@@ -85,11 +85,11 @@ jobs:
       - name: Pull Vercel environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: $VERCEL_BIN pull --yes --environment=preview
+        run: "$VERCEL_BIN" pull --yes --environment=preview
 
       # No token for the build step: it runs repository code, which only needs the pulled settings.
       - name: Build project
-        run: $VERCEL_BIN build
+        run: "$VERCEL_BIN" build
 
       - name: Deploy to Vercel
         id: deploy
