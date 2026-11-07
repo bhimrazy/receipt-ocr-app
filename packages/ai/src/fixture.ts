@@ -77,3 +77,9 @@ export function fixtureExtraction(bytes: Uint8Array): ReceiptExtraction {
   for (const byte of bytes) hash = (hash * 31 + byte) >>> 0;
   return structuredClone(FIXTURE_RECEIPTS[hash % FIXTURE_RECEIPTS.length]!);
 }
+
+/** Simulated model latency for load tests: FIXTURE_LATENCY_MS, default 0; invalid values count as 0. */
+export function fixtureLatencyMs(): number {
+  const ms = Number(process.env.FIXTURE_LATENCY_MS);
+  return Number.isFinite(ms) && ms > 0 ? Math.min(ms, 60_000) : 0;
+}
