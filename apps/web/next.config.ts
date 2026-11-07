@@ -54,6 +54,13 @@ const nextConfig: NextConfig = {
     "@receipt-ocr/ui",
   ],
   poweredByHeader: false,
+  experimental: {
+    // Tab switches within 30 s reuse the page already fetched instead of rendering it again on the
+    // server. Mutations call router.refresh() or a Server Action, which drop the whole client
+    // cache, so edits show at once. Server-side auth checks are untouched: only what the browser
+    // already received is reused, and only briefly.
+    staleTimes: { dynamic: 30 },
+  },
   async headers() {
     return [
       {
