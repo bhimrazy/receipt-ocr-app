@@ -1,6 +1,6 @@
 "use client";
 
-import { adminClient, organizationClient } from "better-auth/client/plugins";
+import { adminClient, organizationClient, twoFactorClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { clearSharedFiles } from "./share-target";
 import { clearSignedInHint } from "./signed-in-hint";
@@ -10,7 +10,8 @@ import { clearSignedInHint } from "./signed-in-hint";
  * inferred from the current origin, so no server secrets leak client-side.
  */
 export const authClient = createAuthClient({
-  plugins: [organizationClient(), adminClient()],
+  // No twoFactorPage: the sign-in form routes to /sign-in/two-factor itself.
+  plugins: [organizationClient(), adminClient(), twoFactorClient()],
 });
 
 /** Signs out and drops the landing-page hint cookie and any receipts shared to the app. */

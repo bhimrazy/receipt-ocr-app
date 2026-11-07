@@ -19,6 +19,7 @@ const LABELS: Record<string, string> = {
   "user.delete": "Deleted user",
   "user.impersonate_start": "Started signing in as user",
   "user.impersonate_stop": "Stopped signing in as user",
+  "user.two_factor_reset": "Reset two-step sign-in",
   "workspace.member_role": "Changed member role",
   "workspace.member_remove": "Removed member",
   "workspace.invitation_cancel": "Cancelled invitation",
@@ -75,6 +76,10 @@ function details(entry: AdminAuditEntry): string | null {
       return `${cap(meta.from)} → ${cap(meta.to)}`;
     case "user.ban":
       return meta.days ? `For ${meta.days} ${meta.days === 1 ? "day" : "days"}` : "Permanent";
+    case "user.two_factor_reset": {
+      const sessions = Number(meta.sessions ?? 0);
+      return `Signed out of ${sessions} ${sessions === 1 ? "session" : "sessions"}`;
+    }
     case "workspace.member_role":
       return `${meta.member}: ${cap(meta.from)} → ${cap(meta.to)}`;
     case "workspace.member_remove":

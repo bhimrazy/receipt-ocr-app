@@ -64,6 +64,7 @@ export function UsersTable({
                   </div>
                   <div className="mt-2.5 flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="shrink-0">{planLabel(user.plan)}</span>
+                    <span className="shrink-0">2FA {user.twoFactorEnabled ? "on" : "off"}</span>
                     <Meter
                       className="flex-1"
                       label={`Receipts used today by ${user.email}`}
@@ -85,6 +86,7 @@ export function UsersTable({
             <TableRow>
               <TableHead>User</TableHead>
               <TableHead>Plan</TableHead>
+              <TableHead>2FA</TableHead>
               <TableHead className="w-48">Used today</TableHead>
               <TableHead className="text-right">Workspaces</TableHead>
               <TableHead className="text-right">Joined</TableHead>
@@ -93,7 +95,7 @@ export function UsersTable({
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={6}>
                   <Empty filtered={filtered} />
                 </TableCell>
               </TableRow>
@@ -120,6 +122,13 @@ export function UsersTable({
                   </TableCell>
                   <TableCell className="text-sm">
                     {planLabel(user.plan).replace(" plan", "")}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {user.twoFactorEnabled ? (
+                      "On"
+                    ) : (
+                      <span className="text-muted-foreground">Off</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Meter

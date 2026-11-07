@@ -18,6 +18,7 @@ import { drainJobs, ROUTE_BUDGET_MS } from "@/lib/jobs";
 import { errorFields, logger } from "@/lib/log";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
+import { requireStepUp, STEP_UP_REQUIRED, StepUpRequiredError } from "@/lib/step-up-check";
 
 /**
  * Admin actions on the job queue. Each re-checks the admin role (Next also
@@ -25,7 +26,8 @@ import { requireAdmin } from "@/lib/session";
  * the change and its audit row in one core transaction.
  */
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult =
+  { ok: true } | { ok: false; error: string; code?: typeof STEP_UP_REQUIRED; action?: string };
 
 const GENERIC = "That didn't work. Try again, and check the server logs if it keeps failing.";
 const SAFE_TAGS = new Set(["InvalidInput", "Conflict", "NotFound"]);
@@ -35,6 +37,7 @@ class ActionError extends Error {}
 async function context() {
   const session = await requireAdmin();
   return {
+    session,
     actor: { id: session.user.id, email: session.user.email },
     ip: clientIp({ headers: await headers() }),
   };
@@ -55,13 +58,17 @@ async function core<A, E>(effect: Effect.Effect<A, E, AppServices>): Promise<A> 
 
 async function run(
   name: string,
-  body: (audit: Awaited<ReturnType<typeof context>>) => Promise<void>,
+  body: (audit: Omit<Awaited<ReturnType<typeof context>>, "session">) => Promise<void>,
 ): Promise<ActionResult> {
-  const audit = await context(); // outside try: requireAdmin's notFound() must propagate
+  const { session, ...audit } = await context(); // outside try: requireAdmin's notFound() must propagate
   try {
+    await requireStepUp(session, `admin.${name}`);
     await body(audit);
     return { ok: true };
   } catch (error) {
+    if (error instanceof StepUpRequiredError) {
+      return { ok: false, error: error.message, code: STEP_UP_REQUIRED, action: error.action };
+    }
     if (error instanceof ActionError) return { ok: false, error: error.message };
     if (error instanceof z.ZodError) {
       return { ok: false, error: error.issues[0]?.message ?? "Check the values and try again." };

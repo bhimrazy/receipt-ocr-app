@@ -45,6 +45,26 @@ export const storageEntries: StorageEntry[] = [
     note: secureNote,
   },
   {
+    name: "better-auth.two_factor",
+    kind: "cookie",
+    setBy: "receiptOCR",
+    category: "necessary",
+    purpose:
+      "Only if you use two-step sign-in: links the code step to the password you just entered. Signed, and holds no password or code.",
+    duration: "10 minutes, or until you enter the code",
+    note: secureNote,
+  },
+  {
+    name: "better-auth.trust_device",
+    kind: "cookie",
+    setBy: "receiptOCR",
+    category: "necessary",
+    purpose:
+      'Only if you tick "Trust this device" at the code step: lets this browser skip the code. Turning two-step sign-in off, or an administrator reset, cancels it on every device.',
+    duration: "30 days, renewed each time you sign in with it",
+    note: secureNote,
+  },
+  {
     name: "better-auth.admin_session",
     kind: "cookie",
     setBy: "receiptOCR",
@@ -97,6 +117,15 @@ export const storageEntries: StorageEntry[] = [
     setBy: "receiptOCR",
     category: "necessary",
     purpose: "Remembers that you closed the install-the-app prompt, so it doesn't show again.",
+    duration: "Until you clear site data",
+  },
+  {
+    name: "receiptocr:security-nudge-dismissed",
+    kind: "localStorage",
+    setBy: "receiptOCR",
+    category: "necessary",
+    purpose:
+      "Remembers when you closed the two-step sign-in reminder, so it stays away for 30 days.",
     duration: "Until you clear site data",
   },
   {

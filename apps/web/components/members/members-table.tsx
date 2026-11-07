@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Loader2, Trash2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { withStepUp } from "@/components/step-up/step-up";
 import { authClient } from "@/lib/auth-client";
 import { RoleSelect } from "./role-select";
 import { RANK, roleLabel, type Role, type WorkspaceMember } from "./roles";
@@ -50,11 +51,11 @@ export function MembersTable({
   async function changeRole(memberId: string, role: Role): Promise<string | void> {
     setBusyMemberId(memberId);
     setError(null);
-    const { error: updateError } = await authClient.organization.updateMemberRole({
-      memberId,
-      role,
-      organizationId,
-    });
+    // Making someone an owner hands over the workspace: the server asks for a fresh check.
+    const { error: updateError } = await withStepUp(
+      () => authClient.organization.updateMemberRole({ memberId, role, organizationId }),
+      "workspace.transfer_ownership",
+    );
     setBusyMemberId(null);
     if (updateError) return updateError.message ?? "Couldn't change the role. Try again.";
     router.refresh();

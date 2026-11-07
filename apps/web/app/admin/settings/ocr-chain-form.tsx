@@ -1,5 +1,6 @@
 "use client";
 
+import { withStepUp } from "@/components/step-up/step-up";
 import type { OcrModel, OcrProvider } from "@receipt-ocr/ai/models";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
@@ -70,7 +71,7 @@ export function OcrChainForm({
     setPending(true);
     setError(null);
     setWarnings([]);
-    const result = await saveOcrAction({ chain });
+    const result = await withStepUp(() => saveOcrAction({ chain }));
     if (!result.ok) {
       setPending(false);
       setError(result.error);

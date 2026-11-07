@@ -10,6 +10,7 @@ import { Check, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SettingsSection } from "@/components/settings-section";
+import { withStepUp } from "@/components/step-up/step-up";
 import { authClient } from "@/lib/auth-client";
 
 function Status({ ok, error, id }: { ok: string | null; error: string | null; id?: string }) {
@@ -115,11 +116,15 @@ function PasswordCard() {
     }
     setPending(true);
     setError(null);
-    const { error: changeError } = await authClient.changePassword({
-      currentPassword: current,
-      newPassword: next,
-      revokeOtherSessions: revokeOthers,
-    });
+    const { error: changeError } = await withStepUp(
+      () =>
+        authClient.changePassword({
+          currentPassword: current,
+          newPassword: next,
+          revokeOtherSessions: revokeOthers,
+        }),
+      "account.change_password",
+    );
     setPending(false);
     if (changeError) {
       setError(changeError.message ?? "Couldn't change your password. Try again.");
@@ -187,7 +192,10 @@ function DangerCard({ email }: { email: string }) {
   const [notice, setNotice] = useState<string | null>(null);
 
   async function remove(): Promise<string | void> {
-    const { error: deleteError } = await authClient.deleteUser({ callbackURL: "/" });
+    const { error: deleteError } = await withStepUp(
+      () => authClient.deleteUser({ callbackURL: "/" }),
+      "account.delete",
+    );
     if (deleteError) return deleteError.message ?? "Couldn't delete your account. Try again.";
     // Depending on config this finishes now or sends a confirmation email, so don't claim it's gone.
     setNotice("Deletion requested. If we emailed you a confirmation link, open it to finish.");

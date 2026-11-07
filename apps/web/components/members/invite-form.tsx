@@ -14,6 +14,7 @@ import { Input } from "@receipt-ocr/ui/components/input";
 import { Check, Copy, Loader2, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { withStepUp } from "@/components/step-up/step-up";
 import { authClient } from "@/lib/auth-client";
 import { RoleSelect, inviteUrl, useCopyLink } from "./role-select";
 import type { Role } from "./roles";
@@ -37,11 +38,10 @@ export function InviteForm({ organizationId }: { organizationId: string }) {
     }
     setError(null);
     setInviting(true);
-    const { data, error: inviteError } = await authClient.organization.inviteMember({
-      email: trimmed,
-      role,
-      organizationId,
-    });
+    const { data, error: inviteError } = await withStepUp(
+      () => authClient.organization.inviteMember({ email: trimmed, role, organizationId }),
+      "workspace.transfer_ownership",
+    );
     setInviting(false);
     if (inviteError || !data) {
       setError(inviteError?.message ?? "Couldn't send the invite. Try again.");

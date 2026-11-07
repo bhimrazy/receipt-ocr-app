@@ -161,6 +161,11 @@ export function CredentialsForm({
         setError({ message: authErrorMessage(authError) });
         return;
       }
+      // Accounts with an authenticator app: the password step passed, now the code.
+      if (data && "twoFactorRedirect" in data && data.twoFactorRedirect) {
+        router.push(`/sign-in/two-factor${redirectQuery}`);
+        return;
+      }
       // With a callbackURL, Better Auth's client navigates there itself (a full page load).
       if (data?.redirect) return;
     }

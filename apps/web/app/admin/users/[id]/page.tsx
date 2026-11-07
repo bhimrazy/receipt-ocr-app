@@ -79,6 +79,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
     banned: user.banned,
     banExpires: user.banExpires ? user.banExpires.toISOString() : null,
     emailVerified: user.emailVerified,
+    twoFactorEnabled: user.twoFactorEnabled,
     soloWorkspaces: user.memberships.filter((m) => m.members === 1).length,
   };
   const banEntry = audit.rows.find((entry) => entry.action === "user.ban");

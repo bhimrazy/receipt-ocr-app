@@ -47,3 +47,14 @@ export async function listWorkspaces(): Promise<WorkspaceOption[]> {
     .where(eq(member.userId, session.user.id))
     .orderBy(asc(member.createdAt));
 }
+
+/** Whether a workspace has anyone besides one member (the security nudge targets those). */
+export async function isSharedWorkspace(organizationId: string): Promise<boolean> {
+  if (!authEnv.databaseUrl) return false;
+  const rows = await createDb(authEnv.databaseUrl)
+    .select({ id: member.id })
+    .from(member)
+    .where(eq(member.organizationId, organizationId))
+    .limit(2);
+  return rows.length > 1;
+}

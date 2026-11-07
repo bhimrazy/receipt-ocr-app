@@ -1,5 +1,6 @@
 "use client";
 
+import { withStepUp } from "@/components/step-up/step-up";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { toast } from "@receipt-ocr/ui/components/toast";
 import { Ban, Pause, Play, RotateCcw } from "lucide-react";
@@ -12,8 +13,8 @@ import {
   type ActionResult,
 } from "./actions";
 
-async function settle(promise: Promise<ActionResult>, success: string): Promise<string | void> {
-  const result = await promise;
+async function settle(call: () => Promise<ActionResult>, success: string): Promise<string | void> {
+  const result = await withStepUp(call);
   if (!result.ok) return result.error;
   toast.add({ title: success, type: "success" });
 }
@@ -43,7 +44,7 @@ export function JobActions({ jobId, state }: { jobId: string; state: string }) {
         description="It goes back in the queue under the same round, so the user isn't charged another read. The service-wide daily cap still applies. The reason goes in the audit log."
         minLength={3}
         onOpenChange={(next) => setOpen(next ? "rerun" : null)}
-        onSubmit={(reason) => settle(rerunJobAction({ jobId, reason }), "Job queued again")}
+        onSubmit={(reason) => settle(() => rerunJobAction({ jobId, reason }), "Job queued again")}
         open={open === "rerun"}
         reasonHint="For example, the provider outage that killed it."
         reasonLabel="Reason"
@@ -55,7 +56,7 @@ export function JobActions({ jobId, state }: { jobId: string; state: string }) {
         destructive
         minLength={3}
         onOpenChange={(next) => setOpen(next ? "cancel" : null)}
-        onSubmit={(reason) => settle(cancelJobAction({ jobId, reason }), "Job cancelled")}
+        onSubmit={(reason) => settle(() => cancelJobAction({ jobId, reason }), "Job cancelled")}
         open={open === "cancel"}
         reasonHint="Why it shouldn't run."
         reasonLabel="Reason"
@@ -102,7 +103,7 @@ export function ControlButton({
         onOpenChange={setOpen}
         onSubmit={(reason) =>
           settle(
-            setQueueControlAction({ scope, paused: !paused && !cooldown, reason }),
+            () => setQueueControlAction({ scope, paused: !paused && !cooldown, reason }),
             `${label}: ${paused || cooldown ? "resumed" : "paused"}`,
           )
         }

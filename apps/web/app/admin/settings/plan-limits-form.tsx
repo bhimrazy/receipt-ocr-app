@@ -1,5 +1,6 @@
 "use client";
 
+import { withStepUp } from "@/components/step-up/step-up";
 import {
   FREE_FAILED_ROUNDS,
   MAX_BATCH,
@@ -75,7 +76,7 @@ export function PlanLimitsForm({ current, defaults }: { current: PlanTable; defa
     event.preventDefault();
     setPending(true);
     setError(null);
-    const result = await savePlansAction(toTable(draft));
+    const result = await withStepUp(() => savePlansAction(toTable(draft)));
     setPending(false);
     if (!result.ok) {
       setError(result.error);

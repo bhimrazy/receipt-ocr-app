@@ -1,6 +1,6 @@
 import { expect, test, type Browser } from "@playwright/test";
 import postgres from "postgres";
-import { signUp, uniqueEmail } from "./helpers";
+import { signUp, uniqueEmail, verifiedAdmin } from "./helpers";
 
 async function sql<T>(run: (db: postgres.Sql) => Promise<T>) {
   const db = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
@@ -24,6 +24,7 @@ async function adminPage(browser: Browser) {
   const email = uniqueEmail("ops-admin");
   await signUp(page, email);
   await sql((db) => db`update "user" set role = 'admin' where email = ${email}`);
+  await verifiedAdmin(page, email);
   return { email, page };
 }
 
