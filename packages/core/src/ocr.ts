@@ -61,6 +61,7 @@ export type StepFailure = {
   usage: ExtractionUsage | null;
   cause: unknown;
   retryAfterMs?: number;
+  skipped?: true;
 };
 
 /** Providers cooling down after a 429, and until when; their models are skipped. */
@@ -134,6 +135,7 @@ export const runChain = (
         ms,
         usage: last.usage,
         ...(last.retryAfterMs === undefined ? {} : { retryAfterMs: last.retryAfterMs }),
+        ...(last.skipped ? { skipped: true as const } : {}),
       });
       if (!FALLBACK_KINDS.has(last.kind)) break;
     }
@@ -196,6 +198,7 @@ export class Ocr extends Context.Tag("@receipt-ocr/core/Ocr")<
                         usage: cause.usage,
                         cause,
                         retryAfterMs: retryAfterMs(cause),
+                        ...(cause.skipped ? { skipped: true as const } : {}),
                       }
                     : {
                         kind: classifyOcrError(cause),

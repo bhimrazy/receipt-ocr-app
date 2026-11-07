@@ -111,6 +111,18 @@ describe("runChain", () => {
     },
   );
 
+  it("marks a step skipped before any request on its attempt", async () => {
+    const call: ExtractCall = ({ model }) =>
+      model === A
+        ? Effect.fail({ kind: "unsupported-file", usage: null, cause: undefined, skipped: true })
+        : Effect.succeed({ extraction: FIXTURE_RECEIPTS[0]!, usage: USAGE, model });
+    const exit = await run(runChain([step(A), step(B)], call));
+    expect(Exit.isSuccess(exit) && exit.value.attempts).toMatchObject([
+      { model: A, kind: "unsupported-file", skipped: true },
+      { model: B, kind: "ok" },
+    ]);
+  });
+
   it("fails with every attempt listed when all models fail", async () => {
     const { call } = fakeCall({ [A]: { error: "provider-error" }, [B]: { error: "rate-limited" } });
     const exit = await run(runChain([step(A), step(B)], call));

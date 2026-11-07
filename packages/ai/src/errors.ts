@@ -43,6 +43,11 @@ function fromStatus(status: number): OcrFailureKind {
   return "bad-image";
 }
 
+/** The cause of a step skipped before any request: this model can't take the file's type or size. */
+export class UnsupportedFileError extends Error {
+  override name = "UnsupportedFileError";
+}
+
 /**
  * Every failed extraction call: why, and the tokens it used when the provider
  * reported them. The message is the kind (plus an HTTP status) only: the SDK's
@@ -59,7 +64,11 @@ export class OcrCallError extends Error {
   ) {
     const status = statusOf(cause);
     super(`OCR call failed: ${kind}${status === undefined ? "" : ` (HTTP ${status})`}`, { cause });
+    this.skipped = cause instanceof UnsupportedFileError;
   }
+
+  /** No request was sent: nothing billed, no provider latency. */
+  readonly skipped: boolean;
 }
 
 function statusOf(error: unknown): number | undefined {

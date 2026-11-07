@@ -52,6 +52,8 @@ export type OcrAttempt = {
   usage: ExtractionUsage | null;
   /** How long a rate-limited provider asked us to wait (its `Retry-After`). */
   retryAfterMs?: number;
+  /** Skipped before any request (the model can't take this file): free, and not a model call. */
+  skipped?: true;
 };
 
 export class OcrError extends Data.TaggedError("OcrError")<{

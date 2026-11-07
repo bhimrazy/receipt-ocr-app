@@ -81,9 +81,21 @@ type CallContext = {
   at: Date;
 };
 
-/** One `ocr_calls` row per model call, priced now; the price is never recomputed later. */
+/**
+ * One `ocr_calls` row per step, priced now; the price is never recomputed later.
+ * A step skipped before any request keeps its provider but no model: queries
+ * read `model is not null` as "a model was called", so a skip doesn't use quota,
+ * count as unpriced or show up in latency.
+ */
 export function ocrCallRows(attempts: readonly OcrAttempt[], context: CallContext): OcrCallRow[] {
   return attempts.map((attempt) => {
+    if (attempt.skipped) {
+      return {
+        ...noCallRow(attempt.kind, context),
+        step: attempt.step,
+        provider: providerOf(attempt.model as ModelId),
+      };
+    }
     const cost = costOf(attempt.model, attempt.usage, context.at);
     return {
       receiptId: context.receiptId,
