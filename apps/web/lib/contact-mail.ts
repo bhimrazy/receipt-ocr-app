@@ -11,11 +11,11 @@ export function isTopic(value: string): value is keyof typeof TOPIC_LABELS {
 }
 
 /** Support-inbox message; replies go to the visitor. The subject uses a fixed label, never user text. */
-export async function contactEmail(
+export function contactEmail(
   ctx: EmailContext,
   input: { to: string; from: string; topic: keyof typeof TOPIC_LABELS; message: string },
-): Promise<SendEmailInput> {
-  const mail = await supportMessageEmail(ctx, {
+): SendEmailInput {
+  const mail = supportMessageEmail(ctx, {
     from: input.from,
     topicLabel: TOPIC_LABELS[input.topic],
     message: input.message,

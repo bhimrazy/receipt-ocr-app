@@ -11,7 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "test:e2e": "playwright test",
-    "test:int": "INTEGRATION=1 vitest run --root ../.. apps/web/lib/auth.int.test.ts apps/web/lib/migrations.int.test.ts apps/web/lib/wide-events.int.test.ts",
+    "test:int": "INTEGRATION=1 vitest run --root ../.. apps/web/lib/auth.int.test.ts apps/web/lib/step-up.int.test.ts apps/web/lib/migrations.int.test.ts apps/web/lib/wide-events.int.test.ts",
     "start": "next start --port ${PORT:-3004}"
   },
   "dependencies": {
@@ -21,7 +21,7 @@
     "@receipt-ocr/email": "workspace:*",
     "@receipt-ocr/ui": "workspace:0.0.0",
     "@vercel/analytics": "2.0.1",
-    "better-auth": "1.7.14",
+    "better-auth": "1.7.18",
     "effect": "3.22.4",
     "lucide-react": "1.62.0",
     "next": "16.4.3",

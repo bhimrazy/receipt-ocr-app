@@ -76,33 +76,33 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-| Track (branch)                  | Work                                                                                                                                                                                                                                |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `feat/capture` (#47)            | In-app camera, batch capture (limit per plan, default 10, set in Admin), review with auto-detected four-corner crop, straightening and filters, uploads two at a time                                                               |
-| `feat/size-target-encoder`      | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                                                                                          |
-| `feat/pwa` (#43)                | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target (files wait for Keep or Discard), install prompt, kill switch in the runbook                                             |
-| `feat/mobile-shell`             | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                                                                                    |
-| `fix/pdf-page-evasions`         | Five remaining ways to hide pages from the PDF page counter                                                                                                                                                                         |
-| `feat/admin-ops`                | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; index only                                                                                       |
-| `feat/receipt-groups`           | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; apply its migration before deploying                                                                     |
-| `feat/dashboard`                | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                                                                                         |
-| `ci/db-migrations`              | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging                                                         |
-| `feat/consent-analytics`        | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                                                                                  |
-| `feat/wide-events` (#52)        | [Wide events](architecture/flows/observability.md): one event per request, page render, job attempt and tick; schema allowlist, tail sampling (`LOG_SAMPLE_RATE`, `LOG_SLOW_MS`); `job.run` is now `job.attempt`. Next: OTLP export |
-| `feat/admin-check-connections`  | Admin → Settings → Connections: on-demand status check of AI providers (free model-list call), storage (put/get/delete) and a test email to yourself; warns after saving the OCR chain; audited, rate-limited                       |
-| `feat/settings-receipt-reading` | Settings → Receipt reading (read-only): the platform default model chain by friendly label and its providers; privacy policy and terms now name Anthropic as a processor                                                            |
-| `feat/anthropic-provider`       | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet                                                                          |
-| `feat/prompt-v2`                | Extraction prompt v2: system-prompt rules, schema field definitions, AD dates (BS-only null), injection guard, `ocr.prompt_version`; A/B in bench/results                                                                           |
-| `feat/email-design`             | Every transactional email rebuilt with React Email: light-first and dark-safe, emerald button, logo, preheader, short fallback link, footer, plain text; `bun run email:preview`                                                    |
+| Track (branch)                  | Work                                                                                                                                                                                                                                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `feat/capture` (#47)            | In-app camera, batch capture (limit per plan, default 10, set in Admin), review with auto-detected four-corner crop, straightening and filters, uploads two at a time                                                                                                               |
+| `feat/size-target-encoder`      | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                                                                                                                                          |
+| `feat/pwa` (#43)                | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target (files wait for Keep or Discard), install prompt, kill switch in the runbook                                                                                             |
+| `feat/mobile-shell`             | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                                                                                                                                    |
+| `fix/pdf-page-evasions`         | Five remaining ways to hide pages from the PDF page counter                                                                                                                                                                                                                         |
+| `feat/admin-ops`                | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; index only                                                                                                                                       |
+| `feat/receipt-groups`           | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; apply its migration before deploying                                                                                                                     |
+| `feat/dashboard`                | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                                                                                                                                         |
+| `ci/db-migrations`              | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging                                                                                                         |
+| `feat/consent-analytics`        | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                                                                                                                                  |
+| `feat/wide-events` (#52)        | [Wide events](architecture/flows/observability.md): one event per request, page render, job attempt and tick; schema allowlist, tail sampling (`LOG_SAMPLE_RATE`, `LOG_SLOW_MS`); `job.run` is now `job.attempt`. Next: OTLP export                                                 |
+| `feat/admin-check-connections`  | Admin → Settings → Connections: on-demand status check of AI providers (free model-list call), storage (put/get/delete) and a test email to yourself; warns after saving the OCR chain; audited, rate-limited                                                                       |
+| `feat/settings-receipt-reading` | Settings → Receipt reading (read-only): the platform default model chain by friendly label and its providers; privacy policy and terms now name Anthropic as a processor                                                                                                            |
+| `feat/anthropic-provider`       | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet                                                                                                                          |
+| `feat/prompt-v2`                | Extraction prompt v2: system-prompt rules, schema field definitions, AD dates (BS-only null), injection guard, `ocr.prompt_version`; A/B in bench/results                                                                                                                           |
+| `fix/step-up-verification`      | Account deletion only through an emailed link (1 hour, single use); email change approved by the current address; "password changed" notices; 15-minute fresh session to delete or change email                                                                                     |
+| `feat/email-design`             | Every transactional email rebuilt with React Email, prerendered at build time (no React Email at runtime): light-first and dark-safe, emerald button (red for delete), logo, preheader, short fallback link, footer, plain text; `email:generate` / `email:check` / `email:preview` |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
 
 ## Decisions waiting on the owner
 
-1. **Better Auth security upgrade.** 1.7.14 is affected by advisories fixed in 1.7.16 (OAuth unverified email,
-   padded owner role, revoked sessions with cookie cache). 1.7.16 is inside the 7-day cooldown until 2026-11-10;
-   upgrading earlier needs a one-time exemption for `better-auth`, `@better-auth/*`, `better-call`.
+1. **Remove the Better Auth cooldown exemption after 2026-11-12.** Approved 2026-11-07 to take 1.7.18 (security
+   fixes from 1.7.16, passkeys); delete `minimumReleaseAgeExcludes` from `bunfig.toml` once 1.7.18 is 7 days old.
 2. Classic as the homepage (then delete `app/(lab)` and `components/marketing`, ~41% of TS code).
 3. Plan limits: daily per user (today) or monthly per workspace; prices; payment provider. See
    [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
@@ -197,6 +197,16 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - HEIC conversion untested (no fixture or Safari in CI); add a WebKit e2e project later.
 - Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.
 - Better Auth: verify the OAuth callback turns a banned user into `?error=BANNED_USER`.
+- Account deletion grace period: soft-delete for 7 days with an undo link before the data goes (today the emailed
+  link deletes at once).
+- E2E for account deletion and email change: the e2e harness doesn't capture email yet (the dev mail log only goes to
+  the server's stdout), so these flows are covered by `apps/web/lib/step-up.int.test.ts` only.
+- Email change: the new address gets the sign-up wording ("finish setting up your account") from
+  `verificationEmail`; and an unverified account's old address gets no notice (Better Auth skips the approval step).
+- Email templates, #91 vs #92: #91 (email redesign) rewrites `packages/email` as async `(ctx, input) => Promise<EmailContent>`
+  in `templates.tsx`, and its `emailChangeNoticeEmail` has no approval link. Whichever lands second adapts: the
+  email-change mail must carry Better Auth's approval `url` and its one-hour expiry and keep the reset-password link;
+  the delete mail keeps the single-use one-hour link to `/app/settings/delete-account`.
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
 - Benchmark has six synthetic images and no committed results.
 - Load test findings (after #37): upload capacity on the small server fell from 64/s to between 12/s (holds) and

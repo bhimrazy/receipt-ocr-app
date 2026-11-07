@@ -13,7 +13,7 @@ export async function sendTestEmail(to: string): Promise<TestEmailOutcome> {
       replyTo: emailEnv.replyTo,
       log: (event: EmailLogEvent) => logger.emit(event),
     },
-    { to, ...(await testEmail(emailContext)) },
+    { to, ...testEmail(emailContext) },
   );
   if (result.delivered) return "sent";
   return result.reason === "not_configured" ? "not-configured" : "failed";

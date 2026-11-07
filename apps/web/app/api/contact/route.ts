@@ -111,7 +111,7 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
     ? (
         await sendEmail(
           mailer,
-          await contactEmail(emailContext, { to: supportEmail, from: email, topic, message }),
+          contactEmail(emailContext, { to: supportEmail, from: email, topic, message }),
         )
       ).delivered
     : false;

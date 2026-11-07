@@ -45,6 +45,10 @@ const nextConfig: NextConfig = {
   // In a monorepo, file tracing must start at the workspace root or the
   // standalone bundle misses the workspace packages.
   outputFileTracingRoot: path.join(import.meta.dirname, "../.."),
+  // Resend's SDK lazily imports @react-email/render for its `react` option, which we never use
+  // (templates are prerendered by packages/email). The package is a dev dependency there, so
+  // without this alias Turbopack would bundle it, with prettier, into the server.
+  turbopack: { resolveAlias: { "@react-email/render": "./lib/no-react-email.ts" } },
   transpilePackages: [
     "@receipt-ocr/ai",
     "@receipt-ocr/core",

@@ -2,7 +2,8 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { signUp, uniqueEmail } from "./helpers";
 
-// Runs in the `mobile-camera` project: 390x844 Chromium with a fake camera. Uploads need the
+// Runs in the `mobile-camera` project (touch, 390x844 Chromium with a fake camera; the camera
+// button is touch-only, see capture-desktop.spec.ts for desktop). Uploads need the
 // fixture OCR provider, like upload.spec.ts.
 test.skip(
   process.env.E2E_UPLOAD !== "1",

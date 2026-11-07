@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   deleteAccountEmail,
-  emailChangeNoticeEmail,
+  emailChangeEmail,
   invitationEmail,
   passwordChangedEmail,
   passwordResetEmail,
@@ -31,7 +31,7 @@ const token =
   "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImFkYUBleGFtcGxlLmNvbSIsImlhdCI6MTc2MjQ4MDAwMH0.c2FtcGxlLXNpZ25hdHVyZS1ub3QtcmVhbA";
 const hour = 3600;
 
-const emails: Record<string, Promise<EmailContent>> = {
+const emails: Record<string, EmailContent> = {
   verification: verificationEmail(ctx, {
     url: `${appUrl}/api/auth/verify-email?token=${token}&callbackURL=%2Fapp`,
     expiresInSeconds: hour,
@@ -54,16 +54,24 @@ const emails: Record<string, Promise<EmailContent>> = {
   }),
   "test-email": testEmail(ctx),
   "delete-account": deleteAccountEmail(ctx, {
-    url: `${appUrl}/api/auth/delete-user/callback?token=${token}`,
+    url: `${appUrl}/app/settings/delete-account?token=${token}`,
     expiresInSeconds: hour,
   }),
-  "password-changed": passwordChangedEmail(ctx),
-  "email-change-notice": emailChangeNoticeEmail(ctx, { newEmail: "ada.new@example.com" }),
+  "password-changed": passwordChangedEmail(ctx, { resetUrl: `${appUrl}/forgot-password` }),
+  "email-change": emailChangeEmail(ctx, {
+    newEmail: "ada.new@example.com",
+    url: `${appUrl}/api/auth/verify-email?token=${token}&callbackURL=%2Fapp%2Fsettings`,
+    resetUrl: `${appUrl}/forgot-password`,
+    expiresInSeconds: hour,
+  }),
+  "password-changed-no-support": passwordChangedEmail(
+    { appUrl },
+    { resetUrl: `${appUrl}/forgot-password` },
+  ),
 };
 
 mkdirSync(out, { recursive: true });
-for (const [name, pending] of Object.entries(emails)) {
-  const mail = await pending;
+for (const [name, mail] of Object.entries(emails)) {
   writeFileSync(path.join(out, `${name}.html`), mail.html);
   writeFileSync(path.join(out, `${name}.txt`), `Subject: ${mail.subject}\n\n${mail.text}\n`);
 }

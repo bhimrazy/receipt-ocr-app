@@ -5,7 +5,7 @@ Two settings can be changed at runtime from **Admin → Settings**, without a de
 | Key     | Holds                                                                                                                | Code default                                                                                                         |
 | ------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `plans` | Per plan: workspaces a user may own, receipts per UTC day, per minute, images per upload batch (`batchMax`, 1 to 20) | `DEFAULT_PLANS` in [`plans.ts`](../../../packages/core/src/plans.ts): Free 1 / 20 / 10 / 10, Pro 5 / 1,000 / 30 / 10 |
-| `ocr`   | The model chain: up to 5 steps, each with a model, on/off and a timeout                                              | One step: `GEMINI_MODEL` (or `fixture` when `OCR_PROVIDER=fixture`), 30 s                                            |
+| `ocr`   | The model chain: up to 5 steps, each with a model, on/off and a timeout                                              | Claude Sonnet 5.5, then `GEMINI_MODEL` (or only `fixture` when `OCR_PROVIDER=fixture`), 30 s each                    |
 
 Both are JSON rows in `app_settings`, read and written by the `Settings` service in
 [`settings.ts`](../../../packages/core/src/settings.ts).

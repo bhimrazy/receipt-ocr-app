@@ -17,6 +17,9 @@ export const colors = {
   /** ui --cta: white text 5.5:1; as link text 5.5:1 on surface. */
   accent: "#047857",
   accentForeground: "#ffffff",
+  /** Destructive actions (delete account): red-700, white text 6.5:1. */
+  danger: "#b91c1c",
+  dangerForeground: "#ffffff",
   dark: {
     canvas: "#0a0a0b", // ui --background
     surface: "#141416", // ui --card
@@ -25,7 +28,9 @@ export const colors = {
     body: "#e4e4e7", // ui --foreground
     muted: "#9a9aa3", // ui --muted-foreground, 6.6:1 on surface
     accent: "#34d399", // ui --primary, 10.6:1 on surface
-    accentForeground: "#07110d", // ui --primary-foreground, 10.6:1 on accent
+    accentForeground: "#07110d", // ui --primary-foreground, 10.0:1 on accent
+    danger: "#f87171", // ui --destructive
+    dangerForeground: "#1a0606", // ui --destructive-foreground, 7.1:1 on danger
   },
 } as const;
 
@@ -57,6 +62,8 @@ export const tailwindConfig: TailwindConfig = {
         muted: colors.muted,
         accent: colors.accent,
         "accent-fg": colors.accentForeground,
+        danger: colors.danger,
+        "danger-fg": colors.dangerForeground,
         "d-canvas": colors.dark.canvas,
         "d-surface": colors.dark.surface,
         "d-line": colors.dark.line,
@@ -65,6 +72,8 @@ export const tailwindConfig: TailwindConfig = {
         "d-muted": colors.dark.muted,
         "d-accent": colors.dark.accent,
         "d-accent-fg": colors.dark.accentForeground,
+        "d-danger": colors.dark.danger,
+        "d-danger-fg": colors.dark.dangerForeground,
       },
       fontFamily: { sans: fonts.sans, mono: fonts.mono },
     },

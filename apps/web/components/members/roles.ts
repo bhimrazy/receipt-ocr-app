@@ -17,9 +17,22 @@ export type WorkspaceInvitation = {
 };
 
 export const ROLES: { value: Role; label: string; description: string }[] = [
-  { value: "member", label: "Member", description: "Uploads and views the workspace's receipts." },
-  { value: "admin", label: "Admin", description: "Also invites and removes members." },
-  { value: "owner", label: "Owner", description: "Full control, including the workspace itself." },
+  {
+    value: "member",
+    label: "Member",
+    description: "Uploads receipts and sees everything in the workspace.",
+  },
+  // Stored as Better Auth's "admin"; shown as Manager so it isn't mistaken for a site admin.
+  {
+    value: "admin",
+    label: "Manager",
+    description: "Everything a member can do, plus invites and removes people.",
+  },
+  {
+    value: "owner",
+    label: "Owner",
+    description: "Full control of the workspace and everyone in it.",
+  },
 ];
 export const ROLE_ITEMS = ROLES.map(({ value, label }) => ({ value, label }));
 export const RANK: Record<Role, number> = { member: 0, admin: 1, owner: 2 };
