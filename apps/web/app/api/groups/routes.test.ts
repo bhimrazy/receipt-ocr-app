@@ -12,6 +12,7 @@ const core = vi.hoisted(() => ({
   addReceiptsToGroup: vi.fn(),
   removeReceiptsFromGroup: vi.fn(),
   groupsOfReceipt: vi.fn(),
+  setReceiptGroup: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -30,7 +31,7 @@ vi.mock("@receipt-ocr/core", async (importOriginal) => ({
   ...core,
 }));
 
-const { Forbidden, NotFound } = await import("@receipt-ocr/core");
+const { Conflict, Forbidden, NotFound } = await import("@receipt-ocr/core");
 const groups = await import("./route");
 const group = await import("./[id]/route");
 const members = await import("./[id]/receipts/route");
@@ -200,21 +201,27 @@ describe("bulk /api/groups/[id]/receipts", () => {
 describe("/api/receipts/[id]/groups", () => {
   it("adds the receipt and returns its groups", async () => {
     const list = [{ id: GROUP_ID, name: "Trip", color: "green" }];
-    core.groupsOfReceipt.mockReturnValue(Effect.succeed(list));
-    core.addReceiptsToGroup.mockReturnValue(
-      Effect.succeed({ changed: 1, unchanged: 0, atLimit: 0, notFound: 0 }),
-    );
+    core.setReceiptGroup.mockReturnValue(Effect.succeed(list));
     const res = await json(
       await receiptGroups.POST(request("POST", { groupId: GROUP_ID }), params(RECEIPT_ID)),
     );
     expect(res).toEqual({ status: 200, body: { groups: list } });
-    expect(core.addReceiptsToGroup).toHaveBeenCalledWith(state.scope, GROUP_ID, [RECEIPT_ID]);
+    expect(core.setReceiptGroup).toHaveBeenCalledWith(state.scope, RECEIPT_ID, GROUP_ID, "add");
   });
 
-  it("says so when the receipt is already in the most groups it can be in", async () => {
-    core.groupsOfReceipt.mockReturnValue(Effect.succeed([]));
-    core.addReceiptsToGroup.mockReturnValue(
-      Effect.succeed({ changed: 0, unchanged: 0, atLimit: 1, notFound: 0 }),
+  it("removes with DELETE", async () => {
+    core.setReceiptGroup.mockReturnValue(Effect.succeed([]));
+    const res = await receiptGroups.DELETE(
+      request("DELETE", { groupId: GROUP_ID }),
+      params(RECEIPT_ID),
+    );
+    expect(res.status).toBe(200);
+    expect(core.setReceiptGroup).toHaveBeenCalledWith(state.scope, RECEIPT_ID, GROUP_ID, "remove");
+  });
+
+  it("409s with the core message when the receipt is in the most groups it can be in", async () => {
+    core.setReceiptGroup.mockReturnValue(
+      Effect.fail(new Conflict({ message: "A receipt can be in up to 20 groups." })),
     );
     const res = await json(
       await receiptGroups.POST(request("POST", { groupId: GROUP_ID }), params(RECEIPT_ID)),
@@ -223,8 +230,8 @@ describe("/api/receipts/[id]/groups", () => {
     expect(res.body.error).toMatch(/up to 20 groups/);
   });
 
-  it("404s a receipt from another workspace without changing anything", async () => {
-    core.groupsOfReceipt.mockReturnValue(
+  it("404s a receipt from another workspace", async () => {
+    core.setReceiptGroup.mockReturnValue(
       Effect.fail(new NotFound({ message: "Receipt not found" })),
     );
     const res = await receiptGroups.DELETE(
@@ -232,6 +239,5 @@ describe("/api/receipts/[id]/groups", () => {
       params(RECEIPT_ID),
     );
     expect(res.status).toBe(404);
-    expect(core.removeReceiptsFromGroup).not.toHaveBeenCalled();
   });
 });

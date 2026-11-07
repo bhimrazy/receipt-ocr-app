@@ -66,7 +66,13 @@ async function Results({
       <ListPoller active={rows.some((receipt) => isInFlight(receipt.status))} counts={counts} />
       {/* groups: selection mode for bulk "Add to group" */}
       {selecting ? (
-        <GroupSelectList groups={await getWorkspaceGroups()} receipts={rows} />
+        <GroupSelectList
+          filters={filters}
+          groups={await getWorkspaceGroups()}
+          page={page}
+          receipts={rows}
+          totalPages={totalPages}
+        />
       ) : (
         <HistoryResults filters={filters} page={page} receipts={rows} totalPages={totalPages} />
       )}

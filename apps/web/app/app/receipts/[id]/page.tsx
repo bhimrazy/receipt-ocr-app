@@ -8,10 +8,14 @@ import { notFound } from "next/navigation";
 
 export default async function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [receipt, scope] = await Promise.all([getReceiptForWorkspace(id), requireActiveScope()]);
+  // groups: chips and "Add to group" under the title. A missing receipt makes its groups lookup fail.
+  const [receipt, scope, groups, inGroups] = await Promise.all([
+    getReceiptForWorkspace(id),
+    requireActiveScope(),
+    getWorkspaceGroups(),
+    getReceiptGroups(id).catch(() => []),
+  ]);
   if (!receipt) notFound();
-  // groups: chips and "Add to group" under the title
-  const [groups, inGroups] = await Promise.all([getWorkspaceGroups(), getReceiptGroups(id)]);
   return (
     <ReceiptResult
       canEdit={canEditReceipt(scope, receipt)}

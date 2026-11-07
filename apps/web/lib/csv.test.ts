@@ -98,7 +98,7 @@ describe("receiptsToCsv", () => {
       .split("\n");
     const columns = header!.split(",");
     expect(columns[columns.indexOf("items") + 1]).toBe("groups");
-    expect(line).toContain(`"Berlin trip; =Taxes, 2026"`);
+    expect(line).toContain(`"Berlin trip; '=Taxes, 2026"`);
     expect(receiptsToCsv([row({ groups: ["=SUM(A1)"] })])).toContain("'=SUM(A1)");
   });
 

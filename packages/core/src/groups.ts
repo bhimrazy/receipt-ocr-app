@@ -78,13 +78,22 @@ const lockGroups = (tx: Tx, organizationId: string) =>
     sql`select pg_advisory_xact_lock(${GROUPS_LOCK_NAMESPACE}, hashtext(${organizationId}))`,
   );
 
-const isUniqueViolation = (error: unknown): boolean => {
-  for (let e = error; e instanceof Error || (e && typeof e === "object");) {
-    if ((e as { code?: unknown }).code === "23505") return true;
-    e = (e as { cause?: unknown }).cause;
-    if (!e) break;
+const isUniqueViolation = (error: unknown) => hasCode(error, "23505");
+
+const hasCode = (error: unknown, code: string): boolean => {
+  for (let e = error; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
+    if ((e as { code?: unknown }).code === code) return true;
   }
   return false;
+};
+
+/** A receipt or group deleted between the check and the insert: foreign key violation. */
+const isForeignKeyViolation = (error: unknown) => hasCode(error, "23503");
+
+const notFoundOnForeignKey = (error: unknown): never => {
+  throw isForeignKeyViolation(error)
+    ? new NotFound({ message: "Receipt or group not found" })
+    : error;
 };
 
 const nameTaken = (name: string) =>
@@ -145,6 +154,10 @@ export const listGroups = (scope: ReceiptScope) =>
     }),
   );
 
+/** One structured line per mutation: ids and counts, never group names. */
+const logMutation = (event: string, scope: ReceiptScope, fields: Record<string, unknown>) =>
+  Effect.logInfo(event, { organizationId: scope.organizationId, actorId: scope.userId, ...fields });
+
 export const createGroup = (scope: ReceiptScope, input: CreateGroupInput) =>
   Effect.flatMap(decode(createGroupSchema, input), ({ name, color }) =>
     transact(async (tx) => {
@@ -173,7 +186,7 @@ export const createGroup = (scope: ReceiptScope, input: CreateGroupInput) =>
       } catch (error) {
         throw isUniqueViolation(error) ? nameTaken(name) : error;
       }
-    }),
+    }).pipe(Effect.tap((group) => logMutation("group.created", scope, { groupId: group.id }))),
   );
 
 /** Renames and/or recolours. Creator, owner or admin only. */
@@ -201,7 +214,15 @@ export const updateGroup = (scope: ReceiptScope, groupId: string, input: UpdateG
         } catch (error) {
           throw isUniqueViolation(error) ? nameTaken(patch.name ?? group.name) : error;
         }
-      }),
+      }).pipe(
+        Effect.tap(() =>
+          logMutation("group.updated", scope, {
+            groupId: id,
+            renamed: patch.name !== undefined,
+            recoloured: patch.color !== undefined,
+          }),
+        ),
+      ),
     ),
   );
 
@@ -218,7 +239,7 @@ export const deleteGroup = (scope: ReceiptScope, groupId: string) =>
       if (!canManageGroup(scope, group.createdBy)) throw forbidden("delete");
       await tx.delete(receiptGroups).where(inWorkspace(id, scope));
       return { id, name: group.name };
-    }),
+    }).pipe(Effect.tap(() => logMutation("group.deleted", scope, { groupId: id }))),
   );
 
 /**
@@ -265,7 +286,8 @@ export const addReceiptsToGroup = (scope: ReceiptScope, groupId: string, receipt
                 ),
             )
             .onConflictDoNothing()
-            .returning({ receiptId: receiptGroupMembers.receiptId });
+            .returning({ receiptId: receiptGroupMembers.receiptId })
+            .catch(notFoundOnForeignKey);
           changed = inserted.length;
         }
         return {
@@ -274,7 +296,11 @@ export const addReceiptsToGroup = (scope: ReceiptScope, groupId: string, receipt
           atLimit: fresh.length - addable.length,
           notFound: ids.length - rows.length,
         };
-      }),
+      }).pipe(
+        Effect.tap((change) =>
+          logMutation("group.receipts_added", scope, { groupId: id, ...change }),
+        ),
+      ),
     ),
   );
 
@@ -309,7 +335,89 @@ export const removeReceiptsFromGroup = (
           atLimit: 0,
           notFound: ids.length - inWorkspaceCount,
         };
-      }),
+      }).pipe(
+        Effect.tap((change) =>
+          logMutation("group.receipts_removed", scope, { groupId: id, ...change }),
+        ),
+      ),
+    ),
+  );
+
+/**
+ * Adds or removes one receipt in one group and returns the receipt's groups,
+ * all in one transaction. NotFound when the receipt or group isn't this
+ * workspace's (or was deleted mid-way); Conflict when the receipt is already in
+ * MAX_GROUPS_PER_RECEIPT groups.
+ */
+export const setReceiptGroup = (
+  scope: ReceiptScope,
+  receiptId: string,
+  groupId: string,
+  action: "add" | "remove",
+) =>
+  Effect.all([
+    decode(z.uuid({ error: "Receipt not found" }), receiptId).pipe(
+      Effect.mapError(() => new NotFound({ message: "Receipt not found" })),
+    ),
+    decode(groupIdSchema, groupId),
+  ]).pipe(
+    Effect.flatMap(([rid, gid]) =>
+      transact(async (tx): Promise<ReceiptGroupRef[]> => {
+        await lockedGroup(tx, scope, gid);
+        const [receipt] = await tx
+          .select({ id: receipts.id })
+          .from(receipts)
+          .where(and(eq(receipts.id, rid), eq(receipts.organizationId, scope.organizationId)));
+        if (!receipt) throw new NotFound({ message: "Receipt not found" });
+        if (action === "add") {
+          const [current] = await tx
+            .select({ value: count() })
+            .from(receiptGroupMembers)
+            .where(eq(receiptGroupMembers.receiptId, rid));
+          const [already] = await tx
+            .select({ groupId: receiptGroupMembers.groupId })
+            .from(receiptGroupMembers)
+            .where(
+              and(eq(receiptGroupMembers.receiptId, rid), eq(receiptGroupMembers.groupId, gid)),
+            );
+          if (!already && (current?.value ?? 0) >= MAX_GROUPS_PER_RECEIPT) {
+            throw new Conflict({
+              message: `A receipt can be in up to ${MAX_GROUPS_PER_RECEIPT} groups. Take it out of one first.`,
+            });
+          }
+          await tx
+            .insert(receiptGroupMembers)
+            .values({ groupId: gid, receiptId: rid, addedBy: scope.userId })
+            .onConflictDoNothing()
+            .catch(notFoundOnForeignKey);
+        } else {
+          await tx
+            .delete(receiptGroupMembers)
+            .where(
+              and(eq(receiptGroupMembers.groupId, gid), eq(receiptGroupMembers.receiptId, rid)),
+            );
+        }
+        const rows = await tx
+          .select({ id: receiptGroups.id, name: receiptGroups.name, color: receiptGroups.color })
+          .from(receiptGroupMembers)
+          .innerJoin(receiptGroups, eq(receiptGroups.id, receiptGroupMembers.groupId))
+          .where(
+            and(
+              eq(receiptGroupMembers.receiptId, rid),
+              eq(receiptGroups.organizationId, scope.organizationId),
+            ),
+          )
+          .orderBy(sql`lower(${receiptGroups.name})`);
+        return rows.map((row) => ({ ...row, color: row.color as GroupColor }));
+      }).pipe(
+        Effect.tap((groups) =>
+          logMutation(action === "add" ? "group.receipt_added" : "group.receipt_removed", scope, {
+            groupId: gid,
+            receiptId: rid,
+            receiptGroups: groups.length,
+          }),
+        ),
+      ),
     ),
   );
 

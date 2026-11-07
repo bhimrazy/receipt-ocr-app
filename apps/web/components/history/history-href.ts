@@ -17,8 +17,9 @@ function filterParams(filters: HistoryFilters) {
 }
 
 /** A History URL for these filters; page 1 is left out so it matches the unpaged URL. */
-export function historyHref(filters: HistoryFilters, page = 1) {
+export function historyHref(filters: HistoryFilters, page = 1, selecting = false) {
   const params = filterParams(filters);
+  if (selecting) params.set("select", "1"); // SELECT_PARAM
   if (page > 1) params.set("page", String(page));
   return params.size ? `/app/history?${params}` : "/app/history";
 }

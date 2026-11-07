@@ -1,11 +1,4 @@
-import {
-  addReceiptsToGroup,
-  groupsOfReceipt,
-  MAX_GROUPS_PER_RECEIPT,
-  receiptGroupBodySchema,
-  removeReceiptsFromGroup,
-} from "@receipt-ocr/core";
-import { Effect } from "effect";
+import { groupsOfReceipt, receiptGroupBodySchema, setReceiptGroup } from "@receipt-ocr/core";
 import { NextResponse } from "next/server";
 import { crossOriginResponse, jsonError, runRoute } from "@/lib/http";
 import { readJson } from "@/lib/json-body";
@@ -32,21 +25,8 @@ async function change(request: Request, { params }: Params, action: "add" | "rem
   const body = await readJson(request, receiptGroupBodySchema);
   if ("response" in body) return body.response;
   const { id } = await params;
-  const run = action === "add" ? addReceiptsToGroup : removeReceiptsFromGroup;
-  return runRoute(
-    Effect.gen(function* () {
-      // Checks the receipt first, so a bad id is a 404 rather than a silent no-op.
-      yield* groupsOfReceipt(scope, id);
-      const result = yield* run(scope, body.data.groupId, [id]);
-      return { result, groups: yield* groupsOfReceipt(scope, id) };
-    }),
-    ({ result, groups }) =>
-      action === "add" && result.atLimit > 0
-        ? jsonError(
-            409,
-            `A receipt can be in up to ${MAX_GROUPS_PER_RECEIPT} groups. Take it out of one first.`,
-          )
-        : NextResponse.json({ groups }),
+  return runRoute(setReceiptGroup(scope, id, body.data.groupId, action), (groups) =>
+    NextResponse.json({ groups }),
   );
 }
 

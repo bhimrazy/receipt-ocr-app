@@ -6,6 +6,7 @@ import {
   isNotNull,
   member,
   organization,
+  receiptGroups,
   receipts,
   user,
 } from "@receipt-ocr/db";
@@ -207,6 +208,16 @@ export const removeMember = (organizationId: string, memberId: string, audit: Au
       });
     }
     await tx.delete(member).where(eq(member.id, memberId));
+    // Their groups stay for the workspace; only the creator link goes.
+    await tx
+      .update(receiptGroups)
+      .set({ createdBy: null })
+      .where(
+        and(
+          eq(receiptGroups.organizationId, organizationId),
+          eq(receiptGroups.createdBy, current.userId),
+        ),
+      );
     const names = await labels(tx, organizationId, current.userId);
     await insertAudit(tx, {
       ...audit,

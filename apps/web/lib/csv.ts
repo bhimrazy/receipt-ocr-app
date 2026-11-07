@@ -8,6 +8,9 @@ const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
  * merchant names come from OCR of an untrusted image. Plain numbers are left
  * alone so refunds (-5.00) stay numeric.
  */
+/** Group names are typed by members: neutralise formula prefixes before they are joined into one cell. */
+const guardFormula = (text: string) => (/^[=+\-@\t\r]/.test(text) ? `'${text}` : text);
+
 function cell(value: unknown): string {
   if (value === null || value === undefined) return "";
   let text = String(value);
@@ -56,7 +59,7 @@ export function receiptsToCsv(receipts: ReceiptExportRow[]): string {
         receipt.total,
         receipt.confidence,
         receipt.itemCount,
-        receipt.groups.join("; "),
+        receipt.groups.map(guardFormula).join("; "),
         receipt.fileName,
         receipt.createdAt instanceof Date ? receipt.createdAt.toISOString() : receipt.createdAt,
       ]),

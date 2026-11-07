@@ -616,7 +616,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               itemCount: sql<number>`(select count(*)::int from receipt_items where receipt_items.receipt_id = receipts.id)`,
               groups: sql<
                 string[]
-              >`array(select g.name from receipt_group_members m join receipt_groups g on g.id = m.group_id where m.receipt_id = receipts.id order by lower(g.name))`,
+              >`array(select g.name from receipt_group_members m join receipt_groups g on g.id = m.group_id where m.receipt_id = receipts.id and g.organization_id = ${scope.organizationId} order by lower(g.name))`,
             })
             .from(receipts)
             .where(filterWhere(scope, filters))

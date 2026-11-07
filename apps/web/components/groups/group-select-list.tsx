@@ -1,16 +1,18 @@
 "use client";
 
 import { MAX_GROUPS_PER_RECEIPT, type ReceiptGroupRef } from "@receipt-ocr/core/group-rules";
-import { Button } from "@receipt-ocr/ui/components/button";
+import { Button, buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { toast } from "@receipt-ocr/ui/components/toast";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { FolderPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, FolderPlus } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { receiptTitle } from "@/components/receipt-list";
 import { formatDate, formatMoney } from "@/lib/format";
-import type { ReceiptSummary } from "@/lib/receipts";
+import { historyHref } from "@/components/history/history-href";
+import type { HistoryFilters, ReceiptSummary } from "@/lib/receipts";
 import { addReceiptsRequest, createGroupRequest } from "./api";
 import { nextGroupColor } from "./group-colors";
 import { GroupPicker } from "./group-picker";
@@ -25,9 +27,15 @@ const plural = (n: number) => `${n} ${n === 1 ? "receipt" : "receipts"}`;
 export function GroupSelectList({
   receipts,
   groups: initialGroups,
+  filters,
+  page,
+  totalPages,
 }: {
   receipts: ReceiptSummary[];
   groups: ReceiptGroupRef[];
+  filters: HistoryFilters;
+  page: number;
+  totalPages: number;
 }) {
   const router = useRouter();
   const [groups, setGroups] = useState(initialGroups);
@@ -184,6 +192,37 @@ export function GroupSelectList({
           />
         </ResponsivePanel>
       </div>
+
+      {totalPages > 1 ? (
+        <nav
+          aria-label="Pagination"
+          className="mt-4 flex items-center justify-between text-sm text-muted-foreground"
+        >
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <div className="flex gap-2">
+            {page > 1 ? (
+              <Link
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                href={historyHref(filters, page - 1, true)}
+              >
+                <ChevronLeft aria-hidden="true" />
+                Previous
+              </Link>
+            ) : null}
+            {page < totalPages ? (
+              <Link
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                href={historyHref(filters, page + 1, true)}
+              >
+                Next
+                <ChevronRight aria-hidden="true" />
+              </Link>
+            ) : null}
+          </div>
+        </nav>
+      ) : null}
     </>
   );
 }

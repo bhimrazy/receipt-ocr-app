@@ -23,8 +23,10 @@ import {
   MAX_GROUPS_PER_RECEIPT,
   MAX_GROUPS_PER_WORKSPACE,
   removeReceiptsFromGroup,
+  setReceiptGroup,
   updateGroup,
 } from "./groups";
+import { removeMember } from "./admin";
 import { AppLayer, type AppServices } from "./index";
 import { ReceiptRepo, type ReceiptScope } from "./repository";
 import { Db } from "./services";
@@ -366,5 +368,128 @@ describe.skipIf(!enabled)("receipt groups against Postgres", () => {
     );
     expect(left).toHaveLength(2);
     expect(await run(groupsOfReceipt(owner, receiptA2))).toEqual([]);
+  });
+
+  it("concurrent creates of one name make exactly one group", async () => {
+    const racer = await createUser("racer-name");
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, i) =>
+        outcome(createGroup(racer, { name: i % 2 ? "Same Name" : "same name", color: "red" })),
+      ),
+    );
+    expect(results.filter((r) => r.tag === "ok")).toHaveLength(1);
+    expect(results.filter((r) => r.tag === "Conflict")).toHaveLength(5);
+    expect(await run(listGroups(racer))).toHaveLength(1);
+  });
+
+  it("concurrent creates at the workspace limit never pass it", async () => {
+    const racer = await createUser("racer-limit");
+    await db((d) =>
+      d.insert(receiptGroups).values(
+        Array.from({ length: MAX_GROUPS_PER_WORKSPACE - 1 }, (_, i) => ({
+          organizationId: racer.organizationId,
+          name: `Filler ${i}`,
+          color: "green",
+          createdBy: racer.userId,
+        })),
+      ),
+    );
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, i) =>
+        outcome(createGroup(racer, { name: `Racer ${i}`, color: "blue" })),
+      ),
+    );
+    expect(results.filter((r) => r.tag === "ok")).toHaveLength(1);
+    expect(results.filter((r) => r.tag === "Conflict")).toHaveLength(4);
+    expect(await run(listGroups(racer))).toHaveLength(MAX_GROUPS_PER_WORKSPACE);
+  });
+
+  it("setReceiptGroup adds, removes, reads back, refuses the 21st group and foreign receipts", async () => {
+    const lone = await seedReceipt(owner, "Single add");
+    const g = await create(owner, "Single add group");
+    const added = await run(setReceiptGroup(owner, lone, g.id, "add"));
+    expect(added.map((x) => x.id)).toEqual([g.id]);
+    // Adding again is a no-op, not an error.
+    expect(await run(setReceiptGroup(owner, lone, g.id, "add"))).toHaveLength(1);
+    expect(await run(setReceiptGroup(owner, lone, g.id, "remove"))).toEqual([]);
+
+    expect(await outcome(setReceiptGroup(owner, receiptB, g.id, "add"))).toMatchObject({
+      tag: "NotFound",
+    });
+    expect(await outcome(setReceiptGroup(owner, lone, "not-a-uuid", "add"))).toMatchObject({
+      tag: "InvalidInput",
+    });
+
+    const ids: string[] = [];
+    for (let i = 0; i < MAX_GROUPS_PER_RECEIPT; i++) {
+      const x = await create(owner, `Full ${i}`);
+      ids.push(x.id);
+      await run(setReceiptGroup(owner, lone, x.id, "add"));
+    }
+    expect(await outcome(setReceiptGroup(owner, lone, g.id, "add"))).toMatchObject({
+      tag: "Conflict",
+    });
+    expect(await run(groupsOfReceipt(owner, lone))).toHaveLength(MAX_GROUPS_PER_RECEIPT);
+    for (const id of [g.id, ...ids]) await run(deleteGroup(owner, id));
+  });
+
+  it("a receipt deleted mid-insert is NotFound, not a database error", async () => {
+    const doomed = await seedReceipt(owner, "Vanishing");
+    const g = await create(owner, "Vanishing group");
+    await db((d) => d.delete(receipts).where(eq(receipts.id, doomed)));
+    expect(await outcome(setReceiptGroup(owner, doomed, g.id, "add"))).toMatchObject({
+      tag: "NotFound",
+    });
+    await run(deleteGroup(owner, g.id));
+  });
+
+  it("export ignores a membership row that points at another workspace's group", async () => {
+    const mine = await seedReceipt(owner, "Foreign link");
+    const foreign = await create(other, "Foreign secret");
+    await db((d) =>
+      d.insert(receiptGroupMembers).values({
+        groupId: foreign.id,
+        receiptId: mine,
+        addedBy: other.userId,
+      }),
+    );
+    const rows = await run(Effect.flatMap(ReceiptRepo, (r) => r.exportRows(owner, {}, 500)));
+    expect(rows.find((row) => row.id === mine)?.groups).toEqual([]);
+    await db((d) => d.delete(receiptGroupMembers).where(eq(receiptGroupMembers.receiptId, mine)));
+  });
+
+  it("removing a member keeps their groups and clears the creator link in that workspace only", async () => {
+    const leaver = await joinAs(owner, "leaver", "member");
+    const elsewhere = await createUser("leaver-home");
+    const kept = await create(leaver, "Leaver group");
+    // The same person also created a group in a workspace they stay in.
+    const [stays] = await db((d) =>
+      d
+        .insert(receiptGroups)
+        .values({
+          organizationId: elsewhere.organizationId,
+          name: "Stays",
+          color: "green",
+          createdBy: leaver.userId,
+        })
+        .returning({ id: receiptGroups.id }),
+    );
+    await run(
+      removeMember(owner.organizationId, `${leaver.userId}-m`, {
+        actor: { id: owner.userId, email: "owner@example.com" },
+      }),
+    );
+    const groups = await run(listGroups(owner));
+    expect(groups.find((x) => x.id === kept.id)).toMatchObject({ createdBy: null });
+    const [other_] = await db((d) =>
+      d
+        .select({ createdBy: receiptGroups.createdBy })
+        .from(receiptGroups)
+        .where(eq(receiptGroups.id, stays!.id)),
+    );
+    expect(other_?.createdBy).toBe(leaver.userId);
+    // Owners and admins can still manage the orphaned group; plain members can't.
+    expect(groups.find((x) => x.id === kept.id)?.canManage).toBe(true);
+    expect((await run(listGroups(memberA))).find((x) => x.id === kept.id)?.canManage).toBe(false);
   });
 });
