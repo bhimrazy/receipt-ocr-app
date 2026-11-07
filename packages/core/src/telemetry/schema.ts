@@ -83,6 +83,8 @@ export const EVENT_SCHEMA = {
   organization_id: "id",
   impersonated_by: "id",
   receipt_id: "id",
+  /** A receipt group. Never its name or colour: names are user text. */
+  group_id: "id",
   job_id: "id",
   /** Attempt of the job (1-based), out of `max_attempts`. */
   attempt: "int",
