@@ -14,7 +14,14 @@ import {
   type ExtractionUsage,
   type ModelId,
 } from "@receipt-ocr/ai";
-import { AMOUNT_FIELDS, EXACT_FIELDS, percentile, scoreReceipt, type Receipt } from "./score";
+import {
+  AMOUNT_FIELDS,
+  EXACT_FIELDS,
+  percentile,
+  scoreReceipt,
+  type Predicted,
+  type Receipt,
+} from "./score";
 
 const root = import.meta.dirname;
 const MIME: Record<string, string> = {
@@ -33,6 +40,8 @@ type Run = {
   /** Micro-USD from the model registry's price table; null when unknown. */
   costMicroUsd: number | null;
   scores: Record<string, number>;
+  /** The model's extraction, to inspect misses. Synthetic fixtures only; the raw file is gitignored. */
+  got?: Predicted;
   error?: string;
 };
 
@@ -51,7 +60,7 @@ async function extract(model: string, bytes: Uint8Array, mimeType: string) {
     file: { data: bytes, mediaType: mimeType },
     keys,
   });
-  return { got: extraction as Receipt, usage };
+  return { got: extraction as Predicted, usage };
 }
 
 function arg(name: string, fallback: string) {
@@ -109,6 +118,7 @@ async function runOne(model: string, { id, file }: Fixture): Promise<Run> {
       usage,
       costMicroUsd: costOf(modelId(model), usage, new Date()).microUsd,
       scores: scoreReceipt(truth, got),
+      got,
     };
   } catch (error) {
     // The message is the failure kind only, never the model's output.

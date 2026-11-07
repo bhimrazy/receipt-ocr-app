@@ -1,7 +1,7 @@
 {
   "merchant": "Himalayan Electronics Pvt. Ltd.",
   "receiptDate": "2026-09-14",
-  "category": "Shopping",
+  "category": ["Equipment", "Supplies"],
   "currency": "NPR",
   "subtotal": 140850,
   "tax": 18310.5,

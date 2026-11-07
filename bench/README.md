@@ -17,14 +17,19 @@ test's receipt) are skipped.
   field to skip it). The six starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, KWD three decimals, EUR comma
   decimals, IDR dot thousands, a tip, a 34-line receipt. Add real, PII-free receipts the same way (faded
   thermal, skewed phone shots, handwritten totals).
-- Scoring (`score.ts`, unit-tested): exact currency/date/category; total/tax/subtotal/tip within 0.01 (a missing
+- Scoring (`score.ts`, unit-tested): exact currency/date; category against the app's canonical list (a fixture may
+  list several acceptable ones, and legacy labels are normalised with `parseCategory`; a test checks every fixture); total/tax/subtotal/tip within 0.01 (a missing
   tip equals zero); merchant by normalised edit similarity >= 0.8; items F1 (name similarity >= 0.7 and the
   same total price).
-- Output: `results/<date>.md` (summary, commit it) and `results/<date>-<model>.json` (raw, gitignored). Latency is
+- Output: `results/<date>.md` (summary, commit it) and `results/<date>-<model>.json` (raw, gitignored, with each
+  run's extraction so misses can be inspected). Latency is
   p50/p95 of successful calls, `cold` the first one to finish.
 - Cost: the usage `extractReceipt` returns (or a failed call's `OcrCallError.usage`), priced with `costOf` from the
   model registry's effective-dated table in `packages/ai/src/models.ts`, the same prices the app stores per call.
   `n/a` when no call reported usage.
+- **Category scores before this fix are invalid for every model**, including the first Claude run
+  (`results/2026-11-07.md`, 0%): the fixtures used pre-`0004` labels (Restaurant, Grocery, Shopping) that the
+  extraction schema can never produce. Every other column of that run stands.
 - The only call into `packages/ai` is `extract()` in `ocr.ts`; change that one function if the export is renamed.
 
 ## Image shrinker

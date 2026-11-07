@@ -1,10 +1,13 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
 import { describe, expect, it } from "vitest";
-import { itemsF1, percentile, scoreReceipt, similarity } from "./score";
+import { itemsF1, percentile, scoreReceipt, similarity, type Receipt } from "./score";
 
 const truth = {
   merchant: "Warung Makan Bahagia",
   receiptDate: "2026-10-02",
-  category: "Restaurant",
+  category: "Meals",
   currency: "IDR",
   total: 155100,
   tax: 14100,
@@ -65,5 +68,39 @@ describe("helpers", () => {
   it("percentile uses nearest rank", () => {
     expect(percentile([1, 2, 3, 4, 100], 50)).toBe(3);
     expect(percentile([1, 2, 3, 4, 100], 95)).toBe(100);
+  });
+});
+
+describe("category scoring", () => {
+  it("accepts any of several listed categories", () => {
+    const either = { ...truth, category: ["Equipment", "Supplies"] };
+    expect(scoreReceipt(either, { ...truth, category: "Supplies" }).category).toBe(1);
+    expect(scoreReceipt(either, { ...truth, category: "Equipment" }).category).toBe(1);
+    expect(scoreReceipt(either, { ...truth, category: "Office" }).category).toBe(0);
+  });
+
+  it("reads a legacy label in the ground truth as the app's canonical category", () => {
+    // The 2026-11-07 run scored 0% here: "Restaurant" can never equal the schema's "Meals".
+    expect(scoreReceipt({ ...truth, category: "Restaurant" }, truth).category).toBe(1);
+  });
+});
+
+describe("bench fixtures", () => {
+  const dir = path.join(import.meta.dirname, "fixtures");
+  const truths = readdirSync(dir)
+    .filter((file) => file.endsWith(".json"))
+    .map(
+      (file) => [file, JSON.parse(readFileSync(path.join(dir, file), "utf8")) as Receipt] as const,
+    );
+
+  it("exist", () => {
+    expect(truths.length).toBeGreaterThan(0);
+  });
+
+  it.each(truths)("%s uses only categories the extraction schema can produce", (_, receipt) => {
+    if (receipt.category == null) return;
+    const accepted = Array.isArray(receipt.category) ? receipt.category : [receipt.category];
+    expect(accepted.length).toBeGreaterThan(0);
+    for (const category of accepted) expect(RECEIPT_CATEGORIES).toContain(category);
   });
 });

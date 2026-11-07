@@ -1,9 +1,12 @@
 // Field-level scoring of an extraction against ground truth. Pure, so it is unit-tested.
+import { parseCategory } from "@receipt-ocr/ai/categories";
+
 export type Item = { name: string; quantity?: number; unitPrice?: number; totalPrice?: number };
 export type Receipt = {
   merchant?: string | null;
   receiptDate?: string | null;
-  category?: string | null;
+  /** One category, or every acceptable one for a receipt that honestly fits several. */
+  category?: string | readonly string[] | null;
   currency?: string | null;
   subtotal?: number | null;
   tax?: number | null;
@@ -13,6 +16,8 @@ export type Receipt = {
 };
 
 export const EXACT_FIELDS = ["currency", "receiptDate", "category"] as const;
+/** What a model returned: always a single category. */
+export type Predicted = Omit<Receipt, "category"> & { category?: string | null };
 export const AMOUNT_FIELDS = ["total", "tax", "subtotal", "tip"] as const;
 const AMOUNT_TOLERANCE = 0.01;
 const MERCHANT_THRESHOLD = 0.8;
@@ -69,12 +74,25 @@ export function itemsF1(truth: readonly Item[], predicted: readonly Item[]) {
   return precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
 }
 
+/** The app's canonical category, so a legacy label ("Restaurant") compares as "Meals". */
+const canonical = (value: string | null | undefined) =>
+  value == null ? value : (parseCategory(value) ?? value);
+
+function categoryMatches(truth: Receipt["category"], got: string | null | undefined) {
+  const accepted = Array.isArray(truth) ? truth : [truth];
+  return accepted.some((want) => canonical(want) === canonical(got));
+}
+
 /** Per-field pass/fail (1 or 0); fields absent from the ground truth are skipped. */
-export function scoreReceipt(truth: Receipt, predicted: Receipt) {
+export function scoreReceipt(truth: Receipt, predicted: Predicted) {
   const fields: Record<string, number> = {};
   for (const f of EXACT_FIELDS) {
     if (truth[f] === undefined) continue;
-    fields[f] = truth[f] === predicted[f] ? 1 : 0;
+    const ok =
+      f === "category"
+        ? categoryMatches(truth.category, predicted.category)
+        : truth[f] === predicted[f];
+    fields[f] = ok ? 1 : 0;
   }
   for (const f of AMOUNT_FIELDS) {
     if (truth[f] === undefined) continue;
