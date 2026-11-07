@@ -1,0 +1,278 @@
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  gte,
+  isNull,
+  session,
+  sql,
+  stepUpCodes,
+  stepUpEvents,
+  twoFactor,
+  user,
+  verification,
+} from "@receipt-ocr/db";
+import { timingSafeEqual } from "node:crypto";
+import { Effect } from "effect";
+import { insertAudit, transact, type AuditActor } from "../audit";
+import { Db } from "../services";
+import {
+  STEP_UP_CODE_MAX_ATTEMPTS,
+  STEP_UP_CODE_TTL_MS,
+  STEP_UP_CODE_WINDOW_MS,
+  STEP_UP_CODES_PER_WINDOW,
+  STEP_UP_LOCKOUT_MS,
+  STEP_UP_MAX_FAILURES,
+  type StepUpMethod,
+} from "./policy";
+
+export interface StepUpSessionRow {
+  sessionId: string;
+  userId: string;
+  role: string;
+  twoFactorEnabled: boolean;
+  /** Always 0 until the passkey table lands; the policy already accepts passkeys. */
+  passkeys: number;
+  authMethod: string | null;
+  stepUpAt: Date | null;
+  stepUpMethod: string | null;
+  impersonatedBy: string | null;
+}
+
+/** The session's step-up state and its user's factors, read fresh (never from a cookie). */
+export const loadStepUpSession = (sessionId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db): Promise<StepUpSessionRow | null> => {
+      const [row] = await db
+        .select({
+          sessionId: session.id,
+          userId: session.userId,
+          role: user.role,
+          twoFactorEnabled: user.twoFactorEnabled,
+          authMethod: session.authMethod,
+          stepUpAt: session.stepUpAt,
+          stepUpMethod: session.stepUpMethod,
+          impersonatedBy: session.impersonatedBy,
+        })
+        .from(session)
+        .innerJoin(user, eq(user.id, session.userId))
+        .where(eq(session.id, sessionId))
+        .limit(1);
+      return row ? { ...row, passkeys: 0 } : null;
+    }),
+  );
+
+export interface StepUpEventInput {
+  userId: string;
+  sessionId: string | null;
+  action: string;
+  method: StepUpMethod;
+  outcome: "sent" | "verified" | "failed";
+  totpCounter?: number | null;
+  ip?: string | null;
+}
+
+/** A passed check: marks the session fresh and writes the audit row, together. */
+export const markStepUp = (input: StepUpEventInput & { sessionId: string }) =>
+  transact(async (tx) => {
+    await tx
+      .update(session)
+      .set({ stepUpAt: new Date(), stepUpMethod: input.method })
+      .where(and(eq(session.id, input.sessionId), eq(session.userId, input.userId)));
+    await tx.insert(stepUpEvents).values({ ...input, outcome: "verified" });
+  });
+
+export const recordStepUpEvent = (input: StepUpEventInput) =>
+  Effect.flatMap(Db, ({ use }) => use((db) => db.insert(stepUpEvents).values(input)));
+
+/**
+ * Seconds until this user may try again, or 0. Counts failures since their last
+ * pass, within the lockout window, across sessions and methods.
+ */
+export const stepUpLockedFor = (userId: string, now = new Date()) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const windowStart = new Date(now.getTime() - STEP_UP_LOCKOUT_MS);
+      const [pass] = await db
+        .select({ at: stepUpEvents.createdAt })
+        .from(stepUpEvents)
+        .where(and(eq(stepUpEvents.userId, userId), eq(stepUpEvents.outcome, "verified")))
+        .orderBy(desc(stepUpEvents.createdAt))
+        .limit(1);
+      // A pass clears earlier failures: only consecutive ones count.
+      const since = pass && pass.at > windowStart ? pass.at : windowStart;
+      const failures = await db
+        .select({ at: stepUpEvents.createdAt })
+        .from(stepUpEvents)
+        .where(
+          and(
+            eq(stepUpEvents.userId, userId),
+            eq(stepUpEvents.outcome, "failed"),
+            gt(stepUpEvents.createdAt, since),
+          ),
+        )
+        .orderBy(desc(stepUpEvents.createdAt))
+        .limit(STEP_UP_MAX_FAILURES);
+      if (failures.length < STEP_UP_MAX_FAILURES) return 0;
+      // Locked until the oldest of the last N failures leaves the window.
+      const oldest = failures.at(-1)!.at.getTime();
+      return Math.max(1, Math.ceil((oldest + STEP_UP_LOCKOUT_MS - now.getTime()) / 1000));
+    }),
+  );
+
+/** True when a verified TOTP step-up already used this time step or a later one (replay). */
+export const totpStepUsed = (userId: string, counter: number) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const [row] = await db
+        .select({ id: stepUpEvents.id })
+        .from(stepUpEvents)
+        .where(
+          and(
+            eq(stepUpEvents.userId, userId),
+            eq(stepUpEvents.method, "totp"),
+            eq(stepUpEvents.outcome, "verified"),
+            gte(stepUpEvents.totpCounter, counter),
+          ),
+        )
+        .limit(1);
+      return Boolean(row);
+    }),
+  );
+
+/** The sealed TOTP secret of a verified authenticator, or null. Decrypted by the caller. */
+export const loadTotpSecret = (userId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const [row] = await db
+        .select({ secret: twoFactor.secret })
+        .from(twoFactor)
+        .where(and(eq(twoFactor.userId, userId), eq(twoFactor.verified, true)))
+        .limit(1);
+      return row?.secret ?? null;
+    }),
+  );
+
+export type IssueCodeResult = { ok: true } | { ok: false; retryAfterSeconds: number };
+
+/**
+ * Stores a new emailed code for the session (only its hash), replacing any
+ * earlier one, unless the user has had too many codes in the window.
+ */
+export const issueStepUpCode = (input: {
+  sessionId: string;
+  userId: string;
+  codeHash: string;
+  now?: Date;
+}) =>
+  transact(async (tx): Promise<IssueCodeResult> => {
+    const now = input.now ?? new Date();
+    const since = new Date(now.getTime() - STEP_UP_CODE_WINDOW_MS);
+    // Serialises concurrent sends for one user, so the window count holds.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`step-up:${input.userId}`}))`);
+    const recent = await tx
+      .select({ createdAt: stepUpCodes.createdAt })
+      .from(stepUpCodes)
+      .where(and(eq(stepUpCodes.userId, input.userId), gte(stepUpCodes.createdAt, since)))
+      .orderBy(stepUpCodes.createdAt);
+    if (recent.length >= STEP_UP_CODES_PER_WINDOW) {
+      const oldest = recent[0]!.createdAt.getTime();
+      return {
+        ok: false,
+        retryAfterSeconds: Math.max(
+          1,
+          Math.ceil((oldest + STEP_UP_CODE_WINDOW_MS - now.getTime()) / 1000),
+        ),
+      };
+    }
+    await tx
+      .update(stepUpCodes)
+      .set({ consumedAt: now })
+      .where(and(eq(stepUpCodes.sessionId, input.sessionId), isNull(stepUpCodes.consumedAt)));
+    await tx.insert(stepUpCodes).values({
+      sessionId: input.sessionId,
+      userId: input.userId,
+      codeHash: input.codeHash,
+      expiresAt: new Date(now.getTime() + STEP_UP_CODE_TTL_MS),
+      createdAt: now,
+    });
+    return { ok: true };
+  });
+
+export type ConsumeCodeResult = "ok" | "invalid" | "expired" | "too_many";
+
+const sameHash = (a: string, b: string) => {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
+};
+
+/** Checks a code against the session's latest unused one; single use, limited guesses. */
+export const consumeStepUpCode = (input: { sessionId: string; codeHash: string; now?: Date }) =>
+  transact(async (tx): Promise<ConsumeCodeResult> => {
+    const now = input.now ?? new Date();
+    const [row] = await tx
+      .select()
+      .from(stepUpCodes)
+      .where(and(eq(stepUpCodes.sessionId, input.sessionId), isNull(stepUpCodes.consumedAt)))
+      .orderBy(desc(stepUpCodes.createdAt))
+      .limit(1)
+      .for("update");
+    if (!row || row.expiresAt.getTime() <= now.getTime()) return "expired";
+    if (row.attempts >= STEP_UP_CODE_MAX_ATTEMPTS) return "too_many";
+    if (!sameHash(row.codeHash, input.codeHash)) {
+      const attempts = row.attempts + 1;
+      await tx
+        .update(stepUpCodes)
+        .set({
+          attempts,
+          ...(attempts >= STEP_UP_CODE_MAX_ATTEMPTS ? { consumedAt: now } : {}),
+        })
+        .where(eq(stepUpCodes.id, row.id));
+      return attempts >= STEP_UP_CODE_MAX_ATTEMPTS ? "too_many" : "invalid";
+    }
+    await tx.update(stepUpCodes).set({ consumedAt: now }).where(eq(stepUpCodes.id, row.id));
+    return "ok";
+  });
+
+/**
+ * Removes every trace of a user's authenticator: the two_factor row, the flag,
+ * trusted-device and pending-challenge rows (all keyed by user id in
+ * `verification.value`). Better Auth's own disable only forgets the current device.
+ */
+export const forgetTrustedDevices = (userId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use((db) => db.delete(verification).where(eq(verification.value, userId))),
+  );
+
+/**
+ * Admin reset of a user's two-factor sign-in: clears the authenticator, its
+ * trusted devices and every session, with the audit row in the same transaction.
+ */
+export const resetSecondFactor = (
+  target: { id: string; email: string },
+  audit: AuditActor & { reason: string },
+) =>
+  transact(async (tx) => {
+    const removed = await tx
+      .delete(twoFactor)
+      .where(eq(twoFactor.userId, target.id))
+      .returning({ id: twoFactor.id });
+    await tx.update(user).set({ twoFactorEnabled: false }).where(eq(user.id, target.id));
+    await tx.delete(verification).where(eq(verification.value, target.id));
+    const sessions = await tx
+      .delete(session)
+      .where(eq(session.userId, target.id))
+      .returning({ id: session.id });
+    await insertAudit(tx, {
+      ...audit,
+      action: "user.two_factor_reset",
+      targetType: "user",
+      targetId: target.id,
+      targetLabel: target.email,
+      reason: audit.reason,
+      metadata: { authenticator: removed.length > 0, sessions: sessions.length },
+    });
+    return { authenticator: removed.length > 0, sessions: sessions.length };
+  });

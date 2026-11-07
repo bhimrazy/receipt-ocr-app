@@ -142,6 +142,7 @@ export const adminOverview = (plans: PlanTable, now = new Date()) =>
           email: user.email,
           plan: user.plan,
           emailVerified: user.emailVerified,
+          twoFactorEnabled: user.twoFactorEnabled,
           createdAt: user.createdAt,
         })
         .from(user)
@@ -201,6 +202,8 @@ export type AdminUserRow = {
   banReason: string | null;
   banExpires: Date | null;
   emailVerified: boolean;
+  /** An authenticator app is enrolled (never the secret or codes). */
+  twoFactorEnabled: boolean;
   createdAt: Date;
   usedToday: number;
   workspaces: number;
@@ -244,6 +247,7 @@ export const listUsers = (filters: UserFilters, page: Page, now = new Date()) =>
           banReason: user.banReason,
           banExpires: user.banExpires,
           emailVerified: user.emailVerified,
+          twoFactorEnabled: user.twoFactorEnabled,
           createdAt: user.createdAt,
           usedToday,
           workspaces: sql<number>`(select count(*)::int from ${member} m where m.user_id = ${USER_ID})`,
@@ -295,6 +299,7 @@ export const userDetail = (id: string, now = new Date()) =>
           banReason: user.banReason,
           banExpires: user.banExpires,
           emailVerified: user.emailVerified,
+          twoFactorEnabled: user.twoFactorEnabled,
           createdAt: user.createdAt,
           usedToday: usedSince(USER_ID, today),
         })
@@ -566,6 +571,7 @@ export type AdminTargetUser = {
   email: string;
   role: string | null;
   emailVerified: boolean;
+  twoFactorEnabled: boolean;
 };
 
 /** The fields an admin action checks before acting on a user; null when the user is gone. */
@@ -578,6 +584,7 @@ export const findUser = (id: string) =>
           email: user.email,
           role: user.role,
           emailVerified: user.emailVerified,
+          twoFactorEnabled: user.twoFactorEnabled,
         })
         .from(user)
         .where(eq(user.id, id))

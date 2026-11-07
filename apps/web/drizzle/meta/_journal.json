@@ -15,6 +15,13 @@
       "when": 1794038936805,
       "tag": "0001_ocr_call_refused_unsupported",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794056844973,
+      "tag": "0002_two_factor_step_up",
+      "breakpoints": true
     }
   ]
 }
