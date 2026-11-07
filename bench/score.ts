@@ -3,7 +3,8 @@ import { parseCategory } from "@receipt-ocr/ai/categories";
 
 export type Item = { name: string; quantity?: number; unitPrice?: number; totalPrice?: number };
 export type Receipt = {
-  merchant?: string | null;
+  /** One name, or every acceptable spelling (e.g. the sign and the legal name). */
+  merchant?: string | readonly string[] | null;
   receiptDate?: string | null;
   /** One category, or every acceptable one for a receipt that honestly fits several. */
   category?: string | readonly string[] | null;
@@ -17,13 +18,22 @@ export type Receipt = {
 
 export const EXACT_FIELDS = ["currency", "receiptDate", "category"] as const;
 /** What a model returned: always a single category. */
-export type Predicted = Omit<Receipt, "category"> & { category?: string | null };
+export type Predicted = Omit<Receipt, "category" | "merchant"> & {
+  category?: string | null;
+  merchant?: string | null;
+};
 export const AMOUNT_FIELDS = ["total", "tax", "subtotal", "tip"] as const;
 const AMOUNT_TOLERANCE = 0.01;
 const MERCHANT_THRESHOLD = 0.8;
 const ITEM_NAME_THRESHOLD = 0.7;
 
-const normalize = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+// NFC first, then keep combining marks: Devanagari vowel signs and viramas are \p{M}, and
+// dropping them turns "भाटभटेनी" into "भटभटन".
+const normalize = (s: string) =>
+  s
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, "");
 
 function levenshtein(a: string, b: string) {
   let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
@@ -106,8 +116,9 @@ export function scoreReceipt(truth: Receipt, predicted: Predicted) {
     fields[f] = ok ? 1 : 0;
   }
   if (truth.merchant != null) {
-    fields.merchant =
-      similarity(truth.merchant, predicted.merchant ?? "") >= MERCHANT_THRESHOLD ? 1 : 0;
+    const accepted = Array.isArray(truth.merchant) ? truth.merchant : [truth.merchant];
+    const best = Math.max(...accepted.map((name) => similarity(name, predicted.merchant ?? "")));
+    fields.merchant = best >= MERCHANT_THRESHOLD ? 1 : 0;
   }
   if (truth.items) fields.itemsF1 = itemsF1(truth.items, predicted.items ?? []);
   return fields;

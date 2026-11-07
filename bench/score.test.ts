@@ -104,3 +104,32 @@ describe("bench fixtures", () => {
     for (const category of accepted) expect(RECEIPT_CATEGORIES).toContain(category);
   });
 });
+
+describe("merchant scoring", () => {
+  it("keeps Devanagari vowel signs, so a different name doesn't pass as the same", () => {
+    const name = "भाटभटेनी सुपरमार्केट";
+    expect(similarity(name, name)).toBe(1);
+    // Only the vowel signs differ; with marks stripped these compared as identical.
+    expect(similarity(name, "भटभटन सपरमरकट")).toBeLessThan(0.8);
+  });
+
+  it("treats composed and decomposed accents as the same letter", () => {
+    const composed = "Bäckerei Sonnenschein";
+    expect(similarity(composed, composed.normalize("NFD"))).toBe(1);
+    expect(similarity("Café Mozart", "CAFÉ MOZART")).toBe(1);
+  });
+
+  it("accepts any of several spellings", () => {
+    const truthNames = {
+      ...truth,
+      merchant: ["Bhat-Bhateni Super Market", "Bhatbhateni Supermarket"],
+    };
+    expect(
+      scoreReceipt(truthNames, { ...truth, merchant: "BHATBHATENI SUPERMARKET" }).merchant,
+    ).toBe(1);
+    expect(
+      scoreReceipt(truthNames, { ...truth, merchant: "Bhat Bhateni Super Market" }).merchant,
+    ).toBe(1);
+    expect(scoreReceipt(truthNames, { ...truth, merchant: "Salesberry" }).merchant).toBe(0);
+  });
+});
