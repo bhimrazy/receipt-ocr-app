@@ -73,7 +73,9 @@ export function ReceiptList({
                     <StatusBadge status={receipt.status} />
                     <span className="min-w-0 truncate">
                       {isInFlight(receipt.status)
-                        ? "Usually takes a few seconds"
+                        ? receipt.retryAt
+                          ? "Waiting to retry"
+                          : "Usually takes a few seconds"
                         : "Open it to see why"}
                     </span>
                     {receipt.status === "failed" ? (
