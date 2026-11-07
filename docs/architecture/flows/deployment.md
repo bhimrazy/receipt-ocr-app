@@ -35,7 +35,8 @@ sequenceDiagram
     M->>SDB: bun run db:migrate with DIRECT_URL
     Dev->>M: run by hand on main: production-db (owner approves)
     M->>DB: bun run db:migrate with DIRECT_URL
-    Dev->>PR: run by hand on main (always deploys)
+    Dev->>PR: run by hand on main
+    PR->>PR: gate: CI passed on the commit, production-db ran the same migrations
     PR->>V: vercel pull, vercel build --prod, vercel deploy --prebuilt --prod
     PR->>GH: record-deploy: move tag production-deployed
   end
@@ -53,7 +54,8 @@ sequenceDiagram
   push to `main` from this repository, or when started by hand from `main` (a manual run on another branch is
   skipped). It runs one at a time (`cancel-in-progress: false`) and builds the commit CI tested rather than whatever
   `main` points at by then. Its `gate` job skips the automatic deploy when `apps/web/drizzle/` differs from the
-  `production-deployed` tag, or the tag is missing; a manual run always deploys. `record-deploy`, the only job with
+  `production-deployed` tag, or the tag is missing; a manual run deploys only if CI passed on its commit and the newest successful `production-db` migration run
+  had the same `apps/web/drizzle/`. `record-deploy`, the only job with
   `contents: write` and no repository code, moves the tag after each deploy.
 - The Vercel token is given only to the `pull` and `deploy` steps. The build step runs repository code and gets no
   token. Deploys upload one archive (`--archive=tgz`) to stay under the free plan's file-upload quota.
@@ -62,7 +64,8 @@ sequenceDiagram
 
 [`db-migrate.yml`](../../../.github/workflows/db-migrate.yml) runs only by `workflow_dispatch` on `main`. Given a GitHub
 environment (`staging-db` or `production-db`, both limited to `main`; `production-db` needs the owner's approval), it
-fails unless the ref is `main`, checks out the commit, installs with the frozen lockfile, validates and masks
+runs a `preflight` job before approval (the ref is `main`; for `production-db`, the newest successful `staging-db`
+run has the same migrations), checks out the commit, installs with the frozen lockfile, validates and masks
 `DIRECT_URL` without printing it, and runs `bun run db:migrate`. Its job-level `concurrency` group
 (`db-migrate-<environment>`, never cancelled while running; a newer queued run replaces a waiting one) keeps two runs
 off the same database. `drizzle-kit` applies all pending files in one transaction, so a failed run changes nothing

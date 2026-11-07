@@ -43,8 +43,10 @@ Steps are in [deployment.md](deployment.md).
 - `staging-db` and `production-db` exist (`main` only, `DIRECT_URL` set, required reviewer on `production-db`).
   Still to do for `ci/db-migrations`: point Vercel's Preview variables at `receipt-ocr-staging`, leave
   `BETTER_AUTH_URL` unset there and turn on Deployment Protection for previews
-  ([deployment.md](deployment.md#staging-and-previews)). After merging, run **Vercel Production Deployment** by hand
-  once: there is no `production-deployed` tag yet, so automatic deploys skip until a deploy creates it.
+  ([deployment.md](deployment.md#staging-and-previews)). After merging, once: run **Database Migration** for
+  `staging-db`, then `production-db` (no-ops at `0010`), then **Vercel Production Deployment** by hand. Manual
+  deploys need a successful `production-db` run with the same migrations, and there is no `production-deployed` tag
+  yet, so automatic deploys skip until that deploy creates it.
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
   to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
@@ -125,6 +127,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    [currencies and FX](plans/2026-11-06-currencies-fx.md).
 
 ## Known follow-ups
+
+- Deploy record (review P3-1, P3-2 on #55): the `production-deployed` tag is moved by `record-deploy` with
+  `GITHUB_TOKEN`. Consider a tag ruleset (only Actions may move it) or GitHub Deployments as the record, and watch the
+  first `record-deploy` after a release that changes workflows.
 
 - FAQ uses a raw `<details>`; add a server-friendly Disclosure primitive to `packages/ui`.
 - PDF page cap gaps: the hand-written page counter (`packages/core/src/pdf-pages.ts`) can undercount when the word

@@ -136,7 +136,10 @@ migrations only happens by hand, after both migrations succeed. If staging faile
 touched; if production failed, staging already has the migration.
 
 1. Open the failed run and find the failing step.
-   - **Require main** failed: the run wasn't started from `main`. Start it again from `main`.
+   - **Require main** (preflight) failed: the run wasn't started from `main`. Start it again from `main`.
+   - **Require staging on this commit** (preflight, `production-db` only) failed: the newest successful `staging-db`
+     run has different migrations from this commit, or none was found. Run **Database Migration** for `staging-db` on
+     the current `main`, check staging, then run `production-db` again.
    - **Check the secret is set** failed: the environment or its `DIRECT_URL` secret is missing or malformed
      (Settings → Environments; see deployment.md, Migrations). The message never includes the URL.
    - **Apply migrations** failed: read the Postgres error. If the log shows only the `drizzle-kit` spinner and
@@ -168,9 +171,18 @@ Don't run `db:migrate` from a laptop against production unless Actions is down.
 The **Vercel Production Deployment** run is green but `deploy-production` was skipped, and the summary says why:
 
 - **"This release adds migrations"**: expected. Follow deployment.md, Every release, steps 6 to 8.
-- **"Can't find the last production deploy"**: the `production-deployed` tag is missing. Check production's schema is
-  current (run **Database Migration** on both if unsure; it's a no-op when up to date), then run the workflow by
-  hand on `main`. That deploy sets the tag.
+- **"Can't find the last production deploy"**: the `production-deployed` tag is missing. Run **Database Migration**
+  for `staging-db`, then `production-db` (a no-op when up to date), then run the workflow by hand on `main`. That
+  deploy sets the tag.
+
+### Manual deploy refused
+
+A manual **Vercel Production Deployment** run is red at `gate`, with "Production deploy refused" in the summary:
+
+- **"CI hasn't passed"**: wait for CI on that `main` commit, or fix it. Manual deploys only ship commits CI passed.
+- **"main has migrations production hasn't run"** or **"Can't find a successful production-db migration"**: run
+  **Database Migration** for `staging-db`, then `production-db` on the current `main`, then deploy again.
+- **"Can't check CI"** or **"Can't compare"**: the GitHub API or the history lookup failed; nothing deployed. Re-run.
 
 ### Leaked secret
 

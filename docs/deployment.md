@@ -122,7 +122,7 @@ To ask everyone again after changing what an optional tool does, bump `CONSENT_V
 **Vercel.** `.github/workflows/production.yml` deploys `main` automatically after CI passes on a push, unless the
 release changes migrations (see [Migrations](#migrations)). Pull requests get a preview deploy from
 `.github/workflows/preview.yml`. To deploy by hand, run the **Vercel Production Deployment** workflow from the
-Actions tab on `main`; a manual run always deploys.
+Actions tab on `main`; a manual run deploys once CI passed on that commit and production has its migrations.
 
 Both Vercel workflows use the GitHub environment `vercel`, which holds `VERCEL_TOKEN`, `VERCEL_ORG_ID` and
 `VERCEL_PROJECT_ID`. It has no branch policy, because previews run from PR branches; don't add one, or previews stop.
@@ -152,7 +152,9 @@ it, and previews never do.
 `production.yml` never deploys code whose migrations may not be applied. On its automatic path it compares
 `apps/web/drizzle/` between the commit CI tested and the `production-deployed` tag (moved after every successful
 deploy by its `record-deploy` job). If anything changed there, or the tag is missing, it skips the deploy and the run
-summary says what to do. A manual run skips that check: you ran the migrations first.
+summary says what to do. A manual run instead checks that CI passed on the commit and that the newest successful
+**Database Migration** run for `production-db` had the same `apps/web/drizzle/`; otherwise it refuses: "main has
+migrations production hasn't run: run Database Migration for production-db first."
 
 ```text
 push to main → CI → production.yml: no migration changes → deploy, move the tag
@@ -163,9 +165,14 @@ How the migration job behaves:
 
 - `drizzle-kit migrate` applies all pending files in **one transaction**, so a failed run leaves that database exactly
   as it was.
-- It fails, rather than skips, when started from any ref but `main`.
+- A `preflight` job runs before the environment's approval. It fails, rather than skips, when started from any ref
+  but `main`. For `production-db` it also requires the newest successful `staging-db` run to have the same
+  `apps/web/drizzle/` as this commit ("run staging first on this commit"). Runs are named `Migrate <environment>`,
+  which is how these lookups find them; any lookup that fails refuses the run.
 - The URL isn't printed: GitHub masks the secret, the check step validates its shape without echoing it and also
-  masks the decoded password, and `drizzle-kit` runs without `--verbose`.
+  masks the decoded username (it carries the Supabase project ref) and password, and `drizzle-kit` runs without `--verbose`.
+- CI's static job runs `bun run db:generate` (no database needed) and fails if `apps/web/drizzle/` changes, so a
+  schema change can't merge without its migration.
 - One run per database at a time (`concurrency: db-migrate-<environment>`, never cancelled while running). GitHub
   keeps only one _pending_ run per group, so a second run started while one waits (for example for approval) cancels
   the waiting one.
