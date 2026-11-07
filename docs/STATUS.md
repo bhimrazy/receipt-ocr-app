@@ -133,7 +133,9 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
     global cap needs a platform-wide lock (it can overshoot by the number of users uploading at the same moment).
 11. Two-factor (policy approved 2026-11-07, see the [plan](plans/2026-11-06-passkeys-2fa.md)): whether the everyday
     History CSV export needs step-up (today only a future "export everything" would); run migration
-    `0002_two_factor_passkey_step_up` on staging, then production.
+    `0002_two_factor_passkey_step_up` on staging, then production; whether a sign-in in the last 10 minutes may keep
+    confirming deletion and password changes for users without a factor (the security review recommends the emailed
+    code only).
 12. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
     `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
     which amounts are converted, sign-up default from country.
@@ -198,6 +200,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   R2, which stay as they are) when traffic or billing makes it necessary.
 
 ## Known follow-ups
+
+- Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
+  rows older than 90 days with a job kind in `packages/core/src/jobs` (there is no retention job yet), keeping the last
+  pass and recent failures that the lockout reads; then update the privacy policy.
 
 - Share target: a cross-site form can plant a share in a visitor's cache (the referrer can be hidden). The Keep and
   Discard prompt, the 10-minute expiry and the size caps are the guard.

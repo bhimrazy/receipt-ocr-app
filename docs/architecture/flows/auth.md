@@ -24,17 +24,17 @@ step-up wiring lives in [`lib/auth-two-factor.ts`](../../../apps/web/lib/auth-tw
 
 ## What is configured
 
-| Setting                       | Value                                                                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Passwords                     | 8 to 128 characters; all sessions revoked on reset                                                                                                      |
-| Email verification            | Required in production (`AUTH_REQUIRE_EMAIL_VERIFICATION`, default true there)                                                                          |
-| Sessions                      | 7 days, refreshed daily; cookie cache off, so every read checks the session row                                                                         |
-| Rate limits (database-backed) | Sign-in 5 per minute, sign-up 3 per minute, invite 20 per hour, delete-user and change-email 10 per hour, per client IP                                 |
-| Tokens at rest                | Verification and reset tokens hashed; OAuth tokens encrypted with the auth secret                                                                       |
-| Social providers              | Google and GitHub, each on only when its ID and secret are both set                                                                                     |
-| First admin                   | `ADMIN_EMAILS`, granted only once that address is verified                                                                                              |
-| Two-step sign-in              | TOTP (6 digits, 30 s, ±1 step) and 10 backup codes, sealed with the auth secret                                                                         |
-| Step-up                       | Fresh for 10 minutes per session; factor first; without one an emailed code, or a sign-in in the last 10 minutes for delete, email and password changes |
+| Setting                       | Value                                                                                                                                              |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Passwords                     | 8 to 128 characters; all sessions revoked on reset                                                                                                 |
+| Email verification            | Required in production (`AUTH_REQUIRE_EMAIL_VERIFICATION`, default true there)                                                                     |
+| Sessions                      | 7 days, refreshed daily; cookie cache off, so every read checks the session row                                                                    |
+| Rate limits (database-backed) | Sign-in 5 per minute, sign-up 3 per minute, invite 20 per hour, delete-user and change-email 10 per hour, per client IP                            |
+| Tokens at rest                | Verification and reset tokens hashed; OAuth tokens encrypted with the auth secret                                                                  |
+| Social providers              | Google and GitHub, each on only when its ID and secret are both set                                                                                |
+| First admin                   | `ADMIN_EMAILS`, granted only once that address is verified                                                                                         |
+| Two-step sign-in              | TOTP (6 digits, 30 s, ±1 step) and 10 backup codes, sealed with the auth secret                                                                    |
+| Step-up                       | Fresh for 10 minutes per session; factor first; without one an emailed code, or a sign-in in the last 10 minutes for deletion and password changes |
 
 Client IPs for rate limits come from `TRUSTED_IP_HEADERS` and `TRUSTED_PROXIES` ([`lib/env.ts`](../../../apps/web/lib/env.ts)),
 so the app's own limiters ([`clientIp`](../../../apps/web/lib/http.ts)) and Better Auth's agree.
@@ -155,8 +155,10 @@ sequenceDiagram
 
 - Google and GitHub sign-ins aren't asked for the code (the plugin only hooks password sign-in). For those users
   the authenticator still guards step-up and admin access, and the Security page says so.
-- Turning it off needs the password and a fresh step-up. A `user.update.after` hook then deletes every
-  `verification` row holding the user id, which forgets all trusted devices, not only the current one.
+- Turning it off needs the password and a fresh step-up. A `user.update.after` hook then deletes every trusted-device
+  row of the user, not only the current device's. Trust rows are stored as `trust-device:` plus a SHA-256 (a
+  `verification.storeIdentifier` override), so this leaves the user's pending reset and deletion links alone. An
+  admin reset deletes every `verification` row of the user on purpose.
 - An impersonation session can't call any `/two-factor/*` or `/passkey/*` endpoint (`IMPERSONATING`), so an admin
   can't enrol their own authenticator on a customer's account.
 - Emails: "two-step sign-in is on", "is off", "new backup codes" and "was reset by an administrator". A failed send is
@@ -168,12 +170,12 @@ Important actions need a check passed in the last 10 minutes on **this session**
 `step_up_at` and `step_up_method`, so nothing can be carried to another session. The policy is pure and unit-tested
 ([`step-up/policy.ts`](../../../packages/core/src/step-up/policy.ts)):
 
-| Account                   | Can verify with                                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Has a passkey             | The passkey (a fresh passkey sign-in)                                                                        |
-| Has an authenticator app  | App code or a backup code                                                                                    |
-| No second factor          | A 6-digit code emailed to them; for delete, email and password changes also a sign-in in the last 10 minutes |
-| Platform admin, no factor | Nothing: must enrol first                                                                                    |
+| Account                   | Can verify with                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Has a passkey             | The passkey (a fresh passkey sign-in)                                                                   |
+| Has an authenticator app  | App code or a backup code                                                                               |
+| No second factor          | A 6-digit code emailed to them; for deletion and password changes also a sign-in in the last 10 minutes |
+| Platform admin, no factor | Nothing: must enrol first                                                                               |
 
 ```mermaid
 sequenceDiagram
@@ -197,9 +199,16 @@ sequenceDiagram
   [`step-up-check.ts`](../../../apps/web/lib/step-up-check.ts) for server actions (every admin mutation calls it in
   `run()`), and a global Better Auth `hooks.before` for auth endpoints, mapped in
   [`step-up-paths.ts`](../../../apps/web/lib/step-up-paths.ts): `/delete-user`, `/change-email`, `/change-password`,
-  `/two-factor/disable`, `/two-factor/generate-backup-codes`, `/passkey/delete-passkey`, `/organization/delete`,
+  `/unlink-account`, `/two-factor/disable`, `/two-factor/generate-backup-codes`, `/passkey/delete-passkey`,
+  `/organization/delete`,
   owner grants through `/organization/update-member-role` or `/organization/invite-member`, and every mutating
-  `/admin/*` endpoint. Calling the API directly can't skip it.
+  `/admin/*` endpoint. Calling the API directly can't skip it. Left open on purpose: ending sessions
+  (`/revoke-session`, `/revoke-other-sessions`, `/revoke-sessions`), the victim's way out, and renaming a passkey.
+- **Methods come from the enrolled factors** on every check, even while the session is fresh, so a user with a factor
+  can't pass or refresh a check with the emailed code.
+- **Signing in again replaces the session.** A sign-in (`/sign-in/email`, `/sign-in/social`, `/callback/*`) from a
+  browser holding a session of the same user deletes that session and keeps its workspace (`replacePreviousSession`;
+  passkey step-ups do the same through `adoptPasskeySession`), so "Sign in again" leaves no second live session.
 - **One client dialog.** [`step-up.tsx`](../../../apps/web/components/step-up/step-up.tsx): `withStepUp(call)` runs the
   call, opens the dialog only when the server says `STEP_UP_REQUIRED`, and retries once.
 - **Codes.** TOTP is checked by our RFC 6238 helper ([`totp.ts`](../../../apps/web/lib/totp.ts)) against the
@@ -212,7 +221,7 @@ sequenceDiagram
 
 - rpID is the host of `BETTER_AUTH_URL` (production `receipt-ocr.bhimraj.com.np`) and the expected origin is exactly
   that origin; resident keys and user verification are required, so a passkey alone is a two-factor sign-in.
-- Added in Settings → Security (needs a fresh step-up and Better Auth's session `freshAge`), renamed and removed
+- Added in Settings → Security (needs a fresh step-up; Better Auth's `freshAge` is off), renamed and removed
   there; removing needs a step-up. Each add and remove emails the user.
 - Sign-in: "Use a passkey" on `/sign-in`, and autofill through `autocomplete="username webauthn"` with conditional
   mediation where the browser supports it. The session gets `auth_method = passkey`.
@@ -313,10 +322,11 @@ nothing and counts nothing. A `/delete-user` call carrying the emailed token is 
 inbox. Settings wraps each call in `withStepUp`. With a factor, the dialog asks for it. Without one, the dialog offers
 "sign in again" ([`sign-in-again.tsx`](../../../apps/web/components/step-up/sign-in-again.tsx): password in place,
 with Turnstile when it is on, or Google/GitHub and back to `/app/settings?resume=…`) or an emailed code. A session
-signed in within 10 minutes passes these three actions only (`signInCounts` in core's policy), because each is
-confirmed again on its own (link, current address, current password); adding a factor never accepts it.
-Better Auth's own `session.freshAge` (15 minutes, from #92) still applies to list-sessions, unlink-account and
-passkey registration.
+signed in within 10 minutes passes deletion and password changes only (`signInCounts` in core's policy), because each
+is confirmed again on its own (emailed link, current password). Not an email change: Better Auth asks the current
+address to approve only when it is verified, so for an unverified account the only link goes to the new address.
+Adding a factor never accepts it either. Better Auth's own `session.freshAge` is 0 (off): it would refuse a passkey
+registration that already passed step-up, and `/unlink-account`, its only other guarded write, needs step-up.
 
 ```mermaid
 sequenceDiagram

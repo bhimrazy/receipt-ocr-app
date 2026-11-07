@@ -113,7 +113,9 @@ erDiagram
 `two_factor` is the twoFactor plugin's table: the secret and backup codes are sealed with the auth secret
 (XChaCha20-Poly1305, versioned with `BETTER_AUTH_SECRETS`), never hashed, because the plugin must read them back.
 `step_up_events` is the "confirm it's you" audit trail and also feeds the lockout and TOTP replay checks; it keeps rows
-when the session ends (`session_id` set null). `step_up_codes` holds only an HMAC of each emailed code.
+when the session ends (`session_id` set null) and goes with the user. It holds the client IP of each check. There is
+no time-based pruning yet (proposed: 90 days, a follow-up in STATUS). `step_up_codes` holds only an HMAC of each
+emailed code.
 
 Also owned by Better Auth, with no foreign keys: `verification` (hashed email-verification and reset tokens) and
 `rate_limit` (fixed-window counters for auth endpoints, also used by the app's own limiters through `hitRateLimit`).
