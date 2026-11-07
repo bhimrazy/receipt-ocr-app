@@ -32,6 +32,7 @@ const noindexPaths = [
   "/forgot-password",
   "/reset-password",
   "/accept-invitation/:path*",
+  "/account-deleted",
 ];
 
 // Everything but production stays out of search results. Vercel only adds this on *.vercel.app, not on
@@ -54,6 +55,13 @@ const nextConfig: NextConfig = {
     "@receipt-ocr/ui",
   ],
   poweredByHeader: false,
+  experimental: {
+    // Tab switches within 30 s reuse the page already fetched instead of rendering it again on the
+    // server. Mutations call router.refresh() or a Server Action, which drop the whole client
+    // cache, so edits show at once. Server-side auth checks are untouched: only what the browser
+    // already received is reused, and only briefly.
+    staleTimes: { dynamic: 30 },
+  },
   async headers() {
     return [
       {

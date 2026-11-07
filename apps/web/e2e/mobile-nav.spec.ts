@@ -63,7 +63,7 @@ test("tab bar moves between sections and marks the active one", async ({ page })
   await expectNoSideScroll(page);
 
   // Every tab is at least 44px tall.
-  for (const name of ["Home", "History", "Scan", "Settings"]) {
+  for (const name of ["Home", "History", "Scan", "Groups", "Settings"]) {
     const box = await tabs.getByRole("link", { name }).boundingBox();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   }
@@ -123,10 +123,13 @@ test("account sheet opens, and closes with Escape or a tap outside", async ({ pa
   await expect(sheet).toBeHidden();
 });
 
-test("Groups, reached from History, has Back and keeps History highlighted", async ({ page }) => {
+test("Groups is a tab and Scan sits in the exact centre", async ({ page }) => {
   await page.goto("/app/groups");
-  await expect(page.getByRole("link", { name: "Back to History" })).toBeVisible();
-  await expect(tabBar(page).getByRole("link", { name: "History" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Back to History" })).toBeHidden();
+  const scan = await tabBar(page).getByRole("link", { name: "Scan" }).boundingBox();
+  const width = page.viewportSize()!.width;
+  expect(Math.abs(scan!.x + scan!.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+  await expect(tabBar(page).getByRole("link", { name: "Groups" })).toHaveAttribute(
     "aria-current",
     "page",
   );

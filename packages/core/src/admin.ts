@@ -14,7 +14,7 @@ import { insertAudit, transact, type AuditActor, type Tx } from "./audit";
 import { Conflict, NotFound } from "./errors";
 import { clearGroupCreator } from "./groups";
 import type { PlanId } from "./plans";
-import { Storage } from "./services";
+import { Db, Storage } from "./services";
 import { errorFields } from "./telemetry/redact";
 
 /**
@@ -113,6 +113,53 @@ export const deleteWorkspace = (organizationId: string, audit: AuditActor) =>
  * Receipts they uploaded to other workspaces stay (`user_id` is set to null).
  * With `audit`, the `user.delete` row commits with the workspace deletions.
  */
+type MemberRow = { organizationId: string; userId: string; role: string };
+
+/**
+ * A user's workspaces split for account deletion: `solo` ones only they belong to (deleted with
+ * the account) and `blocked` shared ones where they are the only owner (deletion is refused).
+ */
+function splitForDeletion(userId: string, organizationIds: string[], rows: MemberRow[]) {
+  const solo: string[] = [];
+  const blocked: string[] = [];
+  for (const organizationId of organizationIds) {
+    const inOrg = rows.filter((r) => r.organizationId === organizationId);
+    const others = inOrg.filter((r) => r.userId !== userId);
+    const owner = inOrg.some((r) => r.userId === userId && r.role === "owner");
+    if (others.length === 0) solo.push(organizationId);
+    else if (owner && !others.some((r) => r.role === "owner")) blocked.push(organizationId);
+  }
+  return { solo, blocked };
+}
+
+/**
+ * Shared workspaces that would refuse this user's account deletion, by name. A read without
+ * locks, so Settings can explain before a deletion link is sent; `prepareUserDeletion` re-checks
+ * under lock.
+ */
+export const workspacesBlockingDeletion = (userId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const mine = await db
+        .select({ organizationId: member.organizationId })
+        .from(member)
+        .where(eq(member.userId, userId));
+      const organizationIds = [...new Set(mine.map((m) => m.organizationId))];
+      if (organizationIds.length === 0) return [];
+      const rows = await db
+        .select({ organizationId: member.organizationId, userId: member.userId, role: member.role })
+        .from(member)
+        .where(inArray(member.organizationId, organizationIds));
+      const { blocked } = splitForDeletion(userId, organizationIds, rows);
+      if (blocked.length === 0) return [];
+      return db
+        .select({ id: organization.id, name: organization.name })
+        .from(organization)
+        .where(inArray(organization.id, blocked))
+        .orderBy(organization.name);
+    }),
+  );
+
 export const prepareUserDeletion = (userId: string, audit?: AuditActor) =>
   Effect.gen(function* () {
     const { keys, workspacesDeleted } = yield* transact(async (tx) => {
@@ -123,15 +170,7 @@ export const prepareUserDeletion = (userId: string, audit?: AuditActor) =>
       const organizationIds = [...new Set(mine.map((m) => m.organizationId))];
       const rows = organizationIds.length > 0 ? await lockMembers(tx, organizationIds) : [];
 
-      const solo: string[] = [];
-      const blocked: string[] = [];
-      for (const organizationId of organizationIds) {
-        const inOrg = rows.filter((r) => r.organizationId === organizationId);
-        const others = inOrg.filter((r) => r.userId !== userId);
-        const owner = inOrg.some((r) => r.userId === userId && r.role === "owner");
-        if (others.length === 0) solo.push(organizationId);
-        else if (owner && !others.some((r) => r.role === "owner")) blocked.push(organizationId);
-      }
+      const { solo, blocked } = splitForDeletion(userId, organizationIds, rows);
       if (blocked.length > 0) {
         const names = await tx
           .select({ name: organization.name })

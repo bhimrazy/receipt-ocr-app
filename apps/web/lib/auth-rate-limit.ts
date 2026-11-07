@@ -8,4 +8,7 @@ export const authRateLimitRules = {
   "/sign-up/email": { window: 60, max: 3 },
   // Per IP; auth-guards also caps each inviter.
   "/organization/invite-member": { window: 60 * 60, max: 20 },
+  // Requesting and completing account deletion, and email changes; email-limits also caps each address.
+  "/delete-user": { window: 60 * 60, max: 10 },
+  "/change-email": { window: 60 * 60, max: 10 },
 } as const;
