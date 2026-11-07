@@ -384,6 +384,26 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     expect((await jobsOf(receipt.id))[0]).toMatchObject({ state: "succeeded", attempts: 2 });
   });
 
+  it("reaps a running job that started more than 24.8 days ago (no int overflow)", async () => {
+    const { receipt, jobId } = await upload(a);
+    const lease = [{ kind: "receipt.extract", leaseSeconds: 90 }];
+    await queue((q) =>
+      q.claim({ worker: "ancient", kinds: lease, n: 1, ownerCap: 9, ids: [jobId] }),
+    );
+    const longAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    await db((d) =>
+      d
+        .update(jobs)
+        .set({ startedAt: longAgo, lockedUntil: new Date(Date.now() - 1000) })
+        .where(eq(jobs.id, jobId)),
+    );
+    const reaped = await queue((q) => q.reap());
+    expect(reaped.map((job) => job.id)).toContain(jobId);
+    const [job] = await jobsOf(receipt.id);
+    const last = (job!.attemptLog as { outcome: string; ms: number }[]).at(-1)!;
+    expect(last.ms).toBeGreaterThan(2 ** 31);
+  });
+
   it("a lease that expires on the last attempt kills the job and settles the receipt", async () => {
     const { receipt, jobId } = await upload(a);
     await db((d) => d.update(jobs).set({ attempts: 3 }).where(eq(jobs.id, jobId)));

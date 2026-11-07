@@ -5,6 +5,8 @@ import { providerOf, type Ocr, type ProviderCooldowns } from "../../ocr";
 import { noCallRow, runExtraction, settleFailure, type ExtractionError } from "../../pipeline";
 import type { ReceiptRepo } from "../../repository";
 import type { Storage } from "../../services";
+import { annotateEvent } from "../../telemetry/current";
+import { errorFields } from "../../telemetry/redact";
 import {
   JobDeferred,
   NonRetryableJobError,
@@ -112,10 +114,12 @@ export const receiptExtract: JobDefinition<
   run: (payload, { attempt }) =>
     Effect.gen(function* () {
       const queue = yield* JobQueue;
+      yield* annotateEvent({ round: payload.round });
       // Unknown cooldowns (database blip) mean "try every provider", not a failed attempt.
       const cooling = (yield* queue.cooldowns.pipe(
         Effect.orElseSucceed(() => new Map()),
       )) as ProviderCooldowns;
+      if (cooling.size > 0) yield* annotateEvent({ flags: { providers_cooling: cooling.size } });
       const outcome = yield* runExtraction({
         receiptId: payload.receiptId,
         scope: scopeOf(payload),
@@ -124,13 +128,19 @@ export const receiptExtract: JobDefinition<
         cooling,
       }).pipe(
         Effect.tapError((error) =>
-          Effect.forEach(cooldownsFrom(error), ([provider, ms]) =>
-            queue.coolDown(provider, ms).pipe(Effect.ignore),
+          Effect.zipRight(
+            annotateEvent({ error: errorFields(error) }),
+            Effect.forEach(cooldownsFrom(error), ([provider, ms]) =>
+              queue.coolDown(provider, ms).pipe(Effect.ignore),
+            ),
           ),
         ),
         Effect.mapError(classifyExtractionError),
       );
-      if (outcome.kind === "skipped") return outcome satisfies ReceiptExtractResult;
+      if (outcome.kind === "skipped") {
+        yield* annotateEvent({ queue: { skipped: outcome.reason } });
+        return outcome satisfies ReceiptExtractResult;
+      }
       return {
         kind: "completed",
         receiptId: payload.receiptId,

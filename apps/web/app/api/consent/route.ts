@@ -3,7 +3,7 @@ import { CONSENT_COOKIE, CONSENT_MAX_AGE_SECONDS } from "@/lib/consent/config";
 import { parseConsent, serializeConsent } from "@/lib/consent/state";
 import { readCappedText } from "@/lib/csp-report";
 import { authEnv } from "@/lib/env";
-import { crossOriginResponse } from "@/lib/http";
+import { crossOriginResponse, withRequestEvent } from "@/lib/http";
 
 const secure = new URL(authEnv.betterAuthUrl).protocol === "https:";
 
@@ -12,7 +12,9 @@ const secure = new URL(authEnv.betterAuthUrl).protocol === "https:";
  * the full 6 months (it caps script-written cookies at 7 days). Same-origin only: another site
  * must not be able to record a choice for a visitor.
  */
-export async function POST(request: Request) {
+export const POST = withRequestEvent({ event: "consent.save", route: "/api/consent" }, save);
+
+async function save(request: Request) {
   const rejected = crossOriginResponse(request);
   if (rejected) return rejected;
   const text = await readCappedText(request, 256);

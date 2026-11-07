@@ -1,40 +1,55 @@
 import { deleteGroup, updateGroup, updateGroupSchema } from "@receipt-ocr/core";
 import { NextResponse } from "next/server";
-import { crossOriginResponse, jsonError, runRoute } from "@/lib/http";
-import { logGroupEvent } from "@/lib/group-log";
+import {
+  annotateCaller,
+  crossOriginResponse,
+  jsonError,
+  runRoute,
+  withRequestEvent,
+} from "@/lib/http";
 import { readJson } from "@/lib/json-body";
+import type { WideEvent } from "@/lib/log";
 import { getActiveScope } from "@/lib/session";
 
 type Params = { params: Promise<{ id: string }> };
 
 /** Renames or recolours a group: its creator, or a workspace owner or admin. */
-export async function PATCH(request: Request, { params }: Params) {
-  const forbidden = crossOriginResponse(request);
-  if (forbidden) return forbidden;
-  const scope = await getActiveScope();
-  if (!scope) return jsonError(401, "Unauthorized");
-  const body = await readJson(request, updateGroupSchema);
-  if ("response" in body) return body.response;
-  const { id } = await params;
-  return runRoute(updateGroup(scope, id, body.data), (group) => {
-    logGroupEvent("group.updated", scope, {
-      groupId: group.id,
+export const PATCH = withRequestEvent(
+  { event: "group.update", route: "/api/groups/[id]" },
+  async (request, { params }: Params, event: WideEvent) => {
+    const forbidden = crossOriginResponse(request);
+    if (forbidden) return forbidden;
+    const scope = await getActiveScope();
+    if (!scope) return jsonError(401, "Unauthorized");
+    annotateCaller(event, { scope });
+    const { id } = await params;
+    event.group_id = id;
+    const body = await readJson(request, updateGroupSchema);
+    if ("response" in body) return body.response;
+    // Which fields changed, never their values.
+    event.flags = {
       renamed: body.data.name !== undefined,
       recoloured: body.data.color !== undefined,
-    });
-    return NextResponse.json({ group });
-  });
-}
+    };
+    return runRoute(
+      updateGroup(scope, id, body.data),
+      (group) => NextResponse.json({ group }),
+      event,
+    );
+  },
+);
 
 /** Deletes a group; its receipts are kept. Creator, owner or admin. */
-export async function DELETE(request: Request, { params }: Params) {
-  const forbidden = crossOriginResponse(request);
-  if (forbidden) return forbidden;
-  const scope = await getActiveScope();
-  if (!scope) return jsonError(401, "Unauthorized");
-  const { id } = await params;
-  return runRoute(deleteGroup(scope, id), () => {
-    logGroupEvent("group.deleted", scope, { groupId: id });
-    return NextResponse.json({ ok: true });
-  });
-}
+export const DELETE = withRequestEvent(
+  { event: "group.delete", route: "/api/groups/[id]" },
+  async (request, { params }: Params, event: WideEvent) => {
+    const forbidden = crossOriginResponse(request);
+    if (forbidden) return forbidden;
+    const scope = await getActiveScope();
+    if (!scope) return jsonError(401, "Unauthorized");
+    annotateCaller(event, { scope });
+    const { id } = await params;
+    event.group_id = id;
+    return runRoute(deleteGroup(scope, id), () => NextResponse.json({ ok: true }), event);
+  },
+);

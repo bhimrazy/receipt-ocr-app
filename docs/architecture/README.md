@@ -101,19 +101,19 @@ flowchart TD
 
 ## Terms used in these pages
 
-| Term             | Meaning                                                                                                                                                           |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace        | A Better Auth **organization**. Receipts belong to a workspace; every member can read them. Every user gets a personal one.                                       |
-| Workspace role   | `member.role`: exactly one of `owner`, `admin` or `member` (enforced by `assertWorkspaceRole`). Decides who may edit or delete receipts and manage members.       |
-| Platform admin   | A user with `user.role = 'admin'` (Better Auth admin plugin). Sees `/admin`. Unrelated to the workspace role.                                                     |
-| Scope            | `{ organizationId, userId, role }` for one request, resolved through `member` on every request.                                                                   |
-| Round            | One upload or one retry of a receipt. `receipts.attempts` counts them; each gets an `ocr_rounds` row.                                                             |
-| Call             | One model call inside a round. Each gets an `ocr_calls` row with tokens, latency and cost.                                                                        |
-| Chain            | The ordered list of models an admin configured. The first that works reads the receipt; the rest are fallbacks.                                                   |
-| Usage ledger     | `ocr_rounds` + `ocr_calls`. Append-only; quota and cost are counted from it, never from `receipts`.                                                               |
-| Wide event       | One JSON log line per request (or background run) holding everything about it: ids, timings, model, cost, outcome. See [`lib/log.ts`](../../apps/web/lib/log.ts). |
-| Advisory lock    | A Postgres lock on a number, not a row (`pg_advisory_xact_lock`). Used per user so one user's quota checks run one at a time; released at commit.                 |
-| Instant / queued | The two upload modes: read in the request, or respond `202` and read after the response.                                                                          |
+| Term             | Meaning                                                                                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Workspace        | A Better Auth **organization**. Receipts belong to a workspace; every member can read them. Every user gets a personal one.                                                                      |
+| Workspace role   | `member.role`: exactly one of `owner`, `admin` or `member` (enforced by `assertWorkspaceRole`). Decides who may edit or delete receipts and manage members.                                      |
+| Platform admin   | A user with `user.role = 'admin'` (Better Auth admin plugin). Sees `/admin`. Unrelated to the workspace role.                                                                                    |
+| Scope            | `{ organizationId, userId, role }` for one request, resolved through `member` on every request.                                                                                                  |
+| Round            | One upload or one retry of a receipt. `receipts.attempts` counts them; each gets an `ocr_rounds` row.                                                                                            |
+| Call             | One model call inside a round. Each gets an `ocr_calls` row with tokens, latency and cost.                                                                                                       |
+| Chain            | The ordered list of models an admin configured. The first that works reads the receipt; the rest are fallbacks.                                                                                  |
+| Usage ledger     | `ocr_rounds` + `ocr_calls`. Append-only; quota and cost are counted from it, never from `receipts`.                                                                                              |
+| Wide event       | One JSON log line per unit of work (request, page render, job attempt, queue tick) holding everything about it: ids, timings, model, cost, outcome. See [Observability](flows/observability.md). |
+| Advisory lock    | A Postgres lock on a number, not a row (`pg_advisory_xact_lock`). Used per user so one user's quota checks run one at a time; released at commit.                                                |
+| Instant / queued | The two upload modes: read in the request, or respond `202` and read after the response.                                                                                                         |
 
 ## Reading order
 
@@ -130,6 +130,7 @@ flowchart TD
 - [Sign-up, sign-in and invitations](flows/auth.md)
 - [Retry](flows/retry.md) and the attempt guard
 - [Background jobs](flows/jobs.md): the Postgres queue, leases, retries and cooldowns
+- [Observability](flows/observability.md): wide events, the schema allowlist and sampling
 - [Admin actions and the audit log](flows/admin-actions.md)
 - [Admin operations and jobs](flows/admin-operations.md): charts, their sources, and the job actions
 - [Settings cache](flows/settings-cache.md)
@@ -166,15 +167,15 @@ several of them is in the [security audit](../reviews/2026-11-06-security-audit.
 
 ## What is planned, not built
 
-| Planned                                     | Today                                                                                   | Plan                                                                                                                                                                                        |
-| ------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker app and cron drain for the job queue | The [job queue](flows/jobs.md) is run by the upload, retry and poll routes in `after()` | [Durable background jobs](../plans/2026-11-06-jobs-queue.md), Tracks B to D; also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
-| Observability (Axiom logs, PostHog, Sentry) | One JSON wide event per request on stdout                                               | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
-| Usage screens for customers and admins      | Rollup queries exist in `usage.ts`; only the daily meter is shown                       | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                                         |
-| Passkeys and two-factor                     | Email/password and OAuth only                                                           | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
-| Second AI provider                          | Google Gemini and the offline fixture                                                   | [AI usage and models](../plans/2026-11-06-ai-usage-models.md)                                                                                                                               |
-| Seats and per-workspace quota               | Quota is per user per UTC day                                                           | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                                              |
-| Home currency and FX conversion             | Amounts `numeric(12,2)`, currency defaults to USD, no conversion                        | [Currencies and FX](../plans/2026-11-06-currencies-fx.md)                                                                                                                                   |
+| Planned                                     | Today                                                                                     | Plan                                                                                                                                                                                        |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker app and cron drain for the job queue | The [job queue](flows/jobs.md) is run by the upload, retry and poll routes in `after()`   | [Durable background jobs](../plans/2026-11-06-jobs-queue.md), Tracks B to D; also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
+| OTLP export (Axiom), PostHog, Sentry        | One [wide event](flows/observability.md) per unit of work on stdout, through an allowlist | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
+| Usage screens for customers and admins      | Rollup queries exist in `usage.ts`; only the daily meter is shown                         | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                                         |
+| Passkeys and two-factor                     | Email/password and OAuth only                                                             | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
+| Second AI provider                          | Google Gemini and the offline fixture                                                     | [AI usage and models](../plans/2026-11-06-ai-usage-models.md)                                                                                                                               |
+| Seats and per-workspace quota               | Quota is per user per UTC day                                                             | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                                              |
+| Home currency and FX conversion             | Amounts `numeric(12,2)`, currency defaults to USD, no conversion                          | [Currencies and FX](../plans/2026-11-06-currencies-fx.md)                                                                                                                                   |
 
 ## Keeping this current
 
