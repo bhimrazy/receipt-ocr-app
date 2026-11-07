@@ -307,19 +307,32 @@ Add both to **Production** only.
 3. Widget mode: **Managed**. Pre-clearance: **No**.
 4. **Create**, then copy the **Site key** and **Secret key**.
 
-For Preview, either leave Turnstile out or use Cloudflare's
-[test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
-
 More help: [Get started](https://developers.cloudflare.com/turnstile/get-started/).
 
 </details>
+
+**Production**
 
 | Key                              | Example       | Kind   |
 | -------------------------------- | ------------- | ------ |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | `0x4AAAAAAA…` | Config |
 | `TURNSTILE_SECRET_KEY`           | `0x4AAAAAAA…` | Secret |
 
-Add **both or neither**: with only one, the app refuses to start.
+**Preview: use Cloudflare's [test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/), not a
+second widget.** A real widget only passes on the hostnames listed in it, and every pull-request preview has a new
+random address. The test keys always pass on any host, so previews still run the whole Turnstile flow. Previews sit
+behind Vercel Deployment Protection, so bots can't reach them anyway.
+
+| Key                              | Value                                 | Kind   |
+| -------------------------------- | ------------------------------------- | ------ |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | `1x00000000000000000000AA`            | Config |
+| `TURNSTILE_SECRET_KEY`           | `1x0000000000000000000000000000000AA` | Secret |
+| `TURNSTILE_ALLOWED_HOSTNAMES`    | `example.com`                         | Config |
+
+The test keys report the hostname `example.com`, and the app checks the hostname, so Preview needs that third
+variable. Never use the test keys in Production: they let every request through.
+
+Add **both keys or neither** in each environment: with only one, the app refuses to start.
 
 **Check:** the sign-up page loads, and signing up still works.
 
@@ -377,7 +390,7 @@ land in the production bucket, and a leaked preview key reaches production. In V
 | `OCR_DAILY_CAP`                | `50`                                                                  | Config | Already set                                   |
 
 Leave out for Preview: `BETTER_AUTH_URL` (previews use their own address), the Google and GitHub sign-in keys
-(callback URLs can't match random preview addresses), and Turnstile (or use Cloudflare's test keys). Previews are
+(callback URLs can't match random preview addresses). For Turnstile, use the test keys in [step 6](#6-bot-protection-turnstile). Previews are
 behind Vercel Deployment Protection, so only the team can open them.
 
 ---
