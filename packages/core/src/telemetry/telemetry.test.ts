@@ -2,7 +2,7 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DbError, OcrError } from "../errors";
 import { annotateEvent, withWideEvent } from "./current";
-import { formatEvent, levelOf, WideEventLoggerLive } from "./logger";
+import { formatEvent, levelOf, logger, WideEventLoggerLive } from "./logger";
 import { errorFields, sanitize } from "./redact";
 import { alwaysKeepReason, sampleDecision, samplingFromEnv } from "./sampling";
 import type { WideEvent } from "./schema";
@@ -194,6 +194,80 @@ describe("sanitize against adversarial input", () => {
   });
 });
 
+describe("sanitize: ids, prototype keys and failures", () => {
+  const UUID = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
+  it("accepts only UUIDs for receipt, group, job and request ids; Better Auth ids stay opaque", () => {
+    const { fields, dropped } = sanitize({
+      event: "x",
+      receipt_id: UUID,
+      group_id: "Groceries",
+      job_id: "j1",
+      request_id: `${UUID}x`,
+      user_id: "aBc123XyZ",
+      organization_id: "org_9f8e",
+    });
+    expect(fields).toEqual({
+      event: "x",
+      receipt_id: UUID,
+      user_id: "aBc123XyZ",
+      organization_id: "org_9f8e",
+    });
+    expect(dropped).toEqual(["group_id", "job_id", "request_id"]);
+  });
+
+  it("treats constructor, toString and __proto__ as unknown keys, at the top and in groups and maps", () => {
+    const input = JSON.parse(
+      `{"event":"x","constructor":"a","toString":"b","__proto__":{"user_id":"u"},` +
+        `"ocr":{"constructor":1,"hasOwnProperty":2,"model":"m"},` +
+        `"counts":{"__proto__":1,"constructor":2,"prototype":3,"n":4},` +
+        `"flags":{"__proto__":"x","ok":true}}`,
+    );
+    const { fields, dropped } = sanitize(input);
+    expect(fields).toEqual({
+      event: "x",
+      ocr: { model: "m" },
+      counts: { n: 4 },
+      flags: { ok: true },
+    });
+    expect(Object.getPrototypeOf(fields.counts)).toBe(Object.prototype);
+    expect(dropped).toEqual(
+      expect.arrayContaining(["constructor", "toString", "__proto__", "ocr.constructor"]),
+    );
+  });
+
+  it("errorFields survives a throwing _tag getter", () => {
+    const hostile = {
+      get _tag(): string {
+        throw new Error("jane@example.com");
+      },
+    };
+    expect(errorFields(hostile)).toEqual({ type: "Unreadable" });
+    const proxy = new Proxy(
+      {},
+      {
+        has: () => {
+          throw new Error("x");
+        },
+      },
+    );
+    expect(errorFields(proxy)).toEqual({ type: "Unreadable" });
+  });
+
+  it("logger.emit never throws, even for an event whose getters throw", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const event = {
+      event: "x",
+      get user_id(): string {
+        throw new Error("boom");
+      },
+    };
+    expect(() => logger.emit(event)).not.toThrow();
+    expect(String(error.mock.calls[0]?.[0])).toContain('"event":"log.failed"');
+    error.mockRestore();
+  });
+});
+
 describe("errorFields", () => {
   it("describes a typed error by tag, kind, cause class and SQLSTATE, never its message", () => {
     const cause = Object.assign(new Error("params: jane@example.com"), { code: "23505" });
@@ -222,12 +296,22 @@ describe("sampling", () => {
 
   it("keeps errors, slow work and model calls at any rate", () => {
     expect(alwaysKeepReason({ ...fast, status_code: 500 }, config)).toBe("error");
-    expect(alwaysKeepReason({ ...fast, status_code: 401 }, config)).toBe("error");
+    expect(alwaysKeepReason({ ...fast, status_code: 403 }, config)).toBe("error");
     expect(alwaysKeepReason({ ...fast, error: { type: "Defect" } }, config)).toBe("error");
     expect(alwaysKeepReason({ ...fast, level: "error" }, config)).toBe("error");
     expect(alwaysKeepReason({ ...fast, duration_ms: 1000 }, config)).toBe("slow");
     expect(alwaysKeepReason({ ...fast, ocr: { calls: 1 } }, config)).toBe("model_call");
     expect(alwaysKeepReason(fast, config)).toBeNull();
+    // Floods and signed-out polls are routine; real errors are not.
+    expect(alwaysKeepReason({ ...fast, status_code: 429 }, config)).toBeNull();
+    expect(alwaysKeepReason({ ...fast, status_code: 401 }, config)).toBeNull();
+    expect(alwaysKeepReason({ ...fast, status_code: 429, error: { type: "X" } }, config)).toBe(
+      "error",
+    );
+    expect(sampleDecision({ ...fast, status_code: 429 }, true, config, () => 0.5)).toEqual({
+      keep: false,
+      rate: 0.1,
+    });
     expect(sampleDecision({ ...fast, status_code: 500 }, true, config, () => 0.99)).toEqual({
       keep: true,
       rate: 1,
@@ -256,7 +340,12 @@ describe("formatEvent", () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it("writes stable leading keys, an ISO timestamp and the deployment fields", () => {
-    const out = formatEvent({ event: "job.attempt", outcome: "dead", job_id: "j1", note: "x" });
+    const out = formatEvent({
+      event: "job.attempt",
+      outcome: "dead",
+      job_id: "00000000-0000-4000-8000-0000000000a1",
+      note: "x",
+    });
     expect(out?.level).toBe("error");
     const line = JSON.parse(out!.line);
     expect(Object.keys(line).slice(0, 8)).toEqual([
@@ -270,7 +359,11 @@ describe("formatEvent", () => {
       "instance",
     ]);
     expect(new Date(line.timestamp).toISOString()).toBe(line.timestamp);
-    expect(line).toMatchObject({ event: "job.attempt", job_id: "j1", dropped_fields: ["note"] });
+    expect(line).toMatchObject({
+      event: "job.attempt",
+      job_id: "00000000-0000-4000-8000-0000000000a1",
+      dropped_fields: ["note"],
+    });
   });
 
   it("marks sampled routine lines with their rate and drops the rest", () => {

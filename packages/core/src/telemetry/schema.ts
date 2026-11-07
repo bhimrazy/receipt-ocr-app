@@ -21,7 +21,8 @@
  */
 
 /**
- * - `id`: an opaque id (uuid, Better Auth id, worker id). No `@`, no spaces.
+ * - `uuid`: a UUID (receipt, group, job and request ids).
+ * - `id`: an opaque id (Better Auth user and workspace ids, worker id). No `@`, no spaces.
  * - `token`: a short code from our own vocabulary (outcome, kind, model id, plan).
  * - `route`: a route pattern or path; any query string or hash is cut off.
  * - `int` / `number` / `bool`: as named; non-finite numbers are dropped.
@@ -32,6 +33,7 @@
  * - `list`: a short list of objects with one schema.
  */
 export type FieldKind =
+  | "uuid"
   | "id"
   | "token"
   | "route"
@@ -70,7 +72,7 @@ export const EVENT_SCHEMA = {
   outcome: "token",
 
   // Request
-  request_id: "id",
+  request_id: "uuid",
   route: "route",
   method: "token",
   status_code: "int",
@@ -82,10 +84,10 @@ export const EVENT_SCHEMA = {
   user_id: "id",
   organization_id: "id",
   impersonated_by: "id",
-  receipt_id: "id",
+  receipt_id: "uuid",
   /** A receipt group. Never its name or colour: names are user text. */
-  group_id: "id",
-  job_id: "id",
+  group_id: "uuid",
+  job_id: "uuid",
   /** Attempt of the job (1-based), out of `max_attempts`. */
   attempt: "int",
   max_attempts: "int",
@@ -174,7 +176,7 @@ export const EVENT_SCHEMA = {
   violations: { list: { directive: "token", blocked: "token" } },
 } as const satisfies FieldSpec;
 
-type ValueOf<K> = K extends "id" | "token" | "route"
+type ValueOf<K> = K extends "uuid" | "id" | "token" | "route"
   ? string
   : K extends "int" | "number"
     ? number

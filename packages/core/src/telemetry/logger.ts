@@ -88,11 +88,26 @@ export function formatEvent(
   return { level, line };
 }
 
+/** Never throws: logging must not break the request or job it describes. */
 function emit(event: LogInput, options?: EmitOptions) {
-  const formatted = formatEvent(event, options);
-  if (!formatted) return;
-  if (formatted.level === "error") console.error(formatted.line);
-  else console.info(formatted.line);
+  try {
+    const formatted = formatEvent(event, options);
+    if (!formatted) return;
+    if (formatted.level === "error") console.error(formatted.line);
+    else console.info(formatted.line);
+  } catch {
+    try {
+      console.error(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: "error",
+          event: "log.failed",
+        }),
+      );
+    } catch {
+      // Nothing left to report with.
+    }
+  }
 }
 
 export const logger = {

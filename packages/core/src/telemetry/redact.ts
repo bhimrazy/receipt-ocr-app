@@ -1,3 +1,4 @@
+import { isUuid } from "../ids";
 import { EVENT_SCHEMA, type ErrorFields, type FieldKind, type FieldSpec } from "./schema";
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
@@ -6,6 +7,8 @@ const TOKEN = /^[A-Za-z0-9_.:/[\]+-]{1,100}$/;
 const ROUTE = /^\/[A-Za-z0-9_.:/[\]~-]{0,200}$/;
 const MAX_ITEMS = 20;
 const MAX_KEYS = 32;
+/** Map keys that would touch the prototype of the output object. */
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" &&
@@ -20,6 +23,8 @@ const DROP = Symbol("drop");
 
 function clean(kind: FieldKind, value: unknown, path: string, dropped: string[]): unknown {
   switch (kind) {
+    case "uuid":
+      return typeof value === "string" && isUuid(value) ? value : DROP;
     case "id":
       return typeof value === "string" && ID.test(value) ? value : DROP;
     case "token":
@@ -47,6 +52,7 @@ function clean(kind: FieldKind, value: unknown, path: string, dropped: string[])
       for (const [key, v] of Object.entries(value).slice(0, MAX_KEYS)) {
         const ok =
           token(key) !== undefined &&
+          !UNSAFE_KEYS.has(key) &&
           (kind === "number_map"
             ? typeof v === "number" && Number.isFinite(v)
             : (typeof v === "number" && Number.isFinite(v)) ||
@@ -81,7 +87,8 @@ function sanitizeWith(
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
     if (value === undefined || value === null) continue;
-    const kind = spec[key];
+    // Own keys only: `constructor`, `toString` and `__proto__` are not schema fields.
+    const kind = Object.hasOwn(spec, key) ? spec[key] : undefined;
     // The key itself is code, but keep it out if it doesn't look like one.
     const path = `${prefix}${token(key) ?? "?"}`;
     if (!kind) {
@@ -129,14 +136,19 @@ const className = (error: unknown) =>
  * `params:`.
  */
 export function errorFields(error: unknown): ErrorFields {
-  if (error && typeof error === "object" && "_tag" in error && typeof error._tag === "string") {
-    const tagged = error as { _tag: string; kind?: unknown; cause?: unknown };
-    return {
-      type: token(tagged._tag),
-      kind: token(tagged.kind),
-      class: tagged.cause === undefined ? undefined : className(tagged.cause),
-      code: sqlState(tagged.cause),
-    };
+  try {
+    if (error && typeof error === "object" && "_tag" in error && typeof error._tag === "string") {
+      const tagged = error as { _tag: string; kind?: unknown; cause?: unknown };
+      return {
+        type: token(tagged._tag),
+        kind: token(tagged.kind),
+        class: tagged.cause === undefined ? undefined : className(tagged.cause),
+        code: sqlState(tagged.cause),
+      };
+    }
+    return { class: className(error), code: sqlState(error) };
+  } catch {
+    // A hostile or broken error (a throwing getter, a revoked proxy) still gets logged as one.
+    return { type: "Unreadable" };
   }
-  return { class: className(error), code: sqlState(error) };
 }

@@ -8,13 +8,13 @@ import { JobQueue } from "./queue";
 import { resetTickMarks, tick } from "./runner";
 
 const JOB: Job = {
-  id: "job-1",
+  id: "00000000-0000-4000-8000-0000000000a1",
   kind: "test.kind",
   state: "running",
   priority: 0,
   payload: { n: 1 },
   idempotencyKey: null,
-  receiptId: "rcpt-1",
+  receiptId: "00000000-0000-4000-8000-0000000000b1",
   organizationId: "org-1",
   userId: "user-1",
   attempts: 1,
@@ -73,7 +73,7 @@ const runTick = (run: () => Effect.Effect<unknown, JobFailure>, ids?: string[], 
       stopClaimingBeforeMs: 0,
       waitForRetries: false,
       ids,
-      context: { request_id: "req-1", trigger: "upload" },
+      context: { request_id: "00000000-0000-4000-8000-0000000000c1", trigger: "upload" },
     }).pipe(Effect.provide(Layer.merge(fakeQueue(jobs), WideEventLoggerLive))),
   );
 
@@ -84,17 +84,17 @@ describe("job.attempt events", () => {
         annotateEvent({ round: 1, ocr: { model: "fixture", calls: 1, tokens_in: 10 } }).pipe(
           Effect.as({ ok: true }),
         ),
-      ["job-1"],
+      ["00000000-0000-4000-8000-0000000000a1"],
     );
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatchObject({
       level: "info",
       event: "job.attempt",
       unit: "job_attempt",
-      request_id: "req-1",
+      request_id: "00000000-0000-4000-8000-0000000000c1",
       trigger: "upload",
-      job_id: "job-1",
-      receipt_id: "rcpt-1",
+      job_id: "00000000-0000-4000-8000-0000000000a1",
+      receipt_id: "00000000-0000-4000-8000-0000000000b1",
       user_id: "user-1",
       organization_id: "org-1",
       attempt: 1,
@@ -110,7 +110,10 @@ describe("job.attempt events", () => {
   });
 
   it("records a retry with its error kind and when it runs next", async () => {
-    await runTick(() => Effect.fail(new RetryableJobError({ kind: "rate-limited" })), ["job-1"]);
+    await runTick(
+      () => Effect.fail(new RetryableJobError({ kind: "rate-limited" })),
+      ["00000000-0000-4000-8000-0000000000a1"],
+    );
     expect(lines[0]).toMatchObject({
       level: "info",
       outcome: "retry",
@@ -126,7 +129,7 @@ describe("job.attempt events", () => {
         Effect.sync(() => {
           throw new TypeError("TOTAL 9.50 at Jane Doe Pharmacy");
         }),
-      ["job-1"],
+      ["00000000-0000-4000-8000-0000000000a1"],
     );
     expect(lines[0]).toMatchObject({
       level: "error",
@@ -139,12 +142,15 @@ describe("job.attempt events", () => {
 
 describe("job.tick events", () => {
   it("summarises an unfiltered tick", async () => {
-    await runTick(() => Effect.succeed(null), undefined, [JOB, { ...JOB, id: "job-2" }]);
+    await runTick(() => Effect.succeed(null), undefined, [
+      JOB,
+      { ...JOB, id: "00000000-0000-4000-8000-0000000000a2" },
+    ]);
     const summary = lines.find((line) => line.event === "job.tick");
     expect(lines.filter((line) => line.event === "job.attempt")).toHaveLength(2);
     expect(summary).toMatchObject({
       unit: "job_tick",
-      request_id: "req-1",
+      request_id: "00000000-0000-4000-8000-0000000000c1",
       outcome: "ran",
       tick: { claimed: 2, succeeded: 2, reaped: 0, idle: false },
     });
@@ -158,7 +164,7 @@ describe("job.tick events", () => {
     await runTick(() => Effect.succeed(null), undefined, []);
     expect(lines[0]).toMatchObject({ event: "job.tick", outcome: "idle", tick: { idle: true } });
     lines = [];
-    await runTick(() => Effect.succeed(null), ["job-1"]);
+    await runTick(() => Effect.succeed(null), ["00000000-0000-4000-8000-0000000000a1"]);
     expect(lines.map((line) => line.event)).toEqual(["job.attempt"]);
   });
 });
