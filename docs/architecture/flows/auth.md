@@ -210,11 +210,18 @@ sequenceDiagram
   BA-->>B: "Verification email sent", Settings says check your email
   B->>B: open the link (signs in first if needed), press Delete
   B->>BA: deleteUser({ token })
+  BA->>H: hooks.before: still the only owner of a shared workspace? then 400, token kept
   BA->>DB: consume the token (gone even if the next steps refuse)
   BA->>H: beforeDelete: deleteOwnData
   BA->>DB: delete user, sessions, accounts
   BA->>H: afterDelete: log user.deleted
+  BA-->>B: session cookie cleared; the page loads /account-deleted
 ```
+
+- A user who is the only owner of a workspace with other members can't delete the account until another member is
+  an owner. Settings shows which workspaces and disables the button (`workspacesBlockingDeletion` in core), no link
+  is emailed (`sendDeleteAccountVerification` refuses), and a link sent earlier is checked before Better Auth spends
+  it. `prepareUserDeletion` still re-checks under lock.
 
 - The link opens our page rather than Better Auth's `GET /delete-user/callback`, which `hooks.before` answers with
   404 (it would delete on one navigation). So nothing is deleted by a mail scanner or a click alone, and a signed-out user is sent to sign in and back. The token must match the signed-in

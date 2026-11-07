@@ -5,6 +5,7 @@ import {
   ensurePersonalWorkspace,
   policyFor,
   prepareUserDeletion,
+  workspacesBlockingDeletion,
   purgeReceiptFiles,
   releaseMemberGroups,
   userPlan,
@@ -24,6 +25,7 @@ import {
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { deleteSessionCookie } from "better-auth/cookies";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
 import { captcha } from "better-auth/plugins/captcha";
@@ -48,9 +50,11 @@ import {
   DELETE_TOKEN_SECONDS,
   FRESH_AGE_SECONDS,
   SESSION_NOT_FRESH,
+  WORKSPACE_NEEDS_OWNER,
   deleteConfirmUrl,
   isSessionFresh,
   needsFreshSession,
+  soleOwnerMessage,
 } from "./step-up";
 
 export { authEnabled };
@@ -170,7 +174,10 @@ export async function deleteOwnData(userId: string) {
     return exit.value;
   }
   const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
-  if (failure?._tag === "Conflict") throw new APIError("BAD_REQUEST", { message: failure.message });
+  if (failure?._tag === "Conflict") {
+    // Core's message is worded for admins; name the workspaces for the user instead.
+    throw soleOwnerError(await blockingNames(userId).catch(() => []), "request a new link");
+  }
   throw new Error("Could not delete the user's workspaces", { cause: exit.cause });
 }
 
@@ -178,6 +185,17 @@ export async function deleteOwnData(userId: string) {
 const VERIFY_LINK_SECONDS = 60 * 60;
 const RESET_LINK_SECONDS = 60 * 60;
 const INVITATION_SECONDS = 60 * 60 * 24 * 7;
+
+/** Shared workspaces only this user owns, by name: deletion is refused while there are any. */
+const blockingNames = async (userId: string) =>
+  (await runtime.runPromise(workspacesBlockingDeletion(userId))).map((w) => w.name);
+
+/** Settings checks this before offering deletion; the server checks again on every step. */
+const soleOwnerError = (names: string[], then: string) =>
+  new APIError("BAD_REQUEST", {
+    code: WORKSPACE_NEEDS_OWNER,
+    message: soleOwnerMessage(names, then),
+  });
 
 export const auth = betterAuth({
   appName: "receiptOCR",
@@ -260,6 +278,14 @@ export const auth = betterAuth({
     before: createAuthMiddleware(async (ctx) => {
       // Deletes on a single GET; our confirm page posts the token to /delete-user instead.
       if (ctx.path === "/delete-user/callback") throw new APIError("NOT_FOUND");
+      if (ctx.path === "/delete-user" && !needsFreshSession(ctx.path, ctx.body)) {
+        // Better Auth spends the token before beforeDelete can refuse; check first so it survives.
+        const current = await getSessionFromCtx(ctx);
+        if (!current) return;
+        const names = await blockingNames(current.user.id);
+        if (names.length > 0) throw soleOwnerError(names, "open this link again");
+        return;
+      }
       if (!needsFreshSession(ctx.path, ctx.body)) return;
       const current = await getSessionFromCtx(ctx);
       // No session: the endpoint itself answers 401.
@@ -269,6 +295,13 @@ export const auth = betterAuth({
         // so capping only real sends would answer 429 for a free address and 200 for a taken one.
         if (ctx.path === "/change-email")
           await limitSignedInEmail("change-email", current.user.email);
+        if (ctx.path === "/delete-user") {
+          // Here, not in sendDeleteAccountVerification: Better Auth 1.7.18 logs and drops errors
+          // thrown there, so the user would be told "check your email" for nothing.
+          const names = await blockingNames(current.user.id);
+          if (names.length > 0) throw soleOwnerError(names, "try again");
+          await limitSignedInEmail("delete-account", current.user.email);
+        }
         return;
       }
       logger.info({
@@ -283,9 +316,16 @@ export const auth = betterAuth({
       });
     }),
     after: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== "/change-password" && ctx.path !== "/admin/set-user-password") return;
-      const returned = ctx.context.returned as { user?: { id: string; email: string } } | undefined;
+      const returned = ctx.context.returned as
+        { user?: { id: string; email: string }; message?: string } | undefined;
       if (!returned || isAPIError(returned)) return;
+      if (ctx.path === "/delete-user" && returned.message === "User deleted") {
+        // The token path deletes inside a nested call whose cookie changes never reach the
+        // response, so the browser would keep a dead session cookie.
+        deleteSessionCookie(ctx);
+        return;
+      }
+      if (ctx.path !== "/change-password" && ctx.path !== "/admin/set-user-password") return;
       if (ctx.path === "/change-password") {
         if (returned.user) await notifyPasswordChanged(returned.user, "change");
         return;
@@ -306,8 +346,8 @@ export const auth = betterAuth({
       // With this set, /delete-user only emails a link; the account goes when that link's token
       // is posted back (single use, consumed before beforeDelete runs).
       deleteTokenExpiresIn: DELETE_TOKEN_SECONDS,
+      // The sole-owner check and the per-address cap run in hooks.before.
       sendDeleteAccountVerification: async ({ user, url, token }) => {
-        await limitSignedInEmail("delete-account", user.email);
         await deliver({
           to: user.email,
           ...deleteAccountEmail(emailContext, {

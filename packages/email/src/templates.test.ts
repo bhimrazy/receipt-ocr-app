@@ -278,7 +278,7 @@ describe("supportMessageEmail", () => {
 });
 
 describe("security notices", () => {
-  it("delete confirmation: red button, single-use link with a one-hour expiry", () => {
+  it("delete confirmation: red button, single-use link, nothing changes until confirmed on the page", () => {
     const delUrl = "https://app.example/app/settings/delete-account?token=abc";
     const mail = deleteAccountEmail(withSupport, { url: delUrl, expiresInSeconds: hour });
     expect(mail.subject).toBe("Confirm deleting your receiptOCR account");
@@ -286,6 +286,8 @@ describe("security notices", () => {
     expect(mail.html).toMatch(/background-color:rgb\(185,28,28\)[^>]*>[\s\S]*?Delete my account/);
     expect(mail.text).toContain(delUrl);
     expect(mail.text).toMatch(/works once and expires in 1 hour/);
+    expect(mail.text).toMatch(/within 1 hour and confirm on the page it opens/);
+    expect(mail.text).toContain("Until then, nothing changes.");
   });
 
   it("password changed: points at the reset page and the support inbox", () => {

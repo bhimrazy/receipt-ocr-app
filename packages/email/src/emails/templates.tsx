@@ -202,8 +202,7 @@ const deleteAccount: EmailDefinition = {
   slots: ["url", "urlLabel", "expiry"],
   render(v, shared) {
     const heading = "Confirm deleting your account";
-    const body =
-      "Someone signed in to your account asked to delete it. This permanently deletes the account, its workspaces and every receipt in them. It can't be undone.";
+    const body = `Someone signed in to your account asked to delete it. Open this link within ${v.expiry} and confirm on the page it opens to permanently delete the account, its workspaces and every receipt in them. Until then, nothing changes.`;
     const expiry = `The link works once and expires in ${v.expiry}.`;
     const note =
       "Wasn't you? Don't open the link. Change your password, or the password of the Google or GitHub account you sign in with, because someone else can use your account.";

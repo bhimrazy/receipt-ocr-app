@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@receipt-ocr/ui/components/dialog";
-import { Field, FieldLabel } from "@receipt-ocr/ui/components/field";
+import { Field, FieldError, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -82,20 +82,23 @@ function ReauthBody({
   const turnstile = useTurnstile();
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState<"password" | SocialProvider | null>(null);
+  /** Errors of the password form, shown with the field; `error` is for provider sign-in. */
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function withPassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setError(null);
     if (!password) {
-      setError("Enter your password.");
+      setFieldError("Enter your password.");
       return;
     }
     if (turnstile.blocker) {
-      if (!turnstile.broken) setError(turnstile.blocker);
+      if (!turnstile.broken) setFieldError(turnstile.blocker);
       return;
     }
     setPending("password");
-    setError(null);
+    setFieldError(null);
     const { error: signInError } = await authClient.signIn.email({
       email,
       password,
@@ -104,7 +107,12 @@ function ReauthBody({
     turnstile.reset();
     setPending(null);
     if (signInError) {
-      setError(authErrorMessage(signInError));
+      // The email is the signed-in one, so a mismatch can only be the password.
+      setFieldError(
+        signInError.code === "INVALID_EMAIL_OR_PASSWORD"
+          ? "That password is not correct."
+          : authErrorMessage(signInError),
+      );
       return;
     }
     await onConfirmed();
@@ -113,6 +121,7 @@ function ReauthBody({
   async function withProvider(provider: SocialProvider) {
     setPending(provider);
     setError(null);
+    setFieldError(null);
     const { error: signInError } = await authClient.signIn.social({
       provider,
       callbackURL: returnTo,
@@ -136,11 +145,11 @@ function ReauthBody({
       </DialogHeader>
       {methods.password ? (
         <form className="flex flex-col gap-3" noValidate onSubmit={withPassword}>
-          <Field>
+          <Field data-invalid={fieldError ? true : undefined}>
             <FieldLabel htmlFor="reauth-password">Password for {email}</FieldLabel>
             <Input
-              aria-describedby={error ? "reauth-error" : undefined}
-              aria-invalid={error ? true : undefined}
+              aria-describedby={fieldError ? "reauth-password-error" : undefined}
+              aria-invalid={fieldError ? true : undefined}
               autoComplete="current-password"
               autoFocus
               id="reauth-password"
@@ -149,6 +158,7 @@ function ReauthBody({
               type="password"
               value={password}
             />
+            {fieldError ? <FieldError id="reauth-password-error">{fieldError}</FieldError> : null}
           </Field>
           <Turnstile controller={turnstile} />
           <Button aria-busy={turnstile.pending} disabled={busy} type="submit">

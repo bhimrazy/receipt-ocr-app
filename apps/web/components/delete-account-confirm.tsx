@@ -10,56 +10,52 @@ import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
 import { clearSharedFiles } from "@/lib/share-target";
 import { clearSignedInHint } from "@/lib/signed-in-hint";
+import { WORKSPACE_NEEDS_OWNER } from "@/lib/step-up";
 
-const LINK_INVALID =
-  "This link has expired or was already used. Request a new one from Settings to delete your account.";
+const LINK_INVALID = "This link has expired or was already used.";
+
+/** Opens the delete dialog in Settings again (`?resume=` is read by account-settings.tsx). */
+const REQUEST_AGAIN = "/app/settings?resume=delete-account";
 
 /** Posts the emailed token back to Better Auth's /delete-user, which consumes it and deletes. */
 export function DeleteAccountConfirm({ token }: { token: string | null }) {
   const [pending, setPending] = useState(false);
-  const [deleted, setDeleted] = useState(false);
-  const [spent, setSpent] = useState(false);
-  const [error, setError] = useState<string | null>(token ? null : LINK_INVALID);
+  // The token is spent once tried, even when the deletion is then refused.
+  const [spent, setSpent] = useState<string | null>(token ? null : LINK_INVALID);
+  const [error, setError] = useState<string | null>(null);
 
   async function confirm() {
     if (!token) return;
     setPending(true);
     setError(null);
     const { error: deleteError } = await authClient.deleteUser({ token });
-    setPending(false);
     if (deleteError) {
-      // The token is used up even when the deletion is then refused (a shared workspace).
-      if (deleteError.status === 429) {
+      setPending(false);
+      // Rate limits and a workspace that still needs another owner leave the link usable.
+      if (deleteError.status === 429 || deleteError.code === WORKSPACE_NEEDS_OWNER)
         setError(authErrorMessage(deleteError));
-        return;
-      }
-      setSpent(true);
-      setError(
-        deleteError.code === "INVALID_TOKEN"
-          ? LINK_INVALID
-          : `${authErrorMessage(deleteError)} Then request a new link from Settings.`,
-      );
+      else
+        setSpent(
+          deleteError.code === "INVALID_TOKEN" ? LINK_INVALID : authErrorMessage(deleteError),
+        );
       return;
     }
     clearSignedInHint();
     await clearSharedFiles();
-    setDeleted(true);
+    // A full load: Better Auth cleared the session cookie, so nothing of the signed-in shell stays.
+    window.location.replace("/account-deleted");
   }
 
-  if (deleted) {
+  if (spent) {
     return (
-      <Card>
-        <CardContent className="flex flex-col gap-3 pt-5">
-          <p className="text-sm" role="status">
-            Your account, your workspaces and their receipts are deleted.
-          </p>
-          <div>
-            <Link className={buttonVariants({ variant: "outline" })} href="/">
-              Go to the home page
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-3">
+        <Alert variant="destructive">{spent}</Alert>
+        <div>
+          <Link className={buttonVariants({ variant: "outline" })} href={REQUEST_AGAIN}>
+            Request a new link
+          </Link>
+        </div>
+      </div>
     );
   }
 
@@ -72,18 +68,16 @@ export function DeleteAccountConfirm({ token }: { token: string | null }) {
         </p>
         {error ? <Alert variant="destructive">{error}</Alert> : null}
         <div className="flex flex-wrap gap-2">
-          {token && !spent ? (
-            <Button disabled={pending} onClick={confirm} variant="destructive">
-              {pending ? (
-                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Trash2 aria-hidden="true" />
-              )}
-              Delete my account
-            </Button>
-          ) : null}
+          <Button disabled={pending} onClick={confirm} variant="destructive">
+            {pending ? (
+              <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <Trash2 aria-hidden="true" />
+            )}
+            Delete my account
+          </Button>
           <Link className={buttonVariants({ variant: "outline" })} href="/app/settings">
-            {token && !spent ? "Keep my account" : "Back to Settings"}
+            Keep my account
           </Link>
         </div>
       </CardContent>

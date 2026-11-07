@@ -3,7 +3,7 @@
  * INTEGRATION=1; run with `bun run --filter @receipt-ocr/web test:int` after `bun run db:migrate`,
  * with DATABASE_URL, BETTER_AUTH_URL and BETTER_AUTH_SECRET set.
  */
-import { createDb, eq, rateLimit, session, sql, user, verification } from "@receipt-ocr/db";
+import { createDb, eq, member, rateLimit, session, sql, user, verification } from "@receipt-ocr/db";
 import type { SendEmailInput } from "@receipt-ocr/email";
 import { APIError } from "better-auth/api";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -164,8 +164,51 @@ describe.skipIf(!enabled)(
       const res = await post("/delete-user", a.cookie, { token });
       expect(res.status).toBe(200);
       expect(await exists(a.id)).toBe(false);
+      // The browser's session cookie is cleared, so the confirm page can leave the app shell.
+      expect(res.headers.getSetCookie().find((c) => c.includes("session_token="))).toMatch(
+        /Max-Age=0/i,
+      );
       const left = await db.select().from(verification).where(eq(verification.value, a.id));
       expect(left).toHaveLength(0);
+    });
+
+    it("a sole owner of a shared workspace gets no link, and a link already sent survives", async () => {
+      const a = await newUser("sole");
+      const other = await newUser("member");
+      const token = await requestDeletion(a);
+      const [own] = await db
+        .select({ organizationId: member.organizationId })
+        .from(member)
+        .where(eq(member.userId, a.id));
+      const memberId = `${tag}-sole-member`;
+      await db.insert(member).values({
+        id: memberId,
+        organizationId: own!.organizationId,
+        userId: other.id,
+        role: "member",
+      });
+
+      const sentBefore = sent.length;
+      expect(
+        await errorOf(
+          auth.api.deleteUser({ headers: new Headers({ cookie: a.cookie }), body: {} }),
+        ),
+      ).toEqual({ status: 400, code: "WORKSPACE_NEEDS_OWNER" });
+      expect(sent.length).toBe(sentBefore);
+
+      const refused = await post("/delete-user", a.cookie, { token });
+      expect(refused.status).toBe(400);
+      const body = (await refused.json()) as { code?: string; message?: string };
+      expect(body.code).toBe("WORKSPACE_NEEDS_OWNER");
+      expect(body.message).toMatch(
+        /^You own .+, which has other members\. Make one of them an owner/,
+      );
+      expect(await exists(a.id)).toBe(true);
+
+      // Once the workspace is theirs alone again, the same link still deletes.
+      await db.delete(member).where(eq(member.id, memberId));
+      expect((await post("/delete-user", a.cookie, { token })).status).toBe(200);
+      expect(await exists(a.id)).toBe(false);
     });
 
     it("a link is single use: once spent (here by another account) it no longer deletes", async () => {
