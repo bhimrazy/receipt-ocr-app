@@ -116,3 +116,7 @@ CI (`.github/workflows/ci.yml`) runs the checks below, which you can run locally
 | `bun run knip`         | Unused files and dependencies                           |
 | `bun run audit`        | `bun audit`, failing on high or critical                |
 | `bun run typecheck`    | `tsc` in every package and in `bench/`                  |
+
+## License
+
+Copyright (c) 2026 Bhimraj Yadav. All rights reserved. Published for viewing only; see [LICENSE](LICENSE).
