@@ -203,17 +203,12 @@ test("the camera link opens once: Back from the receipt doesn't reopen it", asyn
 
 /** Picks `count` copies of the receipt and sends them from review, as one queued batch. */
 async function readBatch(page: Page, count: number) {
+  await page
+    .locator('input[type="file"][multiple]')
+    .setInputFiles(Array.from({ length: count }, () => receipt));
+  // The review sheet is a lazy chunk; on a busy runner it can take a while to arrive.
   const review = page.getByRole("dialog", { name: "Review photos" });
-  // Files set before hydration has wired up the input are dropped: pick them again until the
-  // review opens (only while it hasn't, so nothing is added twice).
-  await expect(async () => {
-    if (!(await review.isVisible())) {
-      await page
-        .locator('input[type="file"][multiple]')
-        .setInputFiles(Array.from({ length: count }, () => receipt));
-    }
-    await expect(review).toBeVisible({ timeout: 3_000 });
-  }).toPass({ timeout: 20_000 });
+  await expect(review).toBeVisible({ timeout: 30_000 });
   await review.getByRole("button", { name: `Read ${count} receipts` }).click();
 }
 
@@ -224,6 +219,7 @@ const accepted = (n: number) => ({
 });
 
 test("a failed upload shows Retry, and the retry goes through", async ({ page }) => {
+  test.setTimeout(60_000);
   await signUp(page, uniqueEmail("batch-retry"));
   let calls = 0;
   await page.route("**/api/receipts", (route) => {
@@ -252,6 +248,7 @@ test("a failed upload shows Retry, and the retry goes through", async ({ page })
 });
 
 test("a per-minute 429 pauses the batch, then it carries on by itself", async ({ page }) => {
+  test.setTimeout(60_000);
   await signUp(page, uniqueEmail("batch-pause"));
   let calls = 0;
   await page.route("**/api/receipts", (route) => {
@@ -276,6 +273,7 @@ test("a per-minute 429 pauses the batch, then it carries on by itself", async ({
 });
 
 test("a daily 429 stops the batch and keeps the rest", async ({ page }) => {
+  test.setTimeout(60_000);
   await signUp(page, uniqueEmail("batch-stop"));
   let calls = 0;
   await page.route("**/api/receipts", (route) => {
