@@ -29,7 +29,19 @@ async function submitCredentials(
   }).toPass({ timeout: 25_000 });
 }
 
+/**
+ * Sign-up is limited to 3 per minute per client IP, and playwright.config.ts gives each worker
+ * one IP. A worker that runs a fourth signing-up test inside a minute is told "Too many attempts"
+ * and the page stays on /sign-up (the flake seen on several PRs). Each sign-up gets its own
+ * address instead. Specs that test the limit itself don't use this helper.
+ */
+async function useFreshClientIp(page: Page) {
+  const ip = `10.${(Math.random() * 255) | 0}.${(Math.random() * 255) | 0}.${(Math.random() * 254 + 1) | 0}`;
+  await page.context().setExtraHTTPHeaders({ "x-forwarded-for": ip });
+}
+
 export async function signUp(page: Page, email: string) {
+  await useFreshClientIp(page);
   await page.goto("/sign-up");
   await submitCredentials(
     page,
