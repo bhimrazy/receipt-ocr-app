@@ -1,4 +1,5 @@
 import { isUuid } from "../ids";
+import { isSecretShaped, REDACTED } from "./secrets";
 import { EVENT_SCHEMA, type ErrorFields, type FieldKind, type FieldSpec } from "./schema";
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
@@ -19,20 +20,42 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 const token = (value: unknown) =>
   typeof value === "string" && TOKEN.test(value) ? value : undefined;
 
+/** A map key that is safe to name in `dropped_fields`: token-shaped and not a secret. */
+const safeKey = (key: string) => {
+  const ok = token(key);
+  return ok !== undefined && !isSecretShaped(ok) ? ok : undefined;
+};
+
 const DROP = Symbol("drop");
 
-function clean(kind: FieldKind, value: unknown, path: string, dropped: string[]): unknown {
+type Sink = { dropped: string[]; redacted: number };
+
+/**
+ * Run on a value the allowlist already accepted (so it is short and the
+ * patterns cannot backtrack on huge input). `id` and `token` are loose enough
+ * to fit API keys, so accepted values are still checked against the denylist.
+ * A 64-hex digest such as a file's sha256 is treated as a secret on purpose:
+ * no field logs one, and a new one should be a `uuid` or a deliberate kind.
+ */
+const screen = (accepted: string, sink: Sink): string => {
+  if (!isSecretShaped(accepted)) return accepted;
+  sink.redacted += 1;
+  return REDACTED;
+};
+
+function clean(kind: FieldKind, value: unknown, path: string, sink: Sink): unknown {
   switch (kind) {
     case "uuid":
       return typeof value === "string" && isUuid(value) ? value : DROP;
     case "id":
-      return typeof value === "string" && ID.test(value) ? value : DROP;
+      return typeof value === "string" && ID.test(value) ? screen(value, sink) : DROP;
     case "token":
-      return token(value) ?? DROP;
+      const t = token(value);
+      return t === undefined ? DROP : screen(t, sink);
     case "route": {
       if (typeof value !== "string") return DROP;
       const path = value.split(/[?#]/, 1)[0] ?? "";
-      return ROUTE.test(path) ? path : DROP;
+      return ROUTE.test(path) ? screen(path, sink) : DROP;
     }
     case "int":
       return typeof value === "number" && Number.isInteger(value) ? value : DROP;
@@ -42,7 +65,10 @@ function clean(kind: FieldKind, value: unknown, path: string, dropped: string[])
       return typeof value === "boolean" ? value : DROP;
     case "tokens": {
       if (!Array.isArray(value)) return DROP;
-      const kept = value.slice(0, MAX_ITEMS).flatMap((v) => token(v) ?? []);
+      const kept = value.slice(0, MAX_ITEMS).flatMap((v) => {
+        const t = token(v);
+        return t === undefined ? [] : [screen(t, sink)];
+      });
       return kept.length > 0 ? kept : DROP;
     }
     case "token_map":
@@ -50,30 +76,34 @@ function clean(kind: FieldKind, value: unknown, path: string, dropped: string[])
       if (!isPlainObject(value)) return DROP;
       const out: Record<string, unknown> = {};
       for (const [key, v] of Object.entries(value).slice(0, MAX_KEYS)) {
+        const keyOk = safeKey(key) !== undefined && !UNSAFE_KEYS.has(key);
+        const tv = kind === "token_map" && keyOk ? token(v) : undefined;
+        const secret = tv !== undefined && isSecretShaped(tv) ? screen(tv, sink) : undefined;
         const ok =
-          token(key) !== undefined &&
-          !UNSAFE_KEYS.has(key) &&
+          keyOk &&
+          !secret &&
           (kind === "number_map"
             ? typeof v === "number" && Number.isFinite(v)
             : (typeof v === "number" && Number.isFinite(v)) ||
               typeof v === "boolean" ||
               token(v) !== undefined);
         if (ok) out[key] = v;
-        else dropped.push(`${path}.${token(key) ?? "?"}`);
+        else if (secret) out[key] = secret;
+        else sink.dropped.push(`${path}.${safeKey(key) ?? "?"}`);
       }
       return Object.keys(out).length > 0 ? out : DROP;
     }
     default:
       if ("group" in kind) {
         if (!isPlainObject(value)) return DROP;
-        const out = sanitizeWith(kind.group, value, `${path}.`, dropped);
+        const out = sanitizeWith(kind.group, value, `${path}.`, sink);
         return Object.keys(out).length > 0 ? out : DROP;
       }
       if (!Array.isArray(value)) return DROP;
       return value
         .slice(0, MAX_ITEMS)
         .flatMap((item) =>
-          isPlainObject(item) ? [sanitizeWith(kind.list, item, `${path}[].`, dropped)] : [],
+          isPlainObject(item) ? [sanitizeWith(kind.list, item, `${path}[].`, sink)] : [],
         );
   }
 }
@@ -82,7 +112,7 @@ function sanitizeWith(
   spec: FieldSpec,
   input: Record<string, unknown>,
   prefix: string,
-  dropped: string[],
+  sink: Sink,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
@@ -90,13 +120,13 @@ function sanitizeWith(
     // Own keys only: `constructor`, `toString` and `__proto__` are not schema fields.
     const kind = Object.hasOwn(spec, key) ? spec[key] : undefined;
     // The key itself is code, but keep it out if it doesn't look like one.
-    const path = `${prefix}${token(key) ?? "?"}`;
+    const path = `${prefix}${safeKey(key) ?? "?"}`;
     if (!kind) {
-      dropped.push(path);
+      sink.dropped.push(path);
       continue;
     }
-    const kept = clean(kind, value, path, dropped);
-    if (kept === DROP) dropped.push(path);
+    const kept = clean(kind, value, path, sink);
+    if (kept === DROP) sink.dropped.push(path);
     else out[key] = kept;
   }
   return out;
@@ -105,15 +135,17 @@ function sanitizeWith(
 /**
  * Applies the schema allowlist: keeps known keys whose values have the
  * schema's kind, drops everything else and reports the dropped paths (never
- * their values). Null and undefined are treated as absent.
+ * their values). Null and undefined are treated as absent. A string value
+ * shaped like a secret is replaced by `[redacted:secret]` and counted.
  */
 export function sanitize(event: Record<string, unknown>): {
   fields: Record<string, unknown>;
   dropped: string[];
+  redacted: number;
 } {
-  const dropped: string[] = [];
-  const fields = sanitizeWith(EVENT_SCHEMA, event, "", dropped);
-  return { fields, dropped: dropped.slice(0, MAX_ITEMS) };
+  const sink: Sink = { dropped: [], redacted: 0 };
+  const fields = sanitizeWith(EVENT_SCHEMA, event, "", sink);
+  return { fields, dropped: sink.dropped.slice(0, MAX_ITEMS), redacted: sink.redacted };
 }
 
 /** A Postgres SQLSTATE, from the driver error or the error it wraps. */

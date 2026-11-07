@@ -1,5 +1,6 @@
 "use client";
 
+import { clearSharedFiles } from "@/lib/share-target";
 import type { PlanTable } from "@receipt-ocr/core/plans";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { ConfirmDialog, type ConfirmDialogProps } from "@receipt-ocr/ui/components/confirm-dialog";
@@ -56,6 +57,7 @@ const BAN_LENGTHS = [
 ];
 
 const n = (value: number) => value.toLocaleString("en-US");
+const plural = (count: number, one: string) => `${n(count)} ${one}${count === 1 ? "" : "s"}`;
 
 /** Toast on success; the error string keeps a dialog open and shows inline. */
 async function settle(promise: Promise<ActionResult>, success: string): Promise<string | void> {
@@ -105,7 +107,7 @@ export function AccountControls({
     <>
       <div className="divide-y divide-border">
         <Row
-          hint={`${n(plans[user.plan as "free" | "pro"]?.receiptsPerDay ?? 0)} receipts a day, ${n(plans[user.plan as "free" | "pro"]?.workspaces ?? 0)} owned workspaces.`}
+          hint={`${n(plans[user.plan as "free" | "pro"]?.receiptsPerDay ?? 0)} receipts a day, ${plural(plans[user.plan as "free" | "pro"]?.workspaces ?? 0, "owned workspace")}.`}
           label="Plan"
         >
           <Select
@@ -383,7 +385,10 @@ export function DangerZone({ user, isSelf }: { user: ActionUser; isSelf: boolean
         minLength={10}
         onOpenChange={setImpersonateOpen}
         onSubmit={(reason) =>
-          settle(impersonateUserAction({ userId: user.id, reason }), "Signed in.")
+          settle(
+            clearSharedFiles().then(() => impersonateUserAction({ userId: user.id, reason })),
+            "Signed in.",
+          )
         }
         open={impersonateOpen}
         reasonHint="Kept in the audit log with the start and end time. For example: the support request you are answering."

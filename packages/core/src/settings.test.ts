@@ -1,10 +1,16 @@
 import { ConfigProvider, Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PLANS } from "./plans";
+import { DEFAULT_PLANS, MAX_BATCH } from "./plans";
 import { Db } from "./services";
-import { ocrRoutingSchema, planTableSchema, providerAvailability, Settings } from "./settings";
+import {
+  ocrRoutingSchema,
+  planTableSchema,
+  providerAvailability,
+  Settings,
+  storedPlanTableSchema,
+} from "./settings";
 
-const policy = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10 };
+const policy = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10, batchMax: 10 };
 
 describe("planTableSchema", () => {
   it("accepts the defaults", () => {
@@ -28,6 +34,50 @@ describe("planTableSchema", () => {
       planTableSchema.safeParse({ free: { ...policy, receiptsPerDay: 1.5 }, pro: policy }).success,
     ).toBe(false);
     expect(planTableSchema.safeParse({ free: policy }).success).toBe(false);
+  });
+});
+
+describe("planTableSchema batchMax", () => {
+  it("defaults a row saved before batchMax existed to 10", () => {
+    const old = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10 };
+    const result = planTableSchema.parse({ free: old, pro: old });
+    expect(result.free.batchMax).toBe(10);
+    expect(result.pro.batchMax).toBe(10);
+  });
+
+  it(`accepts 1 to ${MAX_BATCH} and rejects values outside that range`, () => {
+    expect(MAX_BATCH).toBe(20);
+    for (const batchMax of [1, 20]) {
+      expect(
+        planTableSchema.safeParse({ free: { ...policy, batchMax }, pro: policy }).success,
+      ).toBe(true);
+    }
+    for (const batchMax of [0, 21, 50, 2.5]) {
+      expect(
+        planTableSchema.safeParse({ free: { ...policy, batchMax }, pro: policy }).success,
+      ).toBe(false);
+    }
+  });
+});
+
+describe("storedPlanTableSchema", () => {
+  it("clamps a stored batchMax over the cap and keeps the other limits", () => {
+    const stored = {
+      free: { ...policy, receiptsPerDay: 42, batchMax: 50 },
+      pro: { ...policy, batchMax: 15 },
+    };
+    expect(planTableSchema.safeParse(stored).success).toBe(false);
+    const read = storedPlanTableSchema.parse(stored);
+    expect(read.free).toEqual({ ...policy, receiptsPerDay: 42, batchMax: MAX_BATCH });
+    expect(read.pro.batchMax).toBe(15);
+  });
+
+  it("still rejects a batchMax that isn't a positive whole number", () => {
+    for (const batchMax of [0, 2.5, "10"]) {
+      expect(
+        storedPlanTableSchema.safeParse({ free: { ...policy, batchMax }, pro: policy }).success,
+      ).toBe(false);
+    }
   });
 });
 
@@ -127,6 +177,66 @@ describe("Settings", () => {
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
       "google:gemini-3.8-flash",
     ]);
+  });
+
+  it("saves batchMax and records the change in the audit log", async () => {
+    const writes: { values: Record<string, unknown> }[] = [];
+    const insert = () => ({
+      values: (values: Record<string, unknown>) => {
+        writes.push({ values });
+        return Object.assign(Promise.resolve(), { onConflictDoUpdate: () => Promise.resolve() });
+      },
+    });
+    const select = () => ({ from: () => ({ where: () => ({ for: async () => [] }) }) });
+    const tx = { select, insert };
+    const db = Layer.succeed(Db, {
+      client: { transaction: (body: (t: unknown) => Promise<unknown>) => body(tx) } as never,
+      use: () => Effect.succeed([] as never),
+    });
+    const table = { free: { ...policy, batchMax: 20 }, pro: { ...policy, batchMax: 15 } };
+    const exit = await Effect.runPromiseExit(
+      Effect.flatMap(Settings, (s) => s.save("plans", table, actor)).pipe(
+        Effect.provide(Settings.Live.pipe(Layer.provide(db))),
+        Effect.withConfigProvider(ConfigProvider.fromMap(new Map())),
+      ),
+    );
+    expect(Exit.isSuccess(exit) && exit.value.next.free.batchMax).toBe(20);
+    expect(Exit.isSuccess(exit) && exit.value.previous).toEqual(DEFAULT_PLANS);
+    const [setting, audit] = writes;
+    expect(setting?.values).toMatchObject({ key: "plans", value: table, updatedBy: "a" });
+    expect(audit?.values).toMatchObject({
+      actorId: "a",
+      action: "settings.plans",
+      targetId: "plans",
+      metadata: { from: DEFAULT_PLANS, to: table },
+    });
+    expect(writes).toHaveLength(2);
+  });
+
+  it("reads a saved row with batchMax over the cap as the cap, keeping its other limits", async () => {
+    const saved = {
+      key: "plans",
+      value: { free: { ...policy, receiptsPerDay: 42, batchMax: 50 }, pro: policy },
+      updatedAt: new Date(),
+      updatedBy: "a",
+    };
+    const run = settingsWith({}, [saved]);
+    const exit = await run(Effect.flatMap(Settings, (s) => s.plans));
+    expect(Exit.isSuccess(exit) && exit.value.free).toEqual({
+      ...policy,
+      receiptsPerDay: 42,
+      batchMax: MAX_BATCH,
+    });
+  });
+
+  it("refuses a batchMax over the cap without writing", async () => {
+    const run = settingsWith({});
+    const exit = await run(
+      Effect.flatMap(Settings, (s) =>
+        s.save("plans", { free: { ...policy, batchMax: MAX_BATCH + 1 }, pro: policy }, actor),
+      ),
+    );
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("InvalidInput");
   });
 
   it("refuses invalid plan limits before touching the database", async () => {

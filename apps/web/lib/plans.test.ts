@@ -4,7 +4,7 @@ import { DEFAULT_PLAN, DEFAULT_PLANS, planLabel, policyFor, type PlanTable } fro
 describe("policyFor", () => {
   it("returns the named plan from the table it is given", () => {
     const saved: PlanTable = {
-      free: { workspaces: 2, receiptsPerDay: 5, receiptsPerMinute: 2 },
+      free: { workspaces: 2, receiptsPerDay: 5, receiptsPerMinute: 2, batchMax: 3 },
       pro: DEFAULT_PLANS.pro,
     };
     expect(policyFor(saved, "free")).toBe(saved.free);
@@ -21,6 +21,10 @@ describe("policyFor", () => {
 describe("default plans", () => {
   it("gives the free plan 20 receipts a day and 1 workspace", () => {
     expect(DEFAULT_PLANS.free).toMatchObject({ receiptsPerDay: 20, workspaces: 1 });
+  });
+
+  it("caps an upload batch at 10 images on every plan", () => {
+    for (const policy of Object.values(DEFAULT_PLANS)) expect(policy.batchMax).toBe(10);
   });
 
   it("keeps the burst ceiling below the daily allowance", () => {

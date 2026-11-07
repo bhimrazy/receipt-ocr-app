@@ -78,6 +78,10 @@ More help: [Create buckets](https://developers.cloudflare.com/r2/buckets/create-
 
 **Check:** after deploying, `/api/health/ready` shows `"storage":"ok"`.
 
+**Lifecycle rule for `_health/`:** the Connections check writes a tiny object under `_health/` and deletes it. If
+a run is cut off, one can be left behind. In the bucket's **Settings → Object lifecycle rules**, add a rule for the
+prefix `_health/` that deletes objects after 1 day.
+
 **CORS: leave it unset.** The browser never calls R2 directly: uploads go through the app, and images load in a
 plain `<img>` from a signed link, which needs no CORS. With no policy, no website's scripts can read the bucket's
 responses, which is the strictest setting. Add one only when a feature needs it (direct browser uploads to R2, or a
@@ -165,8 +169,8 @@ nobody can finish signing up.
 <details>
 <summary><b>Verify your domain and get a key from Resend</b></summary>
 
-1. [Resend](https://resend.com) → **Domains → Add domain** → `bhimraj.com.np` (or a subdomain such as
-   `mail.bhimraj.com.np`, which keeps this app's mail settings apart).
+1. [Resend](https://resend.com) → **Domains → Add domain** → `receipt-ocr.bhimraj.com.np`, the app's own
+   subdomain (not the apex `bhimraj.com.np`), so this app's mail settings and reputation stay apart.
 2. Resend lists a few DNS records. Add each one at your DNS provider (where the domain is managed), exactly as shown.
    Also add a DMARC record if you don't have one: name `_dmarc`, type `TXT`, value `v=DMARC1; p=none;`.
 3. Back in Resend, press **Verify DNS records** and wait for **Verified**. It usually takes minutes, sometimes a few
@@ -178,13 +182,18 @@ More help: [Domains](https://resend.com/docs/dashboard/domains/introduction),
 
 </details>
 
-| Key              | Example                                   | Kind   |
-| ---------------- | ----------------------------------------- | ------ |
-| `RESEND_API_KEY` | `re_…`                                    | Secret |
-| `EMAIL_FROM`     | `receiptOCR <receipt-ocr@bhimraj.com.np>` | Config |
-| `SUPPORT_EMAIL`  | `receipt-ocr@bhimraj.com.np`              | Config |
+| Key              | Example                                           | Kind   |
+| ---------------- | ------------------------------------------------- | ------ |
+| `RESEND_API_KEY` | `re_…`                                            | Secret |
+| `EMAIL_FROM`     | `receiptOCR <noreply@receipt-ocr.bhimraj.com.np>` | Config |
+| `SUPPORT_EMAIL`  | `receipt-ocr@bhimraj.com.np`                      | Config |
 
-- `EMAIL_FROM` must use the domain you verified.
+- `EMAIL_FROM` must use the domain you verified (`receipt-ocr.bhimraj.com.np`).
+- Roles: **From** is `EMAIL_FROM`, a noreply address on the verified domain, for every automated email.
+  **Reply-To** is `SUPPORT_EMAIL` on all of them, so replies reach a human. `SUPPORT_EMAIL` is also where
+  support-form messages go; those carry the visitor's address as Reply-To instead. Unset, no Reply-To is sent.
+- If you ever send marketing or newsletters, use a separate subdomain (for example
+  `news.receipt-ocr.bhimraj.com.np`) so complaints there cannot hurt transactional deliverability.
 - `SUPPORT_EMAIL` is where support-form messages go, so it must be an inbox you read. Resend only sends mail; to
   receive at that address, set up a mailbox or forwarding (for example Cloudflare Email Routing to your Gmail).
 - On Preview, only send to Resend's test address `delivered@resend.dev`.
@@ -298,19 +307,32 @@ Add both to **Production** only.
 3. Widget mode: **Managed**. Pre-clearance: **No**.
 4. **Create**, then copy the **Site key** and **Secret key**.
 
-For Preview, either leave Turnstile out or use Cloudflare's
-[test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
-
 More help: [Get started](https://developers.cloudflare.com/turnstile/get-started/).
 
 </details>
+
+**Production**
 
 | Key                              | Example       | Kind   |
 | -------------------------------- | ------------- | ------ |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | `0x4AAAAAAA…` | Config |
 | `TURNSTILE_SECRET_KEY`           | `0x4AAAAAAA…` | Secret |
 
-Add **both or neither**: with only one, the app refuses to start.
+**Preview: use Cloudflare's [test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/), not a
+second widget.** A real widget only passes on the hostnames listed in it, and every pull-request preview has a new
+random address. The test keys always pass on any host, so previews still run the whole Turnstile flow. Previews sit
+behind Vercel Deployment Protection, so bots can't reach them anyway.
+
+| Key                              | Value                                 | Kind   |
+| -------------------------------- | ------------------------------------- | ------ |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | `1x00000000000000000000AA`            | Config |
+| `TURNSTILE_SECRET_KEY`           | `1x0000000000000000000000000000000AA` | Secret |
+| `TURNSTILE_ALLOWED_HOSTNAMES`    | `example.com`                         | Config |
+
+The test keys report the hostname `example.com`, and the app checks the hostname, so Preview needs that third
+variable. Never use the test keys in Production: they let every request through.
+
+Add **both keys or neither** in each environment: with only one, the app refuses to start.
 
 **Check:** the sign-up page loads, and signing up still works.
 
@@ -322,7 +344,12 @@ Add **both or neither**: with only one, the app refuses to start.
    request.
 2. When it finishes, open `https://receipt-ocr.bhimraj.com.np/api/health/ready`. You should see
    `"database":"ok"` and `"storage":"ok"`.
-3. Sign up with a fresh email, confirm it, and upload a receipt.
+3. Sign in as an admin, open **Admin → Settings → Connections** and press **Check now**. Each AI provider, file
+   storage and its read/write access should say **Working**; a problem shows a short hint naming the variable to
+   fix. For AI providers, Working means the key is accepted and the models are visible; billing and credit are not
+   checked. Press **Send test email** to get one message at your own address. Nothing is shown but statuses, so keys
+   stay private.
+4. Sign up with a fresh email, confirm it, and upload a receipt.
 
 ### If something's wrong
 
@@ -330,6 +357,8 @@ Add **both or neither**: with only one, the app refuses to start.
 | -------------------------------------------------- | --------------------------------------------------------------------------- |
 | `"storage":"not_configured"`                       | An `S3_` variable is missing, or no deploy since you added it.              |
 | `"storage"` is anything else (not `ok`)            | Wrong endpoint, a typo in a key, or the token isn't allowed on that bucket. |
+| Connections says **Key rejected**                  | The key is wrong or revoked: paste a fresh one, save, and deploy again.     |
+| Connections says **Billing or quota**              | The provider account needs credit or a higher limit.                        |
 | Admin shows **no API key** for a provider          | The key isn't set for this environment, or no deploy since.                 |
 | Uploads go in but receipts fail to read            | The key is wrong or has no billing; check the provider's usage page.        |
 | No verification email                              | Domain not verified in Resend, or `EMAIL_FROM` uses a different domain.     |
@@ -361,7 +390,7 @@ land in the production bucket, and a leaked preview key reaches production. In V
 | `OCR_DAILY_CAP`                | `50`                                                                  | Config | Already set                                   |
 
 Leave out for Preview: `BETTER_AUTH_URL` (previews use their own address), the Google and GitHub sign-in keys
-(callback URLs can't match random preview addresses), and Turnstile (or use Cloudflare's test keys). Previews are
+(callback URLs can't match random preview addresses). For Turnstile, use the test keys in [step 6](#6-bot-protection-turnstile). Previews are
 behind Vercel Deployment Protection, so only the team can open them.
 
 ---

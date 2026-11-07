@@ -73,6 +73,7 @@ Everything is exported from `@receipt-ocr/core`. Two import-free entry points ex
 | Admin       | `deleteWorkspace`, `prepareUserDeletion`, `setMemberRole`, `removeMember`, `cancelInvitation`, `setUserPlan`, `recordAudit`                                                                 |
 | Admin reads | `adminOverview`, `listUsers`, `userDetail`, `listWorkspaces`, `workspaceDetail`, `listAudit`, `findUser`, `findWorkspace`                                                                   |
 | Settings    | `Settings`, `providerAvailability`, `planTableSchema`, `ocrRoutingSchema`                                                                                                                   |
+| Connections | `checkConnections`, `checkAiProviders`, `checkStorage`, `checkChainProviders`: on-demand status checks for Admin → Settings → Connections (statuses only, rate-limited, audited)            |
 | Groups      | `listGroups`, `createGroup`, `updateGroup`, `deleteGroup`, `addReceiptsToGroup`, `removeReceiptsFromGroup`, `groupsOfReceipt`, `canManageGroup`, the schemas and limits in `group-rules.ts` |
 | Errors      | `InvalidInput`, `NotFound`, `Forbidden`, `Conflict`, `QuotaExceeded`, `NotConfigured`, `DbError`, `StorageError`, `OcrError`                                                                |
 

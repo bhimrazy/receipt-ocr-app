@@ -57,6 +57,7 @@ const db = createDb(authEnv.databaseUrl ?? PLACEHOLDER_DATABASE_URL);
 const mailer = {
   apiKey: emailEnv.resendApiKey,
   from: emailEnv.from,
+  replyTo: emailEnv.replyTo,
   logUndelivered: logUndeliveredMail(),
   log: (event: EmailLogEvent) => logger.emit(event),
 };

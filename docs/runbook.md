@@ -75,6 +75,8 @@ Production runs on Vercel (app), Supabase (Postgres), Cloudflare R2 (receipt fil
 Symptoms: uploads end as failed, `job.attempt` events with `error.type: "OcrError"` and `error.kind` such as
 `rate-limited`, `timeout` or `provider-error`.
 
+Quick check: in **Admin, Settings, Connections** press **Check now**. It says whether the key is accepted and the models are visible, or the key is rejected, rate-limited or unreachable. It does not check billing or credit, so a key that shows Working can still fail for lack of credit; check the provider's usage page.
+
 1. Check <https://aistudio.google.com/status> and the Gemini project's quota page.
 2. In **Admin, Settings**, change the OCR model chain to a model that is answering, or put a lighter model first.
    This takes effect on the next upload without a deploy.
@@ -98,6 +100,8 @@ Symptoms: `/api/health/ready` returns `"database":"down"`, pages fail, `DbError`
 
 Symptoms: `"storage":"down"`, uploads fail with `StorageError`, receipt images don't load.
 
+Quick check: **Admin, Settings, Connections, Check now** writes, reads and deletes a small object under `_health/` and tells you which step failed.
+
 1. Check <https://www.cloudflarestatus.com> (R2) or the provider's status page.
 2. Check the bucket and token in the Cloudflare dashboard: the token may have expired or lost access to the bucket.
 3. Receipt data stays readable without storage; only uploads and images are affected. Nothing to do in the app until
@@ -107,6 +111,8 @@ Symptoms: `"storage":"down"`, uploads fail with `StorageError`, receipt images d
 
 Symptoms: `email.send_failed` in logs; in production, sign-up, password reset and invitations return an error
 because an undelivered email fails the request.
+
+Quick check: **Admin, Settings, Connections, Send test email** sends one message to your own address (3 per hour) and says sent, not configured or failed.
 
 1. Check <https://resend-status.com> and the Resend dashboard (domain verification, API key, daily limit). Resend
    Free allows 100 emails a day.
@@ -217,6 +223,39 @@ A manual **Vercel Production Deployment** run is red at `gate`, with "Production
 1. **Admin, Users**, open the user: revoke their sessions, ban if needed.
 2. Check **Admin, Audit log** for admin actions in the same period.
 3. Tell the user to reset their password once the account is safe.
+
+### Disable the service worker
+
+Use this when the service worker itself is the problem: pages stuck on the offline page, a broken share target, or
+anything that looks cached when it should not be.
+
+1. Replace the worker with the kill switch and deploy:
+
+   ```bash
+   cp apps/web/public/sw-killswitch.js apps/web/public/sw.js
+   ```
+
+   Browsers check `/sw.js` on their next visit (it is served with `Cache-Control: no-cache`). The kill switch
+   installs at once, deletes every `receiptocr-*` cache (the offline page and any shared files), unregisters itself
+   and reloads open tabs, which then load straight from the network.
+
+2. Leave it deployed for a few weeks. Devices that have not visited since still run the old worker until they do.
+   The app keeps registering `/sw.js` under `/app`, so each visit installs the kill switch and it removes itself
+   again; that costs one small request and does no harm.
+
+**Deleting `sw.js` is not enough.** When the script returns 404 the browser keeps the installed worker running; it
+only replaces a worker with a new script that loads.
+
+Optionally, for a faster clean-up on browsers that support it, send `Clear-Site-Data: "storage"` for one release, for
+example from the `headers()` list in `apps/web/next.config.ts` on `/app/:path*`. It removes service workers and Cache
+Storage, and also local storage (the install prompt's dismissal), but not cookies, so nobody is signed out. Safari
+support is partial, so use it with the kill switch, not instead of it.
+
+**Warning:** `Clear-Site-Data` runs on every response that carries it, so a visitor loses their local storage and
+caches on each page load while it is deployed, and a share waiting in Cache Storage is deleted. Send it for one
+release only, then remove it.
+
+To turn the worker back on, restore `public/sw.js` from git, bump `VERSION` in it and deploy.
 
 ## Rollback
 

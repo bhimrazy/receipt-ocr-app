@@ -1,7 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-/** Title row for an admin page, with an optional back link and actions. */
+/** Title row for an admin page, with an optional back link (desktop; the phone app bar has Back) and actions. */
 export function AdminPageHeader({
   title,
   description,
@@ -19,7 +19,7 @@ export function AdminPageHeader({
     <header className="mb-8">
       {back ? (
         <Link
-          className="-ml-2 mb-4 inline-flex min-h-11 items-center gap-1.5 rounded-md px-2 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:min-h-9"
+          className="-ml-2 mb-4 inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:hidden"
           href={back.href}
         >
           <ArrowLeft aria-hidden="true" className="size-4" />

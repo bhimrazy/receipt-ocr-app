@@ -10,7 +10,7 @@ import { Config, Context, Effect, Layer, Option } from "effect";
 import { z } from "zod";
 import { insertAudit, transact, type AuditActor } from "./audit";
 import { InvalidInput, type Conflict, type DbError, type NotFound } from "./errors";
-import { DEFAULT_PLANS, type PlanTable } from "./plans";
+import { DEFAULT_BATCH_MAX, DEFAULT_PLANS, MAX_BATCH, type PlanTable } from "./plans";
 import { Db } from "./services";
 import { errorFields } from "./telemetry/redact";
 
@@ -22,18 +22,40 @@ import { errorFields } from "./telemetry/redact";
 
 const count = (max: number) => z.number().int().min(1).max(max);
 
-const planPolicySchema = z
-  .object({
-    workspaces: count(100),
-    receiptsPerDay: count(100_000),
-    receiptsPerMinute: count(1_000),
-  })
-  .refine((p) => p.receiptsPerMinute <= p.receiptsPerDay, {
-    message: "The per-minute limit can't be higher than the daily limit.",
-    path: ["receiptsPerMinute"],
-  });
+const policySchema = (batchMax: z.ZodType<number>) =>
+  z
+    .object({
+      workspaces: count(100),
+      receiptsPerDay: count(100_000),
+      receiptsPerMinute: count(1_000),
+      // Rows saved before this field existed get the default.
+      batchMax: batchMax.default(DEFAULT_BATCH_MAX),
+    })
+    .refine((p) => p.receiptsPerMinute <= p.receiptsPerDay, {
+      message: "The per-minute limit can't be higher than the daily limit.",
+      path: ["receiptsPerMinute"],
+    });
 
+const planPolicySchema = policySchema(count(MAX_BATCH));
+
+/** What an admin may save. */
 export const planTableSchema = z.object({ free: planPolicySchema, pro: planPolicySchema });
+
+/**
+ * What is read back: a stored `batchMax` over MAX_BATCH (saved before the cap was lowered) is
+ * clamped, so that one field doesn't send every customised limit back to the defaults.
+ */
+const storedPolicySchema = policySchema(
+  z
+    .number()
+    .int()
+    .min(1)
+    .transform((n) => Math.min(n, MAX_BATCH)),
+);
+export const storedPlanTableSchema = z.object({
+  free: storedPolicySchema,
+  pro: storedPolicySchema,
+});
 
 /** Per-step budget; the whole chain also shares one deadline (see `Ocr`). */
 export const DEFAULT_STEP_TIMEOUT_MS = 30_000;
@@ -165,7 +187,7 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
         }
         return {
           plans: plansRow
-            ? yield* parse(planTableSchema, plansRow.value, DEFAULT_PLANS, "plans")
+            ? yield* parse(storedPlanTableSchema, plansRow.value, DEFAULT_PLANS, "plans")
             : DEFAULT_PLANS,
           ocr: ocrRow
             ? ((yield* parse(ocrRoutingSchema, ocrRow.value, fallbackOcr, "ocr")) as OcrRouting)
@@ -217,7 +239,8 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
           Effect.gen(function* () {
             const next = yield* validate(key, value);
             const fallback = key === "plans" ? DEFAULT_PLANS : yield* defaultOcrRouting;
-            const schema: z.ZodType<unknown> = key === "plans" ? planTableSchema : ocrRoutingSchema;
+            const schema: z.ZodType<unknown> =
+              key === "plans" ? storedPlanTableSchema : ocrRoutingSchema;
             const previous = yield* transact(async (tx) => {
               // Read under a row lock, not from the cache, so `previous` is what this save replaces.
               const [row] = await tx

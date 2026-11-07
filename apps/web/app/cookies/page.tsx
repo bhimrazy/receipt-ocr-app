@@ -24,6 +24,7 @@ const categoryTitle: Record<StorageCategory, string> = {
 const kindLabel: Record<StorageEntry["kind"], string> = {
   cookie: "Cookie",
   localStorage: "Local storage",
+  sessionStorage: "Session storage",
   cache: "Cache storage",
 };
 

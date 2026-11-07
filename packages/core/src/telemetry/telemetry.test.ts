@@ -61,6 +61,7 @@ describe("sanitize (the allowlist)", () => {
     expect(sanitize({ event: "x", receipt_id: null, job_id: undefined })).toEqual({
       fields: { event: "x" },
       dropped: [],
+      redacted: 0,
     });
   });
 });
@@ -429,5 +430,148 @@ describe("annotateEvent and the Effect logger", () => {
       dropped_fields: ["message"],
     });
     expect(String(error.mock.calls[0]![0])).not.toContain("Jane");
+  });
+});
+
+describe("secret denylist", () => {
+  // Built at runtime so the literals don't trip secret scanners.
+  const rep = (c: string, n: number) => c.repeat(n);
+  const SECRETS: Record<string, string> = {
+    gemini: "AIza" + rep("a", 35),
+    anthropic: "sk-ant-api03-" + rep("x", 40),
+    resend: "re_" + rep("A1", 14),
+    hex32: rep("ab", 16),
+    hex64: rep("0f", 32),
+    jwt: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.c2lnbmF0dXJl",
+    postgres: "postgresql://user:hunter2secret@db.example.com:5432/postgres",
+    bearer: "Bearer abc123def456",
+    githubClassic: "ghp_" + rep("Z9", 20),
+    githubPat: "github_pat_" + rep("Q", 30),
+    vercel: "vcp_" + rep("k", 30),
+    pem: "-----BEGIN PRIVATE KEY-----",
+    hex40: rep("1f", 20),
+    googleOauth: "GOCSPX-" + rep("a1", 14),
+    awsKeyId: "AKIA" + rep("Q", 16),
+    prefixed: "x_sk-ant-api03-" + rep("x", 40),
+  };
+
+  const legitimate = [
+    "3f1d7c0e-8b1a-4c53-9a3e-0b6f3f1d7c0e",
+    "V1StGXR8_Z5jdHi6B-myT",
+    "cjld2cjxh0000qzrmn831i7rn",
+    "ocr.extract",
+    "google:gemini-3.8-flash",
+    "anthropic:claude-sonnet-5-5",
+    "receipt.upload",
+    "23505",
+    "retry_exhausted",
+    "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6", // 32-char Better Auth id
+  ];
+
+  // Shapes with spaces, `@` or `-----` never fit id/token, so they are dropped instead.
+  const FITS = new Set(
+    Object.keys(SECRETS).filter((n) => !["postgres", "bearer", "pem"].includes(n)),
+  );
+
+  it.each(Object.entries(SECRETS))(
+    "keeps a %s shape out of id and token fields",
+    (name, secret) => {
+      const { fields, redacted, dropped } = sanitize({
+        event: "x",
+        outcome: secret,
+        user_id: secret,
+        flags: { mode: secret },
+        route: `/${secret}?q=1`,
+      });
+      expect(JSON.stringify({ fields, dropped })).not.toContain(secret);
+      if (FITS.has(name)) {
+        expect(fields.user_id).toBe("[redacted:secret]");
+        expect(redacted).toBeGreaterThanOrEqual(3);
+      }
+    },
+  );
+
+  it("does not replace a route whole for a secret in its query string", () => {
+    const { fields, redacted } = sanitize({
+      event: "x",
+      route: `/app/history?k=${SECRETS.gemini}`,
+    });
+    expect(fields.route).toBe("/app/history");
+    expect(redacted).toBe(0);
+  });
+
+  it.each(["eyJ", "postgres://a:", "AIza", "Bearer ", "sk-", "re_", "ghp_", "-----BEGIN "])(
+    "handles 100 KB of %s repeated in well under 50 ms",
+    (unit) => {
+      const big = unit.repeat(Math.ceil(100_000 / unit.length));
+      const start = performance.now();
+      sanitize({ event: "x", user_id: big, outcome: big, route: big, flags: { mode: big } });
+      expect(performance.now() - start).toBeLessThan(50);
+    },
+  );
+
+  it("is linear on accepted near-miss values too", () => {
+    const near = "eyJ".repeat(33);
+    const start = performance.now();
+    for (let i = 0; i < 200; i++) sanitize({ event: "x", user_id: near, outcome: near });
+    expect(performance.now() - start).toBeLessThan(200);
+  });
+
+  it("keeps legitimate ids and codes", () => {
+    for (const value of legitimate) {
+      const id = sanitize({ event: "x", user_id: value, kind: value.length > 100 ? "x" : "k" });
+      expect(id.redacted, value).toBe(0);
+    }
+    expect(sanitize({ event: "x", receipt_id: legitimate[0] }).fields.receipt_id).toBe(
+      legitimate[0],
+    );
+  });
+
+  it("never names a secret-shaped map key in dropped_fields", () => {
+    const { fields, dropped } = sanitize({ event: "x", flags: { [SECRETS.gemini!]: true } });
+    expect(JSON.stringify({ fields, dropped })).not.toContain("AIza");
+  });
+
+  describe("canary through the real logger", () => {
+    let info: ReturnType<typeof vi.spyOn>;
+    let error: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      info = vi.spyOn(console, "info").mockImplementation(() => {});
+      error = vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it("writes no secret shape and counts the attempts", () => {
+      const secrets = Object.values(SECRETS);
+      for (const secret of secrets) {
+        logger.emit({
+          event: "canary",
+          user_id: secret,
+          outcome: secret,
+          kind: secret,
+          error: { type: secret, code: secret },
+          flags: { [secret]: secret },
+        } as never);
+      }
+      const lines = [...info.mock.calls, ...error.mock.calls].map((c: unknown[]) => String(c[0]));
+      expect(lines).toHaveLength(secrets.length);
+      for (const line of lines) {
+        for (const secret of secrets) expect(line).not.toContain(secret);
+      }
+    });
+
+    it("also holds for fields added through annotateEvent", async () => {
+      const runtime = ManagedRuntime.make(Layer.mergeAll(WideEventLoggerLive));
+      const secrets = Object.values(SECRETS);
+      for (const secret of secrets) {
+        const event: WideEvent = { event: "canary" };
+        const deep = annotateEvent({ error: { type: secret, kind: secret }, user_id: secret });
+        await runtime.runPromise(deep.pipe(withWideEvent(event)));
+        logger.info(event as never);
+      }
+      const lines = info.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(lines).toHaveLength(secrets.length);
+      for (const line of lines) for (const secret of secrets) expect(line).not.toContain(secret);
+    });
   });
 });

@@ -78,9 +78,9 @@ Steps are in [deployment.md](deployment.md).
 
 | Track (branch)                  | Work                                                                                                                                                                                                                                |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `feat/capture`                  | In-app camera, batch capture (limit per plan, default 10, set in Admin), four-corner crop with auto edge detection and straightening                                                                                                |
+| `feat/capture` (#47)            | In-app camera, batch capture (limit per plan, default 10, set in Admin), review with auto-detected four-corner crop, straightening and filters, uploads two at a time                                                               |
 | `feat/size-target-encoder`      | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                                                                                          |
-| `feat/pwa`                      | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                                                                                          |
+| `feat/pwa` (#43)                | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target (files wait for Keep or Discard), install prompt, kill switch in the runbook                                             |
 | `feat/mobile-shell`             | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                                                                                    |
 | `fix/pdf-page-evasions`         | Five remaining ways to hide pages from the PDF page counter                                                                                                                                                                         |
 | `feat/admin-ops`                | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; index only                                                                                       |
@@ -89,6 +89,7 @@ Steps are in [deployment.md](deployment.md).
 | `ci/db-migrations`              | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging                                                         |
 | `feat/consent-analytics`        | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                                                                                  |
 | `feat/wide-events` (#52)        | [Wide events](architecture/flows/observability.md): one event per request, page render, job attempt and tick; schema allowlist, tail sampling (`LOG_SAMPLE_RATE`, `LOG_SLOW_MS`); `job.run` is now `job.attempt`. Next: OTLP export |
+| `feat/admin-check-connections`  | Admin → Settings → Connections: on-demand status check of AI providers (free model-list call), storage (put/get/delete) and a test email to yourself; warns after saving the OCR chain; audited, rate-limited                       |
 | `feat/settings-receipt-reading` | Settings → Receipt reading (read-only): the platform default model chain by friendly label and its providers; privacy policy and terms now name Anthropic as a processor                                                            |
 | `feat/anthropic-provider`       | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet                                                                          |
 
@@ -152,6 +153,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 11. Bring your own AI key (Pro perk, maybe a capped Free on-ramp), then own storage (R2 first), on envelope
     encryption with rotation ([BYOK plan](plans/2026-11-07-byok.md)). After billing.
 12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
+13. In-app feedback: "Send feedback" in the account menu and Settings, "Your feedback" list, admin inbox with email
+    replies; public board later ([feedback and requests](plans/2026-11-07-feedback-and-requests.md)).
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
@@ -164,6 +167,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Share target: a cross-site form can plant a share in a visitor's cache (the referrer can be hidden). The Keep and
+  Discard prompt, the 10-minute expiry and the size caps are the guard.
 - Encryption key rotation: re-encrypt job + per-version counts + split from the auth secret (see
   [BYOK plan](plans/2026-11-07-byok.md#9-key-rotation-and-encryption-at-rest)).
 - FAQ uses a raw `<details>`; add a server-friendly Disclosure primitive to `packages/ui`.

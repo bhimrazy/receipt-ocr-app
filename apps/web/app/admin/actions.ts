@@ -2,19 +2,27 @@
 
 import {
   cancelInvitation,
+  checkChainProviders,
+  checkConnections,
   deleteWorkspace,
   findUser,
   findWorkspace,
+  gateTestEmail,
+  ocrRoutingSchema,
   PLAN_IDS,
   prepareUserDeletion,
   recordAudit,
+  recordTestEmail,
   removeMember,
   setMemberRole,
   setUserPlan,
   Settings,
+  withWideEvent,
   WORKSPACE_ROLES,
   type AppServices,
   type AuditEntryInput,
+  type ConnectionRow,
+  type WideEvent,
 } from "@receipt-ocr/core";
 import { APIError } from "better-auth/api";
 import { Cause, Effect, Exit } from "effect";
@@ -28,6 +36,7 @@ import { errorFields, logger } from "@/lib/log";
 import { revalidatePlanCopy } from "@/lib/plan-limits";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
+import { sendTestEmail, type TestEmailOutcome } from "@/lib/test-email";
 
 /**
  * Admin mutations. Each one re-checks the admin role (the client is never
@@ -451,4 +460,84 @@ export async function saveOcrAction(value: unknown) {
     await core(Effect.flatMap(Settings, (settings) => settings.save("ocr", value, ctx.audit)));
     revalidatePath("/admin", "layout");
   });
+}
+
+export type ConnectionsResult = { ok: true; rows: ConnectionRow[] } | { ok: false; error: string };
+
+const wait = (seconds: number) =>
+  `Slow down: try again in ${seconds} second${seconds === 1 ? "" : "s"}.`;
+
+/** Tests each configured service now. Statuses only: provider text never reaches the browser. */
+export async function checkConnectionsAction(): Promise<ConnectionsResult> {
+  const ctx = await context();
+  const event: WideEvent = {
+    event: "admin.connections_check",
+    unit: "log",
+    user_id: ctx.audit.actor.id,
+  };
+  try {
+    const result = await core(checkConnections(ctx.audit).pipe(withWideEvent(event)));
+    if ("limited" in result) return { ok: false, error: wait(result.retryAfterSeconds) };
+    event.outcome = "ok";
+    logger.info(event);
+    return { ok: true, rows: result };
+  } catch (error) {
+    logger.error({ ...event, outcome: "error", error: errorFields(error) });
+    return { ok: false, error: GENERIC };
+  }
+}
+
+/**
+ * After saving the OCR chain: the AI providers its enabled steps use that
+ * aren't healthy. Advisory; a failure here returns no warnings.
+ */
+export async function checkChainProvidersAction(value: unknown): Promise<ConnectionRow[]> {
+  const ctx = await context();
+  const parsed = ocrRoutingSchema.safeParse(value);
+  if (!parsed.success) return [];
+  const models = parsed.data.chain.filter((s) => s.enabled).map((s) => s.model);
+  try {
+    return await core(checkChainProviders(ctx.audit.actor.id, models));
+  } catch (error) {
+    logger.error({
+      event: "admin.chain_check_failed",
+      unit: "log",
+      error: errorFields(error),
+    });
+    return [];
+  }
+}
+
+export type TestEmailResult =
+  { ok: true; outcome: TestEmailOutcome } | { ok: false; error: string };
+
+/** Sends one message, only to the signed-in admin's own address. */
+export async function sendTestEmailAction(): Promise<TestEmailResult> {
+  const ctx = await context();
+  try {
+    const gate = await core(gateTestEmail(ctx.audit.actor.id));
+    if (!gate.allowed) {
+      const minutes = Math.ceil(gate.retryAfterSeconds / 60);
+      return {
+        ok: false,
+        error: `Test emails are limited to 3 per hour. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+      };
+    }
+    const outcome = await sendTestEmail(ctx.audit.actor.email);
+    await core(recordTestEmail(ctx.audit, outcome));
+    logger.info({
+      event: "admin.test_email",
+      unit: "log",
+      user_id: ctx.audit.actor.id,
+      outcome,
+    });
+    return { ok: true, outcome };
+  } catch (error) {
+    logger.error({
+      event: "admin.test_email_failed",
+      unit: "log",
+      error: errorFields(error),
+    });
+    return { ok: false, error: GENERIC };
+  }
 }

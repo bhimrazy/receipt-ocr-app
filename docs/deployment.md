@@ -198,6 +198,10 @@ then fails at "Check the secret is set".
 
 ### Staging and previews
 
+- **Getting a preview:** until launch, a PR deploys a preview only when it has the `preview` label. Add it once the PR
+  is ready to look at: `gh pr edit <number> --add-label preview`. The deploy starts at once, its link is posted on the
+  PR, and every later push redeploys it. Remove the label to stop: `gh pr edit <number> --remove-label preview`. Each
+  deploy counts toward Vercel's 100 a day, which production shares.
 - **Staging database:** Supabase project `receipt-ocr-staging` (us-east-1, same region as production and the `iad1`
   functions). Migrate it before production on every release with migrations, and check it there first.
 - **Previews:** set the Vercel project's **Preview** variables to staging: `DATABASE_URL` (staging transaction
@@ -254,6 +258,12 @@ clear message instead of a failed request. Both constants live in `packages/core
 deployment without that proxy limit can raise `DEPLOYMENT_BODY_LIMIT_BYTES` up to 10 MB by editing the constant and rebuilding.
 On Docker, also cap request bodies in the reverse proxy in front of the image (for example nginx
 `client_max_body_size 11m;`), so oversized requests are refused before they reach the app.
+
+### Installable app (PWA)
+
+Nothing to configure. `next.config.ts` serves `/sw.js` with `Cache-Control: no-cache`, on Vercel and in Docker, so
+browsers pick up a new worker on their next visit. If a CDN or proxy sits in front of a Docker deployment, make sure
+it does not cache `/sw.js` either. The service worker needs HTTPS (or `localhost`).
 
 ## Every release
 

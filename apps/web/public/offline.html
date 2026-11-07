@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0b" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="robots" content="noindex" />
+    <title>You're offline · receiptOCR</title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <style>
+      /* Served by the service worker with no network, so everything is inline. Colours are the
+         tokens in packages/ui/src/styles.css. */
+      :root {
+        --background: #0a0a0b;
+        --foreground: #e4e4e7;
+        --card: #141416;
+        --border: #27272a;
+        --muted-foreground: #9a9aa3;
+        --primary: #34d399;
+        --primary-foreground: #07110d;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+          max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+        background: var(--background);
+        color: var(--foreground);
+        font:
+          16px/1.5 system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      main {
+        width: 100%;
+        max-width: 26rem;
+        padding: 2rem 1.5rem;
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        background: var(--card);
+        text-align: center;
+      }
+      img {
+        width: 48px;
+        height: 48px;
+      }
+      h1 {
+        margin: 1rem 0 0.5rem;
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+      p {
+        margin: 0;
+        font-size: 0.875rem;
+        color: var(--muted-foreground);
+      }
+      button {
+        margin-top: 1.5rem;
+        min-height: 44px;
+        padding: 0 1.25rem;
+        border: 0;
+        border-radius: 999px;
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icon.svg" alt="" />
+      <h1>You're offline</h1>
+      <p>
+        receiptOCR needs an internet connection to read and show your receipts. Check your
+        connection, then try again.
+      </p>
+      <button id="retry" type="button">Try again</button>
+    </main>
+    <!-- A file, not inline, so it still runs once the CSP is enforced with nonces. -->
+    <script src="/offline.js"></script>
+  </body>
+</html>

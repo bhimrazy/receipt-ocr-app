@@ -69,6 +69,14 @@ const nextConfig: NextConfig = {
       // As well as the meta tag, so non-HTML responses (CSV exports, JSON) and redirects from
       // these paths stay out of search results too.
       ...noindexPaths.map((source) => ({ source, headers: [noindexHeader] })),
+      // The browser checks for a new worker on each visit; a cached copy would delay updates.
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, max-age=0, must-revalidate" },
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        ],
+      },
     ];
   },
 };

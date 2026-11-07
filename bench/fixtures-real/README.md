@@ -1,8 +1,13 @@
 # Real receipt fixtures
 
 Real receipt photos for the OCR benchmark, alongside the synthetic `bench/fixtures/`. Each image has a ground-truth
-`.json` in the same format; `merchant` and `category` may list several acceptable values, and `_source`, `_license`
-and `_notes` say where it came from and anything ambiguous.
+`.json` in the same format; `_source`, `_license` and `_notes` say where it came from and anything ambiguous.
+
+Key format: every field is always present, and `null` means "not printed or not legible on the image" (the model should
+return null too). `merchant` and `category` are lists of acceptable values, first one preferred. `receiptDate` is the AD
+date. `subtotal` is the pre-tax goods line the receipt prints (Sub Total, Gross Amount), else `null`. Item names are as
+printed; `quantity` is 1 when none is printed, and `totalPrice` is the line amount after any line discount. Service
+charges, discounts and rounding have no field, so `_notes` shows how the total adds up.
 
 | Folder                          | What                                                                                                                                     | Licence                  |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |

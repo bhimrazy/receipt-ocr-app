@@ -62,7 +62,7 @@ export function GroupFilter({
       {groups.length > 0 ? (
         <div
           aria-label="Filter by group"
-          className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 py-0.5"
+          className="scroll-fade-x -mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 py-0.5"
           role="group"
         >
           {groups.map((group) => {

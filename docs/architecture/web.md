@@ -7,9 +7,11 @@ HTTP.
 ## Contents
 
 - [Layout of the app](#layout-of-the-app)
+- [Navigation](#navigation)
 - [Public API](#public-api)
 - [How a request reaches core](#how-a-request-reaches-core)
 - [Key modules](#key-modules)
+- [Installable app (PWA)](#installable-app-pwa)
 - [Consent and analytics](#consent-and-analytics)
 - [Design principles and invariants](#design-principles-and-invariants)
 - [How to test it](#how-to-test-it)
@@ -33,27 +35,70 @@ HTTP.
 | [`drizzle`](../../apps/web/drizzle)                                                                                                                                                                | SQL migrations, generated from [packages/db](db.md)                                                                                                                                                                  |
 | [`e2e`](../../apps/web/e2e)                                                                                                                                                                        | Playwright suite                                                                                                                                                                                                     |
 
-`/app/upload` only redirects to `/app`; the upload panel lives on Home.
+The upload panel lives on Home (`/app`) and on `/app/upload`, which the Scan tab and the home-screen shortcut (`?capture=1`
+opens the camera on each visit, then is dropped from the URL with `history.replaceState`) and the share target (`?shared=1`) land on. Capture, review and upload in the browser are described in
+[Upload, extraction and result](flows/upload-and-extraction.md#1-in-the-browser):
+
+```mermaid
+flowchart LR
+  camera[Camera sheet] --> review[Review sheet]
+  picker[Picker or drop] --> review
+  review --> encode["Canvas JPEG,<br/>then prepareFile"]
+  encode --> queue["Batch queue (2 at a time)"]
+  queue --> api["POST /api/receipts"]
+```
+
+## Navigation
+
+The signed-in shell ([`app/app/layout.tsx`](../../apps/web/app/app/layout.tsx)) has two arrangements, switched at the
+`md` breakpoint (768 px) with CSS only, so the server renders both and nothing depends on JavaScript to pick one.
+
+```mermaid
+flowchart TB
+  subgraph desktop["md and wider"]
+    sidebar["Sidebar: brand, workspace switcher (dropdown),<br/>Home / History / Settings, Platform: Admin,<br/>usage meter, account menu (dropdown)"]
+  end
+  subgraph phone["Below md"]
+    bar["Top app bar (sticky): brand or Back, workspace name or<br/>scrolled page title, page actions slot, account button"]
+    sheet["Account sheet: account, workspaces (switch, create),<br/>usage meter, Admin, sign out"]
+    tabs["Bottom tab bar (fixed): Home, History, Scan, Settings"]
+    bar -- "account button" --> sheet
+  end
+  tabs -- "Scan" --> scan["/app/upload?capture=1"]
+```
+
+| Piece                                        | Where                                                                                  | Notes                                                                                                                                                                                                                                        |
+| -------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AppSidebarNav`, `SidebarNav`                | [`components/app-nav.tsx`](../../apps/web/components/app-nav.tsx)                      | `aria-current="page"` on the active link. A receipt page counts as History. Admin sits in its own "Platform" group                                                                                                                           |
+| `AppTabBar`, `BottomTabBar`                  | same                                                                                   | 4rem tall (`--tabbar-h`) plus `env(safe-area-inset-bottom)`; `--app-bottom-inset` is the total, set in [`styles.css`](../../packages/ui/src/styles.css) only while a tab bar is on the page. `<main>` and toasts clear it with that variable |
+| `MobileTopBar`                               | same                                                                                   | Back on detail pages (`backFor(pathname)`): returns with `router.back()` when the previous page was the parent list, so filters and scroll survive, else links to it. Shows the page `<h1>` text once it scrolls under the bar               |
+| `AppBarActions`                              | same                                                                                   | Portals a page's own phone actions into the app bar (the receipt page's "Receipt actions" sheet)                                                                                                                                             |
+| `UserMenu` (desktop), `AccountSheet` (phone) | [`components/user-menu.tsx`](../../apps/web/components/user-menu.tsx)                  | The sheet holds `WorkspaceList` from [`workspace-switcher.tsx`](../../apps/web/components/workspace-switcher.tsx); `CreateWorkspaceDialog` is outside the sheet so closing it doesn't unmount the form                                       |
+| `Drawer`                                     | [`packages/ui/src/components/drawer.tsx`](../../packages/ui/src/components/drawer.tsx) | Bottom sheet on Base UI's Drawer: swipe down, Escape or a tap outside closes it. `DrawerAction` is a 48 px row                                                                                                                               |
+
+The admin shell ([`app/admin/layout.tsx`](../../apps/web/app/admin/layout.tsx)) uses the same pieces with its own five
+tabs and no Scan action, and keeps "App" in the top bar.
+
+Phone details: `touch-action: manipulation` on `<html>` (no double-tap delay), and in standalone (installed) mode
+`overscroll-behavior-y: none`, so there is no rubber band or pull-to-refresh.
 
 ## Public API
 
 ### Route handlers
 
-| Method and path                              | File                                                                                        | Does                                                                                                  |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `GET, POST /api/auth/*`                      | [`api/auth/[...all]/route.ts`](../../apps/web/app/api/auth/[...all]/route.ts)               | Better Auth. `503` when auth is not configured.                                                       |
-| `POST /api/receipts`                         | [`api/receipts/route.ts`](../../apps/web/app/api/receipts/route.ts)                         | Upload one file. `mode=instant` reads it in the request; `mode=queued` returns `202`.                 |
-| `GET /api/receipts/status`                   | [`api/receipts/status/route.ts`](../../apps/web/app/api/receipts/status/route.ts)           | Workspace receipt counts, so list pollers refresh only when something changed                         |
-| `GET /api/receipts/:id`                      | [`api/receipts/[id]/route.ts`](../../apps/web/app/api/receipts/[id]/route.ts)               | Status for the polling client; drains the receipt's job if it is due and not running                  |
-| `PATCH /api/receipts/:id`                    | same file                                                                                   | User corrections to merchant, date, category, currency and amounts                                    |
-| `DELETE /api/receipts/:id`                   | same file                                                                                   | Delete the row, then the stored file                                                                  |
-| `POST /api/receipts/:id/retry`               | [`api/receipts/[id]/retry/route.ts`](../../apps/web/app/api/receipts/[id]/retry/route.ts)   | Claim a failed receipt for another round and enqueue its job; `202`, then drain in `after()`          |
-| `GET /api/receipts/export`                   | [`api/receipts/export/route.ts`](../../apps/web/app/api/receipts/export/route.ts)           | CSV with the History filters (including `?group=`), up to 5,000 rows, with a `groups` column          |
-| `GET, POST /api/groups`                      | [`api/groups/route.ts`](../../apps/web/app/api/groups/route.ts)                             | List the workspace's groups with counts; create one (`{ name, color }`, `201`)                        |
-| `PATCH, DELETE /api/groups/:id`              | [`api/groups/[id]/route.ts`](../../apps/web/app/api/groups/[id]/route.ts)                   | Rename or recolour; delete (receipts are kept). Creator, owner or admin, else `403`                   |
-| `POST, DELETE /api/groups/:id/receipts`      | [`api/groups/[id]/receipts/route.ts`](../../apps/web/app/api/groups/[id]/receipts/route.ts) | Bulk add or remove `{ receiptIds }` (1 to 100); returns `changed`, `unchanged`, `atLimit`, `notFound` |
-| `GET, POST, DELETE /api/receipts/:id/groups` | [`api/receipts/[id]/groups/route.ts`](../../apps/web/app/api/receipts/[id]/groups/route.ts) | A receipt's groups; add to or remove from one group (`{ groupId }`)                                   |
-| `POST /api/contact`                          | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts)                           | Support form: origin check, honeypot, per-IP rate limit, mail to `SUPPORT_EMAIL`                      |
+| Method and path                | File                                                                                      | Does                                                                                               |
+| ------------------------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `GET, POST /api/auth/*`        | [`api/auth/[...all]/route.ts`](../../apps/web/app/api/auth/[...all]/route.ts)             | Better Auth. `503` when auth is not configured.                                                    |
+| `POST /api/receipts`           | [`api/receipts/route.ts`](../../apps/web/app/api/receipts/route.ts)                       | Upload one file. `mode=instant` reads it in the request; `mode=queued` returns `202`.              |
+| `GET /api/receipts/status`     | [`api/receipts/status/route.ts`](../../apps/web/app/api/receipts/status/route.ts)         | Workspace receipt counts, so list pollers refresh only when something changed                      |
+| `GET /api/receipts/:id`        | [`api/receipts/[id]/route.ts`](../../apps/web/app/api/receipts/[id]/route.ts)             | Status for the polling client; drains the receipt's job if it is due and not running               |
+| `PATCH /api/receipts/:id`      | same file                                                                                 | User corrections to merchant, date, category, currency and amounts                                 |
+| `DELETE /api/receipts/:id`     | same file                                                                                 | Delete the row, then the stored file                                                               |
+| `POST /api/receipts/:id/retry` | [`api/receipts/[id]/retry/route.ts`](../../apps/web/app/api/receipts/[id]/retry/route.ts) | Claim a failed receipt for another round and enqueue its job; `202`, then drain in `after()`       |
+| `GET /api/receipts/export`     | [`api/receipts/export/route.ts`](../../apps/web/app/api/receipts/export/route.ts)         | CSV with the History filters, up to 5,000 rows                                                     |
+| `POST /api/contact`            | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts)                         | Support form: origin check, honeypot, per-IP rate limit, mail to `SUPPORT_EMAIL`                   |
+| `POST /share-target`           | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                       | Share target fallback when no service worker took the share: `303` to the upload page, body unread |
+| `POST /share-target`           | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                       | Share target fallback when no service worker took the share: `303` to the upload page, body unread |
 
 Status codes come from one table in [`lib/http.ts`](../../apps/web/lib/http.ts):
 
@@ -140,7 +185,9 @@ Pages follow the same path without the HTTP mapping: server components call help
 | [`lib/json-body.ts`](../../apps/web/lib/json-body.ts)                                 | Size-capped JSON body read and Zod validation for the group routes; `400` or `413` on bad input                                                                                                                                                                                                                             |
 | [`components/groups`](../../apps/web/components/groups)                               | Group chips, the searchable picker (popover from md, bottom sheet below), History filter chips and selection mode, the `/app/groups` manager                                                                                                                                                                                |
 | [`lib/csv.ts`](../../apps/web/lib/csv.ts)                                             | CSV export with formula-injection escaping                                                                                                                                                                                                                                                                                  |
-| [`components/upload-panel.tsx`](../../apps/web/components/upload-panel.tsx)           | Picks files, prepares them, posts one at a time                                                                                                                                                                                                                                                                             |
+| [`components/upload-panel.tsx`](../../apps/web/components/upload-panel.tsx)           | Picks files or opens the camera, sends photos to review, uploads the batch two at a time with progress and retry, up to the plan's `batchMax`                                                                                                                                                                               |
+| [`components/capture`](../../apps/web/components/capture)                             | Camera sheet and review sheet (corner crop, rotate, filters), loaded with `next/dynamic` on first use                                                                                                                                                                                                                       |
+| [`lib/capture`](../../apps/web/lib/capture)                                           | Pure maths for capture: homography and warp, edit state, edge detection, filters, the batch queue; plus the camera, canvas and XHR upload helpers                                                                                                                                                                           |
 | [`components/processing-poller.tsx`](../../apps/web/components/processing-poller.tsx) | Polls one receipt's status, or the workspace counts (`/api/receipts/status`) for a list, on the schedule in [`lib/backoff-poll.ts`](../../apps/web/lib/backoff-poll.ts): backs off from 2 s to 15 s, pauses while the tab is hidden, gives up after 6 minutes of visible polling (a receipt job's retries can take about 4) |
 | [`lib/consent`](../../apps/web/lib/consent)                                           | Cookie consent and analytics rules, cookie registry; see [Consent and analytics](#consent-and-analytics)                                                                                                                                                                                                                    |
 | [`lib/signed-in-hint.ts`](../../apps/web/lib/signed-in-hint.ts)                       | The `signed_in_hint` cookie name and browser helpers to read and clear it                                                                                                                                                                                                                                                   |
@@ -188,6 +235,73 @@ flowchart TD
   IndexedDB names that have no entry.
 - **CSP.** `buildContentSecurityPolicy` adds Google's origins only when GA is on. Vercel's script is same-origin.
 
+## Installable app (PWA)
+
+The app installs to a home screen or desktop and opens `/app` in its own window.
+
+| Piece                                                                                                                                                          | What it does                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`app/manifest.ts`](../../apps/web/app/manifest.ts)                                                                                                            | Name, `id` and `start_url` `/app`, standalone display, colours from the theme tokens, PNG and maskable icons, an "Add receipt" shortcut (`/app/upload?capture=1`; the camera track's upload page reads `capture=1`) and the Android share target |
+| [`public/sw.js`](../../apps/web/public/sw.js)                                                                                                                  | Hand-written service worker: offline fallback and share target handoff. Served with `Cache-Control: no-cache` from [`next.config.ts`](../../apps/web/next.config.ts)                                                                             |
+| [`public/offline.html`](../../apps/web/public/offline.html), [`offline.js`](../../apps/web/public/offline.js)                                                  | Page shown when a page load fails offline; reloads itself when the connection returns. The script is a file, not inline, so it still runs under a nonce-based CSP                                                                                |
+| [`public/sw-killswitch.js`](../../apps/web/public/sw-killswitch.js)                                                                                            | Not used normally. Published as `sw.js` it removes the worker and its caches everywhere; see [Disable the service worker](../runbook.md#disable-the-service-worker)                                                                              |
+| [`components/pwa.tsx`](../../apps/web/components/pwa.tsx)                                                                                                      | Registers the worker (production builds, `/app` routes only) and shows the install card: `beforeinstallprompt` on Android and desktop, a one-time Share then Add to Home Screen hint on iOS Safari                                               |
+| [`lib/share-target.ts`](../../apps/web/lib/share-target.ts)                                                                                                    | `takeSharedFiles()` reads the shared files from Cache Storage and deletes them; `clearSharedFiles()` runs on sign-out                                                                                                                            |
+| [`lib/use-shared-files.ts`](../../apps/web/lib/use-shared-files.ts), [`components/shared-files-notice.tsx`](../../apps/web/components/shared-files-notice.tsx) | In the upload panel: lists shared files with Keep and Discard, and explains `?shared=failed` and `?shared=unavailable`                                                                                                                           |
+| [`scripts/pwa-icons.ts`](../../scripts/pwa-icons.ts)                                                                                                           | Renders the PNG icons and `app/apple-icon.png` from `app/icon.svg` with Playwright's Chromium                                                                                                                                                    |
+
+How the worker routes a request:
+
+```mermaid
+flowchart TD
+  R[Request from a page in scope /] --> O{Same origin?}
+  O -- no --> N[Browser default, not handled]
+  O -- yes --> S{POST /share-target?}
+  S -- yes --> RF{Referrer is a web page on another site?}
+  RF -- yes --> D[303 to /app, nothing stored]
+  RF -- no --> F[Keep images, PDFs and untyped files up to 10 MB each and 50 MB in all, at most 20, in the receiptocr-shared cache]
+  F --> U[303 to /app/upload?shared=1, or /app?shared=failed]
+  S -- no --> G{GET?}
+  G -- no --> N
+  G -- yes --> M{Page navigation?}
+  M -- yes --> W[Network, with navigation preload]
+  W -- fails --> X[Precached /offline.html]
+  M -- no --> P{Precached file?}
+  P -- yes --> C[Cache, then network]
+  P -- no --> N
+```
+
+- **Nothing user-specific is cached.** Receipts are financial data, so the worker never stores API responses,
+  signed-in HTML, RSC payloads or receipt images; those requests go straight to the network. The static cache holds
+  only `offline.html`, `offline.js`, `icon.svg` and one icon, fetched past the HTTP cache. `VERSION` in `sw.js`
+  names the cache; `activate` deletes older ones.
+- **A share is never uploaded unseen.** Any site can POST a form to `/share-target`, so shared files never join the
+  queue on their own. The worker drops a share whose referrer is another website (an Android app sends none or an android-app:// one, which passes; a page can hide its referrer, so this
+  is only a first check). The upload panel then lists the files, says they were shared on this device, possibly
+  before sign-in, and waits for **Keep** or **Discard**. Kept files go through the file input like picked files and
+  still need the usual Read click.
+- **Shared files are short-lived.** The worker keeps them in Cache Storage and redirects to the upload page; a
+  signed-out visitor goes through sign-in first. They expire after 10 minutes. The panel deletes the cache when it
+  takes them (stale entries included), the worker prunes expired entries on activate, a new share replaces an
+  earlier one, and sign-out deletes the cache. A file with no type (multipart sends it as `application/octet-stream`)
+  is stored with an empty type, so the panel goes by its extension; a file with no name becomes `shared-receipt`
+  with an extension from its type.
+- **Without a worker** (first launch before it installed, or a browser without one) the share reaches the
+  [route handler](../../apps/web/app/share-target/route.ts), which redirects to `/app/upload?shared=unavailable`
+  without reading the body; the panel explains it. On Vercel a share larger than 4.5 MB is refused with a 413 in
+  that case.
+- **Only the app registers it.** The landing, auth and lab pages never register the worker. Once installed it
+  controls every same-origin page (scope `/`), which only matters for offline page loads and the share target.
+- **iOS** has no install prompt or share target; the hint covers installing. The status bar style is `black`, so
+  pages start below it and need no top safe-area inset; the root `body` pads for side insets
+  (`viewport-fit=cover`). The install card sits above the mobile tab bar using the shell's `--app-bottom-inset`.
+
+The CSP allows `worker-src 'self'` and `manifest-src 'self'` ([`lib/csp.ts`](../../apps/web/lib/csp.ts)).
+[`e2e/pwa.spec.ts`](../../apps/web/e2e/pwa.spec.ts) checks installability (Chromium's own check), the icons, the
+worker's headers, registration, the offline page, that nothing but the precached files is ever cached, the share flow
+signed in and signed out (Keep, Discard, no upload without the visitor's clicks), a share posted by another site, and
+that sign-out clears a waiting share.
+
 ## Design principles and invariants
 
 - **Thin adapters.** A route handler checks origin, session and input shape, then runs one core program. If a
@@ -223,7 +337,8 @@ Security headers (HSTS, `X-Frame-Options: DENY`, a report-only CSP) are set in
 | Consent flow with GA configured           | `scripts/test.sh --analytics` (rebuilds with a test id; Google is stubbed)  |
 | Type check                                | `bun run typecheck`                                                         |
 
-The e2e specs ([`e2e/`](../../apps/web/e2e)) cover auth, upload, admin, smoke pages and security checks. They run with
+The e2e specs ([`e2e/`](../../apps/web/e2e)) cover auth, upload, admin, smoke pages and security checks.
+`capture.spec.ts` runs in its own `mobile-camera` project (390x844 Chromium with a fake camera). They run with
 `OCR_PROVIDER=fixture`, so no model is called.
 
 ## Common changes
@@ -239,6 +354,13 @@ The e2e specs ([`e2e/`](../../apps/web/e2e)) cover auth, upload, admin, smoke pa
 ### Add an admin action
 
 See [Admin actions](flows/admin-actions.md#add-an-admin-action).
+
+### Change the service worker
+
+Edit [`public/sw.js`](../../apps/web/public/sw.js) and bump `VERSION`, so browsers drop the old static cache. If a
+share target name changes, change [`lib/share-target.ts`](../../apps/web/lib/share-target.ts) too;
+`share-target.test.ts` fails until both match. After changing `app/icon.svg`, run `bun scripts/pwa-icons.ts` and
+commit the PNGs.
 
 ### Add an environment variable
 

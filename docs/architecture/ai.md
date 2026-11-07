@@ -7,6 +7,15 @@ failure into a small set of kinds. It also holds the list of models an admin may
 It does not choose models, retry across models, enforce deadlines across a chain or write anything. That is
 [packages/core](core.md)'s job.
 
+## Checking a provider key
+
+`checkProvider(providerId, { apiKey, models })` in [`check.ts`](../../packages/ai/src/check.ts) calls the provider's
+free model-list endpoint (Gemini `GET /v1beta/models` with `x-goog-api-key`, Anthropic `GET /v1/models` with
+`x-api-key`), so no tokens are spent. It returns a status only (`ok`, `invalid-key`, `no-billing-or-quota`,
+`rate-limited`, `unreachable`, `model-not-available`) and a latency; response bodies are read for keywords and
+dropped, because they can echo the key. The AI SDK providers expose no model-list call, hence plain `fetch` with a
+5 s timeout. Used by Admin → Settings → Connections.
+
 ## Contents
 
 - [Public API](#public-api)
@@ -40,14 +49,14 @@ extractReceipt({
 
 ## Key modules
 
-| File                                                   | What it holds                                                                                                                     |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| [`extract.ts`](../../packages/ai/src/extract.ts)       | The prompt, the provider registry (one per key set), per-model Claude options, `generateText` with `Output.object`, usage mapping |
-| [`schema.ts`](../../packages/ai/src/schema.ts)         | `receiptExtractionSchema`: the single definition of an extraction, with length caps                                               |
-| [`errors.ts`](../../packages/ai/src/errors.ts)         | `OCR_FAILURE_KINDS`, `classifyOcrError`, `OcrCallError`                                                                           |
-| [`models.ts`](../../packages/ai/src/models.ts)         | Providers, the model allowlist, effective-dated prices, `costOf`                                                                  |
-| [`categories.ts`](../../packages/ai/src/categories.ts) | The twelve canonical categories and their descriptions (fed to the model)                                                         |
-| [`fixture.ts`](../../packages/ai/src/fixture.ts)       | Offline provider: same bytes give the same canned receipt; bytes containing `FIXTURE_FAIL` fail                                   |
+| File                                                   | What it holds                                                                                                                                                                       |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`extract.ts`](../../packages/ai/src/extract.ts)       | The prompt, the provider registry (one per key set, in a 16-entry LRU keyed by a SHA-256 of the keys), per-model Claude options, `generateText` with `Output.object`, usage mapping |
+| [`schema.ts`](../../packages/ai/src/schema.ts)         | `receiptExtractionSchema`: the single definition of an extraction, with length caps                                                                                                 |
+| [`errors.ts`](../../packages/ai/src/errors.ts)         | `OCR_FAILURE_KINDS`, `classifyOcrError`, `OcrCallError`                                                                                                                             |
+| [`models.ts`](../../packages/ai/src/models.ts)         | Providers, the model allowlist, effective-dated prices, `costOf`                                                                                                                    |
+| [`categories.ts`](../../packages/ai/src/categories.ts) | The twelve canonical categories and their descriptions (fed to the model)                                                                                                           |
+| [`fixture.ts`](../../packages/ai/src/fixture.ts)       | Offline provider: same bytes give the same canned receipt; bytes containing `FIXTURE_FAIL` fail                                                                                     |
 
 ## Data flow
 

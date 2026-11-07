@@ -8,6 +8,7 @@ export const GET = withRequestEvent(
   () =>
     NextResponse.json(
       { ok: true, commit: commitSha() },
-      { headers: { "Cache-Control": "no-store" } },
+      // Cached at Vercel's edge for 10 s so a flood is served by the CDN, not the function.
+      { headers: { "Cache-Control": "public, max-age=0, s-maxage=10" } },
     ),
 );

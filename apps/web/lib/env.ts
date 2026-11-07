@@ -106,6 +106,8 @@ export const emailEnv = {
   resendApiKey: optional("RESEND_API_KEY"),
   /** Verified sender, e.g. `receiptOCR <noreply@yourdomain.com>`. */
   from: optional("EMAIL_FROM"),
+  /** Default Reply-To so answers to noreply mail reach the support inbox. */
+  replyTo: optional("SUPPORT_EMAIL"),
 };
 
 /** Inbox for support-form messages. Unset means the form can't deliver. */
