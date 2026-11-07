@@ -6,7 +6,7 @@ import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Privacy policy",
   description:
-    "What receiptOCR collects, who processes it (including Google Gemini, Anthropic Claude and, if enabled, Groq and OpenAI AI), how long it is kept and how to delete it.",
+    "What receiptOCR collects, who processes it (Gemini, Claude and, if enabled, Groq or OpenAI), how long it is kept and how to delete it.",
   path: "/privacy",
 });
 
