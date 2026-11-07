@@ -56,6 +56,7 @@ Steps are in [deployment.md](deployment.md).
 | `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                                                                                         |
 | `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; migration `0010` (index only)                                                                    |
 | `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying)                                                                |
+| `feat/dashboard`           | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                                                                                         |
 | `feat/wide-events` (#52)   | [Wide events](architecture/flows/observability.md): one event per request, page render, job attempt and tick; schema allowlist, tail sampling (`LOG_SAMPLE_RATE`, `LOG_SLOW_MS`); `job.run` is now `job.attempt`. Next: OTLP export |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),

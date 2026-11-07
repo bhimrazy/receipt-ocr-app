@@ -7,8 +7,12 @@ import {
 import { PanelSkeleton, RowsSkeleton } from "@/components/app-skeletons";
 import { ListPoller } from "@/components/processing-poller";
 import { ReceiptList } from "@/components/receipt-list";
+import { NoReadReceipts } from "@/components/dashboard/empty-states";
+import { SpendDashboardView } from "@/components/dashboard/spend-dashboard";
 import { UploadPanel } from "@/components/upload-panel";
 import { formatTimeUntil } from "@/lib/format";
+import { errorFields, logger } from "@/lib/log";
+import { getSpendView } from "@/lib/spend";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { cn } from "@receipt-ocr/ui/lib/utils";
@@ -217,7 +221,66 @@ async function RecentSection() {
   );
 }
 
-export default function HomePage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+function SpendSkeleton() {
+  return (
+    <div aria-hidden="true" className="mt-10 flex flex-col gap-4">
+      <Skeleton className="h-5 w-32" />
+      <Skeleton className="h-9 w-full max-w-lg rounded-full" />
+      <Skeleton className="h-72 w-full rounded-lg" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {Array.from({ length: 5 }, (_, i) => (
+          <Skeleton
+            className={cn("h-28 rounded-lg", i === 0 && "col-span-2 lg:col-span-1")}
+            key={i}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The spending dashboard. Skipped for an empty workspace (the upload and
+ * how-it-works content is the whole page then), and without a query while
+ * nothing has been read yet: both follow from the counts the page already has.
+ */
+async function SpendSection({ searchParams }: { searchParams: SearchParams }) {
+  const counts = await getReceiptCounts();
+  if (counts.total === 0) return null;
+  const read = counts.total - counts.failed - counts.inFlight;
+  if (read <= 0) {
+    return (
+      <section aria-labelledby="spending-heading" className="mt-10">
+        <h2 className="mb-3 text-base font-semibold" id="spending-heading">
+          Spending
+        </h2>
+        <NoReadReceipts failed={counts.failed} inFlight={counts.inFlight} />
+      </section>
+    );
+  }
+  let view: Awaited<ReturnType<typeof getSpendView>> | null = null;
+  try {
+    view = await getSpendView(await searchParams);
+  } catch (error) {
+    // The rest of Home still works; don't let the dashboard take it down.
+    logger.error({ event: "home.spend_failed", unit: "log", error: errorFields(error) });
+  }
+  if (view) return <SpendDashboardView dashboard={view.dashboard} search={view.search} />;
+  return (
+    <section aria-labelledby="spending-heading" className="mt-10">
+      <h2 className="mb-3 text-base font-semibold" id="spending-heading">
+        Spending
+      </h2>
+      <Card className="p-5 text-sm text-muted-foreground" role="status">
+        Spending totals couldn&apos;t load just now. Reload the page to try again.
+      </Card>
+    </section>
+  );
+}
+
+export default function HomePage({ searchParams }: { searchParams: SearchParams }) {
   logPageRender("/app");
   return (
     <div className="mx-auto max-w-6xl">
@@ -245,6 +308,10 @@ export default function HomePage() {
           <CheckSection />
         </Suspense>
       </div>
+
+      <Suspense fallback={<SpendSkeleton />}>
+        <SpendSection searchParams={searchParams} />
+      </Suspense>
 
       <Suspense
         fallback={

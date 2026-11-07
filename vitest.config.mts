@@ -5,13 +5,14 @@ const root = import.meta.dirname;
 
 /**
  * One config for the whole workspace. These are unit tests over pure logic —
- * no database, no network, no DOM — so a single Node environment covers all of
+ * no database, no network, no browser DOM (components render to static markup) — so a single Node environment covers all of
  * them and keeps `bun run test` fast enough to run on every change.
  */
 export default defineConfig({
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "node",
-    include: ["apps/**/*.test.ts", "packages/**/*.test.ts", "bench/**/*.test.ts"],
+    include: ["apps/**/*.test.{ts,tsx}", "packages/**/*.test.ts", "bench/**/*.test.ts"],
     exclude: ["**/node_modules/**", "**/.next/**", "**/dist/**"],
   },
   resolve: {
