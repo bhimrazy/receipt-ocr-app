@@ -13,6 +13,7 @@ HTTP.
 - [Key modules](#key-modules)
 - [Installable app (PWA)](#installable-app-pwa)
 - [Consent and analytics](#consent-and-analytics)
+- [Search indexing and hosts](#search-indexing-and-hosts)
 - [Design principles and invariants](#design-principles-and-invariants)
 - [How to test it](#how-to-test-it)
 - [Common changes](#common-changes)
@@ -235,6 +236,31 @@ flowchart TD
   key; `/cookies` renders it, and `cookies.test.ts` scans the code for cookie, `localStorage`, Cache Storage and
   IndexedDB names that have no entry.
 - **CSP.** `buildContentSecurityPolicy` adds Google's origins only when GA is on. Vercel's script is same-origin.
+
+## Search indexing and hosts
+
+Only one host may be indexed: `PRODUCTION_HOST` in [`lib/seo-hosts.ts`](../../apps/web/lib/seo-hosts.ts)
+(`receipt-ocr.bhimraj.com.np`). The file has no dependencies because `next.config.ts` imports it. Every check reads the
+`Host` header only, never `X-Forwarded-Host`, so the config rules and the route handlers agree and a client can't
+spoof one.
+
+| Piece                                                                                                       | What it does                                                                                                                                                 |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`app/robots.ts`](../../apps/web/app/robots.ts)                                                             | Decided per request: on the production host `Allow: /` with the private paths disallowed and the sitemap URL; on any other host `Disallow: /`                |
+| `X-Robots-Tag: noindex, nofollow` in [`next.config.ts`](../../apps/web/next.config.ts)                      | Added to every response whose host is not the production host (previews, localhost, the deployment's `*.vercel.app` URL), including images, JSON and PDFs    |
+| [`app/sitemap.ts`](../../apps/web/app/sitemap.ts)                                                           | The indexable public pages (home, privacy, terms, cookies) with real last-modified dates; `e2e/seo.spec.ts` checks each is served, canonical and not noindex |
+| [`app/llms.txt`](../../apps/web/app/llms.txt), `llms-full.txt`, [`lib/llms.ts`](../../apps/web/lib/llms.ts) | A plain-text summary of the product for AI assistants, and the long form                                                                                     |
+| `www` redirect in `next.config.ts`                                                                          | `www.receipt-ocr.bhimraj.com.np` answers `308` to the apex host, same path                                                                                   |
+
+Structured data (JSON-LD) on the public pages comes from [`lib/seo.ts`](../../apps/web/lib/seo.ts). The lab pages keep
+their own `noindex`.
+
+## Queue drain route
+
+`GET, POST /api/jobs/drain` ([route](../../apps/web/app/api/jobs/drain/route.ts)) is a thin adapter over `drainOnce` in
+core. It answers only to `Authorization: Bearer $CRON_SECRET` (`401` when wrong or unset) and stays inside a 60 s budget
+to match `pg_net`. Callers: Supabase `pg_cron` every minute, and the daily Vercel cron in `vercel.json` as a recovery
+net. See [Background jobs](flows/jobs.md).
 
 ## Installable app (PWA)
 

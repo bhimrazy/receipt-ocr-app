@@ -158,11 +158,23 @@ only if the new one is better or equal on totals.
 - **The model list is an allowlist.** Admin settings validate model ids against `OCR_MODELS`; a typo can't reach a
   provider.
 
+## Default chain
+
+Until an admin saves a chain, `defaultOcrRouting` in [`settings.ts`](../../packages/core/src/settings.ts) uses
+`anthropic:claude-sonnet-5-5` first, then the environment's Gemini model (`GEMINI_MODEL`, else the built-in default) as
+the fallback. Steps whose provider has no key are skipped, so a deployment with only a Google key still runs on Gemini.
+`OCR_PROVIDER=fixture` replaces the chain with the offline fixture. This was the owner's choice in #93.
+
+**Open owner decision:** the [two-tier OCR review](../reviews/2026-11-07-two-tier-ocr.md) and the 31-receipt
+[benchmark](../../bench/results/2026-11-07-real.md) found Haiku 5.5 (about $0.0006 a receipt) and Gemini Flash-Lite (about $0.0014) scoring
+the same as Sonnet 5.5 (about $0.011), so the default costs roughly ten times more for no measured gain. Whether to put
+Haiku (or Flash-Lite) first is tracked in [STATUS](../STATUS.md); the code and this page stay as they are until then.
+
 ## Anthropic (Claude)
 
-Three models, none in the default chain: `anthropic:claude-haiku-5-5`, `anthropic:claude-sonnet-5-5`,
-`anthropic:claude-opus-5-5` (bare ids, never date-suffixed). An admin adds them in **Admin → Settings → OCR models**
-once `ANTHROPIC_API_KEY` is set. The request settings live in `ANTHROPIC_OPTIONS` in
+Three models: `anthropic:claude-haiku-5-5`, `anthropic:claude-sonnet-5-5`, `anthropic:claude-opus-5-5` (bare ids,
+never date-suffixed). Sonnet 5.5 is the first step of the [default chain](#default-chain); an admin picks any of them in
+**Admin → Settings → OCR models**. All need `ANTHROPIC_API_KEY`; a step whose provider has no key is skipped. The request settings live in `ANTHROPIC_OPTIONS` in
 [`extract.ts`](../../packages/ai/src/extract.ts), one entry per model:
 
 - **Structured output** through `output_config.format` (a JSON schema), set explicitly with
@@ -196,7 +208,7 @@ once `ANTHROPIC_API_KEY` is set. The request settings live in `ANTHROPIC_OPTIONS
 
 ## Groq
 
-One model, not in the default chain: `groq:qwen/qwen3.8-27b` ("Qwen 3.8 27B (Groq, preview)"). An admin adds it in
+One model, not in the default chain (admin opt-in): `groq:qwen/qwen3.8-27b` ("Qwen 3.8 27B (Groq, preview)"). An admin adds it in
 **Admin → Settings → OCR models** once `GROQ_API_KEY` is set. It uses `@ai-sdk/groq` 4.0.74 (Vercel, `vercel/ai`).
 Facts below are from Groq's docs ([vision](https://console.groq.com/docs/vision),
 [models](https://console.groq.com/docs/models), [structured outputs](https://console.groq.com/docs/structured-outputs),
@@ -229,7 +241,7 @@ API yet; the first benchmark is the check.
 
 ## OpenAI
 
-Two models, not in the default chain: `openai:gpt-6-luna` ("GPT-6 Luna", cheap and fast) and `openai:gpt-6.1-terra`
+Two models, not in the default chain (admin opt-in): `openai:gpt-6-luna` ("GPT-6 Luna", cheap and fast) and `openai:gpt-6.1-terra`
 ("GPT-6.1 Terra", stronger). An admin adds them in **Admin → Settings → OCR models** once `OPENAI_API_KEY` is set. It
 uses `@ai-sdk/openai` 4.0.106 (Vercel, `vercel/ai`, published 2026-10-30) over the Responses API, the provider's default.
 Facts below are from OpenAI's docs ([models](https://developers.openai.com/api/docs/models),

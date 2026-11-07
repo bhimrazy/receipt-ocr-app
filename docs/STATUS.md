@@ -1,7 +1,7 @@
 # Status and handoff
 
 Where the project stands, what is in flight, and what needs a decision. Read this first when picking the work up on a
-new machine; keep it current when something merges or a decision is made. Last updated 2026-11-06 (after #36).
+new machine; keep it current when something merges or a decision is made. Last updated 2026-11-07 (after #110).
 
 How the system is built (every app and package, the main flows and the data model) is in
 [architecture](architecture/README.md).
@@ -32,6 +32,82 @@ How the system is built (every app and package, the main flows and the data mode
 | #38           | Hardening: session check before the upload body, PDF page cap, per-email auth limits, CSP reports, health endpoints, SECURITY.md, [runbook](runbook.md)                                                                |
 | #40           | Load test suite on a 1 vCPU / 1 GB server (`scripts/load.sh`, manual `load.yml`); [results](../bench/results/load-2026-11-06.md)                                                                                       |
 
+## Shipped to `main` (2026-11-07)
+
+Every PR merged 2026-11-07 (plus #42 and #44 from 2026-11-06), by number. Details are in each PR and in the
+[architecture](architecture/README.md) pages.
+
+| PR   | What                                                                               |
+| ---- | ---------------------------------------------------------------------------------- |
+| #41  | Close five PDF page-count evasions                                                 |
+| #42  | Size-target image encoder                                                          |
+| #43  | Installable PWA with offline fallback and Android share target                     |
+| #44  | Currencies and FX conversion plan                                                  |
+| #45  | Three-decimal currencies in the extraction prompt                                  |
+| #46  | Phone app shell (tab bar with Scan, app bar with Back, sheets)                     |
+| #47  | In-app camera, review step and batch upload                                        |
+| #48  | Receipt groups                                                                     |
+| #49  | Spending dashboard on Home                                                         |
+| #51  | Operations page and jobs view                                                      |
+| #52  | Wide events with one schema, allowlist and tail sampling                           |
+| #53  | Cookie consent and privacy-respecting analytics                                    |
+| #54  | Faster public pages and per-page SEO metadata                                      |
+| #55  | Manual database migrations, deploy gate, preview sign-in on staging                |
+| #56  | Fix the between-retries quota test flake                                           |
+| #57  | Squash migrations into a baseline with row-level security on every table           |
+| #58  | Reorganise the env examples                                                        |
+| #59  | Anthropic Claude as a second OCR provider                                          |
+| #60  | Add an all-rights-reserved license                                                 |
+| #61  | Fewer Vercel previews, faster CI, hydration-safe auth e2e                          |
+| #62  | Real receipt benchmark set and long-receipt capture plans                          |
+| #63  | Product idea review for receipt review state and flagging                          |
+| #64  | Real receipt fixtures (CORD, Wikimedia Commons)                                    |
+| #65  | Plan for a read-only MCP server                                                    |
+| #66  | Release-based deploys and self-hosting, for later                                  |
+| #67  | Find the last deploy from workflow runs, stop moving a git tag                     |
+| #68  | Step-by-step Vercel environment setup                                              |
+| #69  | Plan for bring your own AI key and storage                                         |
+| #70  | Check connections panel                                                            |
+| #71  | Preview environment keys and R2 CORS guidance                                      |
+| #72  | Plan for in-app feedback and feature requests                                      |
+| #73  | Show which model reads your receipts                                               |
+| #74  | Security hardening and incident readiness plan                                     |
+| #75  | Run the M1 quota tests with one attempt per failed read                            |
+| #76  | Production-environment.md, sign-in clients per environment                         |
+| #77  | Fixed preview domain from the preview branch                                       |
+| #78  | Redact secret shapes from telemetry, hash and bound client caches                  |
+| #79  | Default Reply-To to SUPPORT_EMAIL                                                  |
+| #80  | Label-only previews until launch                                                   |
+| #81  | Turnstile setup for Preview                                                        |
+| #82  | Edge-cache healthy health checks                                                   |
+| #83  | Consistent answer-key format for the real fixtures                                 |
+| #84  | Gemini Flash-Lite 400 on every call (maxItems in response schema)                  |
+| #85  | Results on 31 real receipts (five models)                                          |
+| #86  | Dual-calendar (AD and Bikram Sambat) receipt dates                                 |
+| #87  | Extraction prompt v2, proven with a v1/v2 benchmark A/B                            |
+| #88  | Show the in-app camera only on touch devices                                       |
+| #89  | Rename workspace Admin role to Manager, clearer descriptions                       |
+| #90  | Upgrade Better Auth to 1.7.18 (security fixes)                                     |
+| #91  | Branded, light/dark-safe emails, prerendered from React Email at build time        |
+| #92  | Confirm account deletion by email, step-up for sensitive changes, password notices |
+| #93  | Default to Claude Sonnet 5.5, with Gemini as fallback                              |
+| #94  | Payment provider research for a Nepal-based seller                                 |
+| #96  | Cron-driven queue drain route and worker loop                                      |
+| #97  | UX decisions for mobile nav, install prompt, name and push                         |
+| #98  | Smoother tab navigation and a centred Scan tab                                     |
+| #99  | Two-step review with a filtered preview, loupe and stable layout                   |
+| #100 | Scan line mark, masters and asset generator                                        |
+| #101 | IOS startup images and maker credit in footer and settings                         |
+| #102 | Scope vercel alias set to the team                                                 |
+| #103 | Index only the production host, llms.txt, richer structured data                   |
+| #104 | Deploy a labelled preview once, skip production deploys that ship nothing          |
+| #105 | BYOK admin controls, limits and states                                             |
+| #106 | Add Groq as an OCR provider (Qwen 3.8 27B vision)                                  |
+| #107 | Two-tier OCR (LiteParse, OCRia-1) and what fits receipts                           |
+| #108 | Spell it ReceiptOCR and say scanned                                                |
+| #109 | Make the concurrent drain tests race-free                                          |
+| #110 | Add OpenAI as an OCR provider                                                      |
+
 ## Migrations squashed (2026-11-07)
 
 Pre-launch, all migrations `0000`-`0010` were squashed into one `0000_baseline` that also enables row-level security on
@@ -47,7 +123,7 @@ Steps are in [deployment.md](deployment.md).
   `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies the squashed baseline with
   row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
   Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
-- Queue drain (jobs plan Track B): after merge, `CRON_SECRET` is already in Vercel; run the Supabase SQL in
+- Queue drain (#96): `CRON_SECRET` is already in Vercel. Store it in Supabase Vault and run the pg_cron SQL in
   [production environment, step 8](production-environment.md#8-queue-drain-cron) (pg_cron + pg_net + Vault), then
   check `cron.job_run_details` and `net._http_response`. Until then only the daily Vercel cron recovers stuck jobs.
 - Production deploys automatically after CI passes on a push to `main`. Manual runs are allowed only from `main`.
@@ -62,7 +138,7 @@ Steps are in [deployment.md](deployment.md).
   deploys need a successful `production-db` run with the same migrations. The automatic gate compares with the last
   run of the workflow on `main` whose `deploy-production` job succeeded; CI creates no git tags (tags are for real
   releases, later).
-- `feat/anthropic-provider` adds migration `0001_ocr_call_refused_unsupported` (widens `ocr_calls_status_check`
+- The Anthropic provider (#59) added migration `0001_ocr_call_refused_unsupported` (widens `ocr_calls_status_check`
   with `refused` and `unsupported-file`; existing rows stay valid). Run **Database Migration** before deploying it:
   without it, a refused or skipped call fails its ledger insert.
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
@@ -76,31 +152,24 @@ Steps are in [deployment.md](deployment.md).
   `BETTER_AUTH_SECRETS=1:<current BETTER_AUTH_SECRET>`.
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
 - If an admin saved an OCR chain naming `gemini-3.7-flash`, re-save it in Admin → Settings.
+- Set `EMAIL_FROM` with the display name `ReceiptOCR` (for example `ReceiptOCR <noreply@...>`), matching the brand.
+- Groq: enable Zero Data Retention in the Groq org's Data Controls before adding `GROQ_API_KEY`; without it Groq may
+  keep inputs and outputs for up to 30 days, and the privacy policy says it does not ([deployment.md](deployment.md)).
+- OpenAI: requests are kept up to 30 days for abuse monitoring; zero data retention needs OpenAI's approval. The
+  privacy policy names OpenAI as an opt-in processor, so add `OPENAI_API_KEY` knowingly ([ai.md](architecture/ai.md#openai)).
+- `receipt-ocr.vercel.app` belongs to another Vercel project, so it is not this app's URL; use the project's own
+  `*.vercel.app` URL or the custom domain (the production host is `receipt-ocr.bhimraj.com.np`).
+- After 2026-11-12, delete `minimumReleaseAgeExcludes` from `bunfig.toml`: it exempts Better Auth 1.7.18 (#90, security
+  fixes and passkeys) from the 7-day cooldown, approved on 2026-11-07, and 1.7.18 clears the cooldown by then.
 
 ## In flight
 
-| Track (branch)                  | Work                                                                                                                                                                                                                                                                                               |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `feat/capture` (#47)            | In-app camera, batch capture (limit per plan, default 10, set in Admin), review with auto-detected four-corner crop, straightening and filters, uploads two at a time                                                                                                                              |
-| `feat/size-target-encoder`      | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                                                                                                                                                         |
-| `feat/pwa` (#43)                | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target (files wait for Keep or Discard), install prompt, kill switch in the runbook                                                                                                            |
-| `feat/mobile-shell`             | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                                                                                                                                                   |
-| `fix/pdf-page-evasions`         | Five remaining ways to hide pages from the PDF page counter                                                                                                                                                                                                                                        |
-| `feat/admin-ops`                | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; index only                                                                                                                                                      |
-| `feat/receipt-groups`           | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; apply its migration before deploying                                                                                                                                    |
-| `feat/dashboard`                | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                                                                                                                                                        |
-| `ci/db-migrations`              | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging                                                                                                                        |
-| `feat/consent-analytics`        | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                                                                                                                                                 |
-| `feat/wide-events` (#52)        | [Wide events](architecture/flows/observability.md): one event per request, page render, job attempt and tick; schema allowlist, tail sampling (`LOG_SAMPLE_RATE`, `LOG_SLOW_MS`); `job.run` is now `job.attempt`. Next: OTLP export                                                                |
-| `feat/admin-check-connections`  | Admin → Settings → Connections: on-demand status check of AI providers (free model-list call), storage (put/get/delete) and a test email to yourself; warns after saving the OCR chain; audited, rate-limited                                                                                      |
-| `feat/settings-receipt-reading` | Settings → Receipt reading (read-only): the platform default model chain by friendly label and its providers; privacy policy and terms now name Anthropic as a processor                                                                                                                           |
-| `feat/anthropic-provider`       | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet                                                                                                                                         |
-| `feat/groq-provider`            | Groq as a third OCR provider: Qwen 3.8 27B (vision, free tier) selectable in Admin → Settings; `@ai-sdk/groq` 4.0.74. Not run against the real API yet; benchmark first. Privacy policy, terms and FAQ name Groq (enable ZDR on the Groq org first, see deployment.md)                             |
-| `feat/openai-provider`          | OpenAI as a fourth OCR provider: GPT-6 Luna and GPT-6.1 Terra (Responses API, reasoning "none", strict schema, PDFs) selectable in Admin → Settings; `@ai-sdk/openai` 4.0.106. Not run against the real API yet; benchmark first. Privacy policy, terms and FAQ name OpenAI as an opt-in processor |
-| `feat/jobs-drain`               | Track B of the [jobs plan](plans/2026-11-06-jobs-queue.md): `drainOnce` / `runWorkerLoop` in core, `/api/jobs/drain` route (`CRON_SECRET`), daily Vercel cron, Supabase `pg_cron` runbook, "Waiting to retry" in the receipt list. `apps/worker` still to do                                       |
-| `feat/prompt-v2`                | Extraction prompt v2: system-prompt rules, schema field definitions, AD dates (BS-only null), injection guard, `ocr.prompt_version`; A/B in bench/results                                                                                                                                          |
-| `fix/step-up-verification`      | Account deletion only through an emailed link (1 hour, single use); email change approved by the current address; "password changed" notices; 15-minute fresh session to delete or change email                                                                                                    |
-| `feat/email-design`             | Every transactional email rebuilt with React Email, prerendered at build time (no React Email at runtime): light-first and dark-safe, emerald button (red for delete), logo, preheader, short fallback link, footer, plain text; `email:generate` / `email:check` / `email:preview`                |
+Open pull requests only.
+
+| PR   | Work                                                                                                                                                   |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #95  | Two-step sign-in (TOTP), passkeys and step-up for important actions. Reviewed; waiting for the owner's go on migration `0002` and on decision 10 below |
+| #111 | Per-model reasoning effort in the OCR chain (Admin → Settings). Fix round after review                                                                 |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -116,29 +185,30 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 
 ## Decisions waiting on the owner
 
-1. **Remove the Better Auth cooldown exemption after 2026-11-12.** Approved 2026-11-07 to take 1.7.18 (security
-   fixes from 1.7.16, passkeys); delete `minimumReleaseAgeExcludes` from `bunfig.toml` once 1.7.18 is 7 days old.
-2. Classic as the homepage (then delete `app/(lab)` and `components/marketing`, ~41% of TS code).
-3. Plan limits: daily per user (today) or monthly per workspace; prices; payment provider. See
+1. Classic as the homepage (then delete `app/(lab)` and `components/marketing`, ~41% of TS code).
+2. Plan limits: daily per user (today) or monthly per workspace; prices; payment provider. See
    [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
-4. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
+3. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
-5. Anthropic (direct key, `ANTHROPIC_API_KEY`): approve the Claude benchmark spend (dry-run estimate about $0.34 for
-   the six fixtures on all three models), then which Claude model, if any, joins the production chain and where.
-6. PostHog: server-only first (recommended) or browser too; Sentry tracing off; source-map upload approach.
-7. Members: free seats 3 or 5, single owner + transfer, pending invites count. See
+4. Default OCR chain. Today it is Claude Sonnet 5.5, then the env Gemini model (your choice in #93). The 31-receipt
+   benchmark (#85) and the [two-tier review](reviews/2026-11-07-two-tier-ocr.md) found Haiku 5.5 ($0.0006 a receipt)
+   and Gemini Flash-Lite ($0.0014) scoring the same as Sonnet ($0.011): about 10x the cost for no measured gain.
+   Keep Sonnet first, or put Haiku (then Flash-Lite) first? Reviews recommend Haiku-first; nothing changes until you
+   decide ([ai.md](architecture/ai.md#default-chain)).
+5. PostHog: server-only first (recommended) or browser too; Sentry tracing off; source-map upload approach.
+6. Members: free seats 3 or 5, single owner + transfer, pending invites count. See
    [members plan](plans/2026-11-06-members-admin-plan.md).
-8. Branch protection on `main` requiring CI.
-9. BYOK tables (`user_credentials`, `storage_source`): keep or delete.
-10. Usage ledger: retention period (suggested 13 months, then a purge job and a privacy-page line); whether the
-    global cap needs a platform-wide lock (it can overshoot by the number of users uploading at the same moment).
-11. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): passkey rpID (host or apex via
+7. Branch protection on `main` requiring CI.
+8. BYOK tables (`user_credentials`, `storage_source`): keep or delete.
+9. Usage ledger: retention period (suggested 13 months, then a purge job and a privacy-page line); whether the
+   global cap needs a platform-wide lock (it can overshoot by the number of users uploading at the same moment).
+10. Passkeys and two-factor (PR #95, migration `0002`) ([plan](plans/2026-11-06-passkeys-2fa.md)): passkey rpID (host or apex via
     `PASSKEY_RP_ID`), require passkey or password+TOTP for platform admins, `session.freshAge` 24 h → 1 h, no email
     OTP, trusted-device length, nudges.
-12. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
+11. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
     `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
     which amounts are converted, sign-up default from country.
-13. UX decisions ([plan](plans/2026-11-07-ux-decisions.md)): five-slot phone bar with centred Scan and Groups (no
+12. UX decisions ([plan](plans/2026-11-07-ux-decisions.md)): five-slot phone bar with centred Scan and Groups (no
     drawer), install offer after the first read with a snooze and an iOS 26 guide, the name spelled ReceiptOCR,
     push notifications deferred until batch capture data.
 
@@ -160,8 +230,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    multi-part receipts: [long receipt capture](plans/2026-11-07-long-receipt-capture.md).
    Two-tier OCR (LiteParse, OCRia-1, open-weight OCR models): cheap model first, escalate on arithmetic checks; no
    OCR-first parser ([two-tier OCR review](reviews/2026-11-07-two-tier-ocr.md)).
-5. Second provider: Anthropic wired in (`feat/anthropic-provider`); admitted to the default chain only by the
-   benchmark. Then OpenAI.
+5. Providers: Anthropic, Groq and OpenAI are wired in (#59, #106, #110) and benchmarked (#85). Next: per-model options
+   and limits on the model table, effort per step (#111), then key source (BYOK).
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
    Security; PR B passkeys (primary sign-in) + admin enforcement. Each adds a migration after the baseline.
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
@@ -241,12 +311,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   the server's stdout), so these flows are covered by `apps/web/lib/step-up.int.test.ts` only.
 - Email change: the new address gets the sign-up wording ("finish setting up your account") from
   `verificationEmail`; and an unverified account's old address gets no notice (Better Auth skips the approval step).
-- Email templates, #91 vs #92: #91 (email redesign) rewrites `packages/email` as async `(ctx, input) => Promise<EmailContent>`
-  in `templates.tsx`, and its `emailChangeNoticeEmail` has no approval link. Whichever lands second adapts: the
-  email-change mail must carry Better Auth's approval `url` and its one-hour expiry and keep the reset-password link;
-  the delete mail keeps the single-use one-hour link to `/app/settings/delete-account`.
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
-- Benchmark has six synthetic images and no committed results.
+- Benchmark: results are committed for 31 real receipts ([2026-11-07-real](../bench/results/2026-11-07-real.md)); the Nepal set is still small, and the arithmetic-checks cascade (`--cascade`) does not exist yet.
 - Load test findings (after #37): upload capacity on the small server fell from 64/s to between 12/s (holds) and
   48/s (fails: end-to-end p95 17 s, Postgres CPU 87%). The quota count (`ocr_rounds` per user, per page and twice per
   upload) is still the top Postgres statement, with the job queue queries next. Next: a performance track that fills
