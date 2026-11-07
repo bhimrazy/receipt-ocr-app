@@ -179,3 +179,118 @@ test("closing the camera stops it", async ({ page }) => {
     await page.evaluate(() => (window as unknown as { track: MediaStreamTrack }).track.readyState),
   ).toBe("ended");
 });
+
+test("the camera link opens once: Back from the receipt doesn't reopen it", async ({ page }) => {
+  await signUp(page, uniqueEmail("capture-back"));
+  await page.goto("/app/upload?capture=1");
+  const camera = page.getByRole("dialog", { name: "Camera" });
+  const shutter = camera.getByRole("button", { name: "Take photo" });
+  await expect(shutter).toBeEnabled({ timeout: 15_000 });
+  // The parameter is spent, so the next Scan tap is a fresh navigation.
+  await expect(page).toHaveURL(/\/app\/upload$/);
+  await shutter.click();
+  await camera.getByRole("button", { name: /Done/ }).click();
+  await page
+    .getByRole("dialog", { name: "Review photos" })
+    .getByRole("button", { name: "Read receipt" })
+    .click();
+  await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
+  await page.goBack();
+  await expect(page).toHaveURL(/\/app\/upload$/);
+  await expect(page.getByRole("heading", { name: "Upload receipts" })).toBeVisible();
+  await expect(camera).toHaveCount(0);
+});
+
+/** Picks `count` copies of the receipt and sends them from review, as one queued batch. */
+async function readBatch(page: Page, count: number) {
+  await page
+    .locator('input[type="file"][multiple]')
+    .setInputFiles(Array.from({ length: count }, () => receipt));
+  await page
+    .getByRole("dialog", { name: "Review photos" })
+    .getByRole("button", { name: `Read ${count} receipts` })
+    .click();
+}
+
+const accepted = (n: number) => ({
+  status: 201,
+  contentType: "application/json",
+  body: JSON.stringify({ receiptId: `00000000-0000-4000-8000-00000000000${n}` }),
+});
+
+test("a failed upload shows Retry, and the retry goes through", async ({ page }) => {
+  await signUp(page, uniqueEmail("batch-retry"));
+  let calls = 0;
+  await page.route("**/api/receipts", (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    calls++;
+    return calls === 1
+      ? route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Something went wrong on our side." }),
+        })
+      : route.fulfill(accepted(calls));
+  });
+  await page.goto("/app");
+  await readBatch(page, 2);
+  const list = page.getByRole("list", { name: "Receipts to read" });
+  await expect(list.getByText("Something went wrong on our side.")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByText("1 receipt uploaded.")).toBeVisible();
+  await expect(list.getByRole("listitem")).toHaveCount(1);
+  await list.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByText("1 receipt uploaded.")).toBeVisible();
+  await expect(list).toHaveCount(0);
+  await expect.poll(() => calls).toBe(3);
+});
+
+test("a per-minute 429 pauses the batch, then it carries on by itself", async ({ page }) => {
+  await signUp(page, uniqueEmail("batch-pause"));
+  let calls = 0;
+  await page.route("**/api/receipts", (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    calls++;
+    return calls === 1
+      ? route.fulfill({
+          status: 429,
+          headers: { "Retry-After": "3" },
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Too many uploads this minute." }),
+        })
+      : route.fulfill(accepted(calls));
+  });
+  await page.goto("/app");
+  await readBatch(page, 3);
+  await expect(page.getByText(/Paused for your plan's per-minute limit/)).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByText("3 receipts uploaded.")).toBeVisible({ timeout: 15_000 });
+  await expect.poll(() => calls).toBe(4);
+});
+
+test("a daily 429 stops the batch and keeps the rest", async ({ page }) => {
+  await signUp(page, uniqueEmail("batch-stop"));
+  let calls = 0;
+  await page.route("**/api/receipts", (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    calls++;
+    return route.fulfill({
+      status: 429,
+      headers: { "Retry-After": "36000" },
+      contentType: "application/json",
+      body: JSON.stringify({ error: "You've reached today's limit." }),
+    });
+  });
+  await page.goto("/app");
+  await readBatch(page, 3);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "The rest are still here" }),
+  ).toContainText("You've reached today's limit.", { timeout: 30_000 });
+  const list = page.getByRole("list", { name: "Receipts to read" });
+  await expect(list.getByRole("listitem")).toHaveCount(3);
+  // Two were in flight when the limit came back; the third was never sent.
+  await expect.poll(() => calls).toBe(2);
+  await expect(page.getByRole("button", { name: "Read 3 receipts" })).toBeEnabled();
+});
