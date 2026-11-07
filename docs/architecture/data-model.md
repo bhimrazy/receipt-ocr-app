@@ -28,6 +28,7 @@ erDiagram
   organization ||--o{ invitation : "has pending"
   user ||--o{ invitation : "sent (inviter_id)"
   user ||--o| two_factor : "authenticator"
+  user ||--o{ passkey : "WebAuthn credentials"
   user ||--o{ step_up_events : "verified"
   session ||--o{ step_up_codes : "emailed code for"
 
@@ -47,6 +48,15 @@ erDiagram
     text backup_codes "sealed"
     boolean verified
     int failed_verification_count
+  }
+  passkey {
+    text id PK
+    text user_id FK
+    text credential_id UK
+    text public_key
+    bigint counter
+    boolean backed_up "synced"
+    text aaguid "authenticator model"
   }
   step_up_events {
     uuid id PK
@@ -293,11 +303,11 @@ erDiagram
 
 ## What happens on delete
 
-| When this is deleted | Rows that cascade (are deleted)                                                                                             | Rows that stay with the id set to null                                                                                                                                                              |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `step_up_events`, `step_up_codes` | `receipts.user_id`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by` |
-| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`                                     | `ocr_rounds.organization_id`, `ocr_calls.organization_id`                                                                                                                                           |
-| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                           | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                             |
+| When this is deleted | Rows that cascade (are deleted)                                                                                                        | Rows that stay with the id set to null                                                                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `passkey`, `step_up_events`, `step_up_codes` | `receipts.user_id`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by` |
+| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`                                                | `ocr_rounds.organization_id`, `ocr_calls.organization_id`                                                                                                                                           |
+| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                      | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                             |
 
 Two rules sit on top of the cascades, in [packages/core](core.md):
 
@@ -315,6 +325,7 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `organization`          | `organization_slug_idx` on `slug`                                                            | Personal workspaces use the user id as slug, with a random suffix on collision                                                                                      |
 | `member`                | `member_org_user_idx` on `(organization_id, user_id)`                                        | One membership per user per workspace                                                                                                                               |
 | `two_factor`            | `two_factor_user_id_idx` on `user_id`                                                        | One authenticator per user (`0002`)                                                                                                                                 |
+| `passkey`               | `passkey_credential_id_idx` on `credential_id`                                               | A WebAuthn credential belongs to one account                                                                                                                        |
 | `step_up_events`        | `method` and `outcome` checks                                                                | Only the known methods and `sent` / `verified` / `failed`                                                                                                           |
 | `ocr_rounds`            | `ocr_rounds_receipt_round_idx` on `(receipt_id, round)`                                      | A round is recorded once                                                                                                                                            |
 | `ocr_calls`             | `ocr_calls_receipt_round_attempt_step_idx` on `(receipt_id, round, job_attempt, step)`       | An attempt's calls written twice (a lost commit acknowledgement, then the failure path) are billed once (`onConflictDoNothing`); each automatic retry keeps its own |

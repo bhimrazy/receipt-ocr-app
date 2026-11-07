@@ -2,10 +2,10 @@
 
 Authentication is [Better Auth](https://better-auth.com), configured in [`lib/auth.ts`](../../../apps/web/lib/auth.ts)
 and served at `/api/auth/*`. It stores users, sessions, accounts, workspaces (organizations), members and
-invitations in Postgres through the Drizzle adapter. Four plugins are on: **organization** (workspaces), **admin**
-(platform roles, bans, impersonation), **twoFactor** (authenticator apps and backup codes) and `nextCookies` (cookies
-from server actions). The two-factor and step-up wiring lives in
-[`lib/auth-two-factor.ts`](../../../apps/web/lib/auth-two-factor.ts).
+invitations in Postgres through the Drizzle adapter. The plugins: **organization** (workspaces), **admin**
+(platform roles, bans, impersonation), **twoFactor** (authenticator apps and backup codes), **passkey**
+(`@better-auth/passkey`, WebAuthn) and `nextCookies` (cookies from server actions). The two-factor, passkey and
+step-up wiring lives in [`lib/auth-two-factor.ts`](../../../apps/web/lib/auth-two-factor.ts).
 
 ## Contents
 
@@ -16,6 +16,7 @@ from server actions). The two-factor and step-up wiring lives in
 - [Every request after sign-in](#every-request-after-sign-in)
 - [Two-step sign-in](#two-step-sign-in)
 - ["Confirm it's you" (step-up)](#confirm-its-you-step-up)
+- [Passkeys](#passkeys)
 - [Admins](#admins)
 - [Invitations](#invitations)
 - [Password reset and account deletion](#password-reset-and-account-deletion)
@@ -166,11 +167,12 @@ Important actions need a check passed in the last 10 minutes on **this session**
 `step_up_at` and `step_up_method`, so nothing can be carried to another session. The policy is pure and unit-tested
 ([`step-up/policy.ts`](../../../packages/core/src/step-up/policy.ts)):
 
-| Account                   | Can verify with                          |
-| ------------------------- | ---------------------------------------- |
-| Has an authenticator app  | App code or a backup code (passkey next) |
-| No second factor          | A 6-digit code emailed to them           |
-| Platform admin, no factor | Nothing: must enrol first                |
+| Account                   | Can verify with                       |
+| ------------------------- | ------------------------------------- |
+| Has a passkey             | The passkey (a fresh passkey sign-in) |
+| Has an authenticator app  | App code or a backup code             |
+| No second factor          | A 6-digit code emailed to them        |
+| Platform admin, no factor | Nothing: must enrol first             |
 
 ```mermaid
 sequenceDiagram
@@ -204,6 +206,18 @@ sequenceDiagram
   plugin (single use, compare-and-swap). Emailed codes are `randomInt` 6 digits, stored as an HMAC under the auth
   secret and bound to the session, 10 minutes, 5 guesses, at most 3 sends per 10 minutes.
 - **Audit.** Every send, pass and failure is a `step_up_events` row and an `auth.step_up` wide event.
+
+## Passkeys
+
+- rpID is the host of `BETTER_AUTH_URL` (production `receipt-ocr.bhimraj.com.np`) and the expected origin is exactly
+  that origin; resident keys and user verification are required, so a passkey alone is a two-factor sign-in.
+- Added in Settings → Security (needs a fresh step-up and Better Auth's session `freshAge`), renamed and removed
+  there; removing needs a step-up. Each add and remove emails the user.
+- Sign-in: "Use a passkey" on `/sign-in`, and autofill through `autocomplete="username webauthn"` with conditional
+  mediation where the browser supports it. The session gets `auth_method = passkey`.
+- As a step-up: the dialog runs a passkey sign-in; an after-hook on `/passkey/verify-authentication` marks the new
+  session verified, keeps the previous session's active workspace and deletes the previous session.
+- Rate limits per IP: authenticate options 20/min, verify 10/min, register options 10/min.
 
 ## Admins
 
@@ -277,5 +291,4 @@ plan's `workspaces` limit, read fresh from the database.
 - **Delete a workspace** (owner): the `beforeDeleteOrganization` hook deletes its stored files first, then the
   cascade removes members, invitations and receipts.
 
-**Planned:** passkeys, as a sign-in method and a step-up factor
-([plan](../../plans/2026-11-06-passkeys-2fa.md)), after the Better Auth 1.7.18 upgrade.
+Plan and decisions: [passkeys and two-factor](../../plans/2026-11-06-passkeys-2fa.md).

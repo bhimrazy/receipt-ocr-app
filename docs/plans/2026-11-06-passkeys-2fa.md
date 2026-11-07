@@ -1,9 +1,9 @@
 # Passkeys and two-factor authentication — plan (2026-11-06)
 
-Status: **PR A shipped on `feat/two-factor`** (TOTP, backup codes, step-up, admin enforcement and reset). Passkeys
-(PR B) follow the Better Auth 1.7.18 upgrade, which brings `@better-auth/passkey@1.7.18`. The owner-approved policy
-below (2026-11-07) is the source of truth and replaces §5 where they differ. Behaviour claims about the plugins were
-checked against the installed `better-auth@1.7.14` source and the packed `@better-auth/passkey@1.7.14` tarball.
+Status: **shipped on `feat/two-factor`, as one PR**: TOTP, backup codes, passkeys (`@better-auth/passkey@1.7.18`,
+after the Better Auth 1.7.18 upgrade in #90), step-up, admin enforcement and reset. The owner-approved policy below
+(2026-11-07) is the source of truth and replaces §5 where they differ. Behaviour claims about the plugins were checked
+against the installed source.
 
 ## Policy (owner-approved 2026-11-07, source of truth)
 
@@ -31,21 +31,22 @@ This replaces two earlier recommendations: email OTP is now allowed, but **only*
 with no factor, never as a sign-in factor (§1's objection was to email as a second sign-in factor); and admin
 enforcement is not behind an owner decision any more.
 
-## What shipped (PR A, `feat/two-factor`)
+## What shipped (`feat/two-factor`)
 
-| Piece                                                                                                                                                                            | Where                                                                    |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| twoFactor plugin (TOTP + 10 sealed backup codes, opt-in 30-day trusted device, `allowPasswordless` so OAuth-only users can enrol)                                                | `lib/auth-two-factor.ts`, plugged into `lib/auth.ts` in delimited blocks |
-| Migration `0002_two_factor_step_up`: `user.two_factor_enabled`, `session.auth_method/step_up_at/step_up_method`, tables `two_factor`, `step_up_events`, `step_up_codes` (RLS on) | `apps/web/drizzle/`                                                      |
-| Step-up policy (pure) and store (Effect)                                                                                                                                         | `packages/core/src/step-up/`                                             |
-| `requireStepUp` + Better Auth `hooks.before` gate                                                                                                                                | `lib/step-up-check.ts`, `lib/step-up-paths.ts`                           |
-| Verify and email-code flow (own RFC 6238 check with replay guard, HMAC'd email codes, 5-failure lockout)                                                                         | `lib/step-up.ts`, `lib/step-up-actions.ts`, `lib/totp.ts`                |
-| One dialog + `withStepUp`                                                                                                                                                        | `components/step-up/step-up.tsx`                                         |
-| Settings → Security (QR via `uqr`, manual key, verify, backup codes once with copy/download, regenerate, turn off)                                                               | `app/app/settings/security/`, `components/security/`                     |
-| Sign-in code step with backup codes and "trust this device"                                                                                                                      | `app/sign-in/two-factor/`, `components/auth/two-factor-form.tsx`         |
-| Admin enforcement (`enrol` / `verify` / `ok`, `ADMIN_MFA_ENFORCE`) and the verify page                                                                                           | `lib/session.ts`, `app/app/settings/security/verify/`                    |
-| Admin → Users 2FA column and badge; Reset 2FA (step-up, reason, audit row, email)                                                                                                | `app/admin/users/`, `resetSecondFactor` in core                          |
-| Emails: step-up code, 2FA on, 2FA off, reset by admin, new backup codes                                                                                                          | `packages/email/src/templates.ts`                                        |
+| Piece                                                                                                                                                                                                           | Where                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| twoFactor plugin (TOTP + 10 sealed backup codes, opt-in 30-day trusted device, `allowPasswordless` so OAuth-only users can enrol)                                                                               | `lib/auth-two-factor.ts`, plugged into `lib/auth.ts` in delimited blocks                                  |
+| Migration `0002_two_factor_passkey_step_up`: `user.two_factor_enabled`, `session.auth_method/step_up_at/step_up_method`, tables `two_factor`, `passkey`, `step_up_events`, `step_up_codes` (RLS on)             | `apps/web/drizzle/`                                                                                       |
+| Step-up policy (pure) and store (Effect)                                                                                                                                                                        | `packages/core/src/step-up/`                                                                              |
+| `requireStepUp` + Better Auth `hooks.before` gate                                                                                                                                                               | `lib/step-up-check.ts`, `lib/step-up-paths.ts`                                                            |
+| Verify and email-code flow (own RFC 6238 check with replay guard, HMAC'd email codes, 5-failure lockout)                                                                                                        | `lib/step-up.ts`, `lib/step-up-actions.ts`, `lib/totp.ts`                                                 |
+| One dialog + `withStepUp`                                                                                                                                                                                       | `components/step-up/step-up.tsx`                                                                          |
+| Settings → Security (QR via `uqr`, manual key, verify, backup codes once with copy/download, regenerate, turn off)                                                                                              | `app/app/settings/security/`, `components/security/`                                                      |
+| Sign-in code step with backup codes and "trust this device"                                                                                                                                                     | `app/sign-in/two-factor/`, `components/auth/two-factor-form.tsx`                                          |
+| Admin enforcement (`enrol` / `verify` / `ok`, `ADMIN_MFA_ENFORCE`) and the verify page                                                                                                                          | `lib/session.ts`, `app/app/settings/security/verify/`                                                     |
+| Admin → Users 2FA column and badge; Reset 2FA (step-up, reason, audit row, email)                                                                                                                               | `app/admin/users/`, `resetSecondFactor` in core                                                           |
+| Passkeys: rpID/origin from `BETTER_AUTH_URL`, resident key and user verification required, rate limits; Settings add (named)/rename/remove; "Use a passkey" on sign-in plus autofill; passkey as step-up factor | `lib/auth-two-factor.ts`, `components/security/passkeys-card.tsx`, `components/auth/credentials-form.tsx` |
+| Emails: step-up code, 2FA on, 2FA off, reset by admin, new backup codes, passkey added, passkey removed                                                                                                         | `packages/email/src/templates.ts`                                                                         |
 
 Differences from the proposal below, and why:
 
@@ -64,16 +65,21 @@ Differences from the proposal below, and why:
   guard itself.
 - **Backup codes stay encrypted, not hashed**: the plugin offers no hashed mode (§1). They are single use and the
   database alone can't read them.
+- **A passkey check is a fresh sign-in.** The plugin's `verify-authentication` always creates a session, so a passkey
+  step-up signs in again: an after-hook (`adoptPasskeySession`) marks the new session verified, copies the old
+  session's active workspace and deletes the old session. Any passkey sign-in therefore counts as a check for 10
+  minutes, which is honest: it just required user verification.
+- **Adding a factor needs step-up too** (`two_factor.enable`, `passkey.add`), or a stolen session could enrol the
+  thief's own factor and then pass every check. With no factor yet the emailed code is the only way, so it is allowed
+  for that one purpose even for admins. `/two-factor/get-totp-uri` (returns the secret) is blocked outright.
+- **One admin reset** clears the authenticator and passkeys (one audit row with counts), not two actions.
 - **TOTP secrets are encrypted at rest** by the plugin, so nothing goes to the BYOK envelope plan; the rotation caveat
   is in `docs/deployment.md`.
 
 Not yet done, and why:
 
-- **Passkeys** (sign-in, conditional UI, Settings list/rename/remove, passkey as step-up factor): waiting for
-  `@better-auth/passkey@1.7.18` with the Better Auth upgrade. The seam is in place: `passkey` is a `StepUpMethod`,
-  `stepUpMethods` already prefers it, `/passkey/delete-passkey` is already gated, `/passkey/*` is already blocked
-  while impersonating, `auth_method = passkey` already counts for admins, and `loadStepUpSession` returns
-  `passkeys: 0` until the table exists.
+- **Previews:** passkeys bind to the host in `BETTER_AUTH_URL`. A preview opened on its other host (deployment URL
+  instead of branch alias) fails the ceremony with a plain "didn't work here" message; password and OAuth still work.
 - **History CSV export** is not gated. It is the everyday filtered export, and the policy's "bulk export all receipts"
   reads as a full-account export, which doesn't exist yet; `receipts.export` and `receipts.delete_all` are defined for
   it. Owner decision, see the PR.
