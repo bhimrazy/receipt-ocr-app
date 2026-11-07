@@ -207,6 +207,8 @@ then fails at "Check the secret is set".
   preview, never at production. The preview's own hosts are trusted on a preview even when `BETTER_AUTH_URL` is set
   there (it then only changes the canonical origin and email links). Production ignores both variables and always
   uses exactly `BETTER_AUTH_URL`.
+- **Fixed preview:** pushing to the `preview` branch deploys it and serves it at
+  `preview.receipt-ocr.bhimraj.com.np`. See [Domains in vercel-environment.md](vercel-environment.md#domains).
 - **Protect previews:** turn on Vercel Deployment Protection (Project → Settings → Deployment Protection, Vercel
   Authentication for preview deployments) so only your team can open them. They hold a working sign-in against the
   staging database.
@@ -221,9 +223,8 @@ then fails at "Check the secret is set".
 - **Turnstile:** tokens must come from one of the preview's hosts. Use Cloudflare's test keys for Preview, or leave
   Turnstile off there.
 - **Site URL:** `NEXT_PUBLIC_SITE_URL` only sets canonical links, the sitemap and social cards. Setting the production
-  URL for Preview is fine: Vercel sends `X-Robots-Tag: noindex` on its generated preview URLs (`*.vercel.app`). That
-  header isn't added for a custom domain assigned to a branch, so don't give previews one without adding your own
-  noindex. Left unset, previews omit canonical links.
+  URL for Preview is fine: Vercel sends `X-Robots-Tag: noindex` on its generated preview URLs (`*.vercel.app`). The
+  app adds the same header itself on every non-production build, so custom preview domains are covered. Left unset, previews omit canonical links.
 
 ### 6. First admin
 
