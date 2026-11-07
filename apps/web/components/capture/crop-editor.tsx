@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   arrowDelta,
   moveCorner,
@@ -10,7 +10,7 @@ import {
   type EditState,
 } from "@/lib/capture/edit-state";
 import { CORNER_NAMES } from "@/lib/capture/geometry";
-import { rotatedCanvas } from "@/lib/capture/render";
+import { releaseCanvas, rotatedCanvas } from "@/lib/capture/render";
 
 /** Preview resolution: sharp enough on a phone, cheap to redraw on rotate. */
 const PREVIEW_PIXELS = 2_000_000;
@@ -45,18 +45,22 @@ export function CropEditor({
     return () => observer.disconnect();
   }, []);
 
-  const preview = useMemo(
-    () => rotatedCanvas(bitmap, edit.rotation, PREVIEW_PIXELS),
-    [bitmap, edit.rotation],
-  );
-
+  // The turned copy is only a step to the visible canvas; it is released once drawn.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    canvas.width = preview.width;
-    canvas.height = preview.height;
-    canvas.getContext("2d")?.drawImage(preview, 0, 0);
-  }, [preview]);
+    let preview: HTMLCanvasElement | null = null;
+    try {
+      preview = rotatedCanvas(bitmap, edit.rotation, PREVIEW_PIXELS);
+      canvas.width = preview.width;
+      canvas.height = preview.height;
+      canvas.getContext("2d")?.drawImage(preview, 0, 0);
+    } catch {
+      // Out of canvas memory: the corners still work over an empty stage.
+    } finally {
+      if (preview) releaseCanvas(preview);
+    }
+  }, [bitmap, edit.rotation]);
 
   const shown = rotatedSize(bitmap.width, bitmap.height, edit.rotation);
   // Fit inside the stage, leaving room for the handles at the edges.

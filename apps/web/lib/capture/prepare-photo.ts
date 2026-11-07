@@ -11,7 +11,7 @@ export class EditFailedError extends Error {
 }
 
 /** True when the upload would look like the photo as taken: no crop, turn or filter. */
-export const isUnedited = (edit: EditState) =>
+const isUnedited = (edit: EditState) =>
   isFullFrame(edit.quad) && edit.rotation === 0 && edit.filter === "original";
 
 /**

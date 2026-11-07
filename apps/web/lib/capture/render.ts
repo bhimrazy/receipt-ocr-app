@@ -183,7 +183,7 @@ export function renderEdit(bitmap: ImageBitmap, edit: EditState, budget: RenderB
   }
 }
 
-export function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("encode failed"))),
