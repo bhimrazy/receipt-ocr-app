@@ -25,3 +25,6 @@ test-results/
 /bench/results/latest.md
 # Private receipts never belong in the repo; this catches an accidental copy.
 /bench/fixtures-local/
+
+# Rendered email previews (bun run email:preview)
+.email-preview/

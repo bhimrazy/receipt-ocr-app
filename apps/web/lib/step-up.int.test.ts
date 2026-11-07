@@ -121,7 +121,7 @@ describe.skipIf(!enabled)(
       expect(withPassword.message).toBe("Verification email sent");
       expect(await exists(a.id)).toBe(true);
       expect(sent.filter((m) => m.to === a.email).at(-1)?.subject).toBe(
-        "Confirm deleting your receiptOCR account",
+        "Confirm deleting your ReceiptOCR account",
       );
     });
 
@@ -142,7 +142,7 @@ describe.skipIf(!enabled)(
       expect(http.status).toBe(403);
       // Sign-up's verification email is the only one sent.
       expect(sent.filter((m) => m.to === a.email).map((m) => m.subject)).toEqual([
-        "Confirm your receiptOCR email",
+        "Confirm your ReceiptOCR email",
       ]);
 
       // Signing in again gives a fresh session that may.
@@ -256,7 +256,7 @@ describe.skipIf(!enabled)(
         body: { currentPassword: password, newPassword: `${password}-2` },
       });
       const notice = sent.filter((m) => m.to === a.email).at(-1);
-      expect(notice?.subject).toBe("Your receiptOCR password was changed");
+      expect(notice?.subject).toBe("Your ReceiptOCR password was changed");
       expect(notice?.text).toContain(`${origin}/forgot-password`);
     });
 
@@ -268,7 +268,7 @@ describe.skipIf(!enabled)(
       const token = new URL(lastLinkTo(a.email)!).pathname.split("/").at(-1)!;
       await auth.api.resetPassword({ body: { token, newPassword: `${password}-2` } });
       expect(sent.filter((m) => m.to === a.email).at(-1)?.subject).toBe(
-        "Your receiptOCR password was changed",
+        "Your ReceiptOCR password was changed",
       );
     });
 
@@ -282,8 +282,8 @@ describe.skipIf(!enabled)(
       });
 
       const notice = sent.filter((m) => m.to === a.email).at(-1);
-      expect(notice?.subject).toBe("Approve the email change on your receiptOCR account");
-      expect(notice?.text).toContain(newEmail);
+      expect(notice?.subject).toBe("Approve your ReceiptOCR email change");
+      expect(notice?.text).toContain(`from ${a.email} to ${newEmail}`);
       expect(sent.some((m) => m.to === newEmail)).toBe(false);
 
       const open = (link: string) =>
@@ -336,7 +336,7 @@ describe.skipIf(!enabled)(
         body: { userId: target.id, newPassword: `${password}-admin` },
       });
       expect(sent.filter((m) => m.to === target.email).at(-1)?.subject).toBe(
-        "Your receiptOCR password was changed",
+        "Your ReceiptOCR password was changed",
       );
     });
   },

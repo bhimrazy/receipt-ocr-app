@@ -37,11 +37,11 @@ import { allowAuthEmail, type AuthEmailKind } from "./email-limits";
 import {
   authEnabled,
   authEnv,
+  emailContext,
   emailEnv,
   isProduction,
   logUndeliveredMail,
   requireEmailVerification,
-  supportEmail,
   turnstileEnv,
 } from "./env";
 import { errorFields, logger } from "./log";
@@ -116,14 +116,17 @@ async function notify(input: SendEmailInput, userId: string, kind: string) {
   });
 }
 
-/** Password reset page and support inbox for "if this wasn't you" in notices. */
+/** Password reset page for "if this wasn't you" in notices. */
 const recovery = () => ({
   resetUrl: new URL("/forgot-password", authEnv.betterAuthUrl).toString(),
-  supportEmail,
 });
 
 async function notifyPasswordChanged(user: { id: string; email: string }, kind: string) {
-  await notify({ to: user.email, ...passwordChangedEmail(recovery()) }, user.id, kind);
+  await notify(
+    { to: user.email, ...passwordChangedEmail(emailContext, recovery()) },
+    user.id,
+    kind,
+  );
   logger.info({ event: "user.password_changed", unit: "log", user_id: user.id, kind });
 }
 
@@ -178,6 +181,11 @@ export async function deleteOwnData(userId: string) {
   throw new Error("Could not delete the user's workspaces", { cause: exit.cause });
 }
 
+// Link lifetimes, set here so the emails quote the same numbers (Better Auth's defaults).
+const VERIFY_LINK_SECONDS = 60 * 60;
+const RESET_LINK_SECONDS = 60 * 60;
+const INVITATION_SECONDS = 60 * 60 * 24 * 7;
+
 /** Shared workspaces only this user owns, by name: deletion is refused while there are any. */
 const blockingNames = async (userId: string) =>
   (await runtime.runPromise(workspacesBlockingDeletion(userId))).map((w) => w.name);
@@ -205,10 +213,17 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 128,
     revokeSessionsOnPasswordReset: true,
+    resetPasswordTokenExpiresIn: RESET_LINK_SECONDS,
     requireEmailVerification,
     sendResetPassword: async ({ user, url }) => {
       if (!(await allowAuthEmail("password-reset", user.email))) return;
-      await deliver({ to: user.email, ...passwordResetEmail(url) });
+      await deliver({
+        to: user.email,
+        ...passwordResetEmail(emailContext, {
+          url,
+          expiresInSeconds: RESET_LINK_SECONDS,
+        }),
+      });
     },
     // Changes through Settings are noticed by the after hook below.
     onPasswordReset: async ({ user }) => notifyPasswordChanged(user, "reset"),
@@ -218,9 +233,13 @@ export const auth = betterAuth({
     sendOnSignUp: requireEmailVerification || !isProduction,
     sendOnSignIn: requireEmailVerification,
     autoSignInAfterVerification: true,
+    expiresIn: VERIFY_LINK_SECONDS,
     sendVerificationEmail: async ({ user, url }) => {
       if (!(await allowAuthEmail("verification", user.email))) return;
-      await deliver({ to: user.email, ...verificationEmail(url) });
+      await deliver({
+        to: user.email,
+        ...verificationEmail(emailContext, { url, expiresInSeconds: VERIFY_LINK_SECONDS }),
+      });
     },
     afterEmailVerification: async (user) => {
       await promoteIfBootstrapAdmin({ ...user, emailVerified: true });
@@ -329,7 +348,14 @@ export const auth = betterAuth({
       deleteTokenExpiresIn: DELETE_TOKEN_SECONDS,
       // The sole-owner check and the per-address cap run in hooks.before.
       sendDeleteAccountVerification: async ({ user, url, token }) => {
-        await deliver({ to: user.email, ...deleteAccountEmail(deleteConfirmUrl(url, token)) });
+        await deliver({
+          to: user.email,
+          ...deleteAccountEmail(emailContext, {
+            url: deleteConfirmUrl(url, token),
+            expiresInSeconds: DELETE_TOKEN_SECONDS,
+            ...recovery(),
+          }),
+        });
         logger.info({ event: "user.delete_requested", unit: "log", user_id: user.id });
       },
       beforeDelete: async (user) => {
@@ -347,7 +373,14 @@ export const auth = betterAuth({
       sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
         await deliver({
           to: user.email,
-          ...emailChangeEmail({ newEmail, url, ...recovery() }),
+          // Better Auth's approval link is signed with the verification lifetime.
+          ...emailChangeEmail(emailContext, {
+            currentEmail: user.email,
+            newEmail,
+            url,
+            expiresInSeconds: VERIFY_LINK_SECONDS,
+            ...recovery(),
+          }),
         });
         logger.info({ event: "user.email_change_requested", unit: "log", user_id: user.id });
       },
@@ -398,17 +431,18 @@ export const auth = betterAuth({
       creatorRole: "owner",
       // 7-day invitations. Cancel any older pending invite when re-inviting the
       // same email so a workspace never accumulates duplicate invitations.
-      invitationExpiresIn: 60 * 60 * 24 * 7,
+      invitationExpiresIn: INVITATION_SECONDS,
       cancelPendingInvitationsOnReInvite: true,
       requireEmailVerificationOnInvitation: true,
       sendInvitationEmail: async ({ email, invitation, organization, inviter }) => {
         const acceptUrl = `${authEnv.betterAuthUrl}/accept-invitation/${invitation.id}`;
         await deliver({
           to: email,
-          ...invitationEmail({
+          ...invitationEmail(emailContext, {
             organizationName: organization.name,
             inviterEmail: inviter.user.email,
             url: acceptUrl,
+            expiresInSeconds: INVITATION_SECONDS,
           }),
         });
       },
