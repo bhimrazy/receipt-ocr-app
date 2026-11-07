@@ -1,16 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <rect width="32" height="32" rx="7" fill="#34d399" />
-  <g
-    fill="none"
-    stroke="#07110d"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    transform="translate(4 4)"
-  >
-    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
-    <path d="M14 8H8" />
-    <path d="M16 12H8" />
-    <path d="M13 16H8" />
+  <g transform="translate(4.4 4.4) scale(.9)" fill="none" stroke="#07110d" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" />
+    <path d="M1.5 11.5h21" stroke-width="3.4" />
   </g>
 </svg>

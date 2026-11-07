@@ -16,6 +16,7 @@
     "format:check": "prettier --check .",
     "check:deps": "bun scripts/check-deps.ts",
     "knip": "knip",
+    "brand:assets": "bun scripts/brand-assets.ts",
     "audit": "bun audit --audit-level=high",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",

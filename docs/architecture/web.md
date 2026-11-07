@@ -248,7 +248,7 @@ The app installs to a home screen or desktop and opens `/app` in its own window.
 | [`components/pwa.tsx`](../../apps/web/components/pwa.tsx)                                                                                                      | Registers the worker (production builds, `/app` routes only) and shows the install card: `beforeinstallprompt` on Android and desktop, a one-time Share then Add to Home Screen hint on iOS Safari                                               |
 | [`lib/share-target.ts`](../../apps/web/lib/share-target.ts)                                                                                                    | `takeSharedFiles()` reads the shared files from Cache Storage and deletes them; `clearSharedFiles()` runs on sign-out                                                                                                                            |
 | [`lib/use-shared-files.ts`](../../apps/web/lib/use-shared-files.ts), [`components/shared-files-notice.tsx`](../../apps/web/components/shared-files-notice.tsx) | In the upload panel: lists shared files with Keep and Discard, and explains `?shared=failed` and `?shared=unavailable`                                                                                                                           |
-| [`scripts/pwa-icons.ts`](../../scripts/pwa-icons.ts)                                                                                                           | Renders the PNG icons and `app/apple-icon.png` from `app/icon.svg` with Playwright's Chromium                                                                                                                                                    |
+| [`scripts/brand-assets.ts`](../../scripts/brand-assets.ts)                                                                                                     | Renders every icon, favicon, social and Google PNG from the SVG masters in [`apps/web/brand`](../../apps/web/brand/README.md) with sharp                                                                                                         |
 
 How the worker routes a request:
 
@@ -359,8 +359,8 @@ See [Admin actions](flows/admin-actions.md#add-an-admin-action).
 
 Edit [`public/sw.js`](../../apps/web/public/sw.js) and bump `VERSION`, so browsers drop the old static cache. If a
 share target name changes, change [`lib/share-target.ts`](../../apps/web/lib/share-target.ts) too;
-`share-target.test.ts` fails until both match. After changing `app/icon.svg`, run `bun scripts/pwa-icons.ts` and
-commit the PNGs.
+`share-target.test.ts` fails until both match. After changing a master in `apps/web/brand`, run `bun run brand:assets` and
+commit the outputs.
 
 ### Add an environment variable
 

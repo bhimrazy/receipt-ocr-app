@@ -116,7 +116,7 @@ async function notify(input: SendEmailInput, userId: string, kind: string) {
   });
 }
 
-/** Password reset page and support inbox for "if this wasn't you" in notices. */
+/** Password reset page for "if this wasn't you" in notices. */
 const recovery = () => ({
   resetUrl: new URL("/forgot-password", authEnv.betterAuthUrl).toString(),
 });

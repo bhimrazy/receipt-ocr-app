@@ -99,6 +99,14 @@ Steps are in [deployment.md](deployment.md).
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
 
+## Brand decisions (owner, 2026-11-07)
+
+Logo: "Scan line" (receipt crossed by a bar that overshoots both edges; keep the overshoot in every drawing). Palette:
+refined emerald (the current one; light-context tile `#047857` with a white glyph). Wordmark: `Receipt` + emerald
+`OCR`, mono. Masters and the asset table: [`apps/web/brand/README.md`](../apps/web/brand/README.md); regenerate with
+`bun run brand:assets`. Planned, not done: respell receiptOCR to ReceiptOCR everywhere in copy (one constant), and
+"scanned" wording in copy. The wordmark component and asset alt text already use ReceiptOCR.
+
 ## Decisions waiting on the owner
 
 1. **Remove the Better Auth cooldown exemption after 2026-11-12.** Approved 2026-11-07 to take 1.7.18 (security
@@ -123,6 +131,9 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
 12. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
     `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
     which amounts are converted, sign-up default from country.
+13. UX decisions ([plan](plans/2026-11-07-ux-decisions.md)): five-slot phone bar with centred Scan and Groups (no
+    drawer), install offer after the first read with a snooze and an iOS 26 guide, the name spelled ReceiptOCR,
+    push notifications deferred until batch capture data.
 
 ## Roadmap (order)
 
@@ -145,6 +156,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
    Security; PR B passkeys (primary sign-in) + admin enforcement. Each adds a migration after the baseline.
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
+   Payment provider for a Nepal-based seller: Paddle (MoR) first, Dodo fallback, Khalti/eSewa prepaid months for NPR
+   later; no Stripe Atlas yet ([payments](plans/2026-11-07-payments.md), [NPR rails](plans/2026-11-07-payments-nepal.md)).
 8. Load test: `scripts/load.sh` (by hand, and from `.github/workflows/load.yml` on demand) runs the production image on
    1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
    to the hot path and commit the new summary. Latest: reads hold 200/s; uploads hold 12/s and fail by 48/s since the job queue (ladder not yet filled in).
@@ -160,6 +173,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
+- **Play Store app (Trusted Web Activity).** Wrap the PWA with Bubblewrap for a Play Store listing; its native
+  splash should allow the Android 12+ bottom branding image ("A product by / BHIMRAJ YADAV"), which installed web
+  apps can't show. Verify when building. Until then Android shows the icon only, the byline is iOS-only.
+- **A distinctive product name before paid marketing.** "Receipt OCR" is the category's generic name: weak as a
+  trademark and hard to find in search. Choose a distinctive name before spending on marketing, while renaming is
+  still cheap ([UX decisions](plans/2026-11-07-ux-decisions.md)).
 - **Release-based deploys.** Today every push to `main` deploys after CI (migrations by hand). Move to deploying
   tagged releases (for example `v0.x.y` with release notes), so `main` can take merges without each one going live.
 - **Self-hosting.** Vercel's free (Hobby) plan is for non-commercial use and has hard monthly limits; a busy month or
