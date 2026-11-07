@@ -12,4 +12,7 @@ export const authRateLimitRules = {
   "/passkey/generate-authenticate-options": { window: 60, max: 20 },
   "/passkey/verify-authentication": { window: 60, max: 10 },
   "/passkey/generate-register-options": { window: 60, max: 10 },
+  // Requesting and completing account deletion, and email changes; email-limits also caps each address.
+  "/delete-user": { window: 60 * 60, max: 10 },
+  "/change-email": { window: 60 * 60, max: 10 },
 } as const;

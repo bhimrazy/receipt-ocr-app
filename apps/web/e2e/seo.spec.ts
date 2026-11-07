@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signUp, uniqueEmail } from "./helpers";
 
+// next.config.ts and app/robots.ts key on the request host; the test server is localhost.
+const PROD_HOST = "receipt-ocr.bhimraj.com.np";
+
 const INDEXABLE = ["/", "/privacy", "/terms", "/cookies"];
 const NOINDEX_PUBLIC = ["/sign-in", "/sign-up", "/forgot-password", "/reset-password"];
 
@@ -35,7 +38,6 @@ test("indexable pages have unique titles and descriptions, a canonical and a wor
   for (const path of INDEXABLE) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(200);
-    expect(res?.headers()["x-robots-tag"] ?? "", path).not.toContain("noindex");
     const tags = await headTags(page);
 
     expect(tags.title.length, `${path} title`).toBeGreaterThan(10);
@@ -121,13 +123,28 @@ test("every crawlable noindex path also sends the header, and the invitation pag
   expect(await meta(page, 'meta[name="robots"]')).toContain("noindex");
 });
 
-test("robots.txt and the sitemap agree with what is indexable", async ({ request }) => {
-  const robots = await (await request.get("/robots.txt")).text();
+test("only the production host is indexable: robots.txt, X-Robots-Tag and llms.txt follow the host", async ({
+  request,
+}) => {
+  // localhost is not production.
+  expect(await (await request.get("/robots.txt")).text()).toMatch(/Disallow: \/\s*$/m);
+  const local = await request.get("/privacy");
+  expect(local.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+  expect((await request.get("/llms.txt")).status()).toBe(404);
+
+  const asProd = { headers: { host: PROD_HOST } };
+  const robots = await (await request.get("/robots.txt", asProd)).text();
+  expect(robots).toContain("Allow: /");
   expect(robots).toContain("Disallow: /api/");
-  // Crawlers must be able to fetch these pages to see their noindex, so none may be disallowed.
-  for (const path of ["/app", "/admin", ...NOINDEX_PUBLIC, "/accept-invitation"]) {
-    expect(robots, path).not.toMatch(new RegExp(`Disallow: ${path}(\\s|$)`));
-  }
+  expect(robots).toContain(`Sitemap: https://${PROD_HOST}/sitemap.xml`);
+  const privacy = await request.get("/privacy", asProd);
+  expect(privacy.headers()["x-robots-tag"] ?? "").not.toContain("noindex");
+  const llms = await request.get("/llms.txt", asProd);
+  expect(llms.status()).toBe(200);
+  expect(await llms.text()).toContain("https://github.com/bhimrazy/receipt-ocr");
+});
+
+test("robots.txt and the sitemap agree with what is indexable", async ({ request }) => {
   const sitemap = await (await request.get("/sitemap.xml")).text();
   const paths = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]!).pathname);
   expect(paths.sort()).toEqual([...INDEXABLE].sort());

@@ -37,6 +37,7 @@ export interface StepUpSessionRow {
   authMethod: string | null;
   stepUpAt: Date | null;
   stepUpMethod: string | null;
+  createdAt: Date;
   impersonatedBy: string | null;
 }
 
@@ -53,6 +54,7 @@ export const loadStepUpSession = (sessionId: string) =>
           authMethod: session.authMethod,
           stepUpAt: session.stepUpAt,
           stepUpMethod: session.stepUpMethod,
+          createdAt: session.createdAt,
           impersonatedBy: session.impersonatedBy,
           passkeys: sql<number>`(select count(*)::int from ${passkey} p where p.user_id = ${session.userId})`,
         })

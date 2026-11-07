@@ -81,11 +81,6 @@ export async function seedReceipts(email: string, merchants: string[]) {
 export const totpCode = (key: string) => totpFromBase32(key);
 
 /**
- * Turns on two-step sign-in from Settings → Security the way a person does: password, read the
- * manual key off the page, enter a code, tick "saved" for the backup codes. Returns the key and
- * the backup codes.
- */
-/**
  * Adding a factor asks for a fresh check, which for an account with no factor is an emailed code.
  * The e2e build has no mailer, so the check is recorded on the user's sessions directly, as if it
  * had passed. Integration tests cover the emailed code itself.
@@ -100,6 +95,11 @@ export async function markSteppedUp(email: string) {
   }
 }
 
+/**
+ * Turns on two-step sign-in from Settings → Security the way a person does: password, read the
+ * manual key off the page, enter a code, tick "saved" for the backup codes. Returns the key and
+ * the backup codes.
+ */
 export async function enrolAuthenticator(page: Page, email: string) {
   await markSteppedUp(email);
   await page.goto("/app/settings/security");
@@ -131,4 +131,11 @@ export async function verifiedAdmin(page: Page, email: string) {
   await page.getByRole("button", { name: "Confirm" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   return { key };
+}
+
+/** Review sheet: Next to the preview, then Upload (the sheet's primary button names the count). */
+export async function uploadFromReview(page: Page) {
+  const review = page.getByRole("dialog", { name: "Review photos" });
+  await review.getByRole("button", { name: "Next" }).click();
+  await review.getByRole("button", { name: /^Upload( \d+ receipts)?$/ }).click();
 }

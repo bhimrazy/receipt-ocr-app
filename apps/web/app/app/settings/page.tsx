@@ -4,10 +4,16 @@ import {
   PageHeaderDescription,
   PageHeaderTitle,
 } from "@/components/page-header";
-import { providerAvailability, receiptReaders, Settings } from "@receipt-ocr/core";
+import {
+  providerAvailability,
+  receiptReaders,
+  Settings,
+  workspacesBlockingDeletion,
+} from "@receipt-ocr/core";
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { Effect } from "effect";
-import { AccountSettings } from "@/components/account-settings";
+import { AboutSettings } from "@/components/about-settings";
+import { AccountSettings, type ResumeStep } from "@/components/account-settings";
 import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
@@ -40,10 +46,21 @@ async function loadWorkspace(organizationId: string) {
   return { name: org?.name ?? "This workspace", members: Number(row?.value ?? 0) };
 }
 
-export default async function SettingsPage() {
+const RESUME_STEPS: readonly ResumeStep[] = ["delete-account", "change-email"];
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ resume?: string | string[] }>;
+}) {
   logPageRender("/app/settings");
-  const [scope, session] = await Promise.all([requireActiveScope(), requireSession()]);
-  const [{ plan, policy }, usage, workspace, readers] = await Promise.all([
+  const [scope, session, { resume }] = await Promise.all([
+    requireActiveScope(),
+    requireSession(),
+    searchParams,
+  ]);
+  const resumeStep = RESUME_STEPS.find((step) => step === resume);
+  const [{ plan, policy }, usage, workspace, readers, blocking] = await Promise.all([
     getCurrentPlan(),
     getUsageSummary(),
     loadWorkspace(scope.organizationId),
@@ -54,6 +71,7 @@ export default async function SettingsPage() {
         receiptReaders,
       ),
     ),
+    runtime.runPromise(workspacesBlockingDeletion(session.user.id)),
   ]);
 
   return (
@@ -151,7 +169,15 @@ export default async function SettingsPage() {
         </Card>
       </SettingsSection>
 
-      <AccountSettings email={session.user.email} name={session.user.name ?? ""} />
+      <AccountSettings
+        blockingWorkspaces={blocking.map((w) => w.name)}
+        email={session.user.email}
+        emailVerified={session.user.emailVerified}
+        name={session.user.name ?? ""}
+        resume={resumeStep}
+      />
+
+      <AboutSettings />
     </div>
   );
 }

@@ -60,12 +60,12 @@ Set these in Vercel (Project → Settings → Environment Variables, Production)
 | `BETTER_AUTH_SECRET`                       | Yes               | `openssl rand -base64 32`. See [Rotating the auth secret](#rotating-the-auth-secret).                                                                                                                |
 | `BETTER_AUTH_SECRETS`                      | No                | Versioned secrets for rotation, current first: `2:<new>,1:<old>`.                                                                                                                                    |
 | `BETTER_AUTH_URL`                          | Yes               | The exact origin users visit, e.g. `https://receiptocr.example.com`. Requests from any other host (such as a `*.vercel.app` alias) are refused. Leave it unset for Vercel previews.                  |
-| `NEXT_PUBLIC_SITE_URL`                     | Yes               | Same origin. Used for canonical URLs, the sitemap and social cards.                                                                                                                                  |
+| `NEXT_PUBLIC_SITE_URL`                     | No                | Not read any more. Canonicals, the sitemap and social cards use `PRODUCTION_HOST` in `apps/web/lib/seo-hosts.ts`.                                                                                    |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`    | Yes               | For R2, `S3_REGION=auto`.                                                                                                                                                                            |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Yes               |                                                                                                                                                                                                      |
 | `S3_FORCE_PATH_STYLE`                      | No                | `true` for RustFS and other self-hosted stores.                                                                                                                                                      |
 | `GOOGLE_GENERATIVE_AI_API_KEY`             | Yes               | Gemini key.                                                                                                                                                                                          |
-| `GEMINI_MODEL`                             | No                | First-run default model. After that, choose models in **Admin → Settings**.                                                                                                                          |
+| `GEMINI_MODEL`                             | No                | Fallback after Claude Sonnet until a chain is saved. After that, choose models in **Admin → Settings**.                                                                                              |
 | `ANTHROPIC_API_KEY`                        | No                | Claude key. Offers the Claude models in **Admin → Settings**; Gemini stays the default. Use a key of its own with a monthly spend limit in the Anthropic Console.                                    |
 | `OCR_DAILY_CAP`                            | No                | Spend guard: OCR rounds per UTC day across all users (each upload or retry is one round, plus each provider attempt).                                                                                |
 | `RESEND_API_KEY`, `EMAIL_FROM`             | Yes in production | Without them, verification and reset links are only logged.                                                                                                                                          |
@@ -200,9 +200,12 @@ then fails at "Check the secret is set".
 ### Staging and previews
 
 - **Getting a preview:** until launch, a PR deploys a preview only when it has the `preview` label. Add it once the PR
-  is ready to look at: `gh pr edit <number> --add-label preview`. The deploy starts at once, its link is posted on the
-  PR, and every later push redeploys it. Remove the label to stop: `gh pr edit <number> --remove-label preview`. Each
-  deploy counts toward Vercel's 100 a day, which production shares.
+  is ready to look at: `gh pr edit <number> --add-label preview`. The deploy starts at once and its link is posted on
+  the PR. Later pushes don't redeploy; to refresh it, remove and re-add the label. Each deploy counts toward Vercel's
+  100 a day, which production shares.
+- **Production skips merges that ship nothing:** when everything since the last production deploy is docs, Markdown,
+  tests, benchmarks, repo scripts or CI config (`.github/scripts/shipped-files.sh`), the gate skips the deploy; the next
+  merge that changes the app deploys it all.
 - **Staging database:** Supabase project `receipt-ocr-staging` (us-east-1, same region as production and the `iad1`
   functions). Migrate it before production on every release with migrations, and check it there first.
 - **Previews:** set the Vercel project's **Preview** variables to staging: `DATABASE_URL` (staging transaction
@@ -227,9 +230,11 @@ then fails at "Check the secret is set".
   impractical. Leave the OAuth variables unset for Preview so the buttons are hidden, and use email and password.
 - **Turnstile:** tokens must come from one of the preview's hosts. Use Cloudflare's test keys for Preview, or leave
   Turnstile off there.
-- **Site URL:** `NEXT_PUBLIC_SITE_URL` only sets canonical links, the sitemap and social cards. Setting the production
-  URL for Preview is fine: Vercel sends `X-Robots-Tag: noindex` on its generated preview URLs (`*.vercel.app`). The
-  app adds the same header itself on every non-production build, so custom preview domains are covered. Left unset, previews omit canonical links.
+- **Indexing:** only `PRODUCTION_HOST` (`apps/web/lib/seo-hosts.ts`) is indexable. Every other host gets
+  `Disallow: /` in robots.txt, `X-Robots-Tag: noindex, nofollow` on every response (next.config.ts, keyed on the
+  request host) and no `/llms.txt`, so custom preview domains are covered without any Vercel setting. Both checks
+  read the `Host` header, so a reverse proxy in front of the Docker image must pass the original `Host` through
+  (nginx: `proxy_set_header Host $host;`), or production is served as noindex.
 
 ### 6. First admin
 
@@ -240,7 +245,8 @@ UPDATE "user" SET role = 'admin' WHERE email = 'you@example.com';
 ```
 
 Then open `/admin/settings` and check the plan limits and the OCR model chain. Until something is saved there, the
-app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day) and `GEMINI_MODEL`.
+app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day) and the chain Claude Sonnet 5.5,
+then `GEMINI_MODEL`; a step whose provider has no key is skipped.
 
 ### 7. Check it works
 

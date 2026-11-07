@@ -1,10 +1,11 @@
 import { AppSidebarNav, AppTabBar, MobileTopBar } from "@/components/app-nav";
+import { MOBILE_TABS } from "@/components/mobile-tabs";
 import { SkipLink } from "@/components/skip-link";
 import { Brand } from "@/components/brand";
 import { NoWorkspace } from "@/components/no-workspace";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { UsageMeter, type Usage } from "@/components/usage-meter";
-import { AccountSheet, UserMenu, type MenuUser } from "@/components/user-menu";
+import { AccountSheet, UserMenu, WorkspaceNameButton, type MenuUser } from "@/components/user-menu";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { SecurityNudge } from "@/components/security/security-nudge";
 import { StepUpProvider } from "@/components/step-up/step-up";
@@ -17,6 +18,8 @@ import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getUsageSummary } from "@/lib/receipts";
+import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
+import { Suspense } from "react";
 
 async function loadUsage(): Promise<Usage | null> {
   try {
@@ -26,6 +29,16 @@ async function loadUsage(): Promise<Usage | null> {
     logger.error({ event: "app.usage_meter_failed", unit: "log", error: errorFields(error) });
     return null;
   }
+}
+
+/** Streams in after the shell: the meter's two queries must not hold up the page. Both reads are per-request cached. */
+async function Meter() {
+  const [usage, { plan }] = await Promise.all([loadUsage(), getCurrentPlan()]);
+  return usage ? <UsageMeter planLabel={planLabel(plan)} usage={usage} /> : null;
+}
+
+function MeterSkeleton() {
+  return <Skeleton aria-hidden="true" className="h-[5.25rem] w-full rounded-lg" />;
 }
 
 // Signed-in pages are private; keep them out of search results even if a link leaks.
@@ -43,14 +56,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     !session.user.twoFactorEnabled &&
     !session.session.impersonatedBy &&
     (scope.role === "owner" || scope.role === "admin");
-  const [allowance, workspaces, usage, { plan }, nudge] = await Promise.all([
+  const [allowance, workspaces, nudge] = await Promise.all([
     getWorkspaceAllowance(),
     listWorkspaces(),
-    loadUsage(),
-    getCurrentPlan(),
     mayNudge ? isSharedWorkspace(scope.organizationId) : false,
   ]);
-  const label = planLabel(plan);
   const showAdmin = isAdmin(session);
   const user: MenuUser = {
     name: session.user.name ?? null,
@@ -58,7 +68,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     image: session.user.image ?? null,
   };
   const workspace = { activeId: scope.organizationId, canCreate: allowance.canCreate, workspaces };
-  const meter = usage ? <UsageMeter planLabel={label} usage={usage} /> : null;
+  const meter = (
+    <Suspense fallback={<MeterSkeleton />}>
+      <Meter />
+    </Suspense>
+  );
 
   return (
     <Toaster>
@@ -85,15 +99,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="flex min-w-0 flex-1 flex-col">
             <MobileTopBar
               context={
-                <>
+                <WorkspaceNameButton>
                   <span className="sr-only">Workspace: </span>
                   {workspaces.find((w) => w.id === scope.organizationId)?.name}
-                </>
+                  <span className="sr-only">. Switch workspace</span>
+                </WorkspaceNameButton>
               }
               home="/app"
               leading={<Brand compact />}
               trailing={
                 <AccountSheet
+                  settingsLink={MOBILE_TABS === "three"}
                   showAdmin={showAdmin}
                   usage={meter}
                   user={user}

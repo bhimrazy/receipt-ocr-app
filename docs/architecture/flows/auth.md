@@ -20,20 +20,21 @@ step-up wiring lives in [`lib/auth-two-factor.ts`](../../../apps/web/lib/auth-tw
 - [Admins](#admins)
 - [Invitations](#invitations)
 - [Password reset and account deletion](#password-reset-and-account-deletion)
+- [Sensitive account changes](#sensitive-account-changes)
 
 ## What is configured
 
-| Setting                       | Value                                                                             |
-| ----------------------------- | --------------------------------------------------------------------------------- |
-| Passwords                     | 8 to 128 characters; all sessions revoked on reset                                |
-| Email verification            | Required in production (`AUTH_REQUIRE_EMAIL_VERIFICATION`, default true there)    |
-| Sessions                      | 7 days, refreshed daily; cookie cache off, so every read checks the session row   |
-| Rate limits (database-backed) | Sign-in 5 per minute, sign-up 3 per minute, invite 20 per hour, per client IP     |
-| Tokens at rest                | Verification and reset tokens hashed; OAuth tokens encrypted with the auth secret |
-| Social providers              | Google and GitHub, each on only when its ID and secret are both set               |
-| First admin                   | `ADMIN_EMAILS`, granted only once that address is verified                        |
-| Two-step sign-in              | TOTP (6 digits, 30 s, ±1 step) and 10 backup codes, sealed with the auth secret   |
-| Step-up                       | Fresh for 10 minutes per session; factor first, emailed code only without one     |
+| Setting                       | Value                                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Passwords                     | 8 to 128 characters; all sessions revoked on reset                                                                                                      |
+| Email verification            | Required in production (`AUTH_REQUIRE_EMAIL_VERIFICATION`, default true there)                                                                          |
+| Sessions                      | 7 days, refreshed daily; cookie cache off, so every read checks the session row                                                                         |
+| Rate limits (database-backed) | Sign-in 5 per minute, sign-up 3 per minute, invite 20 per hour, delete-user and change-email 10 per hour, per client IP                                 |
+| Tokens at rest                | Verification and reset tokens hashed; OAuth tokens encrypted with the auth secret                                                                       |
+| Social providers              | Google and GitHub, each on only when its ID and secret are both set                                                                                     |
+| First admin                   | `ADMIN_EMAILS`, granted only once that address is verified                                                                                              |
+| Two-step sign-in              | TOTP (6 digits, 30 s, ±1 step) and 10 backup codes, sealed with the auth secret                                                                         |
+| Step-up                       | Fresh for 10 minutes per session; factor first; without one an emailed code, or a sign-in in the last 10 minutes for delete, email and password changes |
 
 Client IPs for rate limits come from `TRUSTED_IP_HEADERS` and `TRUSTED_PROXIES` ([`lib/env.ts`](../../../apps/web/lib/env.ts)),
 so the app's own limiters ([`clientIp`](../../../apps/web/lib/http.ts)) and Better Auth's agree.
@@ -167,12 +168,12 @@ Important actions need a check passed in the last 10 minutes on **this session**
 `step_up_at` and `step_up_method`, so nothing can be carried to another session. The policy is pure and unit-tested
 ([`step-up/policy.ts`](../../../packages/core/src/step-up/policy.ts)):
 
-| Account                   | Can verify with                       |
-| ------------------------- | ------------------------------------- |
-| Has a passkey             | The passkey (a fresh passkey sign-in) |
-| Has an authenticator app  | App code or a backup code             |
-| No second factor          | A 6-digit code emailed to them        |
-| Platform admin, no factor | Nothing: must enrol first             |
+| Account                   | Can verify with                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Has a passkey             | The passkey (a fresh passkey sign-in)                                                                        |
+| Has an authenticator app  | App code or a backup code                                                                                    |
+| No second factor          | A 6-digit code emailed to them; for delete, email and password changes also a sign-in in the last 10 minutes |
+| Platform admin, no factor | Nothing: must enrol first                                                                                    |
 
 ```mermaid
 sequenceDiagram
@@ -284,11 +285,81 @@ plan's `workspaces` limit, read fresh from the database.
 
 - **Reset:** `/forgot-password` asks Better Auth to email a reset link (token stored hashed); `/reset-password` sets
   the new password and revokes every session.
-- **Delete own account** (Settings): Better Auth's `deleteUser` runs the `beforeDelete` hook, which calls core's
+- **Delete own account** (Settings): confirmed by an emailed link (see
+  [below](#sensitive-account-changes)). The deletion runs the `beforeDelete` hook, which calls core's
   `prepareUserDeletion`. Workspaces where the user is the only member are deleted with their files; deletion is
   refused while they are the only owner of a workspace with other members. Receipts they uploaded to shared
   workspaces stay, with no uploader.
 - **Delete a workspace** (owner): the `beforeDeleteOrganization` hook deletes its stored files first, then the
   cascade removes members, invitations and receipts.
+
+## Sensitive account changes
+
+A stolen or unlocked session must not be enough to delete an account, take it over by changing its email, or change
+the password unnoticed.
+
+| Change          | What it needs                                                 | Mechanism                                                                                                                      |
+| --------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Delete account  | A step-up to ask; then the emailed link (1 hour, once)        | Better Auth `user.deleteUser.sendDeleteAccountVerification`, `deleteTokenExpiresIn`; the shared step-up gate in `hooks.before` |
+| Change email    | A step-up; the current address approves; the new one confirms | Better Auth `user.changeEmail.sendChangeEmailConfirmation`; the shared step-up gate                                            |
+| Change password | A step-up and the current password                            | Better Auth `changePassword`; the shared step-up gate; a notice to the account address from our `hooks.after`                  |
+| Admin sets one  | The admin role and an admin step-up (a factor)                | Admin plugin `setUserPassword`; the same notice from our `hooks.after`                                                         |
+| Reset password  | The emailed reset link                                        | A notice from `emailAndPassword.onPasswordReset`                                                                               |
+
+These use the same ["Confirm it's you"](#confirm-its-you-step-up) gate as every other important action: the
+`hooks.before` in [`lib/auth.ts`](../../../apps/web/lib/auth.ts) calls `stepUpGate` first, answering
+`403 STEP_UP_REQUIRED`, and only then runs the sole-owner check and the per-address caps, so a refused request sends
+nothing and counts nothing. A `/delete-user` call carrying the emailed token is exempt: opening the link proves the
+inbox. Settings wraps each call in `withStepUp`. With a factor, the dialog asks for it. Without one, the dialog offers
+"sign in again" ([`sign-in-again.tsx`](../../../apps/web/components/step-up/sign-in-again.tsx): password in place,
+with Turnstile when it is on, or Google/GitHub and back to `/app/settings?resume=…`) or an emailed code. A session
+signed in within 10 minutes passes these three actions only (`signInCounts` in core's policy), because each is
+confirmed again on its own (link, current address, current password); adding a factor never accepts it.
+Better Auth's own `session.freshAge` (15 minutes, from #92) still applies to list-sessions, unlink-account and
+passkey registration.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant BA as Better Auth
+  participant H as Hooks in lib/auth.ts
+  participant DB as Postgres
+  participant M as Resend
+
+  B->>BA: deleteUser({}) after typing the account email
+  BA->>H: hooks.before: stepUpGate (factor check, or a sign-in under 10 minutes old)
+  H-->>B: no: 403 STEP_UP_REQUIRED, the dialog asks to confirm
+  BA->>DB: verification row delete-account-{token}, 1 hour (hashed)
+  BA->>H: sendDeleteAccountVerification (3 per hour per address)
+  H->>M: link to /app/settings/delete-account?token=
+  BA-->>B: "Verification email sent", Settings says check your email
+  B->>B: open the link (signs in first if needed), press Delete
+  B->>BA: deleteUser({ token })
+  BA->>H: hooks.before: still the only owner of a shared workspace? then 400, token kept
+  BA->>DB: consume the token (gone even if the next steps refuse)
+  BA->>H: beforeDelete: deleteOwnData
+  BA->>DB: delete user, sessions, accounts
+  BA->>H: afterDelete: log user.deleted
+  BA-->>B: session cookie cleared; the page loads /account-deleted
+```
+
+- A user who is the only owner of a workspace with other members can't delete the account until another member is
+  an owner. Settings shows which workspaces and disables the button (`workspacesBlockingDeletion` in core), no link
+  is emailed (`sendDeleteAccountVerification` refuses), and a link sent earlier is checked before Better Auth spends
+  it. `prepareUserDeletion` still re-checks under lock.
+
+- The link opens our page rather than Better Auth's `GET /delete-user/callback`, which `hooks.before` answers with
+  404 (it would delete on one navigation). So nothing is deleted by a mail scanner or a click alone, and a signed-out user is sent to sign in and back. The token must match the signed-in
+  user; a mismatch spends it.
+- The email change: Better Auth emails the current address (our "approve the change" notice with a reset-password
+  link), that link sends the usual verification email to the new address, and only the second link changes the
+  address. Since Better Auth 1.7.18 the tokens are bound to the user id and the new-address link no longer signs
+  anyone in. An unverified account skips the first step. With the new address already taken, Better Auth answers the
+  same and sends nothing, so the 3-per-hour cap per account address is counted in `hooks.before` on every attempt,
+  not per email sent: otherwise a free address would hit 429 while a taken one kept answering 200.
+- Notices are sent after the change and never fail the request; `auth.notice_sent` records whether one was delivered.
+  Requests and completions are logged as `user.delete_requested`, `user.deleted`, `user.email_change_requested`,
+  `user.password_changed` and `auth.step_up_required`, with the user id only.
 
 Plan and decisions: [passkeys and two-factor](../../plans/2026-11-06-passkeys-2fa.md).

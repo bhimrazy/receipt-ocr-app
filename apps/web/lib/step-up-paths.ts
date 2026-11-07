@@ -1,4 +1,5 @@
 import type { StepUpAction } from "@receipt-ocr/core";
+import { hasDeleteToken } from "./account-deletion";
 
 /** Admin plugin endpoints that only read, or end an impersonation: no step-up. */
 const ADMIN_READS = new Set([
@@ -35,6 +36,8 @@ const grantsOwner = (body: unknown) => {
  * check the UI asks for.
  */
 export function stepUpActionFor(path: string, body: unknown): StepUpAction | null {
+  // Requesting deletion only emails a link; the link's token completes it from any session.
+  if (path === "/delete-user" && hasDeleteToken(body)) return null;
   const fixed = FIXED[path];
   if (fixed) return fixed;
   if (path === "/organization/update-member-role" || path === "/organization/invite-member") {

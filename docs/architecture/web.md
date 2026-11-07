@@ -86,19 +86,20 @@ Phone details: `touch-action: manipulation` on `<html>` (no double-tap delay), a
 
 ### Route handlers
 
-| Method and path                | File                                                                                      | Does                                                                                               |
-| ------------------------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `GET, POST /api/auth/*`        | [`api/auth/[...all]/route.ts`](../../apps/web/app/api/auth/[...all]/route.ts)             | Better Auth. `503` when auth is not configured.                                                    |
-| `POST /api/receipts`           | [`api/receipts/route.ts`](../../apps/web/app/api/receipts/route.ts)                       | Upload one file. `mode=instant` reads it in the request; `mode=queued` returns `202`.              |
-| `GET /api/receipts/status`     | [`api/receipts/status/route.ts`](../../apps/web/app/api/receipts/status/route.ts)         | Workspace receipt counts, so list pollers refresh only when something changed                      |
-| `GET /api/receipts/:id`        | [`api/receipts/[id]/route.ts`](../../apps/web/app/api/receipts/[id]/route.ts)             | Status for the polling client; drains the receipt's job if it is due and not running               |
-| `PATCH /api/receipts/:id`      | same file                                                                                 | User corrections to merchant, date, category, currency and amounts                                 |
-| `DELETE /api/receipts/:id`     | same file                                                                                 | Delete the row, then the stored file                                                               |
-| `POST /api/receipts/:id/retry` | [`api/receipts/[id]/retry/route.ts`](../../apps/web/app/api/receipts/[id]/retry/route.ts) | Claim a failed receipt for another round and enqueue its job; `202`, then drain in `after()`       |
-| `GET /api/receipts/export`     | [`api/receipts/export/route.ts`](../../apps/web/app/api/receipts/export/route.ts)         | CSV with the History filters, up to 5,000 rows                                                     |
-| `POST /api/contact`            | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts)                         | Support form: origin check, honeypot, per-IP rate limit, mail to `SUPPORT_EMAIL`                   |
-| `POST /share-target`           | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                       | Share target fallback when no service worker took the share: `303` to the upload page, body unread |
-| `POST /share-target`           | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                       | Share target fallback when no service worker took the share: `303` to the upload page, body unread |
+| Method and path                | File                                                                                      | Does                                                                                                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET, POST /api/auth/*`        | [`api/auth/[...all]/route.ts`](../../apps/web/app/api/auth/[...all]/route.ts)             | Better Auth. `503` when auth is not configured.                                                                                                      |
+| `POST /api/receipts`           | [`api/receipts/route.ts`](../../apps/web/app/api/receipts/route.ts)                       | Upload one file. `mode=instant` reads it in the request; `mode=queued` returns `202`.                                                                |
+| `GET /api/receipts/status`     | [`api/receipts/status/route.ts`](../../apps/web/app/api/receipts/status/route.ts)         | Workspace receipt counts, so list pollers refresh only when something changed                                                                        |
+| `GET /api/receipts/:id`        | [`api/receipts/[id]/route.ts`](../../apps/web/app/api/receipts/[id]/route.ts)             | Status for the polling client; drains the receipt's job if it is due and not running                                                                 |
+| `PATCH /api/receipts/:id`      | same file                                                                                 | User corrections to merchant, date, category, currency and amounts                                                                                   |
+| `DELETE /api/receipts/:id`     | same file                                                                                 | Delete the row, then the stored file                                                                                                                 |
+| `POST /api/receipts/:id/retry` | [`api/receipts/[id]/retry/route.ts`](../../apps/web/app/api/receipts/[id]/retry/route.ts) | Claim a failed receipt for another round and enqueue its job; `202`, then drain in `after()`                                                         |
+| `GET /api/receipts/export`     | [`api/receipts/export/route.ts`](../../apps/web/app/api/receipts/export/route.ts)         | CSV with the History filters, up to 5,000 rows                                                                                                       |
+| `GET, POST /api/jobs/drain`    | [`api/jobs/drain/route.ts`](../../apps/web/app/api/jobs/drain/route.ts)                   | Runs the job queue once (`drainOnce`). `Authorization: Bearer $CRON_SECRET`: `401` when wrong or unset. Called by Supabase `pg_cron` and Vercel Cron |
+| `POST /api/contact`            | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts)                         | Support form: origin check, honeypot, per-IP rate limit, mail to `SUPPORT_EMAIL`                                                                     |
+| `POST /share-target`           | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                       | Share target fallback when no service worker took the share: `303` to the upload page, body unread                                                   |
+| `POST /share-target`           | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                       | Share target fallback when no service worker took the share: `303` to the upload page, body unread                                                   |
 
 Status codes come from one table in [`lib/http.ts`](../../apps/web/lib/http.ts):
 
@@ -248,7 +249,7 @@ The app installs to a home screen or desktop and opens `/app` in its own window.
 | [`components/pwa.tsx`](../../apps/web/components/pwa.tsx)                                                                                                      | Registers the worker (production builds, `/app` routes only) and shows the install card: `beforeinstallprompt` on Android and desktop, a one-time Share then Add to Home Screen hint on iOS Safari                                               |
 | [`lib/share-target.ts`](../../apps/web/lib/share-target.ts)                                                                                                    | `takeSharedFiles()` reads the shared files from Cache Storage and deletes them; `clearSharedFiles()` runs on sign-out                                                                                                                            |
 | [`lib/use-shared-files.ts`](../../apps/web/lib/use-shared-files.ts), [`components/shared-files-notice.tsx`](../../apps/web/components/shared-files-notice.tsx) | In the upload panel: lists shared files with Keep and Discard, and explains `?shared=failed` and `?shared=unavailable`                                                                                                                           |
-| [`scripts/pwa-icons.ts`](../../scripts/pwa-icons.ts)                                                                                                           | Renders the PNG icons and `app/apple-icon.png` from `app/icon.svg` with Playwright's Chromium                                                                                                                                                    |
+| [`scripts/brand-assets.ts`](../../scripts/brand-assets.ts)                                                                                                     | Renders every icon, favicon, social and Google PNG from the SVG masters in [`apps/web/brand`](../../apps/web/brand/README.md) with sharp                                                                                                         |
 
 How the worker routes a request:
 
@@ -359,8 +360,8 @@ See [Admin actions](flows/admin-actions.md#add-an-admin-action).
 
 Edit [`public/sw.js`](../../apps/web/public/sw.js) and bump `VERSION`, so browsers drop the old static cache. If a
 share target name changes, change [`lib/share-target.ts`](../../apps/web/lib/share-target.ts) too;
-`share-target.test.ts` fails until both match. After changing `app/icon.svg`, run `bun scripts/pwa-icons.ts` and
-commit the PNGs.
+`share-target.test.ts` fails until both match. After changing a master in `apps/web/brand`, run `bun run brand:assets` and
+commit the outputs.
 
 ### Add an environment variable
 

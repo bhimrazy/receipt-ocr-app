@@ -1,5 +1,5 @@
 import "server-only";
-import { adoptPasskeySession, forgetTrustedDevices } from "@receipt-ocr/core";
+import { adoptPasskeySession, forgetTrustedDevices, type StepUpAction } from "@receipt-ocr/core";
 import {
   backupCodesRegeneratedEmail,
   passkeyAddedEmail,
@@ -8,7 +8,7 @@ import {
   twoFactorEnabledEmail,
   type SendEmailInput,
 } from "@receipt-ocr/email";
-import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
+import { APIError, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { passkey } from "@better-auth/passkey";
 import { authMethodFor } from "./auth-method";
@@ -77,28 +77,33 @@ async function notify(deliver: Deliver, input: SendEmailInput, kind: string) {
   }
 }
 
+type HookContext = Parameters<typeof getSessionFromCtx>[0] & { path: string; body?: unknown };
+/** In `hooks.after`, Better Auth puts the endpoint's result on the context. */
+type AfterContext = HookContext & { context: { returned?: unknown } };
+
 /**
- * Before any auth endpoint: refuses factor changes from an impersonation
- * session, and requires a fresh step-up for the endpoints listed in
- * step-up-paths (account deletion, password change, 2FA disable, admin calls…).
+ * Called first in `hooks.before` for every auth endpoint: refuses factor
+ * changes from an impersonation session, and requires a fresh step-up for the
+ * endpoints listed in step-up-paths (account deletion, email and password
+ * change, 2FA disable, admin calls…). Returns the action that passed, if any.
  */
-export const twoFactorBeforeHook = createAuthMiddleware(async (ctx) => {
+export async function stepUpGate(ctx: HookContext): Promise<StepUpAction | null> {
   // Returns the decrypted TOTP secret; the app never needs it, and a stolen session must not get it.
   if (BLOCKED.has(ctx.path)) throw new APIError("NOT_FOUND");
   const action = stepUpActionFor(ctx.path, ctx.body);
   const factor = isFactorEndpoint(ctx.path);
-  if (!action && !factor) return;
+  if (!action && !factor) return null;
   const session = await getSessionFromCtx(ctx);
-  if (!session) return; // the endpoint answers 401 (or runs a sign-in step) itself
+  if (!session) return null; // the endpoint answers 401 (or runs a sign-in step) itself
   if (factor && session.session.impersonatedBy) {
     throw new APIError("FORBIDDEN", {
       message: STEP_UP_MESSAGES.impersonating,
       code: "IMPERSONATING",
     });
   }
-  if (!action) return;
+  if (!action) return null;
   const check = await checkStepUp(session.session.id, action);
-  if (check.ok) return;
+  if (check.ok) return action;
   logger.info({
     event: "auth.step_up_required",
     unit: "log",
@@ -110,7 +115,7 @@ export const twoFactorBeforeHook = createAuthMiddleware(async (ctx) => {
     message: STEP_UP_MESSAGES[check.reason],
     code: STEP_UP_REQUIRED,
   });
-});
+}
 
 const AFTER_PATHS = new Set([
   "/two-factor/generate-backup-codes",
@@ -123,40 +128,39 @@ const AFTER_PATHS = new Set([
  * After a successful factor change: tell the user. After a passkey check: the
  * new session counts as a passed step-up and replaces the one it came from.
  */
-export const twoFactorAfterHook = (deliver: Deliver) =>
-  createAuthMiddleware(async (ctx) => {
-    if (!AFTER_PATHS.has(ctx.path) || isAPIError(ctx.context.returned)) return;
-    if (ctx.path === "/passkey/verify-authentication") {
-      const created = ctx.context.newSession;
-      if (!created) return;
-      const previousToken = await ctx.getSignedCookie(
-        ctx.context.authCookies.sessionToken.name,
-        ctx.context.secret,
-      );
-      await runtime.runPromise(
-        adoptPasskeySession({
-          previousToken:
-            previousToken && previousToken !== created.session.token ? previousToken : null,
-          sessionId: created.session.id,
-          userId: created.user.id,
-          ip: ctx.headers ? clientIp({ headers: ctx.headers }) : null,
-        }),
-      );
-      return;
-    }
-    const user = ctx.context.session?.user;
-    if (!user) return;
-    if (ctx.path === "/two-factor/generate-backup-codes") {
-      logger.info({ event: "auth.backup_codes_regenerated", unit: "log", user_id: user.id });
-      await notify(deliver, { to: user.email, ...backupCodesRegeneratedEmail() }, "backup_codes");
-    } else if (ctx.path === "/passkey/verify-registration") {
-      logger.info({ event: "auth.passkey_added", unit: "log", user_id: user.id });
-      await notify(deliver, { to: user.email, ...passkeyAddedEmail() }, "passkey_added");
-    } else {
-      logger.info({ event: "auth.passkey_removed", unit: "log", user_id: user.id });
-      await notify(deliver, { to: user.email, ...passkeyRemovedEmail() }, "passkey_removed");
-    }
-  });
+export async function factorChangedAfter(ctx: AfterContext, deliver: Deliver) {
+  if (!AFTER_PATHS.has(ctx.path) || isAPIError(ctx.context.returned)) return;
+  if (ctx.path === "/passkey/verify-authentication") {
+    const created = ctx.context.newSession;
+    if (!created) return;
+    const previousToken = await ctx.getSignedCookie(
+      ctx.context.authCookies.sessionToken.name,
+      ctx.context.secret,
+    );
+    await runtime.runPromise(
+      adoptPasskeySession({
+        previousToken:
+          previousToken && previousToken !== created.session.token ? previousToken : null,
+        sessionId: created.session.id,
+        userId: created.user.id,
+        ip: ctx.headers ? clientIp({ headers: ctx.headers }) : null,
+      }),
+    );
+    return;
+  }
+  const user = ctx.context.session?.user;
+  if (!user) return;
+  if (ctx.path === "/two-factor/generate-backup-codes") {
+    logger.info({ event: "auth.backup_codes_regenerated", unit: "log", user_id: user.id });
+    await notify(deliver, { to: user.email, ...backupCodesRegeneratedEmail() }, "backup_codes");
+  } else if (ctx.path === "/passkey/verify-registration") {
+    logger.info({ event: "auth.passkey_added", unit: "log", user_id: user.id });
+    await notify(deliver, { to: user.email, ...passkeyAddedEmail() }, "passkey_added");
+  } else {
+    logger.info({ event: "auth.passkey_removed", unit: "log", user_id: user.id });
+    await notify(deliver, { to: user.email, ...passkeyRemovedEmail() }, "passkey_removed");
+  }
+}
 
 /**
  * For `databaseHooks.user.update.after`: the twoFactor plugin flips

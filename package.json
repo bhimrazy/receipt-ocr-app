@@ -16,6 +16,7 @@
     "format:check": "prettier --check .",
     "check:deps": "bun scripts/check-deps.ts",
     "knip": "knip",
+    "brand:assets": "bun scripts/brand-assets.ts",
     "audit": "bun audit --audit-level=high",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
@@ -29,6 +30,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "bun run --filter @receipt-ocr/web test:e2e",
+    "splash:ios": "bun scripts/splash-ios.ts",
     "bench:ocr": "bun bench/ocr.ts",
     "bench:fixtures": "bun bench/make-fixtures.mjs",
     "bench:encode": "bun bench/encode.mjs"

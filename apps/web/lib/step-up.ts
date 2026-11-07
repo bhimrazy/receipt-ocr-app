@@ -5,6 +5,7 @@ import {
   loadTotpSecret,
   markStepUp,
   recordStepUpEvent,
+  signInCounts,
   stepUpLockedFor,
   totpStepUsed,
   type StepUpAction,
@@ -15,6 +16,8 @@ import { APIError } from "better-auth/api";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { createHmac, randomInt } from "node:crypto";
 import { auth, deliverEmail } from "./auth";
+import { authEnv } from "./env";
+import type { SocialProvider } from "@/components/auth/credentials-form";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 import { checkStepUp, STEP_UP_MESSAGES } from "./step-up-check";
@@ -26,8 +29,21 @@ import { matchTotpStep } from "./totp";
  * every pass or failure is written to `step_up_events`.
  */
 
+/** How this user can sign in again, which passes the check when they have no factor. */
+export interface SignInMethods {
+  password: boolean;
+  providers: SocialProvider[];
+}
+
 export type StepUpOptions =
-  | { ok: true; fresh: boolean; methods: StepUpMethod[]; email: string }
+  | {
+      ok: true;
+      fresh: boolean;
+      methods: StepUpMethod[];
+      email: string;
+      /** When a new sign-in passes this check instead (see `signInCounts`). */
+      signIn?: SignInMethods;
+    }
   | { ok: false; error: string; enrol?: boolean };
 
 export type StepUpResult = { ok: true } | { ok: false; error: string; locked?: boolean };
@@ -53,7 +69,21 @@ export async function stepUpOptions(caller: Caller, action: StepUpAction): Promi
   if (check.reason !== "required") {
     return { ok: false, error: STEP_UP_MESSAGES[check.reason], enrol: check.reason === "enrol" };
   }
-  return { ok: true, fresh: false, methods: check.methods, email: caller.user.email };
+  const signIn = signInCounts(check.methods, action)
+    ? await signInMethods(caller.headers)
+    : undefined;
+  return { ok: true, fresh: false, methods: check.methods, email: caller.user.email, signIn };
+}
+
+async function signInMethods(headers: Headers): Promise<SignInMethods> {
+  const accounts = await auth.api.listUserAccounts({ headers });
+  const linked = new Set(accounts.map((account) => account.providerId));
+  return {
+    password: linked.has("credential"),
+    providers: (["google", "github"] as const).filter(
+      (provider) => linked.has(provider) && Boolean(authEnv[provider]),
+    ),
+  };
 }
 
 /** HMAC under the auth secret, bound to the session: a database read alone can't test guesses. */

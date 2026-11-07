@@ -22,6 +22,7 @@ import {
 import type { StepUpOptions } from "@/lib/step-up";
 import { authClient } from "@/lib/auth-client";
 import { passkeyErrorMessage } from "@/lib/auth-errors";
+import { SignInAgain } from "./sign-in-again";
 
 /**
  * "Verify it's you": one form (dialog or page) and one helper, `withStepUp`,
@@ -40,39 +41,51 @@ export function needsStepUp(result: unknown): boolean {
   return value.code === STEP_UP_REQUIRED || value.error?.code === STEP_UP_REQUIRED;
 }
 
-type Requester = (action: string) => Promise<boolean>;
+type Requester = (action: string, returnTo?: string) => Promise<boolean>;
 let requester: Requester | null = null;
 
 /**
  * Runs `call`; if the server asks for a fresh check, shows the dialog and runs
  * it once more after the user passes. A cancelled dialog returns the first
  * result. `action` names what asked, for the audit trail; server actions send
- * their own.
+ * their own. `returnTo` is where a Google or GitHub sign-in in the dialog
+ * comes back to (default: this page), since that leaves the page.
  */
-export async function withStepUp<T>(call: () => Promise<T>, action?: string): Promise<T> {
+export async function withStepUp<T>(
+  call: () => Promise<T>,
+  action?: string,
+  options?: { returnTo?: string },
+): Promise<T> {
   const first = await call();
   if (!needsStepUp(first) || !requester) return first;
   const named = (first as { action?: unknown }).action;
   const label = typeof named === "string" ? named : action;
   if (!label) return first;
-  return (await requester(label)) ? call() : first;
+  return (await requester(label, options?.returnTo)) ? call() : first;
 }
+
+const here = () =>
+  typeof window === "undefined" ? "/app" : `${window.location.pathname}${window.location.search}`;
 
 export function StepUpForm({
   action,
   onVerified,
   onCancel,
+  returnTo,
   autoFocus = true,
 }: {
   action: string;
   onVerified: () => void;
   onCancel?: () => void;
+  returnTo?: string;
   autoFocus?: boolean;
 }) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [options, setOptions] = useState<StepUpOptions | null>(null);
   const [method, setMethod] = useState<Method | null>(null);
+  /** For users without a factor: sign in again (default when possible) or an emailed code. */
+  const [signingIn, setSigningIn] = useState(false);
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [pending, setPending] = useState<"send" | "verify" | "passkey" | null>(null);
@@ -87,6 +100,7 @@ export function StepUpForm({
         if (next.ok && next.fresh) return onVerified();
         setOptions(next);
         if (next.ok) {
+          setSigningIn(Boolean(next.signIn?.password || next.signIn?.providers.length));
           setMethod(
             next.methods.includes("totp")
               ? "totp"
@@ -210,6 +224,42 @@ export function StepUpForm({
     );
   }
 
+  const signIn = options.signIn;
+  const canSignIn = Boolean(signIn?.password || signIn?.providers.length);
+  if (signIn && canSignIn && signingIn) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Sign in again to continue. It counts for 10 minutes.
+        </p>
+        <SignInAgain
+          email={options.email}
+          methods={signIn}
+          onConfirmed={onVerified}
+          returnTo={returnTo ?? here()}
+        />
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {onCancel ? (
+            <Button onClick={onCancel} type="button" variant="outline">
+              Cancel
+            </Button>
+          ) : null}
+          <Button
+            className="sm:mr-auto"
+            onClick={() => {
+              setSigningIn(false);
+              setError(null);
+            }}
+            type="button"
+            variant="ghost"
+          >
+            Email me a code instead
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const isEmail = method === "email";
   const isBackup = method === "backup_code";
   const showCode = !isEmail || sent;
@@ -274,6 +324,20 @@ export function StepUpForm({
             Cancel
           </Button>
         ) : null}
+        {isEmail && canSignIn ? (
+          <Button
+            className="sm:mr-auto"
+            disabled={pending !== null}
+            onClick={() => {
+              setSigningIn(true);
+              setError(null);
+            }}
+            type="button"
+            variant="ghost"
+          >
+            Sign in again instead
+          </Button>
+        ) : null}
         {options.methods.includes("backup_code") ? (
           <Button
             className="sm:mr-auto"
@@ -319,11 +383,13 @@ export function StepUpForm({
 export function StepUpProvider() {
   const [request, setRequest] = useState<{
     action: string;
+    returnTo?: string;
     resolve: (passed: boolean) => void;
   } | null>(null);
 
   useEffect(() => {
-    requester = (action) => new Promise<boolean>((resolve) => setRequest({ action, resolve }));
+    requester = (action, returnTo) =>
+      new Promise<boolean>((resolve) => setRequest({ action, returnTo, resolve }));
     return () => {
       requester = null;
     };
@@ -352,6 +418,7 @@ export function StepUpProvider() {
             action={request.action}
             onCancel={() => close(false)}
             onVerified={() => close(true)}
+            returnTo={request.returnTo}
           />
         ) : null}
       </DialogContent>

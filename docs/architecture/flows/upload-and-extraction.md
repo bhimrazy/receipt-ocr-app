@@ -46,7 +46,7 @@ flowchart LR
   fallback["Camera app<br/>(input capture)"] --> review
   pick["File picker,<br/>drop, share"] -->|photos| review
   pick -->|PDFs| prep
-  tray -->|Done| review["Review: corners (auto-detected),<br/>rotate, filter, delete"]
+  tray -->|Done| review["Review: 1 corners (auto-detected), rotate;<br/>2 preview, filter, size; delete"]
   review -->|"canvas, JPEG 0.92"| prep["prepareFile<br/>(size target)"]
   prep --> queue["Batch queue<br/>2 at a time"]
   queue -->|"POST /api/receipts"| server[(Server)]
@@ -60,17 +60,25 @@ flowchart LR
   viewfinder. The stream stops on close, when the page is hidden and when the panel unmounts. Without getUserMedia
   (plain HTTP, old browsers) or when access is blocked, "Take photos" falls back to the phone's camera app through
   `<input capture>`. The camera is touch-only: "Take photos" and `?capture=1` apply on `(pointer: coarse)` devices and viewports under `md`, never on fine-pointer desktops, even with a webcam.
-- **Review.** Every photo opens here before upload. `detect-quad.ts` finds the receipt on a 256 px greyscale copy
+- **Review.** Every photo opens here before upload, in two steps like a document scanner, shared by the whole batch
+  (the photo dots move between photos in either step). `detect-quad.ts` finds the receipt on a 256 px greyscale copy
   (Otsu threshold, largest component, convex hull, four corners) and places the corners there; when it isn't
-  confident, the crop is the whole image. Corners drag with pointer events or move with arrow keys; rotation is in
-  quarter turns. `geometry.ts` solves the homography from the four corners and warps the crop straight on a canvas.
-  Filters (Original, Enhance, Greyscale, B&W) apply after the warp; Enhance is the default when a receipt was found,
-  and the last choice is remembered for the session. The expected upload size is estimated from a ~0.3 MP render
-  (its JPEG bytes per pixel times the pixels `prepareFile` keeps, capped at the 500 KB target), so editing never
-  waits on a full-size render.
+  confident, the crop is the whole image.
+  - _Step 1, Adjust corners_: the whole photo with the crop outline. Corners drag with pointer events (a circular
+    loupe at 2.8x, drawn from the canvas already on screen, shows the exact point above the finger) or move with arrow
+    keys; Rotate turns in quarter turns; Reset to detected and Full image restore a crop. "Next" opens step 2.
+  - _Step 2, Preview_: the crop warped straight (`geometry.ts` solves the homography and warps on a canvas) at up to
+    1.5 MP, with the four filters (Original, Enhance, Greyscale, B&W; Enhance is the default when a receipt was found,
+    and the last choice is remembered for the session) applied after the warp. The filter thumbnails are of the same
+    flattened page. It shows the upload's pixel size, from `planSize` (the plan `prepareFile` applies), and the
+    expected file size, estimated from a ~0.3 MP render (its JPEG bytes per pixel times the pixels `prepareFile`
+    keeps, capped at the 500 KB target). "Upload" sends the batch.
+  - State (corners, rotation, filter) is kept per photo across steps; the photo is decoded once and kept while it is
+    shown. Escape or the back arrow goes step 2, step 1, then asks to discard. The stage is a fixed box, so no action
+    moves the controls around it (the e2e suite measures this).
 - Photos over 16 MP are decoded straight to 16 MP (`createImageBitmap` resize, size read from the header first), and
   every canvas is released (`width = height = 0`) as soon as its pixels are used, to stay within iOS canvas memory.
-- On Read, each edited photo becomes a JPEG at quality 0.92 from the canvas, so it carries no EXIF, then goes through
+- On Upload, each edited photo becomes a JPEG at quality 0.92 from the canvas, so it carries no EXIF, then goes through
   `prepareFile` like any picked image. If the browser can't decode a photo, the original goes. If it decodes but the
   edit can't be rendered or encoded, an edited photo is held back with an error on it (sending the original would drop
   the crop, rotation and filter); an unedited one goes as it is. Photos and frames stay on the device until upload.

@@ -3,6 +3,8 @@ import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import { ConsentManager } from "@/components/consent/consent-manager";
 import { Pwa } from "@/components/pwa";
 import { gaMeasurementId } from "@/lib/consent/env";
+import { startupImages } from "@/lib/ios-splash";
+import { buildIsIndexable } from "@/lib/seo-hosts";
 import { siteDescription, siteTitle, siteUrl } from "@/lib/site";
 import "./globals.css";
 
@@ -40,13 +42,17 @@ export const metadata: Metadata = {
     title: siteTitle,
     description: siteDescription,
   },
-  robots: { index: true, follow: true },
+  // Preview builds carry noindex in the HTML too. Per-host X-Robots-Tag rules are in next.config.ts.
+  robots: buildIsIndexable(process.env)
+    ? { index: true, follow: true }
+    : { index: false, follow: false },
   // "black", not "black-translucent": pages start below the status bar, so no layout needs a
   // top safe-area inset. The bar matches --background closely enough to read as one surface.
   appleWebApp: {
     capable: true,
     statusBarStyle: "black",
     title: "receiptOCR",
+    startupImage: startupImages,
   },
 };
 

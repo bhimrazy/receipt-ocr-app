@@ -72,14 +72,44 @@ const ENROLMENT = new Set(["two_factor.enable", "passkey.add"]);
 export interface StepUpState {
   stepUpAt: Date | null;
   stepUpMethod: string | null;
+  /** When the session was created: a sign-in. */
+  createdAt: Date;
 }
 
-/** True when the session passed a check within the TTL, with a method this user may still use. */
-export function stepUpFresh(state: StepUpState, allowed: readonly StepUpMethod[], now: Date) {
+/**
+ * Actions a recent sign-in may confirm for a user with no factor, because each
+ * is confirmed again on its own: deletion by an emailed link, an email change
+ * by the current address, a password change by the current password. Adding a
+ * factor is not one of them: a stolen fresh session could otherwise enrol the
+ * thief's authenticator and lock the owner out.
+ */
+const SIGN_IN_CONFIRMS = new Set<string>([
+  "account.delete",
+  "account.change_email",
+  "account.change_password",
+]);
+
+/** Whether "sign in again" passes this check: the user's method is the emailed code. */
+export const signInCounts = (allowed: readonly StepUpMethod[], action?: string) =>
+  allowed.includes("email") && SIGN_IN_CONFIRMS.has(action ?? "");
+
+/**
+ * True when the session passed a check within the TTL with a method this user
+ * may still use, or (see `signInCounts`) was signed in within the TTL.
+ */
+export function stepUpFresh(
+  state: StepUpState,
+  allowed: readonly StepUpMethod[],
+  now: Date,
+  action?: string,
+) {
+  const within = (at: Date) => {
+    const age = now.getTime() - at.getTime();
+    return age >= 0 && age < STEP_UP_TTL_MS;
+  };
+  if (signInCounts(allowed, action) && within(state.createdAt)) return true;
   if (!state.stepUpAt || !state.stepUpMethod) return false;
-  const age = now.getTime() - state.stepUpAt.getTime();
-  if (age < 0 || age >= STEP_UP_TTL_MS) return false;
-  return (allowed as readonly string[]).includes(state.stepUpMethod);
+  return within(state.stepUpAt) && (allowed as readonly string[]).includes(state.stepUpMethod);
 }
 
 export type AdminAccess = "ok" | "enrol" | "verify";

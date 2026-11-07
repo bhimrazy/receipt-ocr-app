@@ -8,10 +8,17 @@ import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SettingsSection } from "@/components/settings-section";
 import { withStepUp } from "@/components/step-up/step-up";
+import { soleOwnerMessage } from "@/lib/account-deletion";
+import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
+
+/** Where a Google or GitHub re-sign-in returns, so the interrupted step can continue. */
+export type ResumeStep = "delete-account" | "change-email";
+
+const returnTo = (step: ResumeStep) => `/app/settings?resume=${step}`;
 
 function Status({ ok, error, id }: { ok: string | null; error: string | null; id?: string }) {
   if (error) {
@@ -95,6 +102,106 @@ function ProfileCard({ initialName }: { initialName: string }) {
   );
 }
 
+function EmailCard({
+  email,
+  emailVerified,
+  resumed,
+}: {
+  email: string;
+  emailVerified: boolean;
+  resumed: boolean;
+}) {
+  const [next, setNext] = useState("");
+  const [pending, setPending] = useState(false);
+  const [ok, setOk] = useState<string | null>(
+    resumed ? "You signed in again. Enter the new address to continue." : null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Back from a Google or GitHub re-sign-in: bring the user to the field they were filling in.
+  useEffect(() => {
+    if (!resumed) return;
+    inputRef.current?.scrollIntoView({ block: "center" });
+    inputRef.current?.focus({ preventScroll: true });
+  }, [resumed]);
+
+  async function request(newEmail: string) {
+    setPending(true);
+    setError(null);
+    setOk(null);
+    const { error: changeError } = await withStepUp(
+      () => authClient.changeEmail({ newEmail, callbackURL: "/app/settings" }),
+      "account.change_email",
+      { returnTo: returnTo("change-email") },
+    );
+    setPending(false);
+    if (changeError) {
+      setError(authErrorMessage(changeError));
+      return;
+    }
+    setNext("");
+    // Better Auth answers the same when the new address already has an account.
+    setOk(
+      emailVerified
+        ? `Check ${email}: approve the change from the link we sent there within 1 hour, then confirm ${newEmail} from the email we send to it.`
+        : `Check ${newEmail}: confirm it from the link we sent there within 1 hour to finish the change.`,
+    );
+  }
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = next.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setOk(null);
+      setError("Enter a valid email address, for example name@example.com.");
+      return;
+    }
+    if (trimmed === email.toLowerCase()) {
+      setOk(null);
+      setError("That's already your email address.");
+      return;
+    }
+    await request(trimmed);
+  }
+
+  return (
+    <Card>
+      <CardContent className="pt-5">
+        <form className="flex flex-col gap-3" noValidate onSubmit={save}>
+          <p className="text-sm text-muted-foreground">
+            Current address: <span className="break-all text-foreground">{email}</span>
+          </p>
+          <Field data-invalid={error ? true : undefined}>
+            <FieldLabel htmlFor="new-email">New email address</FieldLabel>
+            <Input
+              aria-describedby={error ? "email-error" : undefined}
+              aria-invalid={error ? true : undefined}
+              autoComplete="email"
+              id="new-email"
+              inputMode="email"
+              onChange={(event) => setNext(event.target.value)}
+              placeholder="name@example.com"
+              ref={inputRef}
+              type="email"
+              value={next}
+            />
+          </Field>
+          <Status error={error} id="email-error" ok={ok} />
+          <div>
+            <Button disabled={pending} type="submit">
+              {pending ? (
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : null}
+              Change email
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PasswordCard() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -127,7 +234,7 @@ function PasswordCard() {
     );
     setPending(false);
     if (changeError) {
-      setError(changeError.message ?? "Couldn't change your password. Try again.");
+      setError(authErrorMessage(changeError));
       return;
     }
     setCurrent("");
@@ -186,32 +293,59 @@ function PasswordCard() {
   );
 }
 
-function DangerCard({ email }: { email: string }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
+function DangerCard({
+  email,
+  resumed,
+  blockingWorkspaces,
+}: {
+  email: string;
+  resumed: boolean;
+  /** Shared workspaces only this user owns: deletion would be refused, so it isn't offered. */
+  blockingWorkspaces: string[];
+}) {
+  const blocked = blockingWorkspaces.length > 0;
+  // Back from a Google or GitHub re-sign-in: pick up where the user left off.
+  const [open, setOpen] = useState(resumed && !blocked);
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  async function remove(): Promise<string | void> {
-    const { error: deleteError } = await withStepUp(
-      () => authClient.deleteUser({ callbackURL: "/" }),
+  const sent = `We sent a link to ${email}. Open it within 1 hour and confirm to delete your account. Until then, nothing changes.`;
+
+  /** Only emails a link; the account goes when the user confirms on the page it opens. */
+  async function request(): Promise<string | void> {
+    setNotice(null);
+    setError(null);
+    const { error: requestError } = await withStepUp(
+      () => authClient.deleteUser({}),
       "account.delete",
+      { returnTo: returnTo("delete-account") },
     );
-    if (deleteError) return deleteError.message ?? "Couldn't delete your account. Try again.";
-    // Depending on config this finishes now or sends a confirmation email, so don't claim it's gone.
-    setNotice("Deletion requested. If we emailed you a confirmation link, open it to finish.");
-    router.refresh();
+    if (requestError) return authErrorMessage(requestError);
+    setNotice(sent);
   }
 
   return (
     <Card className="border-destructive/30">
       <CardContent className="flex flex-col gap-3 pt-5">
         <p className="text-sm text-muted-foreground">
-          Permanently removes your account, your workspaces and every receipt in them. You
-          can&apos;t undo this.
+          Permanently removes your account, your workspaces and every receipt in them. We email you
+          a link to confirm. You can&apos;t undo this.
         </p>
-        {notice ? <Alert variant="warning">{notice}</Alert> : null}
+        {blocked ? (
+          <Alert variant="warning">
+            {soleOwnerMessage(blockingWorkspaces, "come back here")} Owners change roles in that
+            workspace&apos;s Settings, under Members.
+          </Alert>
+        ) : null}
+        {notice ? (
+          <p className="flex items-start gap-1.5 text-sm text-success" role="status">
+            <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            {notice}
+          </p>
+        ) : null}
+        {error ? <Alert variant="destructive">{error}</Alert> : null}
         <div>
-          <Button onClick={() => setOpen(true)} variant="destructive">
+          <Button disabled={blocked} onClick={() => setOpen(true)} variant="destructive">
             <Trash2 aria-hidden="true" />
             Delete account
           </Button>
@@ -219,11 +353,11 @@ function DangerCard({ email }: { email: string }) {
       </CardContent>
       <ConfirmDialog
         cancelLabel="Keep my account"
-        confirmLabel="Delete my account"
+        confirmLabel="Email me the link"
         confirmText={email}
-        description="This permanently removes your account, your workspaces and every receipt in them. You can't undo this."
+        description={`We'll email a link to ${email}. Open it within 1 hour and confirm there to permanently remove your account, your workspaces and every receipt in them.`}
         destructive
-        onConfirm={remove}
+        onConfirm={request}
         onOpenChange={setOpen}
         open={open}
         title="Delete your account?"
@@ -232,7 +366,24 @@ function DangerCard({ email }: { email: string }) {
   );
 }
 
-export function AccountSettings({ email, name }: { email: string; name: string }) {
+export function AccountSettings({
+  blockingWorkspaces,
+  email,
+  emailVerified,
+  name,
+  resume,
+}: {
+  blockingWorkspaces: string[];
+  email: string;
+  emailVerified: boolean;
+  name: string;
+  resume?: ResumeStep;
+}) {
+  // Drop ?resume= so a reload doesn't reopen the step.
+  useEffect(() => {
+    if (resume) window.history.replaceState(null, "", "/app/settings");
+  }, [resume]);
+
   return (
     <>
       <SettingsSection
@@ -243,6 +394,17 @@ export function AccountSettings({ email, name }: { email: string; name: string }
         <ProfileCard initialName={name} />
       </SettingsSection>
       <SettingsSection
+        description="Where we send account emails. The change needs a confirmation from both addresses."
+        id="email-heading"
+        title="Email"
+      >
+        <EmailCard
+          email={email}
+          emailVerified={emailVerified}
+          resumed={resume === "change-email"}
+        />
+      </SettingsSection>
+      <SettingsSection
         description="For email sign-in. If you sign in with Google or GitHub, change your password there."
         id="password-heading"
         title="Password"
@@ -250,11 +412,15 @@ export function AccountSettings({ email, name }: { email: string; name: string }
         <PasswordCard />
       </SettingsSection>
       <SettingsSection
-        description="Close your account for good."
+        description="Close your account permanently."
         id="delete-heading"
         title="Delete account"
       >
-        <DangerCard email={email} />
+        <DangerCard
+          blockingWorkspaces={blockingWorkspaces}
+          email={email}
+          resumed={resume === "delete-account"}
+        />
       </SettingsSection>
     </>
   );

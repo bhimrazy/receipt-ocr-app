@@ -27,6 +27,13 @@ describe("authMethodFor", () => {
 describe("stepUpActionFor", () => {
   it.each([
     ["/delete-user", {}, "account.delete"],
+    ["/delete-user", undefined, "account.delete"],
+    // A password doesn't skip the check; only the emailed link's token completes a deletion.
+    ["/delete-user", { password: "x" }, "account.delete"],
+    ["/delete-user", { token: "" }, "account.delete"],
+    ["/delete-user", { token: "abc" }, null],
+    ["/change-email", { newEmail: "a@example.com" }, "account.change_email"],
+    ["/get-session", undefined, null],
     ["/change-password", {}, "account.change_password"],
     ["/change-email", {}, "account.change_email"],
     ["/two-factor/disable", {}, "two_factor.disable"],
