@@ -34,7 +34,18 @@ HTTP.
 | [`drizzle`](../../apps/web/drizzle)                                                                                                                                                                | SQL migrations, generated from [packages/db](db.md)                                                                                                                                                                  |
 | [`e2e`](../../apps/web/e2e)                                                                                                                                                                        | Playwright suite                                                                                                                                                                                                     |
 
-`/app/upload` only redirects to `/app`; the upload panel lives on Home.
+The upload panel lives on Home (`/app`) and on `/app/upload`, which the Scan tab and the home-screen shortcut (`?capture=1`
+opens the camera on each visit, then is dropped from the URL with `history.replaceState`) and the share target (`?shared=1`) land on. Capture, review and upload in the browser are described in
+[Upload, extraction and result](flows/upload-and-extraction.md#1-in-the-browser):
+
+```mermaid
+flowchart LR
+  camera[Camera sheet] --> review[Review sheet]
+  picker[Picker or drop] --> review
+  review --> encode["Canvas JPEG,<br/>then prepareFile"]
+  encode --> queue["Batch queue (2 at a time)"]
+  queue --> api["POST /api/receipts"]
+```
 
 ## Navigation
 
@@ -175,7 +186,9 @@ Pages follow the same path without the HTTP mapping: server components call help
 | [`lib/json-body.ts`](../../apps/web/lib/json-body.ts)                                 | Size-capped JSON body read and Zod validation for the group routes; `400` or `413` on bad input                                                                                                                                                                                                                             |
 | [`components/groups`](../../apps/web/components/groups)                               | Group chips, the searchable picker (popover from md, bottom sheet below), History filter chips and selection mode, the `/app/groups` manager                                                                                                                                                                                |
 | [`lib/csv.ts`](../../apps/web/lib/csv.ts)                                             | CSV export with formula-injection escaping                                                                                                                                                                                                                                                                                  |
-| [`components/upload-panel.tsx`](../../apps/web/components/upload-panel.tsx)           | Picks files, prepares them, posts one at a time                                                                                                                                                                                                                                                                             |
+| [`components/upload-panel.tsx`](../../apps/web/components/upload-panel.tsx)           | Picks files or opens the camera, sends photos to review, uploads the batch two at a time with progress and retry, up to the plan's `batchMax`                                                                                                                                                                               |
+| [`components/capture`](../../apps/web/components/capture)                             | Camera sheet and review sheet (corner crop, rotate, filters), loaded with `next/dynamic` on first use                                                                                                                                                                                                                       |
+| [`lib/capture`](../../apps/web/lib/capture)                                           | Pure maths for capture: homography and warp, edit state, edge detection, filters, the batch queue; plus the camera, canvas and XHR upload helpers                                                                                                                                                                           |
 | [`components/processing-poller.tsx`](../../apps/web/components/processing-poller.tsx) | Polls one receipt's status, or the workspace counts (`/api/receipts/status`) for a list, on the schedule in [`lib/backoff-poll.ts`](../../apps/web/lib/backoff-poll.ts): backs off from 2 s to 15 s, pauses while the tab is hidden, gives up after 6 minutes of visible polling (a receipt job's retries can take about 4) |
 | [`lib/consent`](../../apps/web/lib/consent)                                           | Cookie consent and analytics rules, cookie registry; see [Consent and analytics](#consent-and-analytics)                                                                                                                                                                                                                    |
 | [`lib/signed-in-hint.ts`](../../apps/web/lib/signed-in-hint.ts)                       | The `signed_in_hint` cookie name and browser helpers to read and clear it                                                                                                                                                                                                                                                   |
@@ -258,7 +271,8 @@ Security headers (HSTS, `X-Frame-Options: DENY`, a report-only CSP) are set in
 | Consent flow with GA configured           | `scripts/test.sh --analytics` (rebuilds with a test id; Google is stubbed)  |
 | Type check                                | `bun run typecheck`                                                         |
 
-The e2e specs ([`e2e/`](../../apps/web/e2e)) cover auth, upload, admin, smoke pages and security checks. They run with
+The e2e specs ([`e2e/`](../../apps/web/e2e)) cover auth, upload, admin, smoke pages and security checks.
+`capture.spec.ts` runs in its own `mobile-camera` project (390x844 Chromium with a fake camera). They run with
 `OCR_PROVIDER=fixture`, so no model is called.
 
 ## Common changes

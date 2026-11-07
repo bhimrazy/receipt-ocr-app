@@ -31,6 +31,7 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { getCurrentPlan } from "@/lib/plan-limits";
 import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "@/lib/receipts";
 import { logPageRender } from "@/lib/page-event";
 
@@ -38,11 +39,11 @@ export const metadata: Metadata = { title: "Home" };
 
 const RECENT = 6;
 
-const STEPS: { icon: LucideIcon; title: string; body: string }[] = [
+const steps = (batchMax: number): { icon: LucideIcon; title: string; body: string }[] => [
   {
     icon: Upload,
     title: "Add receipts",
-    body: "Take a photo with your phone, or drop photos or PDFs here. Up to 20 at a time.",
+    body: `Take photos with your phone, or drop photos or PDFs here. Up to ${batchMax} at a time.`,
   },
   {
     icon: ScanText,
@@ -56,12 +57,12 @@ const STEPS: { icon: LucideIcon; title: string; body: string }[] = [
   },
 ];
 
-function HowItWorks() {
+function HowItWorks({ batchMax }: { batchMax: number }) {
   return (
     <Card className="p-5">
       <h2 className="text-sm font-medium">How it works</h2>
       <ol className="mt-4 flex flex-col gap-5">
-        {STEPS.map((step) => (
+        {steps(batchMax).map((step) => (
           <li className="flex gap-3" key={step.title}>
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary">
               <step.icon aria-hidden="true" className="size-4" />
@@ -179,16 +180,22 @@ async function HomeTitle() {
 }
 
 async function UploadSection() {
-  const usage = await getUsageSummary();
-  return <UploadPanel resetsIn={formatTimeUntil(usage.resetsAt)} usage={usage} />;
+  const [usage, { policy }] = await Promise.all([getUsageSummary(), getCurrentPlan()]);
+  return (
+    <UploadPanel
+      batchMax={policy.batchMax}
+      resetsIn={formatTimeUntil(usage.resetsAt)}
+      usage={usage}
+    />
+  );
 }
 
 async function CheckSection() {
-  const counts = await getReceiptCounts();
+  const [counts, { policy }] = await Promise.all([getReceiptCounts(), getCurrentPlan()]);
   return (
     <>
       <ListPoller active={counts.inFlight > 0} counts={counts} />
-      {counts.total === 0 ? <HowItWorks /> : <ToCheck counts={counts} />}
+      {counts.total === 0 ? <HowItWorks batchMax={policy.batchMax} /> : <ToCheck counts={counts} />}
     </>
   );
 }

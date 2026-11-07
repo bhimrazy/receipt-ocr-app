@@ -20,7 +20,28 @@ export default defineConfig({
     colorScheme: "dark",
     extraHTTPHeaders: { "x-forwarded-for": clientIp },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: /capture\.spec\.ts/,
+    },
+    {
+      // Phone-sized Chromium with its built-in fake camera, which grants access without a prompt.
+      name: "mobile-camera",
+      testMatch: /capture\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+        permissions: ["camera"],
+        launchOptions: {
+          args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+        },
+      },
+    },
+  ],
   webServer: {
     command: "bun run start",
     url: `${baseURL}/sign-in`,

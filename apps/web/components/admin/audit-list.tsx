@@ -43,6 +43,7 @@ type Policy = Record<string, number>;
 const FIELDS: [string, string][] = [
   ["receiptsPerDay", "a day"],
   ["receiptsPerMinute", "a minute"],
+  ["batchMax", "a batch"],
   ["workspaces", "workspaces"],
 ];
 

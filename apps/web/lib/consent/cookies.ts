@@ -11,7 +11,7 @@ export type StorageCategory = "necessary" | "analytics" | "marketing";
 export type StorageEntry = {
   /** Exact name; a trailing `*` matches any suffix. */
   name: string;
-  kind: "cookie" | "localStorage" | "cache";
+  kind: "cookie" | "localStorage" | "sessionStorage" | "cache";
   setBy: "receiptOCR" | "Cloudflare" | "Google";
   category: StorageCategory;
   purpose: string;
@@ -98,6 +98,14 @@ export const storageEntries: StorageEntry[] = [
     category: "necessary",
     purpose: "Remembers that you closed the install-the-app prompt, so it doesn't show again.",
     duration: "Until you clear site data",
+  },
+  {
+    name: "receipt-ocr.capture.filter",
+    kind: "sessionStorage",
+    setBy: "receiptOCR",
+    category: "necessary",
+    purpose: "Remembers the photo filter you last chose when reviewing a photo before upload.",
+    duration: "Until you close the tab",
   },
   {
     name: "receiptocr-static-v*",
