@@ -40,7 +40,7 @@ export const user = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [uniqueIndex("user_email_idx").on(table.email)],
-);
+).enableRLS();
 
 export const session = pgTable(
   "session",
@@ -67,7 +67,7 @@ export const session = pgTable(
     uniqueIndex("session_token_idx").on(table.token),
     index("session_user_id_idx").on(table.userId),
   ],
-);
+).enableRLS();
 
 export const account = pgTable(
   "account",
@@ -92,7 +92,7 @@ export const account = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [index("account_user_id_idx").on(table.userId)],
-);
+).enableRLS();
 
 export const verification = pgTable(
   "verification",
@@ -108,7 +108,7 @@ export const verification = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
-);
+).enableRLS();
 
 export const organization = pgTable(
   "organization",
@@ -121,7 +121,7 @@ export const organization = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex("organization_slug_idx").on(table.slug)],
-);
+).enableRLS();
 
 export const member = pgTable(
   "member",
@@ -142,7 +142,7 @@ export const member = pgTable(
     // One membership per user per organization.
     uniqueIndex("member_org_user_idx").on(table.organizationId, table.userId),
   ],
-);
+).enableRLS();
 
 export const invitation = pgTable(
   "invitation",
@@ -164,7 +164,7 @@ export const invitation = pgTable(
     index("invitation_organization_id_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
   ],
-);
+).enableRLS();
 
 /**
  * Better Auth database-backed rate limiting. Field names (key, count,
@@ -179,7 +179,7 @@ export const rateLimit = pgTable(
     lastRequest: bigint("last_request", { mode: "number" }),
   },
   (table) => [index("rate_limit_key_idx").on(table.key)],
-);
+).enableRLS();
 
 export type AuthUser = typeof user.$inferSelect;
 export type AuthSession = typeof session.$inferSelect;

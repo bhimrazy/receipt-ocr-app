@@ -199,7 +199,18 @@ have to sign in with their provider again.
 
 Steps specific to one release, newest first.
 
-### Admin panel (migration `0006_admin_audit_settings`)
+### Squashed baseline and row-level security (2026-11-07)
+
+- **Migrations were squashed into one `0000_baseline`**, before launch. Both databases must be reset, not migrated:
+  drop schemas `public` and `drizzle`, then run the **Database Migration** workflow on `staging-db`, then
+  `production-db` (the owner approves), then deploy by hand. Production auto-deploy may be skipped because the
+  release adds a migration.
+- **RLS** is enabled on all 19 tables with no policies. The app role (`postgres`) bypasses it. In the Supabase
+  dashboard each table shows the **RLS enabled** badge. The Data API is unused, so also remove `public` from
+  Project Settings, Data API, **Exposed schemas**: then `anon` and `authenticated` cannot reach any table even by
+  mistake.
+
+### Admin panel (earlier release, now part of the baseline)
 
 - **Migration:** adds the `admin_audit_log` and `app_settings` tables and the `receipts.model` column. It also makes
   `receipts.user_id` nullable with `ON DELETE SET NULL`, so receipts outlive a deleted uploader, and adds an index
