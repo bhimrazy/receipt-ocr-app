@@ -24,7 +24,7 @@ export function ReceiptReadingSettings({ readers }: { readers: readonly Reader[]
               >
                 privacy policy
               </Link>
-              .
+              . The models and their order can change.
             </p>
           ) : null}
         </>
