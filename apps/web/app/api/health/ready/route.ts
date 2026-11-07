@@ -10,7 +10,14 @@ export const GET = withRequestEvent(
     event.checks = result.checks;
     return NextResponse.json(
       { ...result, commit: commitSha() },
-      { status: result.ok ? 200 : 503, headers: { "Cache-Control": "no-store" } },
+      {
+        status: result.ok ? 200 : 503,
+        // A healthy answer is cached at Vercel's edge for 10 s, so a flood of requests is served by the CDN
+        // without running the function. Failures are never cached, so monitors see an outage at once.
+        headers: {
+          "Cache-Control": result.ok ? "public, max-age=0, s-maxage=10" : "no-store",
+        },
+      },
     );
   },
 );

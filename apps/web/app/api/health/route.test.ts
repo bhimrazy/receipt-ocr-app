@@ -27,7 +27,7 @@ describe("GET /api/health", () => {
   it("answers ok with only the short commit, without touching dependencies", async () => {
     const res = await live.GET(new Request("https://app.example/api/health"));
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=10");
     expect(await res.json()).toEqual({ ok: true, commit: "0123456" });
     expect(runPromise).not.toHaveBeenCalled();
   });
@@ -39,6 +39,7 @@ describe("GET /api/health/ready", () => {
     runPromise.mockResolvedValue({ ok: true, checks: { database: "ok", storage: "ok" } });
     const res = await ready.GET(new Request("https://app.example/api/health/ready"));
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=10");
     expect(await res.json()).toEqual({
       ok: true,
       checks: { database: "ok", storage: "ok" },
@@ -51,6 +52,7 @@ describe("GET /api/health/ready", () => {
     runPromise.mockRejectedValue(new Error("DATABASE_URL is not configured"));
     const res = await ready.GET(new Request("https://app.example/api/health/ready"));
     expect(res.status).toBe(503);
+    expect(res.headers.get("cache-control")).toBe("no-store");
     const body = await res.json();
     expect(body.checks.database).toBe("down");
     expect(JSON.stringify(body)).not.toContain("DATABASE_URL");
