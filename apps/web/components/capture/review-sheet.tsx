@@ -102,10 +102,16 @@ export default function ReviewSheet({
   images: initial,
   onCancel,
   onUpload,
+  alsoReading = [],
+  preparing = false,
 }: {
   images: ReviewImage[];
   onCancel: () => void;
   onUpload: (files: File[]) => void;
+  /** Names of PDFs picked with these photos; they upload in the same batch. */
+  alsoReading?: string[];
+  /** A PDF is still being prepared, so the batch isn't complete yet. */
+  preparing?: boolean;
 }) {
   const [images, setImages] = useState(initial);
   const [index, setIndex] = useState(0);
@@ -267,6 +273,7 @@ export default function ReviewSheet({
   const estimate = current && edit ? estimates[current.id] : undefined;
   const fresh = estimate && edit && estimate.key === editKey(edit);
   const count = images.length;
+  const total = count + alsoReading.length;
   const heldBack = (id: string) => editFailed[id] === true;
 
   return (
@@ -439,13 +446,20 @@ export default function ReviewSheet({
           </ul>
         ) : null}
 
-        <Button disabled={working !== null} onClick={read} ref={uploadRef} size="lg">
+        {alsoReading.length > 0 ? (
+          <p className="text-center text-xs text-muted-foreground">
+            Also reading, as picked: <span className="font-mono">{alsoReading.join(", ")}</span>
+          </p>
+        ) : null}
+
+        <Button disabled={working !== null || preparing} onClick={read} ref={uploadRef} size="lg">
           {working ? (
             <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
           ) : (
             <ScanText aria-hidden="true" />
           )}
-          {working ?? (count === 1 ? "Read receipt" : `Read ${count} receipts`)}
+          {working ??
+            (total === 1 ? "Read receipt" : preparing ? "Preparing…" : `Read ${total} receipts`)}
         </Button>
       </div>
 

@@ -37,6 +37,9 @@ const loadCamera = () => import("@/components/capture/camera-sheet");
 const CameraSheet = dynamic(loadCamera, { ssr: false });
 const ReviewSheet = dynamic(() => import("@/components/capture/review-sheet"), { ssr: false });
 
+// A batch keeps its own count and outcome, so new shots wait until the running one settles.
+const BUSY_NOTICE = "Wait for the current upload to finish before scanning more receipts.";
+
 const noSubscription = () => () => {};
 
 /** A file ready to upload, carried by its queue item. */
@@ -104,7 +107,15 @@ function useCountdown(until: number | null) {
   return until === null ? 0 : Math.max(0, Math.ceil((until - now) / 1000));
 }
 
-function ItemProgress({ item, onRetry }: { item: QueueItem; onRetry: () => void }) {
+function ItemProgress({
+  item,
+  instant,
+  onRetry,
+}: {
+  item: QueueItem;
+  instant: boolean;
+  onRetry: () => void;
+}) {
   if (item.status === "uploading") {
     const pct = Math.round(item.progress * 100);
     return (
@@ -113,7 +124,7 @@ function ItemProgress({ item, onRetry }: { item: QueueItem; onRetry: () => void 
           aria-hidden="true"
           className="size-3 shrink-0 animate-spin motion-reduce:animate-none"
         />
-        <span>{pct < 100 ? "Uploading…" : "Saving…"}</span>
+        <span>{pct < 100 ? "Uploading…" : instant ? "Reading…" : "Finishing…"}</span>
         <span
           aria-label="Upload progress"
           aria-valuemax={100}
@@ -178,7 +189,7 @@ export function UploadPanel({
   const [dragging, setDragging] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ count: number; receiptId?: string } | null>(null);
   // The queue owns the list: each row's file, preview and upload state.
   const [queue] = useState(() =>
     createBatchQueue<Queued, "instant" | "queued">({
@@ -215,9 +226,11 @@ export function UploadPanel({
     if (browserCameraSupport() !== "ok") return;
     void hasCamera().then((found) => {
       setCameraFound(found);
-      if (found) setCameraOpen(true);
+      if (!found) return;
+      if (queue.getSnapshot().running) setNotice(BUSY_NOTICE);
+      else setCameraOpen(true);
     });
-  }, [captureRequested]);
+  }, [captureRequested, queue]);
 
   // Object URLs for the thumbnails live until their row goes away.
   const previews = useRef(new Set<string>());
@@ -247,11 +260,7 @@ export function UploadPanel({
           return;
         }
         release(queue.clearDone().map((i) => i.payload));
-        setSuccess(
-          done.length === 1
-            ? "1 receipt uploaded. It's being read now and shows up in Recent receipts below."
-            : `${done.length} receipts uploaded. They're being read now and show up in Recent receipts below.`,
-        );
+        setSuccess({ count: done.length, receiptId: done[0]?.receiptId });
         router.refresh();
       }),
     [queue, router, release],
@@ -356,6 +365,10 @@ export function UploadPanel({
   }
 
   function openCamera() {
+    if (busy) {
+      setNotice(BUSY_NOTICE);
+      return;
+    }
     if (room === 0) {
       setNotice(fitBatch([null], inBatch, batchMax).notice);
       return;
@@ -383,6 +396,14 @@ export function UploadPanel({
   // Desktop offers the camera only when one exists; phones always get the button, falling
   // back to the camera app when the in-app camera can't run.
   const cameraOnDesktop = support === "ok" && cameraFound;
+  const instant = queue.getMode() === "instant";
+  const heading = busy
+    ? instant
+      ? "Reading"
+      : "Uploading"
+    : items.length > 0 && items.every((i) => i.status === "done")
+      ? "Done"
+      : "Ready to read";
   const prefetchCamera = () => void loadCamera();
 
   return (
@@ -523,7 +544,23 @@ export function UploadPanel({
       {success ? (
         <Alert className="px-4 py-3" variant="success">
           <Check aria-hidden="true" />
-          <p>{success}</p>
+          <p>
+            {success.count === 1
+              ? "1 receipt uploaded. It's being read now."
+              : `${success.count} receipts uploaded. They're being read now.`}{" "}
+            <Link
+              className="font-medium underline underline-offset-4 max-md:inline-flex max-md:min-h-11 max-md:items-center"
+              href={
+                success.count === 1 && success.receiptId
+                  ? `/app/receipts/${success.receiptId}`
+                  : "/app/history"
+              }
+            >
+              {success.count === 1 && success.receiptId
+                ? "Open the receipt"
+                : "See them in History"}
+            </Link>
+          </p>
         </Alert>
       ) : null}
 
@@ -531,7 +568,7 @@ export function UploadPanel({
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-border py-2 pr-2 pl-4">
             <h2 className="text-sm font-medium">
-              Ready to read{" "}
+              {heading}{" "}
               <span className="font-mono text-xs text-muted-foreground tabular-nums">
                 {items.length}
               </span>
@@ -565,7 +602,11 @@ export function UploadPanel({
                       )}
                     >
                       {item.status !== "waiting" ? (
-                        <ItemProgress item={item} onRetry={() => queue.retry(item.id)} />
+                        <ItemProgress
+                          instant={instant}
+                          item={item}
+                          onRetry={() => queue.retry(item.id)}
+                        />
                       ) : (
                         <span className="font-mono tabular-nums">
                           {formatSize(item.payload.file.size)}
@@ -634,7 +675,9 @@ export function UploadPanel({
       {reviewing.length > 0 && !cameraOpen ? (
         <ReviewSheet
           images={reviewing}
+          alsoReading={items.filter((i) => i.status !== "done").map((i) => i.payload.file.name)}
           key={reviewing.map((r) => r.id).join()}
+          preparing={preparing}
           onCancel={() => setReviewing(() => [])}
           onUpload={reviewed}
         />

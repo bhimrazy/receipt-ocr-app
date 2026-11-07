@@ -329,11 +329,13 @@ export default function CameraSheet({
               />
               <button
                 aria-label={`Remove photo ${i + 1}`}
-                className="absolute -top-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full bg-background/80 text-foreground ring-1 ring-foreground/40 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="absolute -top-3 -right-3 flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => removeShot(shot.id)}
                 type="button"
               >
-                <X aria-hidden="true" className="size-3.5" />
+                <span className="flex size-6 items-center justify-center rounded-full bg-background/80 text-foreground ring-1 ring-foreground/40">
+                  <X aria-hidden="true" className="size-3.5" />
+                </span>
               </button>
             </li>
           ))}
