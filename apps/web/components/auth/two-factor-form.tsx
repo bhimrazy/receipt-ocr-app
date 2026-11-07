@@ -65,7 +65,7 @@ export function TwoFactorForm({
       <AuthHeading title="Enter your code">
         {backup
           ? "Enter one of the backup codes you saved when you turned on two-step sign-in."
-          : "Open your authenticator app and enter the 6-digit code for receiptOCR."}
+          : "Open your authenticator app and enter the 6-digit code for ReceiptOCR."}
       </AuthHeading>
       <form className="mt-6 flex flex-col gap-4" data-ready={hydrated} noValidate onSubmit={submit}>
         <AuthField

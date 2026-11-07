@@ -309,7 +309,7 @@ export function StepUpForm({
               ? "One of the 10 codes you saved, like abcde-12345. Each works once."
               : isEmail
                 ? "Didn't get it? Check spam, or send a new code."
-                : "The 6-digit code your authenticator app shows for receiptOCR."}
+                : "The 6-digit code your authenticator app shows for ReceiptOCR."}
           </FieldDescription>
         </Field>
       ) : null}

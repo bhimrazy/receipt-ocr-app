@@ -23,7 +23,7 @@ describe("TOTP helper", () => {
 
   it("reads the key from an otpauth URI and generates the same code", () => {
     const secret = "abcdefghijklmnopqrstuvwxyz012345";
-    const uri = `otpauth://totp/receiptOCR:a%40b.c?secret=MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43UOV3HO6DZPIYDCMRTGQ2Q&issuer=receiptOCR`;
+    const uri = `otpauth://totp/ReceiptOCR:a%40b.c?secret=MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43UOV3HO6DZPIYDCMRTGQ2Q&issuer=ReceiptOCR`;
     const base32 = totpKeyFromUri(uri)!;
     expect(Buffer.from(base32Decode(base32)).toString()).toBe(secret);
     expect(matchTotpStep(secret, totpFromBase32(base32))).toBe(totpStep());

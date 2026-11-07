@@ -10,7 +10,7 @@ import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = pageMetadata({
   title: "Enter your code",
-  description: "The second step of signing in to receiptOCR.",
+  description: "The second step of signing in to ReceiptOCR.",
   path: "/sign-in/two-factor",
   index: false,
 });

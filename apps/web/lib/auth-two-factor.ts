@@ -20,6 +20,13 @@ import { checkStepUp, STEP_UP_MESSAGES, STEP_UP_REQUIRED } from "./step-up-check
 import { isFactorEndpoint, stepUpActionFor } from "./step-up-paths";
 
 /**
+ * The name authenticator apps and passkey managers show. Each entry keeps the label it was
+ * enrolled with, so this must be final before launch. Becomes SITE_NAME from lib/site.ts once #108
+ * lands.
+ */
+const ISSUER = "ReceiptOCR";
+
+/**
  * Two-factor sign-in and step-up wiring for Better Auth, kept out of auth.ts
  * so that file only plugs these in. Plan: docs/plans/2026-11-06-passkeys-2fa.md.
  */
@@ -31,7 +38,7 @@ const BLOCKED = new Set(["/two-factor/get-totp-uri"]);
 /** Defaults kept: 6-digit / 30 s TOTP, 10 encrypted backup codes, 10-min challenge, lockout 10 / 15 min. */
 export const twoFactorPlugin = () =>
   twoFactor({
-    issuer: "receiptOCR",
+    issuer: ISSUER,
     // Google/GitHub-only users have no password to confirm with; anyone with one still needs it.
     allowPasswordless: true,
     // Opt-in per sign-in ("Trust this device for 30 days"); revoked in full on disable or reset.
@@ -48,7 +55,7 @@ export const passkeyPlugin = (appUrl: string) => {
   const url = new URL(appUrl);
   return passkey({
     rpID: url.hostname,
-    rpName: "receiptOCR",
+    rpName: ISSUER,
     origin: url.origin,
     authenticatorSelection: { residentKey: "required", userVerification: "required" },
   });

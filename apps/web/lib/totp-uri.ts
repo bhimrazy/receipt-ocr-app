@@ -15,7 +15,7 @@ export const formatTotpKey = (key: string) => key.match(/.{1,4}/g)?.join(" ") ??
 /** The text of the backup-codes download. */
 export function backupCodesText(codes: readonly string[], email: string, date = new Date()) {
   return [
-    "receiptOCR backup codes",
+    "ReceiptOCR backup codes",
     `Account: ${email}`,
     `Created: ${date.toISOString().slice(0, 10)}`,
     "",
