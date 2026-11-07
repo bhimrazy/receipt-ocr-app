@@ -28,6 +28,9 @@ test("uploading a receipt image shows the extracted merchant and total", async (
 });
 
 test("a phone-sized photo is shrunk in the browser, then uploads", async ({ page }) => {
+  // A 12 MP noise photo is the worst case for the size loop (up to 6 full encodes), plus the
+  // review render; on a loaded 2-vCPU runner that alone can take most of 30 s.
+  test.setTimeout(60_000);
   await signUp(page, uniqueEmail("bigphoto"));
   await page.goto("/app");
   // Noise defeats JPEG compression, so this stands in for a 12 MP sensor photo well over the 4.5 MB body limit.
@@ -66,7 +69,7 @@ test("a phone-sized photo is shrunk in the browser, then uploads", async ({ page
     }
   });
   await page.getByRole("button", { name: "Read receipt" }).click();
-  await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 45_000 });
   expect(requests[0]).toBeLessThan(4 * 1024 * 1024);
 });
 
