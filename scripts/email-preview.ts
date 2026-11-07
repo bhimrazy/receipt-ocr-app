@@ -56,6 +56,7 @@ const emails: Record<string, EmailContent> = {
   "delete-account": deleteAccountEmail(ctx, {
     url: `${appUrl}/app/settings/delete-account?token=${token}`,
     expiresInSeconds: hour,
+    resetUrl: `${appUrl}/forgot-password`,
   }),
   "password-changed": passwordChangedEmail(ctx, { resetUrl: `${appUrl}/forgot-password` }),
   "email-change": emailChangeEmail(ctx, {
