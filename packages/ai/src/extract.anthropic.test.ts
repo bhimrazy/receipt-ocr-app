@@ -1,0 +1,219 @@
+// The Anthropic request and response as the installed @ai-sdk/anthropic builds and
+// reads them, through the same extractReceipt path production uses. fetch is mocked:
+// these tests never reach the network.
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { OcrCallError, retryAfterMs } from "./errors";
+import { extractReceipt, type ModelId } from "./extract";
+import { FIXTURE_RECEIPTS } from "./fixture";
+
+const RECEIPT = FIXTURE_RECEIPTS[0]!;
+const keys = { anthropic: "test-key-not-real" };
+const jpeg = { data: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), mediaType: "image/jpeg" };
+
+type Captured = { url: string; headers: Headers; body: Record<string, unknown> };
+
+function message(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "msg_test",
+    type: "message",
+    role: "assistant",
+    model: "claude-sonnet-5-5",
+    content: [{ type: "text", text: JSON.stringify(RECEIPT) }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: {
+      input_tokens: 1500,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+      output_tokens: 420,
+    },
+    ...overrides,
+  };
+}
+
+/** Stubs global fetch with one response per call (the last one repeats) and records each request. */
+function mockFetch(...responses: Array<() => Response>) {
+  const calls: Captured[] = [];
+  const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({
+      url: String(url),
+      headers: new Headers(init?.headers),
+      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+    });
+    return responses[Math.min(calls.length, responses.length) - 1]!();
+  });
+  vi.stubGlobal("fetch", fetch);
+  return calls;
+}
+
+const json =
+  (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+  () =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json", ...headers },
+    });
+
+const apiError = (status: number, type: string, headers: Record<string, string> = {}) =>
+  json({ type: "error", error: { type, message: "test" } }, status, headers);
+
+const run = (model: ModelId, file = jpeg, maxRetries = 0) =>
+  extractReceipt({ model, keys, file, maxRetries });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+const MODELS = [
+  "anthropic:claude-haiku-5-5",
+  "anthropic:claude-sonnet-5-5",
+  "anthropic:claude-opus-5-5",
+] as const;
+
+describe("the Anthropic request body", () => {
+  it.each(MODELS)(
+    "%s: native structured output, low effort, nothing the model rejects",
+    async (model) => {
+      const calls = mockFetch(json(message()));
+      await run(model);
+      expect(calls).toHaveLength(1);
+      const { url, body, headers } = calls[0]!;
+      expect(url).toBe("https://api.anthropic.com/v1/messages");
+      expect(headers.get("x-api-key")).toBe("test-key-not-real");
+      expect(body.model).toBe(model.slice("anthropic:".length));
+      expect(body.max_tokens).toBe(16_384);
+
+      // JSON schema through output_config.format; no forced tool call (a 400 on Sonnet/Opus 5.5).
+      const outputConfig = body.output_config as {
+        effort: string;
+        format: Record<string, unknown>;
+      };
+      expect(outputConfig.effort).toBe("low");
+      expect(outputConfig.format.type).toBe("json_schema");
+      expect(outputConfig.format.schema).toMatchObject({
+        type: "object",
+        properties: { merchant: expect.anything(), total: expect.anything() },
+      });
+      expect(body).not.toHaveProperty("tools");
+      expect(body).not.toHaveProperty("tool_choice");
+
+      // Thinking stays adaptive by default; sampling params and budgets 400 on these models.
+      for (const key of ["thinking", "temperature", "top_p", "top_k", "budget_tokens"]) {
+        expect(body).not.toHaveProperty(key);
+      }
+
+      // One user turn with the prompt and the image; no assistant prefill.
+      const messages = body.messages as Array<{
+        role: string;
+        content: Array<Record<string, unknown>>;
+      }>;
+      expect(messages.map((m) => m.role)).toEqual(["user"]);
+      expect(messages[0]!.content.map((part) => part.type)).toEqual(["text", "image"]);
+      expect(messages[0]!.content[1]).toMatchObject({
+        source: { type: "base64", media_type: "image/jpeg", data: "/9j/4A==" },
+      });
+    },
+  );
+
+  it("sends a PDF as a base64 document block", async () => {
+    const calls = mockFetch(json(message()));
+    const pdf = { data: new TextEncoder().encode("%PDF-1.7"), mediaType: "application/pdf" };
+    await run("anthropic:claude-haiku-5-5", pdf);
+    const messages = calls[0]!.body.messages as Array<{ content: Array<Record<string, unknown>> }>;
+    expect(messages[0]!.content[1]).toMatchObject({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: "JVBERi0xLjc=" },
+    });
+  });
+
+  it("skips HEIC without a call, as a kind that moves the chain to the next model", async () => {
+    const calls = mockFetch(json(message()));
+    const heic = { data: new Uint8Array([0, 0, 0, 24]), mediaType: "image/heic" };
+    const error = await run("anthropic:claude-haiku-5-5", heic).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OcrCallError);
+    expect(error).toMatchObject({ kind: "not-configured", usage: null });
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("the Anthropic response", () => {
+  it("returns the extraction and records input, output, cache and thinking tokens", async () => {
+    mockFetch(
+      json(
+        message({
+          usage: {
+            input_tokens: 1000,
+            cache_read_input_tokens: 300,
+            cache_creation_input_tokens: 200,
+            output_tokens: 500,
+            output_tokens_details: { thinking_tokens: 120 },
+          },
+        }),
+      ),
+    );
+    const result = await run("anthropic:claude-sonnet-5-5");
+    expect(result.extraction).toEqual(RECEIPT);
+    expect(result.model).toBe("anthropic:claude-sonnet-5-5");
+    // Anthropic's input_tokens exclude cache reads and writes; the ledger total includes them.
+    expect(result.usage).toEqual({
+      inputTokens: 1500,
+      cachedInputTokens: 300,
+      cacheWriteTokens: 200,
+      outputTokens: 500,
+      reasoningTokens: 120,
+    });
+  });
+
+  it("treats a refusal as a failed, billed call, even when its text parses", async () => {
+    mockFetch(
+      json(
+        message({
+          stop_reason: "refusal",
+          stop_details: { type: "refusal", category: null, explanation: null },
+        }),
+      ),
+    );
+    const error = await run("anthropic:claude-opus-5-5").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OcrCallError);
+    expect(error).toMatchObject({
+      kind: "provider-error",
+      usage: { inputTokens: 1500, outputTokens: 420 },
+    });
+    expect((error as Error).message).toBe("OCR call failed: provider-error");
+  });
+});
+
+describe("Anthropic errors", () => {
+  it("429: rate-limited, with the provider's Retry-After", async () => {
+    mockFetch(apiError(429, "rate_limit_error", { "retry-after": "17" }));
+    const error = await run("anthropic:claude-haiku-5-5").catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "rate-limited", usage: null });
+    expect(retryAfterMs(error)).toBe(17_000);
+  });
+
+  it("529 overloaded: provider-error", async () => {
+    mockFetch(apiError(529, "overloaded_error"));
+    const error = await run("anthropic:claude-sonnet-5-5").catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "provider-error" });
+    expect((error as Error).message).toContain("HTTP 529");
+  });
+
+  it("500: provider-error", async () => {
+    mockFetch(apiError(500, "api_error"));
+    const error = await run("anthropic:claude-sonnet-5-5").catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "provider-error" });
+  });
+
+  it("400: the input was refused (bad-image), and the SDK does not retry it", async () => {
+    const calls = mockFetch(apiError(400, "invalid_request_error"));
+    const error = await run("anthropic:claude-opus-5-5", jpeg, 2).catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "bad-image" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("401: not-configured (bad or revoked key)", async () => {
+    mockFetch(apiError(401, "authentication_error"));
+    const error = await run("anthropic:claude-haiku-5-5").catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "not-configured" });
+  });
+});

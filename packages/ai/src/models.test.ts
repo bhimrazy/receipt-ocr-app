@@ -107,6 +107,31 @@ describe("costOf", () => {
     ).toEqual(none);
   });
 
+  it("prices Claude at the per-model rates", () => {
+    const u = usage({ inputTokens: 2000, cachedInputTokens: 500, outputTokens: 400 });
+    const at = day("2026-11-07");
+    // 1500 × 2 + 500 × 0.20 + 400 × 10
+    expect(costOf("anthropic:claude-sonnet-5-5", u, at).microUsd).toBe(7100);
+    // 1500 × 4 + 500 × 0.20 + 400 × 20
+    expect(costOf("anthropic:claude-opus-5-5", u, at).microUsd).toBe(14100);
+  });
+
+  it("charges cache reads as input when the model has no published cache price", () => {
+    // Haiku 5.5: 2000 × 0.10 + 400 × 0.50, the 500 cached tokens at the input rate.
+    const u = usage({ inputTokens: 2000, cachedInputTokens: 500, outputTokens: 400 });
+    expect(costOf("anthropic:claude-haiku-5-5", u, day("2026-11-07")).microUsd).toBe(400);
+  });
+
+  it("switches the whole call to the long-context rates past the prompt threshold", () => {
+    const at = day("2026-11-07");
+    // At the threshold: 100 000 × 0.10 + 1000 × 0.50.
+    const at100k = usage({ inputTokens: 100_000, outputTokens: 1000 });
+    expect(costOf("anthropic:claude-haiku-5-5", at100k, at).microUsd).toBe(10_500);
+    // One token over: 100 001 × 0.50 + 1000 × 2.50, rounded.
+    const over = usage({ inputTokens: 100_001, outputTokens: 1000 });
+    expect(costOf("anthropic:claude-haiku-5-5", over, at).microUsd).toBe(52_501);
+  });
+
   it("has a price for every model today, listed newest first", () => {
     for (const model of OCR_MODELS) {
       expect(priceAt(model, new Date()), model.id).toBeDefined();

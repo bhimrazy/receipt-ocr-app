@@ -1,3 +1,4 @@
+import { createAnthropic, type AnthropicLanguageModelOptions } from "@ai-sdk/anthropic";
 import { createGoogle } from "@ai-sdk/google";
 import {
   createProviderRegistry,
@@ -16,6 +17,8 @@ import { receiptExtractionSchema, type ReceiptExtraction } from "./schema";
 
 /** Providers reached through the AI SDK registry; `fixture` is handled locally. */
 type RegistryProviderId = Exclude<OcrProviderId, "fixture">;
+
+type ProviderOptions = NonNullable<Parameters<typeof generateText>[0]["providerOptions"]>;
 
 /** `provider:model`, e.g. `google:gemini-3.8-flash`, or `fixture` for the offline provider. */
 export type ModelId = `${RegistryProviderId}:${string}` | "fixture";
@@ -67,6 +70,7 @@ const registries = new Map<string, ReturnType<typeof buildRegistry>>();
 function buildRegistry(keys: ProviderKeys) {
   return createProviderRegistry({
     google: createGoogle({ apiKey: keys.google }),
+    anthropic: createAnthropic({ apiKey: keys.anthropic }),
   } satisfies Record<RegistryProviderId, unknown>);
 }
 
@@ -79,6 +83,56 @@ function registryFor(keys: ProviderKeys) {
     registries.set(cacheKey, registry);
   }
   return registry;
+}
+
+/**
+ * Claude request settings, one entry per model so each choice is explicit.
+ * - Structured output via `output_config.format` (JSON schema), never the forced
+ *   `json` tool: Sonnet 5.5 and Opus 5.5 answer forced `tool_choice` with a 400.
+ * - Effort `low`: reading a receipt is transcription, not reasoning. The API
+ *   defaults are `medium` (Haiku 5.5, Opus 5.5) and `high` (Sonnet 5.5).
+ * - No `thinking` setting: adaptive thinking is the default, and Sonnet 5.5 and
+ *   Opus 5.5 reject `disabled` and `budget_tokens`. No temperature/top-p/top-k either.
+ */
+const ANTHROPIC_OPTIONS: Record<
+  string,
+  Pick<AnthropicLanguageModelOptions, "structuredOutputMode" | "effort">
+> = {
+  "claude-haiku-5-5": { structuredOutputMode: "outputFormat", effort: "low" },
+  "claude-sonnet-5-5": { structuredOutputMode: "outputFormat", effort: "low" },
+  "claude-opus-5-5": { structuredOutputMode: "outputFormat", effort: "low" },
+};
+
+/** Image types Claude reads; HEIC/HEIF are not among them. */
+const ANTHROPIC_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/** Thrown without a network call when a model can't take the file's type. */
+export class UnsupportedFileError extends Error {
+  override name = "UnsupportedFileError";
+}
+
+/** The model stopped on a safety refusal; whatever it returned is not an extraction. */
+export class RefusalError extends Error {
+  override name = "RefusalError";
+}
+
+function providerOptionsFor(model: Exclude<ModelId, "fixture">) {
+  const [provider, ...rest] = model.split(":");
+  if (provider !== "anthropic") return undefined;
+  const options = ANTHROPIC_OPTIONS[rest.join(":")];
+  return options ? ({ anthropic: options } satisfies ProviderOptions) : undefined;
+}
+
+function checkFileType(model: Exclude<ModelId, "fixture">, mediaType: string) {
+  if (!model.startsWith("anthropic:")) return;
+  if (mediaType === "application/pdf" || ANTHROPIC_IMAGE_TYPES.has(mediaType)) return;
+  // `not-configured`, not `bad-image`: the file is fine, this model just can't
+  // read it, so the chain should go on to the next model rather than stop.
+  throw new OcrCallError(
+    "not-configured",
+    null,
+    new UnsupportedFileError(`${model} does not accept ${mediaType}`),
+  );
 }
 
 const NO_USAGE: ExtractionUsage = {
@@ -125,9 +179,10 @@ export async function extractReceipt(input: ExtractReceiptInput): Promise<Extrac
       throw new OcrCallError(classifyOcrError(error), null, error);
     }
   }
+  checkFileType(input.model, input.file.mediaType);
   const { extraction, usage } = await extractWith(
     registryFor(input.keys ?? {}).languageModel(input.model),
-    input,
+    { ...input, providerOptions: providerOptionsFor(input.model) },
   );
   return { extraction, usage, model: input.model };
 }
@@ -135,7 +190,7 @@ export async function extractReceipt(input: ExtractReceiptInput): Promise<Extrac
 /** The model call itself, separate from the registry so tests can pass a mock model. */
 export async function extractWith(
   model: LanguageModel,
-  input: Omit<ExtractReceiptInput, "model" | "keys">,
+  input: Omit<ExtractReceiptInput, "model" | "keys"> & { providerOptions?: ProviderOptions },
 ): Promise<Omit<ExtractReceiptResult, "model">> {
   let usage: ExtractionUsage | null = null;
   try {
@@ -146,6 +201,7 @@ export async function extractWith(
       timeout: { totalMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS },
       maxRetries: input.maxRetries ?? DEFAULT_MAX_RETRIES,
       abortSignal: input.abortSignal,
+      providerOptions: input.providerOptions,
       messages: [
         {
           role: "user",
@@ -158,8 +214,14 @@ export async function extractWith(
     });
     // Before `output`: reading it throws on an empty or truncated reply, which was still billed.
     usage = toUsage(result.usage);
+    // Claude's `stop_reason: "refusal"` (and Gemini's safety stop) arrive as
+    // content-filter. Whatever text came back is not an extraction, even if it parses.
+    if (result.finishReason === "content-filter") {
+      throw new OcrCallError("provider-error", usage, new RefusalError("model refused"));
+    }
     return { extraction: result.output, usage };
   } catch (error) {
+    if (error instanceof OcrCallError) throw error;
     throw new OcrCallError(classifyOcrError(error), usageOf(error) ?? usage, error);
   }
 }

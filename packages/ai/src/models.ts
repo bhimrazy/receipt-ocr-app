@@ -4,7 +4,7 @@
  * with its prices, to offer another model.
  */
 
-export type OcrProviderId = "google" | "fixture";
+export type OcrProviderId = "google" | "anthropic" | "fixture";
 
 export interface OcrProvider {
   id: OcrProviderId;
@@ -15,17 +15,22 @@ export interface OcrProvider {
 
 /**
  * USD per 1M tokens, which is also micro-USD per token. `from` is the first
- * UTC day (YYYY-MM-DD) the row applies. Long-context tiers are left out: a
- * receipt is a few thousand tokens.
+ * UTC day (YYYY-MM-DD) the row applies.
  */
 export interface ModelPrice {
   from: string;
   input: number;
-  cachedInput: number;
+  /** Reading from the prompt cache. Unset (not published): charged as input, an upper bound. */
+  cachedInput?: number;
   /** Writing to the prompt cache (Anthropic bills 1.25× input). Unset: charged as input. */
   cacheWrite?: number;
   /** Includes reasoning ("thinking") tokens. */
   output: number;
+  /**
+   * Rates for the whole call once its prompt (cached tokens included) is over
+   * `aboveInputTokens`. A receipt is a few thousand tokens; a 10-page PDF can cross it.
+   */
+  longContext?: { aboveInputTokens: number; input: number; output: number };
 }
 
 export interface OcrModel {
@@ -38,6 +43,7 @@ export interface OcrModel {
 
 export const OCR_PROVIDERS: readonly OcrProvider[] = [
   { id: "google", label: "Google Gemini", keyEnv: "GOOGLE_GENERATIVE_AI_API_KEY" },
+  { id: "anthropic", label: "Anthropic Claude", keyEnv: "ANTHROPIC_API_KEY" },
   // Deterministic offline stand-in; only offered when OCR_PROVIDER=fixture (tests, local).
   { id: "fixture", label: "Offline fixture", keyEnv: null },
 ];
@@ -59,6 +65,34 @@ export const OCR_MODELS: readonly OcrModel[] = [
     provider: "google",
     label: "Gemini 3.5 Flash-Lite",
     prices: [{ from: "2026-11-06", input: 0.3, cachedInput: 0.03, output: 2.5 }],
+  },
+  // Anthropic prices from https://platform.claude.com/docs/en/about-claude/pricing, checked
+  // 2026-11-07. Bare ids only: a date-suffixed id is a different, pinned snapshot.
+  {
+    id: "anthropic:claude-haiku-5-5",
+    provider: "anthropic",
+    label: "Claude Haiku 5.5",
+    // No published cache-read rate for Haiku 5.5 yet; we send no cache_control, so reads stay 0.
+    prices: [
+      {
+        from: "2026-11-07",
+        input: 0.1,
+        output: 0.5,
+        longContext: { aboveInputTokens: 100_000, input: 0.5, output: 2.5 },
+      },
+    ],
+  },
+  {
+    id: "anthropic:claude-sonnet-5-5",
+    provider: "anthropic",
+    label: "Claude Sonnet 5.5",
+    prices: [{ from: "2026-11-07", input: 2, cachedInput: 0.2, output: 10 }],
+  },
+  {
+    id: "anthropic:claude-opus-5-5",
+    provider: "anthropic",
+    label: "Claude Opus 5.5",
+    prices: [{ from: "2026-11-07", input: 4, cachedInput: 0.2, output: 20 }],
   },
   {
     id: "fixture",
@@ -118,11 +152,13 @@ export function priceCall(
 ): number {
   const cached = Math.min(usage.cachedInputTokens ?? 0, usage.inputTokens);
   const written = Math.min(usage.cacheWriteTokens ?? 0, usage.inputTokens - cached);
+  const long = price.longContext;
+  const tier = long && usage.inputTokens > long.aboveInputTokens ? long : price;
   // Reasoning is already inside outputTokens; adding it again would double-count.
   const microUsd =
-    (usage.inputTokens - cached - written) * price.input +
-    cached * price.cachedInput +
-    written * (price.cacheWrite ?? price.input) +
-    usage.outputTokens * price.output;
+    (usage.inputTokens - cached - written) * tier.input +
+    cached * (price.cachedInput ?? tier.input) +
+    written * (price.cacheWrite ?? tier.input) +
+    usage.outputTokens * tier.output;
   return Math.round(microUsd);
 }
