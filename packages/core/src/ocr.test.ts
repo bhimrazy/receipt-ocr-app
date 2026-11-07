@@ -1,8 +1,8 @@
 import { FIXTURE_RECEIPTS, type ModelId, type OcrFailureKind } from "@receipt-ocr/ai";
-import { Duration, Effect, Exit, TestClock, TestContext } from "effect";
+import { ConfigProvider, Duration, Effect, Exit, Layer, TestClock, TestContext } from "effect";
 import { describe, expect, it } from "vitest";
-import { activeChain, OCR_DEADLINE_MS, runChain, type ExtractCall } from "./ocr";
-import type { OcrStep } from "./settings";
+import { activeChain, Ocr, OCR_DEADLINE_MS, runChain, type ExtractCall } from "./ocr";
+import { Settings, type OcrStep } from "./settings";
 
 const step = (model: ModelId, timeoutMs = 30_000, enabled = true): OcrStep => ({
   model,
@@ -53,14 +53,27 @@ const F = "fixture" as const;
 describe("activeChain", () => {
   it("keeps the saved order and skips disabled steps and providers without a key", () => {
     const chain = [step(B), step(A, 30_000, false), step(F), step("google:model-c")];
-    expect(activeChain({ chain }, { google: true, fixture: false }).map((s) => s.model)).toEqual([
-      B,
-      "google:model-c",
-    ]);
-    expect(activeChain({ chain }, { google: false, fixture: true }).map((s) => s.model)).toEqual([
-      F,
-    ]);
-    expect(activeChain({ chain }, { google: false, fixture: false })).toEqual([]);
+    expect(
+      activeChain({ chain }, { google: true, anthropic: false, fixture: false }).map(
+        (s) => s.model,
+      ),
+    ).toEqual([B, "google:model-c"]);
+    expect(
+      activeChain({ chain }, { google: false, anthropic: false, fixture: true }).map(
+        (s) => s.model,
+      ),
+    ).toEqual([F]);
+    expect(activeChain({ chain }, { google: false, anthropic: false, fixture: false })).toEqual([]);
+  });
+
+  it("mixes providers in one chain, each gated on its own key", () => {
+    const claude = "anthropic:claude-haiku-5-5" as const;
+    const chain = [step(A), step(claude)];
+    const only = (available: { google: boolean; anthropic: boolean }) =>
+      activeChain({ chain }, { ...available, fixture: false }).map((s) => s.model);
+    expect(only({ google: true, anthropic: true })).toEqual([A, claude]);
+    expect(only({ google: false, anthropic: true })).toEqual([claude]);
+    expect(only({ google: true, anthropic: false })).toEqual([A]);
   });
 });
 
@@ -73,16 +86,20 @@ describe("runChain", () => {
     expect(calls[0]?.maxRetries).toBe(1);
   });
 
-  it.each(["timeout", "rate-limited", "provider-error", "not-configured"] as const)(
-    "falls back to the next model on %s",
-    async (error) => {
-      const { call, calls } = fakeCall({ [A]: { error } });
-      const exit = await run(runChain([step(A), step(B)], call));
-      expect(Exit.isSuccess(exit) && exit.value.model).toBe(B);
-      expect(calls.map((c) => c.model)).toEqual([A, B]);
-      expect(Exit.isSuccess(exit) && exit.value.attempts.map((a) => a.kind)).toEqual([error, "ok"]);
-    },
-  );
+  it.each([
+    "timeout",
+    "rate-limited",
+    "provider-error",
+    "not-configured",
+    "refused",
+    "unsupported-file",
+  ] as const)("falls back to the next model on %s", async (error) => {
+    const { call, calls } = fakeCall({ [A]: { error } });
+    const exit = await run(runChain([step(A), step(B)], call));
+    expect(Exit.isSuccess(exit) && exit.value.model).toBe(B);
+    expect(calls.map((c) => c.model)).toEqual([A, B]);
+    expect(Exit.isSuccess(exit) && exit.value.attempts.map((a) => a.kind)).toEqual([error, "ok"]);
+  });
 
   it.each(["invalid-output", "bad-image"] as const)(
     "stops on %s without paying for a second model",
@@ -93,6 +110,18 @@ describe("runChain", () => {
       expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(`"kind":"${kind}"`);
     },
   );
+
+  it("marks a step skipped before any request on its attempt", async () => {
+    const call: ExtractCall = ({ model }) =>
+      model === A
+        ? Effect.fail({ kind: "unsupported-file", usage: null, cause: undefined, skipped: true })
+        : Effect.succeed({ extraction: FIXTURE_RECEIPTS[0]!, usage: USAGE, model });
+    const exit = await run(runChain([step(A), step(B)], call));
+    expect(Exit.isSuccess(exit) && exit.value.attempts).toMatchObject([
+      { model: A, kind: "unsupported-file", skipped: true },
+      { model: B, kind: "ok" },
+    ]);
+  });
 
   it("fails with every attempt listed when all models fail", async () => {
     const { call } = fakeCall({ [A]: { error: "provider-error" }, [B]: { error: "rate-limited" } });
@@ -148,5 +177,38 @@ describe("runChain", () => {
     const { call } = fakeCall({});
     const exit = await run(runChain([], call));
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("NotConfigured");
+  });
+});
+
+describe("Ocr.Live with a provider cooling down", () => {
+  it("says when the left-out provider is back, so a terminal rest can wait for it", async () => {
+    const chain = [step("google:gemini-3.8-flash"), step("anthropic:claude-haiku-5-5")];
+    const settings = Layer.succeed(Settings, {
+      ocr: Effect.succeed({ chain }),
+    } as unknown as Settings["Type"]);
+    const env = ConfigProvider.fromMap(
+      new Map([
+        ["GOOGLE_GENERATIVE_AI_API_KEY", "test"],
+        ["ANTHROPIC_API_KEY", "test"],
+      ]),
+    );
+    const until = new Date(Date.now() + 60_000);
+    // HEIC: Claude skips it before any request, and Gemini is cooling, so nothing reaches a network.
+    const heic = { data: new Uint8Array([0, 0, 0, 24]), mediaType: "image/heic" };
+    const exit = await Effect.runPromiseExit(
+      Effect.flatMap(Ocr, (ocr) =>
+        ocr.extract(heic, { cooling: new Map([["google", until]]) }),
+      ).pipe(
+        Effect.provide(Ocr.Live.pipe(Layer.provide(settings))),
+        Effect.withConfigProvider(env),
+      ),
+    );
+    if (!Exit.isFailure(exit) || exit.cause._tag !== "Fail") throw new Error("expected a failure");
+    expect(exit.cause.error).toMatchObject({
+      _tag: "OcrError",
+      kind: "unsupported-file",
+      coolingUntil: until,
+      attempts: [{ model: "anthropic:claude-haiku-5-5", kind: "unsupported-file", skipped: true }],
+    });
   });
 });

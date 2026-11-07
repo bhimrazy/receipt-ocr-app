@@ -30,8 +30,9 @@ directly (`transpilePackages`).
 
 ## OCR benchmark
 
-[`bench/ocr.ts`](../../bench/ocr.ts), run with `bun run bench:ocr`. It calls real models, billed to
-`GOOGLE_GENERATIVE_AI_API_KEY`.
+[`bench/ocr.ts`](../../bench/ocr.ts), run with `bun run bench:ocr`. It calls real models, billed to each chosen
+provider's key (`GOOGLE_GENERATIVE_AI_API_KEY`, `ANTHROPIC_API_KEY`). `--dry-run` prints a cost estimate and calls
+nothing.
 
 ```mermaid
 flowchart LR
@@ -108,7 +109,7 @@ Images are pinned by digest. Containers have no restart policy, so they stay sto
 | ---------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`ci.yml`](../../.github/workflows/ci.yml)                 | Every PR, every push to `main`                           | `changes` (which files the PR touched), `static` (format, lint, deps, knip, audit), `checks` (typecheck, unit tests, build), `e2e` (Postgres and RustFS services, migrations, integration suites overlapping the build, Playwright), `e2e-turnstile`, and `ci-ok` |
 | [`preview.yml`](../../.github/workflows/preview.yml)       | PR opened, pushed, ready for review or labelled          | Vercel preview deploy and a PR comment with its URL, only when the PR needs one (see below)                                                                                                                                                                       |
-| [`production.yml`](../../.github/workflows/production.yml) | CI succeeded on a push to `main`, or by hand from `main` | Deploys the exact commit CI tested to Vercel production; the automatic run skips when migrations changed since the `production-deployed` tag                                                                                                                      |
+| [`production.yml`](../../.github/workflows/production.yml) | CI succeeded on a push to `main`, or by hand from `main` | Deploys the exact commit CI tested to Vercel production; the automatic run skips when migrations changed since the last successful production deploy run                                                                                                          |
 | [`db-migrate.yml`](../../.github/workflows/db-migrate.yml) | By hand from `main` only                                 | `bun run db:migrate` against `staging-db` or `production-db` (GitHub environments holding `DIRECT_URL`), one run per database at a time                                                                                                                           |
 | [`load.yml`](../../.github/workflows/load.yml)             | By hand only (workflow_dispatch)                         | Builds the image, runs `scripts/load.sh` with the chosen scenarios and limits, uploads the report. No secrets                                                                                                                                                     |
 

@@ -25,6 +25,23 @@ import {
 /** Shown on a receipt whose job an admin cancelled. */
 export const EXTRACTION_CANCELLED_MESSAGE = "Reading this receipt was stopped. Try again.";
 
+/** Every model declined the file; retrying won't change that. */
+export const EXTRACTION_REFUSED_MESSAGE =
+  "The AI model declined to read this file. If it is a receipt or invoice, contact support; otherwise upload a receipt instead.";
+
+/** No configured model could take this file's type or size. */
+export const EXTRACTION_UNSUPPORTED_MESSAGE =
+  "This file is too large or in a format the AI models can't read. Upload a smaller JPEG, PNG or PDF copy.";
+
+const FINAL_MESSAGES = new Map<string, string>([
+  ["cancelled", EXTRACTION_CANCELLED_MESSAGE],
+  ["refused", EXTRACTION_REFUSED_MESSAGE],
+  ["unsupported-file", EXTRACTION_UNSUPPORTED_MESSAGE],
+]);
+
+/** The receipt's message for the job's final error kind; undefined means the generic one. */
+export const finalFailureMessage = (errorKind: string) => FINAL_MESSAGES.get(errorKind);
+
 /** Worth another attempt: the provider was slow, busy or down. The rest won't change on a retry. */
 const RETRYABLE_OCR: ReadonlySet<OcrFailureKind> = new Set([
   "timeout",
@@ -41,18 +58,37 @@ const MAX_COOLDOWN_MS = 10 * 60_000;
  * Maps a failed attempt to the job's next step:
  * - retry: timeout, rate-limited, provider-error, storage and database errors;
  * - dead now: invalid-output, bad-image, not-configured (an admin re-runs it
- *   once keys are fixed), and an unreadable stored file;
+ *   once keys are fixed), refused and unsupported-file (every model in the
+ *   chain was already tried), and an unreadable stored file;
  * - deferred, without spending an attempt: every provider is cooling down.
+ * The chain reports its last step's kind, but a transient failure anywhere in
+ * it makes the whole round worth retrying: [429, HEIC skipped] is a 429. The
+ * retry waits at least as long as the cooldowns this failure starts, or the
+ * cooled provider would be left out of the retry too. And when steps were left
+ * out for cooling and the rest failed for good, the round is retried once the
+ * first of those providers is back (as an attempt, so the cap still ends it).
  */
-export function classifyExtractionError(error: ExtractionError): JobFailure {
+export function classifyExtractionError(error: ExtractionError, now = Date.now()): JobFailure {
   switch (error._tag) {
     case "OcrError": {
-      if (!RETRYABLE_OCR.has(error.kind)) return new NonRetryableJobError({ kind: error.kind });
-      const waits = error.attempts.flatMap((a) =>
-        a.retryAfterMs === undefined ? [] : [a.retryAfterMs],
-      );
+      const transient = RETRYABLE_OCR.has(error.kind)
+        ? error.kind
+        : error.attempts.find((a) => a.kind !== "ok" && RETRYABLE_OCR.has(a.kind))?.kind;
+      if (transient === undefined) {
+        if (error.coolingUntil) {
+          return new RetryableJobError({
+            kind: "providers-cooling",
+            retryAfterMs: Math.max(0, error.coolingUntil.getTime() - now),
+          });
+        }
+        return new NonRetryableJobError({ kind: error.kind });
+      }
+      const waits = [
+        ...error.attempts.flatMap((a) => (a.retryAfterMs === undefined ? [] : [a.retryAfterMs])),
+        ...cooldownsFrom(error).values(),
+      ];
       return new RetryableJobError({
-        kind: error.kind,
+        kind: transient,
         ...(waits.length > 0 ? { retryAfterMs: Math.max(...waits) } : {}),
       });
     }
@@ -157,7 +193,7 @@ export const receiptExtract: JobDefinition<
       receiptId: payload.receiptId,
       scope: scopeOf(payload),
       round: payload.round,
-      ...(errorKind === "cancelled" ? { message: EXTRACTION_CANCELLED_MESSAGE } : {}),
+      message: finalFailureMessage(errorKind),
       // A worker that died mid-call wrote nothing for this attempt; one row
       // says it ended, so the round stops reading as in flight.
       calls:

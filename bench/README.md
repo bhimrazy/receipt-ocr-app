@@ -4,22 +4,65 @@
 
 ```bash
 GOOGLE_GENERATIVE_AI_API_KEY=... bun run bench:ocr [--models google:gemini-3.8-flash] [--only npr-lakh,idr-dot] [--concurrency 2]
+ANTHROPIC_API_KEY=... bun run bench:ocr --models anthropic:claude-haiku-5-5,anthropic:claude-sonnet-5-5,anthropic:claude-opus-5-5
+bun run bench:ocr --dry-run --models anthropic:claude-haiku-5-5,anthropic:claude-sonnet-5-5   # cost estimate, no calls
+# Another fixture set, and a resolution sweep: every model runs once per prep mode.
+bun run bench:ocr --fixtures ~/receipt-ocr-real-receipts/nepal --prep none,app,long:1568,long:2400,short:1000 --dry-run
 ```
 
-Real provider calls, billed to the key. Without the key the script exits with a message.
+Real provider calls, billed to the keys. `--models` takes any id in `OCR_MODELS`; a missing key for a chosen provider
+exits with a message. `--dry-run` needs no key and prints an estimate from the fixture sizes (assumptions in
+`printEstimate`, deliberately generous), so spend can be approved before a run. Fixtures without a `.json` (the load
+test's receipt) are skipped.
 
-- Fixtures: `fixtures/<id>.{jpg,png,pdf}` plus `<id>.json` ground truth (same fields as the extraction; omit a
-  field to skip it). The six starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, KWD three decimals, EUR comma
+- Fixtures: `<dir>/<id>.{png,jpg,jpeg,webp,pdf}` plus `<id>.json` ground truth (same fields as the extraction; omit
+  a field to skip it; `category` and `merchant` may list several acceptable values; `receiptDate` is the AD date, and
+  a printed Bikram Sambat date goes only in `_meta` or `_notes`, which scoring ignores). `--fixtures <dir>` picks the
+  set (default `bench/fixtures`); its folder name goes into the result file names, so sets don't overwrite each other.
+- **Real receipts are private and never committed.** The owner's set lives outside the repo
+  (`~/receipt-ocr-real-receipts/`; some show customer names). Point `--fixtures` at it; don't copy it in.
+  `bench/fixtures-local/` is gitignored as a safety net. Raw results for a private set hold its extracted text and
+  stay local (gitignored); summaries hold only scores and sizes. The six starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, KWD three decimals, EUR comma
   decimals, IDR dot thousands, a tip, a 34-line receipt. Add real, PII-free receipts the same way (faded
   thermal, skewed phone shots, handwritten totals).
-- Scoring (`score.ts`, unit-tested): exact currency/date/category; total/tax/subtotal/tip within 0.01 (a missing
-  tip equals zero); merchant by normalised edit similarity >= 0.8; items F1 (name similarity >= 0.7 and the
+- Scoring (`score.ts`, unit-tested): exact currency/date; category against the app's canonical list (a fixture may
+  list several acceptable ones, and legacy labels are normalised with `parseCategory`; a test checks every fixture); total/tax/subtotal/tip within 0.01 (a missing
+  tip equals zero); merchant by edit similarity >= 0.8 after NFC, lower case and dropping everything but letters, marks
+  and digits (marks are kept: Devanagari vowel signs are marks); items F1 (name similarity >= 0.7 and the
   same total price).
-- Output: `results/<date>.md` (summary, commit it) and `results/<date>-<model>.json` (raw, gitignored). Latency is
+- Output: `results/<date>.md` (summary, commit it; `<date>-<set>.md` for a set other than `fixtures`) and
+  `results/<date>[-<set>]-<model>-<prep>.json` (raw, gitignored, with each run's extraction so misses can be
+  inspected). Latency is
   p50/p95 of successful calls, `cold` the first one to finish.
 - Cost: the usage `extractReceipt` returns (or a failed call's `OcrCallError.usage`), priced with `costOf` from the
   model registry's effective-dated table in `packages/ai/src/models.ts`, the same prices the app stores per call.
   `n/a` when no call reported usage.
+- **Prep** (`--prep`, comma-separated, default `none`; [`prep.ts`](prep.ts), unit-tested). Images are prepared in
+  memory; sources are only read. PDFs are always sent as is, as in the app (`prepApplied: false`).
+  - `none`: the file as is.
+  - `app`: the app's own shrinking from [`apps/web/lib/upload-prep.ts`](../apps/web/lib/upload-prep.ts) (`planSize`:
+    ~3 MP budget, short edge kept at 1000 px or more, long edge at most 6000 px; `encodeToTarget`: ~500 KB target,
+    quality steps 0.85 / 0.72 / 0.6, then scaling), with sharp 0.35 in place of the browser canvas. Differences from a
+    browser: sharp resamples with Lanczos-3 where Chrome's canvas uses Skia's high-quality smoothing, and libvips'
+    libjpeg-turbo at the same quality numbers gives slightly different bytes than the browser's encoder, so the size
+    loop can stop one step earlier or later. Orientation (EXIF), the white background and stripped metadata match.
+    Not modelled: browsers that can't decode a file (HEIC outside Safari) or fail to encode send the original.
+  - `long:<px>`: longest edge at most px. `short:<px>[/<maxLong>]`: shortest edge brought down to px with the
+    longest edge capped (default 6000), which keeps tall receipts readable where a long-edge cap alone would not.
+    Both never upscale and re-encode as JPEG quality 85 with sharp.
+  - Each run records the prep, bytes, media type and pixel size sent, input tokens, latency and field scores; the
+    summary has one row per model x prep.
+- **Reading resolution results.** Claude Haiku, Sonnet and Opus 5.5 are on Anthropic's high-resolution tier ("Claude
+  4.7 and later"): an image whose long edge is over **2576 px** or whose cost would exceed **4784 visual tokens** is
+  downscaled by the API, and an image costs ceil(w/28) x ceil(h/28) tokens. Older models are on the standard tier,
+  1568 px and 1568 tokens ([vision docs](https://platform.claude.com/docs/en/build-with-claude/vision), checked
+  2026-11-07). So above ~2576 px Claude sees the same pixels and only the bytes differ. Gemini 3 spends a fixed
+  token budget per image set by `media_resolution`: 1120 by default (280 low, 560 medium, 1120 high, 2240
+  ultra-high; [media resolution](https://ai.google.dev/gemini-api/docs/media-resolution), checked 2026-11-07); that
+  page doesn't describe tiling. For Gemini, more pixels change accuracy but not input tokens.
+- **Category scores before this fix are invalid for every model**, including the first Claude run
+  (`results/2026-11-07.md`, 0%): the fixtures used pre-`0004` labels (Restaurant, Grocery, Shopping) that the
+  extraction schema can never produce. Every other column of that run stands.
 - The only call into `packages/ai` is `extract()` in `ocr.ts`; change that one function if the export is renamed.
 
 ## Image shrinker

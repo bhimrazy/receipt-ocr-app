@@ -24,6 +24,10 @@ export const OCR_FAILURE_KINDS = [
   "invalid-output",
   "bad-image",
   "not-configured",
+  /** The model declined (Claude's refusal, Gemini's safety stop). Another model may not. */
+  "refused",
+  /** This model can't take this file (type or size); another model may. */
+  "unsupported-file",
 ] as const;
 export type OcrFailureKind = (typeof OCR_FAILURE_KINDS)[number];
 
@@ -31,10 +35,17 @@ function fromStatus(status: number): OcrFailureKind {
   if (status === 408) return "timeout";
   if (status === 429) return "rate-limited";
   if (status >= 500) return "provider-error";
-  // Bad or revoked key, or a model id the provider doesn't know.
-  if (status === 401 || status === 403 || status === 404) return "not-configured";
-  // 400, 413, 422: the provider refused the input itself.
+  // Bad or revoked key, billing (Anthropic's 402), or a model id the provider doesn't know.
+  if (status === 401 || status === 402 || status === 403 || status === 404) return "not-configured";
+  // Too large for this provider; another may take it.
+  if (status === 413) return "unsupported-file";
+  // 400, 422: the provider refused the input itself.
   return "bad-image";
+}
+
+/** The cause of a step skipped before any request: this model can't take the file's type or size. */
+export class UnsupportedFileError extends Error {
+  override name = "UnsupportedFileError";
 }
 
 /**
@@ -53,7 +64,11 @@ export class OcrCallError extends Error {
   ) {
     const status = statusOf(cause);
     super(`OCR call failed: ${kind}${status === undefined ? "" : ` (HTTP ${status})`}`, { cause });
+    this.skipped = cause instanceof UnsupportedFileError;
   }
+
+  /** No request was sent: nothing billed, no provider latency. */
+  readonly skipped: boolean;
 }
 
 function statusOf(error: unknown): number | undefined {
@@ -71,11 +86,31 @@ export function retryAfterMs(error: unknown, now = Date.now()): number | undefin
   if (!APICallError.isInstance(error)) return undefined;
   const headers = error.responseHeaders ?? {};
   const value = Object.entries(headers).find(([name]) => name.toLowerCase() === "retry-after")?.[1];
-  if (!value) return undefined;
+  if (!value) return retryDelayInBody(error.responseBody);
   const seconds = Number(value);
   if (Number.isFinite(seconds)) return seconds >= 0 ? seconds * 1000 : undefined;
   const at = Date.parse(value);
   return Number.isNaN(at) ? undefined : Math.max(0, at - now);
+}
+
+/**
+ * Gemini puts its hint in the 429 body, not a header: a google.rpc.RetryInfo
+ * detail with `retryDelay` like "17s" or "1.5s". Only that field is read.
+ */
+function retryDelayInBody(body: string | undefined): number | undefined {
+  if (!body) return undefined;
+  try {
+    const details = (JSON.parse(body) as { error?: { details?: unknown } }).error?.details;
+    if (!Array.isArray(details)) return undefined;
+    for (const detail of details as Array<Record<string, unknown>>) {
+      if (!String(detail["@type"] ?? "").endsWith("google.rpc.RetryInfo")) continue;
+      const match = /^(\d+(?:\.\d+)?)s$/.exec(String(detail.retryDelay ?? ""));
+      if (match) return Math.round(Number(match[1]) * 1000);
+    }
+  } catch {
+    // Not JSON: no hint.
+  }
+  return undefined;
 }
 
 export function classifyOcrError(error: unknown): OcrFailureKind {
@@ -84,6 +119,10 @@ export function classifyOcrError(error: unknown): OcrFailureKind {
   if (RetryError.isInstance(error)) return classifyOcrError(error.lastError);
   if (APICallError.isInstance(error)) {
     return error.statusCode === undefined ? "provider-error" : fromStatus(error.statusCode);
+  }
+  // A refusal with prose (or no) text fails parsing before the caller sees the finish reason.
+  if (NoObjectGeneratedError.isInstance(error) && error.finishReason === "content-filter") {
+    return "refused";
   }
   if (
     NoObjectGeneratedError.isInstance(error) ||

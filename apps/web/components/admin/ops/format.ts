@@ -105,6 +105,8 @@ const KIND_LABELS: Record<string, string> = {
   "invalid-output": "Unreadable answer",
   "bad-image": "Bad image",
   "not-configured": "Not configured",
+  refused: "Model refused",
+  "unsupported-file": "File not supported",
   "storage-error": "Storage error",
   "lease-expired": "Worker lost",
   cancelled: "Cancelled",

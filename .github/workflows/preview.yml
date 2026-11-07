@@ -6,7 +6,12 @@ name: Vercel Preview Deployment
 # The free Vercel plan allows 100 deployments a day and 10 GB of function storage, so a PR gets a
 # preview only when it is ready for review (not a draft) and changes something the app ships. The
 # `preview` label forces one, drafts and docs-only PRs included.
+#
+# A push to the `preview` branch always deploys and aliases the fixed preview domains (docs/production-environment.md).
+# Only the owner should push there.
 on:
+  push:
+    branches: [preview]
   # Every PR, including stacked ones whose base isn't main.
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, labeled]
@@ -17,7 +22,7 @@ permissions: {}
 concurrency:
   # A newer push cancels the deploy in flight. A run for some other label gets its own group, so it
   # can't cancel a deploy.
-  group: vercel-preview-${{ github.event.pull_request.number }}${{ github.event.action == 'labeled' && github.event.label.name != 'preview' && format('-ignored-{0}', github.run_id) || '' }}
+  group: ${{ github.event_name == 'push' && format('vercel-preview-branch-{0}', github.ref_name) || format('vercel-preview-{0}{1}', github.event.pull_request.number, github.event.action == 'labeled' && github.event.label.name != 'preview' && format('-ignored-{0}', github.run_id) || '') }}
   cancel-in-progress: true
 
 jobs:
@@ -26,6 +31,7 @@ jobs:
     # Dependabot and fork PRs get no secrets, so a preview could only fail.
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.actor != 'dependabot[bot]' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        (github.event.action != 'labeled' || github.event.label.name == 'preview'))
@@ -47,7 +53,7 @@ jobs:
           FORCED: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
         run: |
           deploy=false
-          if [ "$EVENT" = workflow_dispatch ] || [ "$FORCED" = true ]; then
+          if [ "$EVENT" = workflow_dispatch ] || [ "$EVENT" = push ] || [ "$FORCED" = true ]; then
             deploy=true
           elif [ "$DRAFT" != true ]; then
             # Any file outside docs, Markdown, tests, benchmarks, scripts and CI config changes what ships
@@ -101,6 +107,18 @@ jobs:
           # One archive upload instead of one request per build file (free plan: 5000 uploads/day).
           url=$("$VERCEL_BIN" deploy --prebuilt --archive=tgz)
           echo "preview_url=$url" >> "$GITHUB_OUTPUT"
+
+      # Branch domains follow git metadata that a CLI deploy may not carry, so point them explicitly.
+      # `alias set` is idempotent.
+      - name: Alias the fixed preview domains
+        if: github.event_name == 'push'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          for domain in preview.receipt-ocr.bhimraj.com.np preview-receipt-ocr.vercel.app; do
+            "$VERCEL_BIN" alias set "$DEPLOYMENT_URL" "$domain"
+          done
 
       - name: Find existing preview comment
         if: github.event_name == 'pull_request'

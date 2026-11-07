@@ -23,3 +23,5 @@ test-results/
 !/bench/results/.gitkeep
 !/bench/results/*.md
 /bench/results/latest.md
+# Private receipts never belong in the repo; this catches an accidental copy.
+/bench/fixtures-local/

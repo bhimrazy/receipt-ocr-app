@@ -123,6 +123,18 @@ describe("job.attempt events", () => {
     expect(lines[0]!.queue).toHaveProperty("next_run_in_ms");
   });
 
+  it("ends a retryable failure on the last attempt: a cooling retry can't run past the cap", async () => {
+    await runTick(
+      () => Effect.fail(new RetryableJobError({ kind: "providers-cooling", retryAfterMs: 30_000 })),
+      ["00000000-0000-4000-8000-0000000000a1"],
+      [{ ...JOB, attempts: 3, maxAttempts: 3 }],
+    );
+    expect(lines[0]).toMatchObject({
+      outcome: "dead",
+      queue: { outcome: "dead", error_kind: "providers-cooling" },
+    });
+  });
+
   it("records a defect by class at error level, never its message", async () => {
     await runTick(
       () =>
