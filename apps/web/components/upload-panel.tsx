@@ -205,19 +205,16 @@ export function UploadPanel({
   const captureRequested = useSearchParams().get("capture") === "1";
   useEffect(() => {
     if (!captureRequested) return;
-    let cancelled = false;
     const url = new URL(window.location.href);
     url.searchParams.delete("capture");
+    // This re-renders with `captureRequested` false straight away, so the camera check below
+    // must not be cancelled by this effect's cleanup.
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     if (browserCameraSupport() !== "ok") return;
     void hasCamera().then((found) => {
-      if (cancelled) return;
       setCameraFound(found);
       if (found) setCameraOpen(true);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [captureRequested]);
 
   // Object URLs for the thumbnails live until their row goes away.
