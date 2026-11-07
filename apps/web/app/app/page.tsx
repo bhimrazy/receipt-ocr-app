@@ -11,7 +11,7 @@ import { NoReadReceipts } from "@/components/dashboard/empty-states";
 import { SpendDashboardView } from "@/components/dashboard/spend-dashboard";
 import { UploadPanel } from "@/components/upload-panel";
 import { formatTimeUntil } from "@/lib/format";
-import { logger, redactDbMessage } from "@/lib/log";
+import { errorFields, logger } from "@/lib/log";
 import { getSpendView } from "@/lib/spend";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
@@ -32,6 +32,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "@/lib/receipts";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -264,7 +265,7 @@ async function SpendSection({ searchParams }: { searchParams: SearchParams }) {
     view = await getSpendView(await searchParams);
   } catch (error) {
     // The rest of Home still works; don't let the dashboard take it down.
-    logger.error({ event: "home.spend_failed", message: redactDbMessage(String(error)) });
+    logger.error({ event: "home.spend_failed", unit: "log", error: errorFields(error) });
   }
   if (view) return <SpendDashboardView dashboard={view.dashboard} search={view.search} />;
   return (
@@ -280,6 +281,7 @@ async function SpendSection({ searchParams }: { searchParams: SearchParams }) {
 }
 
 export default function HomePage({ searchParams }: { searchParams: SearchParams }) {
+  logPageRender("/app");
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader>

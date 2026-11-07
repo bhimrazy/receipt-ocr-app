@@ -15,7 +15,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { clientIp } from "@/lib/http";
 import { drainJobs, ROUTE_BUDGET_MS } from "@/lib/jobs";
-import { logger } from "@/lib/log";
+import { errorFields, logger } from "@/lib/log";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
 
@@ -68,9 +68,9 @@ async function run(
     }
     logger.error({
       event: "admin.action_failed",
+      unit: "log",
       action: name,
-      error:
-        error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+      error: errorFields(error),
     });
     return { ok: false, error: GENERIC };
   }
@@ -102,7 +102,7 @@ export async function rerunJobAction(input: { jobId: string; reason: string }) {
       }),
     );
     after(() =>
-      drainJobs(startedAt + ROUTE_BUDGET_MS, { event: "job.admin_rerun", job_id: parsed.jobId }, [
+      drainJobs(startedAt + ROUTE_BUDGET_MS, { trigger: "admin_rerun", job_id: parsed.jobId }, [
         parsed.jobId,
       ]),
     );

@@ -4,7 +4,7 @@ import { findUser, recordAudit } from "@receipt-ocr/core";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "./auth";
-import { logger } from "./log";
+import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 import { getSession } from "./session";
 
@@ -35,7 +35,7 @@ export async function stopImpersonatingAction(): Promise<{ ok: false; error: str
       logger.error({
         event: "admin.audit_failed",
         action: "user.impersonate_stop",
-        message: String(error),
+        error: errorFields(error),
       }),
     );
   redirect(`/admin/users/${session.user.id}`);

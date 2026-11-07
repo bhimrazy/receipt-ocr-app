@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { revalidatePath } from "next/cache";
 import { cache } from "react";
 import { authEnv } from "./env";
-import { logger } from "./log";
+import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 import { getSession } from "./session";
 
@@ -19,7 +19,7 @@ export async function getPlanTable(): Promise<PlanTable> {
       Effect.flatMap(Settings, (settings) => settings.plans).pipe(Effect.timeout("3 seconds")),
     );
   } catch (error) {
-    logger.error({ event: "plans.read_failed", message: String(error) });
+    logger.error({ event: "plans.read_failed", error: errorFields(error) });
     return DEFAULT_PLANS;
   }
 }

@@ -60,6 +60,9 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Use `packages/storage` for object-key and S3/R2 behavior.
 - Use `packages/db` for schema and DB construction.
 - Use `packages/ui` primitives and Tailwind v4 for UI.
+- Log only through `logger` or `annotateEvent` from `@receipt-ocr/core/telemetry` (wide events), never `console.*`.
+  Describe errors with `errorFields(error)`, never a message or `String(error)`. A new field goes in
+  `packages/core/src/telemetry/schema.ts` and in the PR's field audit (source, and whether it can carry PII).
 - Do not copy prototype inline styles wholesale.
 - Do not add the prototype tweak panel.
 - Preserve user-owned changes; do not revert unrelated work.

@@ -11,7 +11,10 @@ vi.mock("@/lib/session", () => ({ requireAdmin }));
 vi.mock("@/lib/runtime", () => ({ runtime: { runPromiseExit } }));
 vi.mock("@/lib/http", () => ({ clientIp: () => "203.0.113.1" }));
 vi.mock("@/lib/jobs", () => ({ drainJobs, ROUTE_BUDGET_MS: 290_000 }));
-vi.mock("@/lib/log", () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
+vi.mock("@/lib/log", async () => ({
+  logger: { info: vi.fn(), error: vi.fn() },
+  errorFields: (await import("@receipt-ocr/core/telemetry")).errorFields,
+}));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/server", () => ({ after }));
@@ -73,7 +76,11 @@ describe("job admin actions for an admin", () => {
     expect(runPromiseExit).toHaveBeenCalledTimes(2);
     expect(after).toHaveBeenCalledTimes(1);
     after.mock.calls[0]![0]();
-    expect(drainJobs).toHaveBeenCalledWith(expect.any(Number), expect.any(Object), [JOB]);
+    expect(drainJobs).toHaveBeenCalledWith(
+      expect.any(Number),
+      { trigger: "admin_rerun", job_id: JOB },
+      [JOB],
+    );
   });
 
   it("passes a core refusal through as the message and schedules nothing", async () => {

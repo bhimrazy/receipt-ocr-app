@@ -2,6 +2,10 @@ import { Cause, Clock, Duration, Effect, Exit, Option } from "effect";
 import { backoffMs } from "./backoff";
 import type { AnyJobDefinition, Job, JobErrorKind, JobFailure, JobRegistry } from "./definition";
 import { DEFAULT_OWNER_CAP, JobQueue, type JobOutcome } from "./queue";
+import { annotateEvent, mergeFields, withWideEvent } from "../telemetry/current";
+import { emitEvent } from "../telemetry/logger";
+import { errorFields } from "../telemetry/redact";
+import type { WideEvent, WideEventFields } from "../telemetry/schema";
 
 /**
  * How often one process records, per kind, that it ticked: often enough for
@@ -57,8 +61,13 @@ export type TickOptions<R> = {
   waitForRetries?: boolean | readonly string[];
   /** Never sleep for a job due later than this long after the tick started. Default: no cap. */
   maxWaitMs?: number;
-  /** Called as each run ends, e.g. to log one wide event per attempt. */
+  /** Called as each run ends, after its `job.attempt` event is written. */
   onRun?: (record: JobRunRecord) => void;
+  /**
+   * Copied onto every event the tick writes: the id of the request that
+   * started it and the trigger (`upload`, `retry`, `poll`).
+   */
+  context?: WideEventFields;
 };
 
 export type TickStats = { reaped: number; runs: JobRunRecord[] };
@@ -68,8 +77,46 @@ export type TickStats = { reaped: number; runs: JobRunRecord[] };
  * long-running worker calls it in a loop; a request or drain route calls it
  * once. Never fails: job failures are recorded on the job, and a database
  * outage ends the tick early (the jobs stay queued for the next one).
+ *
+ * Each attempt writes one `job.attempt` event. A tick that can claim any job
+ * (not one filtered to a few ids), or that reaped or hit a problem, also
+ * writes one `job.tick` summary; an idle one is routine and sampled.
  */
 export const tick = <R>(options: TickOptions<R>) =>
+  Effect.gen(function* () {
+    const tickEvent: WideEvent = {
+      ...options.context,
+      event: "job.tick",
+      unit: "job_tick",
+      worker: options.worker,
+    };
+    const tickStart = yield* Clock.currentTimeMillis;
+    const stats = yield* runTick(options).pipe(withWideEvent(tickEvent));
+    const count = (outcome: JobRunRecord["outcome"]) =>
+      stats.runs.filter((run) => run.outcome === outcome).length;
+    const idle = stats.runs.length === 0 && stats.reaped === 0;
+    mergeFields(tickEvent, {
+      duration_ms: (yield* Clock.currentTimeMillis) - tickStart,
+      outcome: idle ? "idle" : "ran",
+      tick: {
+        claimed: stats.runs.length,
+        succeeded: count("succeeded"),
+        retried: count("retry"),
+        deferred: count("deferred"),
+        dead: count("dead"),
+        lost: count("lost"),
+        reaped: stats.reaped,
+        reaped_dead: stats.reapedDead,
+        idle,
+      },
+    });
+    if (!options.ids || stats.reaped > 0 || tickEvent.notices) {
+      yield* emitEvent(tickEvent, { routine: idle && !tickEvent.notices });
+    }
+    return { reaped: stats.reaped, runs: stats.runs } satisfies TickStats;
+  });
+
+const runTick = <R>(options: TickOptions<R>) =>
   Effect.gen(function* () {
     const queue = yield* JobQueue;
     const definitions = Object.values(options.registry);
@@ -92,7 +139,12 @@ export const tick = <R>(options: TickOptions<R>) =>
       yield* queue.markTick(due).pipe(Effect.ignore);
     }
     const reaped = yield* queue.reap().pipe(
-      Effect.tapError((error) => Effect.logError("jobs.reap_failed", { error: error.message })),
+      Effect.tapError((error) =>
+        Effect.zipRight(
+          annotateEvent({ error: errorFields(error) }),
+          Effect.logError("jobs.reap_failed"),
+        ),
+      ),
       Effect.orElseSucceed((): Job[] => []),
     );
     for (const job of reaped) {
@@ -118,7 +170,7 @@ export const tick = <R>(options: TickOptions<R>) =>
         });
         if (job) {
           dueAfterEmptyClaim = false;
-          record(yield* runClaimed(options.registry, job, options.worker));
+          record(yield* runClaimed(options.registry, job, options.worker, options.context));
           continue;
         }
         if (waitFor === false) return;
@@ -137,18 +189,64 @@ export const tick = <R>(options: TickOptions<R>) =>
         yield* Effect.sleep(Duration.millis(Math.min(waitMs, IDLE_POLL_MS)));
       }
     }).pipe(
-      Effect.catchAll((error) => Effect.logError("jobs.tick_failed", { error: error.message })),
+      Effect.catchAll((error) =>
+        Effect.zipRight(
+          annotateEvent({ error: errorFields(error) }),
+          Effect.logError("jobs.tick_failed"),
+        ),
+      ),
     );
 
     yield* Effect.all(
       Array.from({ length: Math.max(1, options.concurrency ?? 1) }, () => slot),
       { concurrency: "unbounded", discard: true },
     );
-    return { reaped: reaped.length, runs } satisfies TickStats;
+    return {
+      reaped: reaped.length,
+      reapedDead: reaped.filter((job) => job.state === "dead").length,
+      runs,
+    };
+  });
+
+/** Runs one claimed job and writes its `job.attempt` event, from claim to settle. */
+const runClaimed = <R>(
+  registry: JobRegistry<R>,
+  job: Job,
+  worker: string,
+  context: WideEventFields | undefined,
+) =>
+  Effect.gen(function* () {
+    const event: WideEvent = {
+      ...context,
+      event: "job.attempt",
+      unit: "job_attempt",
+      job_id: job.id,
+      receipt_id: job.receiptId,
+      user_id: job.userId,
+      organization_id: job.organizationId,
+      attempt: job.attempts,
+      max_attempts: job.maxAttempts,
+      worker,
+      queue: { kind: job.kind, priority: job.priority, wait_ms: job.waitMs },
+    };
+    const run: JobRunRecord = yield* attempt(registry, job, worker).pipe(withWideEvent(event));
+    const now = yield* Clock.currentTimeMillis;
+    mergeFields(event, {
+      duration_ms: run.ms,
+      outcome: run.outcome,
+      queue: {
+        outcome: run.outcome,
+        error_kind: run.errorKind,
+        next_run_in_ms: run.runAt ? Math.max(0, run.runAt.getTime() - now) : undefined,
+      },
+    });
+    if (run.errorKind) mergeFields(event, { error: { kind: event.error?.kind ?? run.errorKind } });
+    yield* emitEvent(event);
+    return run;
   });
 
 /** Runs one claimed job to an outcome, holding its lease with heartbeats meanwhile. */
-const runClaimed = <R>(registry: JobRegistry<R>, job: Job, worker: string) =>
+const attempt = <R>(registry: JobRegistry<R>, job: Job, worker: string) =>
   Effect.gen(function* () {
     const queue = yield* JobQueue;
     const startedAt = yield* Clock.currentTimeMillis;
@@ -163,9 +261,7 @@ const runClaimed = <R>(registry: JobRegistry<R>, job: Job, worker: string) =>
     const finish = (outcome: JobOutcome) =>
       Effect.gen(function* () {
         const settled = yield* queue.settle(job, worker, outcome).pipe(
-          Effect.tapError((error) =>
-            Effect.logError("jobs.settle_failed", { jobId: job.id, error: error.message }),
-          ),
+          Effect.tapError(() => Effect.logError("jobs.settle_failed")),
           // Unrecorded: the lease runs out and the reaper re-queues the job.
           Effect.orElseSucceed(() => false),
         );
@@ -229,11 +325,9 @@ const decide = <R>(
       // A defect (a bug, or an interruption we didn't ask for): retry, so a
       // poison job still dies after its attempts.
       // The error's class only: its message or stack can hold receipt contents.
-      const error = Cause.squash(exit.cause);
-      yield* Effect.logError("jobs.defect", {
-        jobId: job.id,
-        kind: job.kind,
-        error: error instanceof Error ? error.constructor.name : typeof error,
+      yield* annotateEvent({
+        level: "error",
+        error: { ...errorFields(Cause.squash(exit.cause)), type: "Defect" },
       });
       return retryOrDead(definition, job, "internal", undefined);
     }

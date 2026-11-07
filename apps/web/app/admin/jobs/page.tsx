@@ -16,6 +16,7 @@ import { QueueAlarms } from "@/components/admin/ops/queue-panel";
 import { AdminPageHeader, AdminSection } from "@/components/admin/page-header";
 import { Pager } from "@/components/admin/pager";
 import { formatDateTime } from "@/lib/format";
+import { logPageRender } from "@/lib/page-event";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
 import { one, PAGE_SIZE, pageOf, pick, type SearchParams } from "../params";
@@ -118,6 +119,7 @@ function JobsTable({ rows, filtered }: { rows: AdminJobRow[]; filtered: boolean 
 }
 
 export default async function AdminJobsPage({ searchParams }: { searchParams: SearchParams }) {
+  logPageRender("/admin/jobs");
   await requireAdmin();
   const params = await searchParams;
   const kinds = jobKinds();

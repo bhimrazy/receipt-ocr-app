@@ -16,10 +16,17 @@ const core = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/env", () => ({ authEnv: { betterAuthUrl: "https://app.example", ipAddress: {} } }));
+vi.mock("@/lib/env", () => ({
+  authEnv: {
+    betterAuthUrl: "https://app.example",
+    trustedOrigins: ["https://app.example"],
+    ipAddress: {},
+  },
+}));
+const emit = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/log", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/log")>()),
-  logger: { error: vi.fn(), info: vi.fn() },
+  logger: { emit, error: vi.fn(), info: vi.fn() },
 }));
 // The core functions are mocked as plain Effects, so the runtime needs no services.
 vi.mock("@/lib/runtime", () => ({
@@ -55,7 +62,16 @@ const json = async (res: Response) => ({ status: res.status, body: await res.jso
 beforeEach(() => {
   state.scope = { organizationId: "o1", userId: "u1", role: "member" };
   for (const fn of Object.values(core)) fn.mockReset();
+  emit.mockReset();
 });
+
+/** The one wide event the last request wrote, after the allowlist. */
+async function lastEvent() {
+  const { formatEvent } = await import("@receipt-ocr/core/telemetry");
+  expect(emit).toHaveBeenCalledTimes(1);
+  const line = formatEvent(emit.mock.calls[0]![0])!.line;
+  return { line, event: JSON.parse(line) as Record<string, unknown> };
+}
 
 describe("same-origin and session checks", () => {
   const mutations = [
@@ -102,7 +118,7 @@ describe("same-origin and session checks", () => {
 
   it("answers 401 without a workspace session", async () => {
     state.scope = null;
-    expect((await groups.GET()).status).toBe(401);
+    expect((await groups.GET(request("GET"))).status).toBe(401);
     expect((await groups.POST(request("POST", { name: "Trip", color: "green" }))).status).toBe(401);
     expect((await receiptGroups.GET(request("GET"), params(RECEIPT_ID))).status).toBe(401);
     for (const fn of Object.values(core)) expect(fn).not.toHaveBeenCalled();
@@ -120,6 +136,18 @@ describe("POST /api/groups", () => {
       name: "Berlin trip",
       color: "blue",
     });
+    const { line, event } = await lastEvent();
+    expect(event).toMatchObject({
+      event: "group.create",
+      unit: "request",
+      route: "/api/groups",
+      status_code: 201,
+      user_id: "u1",
+      organization_id: "o1",
+      group_id: GROUP_ID,
+    });
+    expect(event.dropped_fields).toBeUndefined();
+    expect(line).not.toMatch(/Berlin|blue/);
   });
 
   it("refuses bad input with a readable message", async () => {
@@ -156,6 +184,16 @@ describe("PATCH and DELETE /api/groups/[id]", () => {
       status: 403,
       body: { error: "Only the person who created this group…" },
     });
+    const { line, event } = await lastEvent();
+    expect(event).toMatchObject({
+      event: "group.update",
+      status_code: 403,
+      outcome: "Forbidden",
+      group_id: GROUP_ID,
+      flags: { renamed: false, recoloured: true },
+      error: { type: "Forbidden" },
+    });
+    expect(line).not.toMatch(/created this group|"red"/);
   });
 
   it("needs something to change", async () => {
@@ -183,6 +221,13 @@ describe("bulk /api/groups/[id]/receipts", () => {
     );
     expect(res).toEqual({ status: 200, body: result });
     expect(core.addReceiptsToGroup).toHaveBeenCalledWith(state.scope, GROUP_ID, [RECEIPT_ID]);
+    const { event } = await lastEvent();
+    expect(event).toMatchObject({
+      event: "group.receipts_add",
+      group_id: GROUP_ID,
+      count: 1,
+      counts: { changed: 1, unchanged: 0, at_limit: 0, not_found: 0 },
+    });
   });
 
   it("takes 1 to 100 UUIDs", async () => {
@@ -207,6 +252,15 @@ describe("/api/receipts/[id]/groups", () => {
     );
     expect(res).toEqual({ status: 200, body: { groups: list } });
     expect(core.setReceiptGroup).toHaveBeenCalledWith(state.scope, RECEIPT_ID, GROUP_ID, "add");
+    const { line, event } = await lastEvent();
+    expect(event).toMatchObject({
+      event: "receipt.group_add",
+      route: "/api/receipts/[id]/groups",
+      receipt_id: RECEIPT_ID,
+      group_id: GROUP_ID,
+      count: 1,
+    });
+    expect(line).not.toMatch(/Trip|green/);
   });
 
   it("removes with DELETE", async () => {
