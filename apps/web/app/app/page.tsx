@@ -259,23 +259,24 @@ async function SpendSection({ searchParams }: { searchParams: SearchParams }) {
       </section>
     );
   }
+  let view: Awaited<ReturnType<typeof getSpendView>> | null = null;
   try {
-    const { search, dashboard } = await getSpendView(await searchParams);
-    return <SpendDashboardView dashboard={dashboard} search={search} />;
+    view = await getSpendView(await searchParams);
   } catch (error) {
     // The rest of Home still works; don't let the dashboard take it down.
     logger.error({ event: "home.spend_failed", message: redactDbMessage(String(error)) });
-    return (
-      <section aria-labelledby="spending-heading" className="mt-10">
-        <h2 className="mb-3 text-base font-semibold" id="spending-heading">
-          Spending
-        </h2>
-        <Card className="p-5 text-sm text-muted-foreground" role="status">
-          Spending totals couldn&apos;t load just now. Reload the page to try again.
-        </Card>
-      </section>
-    );
   }
+  if (view) return <SpendDashboardView dashboard={view.dashboard} search={view.search} />;
+  return (
+    <section aria-labelledby="spending-heading" className="mt-10">
+      <h2 className="mb-3 text-base font-semibold" id="spending-heading">
+        Spending
+      </h2>
+      <Card className="p-5 text-sm text-muted-foreground" role="status">
+        Spending totals couldn&apos;t load just now. Reload the page to try again.
+      </Card>
+    </section>
+  );
 }
 
 export default function HomePage({ searchParams }: { searchParams: SearchParams }) {

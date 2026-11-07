@@ -121,6 +121,11 @@ export default function TimeChart({
   );
   const ticks = niceTicks(max);
   const axis = (v: number) => formatValue(v, format, { axis: true });
+  // Size the axis to its longest label (about 7.5px a character in the mono font), so "CHF 1.5K" is never clipped.
+  const axisWidth = Math.max(
+    36,
+    Math.ceil(Math.max(...ticks.map((t) => axis(t).length)) * 7.5) + 8,
+  );
 
   return (
     <div>
@@ -171,7 +176,7 @@ export default function TimeChart({
             tickFormatter={axis}
             tickLine={false}
             ticks={ticks}
-            width={44}
+            width={axisWidth}
           />
           <ChartTooltip
             content={<Readout format={format} labels={labels} />}

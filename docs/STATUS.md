@@ -54,6 +54,7 @@ Steps are in [deployment.md](deployment.md).
 | `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt           |
 | `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                     |
 | `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                          |
+| `feat/dashboard`           | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison          |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
