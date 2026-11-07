@@ -12,6 +12,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const mailer = {
   apiKey: emailEnv.resendApiKey,
   from: emailEnv.from,
+  replyTo: emailEnv.replyTo,
   logUndelivered: logUndeliveredMail(),
   log: (event: EmailLogEvent) => logger.emit(event),
 };

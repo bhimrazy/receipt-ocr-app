@@ -7,7 +7,7 @@ decides whether an undelivered message is an error.
 
 | Export (from [`src/index.ts`](../../packages/email/src/index.ts) and [`src/templates.ts`](../../packages/email/src/templates.ts)) | Does                                                                                              |
 | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `sendEmail(config, { to, subject, html, text, replyTo? })`                                                                        | Returns `{ delivered: true, id }` or `{ delivered: false, reason: "not_configured" or "failed" }` |
+| `sendEmail(config, { to, subject, html, text, replyTo? })` (`config.replyTo`, set from `SUPPORT_EMAIL`, is the default Reply-To)  | Returns `{ delivered: true, id }` or `{ delivered: false, reason: "not_configured" or "failed" }` |
 | `verificationEmail(url)`                                                                                                          | Subject, HTML and text for "confirm your email"                                                   |
 | `passwordResetEmail(url)`                                                                                                         | Same for a reset link                                                                             |
 | `invitationEmail({ organizationName, inviterEmail, url })`                                                                        | Same for a workspace invitation                                                                   |

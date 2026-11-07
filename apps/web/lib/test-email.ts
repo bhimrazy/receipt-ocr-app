@@ -20,6 +20,7 @@ export async function sendTestEmail(to: string): Promise<TestEmailOutcome> {
     {
       apiKey: emailEnv.resendApiKey,
       from: emailEnv.from,
+      replyTo: emailEnv.replyTo,
       log: (event: EmailLogEvent) => logger.emit(event),
     },
     testEmail(to),

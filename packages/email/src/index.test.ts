@@ -58,3 +58,30 @@ describe("sendEmail logging", () => {
     expect(info).not.toHaveBeenCalled();
   });
 });
+
+describe("sendEmail reply-to", () => {
+  const input = { to: "a@example.com", subject: "s", html: "<p>h</p>", text: "t" };
+  const config = { apiKey: "key", from: "x <noreply@example.com>" };
+  const sentWith = async (cfg: object, msg: object) => {
+    send.mockClear();
+    send.mockResolvedValueOnce({ data: { id: "1" }, error: null });
+    await sendEmail({ ...config, ...cfg, log: () => {} }, { ...input, ...msg });
+    return send.mock.calls[0][0];
+  };
+
+  it("defaults to the configured reply-to", async () => {
+    expect(await sentWith({ replyTo: "support@example.com" }, {})).toMatchObject({
+      replyTo: "support@example.com",
+    });
+  });
+
+  it("lets a per-message reply-to win, as the contact form does", async () => {
+    expect(
+      await sentWith({ replyTo: "support@example.com" }, { replyTo: "visitor@example.com" }),
+    ).toMatchObject({ replyTo: "visitor@example.com" });
+  });
+
+  it("sets no Reply-To without either", async () => {
+    expect(await sentWith({}, {})).not.toHaveProperty("replyTo");
+  });
+});
