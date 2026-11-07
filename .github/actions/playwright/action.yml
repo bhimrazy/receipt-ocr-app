@@ -1,0 +1,24 @@
+name: Playwright Chromium
+description: Install Chromium and its system libraries, caching the browser download.
+
+runs:
+  using: composite
+  steps:
+    - id: version
+      shell: bash
+      run: echo "v=$(bunx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+    - id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.version.outputs.v }}
+
+    # The browser download is cached; system libraries live outside the cache and are always installed.
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: bunx playwright install --with-deps chromium
+
+    - if: steps.cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: bunx playwright install-deps chromium
