@@ -6,6 +6,7 @@ import {
   PRIORITY_BULK,
   PRIORITY_INTERACTIVE,
   type ReceiptExtractResult,
+  sniffMediaType,
 } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
@@ -57,10 +58,9 @@ async function upload(request: Request, _context: unknown, event: WideEvent) {
   if (!(file instanceof File)) return jsonError(400, "A receipt file is required");
   const mode = form.get("mode") === "queued" ? "queued" : "instant";
   event.mode = mode;
-  // The declared type only; the stored type is sniffed from the bytes.
-  event.file = { size_bytes: file.size, media_type: file.type || undefined };
-
   const body = new Uint8Array(await file.arrayBuffer());
+  // The type sniffed from the bytes, from the upload allowlist; never the client's `file.type`.
+  event.file = { size_bytes: file.size, media_type: sniffMediaType(body) ?? "unsupported" };
   // Check quota and OCR config first, so nothing is stored for an upload that can't be read.
   const ingest = enforceUploadQuota(session.user.id).pipe(
     Effect.tap(({ plan }) => void (event.plan = plan)),

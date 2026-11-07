@@ -5,3 +5,20 @@
  * routes make their own (`withRequestEvent`) and return it on the response.
  */
 export const REQUEST_ID_HEADER = "x-request-id";
+
+/** The paths proxy.ts runs on, so the only ones whose request id header is ours, not the client's. */
+const PROXIED = /^\/(app|admin)(\/|$)/;
+
+/**
+ * The request id for an error report: the proxy's header on /app and /admin
+ * (so it matches that render's `page.render`), otherwise a fresh one, because
+ * on other paths the header is whatever the client sent.
+ */
+export function requestIdFor(
+  routePath: string,
+  headers: Record<string, string | string[] | undefined>,
+): string {
+  const header = headers[REQUEST_ID_HEADER];
+  if (PROXIED.test(routePath) && typeof header === "string" && header !== "") return header;
+  return crypto.randomUUID();
+}

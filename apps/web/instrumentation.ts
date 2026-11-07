@@ -13,11 +13,16 @@ export async function register() {
  */
 export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
   const { errorFields, logger, noteFailedRender } = await import("./lib/log");
-  const { REQUEST_ID_HEADER } = await import("./lib/request-id");
-  const header = request.headers[REQUEST_ID_HEADER];
-  const requestId = typeof header === "string" ? header : undefined;
-  const fields = { ...errorFields(error), digest: (error as { digest?: string }).digest };
-  if (requestId && context.routeType === "render") noteFailedRender(requestId, fields);
+  const { requestIdFor } = await import("./lib/request-id");
+  const requestId = requestIdFor(context.routePath, request.headers);
+  const fields = errorFields(error);
+  try {
+    const digest = (error as { digest?: unknown }).digest;
+    if (typeof digest === "string") fields.digest = digest;
+  } catch {
+    // An unreadable digest is left out.
+  }
+  if (context.routeType === "render") noteFailedRender(requestId, fields);
   logger.error({
     event: "request.error",
     unit: "log",
