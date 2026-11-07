@@ -22,14 +22,11 @@ export function browserCameraSupport(): CameraSupport {
   });
 }
 
-/** True when there is at least one camera. Before permission, browsers list it without a label. */
-export async function hasCamera(): Promise<boolean> {
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    return devices.some((d) => d.kind === "videoinput");
-  } catch {
-    return false;
-  }
+/** Touch-first devices (phones, tablets) and narrow viewports get the camera; desktops don't. */
+export const CAMERA_MEDIA_QUERY = "(pointer: coarse), (max-width: 767px)";
+
+export function wantsCamera(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.(CAMERA_MEDIA_QUERY).matches === true;
 }
 
 /** Installed to the home screen. iOS reports it through `navigator.standalone`. */
