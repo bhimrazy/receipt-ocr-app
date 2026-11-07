@@ -19,7 +19,7 @@ describe("iOS startup images", () => {
     expect(startupImages).toHaveLength(10);
     for (const image of startupImages) {
       expect(image.media).toContain("(orientation: portrait)");
-      expect(image.media).toContain("(prefers-color-scheme: dark)");
+      expect(image.media).not.toContain("prefers-color-scheme");
     }
     const [first] = splashDevices;
     expect(splashFile("dark", first!)).toBe("dark-1320x2868.png");

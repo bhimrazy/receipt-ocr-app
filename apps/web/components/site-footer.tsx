@@ -89,6 +89,7 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
             A product by{" "}
             <a className={authorLinkClass} href={authorUrl} rel="noopener" target="_blank">
               {authorName}
+              <span className="sr-only"> (opens in a new tab)</span>
             </a>
           </p>
           <a
@@ -99,6 +100,7 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
           >
             <GitHubIcon className="size-3.5" />
             Open source on GitHub
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </div>
       </div>

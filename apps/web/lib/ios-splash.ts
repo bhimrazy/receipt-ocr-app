@@ -13,9 +13,9 @@ const iphones: [number, number, 2 | 3][] = [
   [440, 956, 3], // 16 Pro Max
   [402, 874, 3], // 16 Pro
   [430, 932, 3], // 14 and 15 Pro Max, 15 and 16 Plus
-  [393, 852, 3], // 14 to 16, 14 and 15 Pro
+  [393, 852, 3], // 15, 16, 14 and 15 Pro
   [428, 926, 3], // 12 and 13 Pro Max, 14 Plus
-  [390, 844, 3], // 12 to 14
+  [390, 844, 3], // 12 to 14, 16e
   [375, 812, 3], // X, XS, 11 Pro, 12 and 13 mini
   [414, 896, 3], // XS Max, 11 Pro Max
   [414, 896, 2], // XR, 11
@@ -42,8 +42,8 @@ export const startupImages = splashThemes.flatMap((theme) =>
       `(device-width: ${d.w}px)`,
       `(device-height: ${d.h}px)`,
       `(-webkit-device-pixel-ratio: ${d.dpr})`,
+      // No prefers-color-scheme clause: with only a dark set it would leave light-mode phones blank.
       "(orientation: portrait)",
-      `(prefers-color-scheme: ${theme})`,
     ].join(" and "),
   })),
 );

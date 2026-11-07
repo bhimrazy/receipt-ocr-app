@@ -30,6 +30,7 @@ export function AboutSettings() {
             target="_blank"
           >
             {authorName}
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </p>
         <ul className="mt-1 flex flex-wrap gap-x-5">
@@ -42,16 +43,19 @@ export function AboutSettings() {
             >
               <GitHubIcon className="size-3.5" />
               Open source on GitHub
+              <span className="sr-only"> (opens in a new tab)</span>
             </a>
           </li>
-          {[
-            ["Terms", "/terms"],
-            ["Privacy", "/privacy"],
-          ].map(([label, href]) => (
+          {(
+            [
+              ["Terms", "/terms"],
+              ["Privacy", "/privacy"],
+            ] as const
+          ).map(([label, href]) => (
             <li key={href}>
               <Link
                 className={`${linkClass} text-muted-foreground hover:text-foreground`}
-                href={href!}
+                href={href}
               >
                 {label}
               </Link>
