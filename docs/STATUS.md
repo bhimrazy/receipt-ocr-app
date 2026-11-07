@@ -202,6 +202,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   the server's stdout), so these flows are covered by `apps/web/lib/step-up.int.test.ts` only.
 - Email change: the new address gets the sign-up wording ("finish setting up your account") from
   `verificationEmail`; and an unverified account's old address gets no notice (Better Auth skips the approval step).
+- Email templates, #91 vs #92: #91 (email redesign) rewrites `packages/email` as async `(ctx, input) => Promise<EmailContent>`
+  in `templates.tsx`, and its `emailChangeNoticeEmail` has no approval link. Whichever lands second adapts: the
+  email-change mail must carry Better Auth's approval `url` and its one-hour expiry and keep the reset-password link;
+  the delete mail keeps the single-use one-hour link to `/app/settings/delete-account`.
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
 - Benchmark has six synthetic images and no committed results.
 - Load test findings (after #37): upload capacity on the small server fell from 64/s to between 12/s (holds) and

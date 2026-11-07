@@ -181,6 +181,7 @@ the password unnoticed.
 | Delete account  | A session under 15 minutes old to ask; then the emailed link (1 hour, once)        | Better Auth `user.deleteUser.sendDeleteAccountVerification`, `deleteTokenExpiresIn`; our `hooks.before` freshness check |
 | Change email    | A session under 15 minutes old; the current address approves; the new one confirms | Better Auth `user.changeEmail.sendChangeEmailConfirmation`; our `hooks.before` freshness check                          |
 | Change password | The current password                                                               | Better Auth `changePassword`; a notice to the account address from our `hooks.after`                                    |
+| Admin sets one  | The admin role                                                                     | Admin plugin `setUserPassword`; the same notice from our `hooks.after`                                                  |
 | Reset password  | The emailed reset link                                                             | A notice from `emailAndPassword.onPasswordReset`                                                                        |
 
 Better Auth applies `session.freshAge` itself only to list-sessions, unlink-account and a delete-user call that has
@@ -215,13 +216,15 @@ sequenceDiagram
   BA->>H: afterDelete: log user.deleted
 ```
 
-- The link opens our page rather than Better Auth's `GET /delete-user/callback`, so nothing is deleted by a mail
-  scanner or a click alone, and a signed-out user is sent to sign in and back. The token must match the signed-in
+- The link opens our page rather than Better Auth's `GET /delete-user/callback`, which `hooks.before` answers with
+  404 (it would delete on one navigation). So nothing is deleted by a mail scanner or a click alone, and a signed-out user is sent to sign in and back. The token must match the signed-in
   user; a mismatch spends it.
 - The email change: Better Auth emails the current address (our "approve the change" notice with a reset-password
   link), that link sends the usual verification email to the new address, and only the second link changes the
-  address. An unverified account skips the first step. With the new address already taken, Better Auth answers the
-  same and sends nothing.
+  address. Since Better Auth 1.7.18 the tokens are bound to the user id and the new-address link no longer signs
+  anyone in. An unverified account skips the first step. With the new address already taken, Better Auth answers the
+  same and sends nothing, so the 3-per-hour cap per account address is counted in `hooks.before` on every attempt,
+  not per email sent: otherwise a free address would hit 429 while a taken one kept answering 200.
 - Notices are sent after the change and never fail the request; `auth.notice_sent` records whether one was delivered.
   Requests and completions are logged as `user.delete_requested`, `user.deleted`, `user.email_change_requested`,
   `user.password_changed` and `auth.step_up_required`, with the user id only.
