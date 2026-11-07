@@ -76,6 +76,25 @@ More help: [Create buckets](https://developers.cloudflare.com/r2/buckets/create-
 
 **Check:** after deploying, `/api/health/ready` shows `"storage":"ok"`.
 
+**CORS: leave it unset.** The browser never calls R2 directly: uploads go through the app, and images load in a
+plain `<img>` from a signed link, which needs no CORS. With no policy, no website's scripts can read the bucket's
+responses, which is the strictest setting. Add one only when a feature needs it (direct browser uploads to R2, or a
+script that fetches an image), and keep it to the one origin and the methods used:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://receipt-ocr.bhimraj.com.np"],
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Preview addresses change with every pull request, so a Preview bucket would need a fixed preview domain before it
+can have a policy like this.
+
 ---
 
 ## 2. AI keys
@@ -289,6 +308,33 @@ Add **both or neither**: with only one, the app refuses to start.
 | Google says "Access blocked" or "app not verified" | The app is still in **Testing**: publish it (step 4.3).                     |
 | Google says "redirect_uri_mismatch"                | The redirect URI doesn't match exactly (https, no trailing slash).          |
 | The site won't start after adding Turnstile        | Only one of the two Turnstile keys is set.                                  |
+
+---
+
+## Preview environment
+
+Pull-request previews use the staging database, so give them their own storage and keys too. Otherwise test uploads
+land in the production bucket, and a leaked preview key reaches production. In Vercel, add each of these with only
+**Preview** ticked.
+
+| Key                            | Value for Preview                                                     | Kind   | Notes                                         |
+| ------------------------------ | --------------------------------------------------------------------- | ------ | --------------------------------------------- |
+| `S3_ENDPOINT`                  | Same as Production (one Cloudflare account)                           | Config |                                               |
+| `S3_REGION`                    | `auto`                                                                | Config |                                               |
+| `S3_BUCKET`                    | `receipt-ocr-staging`                                                 | Config |                                               |
+| `S3_ACCESS_KEY_ID`             | From a second R2 token limited to `receipt-ocr-staging` only          | Secret | Never reuse the Production token              |
+| `S3_SECRET_ACCESS_KEY`         | From that token                                                       | Secret |                                               |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | A separate key, ideally in its own Google project with a small budget | Secret |                                               |
+| `ANTHROPIC_API_KEY`            | A key from a preview workspace with a low spend limit                 | Secret | Optional                                      |
+| `RESEND_API_KEY`               | A separate key                                                        | Secret | Optional; send only to `delivered@resend.dev` |
+| `EMAIL_FROM`, `SUPPORT_EMAIL`  | Same as Production                                                    | Config |                                               |
+| `DATABASE_URL`                 | The **staging** database's transaction pooler URL                     | Secret | Already set                                   |
+| `BETTER_AUTH_SECRET`           | Its own secret, never Production's                                    | Secret | Already set                                   |
+| `OCR_DAILY_CAP`                | `50`                                                                  | Config | Already set                                   |
+
+Leave out for Preview: `BETTER_AUTH_URL` (previews use their own address), the Google and GitHub sign-in keys
+(callback URLs can't match random preview addresses), and Turnstile (or use Cloudflare's test keys). Previews are
+behind Vercel Deployment Protection, so only the team can open them.
 
 ---
 
