@@ -1,19 +1,10 @@
 name: Database Migration
 
-# Applies apps/web/drizzle migrations to one database. production.yml calls this for staging and
-# then production before every deploy; run it by hand (Actions → Database Migration → Run workflow,
-# from main) to retry a failed migration. PR previews never run it: see docs/deployment.md.
+# Applies apps/web/drizzle migrations to one database. The only way migrations reach staging or
+# production: run it by hand from main (Actions → Database Migration → Run workflow), staging-db
+# first, then production-db (needs the owner's approval). production.yml never runs it, and skips
+# its automatic deploy when a release changes migrations. PR previews never run it.
 on:
-  workflow_call:
-    inputs:
-      environment:
-        description: GitHub environment holding the DIRECT_URL secret.
-        type: string
-        required: true
-      ref:
-        description: Commit whose migrations to apply. Defaults to the triggering commit.
-        type: string
-        default: ""
   workflow_dispatch:
     inputs:
       environment:
@@ -32,16 +23,15 @@ jobs:
     environment: ${{ inputs.environment }}
     permissions:
       contents: read
-    # One migration per database at a time, across the deploy pipeline and manual runs, never
-    # cancelled mid-run. drizzle-kit applies all pending files in one transaction, but a killed
-    # runner should not be the reason to find out. GitHub keeps one pending run per group: a newer
-    # one cancels the waiting one (see docs/deployment.md).
+    # One migration per database at a time, never cancelled mid-run: drizzle-kit applies all pending
+    # files in one transaction, but a killed runner should not be the reason to find out. GitHub
+    # keeps one pending run per group, so a newer one cancels the waiting one.
     concurrency:
       group: db-migrate-${{ inputs.environment }}
       cancel-in-progress: false
     steps:
-      # Both environments only admit main. Fail rather than skip, so a caller never reads a skipped
-      # migration as a successful one.
+      # Both environments only admit main. Fail rather than skip, so a run from another ref never
+      # looks like a successful migration.
       - name: Require main
         env:
           REF: ${{ github.ref }}
@@ -53,7 +43,6 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-bun
 
