@@ -41,7 +41,8 @@ export function isStandalone(): boolean {
   );
 }
 
-export type CameraProblem = "denied" | "missing" | "busy" | "insecure" | "unsupported" | "failed";
+export type CameraProblem =
+  "denied" | "missing" | "busy" | "insecure" | "unsupported" | "ended" | "failed";
 
 export function cameraProblem(error: unknown): CameraProblem {
   const name = error instanceof Error || error instanceof DOMException ? error.name : "";
@@ -80,6 +81,8 @@ export function cameraProblemMessage(problem: CameraProblem, standalone: boolean
       return "The camera only works over a secure (https) connection.";
     case "unsupported":
       return "This browser can't open the camera here. Use your phone's camera app instead.";
+    case "ended":
+      return "The camera stopped. Try again, or use your phone's camera app instead.";
     default:
       return "The camera didn't start. Try again, or use your phone's camera app instead.";
   }
@@ -134,14 +137,19 @@ export async function grabFrame(video: HTMLVideoElement): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  const ctx = canvas.getContext("2d");
-  if (!ctx || !canvas.width) throw new Error("camera not ready");
-  ctx.drawImage(video, 0, 0);
-  return new Promise((resolve, reject) =>
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("capture failed"))),
-      "image/jpeg",
-      CAPTURE_JPEG_QUALITY,
-    ),
-  );
+  try {
+    const ctx = canvas.getContext("2d");
+    if (!ctx || !canvas.width) throw new Error("camera not ready");
+    ctx.drawImage(video, 0, 0);
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("capture failed"))),
+        "image/jpeg",
+        CAPTURE_JPEG_QUALITY,
+      ),
+    );
+  } finally {
+    // A 12 MP frame holds ~48 MB until garbage collection otherwise.
+    canvas.width = canvas.height = 0;
+  }
 }

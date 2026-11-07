@@ -83,7 +83,18 @@ export default function CameraSheet({
           // iOS needs muted + playsInline to play inline; play() can reject if interrupted.
           await video.play().catch(() => {});
         }
-        setTorchState({ supported: torchSupported(stream.getVideoTracks()[0]), on: false });
+        // Closed, hidden or restarted while play() was pending; `stop` has the stream.
+        if (stale()) return;
+        // The camera can end on its own: unplugged, taken by another app, or revoked.
+        const track = stream.getVideoTracks()[0];
+        track?.addEventListener("ended", () => {
+          if (stale()) return;
+          stop();
+          setOutline(null);
+          setProblem("ended");
+          setStatus("problem");
+        });
+        setTorchState({ supported: torchSupported(track), on: false });
         setProblem(null);
         setStatus("live");
       })
