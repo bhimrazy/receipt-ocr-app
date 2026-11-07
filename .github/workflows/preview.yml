@@ -7,7 +7,7 @@ name: Vercel Preview Deployment
 # preview only when it is ready for review (not a draft) and changes something the app ships. The
 # `preview` label forces one, drafts and docs-only PRs included.
 #
-# A push to the `preview` branch always deploys and aliases the fixed preview domains (docs/vercel-environment.md).
+# A push to the `preview` branch always deploys and aliases the fixed preview domains (docs/production-environment.md).
 # Only the owner should push there.
 on:
   push:

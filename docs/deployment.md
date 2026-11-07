@@ -208,7 +208,7 @@ then fails at "Check the secret is set".
   there (it then only changes the canonical origin and email links). Production ignores both variables and always
   uses exactly `BETTER_AUTH_URL`.
 - **Fixed preview:** pushing to the `preview` branch deploys it and serves it at
-  `preview.receipt-ocr.bhimraj.com.np`. See [Domains in vercel-environment.md](vercel-environment.md#domains).
+  `preview.receipt-ocr.bhimraj.com.np`. See [Domains in production-environment.md](production-environment.md#domains).
 - **Protect previews:** turn on Vercel Deployment Protection (Project → Settings → Deployment Protection, Vercel
   Authentication for preview deployments) so only your team can open them. They hold a working sign-in against the
   staging database.
