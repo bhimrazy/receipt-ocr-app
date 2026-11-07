@@ -8,28 +8,6 @@ export function uniqueEmail(tag: string) {
 }
 
 /**
- * Fills a credentials form and submits it. The inputs are controlled React fields: text typed
- * before the page hydrates is wiped when React takes over, and the browser's `required` check then
- * blocks the submit silently, leaving the page on /sign-up. So wait for the network to settle,
- * and if the click went nowhere, fill again and retry (a swallowed click sent nothing).
- */
-async function submitCredentials(
-  page: Page,
-  fields: Array<[string, string, boolean]>,
-  button: string,
-) {
-  await page.waitForLoadState("networkidle");
-  const url = page.url();
-  await expect(async () => {
-    for (const [label, value, exact] of fields) {
-      await page.getByLabel(label, { exact }).fill(value);
-    }
-    await page.getByRole("button", { name: button }).click();
-    await expect.poll(() => page.url(), { timeout: 4_000 }).not.toBe(url);
-  }).toPass({ timeout: 25_000 });
-}
-
-/**
  * Sign-up is limited to 3 per minute per client IP, and playwright.config.ts gives each worker
  * one IP. A worker that runs a fourth signing-up test inside a minute is told "Too many attempts"
  * and the page stays on /sign-up (the flake seen on several PRs). Each sign-up gets its own
@@ -43,15 +21,10 @@ async function giveFreshClientIp(page: Page) {
 export async function signUp(page: Page, email: string) {
   await giveFreshClientIp(page);
   await page.goto("/sign-up");
-  await submitCredentials(
-    page,
-    [
-      ["Name", "E2E User", false],
-      ["Email", email, false],
-      ["Password", PASSWORD, true],
-    ],
-    "Create account",
-  );
+  await page.getByLabel("Name").fill("E2E User");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/app(\/|\?|$)/);
 }
 
@@ -63,14 +36,9 @@ export async function signOut(page: Page) {
 
 export async function signIn(page: Page, email: string) {
   await page.goto("/sign-in");
-  await submitCredentials(
-    page,
-    [
-      ["Email", email, false],
-      ["Password", PASSWORD, true],
-    ],
-    "Sign in",
-  );
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/app(\/|\?|$)/);
 }
 
