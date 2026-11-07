@@ -10,6 +10,7 @@ import { authErrorMessage } from "@/lib/auth-errors";
 import { Turnstile, useTurnstile } from "@/components/turnstile";
 import { authClient } from "@/lib/auth-client";
 import { DEFAULT_REDIRECT } from "@/lib/redirect";
+import { useHydrated } from "@/lib/use-hydrated";
 import {
   AuthDivider,
   AuthError,
@@ -85,6 +86,7 @@ export function CredentialsForm({
   initialError?: string;
 }) {
   const router = useRouter();
+  const hydrated = useHydrated();
   const turnstile = useTurnstile();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -239,7 +241,11 @@ export function CredentialsForm({
         <div className="mt-6" />
       )}
 
-      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+      <form
+        className="flex flex-col gap-4"
+        data-ready={hydrated ? "" : undefined}
+        onSubmit={handleSubmit}
+      >
         {isSignUp ? (
           <AuthField
             autoComplete="name"

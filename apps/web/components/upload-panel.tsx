@@ -29,6 +29,7 @@ import { fitBatch } from "@/lib/capture/batch-limit";
 import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
 import { browserCameraSupport, hasCamera, type CameraSupport } from "@/lib/capture/camera";
 import { postReceipt } from "@/lib/capture/upload-request";
+import { useHydrated } from "@/lib/use-hydrated";
 import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
 
 // Loaded on first use, so the camera and editor don't weigh on the upload page.
@@ -189,12 +190,7 @@ export function UploadPanel({
   useEffect(() => () => queue.dispose(), [queue]);
   const pausedFor = useCountdown(snapshot.pausedUntil);
 
-  // False in the server HTML, true once hydrated: until then the file inputs have no handlers.
-  const hydrated = useSyncExternalStore(
-    noSubscription,
-    () => true,
-    () => false,
-  );
+  const hydrated = useHydrated();
   const support = useSyncExternalStore<CameraSupport>(
     noSubscription,
     browserCameraSupport,

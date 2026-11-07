@@ -21,6 +21,9 @@ async function giveFreshClientIp(page: Page) {
 export async function signUp(page: Page, email: string) {
   await giveFreshClientIp(page);
   await page.goto("/sign-up");
+  // Before hydration the form has no submit handler, so a click submits it natively and the
+  // page stays on /sign-up.
+  await expect(page.locator("form[data-ready]")).toBeAttached();
   await page.getByLabel("Name").fill("E2E User");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
@@ -36,6 +39,7 @@ export async function signOut(page: Page) {
 
 export async function signIn(page: Page, email: string) {
   await page.goto("/sign-in");
+  await expect(page.locator("form[data-ready]")).toBeAttached();
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
