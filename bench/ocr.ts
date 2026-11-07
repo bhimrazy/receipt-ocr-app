@@ -2,7 +2,7 @@
 //   bun run bench:ocr [--models google:gemini-3.8-flash,anthropic:claude-haiku-5-5,...]
 //     [--fixtures bench/fixtures] [--prep none,app,long:1568,short:1000] [--only id,id]
 //     [--concurrency 2] [--prompt v1|v2] [--dry-run]
-// Needs each chosen provider's key (GOOGLE_GENERATIVE_AI_API_KEY, ANTHROPIC_API_KEY); --dry-run needs none
+// Needs each chosen provider's key (GOOGLE_GENERATIVE_AI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY); --dry-run needs none
 // and calls nothing. Fixtures: <id>.{png,jpg,jpeg,webp,pdf} + <id>.json (ground truth); images without one
 // are skipped. Every model runs on every prep mode; images are prepared in memory, sources never change.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
