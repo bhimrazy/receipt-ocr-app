@@ -93,6 +93,7 @@ Steps are in [deployment.md](deployment.md).
 | `feat/settings-receipt-reading` | Settings → Receipt reading (read-only): the platform default model chain by friendly label and its providers; privacy policy and terms now name Anthropic as a processor                                                            |
 | `feat/anthropic-provider`       | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet                                                                          |
 | `feat/prompt-v2`                | Extraction prompt v2: system-prompt rules, schema field definitions, AD dates (BS-only null), injection guard, `ocr.prompt_version`; A/B in bench/results                                                                           |
+| `feat/email-design`             | Every transactional email rebuilt with React Email: light-first and dark-safe, emerald button, logo, preheader, short fallback link, footer, plain text; `bun run email:preview`                                                    |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).

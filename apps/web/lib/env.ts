@@ -155,6 +155,9 @@ function parseBetterAuthUrl(): string {
 
 const appUrl = betterAuthUrl();
 
+/** What every message links back to: the app origin (BETTER_AUTH_URL) and the support inbox. */
+export const emailContext = { appUrl, supportEmail };
+
 /** Origins allowed to call auth and mutating routes: the app URL, plus both hosts of a preview. */
 const trustedOrigins = [...new Set([new URL(appUrl).origin, ...previewOrigins()])];
 
