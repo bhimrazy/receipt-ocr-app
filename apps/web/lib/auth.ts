@@ -11,7 +11,10 @@ import {
 } from "@receipt-ocr/core";
 import { and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
 import {
+  deleteAccountEmail,
+  emailChangeEmail,
   invitationEmail,
+  passwordChangedEmail,
   passwordResetEmail,
   sendEmail,
   type EmailLogEvent,
@@ -19,7 +22,7 @@ import {
   type SendEmailInput,
 } from "@receipt-ocr/email";
 import { betterAuth } from "better-auth";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
@@ -28,7 +31,7 @@ import { organization as organizationPlugin } from "better-auth/plugins/organiza
 import { isBootstrapAdmin } from "./admin-bootstrap";
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
 import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
-import { allowAuthEmail } from "./email-limits";
+import { allowAuthEmail, type AuthEmailKind } from "./email-limits";
 import {
   authEnabled,
   authEnv,
@@ -36,10 +39,19 @@ import {
   isProduction,
   logUndeliveredMail,
   requireEmailVerification,
+  supportEmail,
   turnstileEnv,
 } from "./env";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
+import {
+  DELETE_TOKEN_SECONDS,
+  FRESH_AGE_SECONDS,
+  SESSION_NOT_FRESH,
+  deleteConfirmUrl,
+  isSessionFresh,
+  needsFreshSession,
+} from "./step-up";
 
 export { authEnabled };
 
@@ -71,6 +83,44 @@ async function deliver(input: SendEmailInput) {
   if (!result.delivered && isProduction) {
     throw new Error(`Email not delivered (${result.reason})`);
   }
+}
+
+/**
+ * For emails a signed-in user asked for (deletion, email change). Unlike sign-up and reset,
+ * refusing says nothing about whether an address has an account, so the user is told.
+ */
+async function limitSignedInEmail(kind: AuthEmailKind, email: string) {
+  if (!(await allowAuthEmail(kind, email))) {
+    throw new APIError("TOO_MANY_REQUESTS", {
+      message: "We've sent this email several times in the last hour. Try again later.",
+    });
+  }
+}
+
+/**
+ * Security notices (password changed) go out after the change has happened, so a failed send
+ * is logged and never fails the request.
+ */
+async function notify(input: SendEmailInput, userId: string, kind: string) {
+  const result = await sendEmail(mailer, input).catch(() => ({ delivered: false as const }));
+  logger.info({
+    event: "auth.notice_sent",
+    unit: "log",
+    user_id: userId,
+    kind,
+    delivered: result.delivered,
+  });
+}
+
+/** Password reset page and support inbox for "if this wasn't you" in notices. */
+const recovery = () => ({
+  resetUrl: new URL("/forgot-password", authEnv.betterAuthUrl).toString(),
+  supportEmail,
+});
+
+async function notifyPasswordChanged(user: { id: string; email: string }, kind: string) {
+  await notify({ to: user.email, ...passwordChangedEmail(recovery()) }, user.id, kind);
+  logger.info({ event: "user.password_changed", unit: "log", user_id: user.id, kind });
 }
 
 /**
@@ -142,6 +192,8 @@ export const auth = betterAuth({
       if (!(await allowAuthEmail("password-reset", user.email))) return;
       await deliver({ to: user.email, ...passwordResetEmail(url) });
     },
+    // Changes through Settings are noticed by the after hook below.
+    onPasswordReset: async ({ user }) => notifyPasswordChanged(user, "reset"),
   },
   emailVerification: {
     // Dev logs the link; in production a send without a mailer throws, so only send when required.
@@ -175,6 +227,9 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
+    // Requesting account deletion and changing the email need a sign-in this recent (hooks
+    // below); Better Auth itself applies it to list-sessions and unlink-account.
+    freshAge: FRESH_AGE_SECONDS,
     // Off: with the cache on, a revoked or banned session keeps working on
     // /api/auth/* for its maxAge (see GHSA-fvxx). App reads skip it anyway.
     cookieCache: { enabled: false },
@@ -182,11 +237,59 @@ export const auth = betterAuth({
   advanced: {
     ipAddress: authEnv.ipAddress,
   },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (!needsFreshSession(ctx.path, ctx.body)) return;
+      const current = await getSessionFromCtx(ctx);
+      // No session: the endpoint itself answers 401.
+      if (!current || isSessionFresh(current.session.createdAt)) return;
+      logger.info({
+        event: "auth.step_up_required",
+        unit: "log",
+        user_id: current.user.id,
+        action: ctx.path.slice(1),
+      });
+      throw new APIError("FORBIDDEN", {
+        code: SESSION_NOT_FRESH,
+        message: "Sign in again to continue.",
+      });
+    }),
+    after: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/change-password") return;
+      const returned = ctx.context.returned as { user?: { id: string; email: string } } | undefined;
+      if (!returned || isAPIError(returned) || !returned.user) return;
+      await notifyPasswordChanged(returned.user, "change");
+    }),
+  },
   user: {
     deleteUser: {
       enabled: true,
+      // With this set, /delete-user only emails a link; the account goes when that link's token
+      // is posted back (single use, consumed before beforeDelete runs).
+      deleteTokenExpiresIn: DELETE_TOKEN_SECONDS,
+      sendDeleteAccountVerification: async ({ user, url, token }) => {
+        await limitSignedInEmail("delete-account", user.email);
+        await deliver({ to: user.email, ...deleteAccountEmail(deleteConfirmUrl(url, token)) });
+        logger.info({ event: "user.delete_requested", unit: "log", user_id: user.id });
+      },
       beforeDelete: async (user) => {
         await deleteOwnData(user.id);
+      },
+      afterDelete: async (user) => {
+        logger.info({ event: "user.deleted", unit: "log", user_id: user.id });
+      },
+    },
+    changeEmail: {
+      enabled: true,
+      // A verified user's current address approves first; Better Auth then sends the usual
+      // verification email to the new one, and only that link changes the address.
+      sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+        await limitSignedInEmail("change-email", user.email);
+        await deliver({
+          to: user.email,
+          ...emailChangeEmail({ newEmail, url, ...recovery() }),
+        });
+        logger.info({ event: "user.email_change_requested", unit: "log", user_id: user.id });
       },
     },
     additionalFields: {

@@ -4,10 +4,10 @@ import { hitRateLimit } from "@receipt-ocr/core";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 
-/** Password-reset or verification emails one address may receive per hour, per kind. */
+/** Auth emails of one kind (reset, verification, ...) one address may receive per hour. */
 export const AUTH_EMAILS_PER_HOUR = 3;
 
-export type AuthEmailKind = "password-reset" | "verification";
+export type AuthEmailKind = "password-reset" | "verification" | "delete-account" | "change-email";
 
 /**
  * Per-address cap for Better Auth's email hooks. Better Auth limits these
