@@ -12,8 +12,8 @@ share any issue in a better way; research with better practice on that too." Rea
   `SUPPORT_EMAIL` through Resend and stores nothing. A signed-in user must retype their email, and nothing records
   what they sent, so there is no status, no history and no metrics.
 - **Build a small private intake now, buy a public board later.** One `feedback` table, a "Send feedback" sheet in
-  the app (reusing the support panel), a "Your feedback" list for users and an admin inbox. About 4 to 6 days in
-  three PRs. Every tool below costs $25 to $79 a month for features we would barely use at launch, and the cheap
+  the app (reusing the support panel), a "Your feedback" list for users and an admin inbox. About 6 days for the first
+  three phases (7 to 8 with notifications and retention). Every tool below costs $25 to $79 a month for features we would barely use at launch, and the cheap
   free tiers are capped (Canny 25 tracked users, Fider Cloud 250 items, Featurebase one board).
 - **Public board at about 300 monthly active users or 20 feature requests a month**, whichever comes first.
   Recommended then: **Featurebase Free** (one board and one roadmap, $0) or **self-hosted Fider** (AGPL-3.0) if the
