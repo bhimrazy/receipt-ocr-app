@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signUp, uniqueEmail } from "./helpers";
 
-const INDEXABLE = ["/", "/privacy", "/terms"];
+const INDEXABLE = ["/", "/privacy", "/terms", "/cookies"];
 const NOINDEX_PUBLIC = ["/sign-in", "/sign-up", "/forgot-password", "/reset-password"];
 
 const meta = (page: Page, selector: string) =>
