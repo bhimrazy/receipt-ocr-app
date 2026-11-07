@@ -4,13 +4,17 @@ import {
   PageHeaderDescription,
   PageHeaderTitle,
 } from "@/components/page-header";
+import { providerAvailability, receiptReaders, Settings } from "@receipt-ocr/core";
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
+import { Effect } from "effect";
 import { AccountSettings } from "@/components/account-settings";
+import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
 import { authEnv } from "@/lib/env";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
+import { runtime } from "@/lib/runtime";
 import { requireActiveScope, requireSession } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
@@ -39,10 +43,17 @@ async function loadWorkspace(organizationId: string) {
 export default async function SettingsPage() {
   logPageRender("/app/settings");
   const [scope, session] = await Promise.all([requireActiveScope(), requireSession()]);
-  const [{ plan, policy }, usage, workspace] = await Promise.all([
+  const [{ plan, policy }, usage, workspace, readers] = await Promise.all([
     getCurrentPlan(),
     getUsageSummary(),
     loadWorkspace(scope.organizationId),
+    runtime.runPromise(
+      Effect.zipWith(
+        Effect.flatMap(Settings, (settings) => settings.ocr),
+        providerAvailability,
+        receiptReaders,
+      ),
+    ),
   ]);
 
   return (
@@ -50,7 +61,9 @@ export default async function SettingsPage() {
       <PageHeader className="mb-8">
         <PageHeaderContent>
           <PageHeaderTitle>Settings</PageHeaderTitle>
-          <PageHeaderDescription>Your plan, your workspace and your account.</PageHeaderDescription>
+          <PageHeaderDescription>
+            Your plan, your workspace, how receipts are read and your account.
+          </PageHeaderDescription>
         </PageHeaderContent>
       </PageHeader>
 
@@ -103,6 +116,8 @@ export default async function SettingsPage() {
           </Link>
         </Card>
       </SettingsSection>
+
+      <ReceiptReadingSettings readers={readers} />
 
       <AccountSettings email={session.user.email} name={session.user.name ?? ""} />
     </div>
