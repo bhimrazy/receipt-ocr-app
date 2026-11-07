@@ -27,35 +27,69 @@ permissions: {}
 jobs:
   migrate:
     name: Migrate ${{ inputs.environment }}
-    # Both environments only admit main; this makes a run from another branch skip, not fail.
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     environment: ${{ inputs.environment }}
     permissions:
       contents: read
-    # One migration per database at a time, across the deploy pipeline and manual runs. Queued,
-    # never cancelled mid-run: drizzle applies each migration in a transaction, but a killed
-    # runner should not be the reason to find out.
+    # One migration per database at a time, across the deploy pipeline and manual runs, never
+    # cancelled mid-run. drizzle-kit applies all pending files in one transaction, but a killed
+    # runner should not be the reason to find out. GitHub keeps one pending run per group: a newer
+    # one cancels the waiting one (see docs/deployment.md).
     concurrency:
       group: db-migrate-${{ inputs.environment }}
       cancel-in-progress: false
     steps:
+      # Both environments only admit main. Fail rather than skip, so a caller never reads a skipped
+      # migration as a successful one.
+      - name: Require main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Migrations run only from main (got $REF)."
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-bun
 
+      # Checks the URL's shape without printing it, and masks the decoded password too: GitHub
+      # masks only the secret as stored, and a percent-encoded password appears decoded in errors.
       - name: Check the secret is set
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           TARGET: ${{ inputs.environment }}
         run: |
-          if [ -z "$DIRECT_URL" ]; then
-            echo "::error::DIRECT_URL is not set in the '$TARGET' environment."
-            exit 1
-          fi
+          bun -e '
+            const target = process.env.TARGET;
+            const raw = process.env.DIRECT_URL ?? "";
+            if (!raw) {
+              console.log(`::error::DIRECT_URL is not set in the ${target} environment.`);
+              process.exit(1);
+            }
+            let url;
+            try {
+              url = new URL(raw);
+            } catch {
+              console.log(`::error::DIRECT_URL in the ${target} environment is not a valid URL.`);
+              process.exit(1);
+            }
+            if (url.password) {
+              let password = url.password;
+              try {
+                password = decodeURIComponent(password);
+              } catch {}
+              console.log(`::add-mask::${password}`);
+            }
+            if (!["postgres:", "postgresql:"].includes(url.protocol) || !url.hostname) {
+              console.log(`::error::DIRECT_URL in the ${target} environment is not a postgres:// URL.`);
+              process.exit(1);
+            }
+          '
 
       # drizzle.config.ts reads DIRECT_URL (session pooler, port 5432). No --verbose: the URL and
       # the SQL stay out of the log.
