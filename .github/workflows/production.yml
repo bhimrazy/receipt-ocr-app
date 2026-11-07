@@ -48,6 +48,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
+          PRODUCTION_HEALTH_URL: https://receipt-ocr.bhimraj.com.np/api/health
         run: |
           skip() {
             echo "deploy=false" >> "$GITHUB_OUTPUT"
