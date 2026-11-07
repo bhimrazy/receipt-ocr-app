@@ -11,18 +11,24 @@ decides whether an undelivered message is an error.
 | `verificationEmail(url)`                                                                                                          | Subject, HTML and text for "confirm your email"                                                   |
 | `passwordResetEmail(url)`                                                                                                         | Same for a reset link                                                                             |
 | `invitationEmail({ organizationName, inviterEmail, url })`                                                                        | Same for a workspace invitation                                                                   |
+| `deleteAccountEmail(url)`                                                                                                         | The account-deletion confirmation link                                                            |
+| `passwordChangedEmail({ resetUrl, supportEmail? })`                                                                               | "Your password was changed", with the reset page and support contact                              |
+| `emailChangeEmail({ newEmail, url, resetUrl, supportEmail? })`                                                                    | To the current address: approve a change to `newEmail`                                            |
 | `escapeHtml(value)`                                                                                                               | Escapes values interpolated into HTML (workspace names, emails)                                   |
 
 The contact form builds its own message in [`apps/web/lib/contact-mail.ts`](../../apps/web/lib/contact-mail.ts).
 
 ## Who sends what
 
-| Message         | Sent from                                                                                                  | When undelivered in production |
-| --------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| Verification    | Better Auth `sendVerificationEmail` in [`lib/auth.ts`](../../apps/web/lib/auth.ts)                         | The auth request fails         |
-| Password reset  | Better Auth `sendResetPassword`                                                                            | The auth request fails         |
-| Invitation      | Organization plugin `sendInvitationEmail`                                                                  | The invite request fails       |
-| Support message | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts), to `SUPPORT_EMAIL`, reply-to the sender | The route returns `503`        |
+| Message          | Sent from                                                                                                  | When undelivered in production                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Verification     | Better Auth `sendVerificationEmail` in [`lib/auth.ts`](../../apps/web/lib/auth.ts)                         | The auth request fails                         |
+| Password reset   | Better Auth `sendResetPassword`                                                                            | The auth request fails                         |
+| Invitation       | Organization plugin `sendInvitationEmail`                                                                  | The invite request fails                       |
+| Delete account   | Better Auth `sendDeleteAccountVerification`                                                                | The request fails                              |
+| Email change     | Better Auth `sendChangeEmailConfirmation`, to the current address                                          | The request fails                              |
+| Password changed | `onPasswordReset` and the `/change-password` after hook                                                    | Logged (`auth.notice_sent`); the change stands |
+| Support message  | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts), to `SUPPORT_EMAIL`, reply-to the sender | The route returns `503`                        |
 
 In `lib/auth.ts`, `deliver()` throws when a message is not delivered and `NODE_ENV` is production, so a user is never
 told "check your inbox" for mail that was not sent.

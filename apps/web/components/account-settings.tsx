@@ -8,9 +8,20 @@ import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ReauthDialog, type SignInMethods } from "@/components/reauth-dialog";
 import { SettingsSection } from "@/components/settings-section";
+import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
+import { SESSION_NOT_FRESH } from "@/lib/step-up";
+
+/** Where a Google or GitHub re-sign-in returns, so the interrupted step can continue. */
+export type ResumeStep = "delete-account" | "change-email";
+
+const returnTo = (step: ResumeStep) => `/app/settings?resume=${step}`;
+
+const isNotFresh = (error: { code?: string | null } | null | undefined) =>
+  error?.code === SESSION_NOT_FRESH;
 
 function Status({ ok, error, id }: { ok: string | null; error: string | null; id?: string }) {
   if (error) {
@@ -90,6 +101,112 @@ function ProfileCard({ initialName }: { initialName: string }) {
           </div>
         </form>
       </CardContent>
+    </Card>
+  );
+}
+
+function EmailCard({
+  email,
+  emailVerified,
+  methods,
+  resumed,
+}: {
+  email: string;
+  emailVerified: boolean;
+  methods: SignInMethods;
+  resumed: boolean;
+}) {
+  const [next, setNext] = useState("");
+  const [pending, setPending] = useState(false);
+  const [reauth, setReauth] = useState(false);
+  const [ok, setOk] = useState<string | null>(
+    resumed ? "You signed in again. Enter the new address to continue." : null,
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  async function request(newEmail: string) {
+    setPending(true);
+    setError(null);
+    setOk(null);
+    const { error: changeError } = await authClient.changeEmail({
+      newEmail,
+      callbackURL: "/app/settings",
+    });
+    setPending(false);
+    if (isNotFresh(changeError)) {
+      setReauth(true);
+      return;
+    }
+    if (changeError) {
+      setError(authErrorMessage(changeError));
+      return;
+    }
+    setNext("");
+    // Better Auth answers the same when the new address already has an account.
+    setOk(
+      emailVerified
+        ? `Check ${email}: approve the change from the link we sent there, then confirm ${newEmail} from the email we send to it.`
+        : `Check ${newEmail}: confirm it from the link we sent there to finish the change.`,
+    );
+  }
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = next.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setOk(null);
+      setError("Enter a valid email address, for example name@example.com.");
+      return;
+    }
+    if (trimmed === email.toLowerCase()) {
+      setOk(null);
+      setError("That's already your email address.");
+      return;
+    }
+    await request(trimmed);
+  }
+
+  return (
+    <Card>
+      <CardContent className="pt-5">
+        <form className="flex flex-col gap-3" noValidate onSubmit={save}>
+          <p className="text-sm text-muted-foreground">
+            Current address: <span className="break-all text-foreground">{email}</span>
+          </p>
+          <Field data-invalid={error ? true : undefined}>
+            <FieldLabel htmlFor="new-email">New email address</FieldLabel>
+            <Input
+              aria-describedby={error ? "email-error" : undefined}
+              aria-invalid={error ? true : undefined}
+              autoComplete="email"
+              id="new-email"
+              inputMode="email"
+              onChange={(event) => setNext(event.target.value)}
+              placeholder="name@example.com"
+              type="email"
+              value={next}
+            />
+          </Field>
+          <Status error={error} id="email-error" ok={ok} />
+          <div>
+            <Button disabled={pending} type="submit">
+              {pending ? (
+                <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : null}
+              Change email
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+      <ReauthDialog
+        action="change your email"
+        email={email}
+        methods={methods}
+        onConfirmed={() => request(next.trim().toLowerCase())}
+        onOpenChange={setReauth}
+        open={reauth}
+        returnTo={returnTo("change-email")}
+      />
     </Card>
   );
 }
@@ -181,27 +298,50 @@ function PasswordCard() {
   );
 }
 
-function DangerCard({ email }: { email: string }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
+function DangerCard({
+  email,
+  methods,
+  resumed,
+}: {
+  email: string;
+  methods: SignInMethods;
+  resumed: boolean;
+}) {
+  // Back from a Google or GitHub re-sign-in: pick up where the user left off.
+  const [open, setOpen] = useState(resumed);
+  const [reauth, setReauth] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  async function remove(): Promise<string | void> {
-    const { error: deleteError } = await authClient.deleteUser({ callbackURL: "/" });
-    if (deleteError) return deleteError.message ?? "Couldn't delete your account. Try again.";
-    // Depending on config this finishes now or sends a confirmation email, so don't claim it's gone.
-    setNotice("Deletion requested. If we emailed you a confirmation link, open it to finish.");
-    router.refresh();
+  const sent = `Check your email. We sent a link to ${email}. Your account is deleted only when you open it, within 1 hour.`;
+
+  /** Only emails a link: the account goes when that link is opened (lib/auth.ts). */
+  async function request(): Promise<string | void> {
+    setNotice(null);
+    setError(null);
+    const { error: requestError } = await authClient.deleteUser({});
+    if (isNotFresh(requestError)) {
+      setReauth(true);
+      return;
+    }
+    if (requestError) return authErrorMessage(requestError);
+    setNotice(sent);
   }
 
   return (
     <Card className="border-destructive/30">
       <CardContent className="flex flex-col gap-3 pt-5">
         <p className="text-sm text-muted-foreground">
-          Permanently removes your account, your workspaces and every receipt in them. You
-          can&apos;t undo this.
+          Permanently removes your account, your workspaces and every receipt in them. We email you
+          a link to confirm. You can&apos;t undo this.
         </p>
-        {notice ? <Alert variant="warning">{notice}</Alert> : null}
+        {notice ? (
+          <p className="flex items-start gap-1.5 text-sm text-success" role="status">
+            <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            {notice}
+          </p>
+        ) : null}
+        {error ? <Alert variant="destructive">{error}</Alert> : null}
         <div>
           <Button onClick={() => setOpen(true)} variant="destructive">
             <Trash2 aria-hidden="true" />
@@ -211,20 +351,49 @@ function DangerCard({ email }: { email: string }) {
       </CardContent>
       <ConfirmDialog
         cancelLabel="Keep my account"
-        confirmLabel="Delete my account"
+        confirmLabel="Email me the link"
         confirmText={email}
-        description="This permanently removes your account, your workspaces and every receipt in them. You can't undo this."
+        description={`We'll email a confirmation link to ${email}. Opening it permanently removes your account, your workspaces and every receipt in them.`}
         destructive
-        onConfirm={remove}
+        onConfirm={request}
         onOpenChange={setOpen}
         open={open}
         title="Delete your account?"
+      />
+      <ReauthDialog
+        action="delete your account"
+        email={email}
+        methods={methods}
+        onConfirmed={async () => {
+          const failed = await request();
+          if (failed) setError(failed);
+        }}
+        onOpenChange={setReauth}
+        open={reauth}
+        returnTo={returnTo("delete-account")}
       />
     </Card>
   );
 }
 
-export function AccountSettings({ email, name }: { email: string; name: string }) {
+export function AccountSettings({
+  email,
+  emailVerified,
+  name,
+  methods,
+  resume,
+}: {
+  email: string;
+  emailVerified: boolean;
+  name: string;
+  methods: SignInMethods;
+  resume?: ResumeStep;
+}) {
+  // Drop ?resume= so a reload doesn't reopen the step.
+  useEffect(() => {
+    if (resume) window.history.replaceState(null, "", "/app/settings");
+  }, [resume]);
+
   return (
     <>
       <SettingsSection
@@ -233,6 +402,18 @@ export function AccountSettings({ email, name }: { email: string; name: string }
         title="Profile"
       >
         <ProfileCard initialName={name} />
+      </SettingsSection>
+      <SettingsSection
+        description="Where we send sign-in links and account notices. The change needs a confirmation from both addresses."
+        id="email-heading"
+        title="Email"
+      >
+        <EmailCard
+          email={email}
+          emailVerified={emailVerified}
+          methods={methods}
+          resumed={resume === "change-email"}
+        />
       </SettingsSection>
       <SettingsSection
         description="For email sign-in. If you sign in with Google or GitHub, change your password there."
@@ -246,7 +427,7 @@ export function AccountSettings({ email, name }: { email: string; name: string }
         id="delete-heading"
         title="Delete account"
       >
-        <DangerCard email={email} />
+        <DangerCard email={email} methods={methods} resumed={resume === "delete-account"} />
       </SettingsSection>
     </>
   );
