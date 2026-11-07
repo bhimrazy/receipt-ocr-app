@@ -110,7 +110,7 @@ export function HistoryToolbar({ filters }: { filters: HistoryFilters }) {
             value={query}
           />
         </div>
-        <div aria-label="Status" className="flex gap-2 overflow-x-auto" role="group">
+        <div aria-label="Status" className="scroll-fade-x flex gap-2 overflow-x-auto" role="group">
           {STATUS_CHIPS.map((chip) => {
             const active = filters.status === chip.value;
             return (

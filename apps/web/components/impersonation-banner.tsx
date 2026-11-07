@@ -44,18 +44,24 @@ export function ImpersonationBanner({ email }: { email: string }) {
       ref={ref}
     >
       <div
-        className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm text-warning md:px-5"
+        className="flex items-center justify-between gap-3 border-b border-warning/30 bg-warning/10 px-4 py-1.5 sm:flex-wrap sm:gap-y-2 sm:py-2 text-sm text-warning md:px-5"
         role="status"
       >
-        <div className="flex min-w-0 items-start gap-2">
-          <UserCog aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          <span className="min-w-0 break-words">
-            Signed in as <span className="font-medium break-all">{email}</span>. Everything you do
-            runs as this user.
+        <div className="flex min-w-0 items-center gap-2 sm:items-start">
+          <UserCog aria-hidden="true" className="size-4 shrink-0 sm:mt-0.5" />
+          <span className="min-w-0 truncate sm:break-words sm:whitespace-normal">
+            Signed in as <span className="font-medium sm:break-all">{email}</span>
+            <span className="max-sm:hidden">. Everything you do runs as this user.</span>
           </span>
         </div>
-        <Button disabled={pending} onClick={stop} size="sm" variant="outline">
-          {pending ? "Stopping…" : "Stop impersonating"}
+        <Button className="shrink-0" disabled={pending} onClick={stop} size="sm" variant="outline">
+          {pending ? (
+            "Stopping…"
+          ) : (
+            <>
+              Stop<span className="max-sm:sr-only"> impersonating</span>
+            </>
+          )}
         </Button>
       </div>
     </div>

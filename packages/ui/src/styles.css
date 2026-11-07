@@ -192,3 +192,27 @@ body {
     animation: none !important;
   }
 }
+
+/* Fades the right edge of a horizontally scrolling row (chips) while more is hidden. Browsers
+   without scroll-driven animations show no fade. */
+@property --fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes scroll-fade-end {
+  0%,
+  92% {
+    --fade-end: 2rem;
+  }
+  100% {
+    --fade-end: 0px;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .scroll-fade-x {
+    animation: scroll-fade-end linear both;
+    animation-timeline: scroll(self inline);
+    mask-image: linear-gradient(to right, #000 calc(100% - var(--fade-end)), transparent);
+  }
+}

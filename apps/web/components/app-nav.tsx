@@ -1,8 +1,19 @@
 "use client";
 
+import {
+  Drawer,
+  DrawerAction,
+  DrawerContent,
+  DrawerDescription,
+  DrawerGroup,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@receipt-ocr/ui/components/drawer";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   ChevronLeft,
+  Ellipsis,
   History,
   House,
   ScanLine,
@@ -30,10 +41,10 @@ export const SCAN_HREF = "/app/upload?capture=1";
 
 const SCAN_ITEM: NavItem = { href: "/app/upload", label: "Scan", icon: ScanLine };
 
-function isActive(pathname: string, item: NavItem) {
+export function isActive(pathname: string, item: NavItem) {
   if (item.exact) return pathname === item.href;
-  // A receipt detail page belongs to History.
-  if (item.href === "/app/history" && pathname.startsWith("/app/receipts")) return true;
+  // Receipt pages and groups (reached from History's "Manage groups") belong to History.
+  if (item.href === "/app/history" && /^\/app\/(receipts|groups)(\/|$)/.test(pathname)) return true;
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
@@ -74,12 +85,17 @@ export function BottomTabBar({
   items,
   label = "Main",
   center,
+  more,
 }: {
   items: NavItem[];
   label?: string;
   center?: NavItem;
+  /** Sections that don't fit the bar (at most 5 slots at 390px); opened from a "More" tab. */
+  more?: NavItem[];
 }) {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreActive = more?.some((item) => isActive(pathname, item)) ?? false;
   const half = Math.ceil(items.length / 2);
   const slots: (NavItem | null)[] = center
     ? [...items.slice(0, half), null, ...items.slice(half)]
@@ -129,6 +145,44 @@ export function BottomTabBar({
             </li>
           );
         })}
+        {more?.length ? (
+          <li>
+            <Drawer onOpenChange={setMoreOpen} open={moreOpen}>
+              <DrawerTrigger
+                aria-current={moreActive ? "true" : undefined}
+                className={cn(
+                  "flex h-full w-full flex-col items-center justify-center gap-1 text-2xs font-medium transition-colors outline-none select-none focus-visible:bg-wash focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset active:bg-wash",
+                  moreActive ? "text-primary" : "text-muted-foreground",
+                )}
+              >
+                <Ellipsis aria-hidden="true" className="size-5" />
+                More
+              </DrawerTrigger>
+              <DrawerContent>
+                <DrawerHeader>
+                  <DrawerTitle>More</DrawerTitle>
+                  <DrawerDescription className="sr-only">Other {label} sections</DrawerDescription>
+                </DrawerHeader>
+                <DrawerGroup>
+                  {more.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <DrawerAction
+                        aria-current={isActive(pathname, item) ? "page" : undefined}
+                        key={item.href}
+                        onClick={() => setMoreOpen(false)}
+                        render={<Link href={item.href} />}
+                      >
+                        <Icon aria-hidden="true" />
+                        {item.label}
+                      </DrawerAction>
+                    );
+                  })}
+                </DrawerGroup>
+              </DrawerContent>
+            </Drawer>
+          </li>
+        ) : null}
       </ul>
     </nav>
   );
@@ -176,7 +230,10 @@ type Back = { href: string; label: string };
 export function backFor(pathname: string): Back | null {
   if (pathname.startsWith("/app/receipts/")) return { href: "/app/history", label: "History" };
   if (pathname.startsWith("/app/settings/")) return { href: "/app/settings", label: "Settings" };
+  if (pathname === "/app/groups") return { href: "/app/history", label: "History" };
   if (/^\/admin\/users\/[^/]+/.test(pathname)) return { href: "/admin/users", label: "Users" };
+  if (pathname === "/admin/jobs") return { href: "/admin/operations", label: "Operations" };
+  if (/^\/admin\/jobs\/[^/]+/.test(pathname)) return { href: "/admin/jobs", label: "Jobs" };
   if (/^\/admin\/workspaces\/[^/]+/.test(pathname)) {
     return { href: "/admin/workspaces", label: "Workspaces" };
   }
@@ -189,6 +246,9 @@ function labelFor(pathname: string): string | null {
     "/app": "Home",
     "/app/history": "History",
     "/app/settings": "Settings",
+    "/app/groups": "Groups",
+    "/admin/jobs": "Jobs",
+    "/admin/operations": "Operations",
     "/admin/users": "Users",
     "/admin/workspaces": "Workspaces",
   };

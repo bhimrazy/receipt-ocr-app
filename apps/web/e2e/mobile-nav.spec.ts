@@ -110,6 +110,7 @@ test("account sheet opens, and closes with Escape or a tap outside", async ({ pa
   await trigger.click();
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole("group", { name: "Workspace" })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Cookie settings" })).toBeVisible();
   await expect(sheet.getByRole("button", { name: "Sign out" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
@@ -120,6 +121,15 @@ test("account sheet opens, and closes with Escape or a tap outside", async ({ pa
   // The backdrop above the sheet.
   await page.mouse.click(195, 60);
   await expect(sheet).toBeHidden();
+});
+
+test("Groups, reached from History, has Back and keeps History highlighted", async ({ page }) => {
+  await page.goto("/app/groups");
+  await expect(page.getByRole("link", { name: "Back to History" })).toBeVisible();
+  await expect(tabBar(page).getByRole("link", { name: "History" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
 });
 
 test("receipt actions sheet offers edit, export and delete", async ({ page }) => {

@@ -1,4 +1,5 @@
 import { ocrModel, OCR_MODELS } from "@receipt-ocr/ai/models";
+import { threeLetterMonth } from "@/lib/format";
 
 /** Display helpers for the Operations and Jobs pages. Pure, so server and client share them. */
 
@@ -73,13 +74,13 @@ const dayFormat = new Intl.DateTimeFormat("en-GB", {
 /** A bucket key (`YYYY-MM-DDTHH` or `YYYY-MM-DD`) as an axis label: "14:00" or "6 Nov". */
 export function bucketLabel(key: string): string {
   const date = key.length > 10 ? new Date(`${key}:00:00Z`) : new Date(`${key}T00:00:00Z`);
-  return key.length > 10 ? hourFormat.format(date) : dayFormat.format(date);
+  return key.length > 10 ? hourFormat.format(date) : threeLetterMonth(dayFormat.format(date));
 }
 
 /** Longer form for tooltips and tables: "6 Nov, 14:00 UTC" or "6 Nov". */
 export function bucketTitle(key: string): string {
   return key.length > 10
-    ? `${dayFormat.format(new Date(`${key}:00:00Z`))}, ${bucketLabel(key)} UTC`
+    ? `${threeLetterMonth(dayFormat.format(new Date(`${key}:00:00Z`)))}, ${bucketLabel(key)} UTC`
     : bucketLabel(key);
 }
 

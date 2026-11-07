@@ -129,19 +129,33 @@ export default function TimeChart({
 
   return (
     <div>
-      {hasPrevious ? (
+      {hasPrevious || reference ? (
         <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <li className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="h-0.5 w-4 rounded-full bg-primary" />
-            {labels.value}
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className="w-4 border-t-2 border-dashed border-muted-foreground"
-            />
-            {labels.previous}
-          </li>
+          {hasPrevious ? (
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-0.5 w-4 rounded-full bg-primary" />
+              {labels.value}
+            </li>
+          ) : null}
+          {hasPrevious ? (
+            <li className="flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="w-4 border-t-2 border-dashed border-muted-foreground"
+              />
+              {labels.previous}
+            </li>
+          ) : null}
+          {/* The average is named here, not on the line, where it ran into the bars. */}
+          {reference ? (
+            <li className="flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="w-4 border-t-2 border-dashed border-muted-foreground"
+              />
+              {reference.label}
+            </li>
+          ) : null}
         </ul>
       ) : null}
       <ChartContainer
@@ -153,7 +167,7 @@ export default function TimeChart({
         <ComposedChart
           accessibilityLayer={false}
           data={points}
-          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+          margin={{ top: 8, right: 16, bottom: 0, left: 0 }}
           onClick={(state) => {
             const index = Number(state?.activeTooltipIndex);
             const href = Number.isInteger(index) ? points[index]?.href : undefined;
@@ -185,11 +199,6 @@ export default function TimeChart({
           {reference ? (
             <ReferenceLine
               ifOverflow="extendDomain"
-              label={{
-                value: reference.label,
-                position: "insideTopRight",
-                className: "fill-muted-foreground font-sans",
-              }}
               stroke="var(--muted-foreground)"
               strokeDasharray="4 4"
               y={reference.value}
