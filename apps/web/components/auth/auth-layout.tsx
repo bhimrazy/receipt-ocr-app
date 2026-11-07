@@ -3,6 +3,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Download, KeyRound, PencilLine, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
+import { CookieSettingsButton } from "@/components/consent/cookie-settings-button";
 import { getPlanTable } from "@/lib/plan-limits";
 import { AuthMessage } from "./auth-field";
 
@@ -102,6 +103,9 @@ export async function AuthLayout({
             <Link className={footerLink} href="/terms">
               Terms
             </Link>
+            <CookieSettingsButton
+              className={cn(footerLink, "h-auto px-0 font-normal hover:bg-transparent")}
+            />
           </nav>
         </div>
       </main>

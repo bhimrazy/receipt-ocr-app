@@ -4,7 +4,12 @@ import { Brand } from "@/components/brand";
 import { SiteFooter } from "@/components/site-footer";
 import { SupportWidget } from "@/components/support-widget";
 
-export type LegalSection = { heading: string; body: string[] };
+export type LegalSection = {
+  heading: string;
+  body: string[];
+  /** Rendered as one line of links after the body. */
+  links?: Array<{ label: string; href: string }>;
+};
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -36,11 +41,14 @@ export function LegalPage({
   updated,
   intro,
   sections,
+  children,
 }: {
   title: string;
   updated: string;
   intro: string;
   sections: LegalSection[];
+  /** Extra content after the sections, e.g. the cookie list. */
+  children?: React.ReactNode;
 }) {
   return (
     <>
@@ -68,9 +76,23 @@ export function LegalPage({
                     {paragraph}
                   </p>
                 ))}
+                {section.links && (
+                  <p className="mt-3 flex flex-wrap gap-x-4 leading-7">
+                    {section.links.map((link) => (
+                      <Link
+                        className={`inline-flex min-h-11 items-center rounded-sm text-foreground underline underline-offset-4 md:min-h-0 ${focusRing}`}
+                        href={link.href}
+                        key={link.href}
+                      >
+                        {link.label}
+                      </Link>
+                    ))}
+                  </p>
+                )}
               </section>
             ))}
           </div>
+          {children}
         </article>
       </main>
       <SiteFooter narrow />

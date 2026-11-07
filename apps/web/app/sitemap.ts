@@ -10,5 +10,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: url("/") },
     { url: url("/privacy"), lastModified: LEGAL_UPDATED.privacy },
     { url: url("/terms"), lastModified: LEGAL_UPDATED.terms },
+    { url: url("/cookies") },
   ];
 }

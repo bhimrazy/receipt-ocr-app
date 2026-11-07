@@ -10,6 +10,7 @@ HTTP.
 - [Public API](#public-api)
 - [How a request reaches core](#how-a-request-reaches-core)
 - [Key modules](#key-modules)
+- [Consent and analytics](#consent-and-analytics)
 - [Design principles and invariants](#design-principles-and-invariants)
 - [How to test it](#how-to-test-it)
 - [Common changes](#common-changes)
@@ -154,8 +155,51 @@ Pages follow the same path without the HTTP mapping: server components call help
 | [`components/capture`](../../apps/web/components/capture)                             | Camera sheet and review sheet (corner crop, rotate, filters), loaded with `next/dynamic` on first use                                                                                                                                                                                                                       |
 | [`lib/capture`](../../apps/web/lib/capture)                                           | Pure maths for capture: homography and warp, edit state, edge detection, filters, the batch queue; plus the camera, canvas and XHR upload helpers                                                                                                                                                                           |
 | [`components/processing-poller.tsx`](../../apps/web/components/processing-poller.tsx) | Polls one receipt's status, or the workspace counts (`/api/receipts/status`) for a list, on the schedule in [`lib/backoff-poll.ts`](../../apps/web/lib/backoff-poll.ts): backs off from 2 s to 15 s, pauses while the tab is hidden, gives up after 6 minutes of visible polling (a receipt job's retries can take about 4) |
+| [`lib/consent`](../../apps/web/lib/consent)                                           | Cookie consent and analytics rules, cookie registry; see [Consent and analytics](#consent-and-analytics)                                                                                                                                                                                                                    |
 | [`lib/signed-in-hint.ts`](../../apps/web/lib/signed-in-hint.ts)                       | The `signed_in_hint` cookie name and browser helpers to read and clear it                                                                                                                                                                                                                                                   |
 | [`components/dashboard/`](../../apps/web/components/dashboard)                        | Home `Spending` section: streamed in Suspense and loaded once per request. Range, compare and currency live in the URL. Recharts (shadcn `ChartContainer`) sits in a lazy chunk that loads when a chart nears the viewport; each chart has a text summary and a table view                                                  |
+
+## Consent and analytics
+
+Analytics runs on an allowlist of public pages only (`isAnalyticsPath` in
+[`lib/consent/config.ts`](../../apps/web/lib/consent/config.ts): `/`, `/sign-in`, `/sign-up`, `/privacy`, `/terms`,
+`/cookies`). `/app` and `/admin` URLs and titles carry receipt and workspace ids, so nothing runs there.
+
+| Tool                 | When it runs                                           | Consent                                          |
+| -------------------- | ------------------------------------------------------ | ------------------------------------------------ |
+| Vercel Web Analytics | Vercel builds (`VERCEL=1`), allowlisted pages          | Opt-out; with GA configured, only after a choice |
+| Google Analytics 4   | `NEXT_PUBLIC_GA_MEASUREMENT_ID` set, allowlisted pages | Opt-in; Consent Mode v2, basic mode              |
+| Browser signals      | GPC and DNT turn both GA and page counts off           | Can't be overridden in the dialog                |
+
+```mermaid
+flowchart TD
+  L[Root layout] --> M[ConsentManager]
+  M --> S[(consent cookie)]
+  M -->|GA set, no choice, no GPC or DNT, public page| B[Banner: Accept all, Reject all, Customise]
+  B --> D[Cookie settings dialog]
+  F[Footer: Cookie settings] --> D
+  B -->|choice| W[saveConsent]
+  D -->|choice| W
+  W --> S
+  W -->|POST /api/consent, same origin| R[Route sets the same cookie server-side]
+  M -->|allowed + public page| G[gtag.js, page views with stripped URL]
+  M -->|allowed + public page| V[Vercel Analytics, beforeSend strips query, drops non-public]
+```
+
+- **Referrer.** Allowlisted pages send `Referrer-Policy: origin` (`next.config.ts`), so the same-origin `/view` fetch and Google never see a path or query. gtag's `page_location` and `page_referrer` are set in `config` and `set` so its automatic hits are stripped too. Withdrawing deletes `_ga*` in `saveConsent` even when gtag never loaded.
+- **Choice.** The `consent` cookie holds version, timestamp and one flag per category (6 months, `SameSite=Lax`,
+  `Secure` on HTTPS). A different `CONSENT_VERSION` or an older timestamp means no choice, so the banner asks again.
+  [`lib/consent/state.ts`](../../apps/web/lib/consent/state.ts) holds the pure rules;
+  [`lib/consent/store.ts`](../../apps/web/lib/consent/store.ts) is the browser store. `POST /api/consent` re-sets the
+  cookie from the server because Safari caps script-written cookies at 7 days.
+- **GA.** [`lib/consent/gtag.ts`](../../apps/web/lib/consent/gtag.ts) queues `consent default` (all four signals
+  denied) before `config`, then grants only `analytics_storage`. `send_page_view` is off and page views carry
+  `origin + pathname`. gtag.js can't be unloaded, so `ga-disable-<id>` is set during render whenever the page leaves
+  the allowlist or consent is withdrawn. Withdrawing also deletes the `_ga*` cookies.
+- **Cookie list.** [`lib/consent/cookies.ts`](../../apps/web/lib/consent/cookies.ts) lists every cookie and storage
+  key; `/cookies` renders it, and `cookies.test.ts` scans the code for cookie, `localStorage`, Cache Storage and
+  IndexedDB names that have no entry.
+- **CSP.** `buildContentSecurityPolicy` adds Google's origins only when GA is on. Vercel's script is same-origin.
 
 ## Design principles and invariants
 
@@ -188,6 +232,7 @@ Security headers (HSTS, `X-Frame-Options: DENY`, a report-only CSP) are set in
 | Unit tests (all `*.test.ts`, Node, no DB) | `bun run test`                                                              |
 | Better Auth against a real database       | `bun run --filter @receipt-ocr/web test:int` (needs `DATABASE_URL`)         |
 | Playwright e2e against a built app        | `scripts/test.sh` (starts Postgres and RustFS, fresh database, fixture OCR) |
+| Consent flow with GA configured           | `scripts/test.sh --analytics` (rebuilds with a test id; Google is stubbed)  |
 | Type check                                | `bun run typecheck`                                                         |
 
 The e2e specs ([`e2e/`](../../apps/web/e2e)) cover auth, upload, admin, smoke pages and security checks.
