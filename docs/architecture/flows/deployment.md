@@ -37,7 +37,7 @@ sequenceDiagram
   audit; `checks` runs typecheck, unit tests and build; `e2e` starts Postgres and RustFS as services, applies every
   migration to an empty database, runs the core and web integration suites, builds, and runs Playwright with the
   fixture OCR provider.
-- **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) run in the GitHub environment `vercel-preview` (production uses `vercel`) and use the Vercel project's preview environment,
+- **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) run in the GitHub environment `vercel`, like production, and use the Vercel project's preview environment,
   which points at the staging database. They never migrate it, so a PR's own migration isn't there until it merges.
   The app's origin on a preview is its own host (`VERCEL_BRANCH_URL`, else `VERCEL_URL`) unless `BETTER_AUTH_URL` is
   set, and both preview hosts stay trusted either way ([`lib/env.ts`](../../../apps/web/lib/env.ts)). Dependabot PRs are skipped because they get no secrets.

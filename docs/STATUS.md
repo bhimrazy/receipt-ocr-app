@@ -42,14 +42,12 @@ Steps are in [deployment.md](deployment.md).
 - Before `ci/db-migrations` merges, in this order (GitHub: Settings → Environments):
   1. Create `staging-db` and `production-db` with deployment branches `main` only, **before** adding any secret.
   2. Add `DIRECT_URL` (Supabase session pooler, port 5432) to each. Consider a required reviewer on `production-db`.
-  3. Create `vercel-preview` (no branch policy; previews run on every PR) with the same `VERCEL_TOKEN`,
-     `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as `vercel`.
-  4. Point Vercel's Preview variables at `receipt-ocr-staging`, leave `BETTER_AUTH_URL` unset there and turn on
+  3. Point Vercel's Preview variables at `receipt-ocr-staging`, leave `BETTER_AUTH_URL` unset there and turn on
      Deployment Protection for previews ([deployment.md](deployment.md#staging-and-previews)). Then merge.
-- `vercel` environment (review P2-1): it has no branch policy and its token reaches same-repo PR runs. Mitigations:
-  every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and previews now use
-  `vercel-preview`, so `vercel` can get a `main`-only policy and a required reviewer for production deploys
-  (recommended). The token is still account-wide: rotate it if a PR workflow could have leaked it.
+- `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
+  to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
+  every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
+  no outside collaborators. The full fix is a separate Vercel project for previews, with its own token.
 - Keep every new production secret Sensitive in Vercel. The build tolerates their placeholders (fix in
   `ci/db-migrations`); `BETTER_AUTH_SECRETS` was removed from Vercel as a stopgap and can go back once it lands.
 - Set `OCR_DAILY_CAP` in production as a spend guard.

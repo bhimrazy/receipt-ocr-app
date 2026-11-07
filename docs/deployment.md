@@ -104,20 +104,18 @@ production, then deploys. If either migration fails, nothing is deployed. Pull r
 `.github/workflows/preview.yml`. To run the whole pipeline by hand, run the **Vercel Production Deployment** workflow
 from the Actions tab on `main`.
 
-The two Vercel workflows use separate GitHub environments, each holding the same three secrets (`VERCEL_TOKEN`,
-`VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`):
-
-| Environment      | Used by          | Branch policy             | Notes                                                       |
-| ---------------- | ---------------- | ------------------------- | ----------------------------------------------------------- |
-| `vercel`         | `production.yml` | `main` only (recommended) | Consider a required reviewer: every production deploy waits |
-| `vercel-preview` | `preview.yml`    | None (every PR)           | Kept apart so a reviewer on `vercel` never blocks previews  |
+Both Vercel workflows use the GitHub environment `vercel`, which holds `VERCEL_TOKEN`, `VERCEL_ORG_ID` and
+`VERCEL_PROJECT_ID`. It has no branch policy, because previews run from PR branches; don't add one, or previews stop.
 
 **Every production secret is stored as Vercel _Sensitive_.** Sensitive values can't be read back, so `vercel pull` in
 CI gets empty or placeholder values for them and the build must not depend on them: `lib/env.ts` treats a malformed
-runtime-only secret as unset during `next build` and refuses it only when the server starts. This is also what limits
-the Vercel token: it reaches same-repository PR runs (preview.yml), and while it can deploy, it can't read production
-secrets. Mark any new production secret Sensitive when you add it. A required reviewer on `vercel` plus its `main`-only
-policy keeps PR runs from using that environment at all; the token itself stays account-wide, so treat it like a
+runtime-only secret as unset during `next build` and refuses it only when the server starts. Mark any new production
+secret Sensitive when you add it.
+
+**The Vercel token reaches PR runs.** The same `VERCEL_TOKEN` that deploys production is available to same-repository
+PR runs of `preview.yml`, so a PR branch could deploy to production with it. What limits that today: production
+secrets are Sensitive, so the token can't read them back, and the repository has no outside collaborators (fork PRs
+get no secrets). The full fix is a separate Vercel project for previews with its own token. Treat the token as a
 production credential and rotate it if a PR workflow might have leaked it.
 
 **Docker.** Build `docker/Dockerfile.prod`, run migrations once with the `builder` stage
