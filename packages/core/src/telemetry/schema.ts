@@ -92,7 +92,7 @@ export const EVENT_SCHEMA = {
   /** Round of the receipt: its upload or nth retry. */
   round: "int",
   worker: "id",
-  /** What started the job run: `upload`, `retry`, `poll`, `drain`. */
+  /** What started the job run: `upload`, `retry`, `poll`, `drain`, `admin_rerun`. */
   trigger: "token",
   plan: "token",
   /** Upload mode: `instant` or `queued`. */
