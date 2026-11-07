@@ -120,7 +120,10 @@ export const providerAvailability: Effect.Effect<Record<OcrProviderId, boolean>>
   ),
 );
 
-/** The chain used until an admin saves one: whatever env configures, as before. */
+/** First choice until an admin saves a chain; steps whose provider has no key are skipped. */
+const DEFAULT_PRIMARY_MODEL: ModelId = "anthropic:claude-sonnet-5-5";
+
+/** The chain used until an admin saves one: Claude Sonnet, then the env's Gemini model. */
 const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
   provider: Config.string("OCR_PROVIDER").pipe(Config.withDefault("google")),
   model: Config.string("GEMINI_MODEL").pipe(Config.withDefault(DEFAULT_GOOGLE_MODEL)),
@@ -136,7 +139,11 @@ const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
     );
   }),
   Effect.map((model) => ({
-    chain: [{ model, enabled: true, timeoutMs: DEFAULT_STEP_TIMEOUT_MS }],
+    chain: (model === "fixture" ? [model] : [DEFAULT_PRIMARY_MODEL, model]).map((id) => ({
+      model: id,
+      enabled: true,
+      timeoutMs: DEFAULT_STEP_TIMEOUT_MS,
+    })),
   })),
 );
 

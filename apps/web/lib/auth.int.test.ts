@@ -169,7 +169,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     expect(await decryptOAuthToken(legacy!.refreshToken!, context)).toBe("1//legacy-refresh");
   });
 
-  it("GHSA-c85h: refuses padded owner roles on invite and role change", async () => {
+  it("GHSA-c85h: refuses role lists and stores padded roles trimmed", async () => {
     // The reset above revoked earlier sessions; sign in with the new password.
     const signIn = await auth.api.signInEmail({
       body: { email, password: `${password}-2` },
@@ -191,7 +191,9 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
         body: { organizationId: org!.id, email: `${tag}-x@example.com`, role: role as "member" },
       });
     expect(await status(invite("admin, owner"))).toBe(400);
-    expect(await status(invite(" owner"))).toBe(400);
+    // 1.7.16+ trims roles before our hook, so padding can no longer smuggle in a different role.
+    const padded = await invite(" owner");
+    expect(padded.role).toBe("owner");
     expect(await status(invite("member"))).toBe(200);
   });
 

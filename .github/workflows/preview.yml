@@ -119,7 +119,8 @@ jobs:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.preview_url }}
         run: |
           for domain in preview.receipt-ocr.bhimraj.com.np preview-receipt-ocr.vercel.app; do
-            "$VERCEL_BIN" alias set "$DEPLOYMENT_URL" "$domain"
+            # Unlike deploy, alias set doesn't read VERCEL_ORG_ID; without --scope it looks up a personal account.
+            "$VERCEL_BIN" alias set "$DEPLOYMENT_URL" "$domain" --scope "$VERCEL_ORG_ID"
           done
 
       - name: Find existing preview comment
