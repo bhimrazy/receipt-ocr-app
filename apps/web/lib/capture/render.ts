@@ -187,6 +187,11 @@ function cachedStraightened(bitmap: ImageBitmap, edit: EditState, budget: Render
   return made;
 }
 
+/** Frees the cached pixels (up to about 24 MB) once their photo is closed. */
+export function dropRenderCache(bitmap: ImageBitmap) {
+  if (cache?.bitmap === bitmap) cache = null;
+}
+
 /**
  * Rotates, straightens the crop and applies the filter. Intermediate canvases are released
  * here; the caller releases the one returned (`releaseCanvas`) once it is encoded. The small

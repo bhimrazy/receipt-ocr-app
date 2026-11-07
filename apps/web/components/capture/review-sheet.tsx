@@ -29,6 +29,7 @@ import { defaultFilter, FILTER_LABELS, FILTERS, type Filter } from "@/lib/captur
 import { EditFailedError, preparePhoto } from "@/lib/capture/prepare-photo";
 import {
   detectOnBitmap,
+  dropRenderCache,
   FULL_RENDER,
   loadImage,
   renderedSize,
@@ -171,7 +172,10 @@ export default function ReviewSheet({
       });
     return () => {
       cancelled = true;
-      bmp?.close();
+      if (bmp) {
+        dropRenderCache(bmp);
+        bmp.close();
+      }
     };
   }, [current]);
 
