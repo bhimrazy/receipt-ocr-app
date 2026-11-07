@@ -24,8 +24,8 @@ const ROLES: ReadonlySet<string> = new Set(WORKSPACE_ROLES);
 
 /**
  * Better Auth organization hook: a membership or invitation role must be exactly
- * one of our roles. Better Auth 1.7.14 accepts comma lists with padding such as
- * "admin, owner" (GHSA-c85h), which would let a workspace admin mint an owner.
+ * one of our roles, never a comma list such as "admin,owner" (GHSA-c85h: it would
+ * let a workspace admin mint an owner). Better Auth 1.7.16+ trims roles before this runs.
  */
 export function assertWorkspaceRole(role: unknown): void {
   if (typeof role !== "string" || !ROLES.has(role)) {

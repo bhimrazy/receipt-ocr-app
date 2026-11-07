@@ -99,9 +99,8 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
 
 ## Decisions waiting on the owner
 
-1. **Better Auth security upgrade.** 1.7.14 is affected by advisories fixed in 1.7.16 (OAuth unverified email,
-   padded owner role, revoked sessions with cookie cache). 1.7.16 is inside the 7-day cooldown until 2026-11-10;
-   upgrading earlier needs a one-time exemption for `better-auth`, `@better-auth/*`, `better-call`.
+1. **Remove the Better Auth cooldown exemption after 2026-11-12.** Approved 2026-11-07 to take 1.7.18 (security
+   fixes from 1.7.16, passkeys); delete `minimumReleaseAgeExcludes` from `bunfig.toml` once 1.7.18 is 7 days old.
 2. Classic as the homepage (then delete `app/(lab)` and `components/marketing`, ~41% of TS code).
 3. Plan limits: daily per user (today) or monthly per workspace; prices; payment provider. See
    [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
