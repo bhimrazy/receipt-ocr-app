@@ -9,6 +9,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -388,6 +389,54 @@ export const appSettings = pgTable("app_settings", {
   updatedBy: text("updated_by").references(() => user.id, { onDelete: "set null" }),
 });
 
+/**
+ * A named collection of receipts in a workspace ("Berlin trip", "Taxes 2026").
+ * Names are unique per workspace ignoring case; `color` is a palette key
+ * validated in core.
+ */
+export const receiptGroups = pgTable(
+  "receipt_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color").notNull(),
+    /** Who may rename or delete it besides owners and admins. Null once that user is deleted. */
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("receipt_groups_org_name_idx").on(table.organizationId, sql`lower(${table.name})`),
+  ],
+);
+
+/**
+ * Receipts in a group (many-to-many). Nothing here checks that the receipt and
+ * the group share a workspace; core only inserts rows selected through both
+ * tables' `organization_id`.
+ */
+export const receiptGroupMembers = pgTable(
+  "receipt_group_members",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => receiptGroups.id, { onDelete: "cascade" }),
+    receiptId: uuid("receipt_id")
+      .notNull()
+      .references(() => receipts.id, { onDelete: "cascade" }),
+    addedBy: text("added_by").references(() => user.id, { onDelete: "set null" }),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.groupId, table.receiptId] }),
+    // Groups of a receipt, the History filter, and the cascade on receipt delete.
+    index("receipt_group_members_receipt_id_idx").on(table.receiptId),
+  ],
+);
+
 export const receiptsRelations = relations(receipts, ({ many }) => ({
   items: many(receiptItems),
 }));
@@ -411,6 +460,8 @@ export const schema = {
   userCredentials,
   adminAuditLog,
   appSettings,
+  receiptGroups,
+  receiptGroupMembers,
   receiptsRelations,
   receiptItemsRelations,
   // Better Auth tables (core + organization + admin plugins).

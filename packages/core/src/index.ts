@@ -9,6 +9,7 @@ export { RECEIPT_CATEGORIES, type ReceiptCategory } from "@receipt-ocr/ai/catego
 export * from "./config";
 export * from "./errors";
 export * from "./files";
+export * from "./groups";
 export * from "./health";
 export * from "./jobs";
 export * from "./ocr";
