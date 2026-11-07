@@ -161,6 +161,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
+- **A distinctive product name before paid marketing.** "Receipt OCR" is the category's generic name: weak as a
+  trademark and hard to find in search. Choose a distinctive name before spending on marketing, while renaming is
+  still cheap ([UX decisions](plans/2026-11-07-ux-decisions.md)).
 - **Release-based deploys.** Today every push to `main` deploys after CI (migrations by hand). Move to deploying
   tagged releases (for example `v0.x.y` with release notes), so `main` can take merges without each one going live.
 - **Self-hosting.** Vercel's free (Hobby) plan is for non-commercial use and has hard monthly limits; a busy month or
