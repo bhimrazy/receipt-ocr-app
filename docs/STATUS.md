@@ -69,7 +69,7 @@ Steps are in [deployment.md](deployment.md).
 - Keep every new production secret Sensitive in Vercel. The build tolerates their placeholders (fix in
   `ci/db-migrations`); `BETTER_AUTH_SECRETS` was removed from Vercel as a stopgap and can go back once it lands.
 - Set `OCR_DAILY_CAP` in production as a spend guard.
-- Vercel env: `NEXT_PUBLIC_SITE_URL`, `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`; recommended
+- Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`; recommended
   `BETTER_AUTH_SECRETS=1:<current BETTER_AUTH_SECRET>`.
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
 - If an admin saved an OCR chain naming `gemini-3.7-flash`, re-save it in Admin → Settings.

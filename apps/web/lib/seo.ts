@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { canonicalFor, siteUrl, siteUrlMissing } from "@/lib/site";
+import { siteUrl } from "@/lib/site";
 
 const SITE_NAME = "receiptOCR";
 
@@ -39,7 +39,7 @@ export function pageMetadata({
   return {
     title: absoluteTitle ? { absolute: title } : title,
     description,
-    ...(index ? { alternates: canonicalFor(path) } : { robots: { index: false, follow: true } }),
+    ...(index ? { alternates: { canonical: path } } : { robots: { index: false, follow: true } }),
     openGraph: {
       type: "website",
       siteName: SITE_NAME,
@@ -61,7 +61,18 @@ export function pageMetadata({
 export const LEGAL_UPDATED = {
   privacy: "2026-11-07",
   terms: "2026-11-07",
+  cookies: "2026-11-06",
 } as const;
+
+/** Home page copy last changed; the sitemap's lastModified for "/". */
+export const HOME_UPDATED = "2026-11-07";
+
+export const OWNER = {
+  name: "Bhimraj Yadav",
+  url: "https://bhimraj.com.np",
+  github: "https://github.com/bhimrazy",
+} as const;
+export const REPO_URL = "https://github.com/bhimrazy/receipt-ocr";
 
 export function formatLegalDate(isoDate: string): string {
   return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -73,39 +84,53 @@ export function formatLegalDate(isoDate: string): string {
 }
 
 /**
- * Organization, WebSite and SoftwareApplication for the home page. Only claims the product backs
- * today: a free web app. No ratings, reviews or prices beyond the free plan.
+ * Organization (with its founder), WebSite and SoftwareApplication for the home page. Only claims
+ * the product backs today: a free web app, installable as a PWA. No ratings, reviews or prices
+ * beyond the free plan; the custom plan has no public price, so it has no Offer.
  */
-export function homeJsonLd(): Record<string, unknown> | null {
-  if (siteUrlMissing) return null;
+export function homeJsonLd(): Record<string, unknown> {
   const url = new URL("/", siteUrl).toString();
   const orgId = `${url}#organization`;
+  const personId = `${OWNER.url}/#person`;
   return {
     "@context": "https://schema.org",
     "@graph": [
+      {
+        "@type": "Person",
+        "@id": personId,
+        name: OWNER.name,
+        url: OWNER.url,
+        sameAs: [OWNER.github],
+      },
       {
         "@type": "Organization",
         "@id": orgId,
         name: SITE_NAME,
         url,
-        logo: new URL("/icon.svg", siteUrl).toString(),
+        logo: new URL("/icons/icon-512.png", siteUrl).toString(),
+        founder: { "@id": personId },
+        sameAs: [REPO_URL],
       },
       {
         "@type": "WebSite",
         "@id": `${url}#website`,
         name: SITE_NAME,
         url,
+        inLanguage: "en",
         publisher: { "@id": orgId },
       },
       {
         "@type": "SoftwareApplication",
+        "@id": `${url}#app`,
         name: SITE_NAME,
         url,
         description: homeDescription,
-        applicationCategory: "BusinessApplication",
-        operatingSystem: "Web",
+        applicationCategory: "FinanceApplication",
+        operatingSystem: "Web, iOS, Android",
+        isAccessibleForFree: true,
         offers: { "@type": "Offer", price: "0", priceCurrency: "USD", description: "Free plan" },
         publisher: { "@id": orgId },
+        author: { "@id": personId },
       },
     ],
   };
