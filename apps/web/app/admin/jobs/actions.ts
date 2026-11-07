@@ -94,7 +94,7 @@ export async function rerunJobAction(input: { jobId: string; reason: string }) {
   return run("job.rerun", async (audit) => {
     const parsed = z.object({ jobId, reason }).parse(input);
     const startedAt = Date.now();
-    const dailyCap = await core(loadDailyOcrCap.pipe(Effect.orElseSucceed(() => undefined)));
+    const dailyCap = await core(loadDailyOcrCap);
     await core(
       rerunJob(JOB_REGISTRY, parsed.jobId, audit, {
         reason: parsed.reason,

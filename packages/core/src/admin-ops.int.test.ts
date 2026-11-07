@@ -346,6 +346,10 @@ describe.skipIf(!enabled)("queue snapshot and job list", () => {
       setQueueControl(JOB_REGISTRY, { scope: "kind:nope", paused: true }, auditor),
     );
     expect(Exit.isFailure(exit)).toBe(true);
+    const inherited = await runExit(
+      setQueueControl(JOB_REGISTRY, { scope: "kind:constructor", paused: true }, auditor),
+    );
+    expect(Exit.isFailure(inherited)).toBe(true);
     const bad = await runExit(
       setQueueControl(JOB_REGISTRY, { scope: "drop table", paused: true }, auditor),
     );

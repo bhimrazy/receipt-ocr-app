@@ -94,7 +94,7 @@ export async function volumeQuery(db: Queryable, w: OpsWindow): Promise<OpsVolum
         case
           when c.ok then 'ok'
           when exists (select 1 from jobs j where j.receipt_id = r.receipt_id
-              and (j.payload->>'round')::int = r.round and ${liveReceiptJob("j")})
+              and (case when j.payload->>'round' ~ '^[0-9]{1,5}$' then (j.payload->>'round')::int end) = r.round and ${liveReceiptJob("j")})
             or (c.receipt_id is null and r.created_at >= now() - ${staleInterval}) then 'in_flight'
           else 'failed'
         end as outcome
@@ -376,6 +376,9 @@ export type OpsQueue = {
 };
 
 const inForce = sql`(c.paused or c.until is not null) and (c.until is null or c.until > now())`;
+
+/** The queue snapshot as an Effect, for pages that don't hold a database handle. */
+export const queueSnapshot = Effect.flatMap(Db, ({ use }) => use((db) => queueQuery(db)));
 
 export async function queueQuery(db: Queryable): Promise<OpsQueue> {
   const [row] = await db.execute<{

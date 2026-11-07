@@ -367,7 +367,7 @@ export const adminAuditLog = pgTable(
     actorEmail: text("actor_email").notNull(),
     /** Dotted verb, e.g. `user.ban`, `workspace.delete`, `settings.plans`. */
     action: text("action").notNull(),
-    targetType: text("target_type").notNull(), // user | workspace | settings
+    targetType: text("target_type").notNull(), // user | workspace | settings | job
     targetId: text("target_id"),
     targetLabel: text("target_label"),
     reason: text("reason"),

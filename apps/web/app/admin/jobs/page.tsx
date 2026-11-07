@@ -3,8 +3,7 @@ import {
   jobErrorKinds,
   jobKinds,
   listJobs,
-  queueQuery,
-  Db,
+  queueSnapshot,
   type AdminJobRow,
 } from "@receipt-ocr/core";
 import { Badge } from "@receipt-ocr/ui/components/badge";
@@ -131,14 +130,9 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: Se
   };
   const page = pageOf(params.page);
   const [result, errorKinds, queue] = await runtime.runPromise(
-    Effect.all(
-      [
-        listJobs(filters, { page, pageSize: PAGE_SIZE }),
-        jobErrorKinds,
-        Effect.flatMap(Db, ({ use }) => use((db) => queueQuery(db))),
-      ],
-      { concurrency: 2 },
-    ),
+    Effect.all([listJobs(filters, { page, pageSize: PAGE_SIZE }), jobErrorKinds, queueSnapshot], {
+      concurrency: 2,
+    }),
   );
   const pausedQueue = queue.controls.some((c) => c.scope === "queue" && c.paused);
   const pausedKinds = new Set(queue.controls.filter((c) => c.paused).map((c) => c.scope));

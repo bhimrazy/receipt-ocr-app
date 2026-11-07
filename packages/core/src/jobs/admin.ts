@@ -59,7 +59,7 @@ export const rerunJob = <R>(
         receipt_id, organization_id, user_id, last_error_kind, payload
       from jobs where id = ${id}::uuid for update`);
     if (!job) throw new NotFound({ message: "That job no longer exists." });
-    const definition = registry[job.kind];
+    const definition = Object.hasOwn(registry, job.kind) ? registry[job.kind] : undefined;
     if (!definition) throw new Conflict({ message: `No handler runs ${job.kind} jobs any more.` });
     if (job.state !== "dead" && job.state !== "cancelled") {
       throw new Conflict({ message: "Only dead or cancelled jobs can be re-run." });
@@ -203,7 +203,7 @@ export const cancelQueuedJob = <R>(
         lastErrorKind: "cancelled",
       } satisfies Job;
     });
-    const definition = registry[job.kind];
+    const definition = Object.hasOwn(registry, job.kind) ? registry[job.kind] : undefined;
     const parsed = definition?.payload.safeParse(job.payload);
     if (definition?.onFinalFailure && parsed?.success) {
       yield* definition.onFinalFailure(parsed.data, { job, errorKind: "cancelled" });
@@ -223,7 +223,7 @@ export const setQueueControl = <R>(
   transact(async (tx) => {
     const { scope, paused } = input;
     if (!SCOPE.test(scope)) throw new InvalidInput({ message: "Unknown queue scope." });
-    if (scope.startsWith("kind:") && !registry[scope.slice(5)]) {
+    if (scope.startsWith("kind:") && !Object.hasOwn(registry, scope.slice(5))) {
       throw new InvalidInput({ message: "No handler runs that kind." });
     }
     if (paused && scope.startsWith("provider:")) {

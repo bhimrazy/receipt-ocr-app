@@ -126,6 +126,9 @@ Symptoms: receipts stay "processing", or the **Dead, last 24 hours** tile on **A
 4. Every action appears in **Admin, Audit log** (`job.*`). A user who has retried since is refused: the retry already
    re-read it.
 
+Past about 1M `jobs` rows, build new `jobs` indexes by hand with `CREATE INDEX CONCURRENTLY` and keep a no-op migration
+so the journal stays in step.
+
 ### Leaked secret
 
 1. Rotate it now, using the [table below](#secret-rotation). Rotate first, investigate after.
