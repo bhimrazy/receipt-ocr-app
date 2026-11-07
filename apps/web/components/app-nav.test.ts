@@ -2,7 +2,8 @@ import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MORE_SECTIONS, TAB_SECTIONS } from "@/app/admin/admin-nav";
-import { APP_NAV, backFor, isActive, type NavItem } from "./app-nav";
+import { APP_NAV, backFor, isActive, tabItems, type NavItem } from "./app-nav";
+import type { MobileTabs } from "./mobile-tabs";
 
 const appDir = join(__dirname, "..", "app");
 
@@ -29,21 +30,40 @@ describe("phone navigation", () => {
     expect(signedIn.length).toBeGreaterThan(10);
   });
 
-  it.each(signedIn.filter((r) => !redirects.has(r)))(
-    "%s has Back or a highlighted tab",
-    (route) => {
-      const tabs = route.startsWith("/admin")
-        ? [...TAB_SECTIONS, ...MORE_SECTIONS]
-        : [...APP_NAV, scan];
-      expect(backFor(route) !== null || tabs.some((item) => isActive(route, item))).toBe(true);
-    },
-  );
+  describe.each<MobileTabs>(["five", "three"])("%s-tab bar", (tabs) => {
+    it.each(signedIn.filter((r) => !redirects.has(r)))(
+      "%s has Back or a highlighted tab",
+      (route) => {
+        const items = route.startsWith("/admin")
+          ? [...TAB_SECTIONS, ...MORE_SECTIONS]
+          : // Settings has no tab in "three"; the account sheet carries it.
+            [...tabItems(tabs), scan, ...(tabs === "three" ? [APP_NAV[3]!] : [])];
+        expect(
+          backFor(route, tabs) !== null || items.some((item) => isActive(route, item, tabs)),
+        ).toBe(true);
+      },
+    );
+
+    it("has as many tabs left of Scan as right", () => {
+      expect(tabItems(tabs).length % 2).toBe(0);
+    });
+  });
 
   it("keeps the admin tab bar to five slots", () => {
     expect(TAB_SECTIONS.length + 1).toBeLessThanOrEqual(5);
   });
 
-  it("sends Groups back to History", () => {
-    expect(backFor("/app/groups")).toEqual({ href: "/app/history", label: "History" });
+  it("gives Groups its own tab with five tabs", () => {
+    const groups = APP_NAV.find((i) => i.href === "/app/groups")!;
+    const history = APP_NAV.find((i) => i.href === "/app/history")!;
+    expect(backFor("/app/groups", "five")).toBeNull();
+    expect(isActive("/app/groups", groups, "five")).toBe(true);
+    expect(isActive("/app/groups", history, "five")).toBe(false);
+  });
+
+  it("keeps Groups under History with three tabs", () => {
+    const history = APP_NAV.find((i) => i.href === "/app/history")!;
+    expect(backFor("/app/groups", "three")).toEqual({ href: "/app/history", label: "History" });
+    expect(isActive("/app/groups", history, "three")).toBe(true);
   });
 });

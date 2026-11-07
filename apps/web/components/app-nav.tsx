@@ -16,12 +16,15 @@ import {
   Ellipsis,
   History,
   House,
+  Loader2,
   ScanLine,
   Settings,
+  Tags,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
+import { MOBILE_TABS, type MobileTabs } from "./mobile-tabs";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
@@ -31,8 +34,16 @@ export type NavItem = { href: string; label: string; icon: LucideIcon; exact?: b
 export const APP_NAV: NavItem[] = [
   { href: "/app", label: "Home", icon: House, exact: true },
   { href: "/app/history", label: "History", icon: History },
+  { href: "/app/groups", label: "Groups", icon: Tags },
   { href: "/app/settings", label: "Settings", icon: Settings },
 ];
+
+/** The tabs on either side of Scan for a layout. */
+export function tabItems(tabs: MobileTabs = MOBILE_TABS): NavItem[] {
+  return tabs === "five"
+    ? APP_NAV
+    : APP_NAV.filter((item) => item.href === "/app" || item.href === "/app/history");
+}
 
 export const ADMIN_NAV_ITEM: NavItem = { href: "/admin", label: "Admin", icon: ShieldCheck };
 
@@ -41,10 +52,27 @@ export const SCAN_HREF = "/app/upload?capture=1";
 
 const SCAN_ITEM: NavItem = { href: "/app/upload", label: "Scan", icon: ScanLine };
 
-export function isActive(pathname: string, item: NavItem) {
+/**
+ * The tab's icon, swapped for a spinner from the click until the next page is ready, so a
+ * tab responds at once even when its page takes a moment. Must sit inside the <Link>.
+ */
+function NavIcon({ icon: Icon, className }: { icon: LucideIcon; className?: string }) {
+  const { pending } = useLinkStatus();
+  return pending ? (
+    <Loader2
+      aria-hidden="true"
+      className={cn(className, "animate-spin motion-reduce:animate-none")}
+    />
+  ) : (
+    <Icon aria-hidden="true" className={className} />
+  );
+}
+
+export function isActive(pathname: string, item: NavItem, tabs: MobileTabs = MOBILE_TABS) {
   if (item.exact) return pathname === item.href;
-  // Receipt pages and groups (reached from History's "Manage groups") belong to History.
-  if (item.href === "/app/history" && /^\/app\/(receipts|groups)(\/|$)/.test(pathname)) return true;
+  // Receipt pages (opened from History) belong to History, and so does Groups without its own tab.
+  const owned = tabs === "five" ? /^\/app\/receipts(\/|$)/ : /^\/app\/(receipts|groups)(\/|$)/;
+  if (item.href === "/app/history" && owned.test(pathname)) return true;
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
@@ -54,7 +82,6 @@ export function SidebarNav({ items, label = "Main" }: { items: NavItem[]; label?
   return (
     <nav aria-label={label} className="flex flex-col gap-1">
       {items.map((item) => {
-        const Icon = item.icon;
         const active = isActive(pathname, item);
         return (
           <Link
@@ -68,7 +95,7 @@ export function SidebarNav({ items, label = "Main" }: { items: NavItem[]; label?
             href={item.href}
             key={item.href}
           >
-            <Icon aria-hidden="true" className="size-4" />
+            <NavIcon className="size-4" icon={item.icon} />
             {item.label}
           </Link>
         );
@@ -109,7 +136,6 @@ export function BottomTabBar({
       <ul className="grid h-[var(--tabbar-h,4rem)] auto-cols-fr grid-flow-col">
         {slots.map((item) => {
           if (!item) {
-            const Icon = center!.icon;
             const active = isActive(pathname, center!);
             return (
               <li className="flex min-h-0 justify-center" key="center">
@@ -120,14 +146,13 @@ export function BottomTabBar({
                 >
                   {/* Labels share a baseline with the other tabs; the button rises above the bar. */}
                   <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_0_24px_color-mix(in_oklab,var(--primary)_35%,transparent)] ring-4 ring-background transition group-focus-visible:outline-2 group-focus-visible:outline-offset-4 group-focus-visible:outline-ring group-active:scale-95 motion-reduce:transition-none">
-                    <Icon aria-hidden="true" className="size-6" />
+                    <NavIcon className="size-6" icon={center!.icon} />
                   </span>
                   {center!.label}
                 </Link>
               </li>
             );
           }
-          const Icon = item.icon;
           const active = isActive(pathname, item);
           return (
             <li key={item.href}>
@@ -139,7 +164,7 @@ export function BottomTabBar({
                 )}
                 href={item.href}
               >
-                <Icon aria-hidden="true" className="size-5" />
+                <NavIcon className="size-5" icon={item.icon} />
                 {item.label}
               </Link>
             </li>
@@ -205,9 +230,9 @@ export function AppSidebarNav({ showAdmin }: { showAdmin: boolean }) {
   );
 }
 
-/** Home, History, Scan, Settings. Admin is in the account sheet: few people use it, and rarely. */
+/** Scan sits in the middle of the tabs (see MOBILE_TABS). Admin is in the account sheet: few people use it, and rarely. */
 export function AppTabBar() {
-  return <BottomTabBar center={SCAN_ITEM} items={APP_NAV} />;
+  return <BottomTabBar center={SCAN_ITEM} items={tabItems()} />;
 }
 
 const APP_BAR_ACTIONS_ID = "app-bar-actions";
@@ -227,10 +252,11 @@ export function AppBarActions({ children }: { children: React.ReactNode }) {
 type Back = { href: string; label: string };
 
 /** Where Back goes from a detail page; null on a top-level page. */
-export function backFor(pathname: string): Back | null {
+export function backFor(pathname: string, tabs: MobileTabs = MOBILE_TABS): Back | null {
   if (pathname.startsWith("/app/receipts/")) return { href: "/app/history", label: "History" };
+  if (tabs === "three" && pathname === "/app/groups")
+    return { href: "/app/history", label: "History" };
   if (pathname.startsWith("/app/settings/")) return { href: "/app/settings", label: "Settings" };
-  if (pathname === "/app/groups") return { href: "/app/history", label: "History" };
   if (/^\/admin\/users\/[^/]+/.test(pathname)) return { href: "/admin/users", label: "Users" };
   if (pathname === "/admin/jobs") return { href: "/admin/operations", label: "Operations" };
   if (/^\/admin\/jobs\/[^/]+/.test(pathname)) return { href: "/admin/jobs", label: "Jobs" };
@@ -374,9 +400,11 @@ export function MobileTopBar({
           </p>
           {context && !back ? (
             <div
+              // invisible, not just transparent: the context may be a button, so it must leave
+              // the tab order and stop taking taps while the page title is in its place.
               className={cn(
-                "absolute inset-x-1 top-1/2 -translate-y-1/2 truncate text-sm text-muted-foreground transition-opacity duration-200 motion-reduce:transition-none",
-                title ? "opacity-0" : "opacity-100",
+                "absolute inset-x-1 top-1/2 -translate-y-1/2 truncate text-sm text-muted-foreground transition-[opacity,visibility] duration-200 motion-reduce:transition-none",
+                title ? "invisible opacity-0" : "visible opacity-100",
               )}
             >
               {context}

@@ -20,7 +20,7 @@ import {
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronsUpDown, Cookie, LogOut, Settings, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOutAndClearHint } from "@/lib/auth-client";
 import { CreateWorkspaceDialog, WorkspaceList } from "@/components/workspace-switcher";
@@ -110,6 +110,22 @@ export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boole
   );
 }
 
+const OPEN_ACCOUNT_SHEET = "account-sheet:open";
+
+/** The workspace name in the phone app bar; opens the account sheet, which lists the workspaces. */
+export function WorkspaceNameButton({ children }: { children: React.ReactNode }) {
+  return (
+    <button
+      aria-haspopup="dialog"
+      className="max-w-full truncate rounded-md px-1 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={() => window.dispatchEvent(new Event(OPEN_ACCOUNT_SHEET))}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
 /**
  * The phone account sheet behind the avatar in the top bar: who's signed in, the workspace
  * (switch or create), today's usage, Admin for platform admins, and sign out. A sheet rather
@@ -120,9 +136,12 @@ export function AccountSheet({
   showAdmin,
   workspace,
   usage,
+  settingsLink = false,
 }: {
   user: MenuUser;
   showAdmin: boolean;
+  /** Settings has no tab in the three-tab bar, so the sheet carries it. */
+  settingsLink?: boolean;
   /** Omitted in the admin shell, which has no active workspace of its own. */
   workspace?: { activeId: string; canCreate: boolean; workspaces: WorkspaceOption[] };
   /** The usage meter, rendered by the server layout. */
@@ -133,6 +152,12 @@ export function AccountSheet({
   const handleSignOut = useSignOut();
   const close = () => setOpen(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const openSheet = () => setOpen(true);
+    window.addEventListener(OPEN_ACCOUNT_SHEET, openSheet);
+    return () => window.removeEventListener(OPEN_ACCOUNT_SHEET, openSheet);
+  }, []);
 
   return (
     <>
@@ -164,6 +189,12 @@ export function AccountSheet({
           ) : null}
           {usage ? <div className="border-t border-border px-4 py-3">{usage}</div> : null}
           <DrawerGroup>
+            {settingsLink ? (
+              <DrawerAction onClick={close} render={<Link href="/app/settings" />}>
+                <Settings aria-hidden="true" />
+                Settings
+              </DrawerAction>
+            ) : null}
             {showAdmin ? (
               <DrawerAction onClick={close} render={<Link href="/admin" />}>
                 <ShieldCheck aria-hidden="true" />
