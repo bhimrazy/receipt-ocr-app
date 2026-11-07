@@ -93,6 +93,7 @@ Steps are in [deployment.md](deployment.md).
 | `feat/settings-receipt-reading` | Settings → Receipt reading (read-only): the platform default model chain by friendly label and its providers; privacy policy and terms now name Anthropic as a processor                                                            |
 | `feat/anthropic-provider`       | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet                                                                          |
 | `feat/prompt-v2`                | Extraction prompt v2: system-prompt rules, schema field definitions, AD dates (BS-only null), injection guard, `ocr.prompt_version`; A/B in bench/results                                                                           |
+| `fix/step-up-verification`      | Account deletion only through an emailed link (1 hour, single use); email change approved by the current address; "password changed" notices; 15-minute fresh session to delete or change email                                     |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -196,6 +197,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - HEIC conversion untested (no fixture or Safari in CI); add a WebKit e2e project later.
 - Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.
 - Better Auth: verify the OAuth callback turns a banned user into `?error=BANNED_USER`.
+- Account deletion grace period: soft-delete for 7 days with an undo link before the data goes (today the emailed
+  link deletes at once).
+- E2E for account deletion and email change: the e2e harness doesn't capture email yet (the dev mail log only goes to
+  the server's stdout), so these flows are covered by `apps/web/lib/step-up.int.test.ts` only.
+- Email change: the new address gets the sign-up wording ("finish setting up your account") from
+  `verificationEmail`; and an unverified account's old address gets no notice (Better Auth skips the approval step).
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
 - Benchmark has six synthetic images and no committed results.
 - Load test findings (after #37): upload capacity on the small server fell from 64/s to between 12/s (holds) and
