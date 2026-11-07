@@ -116,10 +116,35 @@ describe("costOf", () => {
     expect(costOf("anthropic:claude-opus-5-5", u, at).microUsd).toBe(14100);
   });
 
-  it("charges cache reads as input when the model has no published cache price", () => {
-    // Haiku 5.5: 2000 × 0.10 + 400 × 0.50, the 500 cached tokens at the input rate.
+  it("prices Haiku 5.5 cache reads and writes, in each context tier", () => {
+    const at = day("2026-11-07");
+    // 1500 × 0.10 + 300 × 0.01 + 200 × 0.125 + 400 × 0.50 = 150 + 3 + 25 + 200
+    const short = usage({
+      inputTokens: 2000,
+      cachedInputTokens: 300,
+      cacheWriteTokens: 200,
+      outputTokens: 400,
+    });
+    expect(costOf("anthropic:claude-haiku-5-5", short, at).microUsd).toBe(378);
+    // Past 100K: 100 000 × 0.50 + 1000 × 0.05 + 1000 × 0.625 + 0 output
+    const long = usage({
+      inputTokens: 102_000,
+      cachedInputTokens: 1000,
+      cacheWriteTokens: 1000,
+      outputTokens: 0,
+    });
+    expect(costOf("anthropic:claude-haiku-5-5", long, at).microUsd).toBe(50_675);
+  });
+
+  it("charges cache reads as input when a price row has no cache rate", () => {
     const u = usage({ inputTokens: 2000, cachedInputTokens: 500, outputTokens: 400 });
-    expect(costOf("anthropic:claude-haiku-5-5", u, day("2026-11-07")).microUsd).toBe(400);
+    // 2000 × 0.10 + 400 × 0.50: the 500 cached tokens at the input rate.
+    expect(
+      priceCall(
+        { from: "2026-01-01", input: 0.1, output: 0.5 },
+        { ...u, inputTokens: 2000, outputTokens: 400 },
+      ),
+    ).toBe(400);
   });
 
   it("switches the whole call to the long-context rates past the prompt threshold", () => {

@@ -30,7 +30,9 @@ export interface ModelPrice {
    * Rates for the whole call once its prompt (cached tokens included) is over
    * `aboveInputTokens`. A receipt is a few thousand tokens; a 10-page PDF can cross it.
    */
-  longContext?: { aboveInputTokens: number; input: number; output: number };
+  longContext?: Pick<ModelPrice, "input" | "cachedInput" | "cacheWrite" | "output"> & {
+    aboveInputTokens: number;
+  };
 }
 
 export interface OcrModel {
@@ -72,15 +74,22 @@ export const OCR_MODELS: readonly OcrModel[] = [
     id: "anthropic:claude-haiku-5-5",
     provider: "anthropic",
     label: "Claude Haiku 5.5",
-    // No published cache-read rate for Haiku 5.5 yet; we send no cache_control, so reads stay 0.
-    // cacheWrite is unset on all three Claude models for the same reason: no request writes
-    // to the cache today. Add it (1.25x input for a 5-minute write) with the first cache_control.
+    // Cache reads 0.1x input, 5-minute cache writes 1.25x input, in both tiers. No request sets
+    // cache_control today, so these stay unused until one does.
     prices: [
       {
         from: "2026-11-07",
         input: 0.1,
+        cachedInput: 0.01,
+        cacheWrite: 0.125,
         output: 0.5,
-        longContext: { aboveInputTokens: 100_000, input: 0.5, output: 2.5 },
+        longContext: {
+          aboveInputTokens: 100_000,
+          input: 0.5,
+          cachedInput: 0.05,
+          cacheWrite: 0.625,
+          output: 2.5,
+        },
       },
     ],
   },
@@ -88,13 +97,13 @@ export const OCR_MODELS: readonly OcrModel[] = [
     id: "anthropic:claude-sonnet-5-5",
     provider: "anthropic",
     label: "Claude Sonnet 5.5",
-    prices: [{ from: "2026-11-07", input: 2, cachedInput: 0.2, output: 10 }],
+    prices: [{ from: "2026-11-07", input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 10 }],
   },
   {
     id: "anthropic:claude-opus-5-5",
     provider: "anthropic",
     label: "Claude Opus 5.5",
-    prices: [{ from: "2026-11-07", input: 4, cachedInput: 0.2, output: 20 }],
+    prices: [{ from: "2026-11-07", input: 4, cachedInput: 0.2, cacheWrite: 5, output: 20 }],
   },
   {
     id: "fixture",
@@ -159,8 +168,8 @@ export function priceCall(
   // Reasoning is already inside outputTokens; adding it again would double-count.
   const microUsd =
     (usage.inputTokens - cached - written) * tier.input +
-    cached * (price.cachedInput ?? tier.input) +
-    written * (price.cacheWrite ?? tier.input) +
+    cached * (tier.cachedInput ?? tier.input) +
+    written * (tier.cacheWrite ?? tier.input) +
     usage.outputTokens * tier.output;
   return Math.round(microUsd);
 }
