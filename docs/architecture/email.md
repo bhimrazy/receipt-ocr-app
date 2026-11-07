@@ -28,16 +28,16 @@ off `appUrl`, so a preview deployment's mail points at the preview. Without `sup
 
 ## Who sends what
 
-| Message          | Sent from                                                                                                  | When undelivered in production                 |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| Verification     | Better Auth `sendVerificationEmail` in [`lib/auth.ts`](../../apps/web/lib/auth.ts)                         | The auth request fails                         |
-| Password reset   | Better Auth `sendResetPassword`                                                                            | The auth request fails                         |
-| Invitation       | Organization plugin `sendInvitationEmail`                                                                  | The invite request fails                       |
+| Message          | Sent from                                                                                                  | When undelivered in production                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Verification     | Better Auth `sendVerificationEmail` in [`lib/auth.ts`](../../apps/web/lib/auth.ts)                         | The auth request fails                                             |
+| Password reset   | Better Auth `sendResetPassword`                                                                            | The auth request fails                                             |
+| Invitation       | Organization plugin `sendInvitationEmail`                                                                  | The invite request fails                                           |
 | Delete account   | Better Auth `sendDeleteAccountVerification`                                                                | Logged only (Better Auth 1.7.18 drops callback errors; see STATUS) |
 | Email change     | Better Auth `sendChangeEmailConfirmation`, to the current address                                          | Logged only (Better Auth 1.7.18 drops callback errors; see STATUS) |
-| Password changed | `onPasswordReset` and the `/change-password` after hook                                                    | Logged (`auth.notice_sent`); the change stands |
-| Support message  | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts), to `SUPPORT_EMAIL`, reply-to the sender | The route returns `503`                        |
-| Test email       | Admin settings, [`lib/test-email.ts`](../../apps/web/lib/test-email.ts)                                    | The admin sees "failed"                        |
+| Password changed | `onPasswordReset` and the `/change-password` after hook                                                    | Logged (`auth.notice_sent`); the change stands                     |
+| Support message  | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts), to `SUPPORT_EMAIL`, reply-to the sender | The route returns `503`                                            |
+| Test email       | Admin settings, [`lib/test-email.ts`](../../apps/web/lib/test-email.ts)                                    | The admin sees "failed"                                            |
 
 In `lib/auth.ts`, `deliver()` throws when a message is not delivered and `NODE_ENV` is production, so a user is never
 told "check your inbox" for mail that was not sent. Link lifetimes are constants there (`VERIFY_LINK_SECONDS`, which
