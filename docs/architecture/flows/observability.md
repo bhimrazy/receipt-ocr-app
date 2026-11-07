@@ -60,9 +60,13 @@ finds a request and every job attempt it caused.
 [`sanitize`](../../../packages/core/src/telemetry/redact.ts) runs inside `formatEvent`, before any sink:
 
 - Unknown keys are dropped at any depth; their paths (never their values) go in `dropped_fields`.
-- `id` values must look like ids (no `@`, no spaces), `token` values like our own codes, `route` values lose any query
-  string or hash. Maps and lists are filtered entry by entry and capped (32 keys, 20 items).
+- `uuid` values (`receipt_id`, `group_id`, `job_id`, `request_id`) must be UUIDs; `id` values (Better Auth user and
+  workspace ids, worker ids) must look like ids (no `@`, no spaces); `token` values like our own codes; `route` values
+  lose any query string or hash. Only the schema's own keys count, so `constructor`, `toString` and `__proto__` are
+  unknown keys, and map keys that touch a prototype are dropped. Maps and lists are filtered entry by entry and capped (32 keys, 20 items).
 - Only plain objects are walked: an `Error`, a `Map` or a class instance in a group is dropped whole.
+- Logging never breaks the work it describes: `logger.emit` and `errorFields` catch their own failures (a throwing
+  getter becomes `log.failed` or `error.type: "Unreadable"`).
 - Errors are described by [`errorFields`](../../../packages/core/src/telemetry/redact.ts): the tagged error's `type`
   and `kind`, the cause's class and a Postgres SQLSTATE. Never the message or stack, because provider and Drizzle
   messages embed receipt data and bound `params:`.
@@ -72,10 +76,19 @@ prompt or model output. Adding one means adding it to the schema, which is where
 
 ## Sampling
 
-[`sampling.ts`](../../../packages/core/src/telemetry/sampling.ts) decides after the unit has finished. Errors (status
-4xx or 5xx, an `error` field, level `error`), slow units (`duration_ms` at or above `LOG_SLOW_MS`, default 1000) and
-anything that called a model are always kept. Only routine units are sampled, at `LOG_SAMPLE_RATE` (default 1, `0.1`
-in production), and a kept sampled line carries `sample_rate` so counts can be weighted back up.
+[`sampling.ts`](../../../packages/core/src/telemetry/sampling.ts) decides after the unit has finished. Errors (5xx,
+4xx other than 401 and 429, an `error` field, level `error`), slow units (`duration_ms` at or above `LOG_SLOW_MS`,
+default 1000) and anything that called a model are always kept. Only routine units are sampled, at `LOG_SAMPLE_RATE`
+(default 1, `0.1` in production), and a kept sampled line carries `sample_rate` so counts can be weighted back up.
+
+What counts as routine:
+
+- Routes declare it in `withRequestEvent` as a flag or a per-request predicate. Auth GETs are routine only for
+  session and list reads (`lib/auth-routine.ts`); OAuth callbacks, email verification and password resets answer
+  with redirects that can hide a failure, so they are always logged.
+- Any 429 response is routine, and a 401 on a routine route is not counted as an error, so a flood can't fill the
+  logs. The CSP-report route skips the event entirely (`skipEvent`) once its per-IP limiter rejects.
+- A unit that logged a notice is never routine (requests, page renders and ticks alike).
 
 ## Effect code
 

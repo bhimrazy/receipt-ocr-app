@@ -35,6 +35,9 @@ Production runs on Vercel (app), Supabase (Postgres), Cloudflare R2 (receipt fil
 
    **Find one request.** API responses carry the request id in the `x-request-id` header. Search for it:
    `grep '"request_id":"<id>"'`. The request's own event and every `job.attempt` it started share that id.
+   Caveat: the id is per request, not per user action. A page render's id (`/app`, `/admin`) is set by `proxy.ts` and is
+   not returned to the browser, so a render is found by `route`, `user_id` and time instead. A client-sent
+   `x-request-id` is never trusted: API routes and error reports outside `/app` and `/admin` make their own.
 
    **Find a receipt's history.** Search for `"receipt_id":"<id>"`: the upload or retry request, each `job.attempt`
    (`attempt`, `round`, `queue.outcome`, `error.kind`, `ocr.model`) and the polls. `"job_id":"<id>"` narrows it to one
