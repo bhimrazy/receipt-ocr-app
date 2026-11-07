@@ -1,6 +1,7 @@
 export * from "./admin";
 export * from "./backoff";
 export * from "./definition";
+export * from "./drain";
 export * from "./kinds/receipt-extract";
 export * from "./queue";
 export * from "./receipt-extract-job";
