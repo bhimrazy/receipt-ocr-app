@@ -3,6 +3,7 @@ import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import { ConsentManager } from "@/components/consent/consent-manager";
 import { Pwa } from "@/components/pwa";
 import { gaMeasurementId } from "@/lib/consent/env";
+import { startupImages } from "@/lib/ios-splash";
 import { siteDescription, siteTitle, siteUrl } from "@/lib/site";
 import "./globals.css";
 
@@ -47,6 +48,7 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "black",
     title: "receiptOCR",
+    startupImage: startupImages,
   },
 };
 

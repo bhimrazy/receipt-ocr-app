@@ -7,6 +7,7 @@ import {
 import { providerAvailability, receiptReaders, Settings } from "@receipt-ocr/core";
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { Effect } from "effect";
+import { AboutSettings } from "@/components/about-settings";
 import { AccountSettings } from "@/components/account-settings";
 import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsSection } from "@/components/settings-section";
@@ -120,6 +121,8 @@ export default async function SettingsPage() {
       <ReceiptReadingSettings readers={readers} />
 
       <AccountSettings email={session.user.email} name={session.user.name ?? ""} />
+
+      <AboutSettings />
     </div>
   );
 }

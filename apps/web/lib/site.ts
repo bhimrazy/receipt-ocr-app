@@ -38,3 +38,8 @@ export function canonicalFor(path: string): { canonical: string } | undefined {
 export const siteTitle = "Receipt OCR: Turn Receipt Photos into CSV | receiptOCR";
 
 export const siteDescription = `Receipt OCR that turns receipt photos and PDFs into spreadsheet rows. Extracts merchant, date, line items, tax and total with confidence scores. Free to start, no card required.`;
+
+export const authorName = "Bhimraj Yadav";
+export const authorUrl = "https://bhimraj.com.np";
+// The CLI behind the same idea; it will later work with this site.
+export const repoUrl = "https://github.com/bhimrazy/receipt-ocr";
