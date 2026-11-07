@@ -1,7 +1,8 @@
 name: Vercel Production Deployment
 
-# Deploys only after CI (lint, format, dependencies, audit, typecheck, tests, build, e2e) passes
-# on a push to main.
+# Runs only after CI (lint, format, dependencies, audit, typecheck, tests, build, e2e) passes on a
+# push to main, or by hand from main: migrate staging, then production, then deploy. A failed
+# migration stops the pipeline before the deploy; see docs/runbook.md.
 on:
   workflow_run:
     workflows: [CI]
@@ -16,10 +17,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy-production:
+  migrate-staging:
     if: >-
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/db-migrate.yml
+    with:
+      environment: staging-db
+      # The commit CI tested, not whatever main points at now.
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+  # Staging goes first so a migration that fails there never reaches production.
+  migrate-production:
+    needs: migrate-staging
+    permissions:
+      contents: read
+    uses: ./.github/workflows/db-migrate.yml
+    with:
+      environment: production-db
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+  deploy-production:
+    # Code ships only onto a schema that already has its migrations.
+    needs: migrate-production
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     environment: vercel

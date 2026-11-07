@@ -1,0 +1,65 @@
+name: Database Migration
+
+# Applies apps/web/drizzle migrations to one database. production.yml calls this for staging and
+# then production before every deploy; run it by hand (Actions → Database Migration → Run workflow,
+# from main) to retry a failed migration. PR previews never run it: see docs/deployment.md.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment holding the DIRECT_URL secret.
+        type: string
+        required: true
+      ref:
+        description: Commit whose migrations to apply. Defaults to the triggering commit.
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Database to migrate, from main.
+        type: choice
+        options: [staging-db, production-db]
+        required: true
+
+permissions: {}
+
+jobs:
+  migrate:
+    name: Migrate ${{ inputs.environment }}
+    # Both environments only admit main; this makes a run from another branch skip, not fail.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    # One migration per database at a time, across the deploy pipeline and manual runs. Queued,
+    # never cancelled mid-run: drizzle applies each migration in a transaction, but a killed
+    # runner should not be the reason to find out.
+    concurrency:
+      group: db-migrate-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+
+      - name: Check the secret is set
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          TARGET: ${{ inputs.environment }}
+        run: |
+          if [ -z "$DIRECT_URL" ]; then
+            echo "::error::DIRECT_URL is not set in the '$TARGET' environment."
+            exit 1
+          fi
+
+      # drizzle.config.ts reads DIRECT_URL (session pooler, port 5432). No --verbose: the URL and
+      # the SQL stay out of the log.
+      - name: Apply migrations
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: bun run db:migrate
