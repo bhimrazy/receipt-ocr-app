@@ -151,8 +151,9 @@ Migrations run **only by hand**, through [`db-migrate.yml`](../.github/workflows
 it, and previews never do.
 
 `production.yml` never deploys code whose migrations may not be applied. On its automatic path it compares
-`apps/web/drizzle/` between the commit CI tested and the `production-deployed` tag (moved after every successful
-deploy by its `record-deploy` job). If anything changed there, or the tag is missing, it skips the deploy and the run
+`apps/web/drizzle/` between the commit CI tested and the commit of the last run on `main` whose `deploy-production` job succeeded
+(`.github/scripts/last-deployed-sha.sh`, through the Actions API; CI creates no git tags). If anything changed there,
+or no such run is found, it skips the deploy and the run
 summary says what to do. A manual run instead checks that CI passed on the commit and that the newest successful
 **Database Migration** run for `production-db` had the same `apps/web/drizzle/`; otherwise it refuses: "main has
 migrations production hasn't run: run Database Migration for production-db first."
@@ -265,8 +266,9 @@ A release without migration changes deploys by itself after CI. For one with mig
 1. **See what's new since the last deploy:**
 
    ```bash
-   git fetch origin --tags
-   git diff --name-only production-deployed origin/main -- apps/web/drizzle '*.env.example'
+   git fetch origin
+   GITHUB_REPOSITORY=bhimrazy/receipt-ocr-app .github/scripts/last-deployed-sha.sh  # last deployed commit
+   git diff --name-only <that sha> origin/main -- apps/web/drizzle '*.env.example'
    ```
 
    New files in `apps/web/drizzle/` are migrations. Changes to an `.env.example` mean new or changed variables.

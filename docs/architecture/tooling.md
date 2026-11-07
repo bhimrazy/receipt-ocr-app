@@ -105,13 +105,37 @@ Images are pinned by digest. Containers have no restart policy, so they stay sto
 
 ## CI workflows
 
-| Workflow                                                   | Trigger                                                  | Jobs                                                                                                                                                                         |
-| ---------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`ci.yml`](../../.github/workflows/ci.yml)                 | Every PR, every push to `main`                           | `static` (format, lint, deps, knip, audit), `checks` (typecheck, unit tests, build), `e2e` (Postgres and RustFS services, migrations, integration suites, build, Playwright) |
-| [`preview.yml`](../../.github/workflows/preview.yml)       | Every PR                                                 | Vercel preview deploy and a PR comment with its URL. Skipped for Dependabot                                                                                                  |
-| [`production.yml`](../../.github/workflows/production.yml) | CI succeeded on a push to `main`, or by hand from `main` | Deploys the exact commit CI tested to Vercel production; the automatic run skips when migrations changed since the `production-deployed` tag                                 |
-| [`db-migrate.yml`](../../.github/workflows/db-migrate.yml) | By hand from `main` only                                 | `bun run db:migrate` against `staging-db` or `production-db` (GitHub environments holding `DIRECT_URL`), one run per database at a time                                      |
-| [`load.yml`](../../.github/workflows/load.yml)             | By hand only (workflow_dispatch)                         | Builds the image, runs `scripts/load.sh` with the chosen scenarios and limits, uploads the report. No secrets                                                                |
+| Workflow                                                   | Trigger                                                  | Jobs                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`ci.yml`](../../.github/workflows/ci.yml)                 | Every PR, every push to `main`                           | `changes` (which files the PR touched), `static` (format, lint, deps, knip, audit), `checks` (typecheck, unit tests, build), `e2e` (Postgres and RustFS services, migrations, integration suites overlapping the build, Playwright), `e2e-turnstile`, and `ci-ok` |
+| [`preview.yml`](../../.github/workflows/preview.yml)       | PR opened, pushed, ready for review or labelled          | Vercel preview deploy and a PR comment with its URL, only when the PR needs one (see below)                                                                                                                                                                       |
+| [`production.yml`](../../.github/workflows/production.yml) | CI succeeded on a push to `main`, or by hand from `main` | Deploys the exact commit CI tested to Vercel production; the automatic run skips when migrations changed since the last successful production deploy run                                                                                                          |
+| [`db-migrate.yml`](../../.github/workflows/db-migrate.yml) | By hand from `main` only                                 | `bun run db:migrate` against `staging-db` or `production-db` (GitHub environments holding `DIRECT_URL`), one run per database at a time                                                                                                                           |
+| [`load.yml`](../../.github/workflows/load.yml)             | By hand only (workflow_dispatch)                         | Builds the image, runs `scripts/load.sh` with the chosen scenarios and limits, uploads the report. No secrets                                                                                                                                                     |
+
+### CI speed
+
+- A new push to a PR cancels its running CI; runs on `main` are never cancelled, because production deploys the commit
+  whose CI succeeded.
+- `changes` lists the PR's files (merge commit against its base). Docs and Markdown only: just `static`. Also
+  `bench/` and unrelated workflows: `static` and `checks` but no e2e. Pushes to `main` run everything.
+- Skipped jobs report success. `ci-ok` is the one job to require: it fails if any job failed or was cancelled.
+- [`next-cache`](../../.github/actions/next-cache/action.yml) keeps `apps/web/.next/cache` (Turbopack's build cache) per
+  job, keyed by lockfile and source hash. [`playwright`](../../.github/actions/playwright/action.yml) caches the
+  Chromium download by Playwright version; system libraries are installed every time.
+- In `e2e` the integration suites and `next build` run side by side: the build needs no database.
+- Unit tests: one Vitest run takes about 13 s on a runner and is dominated by startup and one 8 s file
+  (`pdf-pages.test.ts`), so pool settings are left at the defaults.
+- E2E auth forms set `data-ready` once hydrated and the helpers wait for it. Typing before hydration is lost and an early
+  submit reloads the page, which showed up as sign-up staying on `/sign-up`.
+
+### Vercel previews
+
+The free plan allows 100 deployments a day and 10 GB of function storage, and every deployment keeps its function
+bundles. A PR gets a preview when it is not a draft and changes a file that ships; the `preview` label forces one
+(drafts and docs-only PRs included). Never for Dependabot or fork PRs. A newer push cancels the deploy in flight, and
+labels other than `preview` don't. Docs, Markdown, tests, `bench/`, `scripts/` and CI config other than `preview.yml` don't
+count as shipping.
 
 All third-party actions are pinned to a commit SHA. [`.github/actions/setup-bun`](../../.github/actions/setup-bun/action.yml)
 installs the pinned Bun and runs `bun install --frozen-lockfile` with a cache. The Vercel CLI has its own pinned

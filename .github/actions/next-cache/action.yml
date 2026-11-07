@@ -1,0 +1,20 @@
+name: Next.js build cache
+description: Restore and save apps/web/.next/cache (Turbopack's build cache) between runs.
+
+inputs:
+  scope:
+    description: Cache name per job, because the jobs build with different inline NEXT_PUBLIC_* values.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # A hit on the exact source hash saves nothing new; otherwise the newest cache for the lockfile is
+    # restored and Turbopack rebuilds only what changed.
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: apps/web/.next/cache
+        key: next-${{ runner.os }}-${{ inputs.scope }}-${{ hashFiles('bun.lock') }}-${{ hashFiles('apps/web/app/**', 'apps/web/components/**', 'apps/web/lib/**', 'packages/*/src/**', 'apps/web/next.config.ts') }}
+        restore-keys: |
+          next-${{ runner.os }}-${{ inputs.scope }}-${{ hashFiles('bun.lock') }}-
+          next-${{ runner.os }}-${{ inputs.scope }}-

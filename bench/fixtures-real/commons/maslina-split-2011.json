@@ -1,0 +1,45 @@
+{
+  "merchant": ["Konoba-Pizzeria Maslina", "Pizzeria Maslina", "Maslina"],
+  "receiptDate": "2011-10-23",
+  "category": "Meals",
+  "currency": "HRK",
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": 134,
+  "items": [
+    {
+      "name": "San Sebastijan sre",
+      "quantity": 1,
+      "unitPrice": 50,
+      "totalPrice": 50
+    },
+    {
+      "name": "Cetiri godisnja do",
+      "quantity": 1,
+      "unitPrice": 43,
+      "totalPrice": 43
+    },
+    {
+      "name": "Salata sezonska",
+      "quantity": 1,
+      "unitPrice": 15,
+      "totalPrice": 15
+    },
+    {
+      "name": "Toceno-0,3L",
+      "quantity": 1,
+      "unitPrice": 12,
+      "totalPrice": 12
+    },
+    {
+      "name": "Ozujsko limun 0.33",
+      "quantity": 1,
+      "unitPrice": 14,
+      "totalPrice": 14
+    }
+  ],
+  "_source": "https://commons.wikimedia.org/wiki/File:Croatia_pizza_receipt.jpg",
+  "_license": "CC BY-SA 3.0",
+  "_notes": "Read by me. Real photo (Croatia), small 600x690. Date from 'Rn. 0017981 23.10.11'. HRK (kuna) inferred from country/year; no currency printed. 50+43+15+12+14 = 134 (adds up). PDV (VAT) included, amount not printed. Item names are truncated on the receipt. Author: Macic7."
+}

@@ -18,9 +18,15 @@ async function giveFreshClientIp(page: Page) {
   await page.context().setExtraHTTPHeaders({ "x-forwarded-for": ip });
 }
 
+/** Typing before React hydrates is lost and a submit reloads the page; the form flags when it is ready. */
+export async function waitForAuthForm(page: Page) {
+  await page.locator("form[data-ready='true']").waitFor();
+}
+
 export async function signUp(page: Page, email: string) {
   await giveFreshClientIp(page);
   await page.goto("/sign-up");
+  await waitForAuthForm(page);
   await page.getByLabel("Name").fill("E2E User");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
@@ -36,6 +42,7 @@ export async function signOut(page: Page) {
 
 export async function signIn(page: Page, email: string) {
   await page.goto("/sign-in");
+  await waitForAuthForm(page);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();

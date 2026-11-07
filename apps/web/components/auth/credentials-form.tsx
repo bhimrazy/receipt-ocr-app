@@ -5,7 +5,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { Turnstile, useTurnstile } from "@/components/turnstile";
 import { authClient } from "@/lib/auth-client";
@@ -65,6 +65,8 @@ const providerIcons: Record<SocialProvider, () => React.ReactNode> = {
 
 type FormError = { message: string; signInInstead?: boolean };
 
+const subscribeNever = () => () => {};
+
 export function CredentialsForm({
   mode,
   providers,
@@ -86,6 +88,12 @@ export function CredentialsForm({
 }) {
   const router = useRouter();
   const turnstile = useTurnstile();
+  // False on the server and during hydration, true once handlers are attached (e2e waits on it).
+  const hydrated = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -239,7 +247,7 @@ export function CredentialsForm({
         <div className="mt-6" />
       )}
 
-      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit} data-ready={hydrated}>
         {isSignUp ? (
           <AuthField
             autoComplete="name"

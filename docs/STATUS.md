@@ -49,15 +49,16 @@ Steps are in [deployment.md](deployment.md).
   Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
 - Production deploys automatically after CI passes on a push to `main`. Manual runs are allowed only from `main`.
   Once `ci/db-migrations` lands, the automatic deploy skips any release that changes `apps/web/drizzle/` since the
-  `production-deployed` tag; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
+  last successful production deploy run; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
   with the owner's approval), then the deploy is run by hand. Production and staging are reset to the squashed baseline.
 - `staging-db` and `production-db` exist (`main` only, `DIRECT_URL` set, required reviewer on `production-db`).
   Still to do for `ci/db-migrations`: point Vercel's Preview variables at `receipt-ocr-staging`, leave
   `BETTER_AUTH_URL` unset there and turn on Deployment Protection for previews
   ([deployment.md](deployment.md#staging-and-previews)). After merging, once: run **Database Migration** for
   `staging-db`, then `production-db` (applies the baseline), then **Vercel Production Deployment** by hand. Manual
-  deploys need a successful `production-db` run with the same migrations, and there is no `production-deployed` tag
-  yet, so automatic deploys skip until that deploy creates it.
+  deploys need a successful `production-db` run with the same migrations. The automatic gate compares with the last
+  run of the workflow on `main` whose `deploy-production` job succeeded; CI creates no git tags (tags are for real
+  releases, later).
 - `feat/anthropic-provider` adds migration `0001_ocr_call_refused_unsupported` (widens `ocr_calls_status_check`
   with `refused` and `unsupported-file`; existing rows stay valid). Run **Database Migration** before deploying it:
   without it, a refused or skipped call fails its ledger insert.
@@ -146,12 +147,18 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
    Currency honesty (no USD default, 3-decimal amounts) and conversion to a home currency:
    [currencies and FX](plans/2026-11-06-currencies-fx.md).
+10. Read-only agent access over MCP: personal tokens first, then OAuth for Claude.ai and ChatGPT ([MCP server](plans/2026-11-07-mcp-server.md)).
+
+## Later, once the app is stable (owner notes, 2026-11-07)
+
+- **Release-based deploys.** Today every push to `main` deploys after CI (migrations by hand). Move to deploying
+  tagged releases (for example `v0.x.y` with release notes), so `main` can take merges without each one going live.
+- **Self-hosting.** Vercel's free (Hobby) plan is for non-commercial use and has hard monthly limits; a busy month or
+  paying users outgrow it. The exit is already built: the Docker image (`docker/Dockerfile.prod`, Bun runtime), the
+  compose stack and the 1 vCPU / 1 GB load test. Decide between Vercel Pro and a small VPS (plus managed Postgres and
+  R2, which stay as they are) when traffic or billing makes it necessary.
 
 ## Known follow-ups
-
-- Deploy record (review P3-1, P3-2 on #55): the `production-deployed` tag is moved by `record-deploy` with
-  `GITHUB_TOKEN`. Consider a tag ruleset (only Actions may move it) or GitHub Deployments as the record, and watch the
-  first `record-deploy` after a release that changes workflows.
 
 - FAQ uses a raw `<details>`; add a server-friendly Disclosure primitive to `packages/ui`.
 - PDF page cap gaps: the hand-written page counter (`packages/core/src/pdf-pages.ts`) can undercount when the word

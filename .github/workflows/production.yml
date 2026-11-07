@@ -5,7 +5,8 @@ name: Vercel Production Deployment
 # Migration workflow), so such a release waits for them and a manual run of this workflow. A manual
 # run from main deploys once CI passed on its commit and production-db ran the same migrations. See docs/deployment.md, Every release.
 on:
-  workflow_run:
+  # Runs main's own file; the gate job only passes a successful CI push on main in this repo.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [CI]
     types: [completed]
     branches: [main]
@@ -37,7 +38,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          # Full history and tags, to diff against the last deployed commit.
+          # Full history, to diff against the last deployed commit.
           fetch-depth: 0
           persist-credentials: false
 
@@ -75,9 +76,13 @@ jobs:
             echo "Manual run: CI passed and production-db last migrated ${migrated:0:12} with the same migrations; deploying." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # Moved by the record-deploy job after every successful deploy.
-          if ! last=$(git rev-parse --verify --quiet "refs/tags/production-deployed^{commit}"); then
-            skip "Can't find the last production deploy (tag production-deployed is missing). Run this workflow by hand from main once migrations are applied; that deploy sets the tag."
+          # Newest main run whose deploy-production job succeeded; fails closed.
+          if ! last=$(.github/scripts/last-deployed-sha.sh); then
+            skip "Can't find the last production deploy (no run of this workflow on main with a successful deploy-production job, or the lookup failed). Run this workflow by hand from main once migrations are applied."
+            exit 0
+          fi
+          if ! git cat-file -e "$last^{commit}" 2>/dev/null; then
+            skip "The last production deploy (${last:0:12}) isn't in this checkout's history; can't compare migrations."
             exit 0
           fi
           changed=$(git diff --name-only "$last" "$HEAD_SHA" -- apps/web/drizzle/)
@@ -97,6 +102,7 @@ jobs:
     permissions:
       contents: read
     env:
+      VERCEL_BIN: ${{ github.workspace }}/.github/vercel-cli/node_modules/.bin/vercel
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
@@ -110,40 +116,20 @@ jobs:
       - name: Install Vercel CLI (pinned, own lockfile)
         run: |
           bun install --frozen-lockfile --cwd .github/vercel-cli
-          echo "$GITHUB_WORKSPACE/.github/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Pull Vercel environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel pull --yes --environment=production
+        run: |
+          "$VERCEL_BIN" pull --yes --environment=production
 
       # No token for the build step: it runs repository code, which only needs the pulled settings.
       - name: Build project
-        run: vercel build --prod
+        run: |
+          "$VERCEL_BIN" build --prod
 
       - name: Deploy to production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel deploy --prebuilt --prod --archive=tgz
-
-  # Records what's live, for the next run's gate. Separate job: the only one with write access, and
-  # it runs no repository code.
-  record-deploy:
-    needs: deploy-production
-    runs-on: ubuntu-26.04
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    steps:
-      - name: Move the production-deployed tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
-          if gh api "repos/$REPO/git/ref/tags/production-deployed" --silent 2>/dev/null; then
-            gh api -X PATCH "repos/$REPO/git/refs/tags/production-deployed" -f sha="$SHA" -F force=true --silent
-          else
-            gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/production-deployed -f sha="$SHA" --silent
-          fi
-          echo "Tagged $SHA as production-deployed." >> "$GITHUB_STEP_SUMMARY"
+          "$VERCEL_BIN" deploy --prebuilt --prod --archive=tgz
