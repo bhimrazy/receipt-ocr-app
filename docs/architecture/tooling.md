@@ -30,8 +30,9 @@ directly (`transpilePackages`).
 
 ## OCR benchmark
 
-[`bench/ocr.ts`](../../bench/ocr.ts), run with `bun run bench:ocr`. It calls real models, billed to
-`GOOGLE_GENERATIVE_AI_API_KEY`.
+[`bench/ocr.ts`](../../bench/ocr.ts), run with `bun run bench:ocr`. It calls real models, billed to each chosen
+provider's key (`GOOGLE_GENERATIVE_AI_API_KEY`, `ANTHROPIC_API_KEY`). `--dry-run` prints a cost estimate and calls
+nothing.
 
 ```mermaid
 flowchart LR

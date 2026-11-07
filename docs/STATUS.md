@@ -58,6 +58,7 @@ Steps are in [deployment.md](deployment.md).
 | `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying) |
 | `feat/dashboard`           | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                          |
 | `feat/consent-analytics`   | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                   |
+| `feat/anthropic-provider`  | Anthropic as a second OCR provider: Claude Haiku 5.5, Sonnet 5.5, Opus 5.5 selectable in Admin → Settings; Gemini stays the default. Benchmark not run yet           |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -72,7 +73,8 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
    [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
 4. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
-5. Second AI provider (recommended: Anthropic Haiku), direct keys vs Vercel AI Gateway.
+5. Anthropic (direct key, `ANTHROPIC_API_KEY`): approve the Claude benchmark spend (dry-run estimate about $0.34 for
+   the six fixtures on all three models), then which Claude model, if any, joins the production chain and where.
 6. PostHog: server-only first (recommended) or browser too; Sentry tracing off; source-map upload approach.
 7. Members: free seats 3 or 5, single owner + transfer, pending invites count. See
    [members plan](plans/2026-11-06-members-admin-plan.md).
@@ -100,7 +102,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    Benchmark set and engines to compare (Qwen3-VL-8B via an OpenAI-compatible host, LlamaExtract, Mistral OCR):
    [parsers landscape](plans/2026-11-06-parsers-landscape.md). LangChain, Reducto, Unstructured and OCR-to-markdown
    models: no.
-5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
+5. Second provider: Anthropic wired in (`feat/anthropic-provider`); admitted to the default chain only by the
+   benchmark. Then OpenAI.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
    Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations take the next free numbers after `0008` (job queue).
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
