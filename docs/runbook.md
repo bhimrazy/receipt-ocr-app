@@ -190,9 +190,9 @@ Don't run `db:migrate` from a laptop against production unless Actions is down.
 The **Vercel Production Deployment** run is green but `deploy-production` was skipped, and the summary says why:
 
 - **"This release adds migrations"**: expected. Follow deployment.md, Every release, steps 6 to 8.
-- **"Can't find the last production deploy"**: the `production-deployed` tag is missing. Run **Database Migration**
-  for `staging-db`, then `production-db` (a no-op when up to date), then run the workflow by hand on `main`. That
-  deploy sets the tag.
+- **"Can't find the last production deploy"**: no run of the workflow on `main` (among the last 50) has a successful
+  `deploy-production` job, or the lookup failed. Run **Database Migration** for `staging-db`, then `production-db` (a
+  no-op when up to date), then run the workflow by hand on `main`; that deploy becomes the new reference.
 
 ### Manual deploy refused
 

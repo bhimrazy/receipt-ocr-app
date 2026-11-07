@@ -25,11 +25,10 @@ sequenceDiagram
   Dev->>GH: squash-merge to main
   GH->>CI: same jobs on the main commit
   CI-->>PR: workflow_run: CI completed with success on a push
-  PR->>PR: gate: diff apps/web/drizzle against tag production-deployed
+  PR->>PR: gate: diff apps/web/drizzle against the last successful deploy run
   alt no migration changes
     PR->>V: vercel pull, vercel build --prod, vercel deploy --prebuilt --prod
-    PR->>GH: record-deploy: move tag production-deployed
-  else migrations changed, or no tag
+  else migrations changed, or no previous deploy
     PR->>GH: skip the deploy; summary says to run Database Migration
     Dev->>M: run by hand on main: staging-db
     M->>SDB: bun run db:migrate with DIRECT_URL
@@ -38,7 +37,6 @@ sequenceDiagram
     Dev->>PR: run by hand on main
     PR->>PR: gate: CI passed on the commit, production-db ran the same migrations
     PR->>V: vercel pull, vercel build --prod, vercel deploy --prebuilt --prod
-    PR->>GH: record-deploy: move tag production-deployed
   end
 ```
 
@@ -54,9 +52,9 @@ sequenceDiagram
   push to `main` from this repository, or when started by hand from `main` (a manual run on another branch is
   skipped). It runs one at a time (`cancel-in-progress: false`) and builds the commit CI tested rather than whatever
   `main` points at by then. Its `gate` job skips the automatic deploy when `apps/web/drizzle/` differs from the
-  `production-deployed` tag, or the tag is missing; a manual run deploys only if CI passed on its commit and the newest successful `production-db` migration run
-  had the same `apps/web/drizzle/`. `record-deploy`, the only job with
-  `contents: write` and no repository code, moves the tag after each deploy.
+  commit of the last run whose `deploy-production` job succeeded (found with `last-deployed-sha.sh` through the Actions
+  API; no git tag), or that run can't be found; a manual run deploys only if CI passed on its commit and the newest
+  successful `production-db` migration run had the same `apps/web/drizzle/`.
 - The Vercel token is given only to the `pull` and `deploy` steps. The build step runs repository code and gets no
   token. Deploys upload one archive (`--archive=tgz`) to stay under the free plan's file-upload quota.
 
@@ -73,9 +71,9 @@ off the same database. `drizzle-kit` applies all pending files in one transactio
 
 ```mermaid
 flowchart LR
-  merge["merge to main, CI green"] --> gate{"apps/web/drizzle changed<br/>since production-deployed?"}
-  gate -- no --> d["deploy, move tag"]
-  gate -- "yes, or no tag" --> skip["skip deploy"]
+  merge["merge to main, CI green"] --> gate{"apps/web/drizzle changed<br/>since the last deploy run?"}
+  gate -- no --> d["deploy"]
+  gate -- "yes, or no previous deploy" --> skip["skip deploy"]
   skip --> s["Database Migration:<br/>staging-db"]
   s --> p["Database Migration:<br/>production-db (approve)"]
   p --> m["production.yml by hand"]
