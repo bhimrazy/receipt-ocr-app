@@ -90,7 +90,7 @@ type RawJob = {
   locked_by: string | null;
   locked_until: string | Date | null;
   last_error_kind: string | null;
-  wait_ms?: number | null;
+  wait_ms?: number | string | null;
 };
 
 const toDate = (value: string | Date) => (value instanceof Date ? value : new Date(value));
@@ -253,7 +253,7 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
                   started_at = now(), updated_at = now()
                 from picked where j.id = picked.id
                 returning ${COLUMNS},
-                  greatest(0, extract(epoch from now() - j.run_at) * 1000)::int as wait_ms`,
+                  greatest(0, extract(epoch from now() - j.run_at) * 1000)::bigint as wait_ms`,
               );
             }),
 
