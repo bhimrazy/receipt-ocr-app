@@ -9,7 +9,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=... bun run bench:ocr [--models google:gemini-3.8-f
 Real provider calls, billed to the key. Without the key the script exits with a message.
 
 - Fixtures: `fixtures/<id>.{jpg,png,pdf}` plus `<id>.json` ground truth (same fields as the extraction; omit a
-  field to skip it). The five starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, EUR comma
+  field to skip it). The six starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, KWD three decimals, EUR comma
   decimals, IDR dot thousands, a tip, a 34-line receipt. Add real, PII-free receipts the same way (faded
   thermal, skewed phone shots, handwritten totals).
 - Scoring (`score.ts`, unit-tested): exact currency/date/category; total/tax/subtotal/tip within 0.01 (a missing
@@ -21,6 +21,15 @@ Real provider calls, billed to the key. Without the key the script exits with a 
   model registry's effective-dated table in `packages/ai/src/models.ts`, the same prices the app stores per call.
   `n/a` when no call reported usage.
 - The only call into `packages/ai` is `extract()` in `ocr.ts`; change that one function if the export is renamed.
+
+## Image shrinker
+
+```bash
+bun run bench:encode
+```
+
+Runs `apps/web/lib/upload-prep.ts` in headless Chromium over the fixture PNGs and synthetic noisy photos (a 12 MP
+photo, tall 1:4 and 1:6 receipts) and prints dimensions, bytes, final quality and encode attempts. No model calls.
 
 ## Load test (small server)
 

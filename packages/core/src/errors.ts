@@ -10,6 +10,11 @@ export class NotFound extends Data.TaggedError("NotFound")<{
   readonly message: string;
 }> {}
 
+/** The caller is in the workspace but their role doesn't allow this action. */
+export class Forbidden extends Data.TaggedError("Forbidden")<{
+  readonly message: string;
+}> {}
+
 /** The receipt is not in a state that allows the action (e.g. retrying a completed one). */
 export class Conflict extends Data.TaggedError("Conflict")<{
   readonly message: string;
@@ -67,6 +72,7 @@ export class ProvidersCooling extends Data.TaggedError("ProvidersCooling")<{
 export type AppError =
   | InvalidInput
   | NotFound
+  | Forbidden
   | Conflict
   | QuotaExceeded
   | NotConfigured

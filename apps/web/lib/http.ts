@@ -10,6 +10,7 @@ import { runtime } from "./runtime";
 const STATUS: Record<AppError["_tag"], number> = {
   InvalidInput: 400,
   NotFound: 404,
+  Forbidden: 403,
   Conflict: 409,
   QuotaExceeded: 429,
   NotConfigured: 503,
@@ -19,7 +20,13 @@ const STATUS: Record<AppError["_tag"], number> = {
 };
 
 /** Messages from these are safe to show; the rest are internal and get a generic one. */
-const PUBLIC = new Set<AppError["_tag"]>(["InvalidInput", "NotFound", "Conflict", "QuotaExceeded"]);
+const PUBLIC = new Set<AppError["_tag"]>([
+  "InvalidInput",
+  "NotFound",
+  "Forbidden",
+  "Conflict",
+  "QuotaExceeded",
+]);
 
 export const jsonError = (status: number, error: string, headers?: HeadersInit) =>
   NextResponse.json({ error }, { status, headers });

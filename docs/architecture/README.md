@@ -83,16 +83,16 @@ flowchart TD
 `packages/db` directly for Better Auth's adapter and a few membership counts. All receipt work goes through
 `packages/core`.
 
-| Path                                         | Role                                                                                   | Page                     |
-| -------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------ |
-| [`apps/web`](../../apps/web)                 | Pages, route handlers, server actions, Better Auth config. Thin adapters over core.    | [web.md](web.md)         |
-| [`packages/core`](../../packages/core)       | The receipt workflow, quota, usage ledger, settings, admin writes. Effect TS services. | [core.md](core.md)       |
-| [`packages/ai`](../../packages/ai)           | One model call: schema, prompt, error kinds, usage, the model list and its prices.     | [ai.md](ai.md)           |
-| [`packages/db`](../../packages/db)           | Drizzle schema for every table and the shared connection pool.                         | [db.md](db.md)           |
-| [`packages/storage`](../../packages/storage) | S3 client, object keys, signed read URLs.                                              | [storage.md](storage.md) |
-| [`packages/email`](../../packages/email)     | Resend sender and HTML/text templates.                                                 | [email.md](email.md)     |
-| [`packages/ui`](../../packages/ui)           | shadcn-style primitives on Base UI, Tailwind v4 theme tokens.                          | [ui.md](ui.md)           |
-| `bench/`, `scripts/`, `docker/`, `.github/`  | OCR benchmark, load test, dependency checks, images, CI and deploys.                   | [tooling.md](tooling.md) |
+| Path                                         | Role                                                                                                   | Page                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------ |
+| [`apps/web`](../../apps/web)                 | Pages, route handlers, server actions, Better Auth config. Thin adapters over core.                    | [web.md](web.md)         |
+| [`packages/core`](../../packages/core)       | The receipt workflow, receipt groups, quota, usage ledger, settings, admin writes. Effect TS services. | [core.md](core.md)       |
+| [`packages/ai`](../../packages/ai)           | One model call: schema, prompt, error kinds, usage, the model list and its prices.                     | [ai.md](ai.md)           |
+| [`packages/db`](../../packages/db)           | Drizzle schema for every table and the shared connection pool.                                         | [db.md](db.md)           |
+| [`packages/storage`](../../packages/storage) | S3 client, object keys, signed read URLs.                                                              | [storage.md](storage.md) |
+| [`packages/email`](../../packages/email)     | Resend sender and HTML/text templates.                                                                 | [email.md](email.md)     |
+| [`packages/ui`](../../packages/ui)           | shadcn-style primitives on Base UI, Tailwind v4 theme tokens.                                          | [ui.md](ui.md)           |
+| `bench/`, `scripts/`, `docker/`, `.github/`  | OCR benchmark, load test, dependency checks, images, CI and deploys.                                   | [tooling.md](tooling.md) |
 
 ## Terms used in these pages
 
@@ -168,6 +168,7 @@ several of them is in the [security audit](../reviews/2026-11-06-security-audit.
 | Passkeys and two-factor                     | Email/password and OAuth only                                                           | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
 | Second AI provider                          | Google Gemini and the offline fixture                                                   | [AI usage and models](../plans/2026-11-06-ai-usage-models.md)                                                                                                                               |
 | Seats and per-workspace quota               | Quota is per user per UTC day                                                           | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                                              |
+| Home currency and FX conversion             | Amounts `numeric(12,2)`, currency defaults to USD, no conversion                        | [Currencies and FX](../plans/2026-11-06-currencies-fx.md)                                                                                                                                   |
 
 ## Keeping this current
 

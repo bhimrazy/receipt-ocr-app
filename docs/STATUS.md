@@ -47,13 +47,14 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-| Track (branch)             | Work                                                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `feat/capture`             | In-app camera, batch capture (limit per plan, default 10, set in Admin), four-corner crop with auto edge detection and straightening |
-| `feat/size-target-encoder` | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width           |
-| `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt           |
-| `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                     |
-| `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                          |
+| Track (branch)             | Work                                                                                                                                                                 |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `feat/capture`             | In-app camera, batch capture (limit per plan, default 10, set in Admin), four-corner crop with auto edge detection and straightening                                 |
+| `feat/size-target-encoder` | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                           |
+| `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                           |
+| `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                     |
+| `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                          |
+| `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying) |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -79,6 +80,9 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
 11. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): passkey rpID (host or apex via
     `PASSKEY_RP_ID`), require passkey or password+TOTP for platform admins, `session.freshAge` 24 h → 1 h, no email
     OTP, trusted-device length, nudges.
+12. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
+    `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
+    which amounts are converted, sign-up default from country.
 
 ## Roadmap (order)
 
@@ -101,9 +105,21 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
    to the hot path and commit the new summary. Latest: reads hold 200/s; uploads hold 12/s and fail by 48/s since the job queue (ladder not yet filled in).
 9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
+   Currency honesty (no USD default, 3-decimal amounts) and conversion to a home currency:
+   [currencies and FX](plans/2026-11-06-currencies-fx.md).
 
 ## Known follow-ups
 
+- PDF page cap gaps: the hand-written page counter (`packages/core/src/pdf-pages.ts`) can undercount when the word
+  `stream` sits inside a string or `/stream` is used as a name, when `endobj` sits inside a string, when comments sit
+  inside a dictionary, and for encrypted object streams. The list is not exhaustive. The cap is a
+  cost guard, not a security boundary: uploads are size-capped, the daily quota bounds total cost and the ledger
+  records real tokens per call, so an outlier is visible. If abuse shows up, count with a real reader (pdf.js in a
+  worker with a timeout) rather than parsing further by hand.
+- Image shrinking (browser, `apps/web/lib/upload-prep.ts`): decode large photos at reduced size
+  (`createImageBitmap` `resizeWidth`/`resizeHeight`, after reading the dimensions from the header) to cut peak memory
+  on phones; and strip metadata on the server for files the browser couldn't decode or encode (for example HEIC
+  outside Safari, or a canvas memory error), which still upload with their EXIF.
 - Zod at every boundary: `PATCH /api/receipts/[id]` validates by hand and drops bad values; history/export query
   params, `apps/web/lib/env.ts` and customer forms should share Zod schemas (today Zod covers only the AI output
   schema, admin settings and admin actions).
@@ -118,7 +134,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.
 - Better Auth: verify the OAuth callback turns a banned user into `?error=BANNED_USER`.
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
-- Benchmark has five synthetic images and no committed results.
+- Benchmark has six synthetic images and no committed results.
 - Load test findings (after #37): upload capacity on the small server fell from 64/s to between 12/s (holds) and
   48/s (fails: end-to-end p95 17 s, Postgres CPU 87%). The quota count (`ocr_rounds` per user, per page and twice per
   upload) is still the top Postgres statement, with the job queue queries next. Next: a performance track that fills
