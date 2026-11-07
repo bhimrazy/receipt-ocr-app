@@ -253,5 +253,48 @@ describe.skipIf(!enabled)(
       const [changed] = await db.select({ email: user.email }).from(user).where(eq(user.id, a.id));
       expect(changed?.email).toBe(newEmail);
     });
+
+    it("caps email-change attempts per address the same whether the new address is taken or free", async () => {
+      const a = await newUser("oracle");
+      const taken = await newUser("taken");
+      await db.update(user).set({ emailVerified: true }).where(eq(user.id, a.id));
+      const headers = new Headers({ cookie: a.cookie });
+      const change = (newEmail: string) => auth.api.changeEmail({ headers, body: { newEmail } });
+      for (let i = 0; i < 3; i++) expect(await change(taken.email)).toEqual({ status: true });
+      // Nothing was sent for the taken address, yet the cap is used up for both kinds of answer.
+      expect(sent.some((m) => m.to === a.email && m.subject.startsWith("Approve"))).toBe(false);
+      expect(await errorOf(change(taken.email))).toMatchObject({ status: 429 });
+      expect(await errorOf(change(`${tag}-oracle-free@example.com`))).toMatchObject({
+        status: 429,
+      });
+    });
+
+    it("Better Auth's GET delete callback is off: a valid token there deletes nothing", async () => {
+      const a = await newUser("callback");
+      const token = await requestDeletion(a);
+      const res = await auth.handler(
+        new Request(`${origin}/api/auth/delete-user/callback?token=${token}`, {
+          headers: { cookie: a.cookie },
+        }),
+      );
+      expect(res.status).toBe(404);
+      expect(await exists(a.id)).toBe(true);
+      // The token is untouched, so the confirm page still works.
+      expect((await post("/delete-user", a.cookie, { token })).status).toBe(200);
+      expect(await exists(a.id)).toBe(false);
+    });
+
+    it("emails the notice when an admin sets a user's password", async () => {
+      const admin = await newUser("admin");
+      const target = await newUser("target");
+      await db.update(user).set({ role: "admin" }).where(eq(user.id, admin.id));
+      await auth.api.setUserPassword({
+        headers: new Headers({ cookie: admin.cookie }),
+        body: { userId: target.id, newPassword: `${password}-admin` },
+      });
+      expect(sent.filter((m) => m.to === target.email).at(-1)?.subject).toBe(
+        "Your receiptOCR password was changed",
+      );
+    });
   },
 );

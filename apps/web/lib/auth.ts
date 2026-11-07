@@ -239,10 +239,19 @@ export const auth = betterAuth({
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      // Deletes on a single GET; our confirm page posts the token to /delete-user instead.
+      if (ctx.path === "/delete-user/callback") throw new APIError("NOT_FOUND");
       if (!needsFreshSession(ctx.path, ctx.body)) return;
       const current = await getSessionFromCtx(ctx);
       // No session: the endpoint itself answers 401.
-      if (!current || isSessionFresh(current.session.createdAt)) return;
+      if (!current) return;
+      if (isSessionFresh(current.session.createdAt)) {
+        // Counts attempts, not sends: Better Auth sends nothing when the new address is taken,
+        // so capping only real sends would answer 429 for a free address and 200 for a taken one.
+        if (ctx.path === "/change-email")
+          await limitSignedInEmail("change-email", current.user.email);
+        return;
+      }
       logger.info({
         event: "auth.step_up_required",
         unit: "log",
@@ -255,10 +264,21 @@ export const auth = betterAuth({
       });
     }),
     after: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== "/change-password") return;
+      if (ctx.path !== "/change-password" && ctx.path !== "/admin/set-user-password") return;
       const returned = ctx.context.returned as { user?: { id: string; email: string } } | undefined;
-      if (!returned || isAPIError(returned) || !returned.user) return;
-      await notifyPasswordChanged(returned.user, "change");
+      if (!returned || isAPIError(returned)) return;
+      if (ctx.path === "/change-password") {
+        if (returned.user) await notifyPasswordChanged(returned.user, "change");
+        return;
+      }
+      const userId = (ctx.body as { userId?: unknown } | undefined)?.userId;
+      if (typeof userId !== "string") return;
+      const [target] = await db
+        .select({ id: userTable.id, email: userTable.email })
+        .from(userTable)
+        .where(eq(userTable.id, userId))
+        .limit(1);
+      if (target) await notifyPasswordChanged(target, "admin");
     }),
   },
   user: {
@@ -283,8 +303,8 @@ export const auth = betterAuth({
       enabled: true,
       // A verified user's current address approves first; Better Auth then sends the usual
       // verification email to the new one, and only that link changes the address.
+      // The per-address cap runs in hooks.before, for every attempt.
       sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
-        await limitSignedInEmail("change-email", user.email);
         await deliver({
           to: user.email,
           ...emailChangeEmail({ newEmail, url, ...recovery() }),
