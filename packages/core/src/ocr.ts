@@ -31,9 +31,10 @@ const STEP_MAX_RETRIES = 1;
 
 /**
  * Worth trying the next model: the provider was slow, busy, down or
- * misconfigured, refused, or can't take this file. `invalid-output` and
- * `bad-image` stop the chain: the image is usually the problem, and a second
- * model would cost a second call.
+ * misconfigured, refused, can't take this file, or returned output that
+ * broke the schema (a weaker model, e.g. Groq's best-effort JSON, can; the next may not).
+ * `bad-image` stops the chain: the image is the problem, and a second model
+ * would cost a second call.
  */
 const FALLBACK_KINDS: ReadonlySet<OcrFailureKind> = new Set([
   "timeout",
@@ -42,6 +43,7 @@ const FALLBACK_KINDS: ReadonlySet<OcrFailureKind> = new Set([
   "not-configured",
   "refused",
   "unsupported-file",
+  "invalid-output",
 ]);
 
 export const providerOf = (model: ModelId): OcrProviderId =>

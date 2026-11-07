@@ -135,16 +135,19 @@ describe("providerAvailability", () => {
     expect(await availability({ ANTHROPIC_API_KEY: "k" })).toEqual({
       google: false,
       anthropic: true,
+      groq: false,
       fixture: false,
     });
     expect(
       await availability({ GOOGLE_GENERATIVE_AI_API_KEY: "k", ANTHROPIC_API_KEY: " " }),
-    ).toEqual({ google: true, anthropic: false, fixture: false });
+    ).toEqual({ google: true, anthropic: false, groq: false, fixture: false });
     expect(await availability({ OCR_PROVIDER: "fixture" })).toEqual({
       google: false,
       anthropic: false,
+      groq: false,
       fixture: true,
     });
+    expect(await availability({ GROQ_API_KEY: "k" })).toMatchObject({ groq: true, google: false });
   });
 });
 

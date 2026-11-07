@@ -57,7 +57,7 @@ const MAX_COOLDOWN_MS = 10 * 60_000;
 /**
  * Maps a failed attempt to the job's next step:
  * - retry: timeout, rate-limited, provider-error, storage and database errors;
- * - dead now: invalid-output, bad-image, not-configured (an admin re-runs it
+ * - dead now: invalid-output (every model in the chain returned it), bad-image, not-configured (an admin re-runs it
  *   once keys are fixed), refused and unsupported-file (every model in the
  *   chain was already tried), and an unreadable stored file;
  * - deferred, without spending an attempt: every provider is cooling down.

@@ -66,7 +66,7 @@ describe("receiptReaders", () => {
   const claude = "anthropic:claude-sonnet-5-5" as const;
   const flash = "google:gemini-3.8-flash" as const;
   const lite = "google:gemini-3.5-flash-lite" as const;
-  const keys = { google: true, anthropic: true, fixture: false };
+  const keys = { google: true, anthropic: true, groq: false, fixture: false };
 
   it("lists friendly labels in chain order, skipping disabled steps and missing keys", () => {
     const chain = [step(claude), step(flash, 30_000, false), step(lite)];
@@ -77,9 +77,9 @@ describe("receiptReaders", () => {
     expect(receiptReaders({ chain }, { ...keys, anthropic: false })).toEqual([
       { label: "Gemini 3.5 Flash-Lite", provider: "google" },
     ]);
-    expect(receiptReaders({ chain }, { google: false, anthropic: false, fixture: false })).toEqual(
-      [],
-    );
+    expect(
+      receiptReaders({ chain }, { google: false, anthropic: false, groq: false, fixture: false }),
+    ).toEqual([]);
   });
 
   it("exposes nothing but label and provider", () => {
@@ -92,23 +92,25 @@ describe("activeChain", () => {
   it("keeps the saved order and skips disabled steps and providers without a key", () => {
     const chain = [step(B), step(A, 30_000, false), step(F), step("google:model-c")];
     expect(
-      activeChain({ chain }, { google: true, anthropic: false, fixture: false }).map(
+      activeChain({ chain }, { google: true, anthropic: false, groq: false, fixture: false }).map(
         (s) => s.model,
       ),
     ).toEqual([B, "google:model-c"]);
     expect(
-      activeChain({ chain }, { google: false, anthropic: false, fixture: true }).map(
+      activeChain({ chain }, { google: false, anthropic: false, groq: false, fixture: true }).map(
         (s) => s.model,
       ),
     ).toEqual([F]);
-    expect(activeChain({ chain }, { google: false, anthropic: false, fixture: false })).toEqual([]);
+    expect(
+      activeChain({ chain }, { google: false, anthropic: false, groq: false, fixture: false }),
+    ).toEqual([]);
   });
 
   it("mixes providers in one chain, each gated on its own key", () => {
     const claude = "anthropic:claude-haiku-5-5" as const;
     const chain = [step(A), step(claude)];
     const only = (available: { google: boolean; anthropic: boolean }) =>
-      activeChain({ chain }, { ...available, fixture: false }).map((s) => s.model);
+      activeChain({ chain }, { ...available, groq: false, fixture: false }).map((s) => s.model);
     expect(only({ google: true, anthropic: true })).toEqual([A, claude]);
     expect(only({ google: false, anthropic: true })).toEqual([claude]);
     expect(only({ google: true, anthropic: false })).toEqual([A]);
@@ -139,15 +141,19 @@ describe("runChain", () => {
     expect(Exit.isSuccess(exit) && exit.value.attempts.map((a) => a.kind)).toEqual([error, "ok"]);
   });
 
-  it.each(["invalid-output", "bad-image"] as const)(
-    "stops on %s without paying for a second model",
-    async (kind) => {
-      const { call, calls } = fakeCall({ [A]: { error: kind } });
-      const exit = await run(runChain([step(A), step(B)], call));
-      expect(calls.map((c) => c.model)).toEqual([A]);
-      expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(`"kind":"${kind}"`);
-    },
-  );
+  it("stops on bad-image without paying for a second model", async () => {
+    const { call, calls } = fakeCall({ [A]: { error: "bad-image" } });
+    const exit = await run(runChain([step(A), step(B)], call));
+    expect(calls.map((c) => c.model)).toEqual([A]);
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain('"kind":"bad-image"');
+  });
+
+  it("tries the next model after invalid-output", async () => {
+    const { call, calls } = fakeCall({ [A]: { error: "invalid-output" } });
+    const exit = await run(runChain([step(A), step(B)], call));
+    expect(calls.map((c) => c.model)).toEqual([A, B]);
+    expect(Exit.isSuccess(exit)).toBe(true);
+  });
 
   it("marks a step skipped before any request on its attempt", async () => {
     const call: ExtractCall = ({ model }) =>

@@ -11,7 +11,7 @@ It does not choose models, retry across models, enforce deadlines across a chain
 
 `checkProvider(providerId, { apiKey, models })` in [`check.ts`](../../packages/ai/src/check.ts) calls the provider's
 free model-list endpoint (Gemini `GET /v1beta/models` with `x-goog-api-key`, Anthropic `GET /v1/models` with
-`x-api-key`), so no tokens are spent. It returns a status only (`ok`, `invalid-key`, `no-billing-or-quota`,
+`x-api-key`, Groq `GET /openai/v1/models` with a bearer token), so no tokens are spent. It returns a status only (`ok`, `invalid-key`, `no-billing-or-quota`,
 `rate-limited`, `unreachable`, `model-not-available`) and a latency; response bodies are read for keywords and
 dropped, because they can echo the key. The AI SDK providers expose no model-list call, hence plain `fetch` with a
 5 s timeout. Used by Admin → Settings → Connections.
@@ -73,6 +73,7 @@ flowchart LR
   extract -- "provider:model" --> sdk[AI SDK generateText<br/>with the Zod schema]
   sdk -- HTTPS --> gemini[Gemini API]
   sdk -- HTTPS --> claude[Anthropic Messages API]
+  sdk -- HTTPS --> groq[Groq chat completions]
   sdk -- "valid object" --> ok([extraction, usage, model])
   fixture --> ok
   fixture -- "FIXTURE_FAIL" --> classify
@@ -82,16 +83,16 @@ flowchart LR
 
 Failure kinds and how they are decided ([`errors.ts`](../../packages/ai/src/errors.ts)):
 
-| Kind               | From                                                                                                                  | Core falls back?    |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `timeout`          | HTTP 408, `TimeoutError` or `AbortError`                                                                              | Yes                 |
-| `rate-limited`     | HTTP 429                                                                                                              | Yes                 |
-| `provider-error`   | HTTP 5xx (Anthropic 529 overloaded included), network errors, the fixture's simulated failure, anything unrecognised  | Yes                 |
-| `not-configured`   | HTTP 401, 402 (Anthropic billing), 403, 404, missing key, unknown model or provider                                   | Yes                 |
-| `refused`          | A `content-filter` finish (Claude's refusal, Gemini's safety stop), whether its text parses, is prose or is empty     | Yes (job: dead now) |
-| `unsupported-file` | HTTP 413, or before any request: a type or size this model can't take (HEIC, or an image over 10 MB base64 on Claude) | Yes (job: dead now) |
-| `invalid-output`   | No object, no content, schema or JSON parse failure                                                                   | No                  |
-| `bad-image`        | Any other 4xx (400, 422): the provider refused the input                                                              | No                  |
+| Kind               | From                                                                                                                                 | Core falls back?    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| `timeout`          | HTTP 408, `TimeoutError` or `AbortError`                                                                                             | Yes                 |
+| `rate-limited`     | HTTP 429                                                                                                                             | Yes                 |
+| `provider-error`   | HTTP 5xx (Anthropic 529 overloaded included), network errors, the fixture's simulated failure, anything unrecognised                 | Yes                 |
+| `not-configured`   | HTTP 401, 402 (Anthropic billing), 403, 404, missing key, unknown model or provider                                                  | Yes                 |
+| `refused`          | A `content-filter` finish (Claude's refusal, Gemini's safety stop), whether its text parses, is prose or is empty                    | Yes (job: dead now) |
+| `unsupported-file` | HTTP 413, or before any request: a type or size this model can't take (HEIC, a PDF on Groq, or an image over 10 MB base64 on Claude) | Yes (job: dead now) |
+| `invalid-output`   | No object, no content, schema or JSON parse failure (Groq `json_validate_failed`)                                                    | Yes                 |
+| `bad-image`        | Any other 4xx (400, 422): the provider refused the input                                                                             | No                  |
 
 ## The prompt
 
@@ -192,11 +193,45 @@ once `ANTHROPIC_API_KEY` is set. The request settings live in `ANTHROPIC_OPTIONS
 - **Not used:** Anthropic's server-side refusal `fallbacks`. Core's chain is the fallback, and a fallback served by
   another model inside one call would be recorded under the wrong model and price.
 
+## Groq
+
+One model, not in the default chain: `groq:qwen/qwen3.8-27b` ("Qwen 3.8 27B (Groq, preview)"). An admin adds it in
+**Admin → Settings → OCR models** once `GROQ_API_KEY` is set. It uses `@ai-sdk/groq` 4.0.74 (Vercel, `vercel/ai`).
+Facts below are from Groq's docs ([vision](https://console.groq.com/docs/vision),
+[models](https://console.groq.com/docs/models), [structured outputs](https://console.groq.com/docs/structured-outputs),
+[rate limits](https://console.groq.com/docs/rate-limits)), checked 2026-11-07. Nothing here has run against the real
+API yet; the first benchmark is the check.
+
+- **Which models.** Groq lists two with image input: `qwen/qwen3.8-27b` (a preview model, "for evaluation only", 3
+  images a request, 2,048 tokens an image, 131K context, 16K max output) and `meta-models/muse-spark-open` (limited
+  preview, access by contacting Groq, so not offered). Every other model on the models page is text-only or audio.
+  Prices for Qwen: $0.80 input / $4.00 output per MTok. The free plan bills nothing, so the ledger's cost there is an
+  upper bound.
+- **Free plan limits** (rate-limits page): `qwen/qwen3.8-27b` 30 requests a minute, 1K a day, 8K tokens a minute, 200K
+  a day. A receipt is about 2,048 image tokens plus the v2 prompt (~3.5K) plus the reply, so one read nearly fills a
+  minute's token budget: expect `rate-limited` under any concurrency. Limits are per organization.
+- **Structured output:** `response_format: json_schema` with `strict: false` (best-effort), set by `GROQ_OPTIONS`.
+  Qwen also supports `strict: true` (constrained decoding), which needs every keyword in the schema to be supported;
+  switch to it only after a benchmark shows the schema is accepted. `maxItems` is dropped from the request
+  (`schemaMode: "no-bounds"`: no `maxItems`, `maxLength`, `minimum` and the like; Groq's docs list no supported keywords for best-effort mode), and the reply is validated against the full zod schema either way. No tools.
+- **Reasoning:** `reasoning_effort: "none"` (instruct mode) so transcription does not burn the token-per-minute budget.
+- **Files:** images only (JPEG, PNG, GIF, WebP); the SDK rejects other file parts. PDFs and HEIC fail before any
+  request as `unsupported-file`, so the chain moves on. Groq documents a 20 MB limit on a request with an image (a
+  400 beyond it), checked on the base64 size; it states no pixel limit or base64-specific limit.
+- **Errors:** 429 is `rate-limited` with `retry-after` (seconds), which makes the provider cool; 5xx `provider-error`;
+  401/403/404 `not-configured`; 413 `unsupported-file`. A 400 is read by its `error.code`: `json_validate_failed`
+  (best-effort output broke the schema) is `invalid-output`, which now falls through to the next model;
+  `model_decommissioned` (Groq answers 400, not 404, for a retired model) and any other `invalid_request_error` that
+  doesn't blame the image are `not-configured`; a 400 that names the image is `bad-image`. The key check treats a 429 naming a daily
+  cap (TPD, RPD) as `no-billing-or-quota`.
+- **Benchmark:** `GROQ_API_KEY=... bun run bench:ocr --models groq:qwen/qwen3.8-27b --concurrency 1`.
+
 ## How to test it
 
 `bun run test` runs [`extract.test.ts`](../../packages/ai/src/extract.test.ts) (with a mock model through
 `extractWith`), [`extract.anthropic.test.ts`](../../packages/ai/src/extract.anthropic.test.ts) (the real Anthropic
-provider over a mocked `fetch`: the request body each Claude model gets, usage, refusal and HTTP error mapping), [`errors.test.ts`](../../packages/ai/src/errors.test.ts),
+provider over a mocked `fetch`: the request body each Claude model gets, usage, refusal and HTTP error mapping),
+[`extract.groq.test.ts`](../../packages/ai/src/extract.groq.test.ts) (the same for Groq), [`errors.test.ts`](../../packages/ai/src/errors.test.ts),
 [`models.test.ts`](../../packages/ai/src/models.test.ts) and
 [`categories.test.ts`](../../packages/ai/src/categories.test.ts). None calls a provider. For real accuracy, latency
 and cost, use the [OCR benchmark](tooling.md#ocr-benchmark).
