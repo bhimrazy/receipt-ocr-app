@@ -14,7 +14,8 @@ import { Switch } from "@receipt-ocr/ui/components/switch";
 import { toast } from "@receipt-ocr/ui/components/toast";
 import { ArrowDown, ArrowUp, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useId, useState } from "react";
-import { saveOcrAction } from "../actions";
+import type { ConnectionRow } from "@receipt-ocr/core";
+import { checkChainProvidersAction, saveOcrAction } from "../actions";
 
 type Step = { model: string; enabled: boolean; timeoutMs: number };
 
@@ -43,6 +44,7 @@ export function OcrChainForm({
   const [adding, setAdding] = useState<string>("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<ConnectionRow[]>([]);
   const dirty = JSON.stringify(chain) !== JSON.stringify(saved);
 
   const modelOf = (modelId: string) => models.find((m) => m.id === modelId);
@@ -66,14 +68,18 @@ export function OcrChainForm({
   async function save() {
     setPending(true);
     setError(null);
+    setWarnings([]);
     const result = await saveOcrAction({ chain });
-    setPending(false);
     if (!result.ok) {
+      setPending(false);
       setError(result.error);
       return;
     }
     setSaved(chain);
     toast.add({ title: "OCR models saved.", type: "success" });
+    // Advisory only: the save stands even if a provider is briefly down.
+    setWarnings(await checkChainProvidersAction({ chain }).catch(() => []));
+    setPending(false);
   }
 
   return (
@@ -221,6 +227,21 @@ export function OcrChainForm({
         <p className="mt-3 text-sm text-destructive" role="alert">
           {error}
         </p>
+      ) : null}
+      {warnings.length > 0 ? (
+        <div
+          className="mt-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning"
+          role="status"
+        >
+          <p className="font-medium">Saved, but a connection check failed.</p>
+          <ul className="mt-1 list-disc pl-5">
+            {warnings.map((w) => (
+              <li key={w.id}>
+                {w.label}: {w.hint}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
         <Button disabled={!dirty || pending || order.length === 0} onClick={save}>
