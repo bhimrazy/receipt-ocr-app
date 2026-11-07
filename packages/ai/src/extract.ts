@@ -14,8 +14,8 @@ import { CATEGORY_DESCRIPTIONS, RECEIPT_CATEGORIES } from "./categories";
 import { classifyOcrError, OcrCallError, UnsupportedFileError } from "./errors";
 import { fixtureExtraction, fixtureLatencyMs } from "./fixture";
 import { imageSize } from "./image-size";
-import type { ExtractionUsage, OcrProviderId } from "./models";
-import { receiptExtractionSchema, type ReceiptExtraction } from "./schema";
+import { ocrModel, type ExtractionUsage, type OcrModel, type OcrProviderId } from "./models";
+import { receiptExtractionSchema, receiptRequestSchema, type ReceiptExtraction } from "./schema";
 
 /** Providers reached through the AI SDK registry; `fixture` is handled locally. */
 type RegistryProviderId = Exclude<OcrProviderId, "fixture">;
@@ -199,7 +199,11 @@ export async function extractReceipt(input: ExtractReceiptInput): Promise<Extrac
   checkFile(input.model, input.file);
   const { extraction, usage } = await extractWith(
     registryFor(input.keys ?? {}).languageModel(input.model),
-    { ...input, providerOptions: providerOptionsFor(input.model) },
+    {
+      ...input,
+      providerOptions: providerOptionsFor(input.model),
+      schemaMode: ocrModel(input.model)?.schemaMode,
+    },
   );
   return { extraction, usage, model: input.model };
 }
@@ -207,13 +211,19 @@ export async function extractReceipt(input: ExtractReceiptInput): Promise<Extrac
 /** The model call itself, separate from the registry so tests can pass a mock model. */
 export async function extractWith(
   model: LanguageModel,
-  input: Omit<ExtractReceiptInput, "model" | "keys"> & { providerOptions?: ProviderOptions },
+  input: Omit<ExtractReceiptInput, "model" | "keys"> & {
+    providerOptions?: ProviderOptions;
+    schemaMode?: OcrModel["schemaMode"];
+  },
 ): Promise<Omit<ExtractReceiptResult, "model">> {
   let usage: ExtractionUsage | null = null;
   try {
     const result = await generateText({
       model,
-      output: Output.object({ schema: receiptExtractionSchema }),
+      output: Output.object({
+        schema:
+          input.schemaMode === "no-array-bounds" ? receiptRequestSchema() : receiptExtractionSchema,
+      }),
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       timeout: { totalMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS },
       maxRetries: input.maxRetries ?? DEFAULT_MAX_RETRIES,
