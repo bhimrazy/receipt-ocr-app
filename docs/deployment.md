@@ -199,9 +199,12 @@ then fails at "Check the secret is set".
 ### Staging and previews
 
 - **Getting a preview:** until launch, a PR deploys a preview only when it has the `preview` label. Add it once the PR
-  is ready to look at: `gh pr edit <number> --add-label preview`. The deploy starts at once, its link is posted on the
-  PR, and every later push redeploys it. Remove the label to stop: `gh pr edit <number> --remove-label preview`. Each
-  deploy counts toward Vercel's 100 a day, which production shares.
+  is ready to look at: `gh pr edit <number> --add-label preview`. The deploy starts at once and its link is posted on
+  the PR. Later pushes don't redeploy; to refresh it, remove and re-add the label. Each deploy counts toward Vercel's
+  100 a day, which production shares.
+- **Production skips merges that ship nothing:** when everything since the last production deploy is docs, Markdown,
+  tests, benchmarks, repo scripts or CI config (`.github/scripts/shipped-files.sh`), the gate skips the deploy; the next
+  merge that changes the app deploys it all.
 - **Staging database:** Supabase project `receipt-ocr-staging` (us-east-1, same region as production and the `iad1`
   functions). Migrate it before production on every release with migrations, and check it there first.
 - **Previews:** set the Vercel project's **Preview** variables to staging: `DATABASE_URL` (staging transaction
