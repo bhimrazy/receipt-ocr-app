@@ -3,9 +3,10 @@ name: Vercel Preview Deployment
 # Previews use the staging database (Vercel's Preview env vars) and never run migrations: a PR whose
 # migration hasn't merged yet won't find its tables there. See docs/deployment.md.
 #
-# The free Vercel plan allows 100 deployments a day and 10 GB of function storage, so a PR gets a
-# preview only when it is ready for review (not a draft) and changes something the app ships. The
-# `preview` label forces one, drafts and docs-only PRs included.
+# The free Vercel plan allows 100 deployments a day (production deploys included) and 10 GB of
+# function storage. Until launch, a PR gets a preview only when it carries the `preview` label
+# (repository variable PREVIEW_MODE unset or `label`). Set PREVIEW_MODE=auto to also deploy every
+# ready-for-review PR that changes something the app ships.
 #
 # A push to the `preview` branch always deploys and aliases the fixed preview domains (docs/production-environment.md).
 # Only the owner should push there.
@@ -51,11 +52,12 @@ jobs:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
           FORCED: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
+          MODE: ${{ vars.PREVIEW_MODE || 'label' }}
         run: |
           deploy=false
           if [ "$EVENT" = workflow_dispatch ] || [ "$EVENT" = push ] || [ "$FORCED" = true ]; then
             deploy=true
-          elif [ "$DRAFT" != true ]; then
+          elif [ "$MODE" = auto ] && [ "$DRAFT" != true ]; then
             # Any file outside docs, Markdown, tests, benchmarks, scripts and CI config changes what ships
             # (preview.yml itself and the Vercel CLI lockfile do: they change the deploy).
             shipped=$(git diff --name-only --no-renames HEAD^1 HEAD | tee /dev/stderr \

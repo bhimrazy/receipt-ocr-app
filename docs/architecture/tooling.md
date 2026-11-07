@@ -132,8 +132,9 @@ Images are pinned by digest. Containers have no restart policy, so they stay sto
 ### Vercel previews
 
 The free plan allows 100 deployments a day and 10 GB of function storage, and every deployment keeps its function
-bundles. A PR gets a preview when it is not a draft and changes a file that ships; the `preview` label forces one
-(drafts and docs-only PRs included). Never for Dependabot or fork PRs. A newer push cancels the deploy in flight, and
+bundles, and production deploys count toward the same limit. Until launch a PR gets a preview only when it carries
+the `preview` label (drafts and docs-only PRs included). With the repository variable `PREVIEW_MODE=auto`, every PR
+that is not a draft and changes a file that ships also gets one. Never for Dependabot or fork PRs. A newer push cancels the deploy in flight, and
 labels other than `preview` don't. Docs, Markdown, tests, `bench/`, `scripts/` and CI config other than `preview.yml` don't
 count as shipping.
 
