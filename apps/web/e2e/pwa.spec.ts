@@ -165,7 +165,7 @@ test("a shared receipt waits for Keep, then for Read in the review sheet, and is
   await expect(page).toHaveURL(/\/app(\/upload)?(\?|$)/);
   await expect(sharedNotice(page)).toContainText("1 file shared from another app");
   await expect(sharedNotice(page)).toContainText("shared-receipt.png");
-  await expect(sharedNotice(page)).toContainText("possibly before you signed in");
+  await expect(sharedNotice(page)).toContainText("Keep them only if you shared them");
   await expect(review(page)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Keep" }).click();
