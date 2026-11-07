@@ -76,6 +76,16 @@ test("Accept all loads GA with only analytics consent granted", async ({ page })
   const pageView = layer.find((e) => e[0] === "event" && e[1] === "page_view");
   expect((pageView![2] as { page_location: string }).page_location).toMatch(/\/sign-in$/);
 
+  // gtag's automatic hits default page_location to location.href, so config and set carry a
+  // stripped one (no ?redirect=).
+  const carriers = layer.filter((e) => e[0] === "config" || e[0] === "set");
+  expect(carriers.length).toBeGreaterThanOrEqual(2);
+  for (const entry of carriers) {
+    const args = (entry[0] === "config" ? entry[2] : entry[1]) as { page_location: string };
+    expect(args.page_location).not.toContain("?");
+  }
+  expect(JSON.stringify(layer)).not.toContain("secret-id");
+
   // Persists: the next page loads GA without asking.
   await page.goto("/");
   await expect(banner(page)).toHaveCount(0);

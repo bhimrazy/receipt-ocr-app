@@ -52,8 +52,8 @@ export function CookieBanner({ confirmation }: { confirmation?: ConsentChoice })
           </h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             We use necessary cookies to keep you signed in. With your permission we also use Google
-            Analytics cookies to see how people find and use this site. They are off until you
-            accept.{" "}
+            Analytics cookies and cookie-free page counts to see how people find and use this site.
+            They are off until you accept.{" "}
             <Link
               className="rounded-sm text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               href="/cookies"

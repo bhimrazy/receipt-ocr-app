@@ -45,6 +45,7 @@ function ConsentForm({ features }: { features: ConsentFeatures }) {
   });
   const optional = features.googleAnalytics || features.pageCounts;
   const gaBlockedBy = signals.gpc ? "Global Privacy Control" : signals.dnt ? "Do Not Track" : null;
+  const countsBlocked = signals.gpc || signals.dnt;
 
   return (
     <>
@@ -89,9 +90,11 @@ function ConsentForm({ features }: { features: ConsentFeatures }) {
         {features.pageCounts && (
           <Category
             description={
-              signals.dnt
-                ? "Your browser sends Do Not Track, so page counts are off. We honour that signal."
-                : "Vercel Web Analytics counts visits to public pages without cookies or any id stored on your device. Visits are told apart by a hash of the request that is discarded after 24 hours. On unless you turn it off."
+              gaBlockedBy
+                ? `Your browser sends ${gaBlockedBy}, so page counts are off. We honour that signal.`
+                : features.googleAnalytics
+                  ? "Vercel Web Analytics counts visits to public pages without cookies or any id stored on your device. Visits are told apart by a hash of the request that is discarded after 24 hours. Off until you turn it on."
+                  : "Vercel Web Analytics counts visits to public pages without cookies or any id stored on your device. Visits are told apart by a hash of the request that is discarded after 24 hours. On unless you turn it off."
             }
             title="Cookie-free page counts"
           >
@@ -99,8 +102,8 @@ function ConsentForm({ features }: { features: ConsentFeatures }) {
               <Switch
                 aria-describedby={descriptionId}
                 aria-labelledby={labelId}
-                checked={choice.pageCounts && !signals.dnt}
-                disabled={signals.dnt}
+                checked={choice.pageCounts && !countsBlocked}
+                disabled={countsBlocked}
                 onCheckedChange={(pageCounts) => setChoice((c) => ({ ...c, pageCounts }))}
               />
             )}
@@ -111,8 +114,8 @@ function ConsentForm({ features }: { features: ConsentFeatures }) {
 
       {signals.gpc && (
         <p className="text-xs leading-5 text-muted-foreground">
-          Global Privacy Control detected: we don&apos;t sell or share your data, and tools that
-          share data with third parties stay off.
+          Global Privacy Control detected: we don&apos;t sell or share your data, and Google
+          Analytics and page counts stay off.
         </p>
       )}
 

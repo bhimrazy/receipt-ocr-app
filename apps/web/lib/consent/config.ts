@@ -3,7 +3,15 @@
  * and URLs carry receipt and workspace ids, and the reset-password and invitation pages carry
  * tokens. Exact paths only; there is no pricing page yet (pricing is a section of /).
  */
-const ANALYTICS_PATHS = new Set(["/", "/privacy", "/terms", "/cookies", "/sign-in", "/sign-up"]);
+export const ANALYTICS_PATH_LIST = [
+  "/",
+  "/privacy",
+  "/terms",
+  "/cookies",
+  "/sign-in",
+  "/sign-up",
+] as const;
+const ANALYTICS_PATHS = new Set<string>(ANALYTICS_PATH_LIST);
 
 export function isAnalyticsPath(pathname: string): boolean {
   return ANALYTICS_PATHS.has(pathname);

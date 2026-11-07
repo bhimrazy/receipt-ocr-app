@@ -151,11 +151,11 @@ Analytics runs on an allowlist of public pages only (`isAnalyticsPath` in
 [`lib/consent/config.ts`](../../apps/web/lib/consent/config.ts): `/`, `/sign-in`, `/sign-up`, `/privacy`, `/terms`,
 `/cookies`). `/app` and `/admin` URLs and titles carry receipt and workspace ids, so nothing runs there.
 
-| Tool                 | When it runs                                                   | Consent                                       |
-| -------------------- | -------------------------------------------------------------- | --------------------------------------------- |
-| Vercel Web Analytics | Vercel builds (`VERCEL=1`), allowlisted pages                  | None needed (no cookies); visitor can opt out |
-| Google Analytics 4   | `NEXT_PUBLIC_GA_MEASUREMENT_ID` set, allowlisted pages         | Opt-in; Consent Mode v2, basic mode           |
-| Browser signals      | GPC turns GA off (data shared with Google); DNT turns both off | Can't be overridden in the dialog             |
+| Tool                 | When it runs                                           | Consent                                          |
+| -------------------- | ------------------------------------------------------ | ------------------------------------------------ |
+| Vercel Web Analytics | Vercel builds (`VERCEL=1`), allowlisted pages          | Opt-out; with GA configured, only after a choice |
+| Google Analytics 4   | `NEXT_PUBLIC_GA_MEASUREMENT_ID` set, allowlisted pages | Opt-in; Consent Mode v2, basic mode              |
+| Browser signals      | GPC and DNT turn both GA and page counts off           | Can't be overridden in the dialog                |
 
 ```mermaid
 flowchart TD
@@ -172,6 +172,7 @@ flowchart TD
   M -->|allowed + public page| V[Vercel Analytics, beforeSend strips query, drops non-public]
 ```
 
+- **Referrer.** Allowlisted pages send `Referrer-Policy: origin` (`next.config.ts`), so the same-origin `/view` fetch and Google never see a path or query. gtag's `page_location` and `page_referrer` are set in `config` and `set` so its automatic hits are stripped too. Withdrawing deletes `_ga*` in `saveConsent` even when gtag never loaded.
 - **Choice.** The `consent` cookie holds version, timestamp and one flag per category (6 months, `SameSite=Lax`,
   `Secure` on HTTPS). A different `CONSENT_VERSION` or an older timestamp means no choice, so the banner asks again.
   [`lib/consent/state.ts`](../../apps/web/lib/consent/state.ts) holds the pure rules;

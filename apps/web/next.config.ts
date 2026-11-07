@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { NextConfig } from "next";
-import { parseGaMeasurementId } from "./lib/consent/config";
+import { ANALYTICS_PATH_LIST, parseGaMeasurementId } from "./lib/consent/config";
 import { buildContentSecurityPolicy } from "./lib/csp";
 
 const contentSecurityPolicy = buildContentSecurityPolicy(
@@ -52,6 +52,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
+      // Pages where analytics may run send only their origin as Referer: the same-origin /view
+      // fetch and Google then never see a path or a query string (?redirect= can name a receipt).
+      ...ANALYTICS_PATH_LIST.map((source) => ({
+        source,
+        headers: [{ key: "Referrer-Policy", value: "origin" }],
+      })),
       // As well as the meta tag, so non-HTML responses (CSV exports, JSON) and redirects from
       // these paths stay out of search results too.
       ...noindexPaths.map((source) => ({ source, headers: [noindexHeader] })),

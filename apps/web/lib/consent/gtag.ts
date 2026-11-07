@@ -34,7 +34,12 @@ export function initGtag(id: string) {
   gtag("consent", "update", { analytics_storage: "granted" });
   gtag("js", new Date());
   // Page views are sent by gtagPageView with a stripped URL, never by gtag itself.
+  // page_location and page_referrer are set here and again on every page view: gtag's automatic
+  // hits (user_engagement, scroll, form and outbound-click events) default to location.href,
+  // which on /sign-in can carry ?redirect=/app/receipts/<id>.
   gtag("config", id, {
+    page_location: location.origin + location.pathname,
+    page_referrer: safeReferrer(document.referrer),
     send_page_view: false,
     allow_google_signals: false,
     allow_ad_personalization_signals: false,
@@ -51,11 +56,15 @@ function safeReferrer(referrer: string): string {
 }
 
 export function gtagPageView(pathname: string) {
-  w().gtag?.("event", "page_view", {
+  const gtag = w().gtag;
+  if (!gtag) return;
+  const page = {
     page_location: `${location.origin}${pathname}`,
-    page_title: document.title,
     page_referrer: safeReferrer(document.referrer),
-  });
+  };
+  // "set" first, so every later automatic hit inherits the stripped values.
+  gtag("set", page);
+  gtag("event", "page_view", { ...page, page_title: document.title });
 }
 
 /**
@@ -74,6 +83,11 @@ export function grantGtag() {
 export function withdrawGtag(id: string) {
   setGtagDisabled(id, true);
   w().gtag?.("consent", "update", { analytics_storage: "denied" });
+  deleteGaCookies();
+}
+
+/** Works whether or not gtag ever loaded on this page: a withdrawal on a 404 still clears _ga*. */
+export function deleteGaCookies() {
   // GA writes its cookies on the widest domain it can, so try the host and every parent.
   const names = document.cookie
     .split("; ")

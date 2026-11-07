@@ -8,10 +8,11 @@ import {
   DropdownMenuTrigger,
 } from "@receipt-ocr/ui/components/dropdown-menu";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { ChevronsUpDown, LogOut, Settings, ShieldCheck } from "lucide-react";
+import { ChevronsUpDown, Cookie, LogOut, Settings, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOutAndClearHint } from "@/lib/auth-client";
+import { openConsentSettings } from "@/lib/consent/store";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
 
@@ -101,6 +102,10 @@ export function UserMenu({
             Admin
           </DropdownMenuItem>
         ) : null}
+        <DropdownMenuItem onClick={openConsentSettings}>
+          <Cookie aria-hidden="true" />
+          Cookie settings
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut}>
           <LogOut aria-hidden="true" />

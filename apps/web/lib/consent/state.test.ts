@@ -56,8 +56,12 @@ describe("consent record", () => {
 });
 
 describe("what may run", () => {
-  it("keeps GA off until the visitor accepts, and page counts on until they object", () => {
-    expect(allowedTools(null, none, both)).toEqual({ googleAnalytics: false, pageCounts: true });
+  it("keeps GA and page counts off until a choice while the banner asks, and counts on without GA", () => {
+    expect(allowedTools(null, none, both)).toEqual({ googleAnalytics: false, pageCounts: false });
+    expect(allowedTools(null, none, { googleAnalytics: false, pageCounts: true })).toEqual({
+      googleAnalytics: false,
+      pageCounts: true,
+    });
     expect(allowedTools(makeRecord(ACCEPT_ALL, now), none, both)).toEqual({
       googleAnalytics: true,
       pageCounts: true,
@@ -76,12 +80,12 @@ describe("what may run", () => {
     });
   });
 
-  it("treats Global Privacy Control as a reject for GA, even after an accept", () => {
+  it("treats Global Privacy Control as a reject for GA and page counts, even after an accept", () => {
     const signals = readSignals({ globalPrivacyControl: true });
     expect(signals).toEqual({ gpc: true, dnt: false });
     expect(allowedTools(makeRecord(ACCEPT_ALL, now), signals, both)).toEqual({
       googleAnalytics: false,
-      pageCounts: true,
+      pageCounts: false,
     });
     expect(needsBanner(null, signals, both)).toBe(false);
   });

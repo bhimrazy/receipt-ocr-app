@@ -85,8 +85,8 @@ export default function PrivacyPage() {
             googleAnalytics
               ? "We use necessary cookies to run the service, and Google Analytics cookies only if you accept them in the cookie banner or Cookie settings."
               : "We use only necessary cookies, which keep you signed in, protect sign-in and remember your choices. We don't use advertising or tracking cookies.",
-            "Analytics never runs inside the app or the admin area. We honour Global Privacy Control as a request not to sell or share your data, and Do Not Track as a request not to be measured.",
-            "You can change or withdraw your choice at any time with Cookie settings at the bottom of every page. The cookie policy lists every cookie and storage key, what it does and how long it lasts.",
+            "Analytics never runs inside the app or the admin area. We honour Global Privacy Control (which turns off Google Analytics and page counts) as a request not to sell or share your data, and Do Not Track as a request not to be measured.",
+            "You can change or withdraw your choice at any time with Cookie settings in the footer, the sign-in pages and the account menu. The cookie policy lists every cookie and storage key, what it does and how long it lasts.",
           ],
           links: [{ label: "Cookie policy", href: "/cookies" }],
         },

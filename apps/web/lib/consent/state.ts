@@ -71,8 +71,8 @@ export function readSignals(nav: {
 }
 
 /**
- * What may run right now. GA shares data with Google, so GPC turns it off; DNT turns off all
- * measurement, including cookie-free page counts. Neither can be overridden from the dialog.
+ * What may run right now. GA shares data with Google, so GPC turns it off; GPC and DNT turn off
+ * all measurement, including cookie-free page counts. Neither can be overridden from the dialog.
  */
 export function allowedTools(
   record: ConsentRecord | null,
@@ -82,7 +82,12 @@ export function allowedTools(
   return {
     googleAnalytics:
       features.googleAnalytics && !signals.gpc && !signals.dnt && record?.analytics === true,
-    pageCounts: features.pageCounts && !signals.dnt && (record?.pageCounts ?? true),
+    // Before a choice, counts run only when no banner is asking (GA off). GPC and DNT turn them off.
+    pageCounts:
+      features.pageCounts &&
+      !signals.dnt &&
+      !signals.gpc &&
+      (record ? record.pageCounts : !features.googleAnalytics),
   };
 }
 

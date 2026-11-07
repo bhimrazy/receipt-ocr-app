@@ -104,7 +104,7 @@ or `/admin`, and page addresses are sent without their query string.
 
 - **Vercel Web Analytics** (cookie-free page counts) is on in every Vercel build. Turn it on for the project in the
   Vercel dashboard (**Analytics → Enable**); no env var is needed. Visitors can switch it off in Cookie settings, and
-  Do Not Track turns it off. Docker images run no analytics.
+  Do Not Track and Global Privacy Control turn it off, and with GA configured it waits for a choice. Docker images run no analytics.
 - **Google Analytics 4** is optional. Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` and rebuild. The site then shows a cookie
   banner, and gtag.js loads only after a visitor accepts, with Consent Mode v2 signals denied by default and only
   `analytics_storage` ever granted. The CSP adds Google's origins only when the id is set. In the GA property:

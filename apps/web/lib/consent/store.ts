@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { CONSENT_COOKIE, CONSENT_MAX_AGE_SECONDS } from "./config";
+import { deleteGaCookies } from "./gtag";
 import {
   makeRecord,
   parseConsent,
@@ -85,6 +86,7 @@ export function saveConsent(choice: ConsentChoice, from: "banner" | "dialog") {
   // written from script at 7 days, but not ones set by a same-site response.
   const secure = location.protocol === "https:" ? "; Secure" : "";
   document.cookie = `${CONSENT_COOKIE}=${encodeURIComponent(value)}; Path=/; Max-Age=${CONSENT_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
+  if (!choice.analytics) deleteGaCookies();
   void fetch("/api/consent", { method: "POST", body: value, keepalive: true }).catch(() => {
     // The script-written cookie still holds the choice.
   });

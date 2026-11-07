@@ -59,7 +59,9 @@ export function ConsentManager({
           pathname={publicPage ? pathname : null}
         />
       )}
-      {publicPage && allowed.pageCounts && <Analytics beforeSend={pageCountsBeforeSend} />}
+      {publicPage && allowed.pageCounts && (
+        <Analytics beforeSend={(event) => pageCountsBeforeSend(event, features)} />
+      )}
     </>
   );
 }
@@ -68,11 +70,14 @@ export function ConsentManager({
  * Vercel's script stays on the page after a client navigation, so every event is checked here:
  * dropped outside the allowlist or once the visitor objects, and sent without its query string.
  */
-function pageCountsBeforeSend(event: BeforeSendEvent): BeforeSendEvent | null {
+function pageCountsBeforeSend(
+  event: BeforeSendEvent,
+  features: ConsentFeatures,
+): BeforeSendEvent | null {
   const url = stripUrl(event.url);
   if (!url || !isAnalyticsPath(new URL(url).pathname)) return null;
   const { record, signals } = currentConsent();
-  if (!allowedTools(record, signals, { googleAnalytics: false, pageCounts: true }).pageCounts) {
+  if (!allowedTools(record, signals, features).pageCounts) {
     return null;
   }
   return { ...event, url };

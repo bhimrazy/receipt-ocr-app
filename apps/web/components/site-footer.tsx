@@ -66,7 +66,12 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
                 ))}
                 {column.title === "Legal" && (
                   <li>
-                    <CookieSettingsButton className={linkClass} />
+                    <CookieSettingsButton
+                      className={cn(
+                        linkClass,
+                        "h-auto justify-start px-0 font-normal hover:bg-transparent",
+                      )}
+                    />
                   </li>
                 )}
               </ul>

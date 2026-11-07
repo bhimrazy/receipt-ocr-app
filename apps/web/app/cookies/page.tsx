@@ -53,7 +53,7 @@ export default function CookiesPage() {
                 heading: "Cookie-free page counts",
                 body: [
                   "We count visits to public pages with Vercel Web Analytics. It sets no cookies and stores nothing on your device. Vercel tells visits apart with a hash of the request that it discards after 24 hours, and keeps the page, the referring site, the country, and the browser, operating system and device type.",
-                  "You can turn page counts off in Cookie settings. Do Not Track turns them off too.",
+                  "You can turn page counts off in Cookie settings. Global Privacy Control and Do Not Track turn them off too. When Google Analytics is in use, they stay off until you accept.",
                 ],
               },
             ]
@@ -61,14 +61,14 @@ export default function CookiesPage() {
         {
           heading: "Browser privacy signals",
           body: [
-            "If your browser sends Global Privacy Control, we treat it as a request not to sell or share your data and keep any tool that shares data with a third party off, including Google Analytics. We don't sell your data either way.",
-            "If your browser sends Do Not Track, we keep all analytics off.",
+            "If your browser sends Global Privacy Control, we treat it as a request not to sell or share your data and keep Google Analytics and page counts off. We don't sell your data either way.",
+            "If your browser sends Do Not Track, we keep all analytics off too.",
           ],
         },
         {
           heading: "Changing your choice",
           body: [
-            "Use Cookie settings, below or at the bottom of every page, to change your choice at any time. Your choice is saved for 6 months, and we ask again sooner if this policy changes what optional tools do. Turning analytics off also deletes the Google Analytics cookies on this site.",
+            "Use Cookie settings, below, in the footer of the public pages and the sign-in pages, or in the account menu once you are signed in, to change your choice at any time. Your choice is saved for 6 months, and we ask again sooner if this policy changes what optional tools do. Turning analytics off also deletes the Google Analytics cookies on this site.",
           ],
           links: [{ label: "Privacy policy", href: "/privacy" }],
         },
@@ -77,7 +77,7 @@ export default function CookiesPage() {
       updated="November 6, 2026"
     >
       <div className="mt-6">
-        <CookieSettingsButton className="inline-flex min-h-11 items-center rounded-full border border-border bg-secondary px-4 text-sm font-medium text-secondary-foreground transition hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" />
+        <CookieSettingsButton variant="secondary" />
       </div>
 
       <h2 className="mt-12 text-lg font-semibold tracking-tight">Everything we store</h2>
