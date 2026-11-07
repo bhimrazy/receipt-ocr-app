@@ -41,6 +41,12 @@ export interface OcrModel {
   label: string;
   /** Newest first. */
   prices: readonly ModelPrice[];
+  /**
+   * How much of the extraction JSON schema the model accepts. "no-array-bounds" drops
+   * `maxItems` from the request (the reply is still checked against the full schema).
+   * Default "full".
+   */
+  schemaMode?: "full" | "no-array-bounds";
 }
 
 export const OCR_PROVIDERS: readonly OcrProvider[] = [
@@ -66,6 +72,9 @@ export const OCR_MODELS: readonly OcrModel[] = [
     id: "google:gemini-3.5-flash-lite",
     provider: "google",
     label: "Gemini 3.5 Flash-Lite",
+    // Verified 2026-11-07: a `maxItems` on the schema makes generateContent answer 400
+    // INVALID_ARGUMENT ("Request contains an invalid argument.") with no detail.
+    schemaMode: "no-array-bounds",
     prices: [{ from: "2026-11-06", input: 0.3, cachedInput: 0.03, output: 2.5 }],
   },
   // Anthropic prices from https://platform.claude.com/docs/en/about-claude/pricing, checked

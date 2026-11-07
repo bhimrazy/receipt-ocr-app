@@ -43,6 +43,29 @@ function fromStatus(status: number): OcrFailureKind {
   return "bad-image";
 }
 
+/** Words in a Google 400 that blame the input file rather than the request's own parameters. */
+const IMAGE_COMPLAINT = /image|mime|media type|document|pdf|inline_?data|\bfile\b|corrupt|decode/i;
+
+/**
+ * A Google 400 with status INVALID_ARGUMENT whose message doesn't blame the file: the request
+ * itself (a schema keyword, a generation setting) was rejected, so the photo is not at fault.
+ * Gemini sends these with no detail, e.g. "Request contains an invalid argument."
+ */
+function isRequestRejection(error: unknown): boolean {
+  if (RetryError.isInstance(error)) return isRequestRejection(error.lastError);
+  if (!APICallError.isInstance(error) || error.statusCode !== 400 || !error.responseBody) {
+    return false;
+  }
+  try {
+    const body = (
+      JSON.parse(error.responseBody) as { error?: { status?: unknown; message?: unknown } }
+    ).error;
+    return body?.status === "INVALID_ARGUMENT" && !IMAGE_COMPLAINT.test(String(body.message ?? ""));
+  } catch {
+    return false;
+  }
+}
+
 /** The cause of a step skipped before any request: this model can't take the file's type or size. */
 export class UnsupportedFileError extends Error {
   override name = "UnsupportedFileError";
@@ -63,7 +86,10 @@ export class OcrCallError extends Error {
     cause: unknown,
   ) {
     const status = statusOf(cause);
-    super(`OCR call failed: ${kind}${status === undefined ? "" : ` (HTTP ${status})`}`, { cause });
+    const why = isRequestRejection(cause) ? ", invalid request" : "";
+    super(`OCR call failed: ${kind}${status === undefined ? "" : ` (HTTP ${status}${why})`}`, {
+      cause,
+    });
     this.skipped = cause instanceof UnsupportedFileError;
   }
 
@@ -118,6 +144,8 @@ export function classifyOcrError(error: unknown): OcrFailureKind {
   // With retries, the SDK wraps the last attempt's error.
   if (RetryError.isInstance(error)) return classifyOcrError(error.lastError);
   if (APICallError.isInstance(error)) {
+    // Our request is wrong for this model, not the photo: configuration, and the next model may work.
+    if (isRequestRejection(error)) return "not-configured";
     return error.statusCode === undefined ? "provider-error" : fromStatus(error.statusCode);
   }
   // A refusal with prose (or no) text fails parsing before the caller sees the finish reason.

@@ -1,3 +1,4 @@
+import { jsonSchema, zodSchema, type Schema } from "ai";
 import { z } from "zod";
 import { RECEIPT_CATEGORIES } from "./categories";
 
@@ -29,3 +30,34 @@ export const receiptExtractionSchema = z.object({
 });
 
 export type ReceiptExtraction = z.infer<typeof receiptExtractionSchema>;
+
+function withoutKeyword(node: unknown, keyword: string): unknown {
+  if (Array.isArray(node)) return node.map((child) => withoutKeyword(child, keyword));
+  if (node && typeof node === "object") {
+    return Object.fromEntries(
+      Object.entries(node)
+        .filter(([key]) => key !== keyword)
+        .map(([key, value]) => [key, withoutKeyword(value, keyword)]),
+    );
+  }
+  return node;
+}
+
+/**
+ * The schema sent to the model, for a model whose `schemaMode` is "no-array-bounds": the same
+ * JSON schema minus `maxItems`, still validated against `receiptExtractionSchema` on the reply.
+ */
+export function receiptRequestSchema(): Schema<ReceiptExtraction> {
+  return jsonSchema<ReceiptExtraction>(
+    async () =>
+      withoutKeyword(await zodSchema(receiptExtractionSchema).jsonSchema, "maxItems") as never,
+    {
+      validate: (value) => {
+        const parsed = receiptExtractionSchema.safeParse(value);
+        return parsed.success
+          ? { success: true, value: parsed.data }
+          : { success: false, error: parsed.error };
+      },
+    },
+  );
+}

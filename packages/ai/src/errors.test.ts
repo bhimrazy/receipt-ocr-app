@@ -18,6 +18,61 @@ const apiError = (statusCode: number | undefined) =>
     statusCode,
   });
 
+const googleBody = (status: string, message: string) =>
+  JSON.stringify({ error: { code: 400, message, status } }, null, 2);
+
+const apiError400 = (responseBody: string) =>
+  new APICallError({
+    message: "Request contains an invalid argument.",
+    url: "https://generativelanguage.googleapis.com",
+    requestBodyValues: {},
+    statusCode: 400,
+    responseBody,
+  });
+
+describe("Google 400 INVALID_ARGUMENT", () => {
+  // Recorded 2026-11-07 from gemini-3.5-flash-lite rejecting `maxItems` in responseJsonSchema.
+  const recorded = googleBody("INVALID_ARGUMENT", "Request contains an invalid argument.");
+
+  it("a rejected request is a configuration error, so the chain moves on", () => {
+    const error = apiError400(recorded);
+    expect(classifyOcrError(error)).toBe("not-configured");
+    const call = new OcrCallError("not-configured", null, error);
+    expect(call.message).toBe("OCR call failed: not-configured (HTTP 400, invalid request)");
+  });
+
+  it("looks through the SDK's retry wrapper", () => {
+    const retried = new RetryError({
+      message: "Failed after 2 attempts",
+      reason: "maxRetriesExceeded",
+      errors: [apiError400(recorded)],
+    });
+    expect(classifyOcrError(retried)).toBe("not-configured");
+  });
+
+  it.each([
+    "Unable to process input image. Please retry or report in https://goo.gle/gemini-feedback",
+    "Provided image is not valid.",
+    "Unsupported MIME type: image/heic",
+    "The document has no pages.",
+  ])("a complaint about the file stays bad-image: %s", (message) => {
+    expect(classifyOcrError(apiError400(googleBody("INVALID_ARGUMENT", message)))).toBe(
+      "bad-image",
+    );
+  });
+
+  it("other 400s (no Google body, another status string, Anthropic) stay bad-image", () => {
+    expect(classifyOcrError(apiError400(""))).toBe("bad-image");
+    expect(classifyOcrError(apiError400("<html>"))).toBe("bad-image");
+    expect(classifyOcrError(apiError400(googleBody("FAILED_PRECONDITION", "x")))).toBe("bad-image");
+    expect(
+      classifyOcrError(
+        apiError400(JSON.stringify({ type: "error", error: { type: "invalid_request_error" } })),
+      ),
+    ).toBe("bad-image");
+  });
+});
+
 describe("classifyOcrError", () => {
   it.each([
     [429, "rate-limited"],
