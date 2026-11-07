@@ -53,3 +53,10 @@ describe("formatSpan", () => {
     expect(formatSpan("2026-11-06", "2026-11-06")).toBe("6 Nov 2026");
   });
 });
+
+describe("whole-unit currencies", () => {
+  it("fixes the fraction digits for both whole and fractional IDR amounts", () => {
+    expect(formatMoney(150000, "IDR")).toMatch(/150,000$/);
+    expect(formatMoney(150000.5, "IDR")).toMatch(/150,000\.50$/);
+  });
+});

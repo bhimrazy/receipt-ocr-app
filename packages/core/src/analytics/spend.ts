@@ -155,8 +155,10 @@ const d = (iso: string) => sql`${iso}::date`;
  * the windows it falls in.
  *
  * Every workspace member reads every receipt (see `ReceiptScope`), so only
- * the workspace narrows this. A receipt-group filter goes here, as one more
- * condition on `r`, once receipt groups exist.
+ * the workspace narrows this. A receipt-group filter would go here, as one
+ * more condition on `r` (an `exists` over the group membership table); the
+ * dashboard doesn't take one yet, and History's `groups` links don't carry
+ * the dashboard's range.
  *
  * `created_at >= windowFrom - 2 days` lets `receipts_org_created_at_idx` bound
  * the scan. It assumes nothing is dated after it was uploaded (two days of
@@ -297,9 +299,29 @@ function dashboardSql(scope: AnalyticsScope, w: Windows): SQL {
 }
 
 const num = (value: string | null | undefined) => Number(value ?? 0);
-const cents = (value: number) => Math.round(value * 100) / 100;
 
-function cumulative(daily: Map<string, number>, first: string, days: number) {
+/** Decimal places of a currency's minor unit (JPY 0, USD 2, KWD 3); 2 when Intl doesn't know it. */
+export function minorUnits(currency: string) {
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency }).resolvedOptions()
+      .maximumFractionDigits!;
+  } catch {
+    return 2;
+  }
+}
+
+/** Rounds to the currency's minor unit, so sums don't drift or lose a third decimal. */
+const rounder = (currency: string) => {
+  const factor = 10 ** minorUnits(currency);
+  return (value: number) => Math.round(value * factor) / factor;
+};
+
+function cumulative(
+  daily: Map<string, number>,
+  first: string,
+  days: number,
+  cents: (value: number) => number,
+) {
   const out: number[] = [];
   let running = 0;
   for (let i = 0; i < days; i++) {
@@ -310,7 +332,12 @@ function cumulative(daily: Map<string, number>, first: string, days: number) {
 }
 
 /** Remainder after the top entries; null when nothing is left out. */
-function rest(all: Amount, top: readonly Amount[], groups: number | null): RestSpend | null {
+function rest(
+  all: Amount,
+  top: readonly Amount[],
+  groups: number | null,
+  cents: (value: number) => number,
+): RestSpend | null {
   const count = all.count - top.reduce((n, e) => n + e.count, 0);
   if (count <= 0) return null;
   return { total: cents(all.total - top.reduce((n, e) => n + e.total, 0)), count, groups };
@@ -359,6 +386,7 @@ export function assembleDashboard(
 
   const currencies: CurrencySpend[] = [];
   for (const [currency, list] of byCurrency) {
+    const cents = rounder(currency);
     const of = (g: number) => list.filter((row) => row.g === g);
     const totalRow = of(SET.total)[0];
     if (!totalRow) continue;
@@ -390,8 +418,8 @@ export function assembleDashboard(
       ? cents(complete.reduce((acc, m) => acc + m.total, 0) / complete.length)
       : null;
 
-    const thisCumulative = cumulative(days, thisMonthFrom, day);
-    const lastCumulative = cumulative(days, w.lastMonthFrom, lastMonthDays);
+    const thisCumulative = cumulative(days, thisMonthFrom, day, cents);
+    const lastCumulative = cumulative(days, w.lastMonthFrom, lastMonthDays, cents);
     const toDate = thisCumulative.at(-1) ?? 0;
 
     const categories = of(SET.category)
@@ -417,9 +445,9 @@ export function assembleDashboard(
       previousSeries: series(range.previous.from, range.previous.to, range.unit, prevBuckets),
       categories: {
         top: topCategories,
-        rest: rest(all, topCategories, categories.length - topCategories.length),
+        rest: rest(all, topCategories, categories.length - topCategories.length, cents),
       },
-      merchants: { top: merchants, rest: rest(all, merchants, null) },
+      merchants: { top: merchants, rest: rest(all, merchants, null, cents) },
       weekdays: [1, 2, 3, 4, 5, 6, 7].map((isoDay) => ({
         isoDay,
         total: num(weekdays.get(isoDay)?.range_total),

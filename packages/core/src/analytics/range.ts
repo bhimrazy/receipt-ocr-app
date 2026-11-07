@@ -56,16 +56,20 @@ export function resolveDateValue(value: string | undefined, today: string): stri
   const relative = RELATIVE.exec(value);
   if (relative) {
     const n = Number(relative[1]);
-    switch (relative[2]) {
-      case "d":
-        return addDays(today, -n);
-      case "w":
-        return addDays(today, -7 * n);
-      case "mo":
-        return shiftMonths(today, -n);
-      default:
-        return shiftMonths(today, -12 * n);
-    }
+    const shifted = (() => {
+      switch (relative[2]) {
+        case "d":
+          return addDays(today, -n);
+        case "w":
+          return addDays(today, -7 * n);
+        case "mo":
+          return shiftMonths(today, -n);
+        default:
+          return shiftMonths(today, -12 * n);
+      }
+    })();
+    // Far enough back to leave the calendar (`-2000y`) is unreadable, not an error.
+    return parseIsoDate(shifted);
   }
   return parseIsoDate(value);
 }
@@ -94,11 +98,8 @@ export function resolveRange(search: SpendSearch, today: string): SpendRange {
     case "12m":
       // Twelve calendar months including this one, the same months as the monthly chart.
       from = `${shiftMonths(today, -11).slice(0, 7)}-01`;
-      previous = {
-        from: `${shiftMonths(today, -23).slice(0, 7)}-01`,
-        to: addDays(from, -1),
-        kind: "previous-period",
-      };
+      // The same stretch a year earlier, so a flat year compares as flat.
+      previous = { from: lastYear(from), to: lastYear(today), kind: "last-year" };
       break;
     case "ytd":
       from = `${today.slice(0, 4)}-01-01`;

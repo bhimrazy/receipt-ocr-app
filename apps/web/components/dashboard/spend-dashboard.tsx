@@ -17,6 +17,7 @@ import {
   formatSpan,
   formatWeekday,
 } from "./format";
+import { TimeZoneCookie } from "./time-zone-cookie";
 import { LazySparkline, LazyTimeChart } from "./lazy-charts";
 import { homeHref, sliceHref } from "./links";
 import type { TimePoint } from "./time-chart";
@@ -74,6 +75,7 @@ export function SpendDashboardView({
 
   return (
     <section aria-labelledby="spending-heading" className="mt-10">
+      <TimeZoneCookie current={dashboard.timeZone} />
       <div className="mb-4">
         <h2 className="text-base font-semibold" id="spending-heading">
           Spending

@@ -174,6 +174,29 @@ describe.skipIf(!enabled)("spending aggregates against Postgres", () => {
     expect((await run(spendDashboard(empty, query()))).currencies).toEqual([]);
   });
 
+  it("reads a receipt without a currency as USD and keeps more than 10 merchants and categories in 'rest'", async () => {
+    const ws = await workspace("many");
+    await insert([
+      row(ws, { date: "2026-11-01", total: "5.00", currency: null }),
+      ...Array.from({ length: 12 }, (_, i) =>
+        row(ws, {
+          date: "2026-11-02",
+          total: `${20 - i}.00`,
+          merchant: `Shop ${i}`,
+          category: `Category ${i}`,
+        }),
+      ),
+    ]);
+    const usd = (await run(spendDashboard(ws, query()))).currencies;
+    expect(usd.map((c) => c.currency)).toEqual(["USD"]);
+    const only = usd[0]!;
+    expect(only.count).toBe(13);
+    expect(only.merchants.top).toHaveLength(10);
+    expect(only.merchants.rest).toMatchObject({ count: 3 });
+    expect(only.categories.top).toHaveLength(10);
+    expect(only.categories.rest).toMatchObject({ count: 3, groups: 3 });
+  });
+
   it("refuses conversion until it exists", async () => {
     const exit = await runtime.runPromiseExit(
       spendDashboard(

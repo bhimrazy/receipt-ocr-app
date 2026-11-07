@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { daySpan } from "./dates";
 import { MAX_RANGE_DAYS, parseSpendSearch, resolveDateValue, resolveRange } from "./range";
 
 const today = "2026-11-06";
@@ -57,8 +58,17 @@ describe("resolveRange", () => {
     expect(range({ range: "12m" })).toMatchObject({
       from: "2025-12-01",
       unit: "month",
-      previous: { from: "2024-12-01", to: "2025-11-30" },
+      previous: { from: "2024-12-01", to: "2025-11-06", kind: "last-year" },
     });
+  });
+
+  it("compares 12 months with a period of the same length, so flat spending reads 0%", () => {
+    const r = range({ range: "12m" });
+    // A leap day can add one; before it was 342 days against 365.
+    expect(Math.abs(daySpan(r.previous.from, r.previous.to) - daySpan(r.from, r.to))).toBeLessThan(
+      2,
+    );
+    expect(daySpan(r.from, r.to)).toBe(daySpan("2025-12-01", today));
   });
 
   it("compares year to date with the same days last year", () => {
@@ -86,6 +96,16 @@ describe("resolveRange", () => {
     expect(long.from > "2000-01-01").toBe(true);
     expect(range({ range: "custom", from: "nope" }).preset).toBe("30d");
     expect(MAX_RANGE_DAYS).toBeGreaterThan(366);
+  });
+
+  it("treats relative dates that leave the calendar as unreadable, never throws", () => {
+    for (const bad of ["-2000y", "-9999y"]) {
+      expect(resolveDateValue(bad, today)).toBeNull();
+      expect(range({ from: bad }).preset).toBe("30d");
+      expect(() => range({ from: "2026-01-01", to: bad })).not.toThrow();
+    }
+    expect(() => range({ from: "-9999mo" })).not.toThrow();
+    expect(resolveDateValue("-9999d", today)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("turns the comparison off with compare=0", () => {

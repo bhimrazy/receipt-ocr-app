@@ -28,8 +28,9 @@ function moneyFormatter(currency: string, compact: boolean, whole: boolean) {
       currencyDisplay: "narrowSymbol",
       ...(compact
         ? { notation: "compact", maximumFractionDigits: 1 }
-        : whole
-          ? { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+        : WHOLE_UNITS.has(currency)
+          ? // Explicit either way, so the server and the browser never pick their own default.
+            { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 }
           : {}),
     });
   } catch {
