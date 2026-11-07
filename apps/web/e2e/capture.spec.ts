@@ -203,13 +203,18 @@ test("the camera link opens once: Back from the receipt doesn't reopen it", asyn
 
 /** Picks `count` copies of the receipt and sends them from review, as one queued batch. */
 async function readBatch(page: Page, count: number) {
-  await page
-    .locator('input[type="file"][multiple]')
-    .setInputFiles(Array.from({ length: count }, () => receipt));
-  await page
+  const read = page
     .getByRole("dialog", { name: "Review photos" })
-    .getByRole("button", { name: `Read ${count} receipts` })
-    .click();
+    .getByRole("button", { name: `Read ${count} receipts` });
+  // Files set before hydration has wired up the input are dropped: pick them again until the
+  // review opens.
+  await expect(async () => {
+    await page
+      .locator('input[type="file"][multiple]')
+      .setInputFiles(Array.from({ length: count }, () => receipt));
+    await expect(read).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
+  await read.click();
 }
 
 const accepted = (n: number) => ({
