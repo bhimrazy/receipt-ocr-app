@@ -80,6 +80,9 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
 11. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): passkey rpID (host or apex via
     `PASSKEY_RP_ID`), require passkey or password+TOTP for platform admins, `session.freshAge` 24 h → 1 h, no email
     OTP, trusted-device length, nudges.
+12. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
+    `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
+    which amounts are converted, sign-up default from country.
 
 ## Roadmap (order)
 
@@ -102,6 +105,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
    to the hot path and commit the new summary. Latest: reads hold 200/s; uploads hold 12/s and fail by 48/s since the job queue (ladder not yet filled in).
 9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
+   Currency honesty (no USD default, 3-decimal amounts) and conversion to a home currency:
+   [currencies and FX](plans/2026-11-06-currencies-fx.md).
 
 ## Known follow-ups
 
