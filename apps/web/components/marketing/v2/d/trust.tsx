@@ -8,7 +8,7 @@ const promises = [
   },
   {
     title: "Google's Gemini AI does the scanning.",
-    body: "Each image is sent to Gemini, which scans out the merchant, date, items, tax and total.",
+    body: "Each image is sent to Gemini, which picks out the merchant, date, items, tax and total.",
   },
   {
     title: "You can delete anything.",
@@ -63,7 +63,7 @@ export function FinePrintD() {
         <SectionHead
           eyebrow="Specifics"
           id="specs"
-          lead="What it takes, what it scanneds and what it gives back."
+          lead="What it takes, what it scans and what it gives back."
           title={
             <>
               The fine print, in <span className="d-wonk">large</span> print.

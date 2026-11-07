@@ -11,7 +11,7 @@ import { Ctas, Label, Section, SectionHead, focusRing, sectionLinks } from "./pr
 // resets, who can access an account, and how export works.
 const answers: Record<string, string> = {
   "How accurate is it?":
-    "ReceiptOCR uses Google's Gemini AI to extract data from receipts. Each receipt gets an overall confidence score, and each line item gets its own. Low scores show you what to check against the photo. You can fix the merchant, date, category, currency and totals before you export. Line items are read and scored, but you can't edit them yet.",
+    "ReceiptOCR uses Google's Gemini AI to extract data from receipts. Each receipt gets an overall confidence score, and each line item gets its own. Low scores show you what to check against the photo. You can fix the merchant, date, category, currency and totals before you export. Line items are scanned and scored, but you can't edit them yet.",
   "What are the limits on the free plan?": `Up to ${PLANS.free.receiptsPerDay} receipts a day, counted from 00:00 UTC, and ${PLANS.free.workspaces} workspace. On busy days a service-wide daily cap can apply first. Need more? Use Contact us and tell us what you need.`,
   "Who can see my receipts?":
     "Only you and the people you invite to your workspace. ReceiptOCR admins can access a workspace to handle a support request. Google's Gemini AI scans the images to extract the data. Deleting a receipt, or your account, also deletes the stored images.",

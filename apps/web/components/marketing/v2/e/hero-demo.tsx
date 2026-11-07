@@ -468,7 +468,7 @@ export function HeroDemo() {
               className="font-medium text-primary underline-offset-4 hover:underline"
               href="/sign-up"
             >
-              Sign up to read your own
+              Sign up to scan your own
             </Link>
             .
           </>

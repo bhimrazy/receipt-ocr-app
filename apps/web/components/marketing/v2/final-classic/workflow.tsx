@@ -221,7 +221,7 @@ const steps = [
   },
   {
     title: "Check",
-    body: "Each receipt, and each line on it, gets a confidence score. Low scores tell you which line to compare with the photo. Fix the merchant, date, category, currency or totals. Line items are read and scored, but you can't edit them yet.",
+    body: "Each receipt, and each line on it, gets a confidence score. Low scores tell you which line to compare with the photo. Fix the merchant, date, category, currency or totals. Line items are scanned and scored, but you can't edit them yet.",
     visual: <Correct />,
   },
   {

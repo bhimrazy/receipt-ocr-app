@@ -496,7 +496,7 @@ export const auth = betterAuth({
     admin({
       defaultRole: "user",
     }),
-    // Scans the token from `x-captcha-response` and the client IP from advanced.ipAddress. A
+    // Reads the token from `x-captcha-response` and the client IP from advanced.ipAddress. A
     // missing token is a 400, a rejected one a 403, and a siteverify failure or timeout (10 s) a
     // 500: all fail closed.
     ...(turnstileEnv

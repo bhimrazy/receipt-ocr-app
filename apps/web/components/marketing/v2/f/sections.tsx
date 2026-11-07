@@ -25,7 +25,7 @@ export function FTicker() {
   );
   return (
     <div className="f-on-ink f-marquee-wrap overflow-hidden border-y-2 border-[var(--f-ink)] bg-background py-4 text-foreground">
-      <p className="sr-only">What ReceiptOCR scanneds from each receipt</p>
+      <p className="sr-only">What ReceiptOCR scans from each receipt</p>
       <div className="f-marquee">
         {row(false)}
         {row(true)}

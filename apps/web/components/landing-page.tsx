@@ -59,7 +59,7 @@ const features = [
 ];
 
 const stats: Array<[string, string]> = [
-  ["Line items", "Read too, not just the total"],
+  ["Line items", "Scanned too, not just the total"],
   ["Confidence", "Per receipt and per line"],
   ["CSV + JSON", "Export as CSV, copy as JSON"],
   ["$0", "To start, no card required"],

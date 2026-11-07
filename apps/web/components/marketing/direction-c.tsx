@@ -22,7 +22,7 @@ const pipeline = [
   },
   {
     step: "02",
-    verb: "Read",
+    verb: "Scan",
     detail: "merchant · items · tax · total",
     note: "Google's Gemini model scans the image",
   },

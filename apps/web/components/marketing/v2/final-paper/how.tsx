@@ -108,7 +108,7 @@ const steps = [
   },
   {
     title: "Check the bits it flags.",
-    body: 'Every receipt, and every line on it, gets a confidence score. Low ones say "check this line", so you know what to compare with the photo. Fix the merchant, date, category, currency or totals right there. Line items are read and scored, but not editable yet.',
+    body: 'Every receipt, and every line on it, gets a confidence score. Low ones say "check this line", so you know what to compare with the photo. Fix the merchant, date, category, currency or totals right there. Line items are scanned and scored, but not editable yet.',
     visual: <Fix />,
   },
   {
