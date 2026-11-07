@@ -12,6 +12,7 @@ import { getPlanTable } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -19,6 +20,7 @@ const linkClass =
   "rounded-sm outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring";
 
 export default async function AdminOverviewPage() {
+  logPageRender("/admin");
   await requireAdmin();
   const now = new Date();
   const plans = await getPlanTable();

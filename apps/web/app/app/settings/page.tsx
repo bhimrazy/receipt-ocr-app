@@ -19,6 +19,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getUsageSummary } from "@/lib/receipts";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -36,6 +37,7 @@ async function loadWorkspace(organizationId: string) {
 }
 
 export default async function SettingsPage() {
+  logPageRender("/app/settings");
   const [scope, session] = await Promise.all([requireActiveScope(), requireSession()]);
   const [{ plan, policy }, usage, workspace] = await Promise.all([
     getCurrentPlan(),

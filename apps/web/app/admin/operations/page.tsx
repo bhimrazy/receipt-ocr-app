@@ -31,6 +31,7 @@ import { RangeSwitcher } from "@/components/admin/ops/range-switcher";
 import { TelemetryLinks } from "@/components/admin/ops/telemetry-links";
 import { AdminPageHeader, AdminSection } from "@/components/admin/page-header";
 import { Stat } from "@/components/admin/stat";
+import { logPageRender } from "@/lib/page-event";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
 import type { SearchParams } from "../params";
@@ -210,6 +211,7 @@ export default async function AdminOperationsPage({
 }: {
   searchParams: SearchParams;
 }) {
+  logPageRender("/admin/operations");
   await requireAdmin();
   const raw = await searchParams;
   const { range, compare } = paramsSchema.parse({

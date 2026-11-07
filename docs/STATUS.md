@@ -32,19 +32,30 @@ How the system is built (every app and package, the main flows and the data mode
 | #38           | Hardening: session check before the upload body, PDF page cap, per-email auth limits, CSP reports, health endpoints, SECURITY.md, [runbook](runbook.md)                                                                |
 | #40           | Load test suite on a 1 vCPU / 1 GB server (`scripts/load.sh`, manual `load.yml`); [results](../bench/results/load-2026-11-06.md)                                                                                       |
 
+## Migrations squashed (2026-11-07)
+
+Pre-launch, all migrations `0000`-`0010` were squashed into one `0000_baseline` that also enables row-level security on
+every table (no policies; the app role bypasses it, so it is defence in depth for Supabase's Data API). Both databases
+are empty and get reset. **From the first real user onward we never squash again.** Details:
+[data layer](architecture/db.md#migrations).
+
 ## Production to-dos (owner)
 
 Steps are in [deployment.md](deployment.md).
 
+- Reset `staging-db` and `production-db` (the explicit SQL in [deployment.md](deployment.md#release-notes), not `DROP SCHEMA public`), run **Database Migration** on
+  `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies the squashed baseline with
+  row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
+  Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
 - Production deploys automatically after CI passes on a push to `main`. Manual runs are allowed only from `main`.
   Once `ci/db-migrations` lands, the automatic deploy skips any release that changes `apps/web/drizzle/` since the
   `production-deployed` tag; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
-  with the owner's approval), then the deploy is run by hand. Production and staging are both at migration `0010`.
+  with the owner's approval), then the deploy is run by hand. Production and staging are reset to the squashed baseline.
 - `staging-db` and `production-db` exist (`main` only, `DIRECT_URL` set, required reviewer on `production-db`).
   Still to do for `ci/db-migrations`: point Vercel's Preview variables at `receipt-ocr-staging`, leave
   `BETTER_AUTH_URL` unset there and turn on Deployment Protection for previews
   ([deployment.md](deployment.md#staging-and-previews)). After merging, once: run **Database Migration** for
-  `staging-db`, then `production-db` (no-ops at `0010`), then **Vercel Production Deployment** by hand. Manual
+  `staging-db`, then `production-db` (applies the baseline), then **Vercel Production Deployment** by hand. Manual
   deploys need a successful `production-db` run with the same migrations, and there is no `production-deployed` tag
   yet, so automatic deploys skip until that deploy creates it.
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
@@ -61,18 +72,19 @@ Steps are in [deployment.md](deployment.md).
 
 ## In flight
 
-| Track (branch)             | Work                                                                                                                                                                        |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `feat/capture`             | In-app camera, batch capture (limit per plan, default 10, set in Admin), four-corner crop with auto edge detection and straightening                                        |
-| `feat/size-target-encoder` | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                                  |
-| `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                                  |
-| `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                            |
-| `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                                 |
-| `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; migration `0010` (index only)            |
-| `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; migration `0009` (apply before deploying)        |
-| `feat/dashboard`           | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                                 |
-| `ci/db-migrations`         | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging |
-| `feat/consent-analytics`   | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                          |
+| Track (branch)             | Work                                                                                                                                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `feat/capture`             | In-app camera, batch capture (limit per plan, default 10, set in Admin), four-corner crop with auto edge detection and straightening                                                                                                |
+| `feat/size-target-encoder` | Browser shrinking by pixel budget with a size target (about 500 KB, at most about 1 MB); tall receipts keep readable width                                                                                                          |
+| `feat/pwa`                 | Installable app: PNG icons, offline page, service worker (no receipt or API caching), Android share target, install prompt                                                                                                          |
+| `feat/mobile-shell`        | App-like mobile shell: bottom tab bar with Scan, compact top bar, sheets; desktop sidebar review                                                                                                                                    |
+| `fix/pdf-page-evasions`    | Five remaining ways to hide pages from the PDF page counter                                                                                                                                                                         |
+| `feat/admin-ops`           | Admin Operations page (volume, latency, cost, failures, queue charts), `/admin/jobs` with audited re-run, cancel and pause/resume; index only                                                                                       |
+| `feat/receipt-groups`      | Receipt groups: named collections per workspace, History filter and selection, picker, `/app/groups`, CSV `groups` column; apply its migration before deploying                                                                     |
+| `feat/dashboard`           | Home spending dashboard per currency: this month vs last, 12 months, categories, merchants, tax, previous-period comparison                                                                                                         |
+| `ci/db-migrations`         | Manual **Database Migration** workflow, automatic deploy skipped when migrations changed, build-time secrets fix, preview sign-in on the preview's own host against staging                                                         |
+| `feat/consent-analytics`   | Cookie consent and analytics on public pages only: Vercel Web Analytics (cookie-free), optional GA4 after opt-in, `/cookies` (#53)                                                                                                  |
+| `feat/wide-events` (#52)   | [Wide events](architecture/flows/observability.md): one event per request, page render, job attempt and tick; schema allowlist, tail sampling (`LOG_SAMPLE_RATE`, `LOG_SLOW_MS`); `job.run` is now `job.attempt`. Next: OTLP export |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -108,16 +120,19 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 1. ~~Usage capture + quota ledger~~ (shipped in #27).
 2. Usage surfaces for customers and admins ([usage design](plans/2026-11-06-usage-design.md)).
-3. Observability: telemetry interface + Axiom + server PostHog, then Sentry, then optional browser PostHog
+3. Observability: wide events (#52), then OTLP export to Axiom, then the optional Sentry and server PostHog extras
    ([observability](plans/2026-11-06-observability.md)) with the [security requirements](reviews/2026-11-06-security-plan.md).
 4. Accuracy: arithmetic checks, low thinking, a real benchmark set, then Flash-Lite-first cascade
    ([extraction cost and accuracy](plans/2026-11-06-extraction-cost-accuracy.md)). No Docling/OCR-first pipeline.
    Benchmark set and engines to compare (Qwen3-VL-8B via an OpenAI-compatible host, LlamaExtract, Mistral OCR):
    [parsers landscape](plans/2026-11-06-parsers-landscape.md). LangChain, Reducto, Unstructured and OCR-to-markdown
    models: no.
+   Real benchmark set (CORD/CORU committed, SROIE/ReceiptBench local, the owner's 40 Nepal receipts, BS-date and
+   Devanagari scoring fixes): [receipt benchmark set](plans/2026-11-07-receipt-benchmark-set.md). Long receipts as
+   multi-part receipts: [long receipt capture](plans/2026-11-07-long-receipt-capture.md).
 5. Second provider (Anthropic), then OpenAI, each admitted by the benchmark.
 6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
-   Security; PR B passkeys (primary sign-in) + admin enforcement. Migrations take the next free numbers after `0008` (job queue).
+   Security; PR B passkeys (primary sign-in) + admin enforcement. Each adds a migration after the baseline.
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
 8. Load test: `scripts/load.sh` (by hand, and from `.github/workflows/load.yml` on demand) runs the production image on
    1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
@@ -162,7 +177,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   48/s (fails: end-to-end p95 17 s, Postgres CPU 87%). The quota count (`ocr_rounds` per user, per page and twice per
   upload) is still the top Postgres statement, with the job queue queries next. Next: a performance track that fills
   in the 24/36/48 ladder after #38, profiles both, replaces the quota count with something cheaper, and runs a
-  30-minute soak. The app also holds up to 10 connections against a pool max of 5, and pages emit no wide events.
+  30-minute soak. The app also holds up to 10 connections against a pool max of 5. Pages emit `page.render` events
+  from #52 on.
 
 - Perf/SEO follow-ups from [the audit](reviews/2026-11-06-perf-seo.md) on files other tracks own: root layout
   preloads DM Sans with the `opsz` axis (62 KB) and JetBrains Mono (40 KB) on every page, and its `openGraph.url: "/"`

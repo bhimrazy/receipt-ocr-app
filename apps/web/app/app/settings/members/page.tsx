@@ -9,13 +9,14 @@ import { MembersTable } from "@/components/members/members-table";
 import { PendingInvites } from "@/components/members/pending-invites";
 import { toRole } from "@/components/members/roles";
 import { auth } from "@/lib/auth";
-import { logger } from "@/lib/log";
+import { errorFields, logger } from "@/lib/log";
 import { requireActiveScope } from "@/lib/session";
 import { Alert } from "@receipt-ocr/ui/components/alert";
 import { headers } from "next/headers";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Members" };
 
@@ -41,12 +42,13 @@ async function loadWorkspace(organizationId: string) {
         .map((i) => ({ id: i.id, email: i.email, role: toRole(i.role), expiresAt: i.expiresAt })),
     };
   } catch (error) {
-    logger.error({ event: "members.load_failed", message: String(error) });
+    logger.error({ event: "members.load_failed", unit: "log", error: errorFields(error) });
     return null;
   }
 }
 
 export default async function MembersPage() {
+  logPageRender("/app/settings/members");
   const scope = await requireActiveScope();
   const workspace = await loadWorkspace(scope.organizationId);
   const canManage = scope.role === "owner" || scope.role === "admin";

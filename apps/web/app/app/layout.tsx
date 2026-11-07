@@ -6,7 +6,7 @@ import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { UsageMeter, type Usage } from "@/components/usage-meter";
 import { UserMenu, type MenuUser } from "@/components/user-menu";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
-import { logger } from "@/lib/log";
+import { errorFields, logger } from "@/lib/log";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
 import { getActiveScope, isAdmin, requireSession } from "@/lib/session";
@@ -21,7 +21,7 @@ async function loadUsage(): Promise<Usage | null> {
     return await getUsageSummary();
   } catch (error) {
     // The pages report a broken database themselves; the meter just stays out of the way.
-    logger.error({ event: "app.usage_meter_failed", message: String(error) });
+    logger.error({ event: "app.usage_meter_failed", unit: "log", error: errorFields(error) });
     return null;
   }
 }
