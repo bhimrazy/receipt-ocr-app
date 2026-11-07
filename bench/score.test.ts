@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
 import { describe, expect, it } from "vitest";
@@ -86,12 +86,22 @@ describe("category scoring", () => {
 });
 
 describe("bench fixtures", () => {
-  const dir = path.join(import.meta.dirname, "fixtures");
-  const truths = readdirSync(dir)
-    .filter((file) => file.endsWith(".json"))
-    .map(
-      (file) => [file, JSON.parse(readFileSync(path.join(dir, file), "utf8")) as Receipt] as const,
-    );
+  // The synthetic set, plus the committed real sets (bench/fixtures-real/<set>/) once they exist.
+  const dirs = ["fixtures", "fixtures-real"]
+    .map((name) => path.join(import.meta.dirname, name))
+    .filter((dir) => existsSync(dir));
+  const truths = dirs.flatMap((dir) =>
+    readdirSync(dir, { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".json"))
+      .map(
+        (file) =>
+          [
+            path.relative(import.meta.dirname, path.join(dir, file)),
+            JSON.parse(readFileSync(path.join(dir, file), "utf8")) as Receipt,
+          ] as const,
+      ),
+  );
+  const listOf = (value: string | readonly string[]) => (Array.isArray(value) ? value : [value]);
 
   it("exist", () => {
     expect(truths.length).toBeGreaterThan(0);
@@ -99,9 +109,24 @@ describe("bench fixtures", () => {
 
   it.each(truths)("%s uses only categories the extraction schema can produce", (_, receipt) => {
     if (receipt.category == null) return;
-    const accepted = Array.isArray(receipt.category) ? receipt.category : [receipt.category];
+    const accepted = listOf(receipt.category);
     expect(accepted.length).toBeGreaterThan(0);
     for (const category of accepted) expect(RECEIPT_CATEGORIES).toContain(category);
+  });
+
+  it.each(truths)("%s has a usable merchant and an AD receiptDate", (_, receipt) => {
+    if (receipt.merchant != null) {
+      const names = listOf(receipt.merchant);
+      expect(names.length).toBeGreaterThan(0);
+      for (const name of names) expect(name.trim()).not.toBe("");
+    }
+    // The AD date; a printed Bikram Sambat date belongs in _meta or _notes. BS runs about 57
+    // years ahead (2081 BS is 2024 AD), so an AD year from 1990 to 2069 tells the two apart.
+    if (receipt.receiptDate != null) {
+      expect(receipt.receiptDate).toMatch(
+        /^(199\d|20[0-6]\d)-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/,
+      );
+    }
   });
 });
 
