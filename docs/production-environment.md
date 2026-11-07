@@ -94,8 +94,8 @@ script that fetches an image), and keep it to the one origin and the methods use
 ]
 ```
 
-Preview addresses change with every pull request, so a Preview bucket would need a fixed preview domain before it
-can have a policy like this.
+Per-PR preview addresses change, so they can't have a policy. The fixed preview domain can: for the Preview bucket,
+use `https://preview.receipt-ocr.bhimraj.com.np` as the one allowed origin (see [Domains](#domains)).
 
 ---
 
@@ -363,6 +363,26 @@ land in the production bucket, and a leaked preview key reaches production. In V
 Leave out for Preview: `BETTER_AUTH_URL` (previews use their own address), the Google and GitHub sign-in keys
 (callback URLs can't match random preview addresses), and Turnstile (or use Cloudflare's test keys). Previews are
 behind Vercel Deployment Protection, so only the team can open them.
+
+---
+
+## Domains
+
+| Domain                               | What it does                                          |
+| ------------------------------------ | ----------------------------------------------------- |
+| `receipt-ocr.bhimraj.com.np`         | Production                                            |
+| `receiptocr.vercel.app`              | 308 redirect to production                            |
+| `preview.receipt-ocr.bhimraj.com.np` | Fixed preview: branch domain for git branch `preview` |
+| `preview-receipt-ocr.vercel.app`     | Same, on a Vercel address                             |
+
+**The `preview` branch.** Pushing to `preview` runs the Preview workflow, which deploys and points both preview
+domains at the new deployment. To refresh it with any branch: `git push origin <branch>:preview` (add `--force-with-lease`
+if it isn't a fast-forward). It uses the staging database and the Preview variables, and sits behind Vercel Deployment
+Protection. Only the owner should push to `preview`; add a branch rule for it later. Every non-production deployment
+sends `X-Robots-Tag: noindex` and a disallow-all `robots.txt`.
+
+Google and GitHub sign-in stay off on Preview (owner decision): leave their variables unset there and use email and
+password.
 
 ---
 
