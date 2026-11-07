@@ -80,6 +80,23 @@ const receipts = [
     ]),
   },
   {
+    id: "kwd-three-decimals",
+    merchant: "Al Mubarakiya Cafe",
+    place: "Block 4, Salmiya, Kuwait",
+    date: ["2026-10-12", "12/10/2026"],
+    category: "Restaurant",
+    currency: "KWD",
+    suffix: " KD",
+    fmt: (n) => group3(n, ",", ".", 3),
+    tax: 0,
+    items: items([
+      ["Chicken Machboos", 2, 1.75],
+      ["Karak Tea", 3, 0.25],
+      ["Lamb Samosa", 4, 0.125],
+      ["Fresh Lime", 2, 0.85],
+    ]),
+  },
+  {
     id: "usd-tip",
     merchant: "Blue Door Bistro",
     place: "418 Market St, Portland OR",
