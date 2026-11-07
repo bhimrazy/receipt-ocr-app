@@ -12,6 +12,7 @@ import {
 } from "@receipt-ocr/core";
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { Effect } from "effect";
+import { AboutSettings } from "@/components/about-settings";
 import { AccountSettings, type ResumeStep } from "@/components/account-settings";
 import type { SignInMethods } from "@/components/reauth-dialog";
 import { auth } from "@/lib/auth";
@@ -160,6 +161,8 @@ export default async function SettingsPage({
         name={session.user.name ?? ""}
         resume={resumeStep}
       />
+
+      <AboutSettings />
     </div>
   );
 }

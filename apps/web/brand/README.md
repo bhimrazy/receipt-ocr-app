@@ -20,6 +20,8 @@ with a white glyph on light. Wordmark: `Receipt` + emerald `OCR`, monospace.
 Add `--sheet <file.png>` to also write a contact sheet. Other scripts render from the masters with
 `renderMaster(name, size)` exported from `scripts/brand-assets.ts` (for example iOS splash images from `app-icon`).
 
+iOS startup images (`bun run splash:ios`, `apps/web/public/splash`): 10 files, iPhone, portrait and dark only, rendered from `app-icon`. iPad, landscape and a light set are left out until there is a theme switch.
+
 | File (under `apps/web`)                  | Size     | Used for                                                   |
 | ---------------------------------------- | -------- | ---------------------------------------------------------- |
 | `app/icon.svg`                           | vector   | Browser tab (Next), offline page, structured-data logo     |
