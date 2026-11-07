@@ -131,7 +131,7 @@ describe("the Anthropic request body", () => {
     const heic = { data: new Uint8Array([0, 0, 0, 24]), mediaType: "image/heic" };
     const error = await run("anthropic:claude-haiku-5-5", heic).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(OcrCallError);
-    expect(error).toMatchObject({ kind: "unsupported-file", usage: null });
+    expect(error).toMatchObject({ kind: "unsupported-file", usage: null, skipped: true });
     expect(calls).toHaveLength(0);
   });
 
@@ -144,6 +144,45 @@ describe("the Anthropic request body", () => {
     expect(error).toMatchObject({ kind: "unsupported-file", usage: null });
     expect(calls).toHaveLength(0);
     await run("anthropic:claude-haiku-5-5", under);
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe("Claude's per-image pixel limit", () => {
+  const png = (width: number, height: number) => {
+    const be32 = (n: number) => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+    return new Uint8Array([
+      0x89,
+      0x50,
+      0x4e,
+      0x47,
+      13,
+      10,
+      26,
+      10,
+      ...be32(13),
+      0x49,
+      0x48,
+      0x44,
+      0x52,
+      ...be32(width),
+      ...be32(height),
+    ]);
+  };
+
+  it("skips an image over 8000 px without a call, so the chain can try Gemini", async () => {
+    const calls = mockFetch(json(message()));
+    const error = await run("anthropic:claude-haiku-5-5", {
+      data: png(8001, 600),
+      mediaType: "image/png",
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "unsupported-file", usage: null });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("sends an image exactly 8000 px long", async () => {
+    const calls = mockFetch(json(message()));
+    await run("anthropic:claude-haiku-5-5", { data: png(600, 8000), mediaType: "image/png" });
     expect(calls).toHaveLength(1);
   });
 });
@@ -251,10 +290,10 @@ describe("Anthropic errors", () => {
     expect(error).toMatchObject({ kind: "not-configured" });
   });
 
-  it("413: unsupported-file, so the chain falls back", async () => {
+  it("413: unsupported-file, so the chain falls back, but it was a request, not a skip", async () => {
     mockFetch(apiError(413, "request_too_large"));
     const error = await run("anthropic:claude-haiku-5-5").catch((e: unknown) => e);
-    expect(error).toMatchObject({ kind: "unsupported-file" });
+    expect(error).toMatchObject({ kind: "unsupported-file", skipped: false });
   });
 
   it("401: not-configured (bad or revoked key)", async () => {

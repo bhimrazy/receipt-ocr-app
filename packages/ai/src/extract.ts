@@ -10,8 +10,9 @@ import {
   type LanguageModelUsage,
 } from "ai";
 import { CATEGORY_DESCRIPTIONS, RECEIPT_CATEGORIES } from "./categories";
-import { classifyOcrError, OcrCallError } from "./errors";
+import { classifyOcrError, OcrCallError, UnsupportedFileError } from "./errors";
 import { fixtureExtraction, fixtureLatencyMs } from "./fixture";
+import { imageSize } from "./image-size";
 import type { ExtractionUsage, OcrProviderId } from "./models";
 import { receiptExtractionSchema, type ReceiptExtraction } from "./schema";
 
@@ -113,11 +114,8 @@ const ANTHROPIC_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "
  * about 13.4 MB in base64. PDFs fall under the 32 MB request limit instead.
  */
 const ANTHROPIC_MAX_IMAGE_BASE64_BYTES = 10_000_000;
-
-/** Thrown without a network call when a model can't take the file's type or size. */
-export class UnsupportedFileError extends Error {
-  override name = "UnsupportedFileError";
-}
+/** Same page: larger images are a 400, which would read as bad-image and stop the chain. */
+const ANTHROPIC_MAX_IMAGE_EDGE = 8000;
 
 /** The model stopped on a safety refusal; whatever it returned is not an extraction. */
 export class RefusalError extends Error {
@@ -143,6 +141,10 @@ function checkFile(model: Exclude<ModelId, "fixture">, file: ExtractReceiptInput
   if (!ANTHROPIC_IMAGE_TYPES.has(file.mediaType)) throw unsupported(`no ${file.mediaType}`);
   if (Math.ceil(file.data.byteLength / 3) * 4 > ANTHROPIC_MAX_IMAGE_BASE64_BYTES) {
     throw unsupported("image over 10 MB base64");
+  }
+  const size = imageSize(file.data);
+  if (size && Math.max(size.width, size.height) > ANTHROPIC_MAX_IMAGE_EDGE) {
+    throw unsupported(`image over ${ANTHROPIC_MAX_IMAGE_EDGE} px`);
   }
 }
 

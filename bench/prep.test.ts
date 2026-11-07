@@ -1,5 +1,6 @@
-import sharp from "sharp";
+import sharp, { type Sharp } from "sharp";
 import { describe, expect, it } from "vitest";
+import { imageSize } from "../packages/ai/src/image-size";
 import { imageTokens, parsePrep, prepare, prepLabel, scaleFor } from "./prep";
 
 const image = async (width: number, height: number, format: "png" | "webp" = "png") =>
@@ -90,5 +91,20 @@ describe("imageTokens", () => {
   it("is Gemini's fixed per-image budget, and unknown for a PDF on Claude", () => {
     expect(imageTokens("google", 4000, 3000)).toBe(1120);
     expect(imageTokens("anthropic", null, null)).toBeNull();
+  });
+});
+
+describe("packages/ai imageSize against real encodes", () => {
+  it.each([
+    ["png", (s: Sharp) => s.png()],
+    ["jpeg", (s: Sharp) => s.jpeg()],
+    ["progressive jpeg", (s: Sharp) => s.jpeg({ progressive: true })],
+    ["lossy webp", (s: Sharp) => s.webp()],
+    ["lossless webp", (s: Sharp) => s.webp({ lossless: true })],
+    ["gif", (s: Sharp) => s.gif()],
+  ])("reads %s", async (_, encode) => {
+    const source = sharp({ create: { width: 321, height: 123, channels: 3, background: "#888" } });
+    const data = new Uint8Array(await encode(source).toBuffer());
+    expect(imageSize(data)).toEqual({ width: 321, height: 123 });
   });
 });
