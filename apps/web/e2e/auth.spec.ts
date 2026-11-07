@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
-import { PASSWORD, signIn, signUp, uniqueEmail } from "./helpers";
+import { PASSWORD, signIn, signUp, uniqueEmail, waitForAuthForm } from "./helpers";
 
 test("sign-in explains a wrong password in plain words", async ({ page }) => {
   await page.goto("/sign-in");
+  await waitForAuthForm(page);
   await page.getByLabel("Email").fill(uniqueEmail("nobody"));
   await page.getByLabel("Password", { exact: true }).fill("not-the-password");
   await page.getByRole("button", { name: "Sign in" }).click();
