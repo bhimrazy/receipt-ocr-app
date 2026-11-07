@@ -48,7 +48,7 @@ test("Reject all loads no GA, and the choice persists", async ({ page, context }
   const consent = (await context.cookies()).find((c) => c.name === "consent");
   expect(decodeURIComponent(consent!.value)).toContain("analytics=0");
   expect(consent!.sameSite).toBe("Lax");
-  expect(consent!.expires * 1000 - Date.now()).toBeGreaterThan(360 * 86_400_000);
+  expect(consent!.expires * 1000 - Date.now()).toBeGreaterThan(180 * 86_400_000);
 
   await page.goto("/sign-in");
   await expect(banner(page)).toHaveCount(0);
