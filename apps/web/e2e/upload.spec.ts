@@ -9,6 +9,9 @@ test.skip(
   "set E2E_UPLOAD=1 and OCR_PROVIDER=fixture to run the upload flow",
 );
 
+// The file inputs are matched inside `[data-ready]`, which the upload panel sets once React has
+// hydrated: files set before then fire no change handler and the review dialog never opens.
+
 // Sign-up is limited per client IP; give every test (and retry) its own address.
 test.beforeEach(async ({ context }) => {
   const octet = () => Math.floor(Math.random() * 255);
@@ -19,7 +22,7 @@ test("uploading a receipt image shows the extracted merchant and total", async (
   await signUp(page, uniqueEmail("upload"));
   await page.goto("/app");
   await page
-    .locator('input[type="file"][multiple]')
+    .locator('[data-ready] input[type="file"][multiple]')
     .first()
     .setInputFiles(path.join(import.meta.dirname, "../../../bench/fixtures/npr-lakh.png"));
   await uploadFromReview(page);
@@ -53,7 +56,7 @@ test("a phone-sized photo is shrunk in the browser, then uploads", async ({ page
   });
   expect(original.length).toBeGreaterThan(4_500_000);
   await page
-    .locator('input[type="file"][multiple]')
+    .locator('[data-ready] input[type="file"][multiple]')
     .first()
     .setInputFiles({
       name: "phone-photo.jpg",
@@ -78,7 +81,7 @@ test("a PDF is accepted, and one over the body limit is refused before upload", 
 }) => {
   await signUp(page, uniqueEmail("pdf"));
   await page.goto("/app");
-  const input = page.locator('input[type="file"][multiple]').first();
+  const input = page.locator('[data-ready] input[type="file"][multiple]').first();
   await expect(input).toHaveAttribute("accept", /application\/pdf/);
 
   const tooBig = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(5_000_000, 0x20)]);
