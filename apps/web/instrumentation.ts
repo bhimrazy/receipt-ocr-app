@@ -13,7 +13,7 @@ export async function register() {
  */
 export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
   const { errorFields, logger, noteFailedRender } = await import("./lib/log");
-  const { requestIdFor } = await import("./lib/request-id");
+  const { isProxiedRoute, requestIdFor } = await import("./lib/request-id");
   const requestId = requestIdFor(context.routePath, request.headers);
   const fields = errorFields(error);
   try {
@@ -22,7 +22,10 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
   } catch {
     // An unreadable digest is left out.
   }
-  if (context.routeType === "render") noteFailedRender(requestId, fields);
+  // Only /app and /admin renders write a page.render to pick this up; others would fill the map.
+  if (context.routeType === "render" && isProxiedRoute(context.routePath)) {
+    noteFailedRender(requestId, fields);
+  }
   logger.error({
     event: "request.error",
     unit: "log",

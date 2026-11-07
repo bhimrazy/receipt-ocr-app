@@ -9,6 +9,9 @@ export const REQUEST_ID_HEADER = "x-request-id";
 /** The paths proxy.ts runs on, so the only ones whose request id header is ours, not the client's. */
 const PROXIED = /^\/(app|admin)(\/|$)/;
 
+/** Whether `routePath` is under /app or /admin: proxied, and logging `page.render`. */
+export const isProxiedRoute = (routePath: string) => PROXIED.test(routePath);
+
 /**
  * The request id for an error report: the proxy's header on /app and /admin
  * (so it matches that render's `page.render`), otherwise a fresh one, because
@@ -19,6 +22,6 @@ export function requestIdFor(
   headers: Record<string, string | string[] | undefined>,
 ): string {
   const header = headers[REQUEST_ID_HEADER];
-  if (PROXIED.test(routePath) && typeof header === "string" && header !== "") return header;
+  if (isProxiedRoute(routePath) && typeof header === "string" && header !== "") return header;
   return crypto.randomUUID();
 }
