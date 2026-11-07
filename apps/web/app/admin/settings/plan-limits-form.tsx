@@ -2,6 +2,7 @@
 
 import {
   FREE_FAILED_ROUNDS,
+  MAX_BATCH,
   type PlanId,
   type PlanPolicy,
   type PlanTable,
@@ -23,6 +24,11 @@ const FIELDS: { key: keyof PlanPolicy; label: string; hint: string }[] = [
     key: "receiptsPerMinute",
     label: "Receipts a minute",
     hint: "Burst limit per user, over a rolling minute.",
+  },
+  {
+    key: "batchMax",
+    label: "Receipts in one batch",
+    hint: `Photos and files a user can add before uploading, from 1 to ${MAX_BATCH}. Photos are prepared on the phone, so larger batches would run older phones out of memory. The limits above still apply to each upload.`,
   },
   {
     key: "workspaces",

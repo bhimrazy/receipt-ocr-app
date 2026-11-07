@@ -46,6 +46,14 @@
   --color-cta-foreground: var(--cta-foreground);
   --color-brand-teal: var(--brand-teal);
   --color-brand-cyan: var(--brand-cyan);
+  --color-group-green: var(--group-green);
+  --color-group-teal: var(--group-teal);
+  --color-group-blue: var(--group-blue);
+  --color-group-violet: var(--group-violet);
+  --color-group-pink: var(--group-pink);
+  --color-group-red: var(--group-red);
+  --color-group-orange: var(--group-orange);
+  --color-group-yellow: var(--group-yellow);
   /* Small mono labels, chips and tab-bar captions. */
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -102,6 +110,15 @@
   /* Brand gradient stops after --primary. */
   --brand-teal: #2dd4bf;
   --brand-cyan: #22d3ee;
+  /* Receipt group colours (GROUP_COLORS in core): >=3:1 on --card and --popover. */
+  --group-green: #4ade80;
+  --group-teal: #2dd4bf;
+  --group-blue: #60a5fa;
+  --group-violet: #a78bfa;
+  --group-pink: #f472b6;
+  --group-red: #f87171;
+  --group-orange: #fb923c;
+  --group-yellow: #facc15;
   --radius: 0.5rem;
   /* Subtle card edges; --input is for form controls and must reach 3:1 (WCAG 1.4.11). */
   --border: #27272a;
@@ -124,6 +141,40 @@
   }
 }
 
+/* Taps fire at once (no double-tap-zoom wait); controls draw their own pressed state. */
+html {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Installed, there's no browser chrome to pull: no rubber band, no pull-to-refresh. */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+/* The phone tab bar: --tabbar-h is its height above the home indicator, --app-bottom-inset
+   all the room it takes. Pages, toasts and floating cards clear it with these. */
+@media (width < 48rem) {
+  :root:has([data-slot="tab-bar"]) {
+    --tabbar-h: 4rem;
+    --app-bottom-inset: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    /* Keep focused fields and #anchors clear of the sticky bars. */
+    scroll-padding-bottom: var(--app-bottom-inset);
+  }
+  /* The impersonation banner carries the status-bar inset, so the app bar below it adds none. */
+  :root:has([data-slot="impersonation-banner"]) {
+    --top-inset: 0px;
+  }
+  :root:has([data-slot="app-bar"]) {
+    scroll-padding-top: calc(
+      var(--banner-h, 0px) + var(--top-inset, env(safe-area-inset-top)) + 3.5rem + 0.5rem
+    );
+  }
+}
+
 body {
   min-height: 100vh;
   background: var(--background);
@@ -139,5 +190,29 @@ body {
   [class*="animate-in"],
   [class*="animate-out"] {
     animation: none !important;
+  }
+}
+
+/* Fades the right edge of a horizontally scrolling row (chips) while more is hidden. Browsers
+   without scroll-driven animations show no fade. */
+@property --fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes scroll-fade-end {
+  0%,
+  92% {
+    --fade-end: 2rem;
+  }
+  100% {
+    --fade-end: 0px;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .scroll-fade-x {
+    animation: scroll-fade-end linear both;
+    animation-timeline: scroll(self inline);
+    mask-image: linear-gradient(to right, #000 calc(100% - var(--fade-end)), transparent);
   }
 }

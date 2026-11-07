@@ -23,23 +23,42 @@ Production runs on Vercel (app), Supabase (Postgres), Cloudflare R2 (receipt fil
    `VERCEL_GIT_COMMIT_SHA`, or `GIT_COMMIT_SHA` on Docker). Compare it with the last merge to `main`. If the problem
    started with that deploy, roll back first and investigate after (see [Rollback](#rollback)).
 
-3. Read the logs. Every request writes one JSON line to stdout (`apps/web/lib/log.ts`) with `event`, `outcome`,
-   `status_code`, `request_id` and `error`.
+3. Read the logs. Every unit of work writes one JSON line ([wide events](architecture/flows/observability.md)): each
+   API request, each `/app` and `/admin` page render, each job attempt and each queue tick. Every line has
+   `timestamp`, `level`, `event`, `outcome` and the deployment fields (`version` is the commit); requests add
+   `request_id`, `route`, `status_code` and `duration_ms`, failures add `error` (`type`, `kind`, `class`, `code`, never a
+   message).
    - Vercel: Project, Logs. Filter by `level:error` or by event name. Runtime logs are kept 1 hour on Hobby.
    - Docker: `docker logs <container> --since 30m | grep '"level":"error"'`.
+   - With `LOG_SAMPLE_RATE` below 1, fast successful polls, page renders and idle ticks are sampled (they carry
+     `sample_rate`). Errors, slow units (`LOG_SLOW_MS`) and anything that called a model are always kept.
+
+   **Find one request.** API responses carry the request id in the `x-request-id` header. Search for it:
+   `grep '"request_id":"<id>"'`. The request's own event and every `job.attempt` it started share that id.
+   Caveat: the id is per request, not per user action. A page render's id (`/app`, `/admin`) is set by `proxy.ts` and is
+   not returned to the browser, so a render is found by `route`, `user_id` and time instead. A client-sent
+   `x-request-id` is never trusted: API routes and error reports outside `/app` and `/admin` make their own.
+
+   **Find a receipt's history.** Search for `"receipt_id":"<id>"`: the upload or retry request, each `job.attempt`
+   (`attempt`, `round`, `queue.outcome`, `error.kind`, `ocr.model`) and the polls. `"job_id":"<id>"` narrows it to one
+   job.
 
    Events worth searching for:
 
-   | Event                               | Means                                                              |
-   | ----------------------------------- | ------------------------------------------------------------------ |
-   | `receipt.upload`, `receipt.retry`   | One upload or retry; `error.type` and `ocr.kind` say why it failed |
-   | `receipt.extract.background`        | A queued extraction finished or failed                             |
-   | `health.not_ready`                  | A readiness check failed (logged once per fresh check)             |
-   | `email.send_failed`                 | Resend rejected or could not be reached                            |
-   | `auth.email_rate_limited`           | An address hit 3 reset or verification emails in an hour           |
-   | `csp.violation`                     | The report-only CSP would have blocked something                   |
-   | `http.client_ip_unresolved`         | Rate limits can't see client IPs; check `TRUSTED_*` settings       |
-   | `route.failure`, `app.render_error` | Unhandled server errors                                            |
+   | Event                             | Means                                                                             |
+   | --------------------------------- | --------------------------------------------------------------------------------- |
+   | `receipt.upload`, `receipt.retry` | One upload or retry; `error.type` and `error.kind` say why it failed              |
+   | `job.attempt`                     | One job attempt (was `job.run`); `queue.outcome` is `succeeded`, `retry`, `dead`… |
+   | `job.tick`                        | One queue drain: what it claimed and reaped; `notices` lists `jobs.*_failed`      |
+   | `page.render` with `level:error`  | A server render failed; `error.digest` matches the error page the user saw        |
+   | `request.error`                   | Next.js caught an unhandled render, route or action error                         |
+   | `route.failure`                   | A server action's core call failed with a 5xx or a defect                         |
+   | `health.not_ready`                | A readiness check failed (logged once per fresh check)                            |
+   | `email.send_failed`               | Resend rejected or could not be reached; `error.kind` is Resend's error name      |
+   | `auth.email_rate_limited`         | An address hit 3 reset or verification emails in an hour                          |
+   | `csp.violation`                   | The report-only CSP would have blocked something                                  |
+   | `http.client_ip_unresolved`       | Rate limits can't see client IPs; check `TRUSTED_*` settings                      |
+   | an event with `dropped_fields`    | Code tried to log a field the schema doesn't allow; fix the call site             |
 
 ## Incidents
 
@@ -53,8 +72,10 @@ Production runs on Vercel (app), Supabase (Postgres), Cloudflare R2 (receipt fil
 
 ### OCR provider down (Gemini errors or 429s)
 
-Symptoms: uploads end as failed, `receipt.upload` events with `error.type: "OcrError"` and `ocr.kind` such as
+Symptoms: uploads end as failed, `job.attempt` events with `error.type: "OcrError"` and `error.kind` such as
 `rate-limited`, `timeout` or `provider-error`.
+
+Quick check: in **Admin, Settings, Connections** press **Check now**. It says whether the key is accepted and the models are visible, or the key is rejected, rate-limited or unreachable. It does not check billing or credit, so a key that shows Working can still fail for lack of credit; check the provider's usage page.
 
 1. Check <https://aistudio.google.com/status> and the Gemini project's quota page.
 2. In **Admin, Settings**, change the OCR model chain to a model that is answering, or put a lighter model first.
@@ -79,6 +100,8 @@ Symptoms: `/api/health/ready` returns `"database":"down"`, pages fail, `DbError`
 
 Symptoms: `"storage":"down"`, uploads fail with `StorageError`, receipt images don't load.
 
+Quick check: **Admin, Settings, Connections, Check now** writes, reads and deletes a small object under `_health/` and tells you which step failed.
+
 1. Check <https://www.cloudflarestatus.com> (R2) or the provider's status page.
 2. Check the bucket and token in the Cloudflare dashboard: the token may have expired or lost access to the bucket.
 3. Receipt data stays readable without storage; only uploads and images are affected. Nothing to do in the app until
@@ -88,6 +111,8 @@ Symptoms: `"storage":"down"`, uploads fail with `StorageError`, receipt images d
 
 Symptoms: `email.send_failed` in logs; in production, sign-up, password reset and invitations return an error
 because an undelivered email fails the request.
+
+Quick check: **Admin, Settings, Connections, Send test email** sends one message to your own address (3 per hour) and says sent, not configured or failed.
 
 1. Check <https://resend-status.com> and the Resend dashboard (domain verification, API key, daily limit). Resend
    Free allows 100 emails a day.
@@ -113,6 +138,76 @@ Symptoms: OCR spend rising, one user or workspace uploading far more than usual.
    retry is one round, and each provider attempt within a round counts too. Lower plan limits in
    **Admin, Settings** for a quicker change.
 4. Set a Gemini project spend cap and a Google Cloud budget alert if they aren't already.
+
+### Jobs stuck or dead
+
+Symptoms: receipts stay "processing", or the **Dead, last 24 hours** tile on **Admin, Operations** is above zero.
+
+1. Open **Admin, Jobs** (filter by state, kind or user). The detail page shows each attempt and its error kind.
+2. Dead because of a provider outage that has passed: **Re-run**. It reads the receipt again in its original round, so
+   the user is not charged, but it still counts against `OCR_DAILY_CAP` and is audited (`job.rerun`).
+3. Not wanted any more: **Cancel** a queued job. To stop new work while you fix something, **Pause** the queue or one
+   kind from Operations; **Resume** when done. A provider cooldown clears itself, or clear it by hand.
+4. Every action appears in **Admin, Audit log** (`job.*`). A user who has retried since is refused: the retry already
+   re-read it.
+
+Past about 1M `jobs` rows, build new `jobs` indexes by hand with `CREATE INDEX CONCURRENTLY` and keep a no-op migration
+so the journal stays in step.
+
+### Migration failed
+
+A **Database Migration** run is red. Production still runs the previous code: the deploy for a release with
+migrations only happens by hand, after both migrations succeed. If staging failed, production's schema wasn't
+touched; if production failed, staging already has the migration.
+
+1. Open the failed run and find the failing step.
+   - **Require main** (preflight) failed: the run wasn't started from `main`. Start it again from `main`.
+   - **Require staging on this commit** (preflight, `production-db` only) failed: the newest successful `staging-db`
+     run has different migrations from this commit, or none was found. Run **Database Migration** for `staging-db` on
+     the current `main`, check staging, then run `production-db` again.
+   - **Check the secret is set** failed: the environment or its `DIRECT_URL` secret is missing or malformed
+     (Settings → Environments; see deployment.md, Migrations). The message never includes the URL.
+   - **Apply migrations** failed: read the Postgres error. If the log shows only the `drizzle-kit` spinner and
+     `exit code 1` with no error, it couldn't connect: check the database is up and not paused, the session pooler
+     (port 5432) is reachable, and the password in `DIRECT_URL` is current.
+2. Check what was applied. `drizzle-kit migrate` applies all pending files in **one transaction**, so a failed run
+   rolls back the whole run: that database is exactly as it was before. In the Supabase SQL editor:
+
+   ```sql
+   SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at DESC LIMIT 5;
+   ```
+
+3. Fix the cause:
+   - **Connection or timeout** (database paused, pooler down, password rotated): fix it, then go to step 4.
+   - **The migration itself is wrong** (a constraint existing rows break, a lock timeout): open a PR that fixes it
+     and merge it. If staging already applied the file (only production failed), don't edit it, because staging
+     would never re-run it: add a new migration that works on both instead.
+   - **Data damaged:** restore the backup taken before the migration (deployment.md, Every release, step 3).
+4. Retry: Actions → **Database Migration** → Run workflow on `main`, `staging-db` first, then `production-db`
+   (approve it). Then run **Vercel Production Deployment** by hand on `main`.
+
+Start one run per database at a time. GitHub keeps one pending run per concurrency group, so a second run started
+while the first waits for approval cancels the waiting one; re-run it if that happens.
+
+Don't run `db:migrate` from a laptop against production unless Actions is down.
+
+### Deploy skipped after a merge
+
+The **Vercel Production Deployment** run is green but `deploy-production` was skipped, and the summary says why:
+
+- **"This release adds migrations"**: expected. Follow deployment.md, Every release, steps 6 to 8.
+- **"Can't find the last production deploy"**: no run of the workflow on `main` (among the last 50) has a successful
+  `deploy-production` job, or the lookup failed. Run **Database Migration** for `staging-db`, then `production-db` (a
+  no-op when up to date), then run the workflow by hand on `main`; that deploy becomes the new reference.
+
+### Manual deploy refused
+
+A manual **Vercel Production Deployment** run is red at `gate`, with "Production deploy refused" in the summary:
+
+- **"CI hasn't passed"**: wait for CI on that `main` commit, or fix it. Manual deploys only ship commits CI passed.
+- **"main has migrations production hasn't run"** or **"Can't find a successful production-db migration"**: run
+  **Database Migration** for `staging-db`, then `production-db` on the current `main`, then deploy again.
+- **"Can't check CI"** or **"Can't compare"**: the GitHub API or the history lookup failed; nothing deployed. Re-run.
 
 ### Leaked secret
 
@@ -177,17 +272,18 @@ Names only; values live in Vercel (Production environment), the container enviro
 After any rotation, redeploy and run the smoke test from [deployment.md](deployment.md#7-check-it-works). Rotate all of
 them once a year, and at once when someone with access leaves.
 
-| Secret                                                                                                                   | Where it lives                                  | How to rotate                                                                                             | What breaks                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`, `BETTER_AUTH_SECRETS`                                                                              | Vercel / container                              | Versioned: see [Rotating the auth secret](deployment.md#rotating-the-auth-secret)                         | Nothing if versioned; changing the current version signs everyone out                          |
-| `DATABASE_URL`, `DIRECT_URL`                                                                                             | Vercel / container; your machine for migrations | Supabase, Database settings, reset the database password; update both URLs                                | Every instance until redeployed with the new URL                                               |
-| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`                                                                               | Vercel / container                              | Cloudflare R2, Manage API tokens: create a new token for the bucket, deploy it, then delete the old one   | Uploads and images until redeployed; signed image URLs already issued expire within 10 minutes |
-| `GOOGLE_GENERATIVE_AI_API_KEY`                                                                                           | Vercel / container                              | Google AI Studio or Cloud Console, API keys: create a key in the paid project, deploy, delete the old key | OCR until redeployed                                                                           |
-| `RESEND_API_KEY`                                                                                                         | Vercel / container                              | Resend, API Keys: create a sending key, deploy, revoke the old one                                        | Account emails until redeployed                                                                |
-| `GOOGLE_CLIENT_SECRET`                                                                                                   | Vercel / container                              | Google Cloud Console, Credentials, the OAuth client: add a secret, deploy, disable the old one            | Google sign-ins in progress during the switch                                                  |
-| `GITHUB_CLIENT_SECRET`                                                                                                   | Vercel / container                              | GitHub, Developer settings, OAuth Apps: generate a new secret, deploy, delete the old one                 | GitHub sign-ins in progress during the switch                                                  |
-| `VERCEL_TOKEN`                                                                                                           | GitHub Actions secret                           | Vercel, Account settings, Tokens: create a token, update the repository secret, delete the old token      | Deploys from Actions until updated                                                             |
-| `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                                                     | GitHub Actions secret                           | Identifiers, not credentials; change only when the project moves                                          | Nothing                                                                                        |
-| `TURNSTILE_SECRET_KEY` (site key `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is inlined at build time: changing it needs a rebuild) | Vercel / container                              | Cloudflare, Turnstile, the widget: rotate the secret key, deploy; rebuild if the site key changed         | Protected forms until redeployed                                                               |
+| Secret                                                                                                                   | Where it lives                                                                                    | How to rotate                                                                                                      | What breaks                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_SECRETS`                                                                              | Vercel / container                                                                                | Versioned: see [Rotating the auth secret](deployment.md#rotating-the-auth-secret)                                  | Nothing if versioned; changing the current version signs everyone out                          |
+| `DATABASE_URL`, `DIRECT_URL`                                                                                             | Vercel / container; `DIRECT_URL` also in the `staging-db` and `production-db` GitHub environments | Supabase, Database settings, reset the database password; update both URLs, in Vercel and the GitHub environment   | Every instance until redeployed with the new URL                                               |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`                                                                               | Vercel / container                                                                                | Cloudflare R2, Manage API tokens: create a new token for the bucket, deploy it, then delete the old one            | Uploads and images until redeployed; signed image URLs already issued expire within 10 minutes |
+| `GOOGLE_GENERATIVE_AI_API_KEY`                                                                                           | Vercel / container                                                                                | Google AI Studio or Cloud Console, API keys: create a key in the paid project, deploy, delete the old key          | OCR until redeployed                                                                           |
+| `ANTHROPIC_API_KEY`                                                                                                      | Vercel / container                                                                                | Anthropic Console, API keys: create a key in the same workspace (keep its spend limit), deploy, delete the old key | Claude steps in the OCR chain until redeployed                                                 |
+| `RESEND_API_KEY`                                                                                                         | Vercel / container                                                                                | Resend, API Keys: create a sending key, deploy, revoke the old one                                                 | Account emails until redeployed                                                                |
+| `GOOGLE_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | Google Cloud Console, Credentials, the OAuth client: add a secret, deploy, disable the old one                     | Google sign-ins in progress during the switch                                                  |
+| `GITHUB_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | GitHub, Developer settings, OAuth Apps: generate a new secret, deploy, delete the old one                          | GitHub sign-ins in progress during the switch                                                  |
+| `VERCEL_TOKEN`                                                                                                           | GitHub environment `vercel`                                                                       | Vercel, Account settings, Tokens: create a token, update the environment secret, delete the old token              | Deploys from Actions until updated                                                             |
+| `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                                                     | GitHub environment `vercel`                                                                       | Identifiers, not credentials; change only when the project moves                                                   | Nothing                                                                                        |
+| `TURNSTILE_SECRET_KEY` (site key `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is inlined at build time: changing it needs a rebuild) | Vercel / container                                                                                | Cloudflare, Turnstile, the widget: rotate the secret key, deploy; rebuild if the site key changed                  | Protected forms until redeployed                                                               |
 
 Not secrets, but worth checking after a leak: `ADMIN_EMAILS` (who becomes admin on sign-up) and `SUPPORT_EMAIL`.

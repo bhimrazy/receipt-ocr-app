@@ -49,6 +49,8 @@ export type Job = {
   lockedBy: string | null;
   lockedUntil: Date | null;
   lastErrorKind: string | null;
+  /** Set by a claim: how long the job had been runnable, by the database clock. */
+  waitMs?: number;
 };
 
 export type JobContext = {

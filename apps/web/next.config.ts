@@ -1,9 +1,11 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { ANALYTICS_PATH_LIST, parseGaMeasurementId } from "./lib/consent/config";
 import { buildContentSecurityPolicy } from "./lib/csp";
 
 const contentSecurityPolicy = buildContentSecurityPolicy(
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+  { googleAnalytics: Boolean(parseGaMeasurementId(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID)) },
 );
 
 const securityHeaders = [
@@ -17,6 +19,25 @@ const securityHeaders = [
   { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy },
   { key: "Reporting-Endpoints", value: 'csp="/api/csp-report"' },
 ];
+
+const noindexHeader = { key: "X-Robots-Tag", value: "noindex" };
+const noindexPaths = [
+  "/app",
+  "/app/:path*",
+  "/admin",
+  "/admin/:path*",
+  "/api/:path*",
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/accept-invitation/:path*",
+];
+
+// Everything but production stays out of search results. Vercel only adds this on *.vercel.app, not on
+// a custom domain such as the fixed preview one. No VERCEL_ENV (Docker) leaves behaviour as it was.
+const notProduction =
+  process.env.VERCEL_ENV !== undefined && process.env.VERCEL_ENV !== "production";
 
 const nextConfig: NextConfig = {
   // Self-contained server bundle for the Docker image. Ignored by Vercel.
@@ -35,7 +56,19 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [
-      { source: "/:path*", headers: securityHeaders },
+      {
+        source: "/:path*",
+        headers: notProduction ? [...securityHeaders, noindexHeader] : securityHeaders,
+      },
+      // Pages where analytics may run send only their origin as Referer: the same-origin /view
+      // fetch and Google then never see a path or a query string (?redirect= can name a receipt).
+      ...ANALYTICS_PATH_LIST.map((source) => ({
+        source,
+        headers: [{ key: "Referrer-Policy", value: "origin" }],
+      })),
+      // As well as the meta tag, so non-HTML responses (CSV exports, JSON) and redirects from
+      // these paths stay out of search results too.
+      ...noindexPaths.map((source) => ({ source, headers: [noindexHeader] })),
       // The browser checks for a new worker on each visit; a cached copy would delay updates.
       {
         source: "/sw.js",

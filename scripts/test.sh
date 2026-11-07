@@ -7,18 +7,21 @@
 #   scripts/test.sh --keep-db  leave the test database in place
 #   scripts/test.sh --turnstile  also rebuild with Cloudflare's test keys and run e2e/turnstile.spec.ts
 #                                against a passing and a rejecting secret (needs internet)
+#   scripts/test.sh --analytics  also rebuild with a test GA measurement id and run
+#                                e2e/consent-ga.spec.ts (Google is stubbed; no internet needed)
 #
 # Env: PORT (default 3004), POSTGRES_PORT (5433), RUSTFS_PORT (9000).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-unit_only=0 keep_db=0 turnstile=0
+unit_only=0 keep_db=0 turnstile=0 analytics=0
 for arg in "$@"; do
   case "$arg" in
     --unit) unit_only=1 ;;
     --keep-db) keep_db=1 ;;
     --turnstile) turnstile=1 ;;
-    -h | --help) sed -n '2,12p' "$0"; exit 0 ;;
+    --analytics) analytics=1 ;;
+    -h | --help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "test.sh: unknown option $arg" >&2; exit 2 ;;
   esac
 done
@@ -56,12 +59,21 @@ bun run db:migrate
 bun run build
 bun run test:e2e
 
+# `bun run start` forks next, so stop the server by its port rather than by PID.
+stop_server() { lsof -tiTCP:"$port" -sTCP:LISTEN | xargs kill 2>/dev/null || true; }
+
+if [ "$analytics" = 1 ]; then
+  # The measurement id is inlined at build time, so this needs its own build.
+  NEXT_PUBLIC_GA_MEASUREMENT_ID=G-E2ETEST01 bun run build
+  (cd apps/web && E2E_GA=1 bunx playwright test e2e/consent-ga.spec.ts)
+  stop_server
+  sleep 1
+fi
+
 if [ "$turnstile" = 1 ]; then
   # The site key is inlined at build time, so this needs its own build; the secret is runtime.
   export NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
   bun run build
-  # `bun run start` forks next, so stop the server by its port rather than by PID.
-  stop_server() { lsof -tiTCP:"$port" -sTCP:LISTEN | xargs kill 2>/dev/null || true; }
   trap 'stop_server; cleanup' EXIT
   # pass: Cloudflare's always-passing secret; fail: its always-rejecting one.
   for mode in pass fail; do

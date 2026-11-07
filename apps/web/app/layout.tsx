@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
+import { ConsentManager } from "@/components/consent/consent-manager";
 import { Pwa } from "@/components/pwa";
+import { gaMeasurementId } from "@/lib/consent/env";
 import { siteDescription, siteTitle, siteUrl } from "@/lib/site";
 import "./globals.css";
 
@@ -55,6 +57,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   themeColor: "#0a0a0b",
   colorScheme: "dark",
+  // Draw under the notch and home indicator; the shell pads itself with env(safe-area-inset-*).
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -68,6 +72,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] font-sans antialiased">
         {children}
         <Pwa />
+        {/* VERCEL is set in Vercel builds only; Docker images run no page counts. */}
+        <ConsentManager
+          gaMeasurementId={gaMeasurementId}
+          vercelAnalytics={process.env.VERCEL === "1"}
+        />
       </body>
     </html>
   );

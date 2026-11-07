@@ -4,6 +4,7 @@ export {
   OCR_FAILURE_KINDS,
   OcrCallError,
   retryAfterMs,
+  UnsupportedFileError,
   type OcrFailureKind,
 } from "./errors";
 export * from "./models";
@@ -16,3 +17,11 @@ export {
 } from "./extract";
 export { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, FixtureFailureError } from "./fixture";
 export { receiptExtractionSchema, type ReceiptExtraction } from "./schema";
+export {
+  CHECK_TIMEOUT_MS,
+  checkProvider,
+  PROVIDER_CHECK_STATUSES,
+  type ProviderCheckInput,
+  type ProviderCheckResult,
+  type ProviderCheckStatus,
+} from "./check";

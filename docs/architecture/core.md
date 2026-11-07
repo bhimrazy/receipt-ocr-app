@@ -63,35 +63,40 @@ shared, so there is one pool and one settings cache per process.
 Everything is exported from `@receipt-ocr/core`. Two import-free entry points exist for client components:
 `@receipt-ocr/core/plans` (plan defaults) and `@receipt-ocr/core/upload-limits` (size and type limits).
 
-| Area        | Exports                                                                                                                     |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Pipeline    | `ingestUpload`, `runExtraction`, `settleFailure`, `claimRetry`, `deleteReceipt`, `purgeReceiptFiles`, `getReceiptWithImage` |
-| Jobs        | `JobQueue`, `enqueueJob`, `tick`, `cancelJob`, `JOB_REGISTRY`, `receiptExtract`, `backoffMs`, job errors                    |
-| Quota       | `userPlan`, `quotaLimits`, `checkQuota`, `enforceQuota`, `quotaGate`, `decideQuota`, `quotaMessage`                         |
-| Usage       | `countUsage`, `lockUserQuota`, `usageByDay`, `usageByModel`, `usageByWorkspace`, `receiptCalls`, `receiptsReadSince`        |
-| Workspace   | `resolveScope`, `ensurePersonalWorkspace`, `hitRateLimit`, `parseWorkspaceName`, `personalWorkspaceName`                    |
-| Admin       | `deleteWorkspace`, `prepareUserDeletion`, `setMemberRole`, `removeMember`, `cancelInvitation`, `setUserPlan`, `recordAudit` |
-| Admin reads | `adminOverview`, `listUsers`, `userDetail`, `listWorkspaces`, `workspaceDetail`, `listAudit`, `findUser`, `findWorkspace`   |
-| Settings    | `Settings`, `providerAvailability`, `planTableSchema`, `ocrRoutingSchema`                                                   |
-| Errors      | `InvalidInput`, `NotFound`, `Conflict`, `QuotaExceeded`, `NotConfigured`, `DbError`, `StorageError`, `OcrError`             |
+| Area        | Exports                                                                                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pipeline    | `ingestUpload`, `runExtraction`, `settleFailure`, `claimRetry`, `deleteReceipt`, `purgeReceiptFiles`, `getReceiptWithImage`                                                                 |
+| Jobs        | `JobQueue`, `enqueueJob`, `tick`, `cancelJob`, `JOB_REGISTRY`, `receiptExtract`, `backoffMs`, job errors                                                                                    |
+| Quota       | `userPlan`, `quotaLimits`, `checkQuota`, `enforceQuota`, `quotaGate`, `decideQuota`, `quotaMessage`                                                                                         |
+| Usage       | `countUsage`, `lockUserQuota`, `usageByDay`, `usageByModel`, `usageByWorkspace`, `receiptCalls`, `receiptsReadSince`                                                                        |
+| Workspace   | `resolveScope`, `ensurePersonalWorkspace`, `hitRateLimit`, `parseWorkspaceName`, `personalWorkspaceName`                                                                                    |
+| Admin       | `deleteWorkspace`, `prepareUserDeletion`, `setMemberRole`, `removeMember`, `cancelInvitation`, `setUserPlan`, `recordAudit`                                                                 |
+| Admin reads | `adminOverview`, `listUsers`, `userDetail`, `listWorkspaces`, `workspaceDetail`, `listAudit`, `findUser`, `findWorkspace`                                                                   |
+| Settings    | `Settings`, `providerAvailability`, `planTableSchema`, `ocrRoutingSchema`                                                                                                                   |
+| Connections | `checkConnections`, `checkAiProviders`, `checkStorage`, `checkChainProviders`: on-demand status checks for Admin → Settings → Connections (statuses only, rate-limited, audited)            |
+| Groups      | `listGroups`, `createGroup`, `updateGroup`, `deleteGroup`, `addReceiptsToGroup`, `removeReceiptsFromGroup`, `groupsOfReceipt`, `canManageGroup`, the schemas and limits in `group-rules.ts` |
+| Errors      | `InvalidInput`, `NotFound`, `Forbidden`, `Conflict`, `QuotaExceeded`, `NotConfigured`, `DbError`, `StorageError`, `OcrError`                                                                |
 
 ## Key modules
 
-| File                                                                                           | What it holds                                                                                             |
-| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| [`pipeline.ts`](../../packages/core/src/pipeline.ts)                                           | The two stages (ingest, extract), retry claim, delete, and building `ocr_calls` rows                      |
-| [`repository.ts`](../../packages/core/src/repository.ts)                                       | `ReceiptRepo`: scoped reads, insert under quota, complete and fail under the attempt guard, staleness     |
-| [`jobs/`](../../packages/core/src/jobs)                                                        | The job queue: store and claim SQL, `tick`, the `receipt.extract` kind ([Background jobs](flows/jobs.md)) |
-| [`ocr.ts`](../../packages/core/src/ocr.ts)                                                     | `runChain`: shared deadline, per-step timeout, which failures fall back                                   |
-| [`quota.ts`](../../packages/core/src/quota.ts)                                                 | Turning usage counts into a verdict and a user-facing message                                             |
-| [`usage.ts`](../../packages/core/src/usage.ts)                                                 | The ledger's counting rules in SQL, the per-user advisory lock, rollups for usage pages                   |
-| [`settings.ts`](../../packages/core/src/settings.ts)                                           | Zod schemas for plan limits and the chain, the cached loader, `save`                                      |
-| [`plans.ts`](../../packages/core/src/plans.ts)                                                 | Plan defaults (Free 20 a day, Pro 1,000), `FREE_FAILED_ROUNDS = 5`                                        |
-| [`files.ts`](../../packages/core/src/files.ts)                                                 | Magic-byte sniffing and upload validation                                                                 |
-| [`workspace.ts`](../../packages/core/src/workspace.ts)                                         | Scope resolution, personal workspace creation, a fixed-window rate limiter                                |
-| [`admin.ts`](../../packages/core/src/admin.ts), [`audit.ts`](../../packages/core/src/audit.ts) | Admin writes with their audit row in one transaction                                                      |
-| [`admin-queries.ts`](../../packages/core/src/admin-queries.ts)                                 | Reads for the admin pages                                                                                 |
-| [`config.ts`](../../packages/core/src/config.ts)                                               | `DATABASE_URL`, `S3_*`, `OCR_DAILY_CAP` via Effect `Config`                                               |
+| File                                                                                           | What it holds                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`pipeline.ts`](../../packages/core/src/pipeline.ts)                                           | The two stages (ingest, extract), retry claim, delete, and building `ocr_calls` rows                                                                                                                                                                                                                                                                                                                                                  |
+| [`repository.ts`](../../packages/core/src/repository.ts)                                       | `ReceiptRepo`: scoped reads, insert under quota, complete and fail under the attempt guard, staleness                                                                                                                                                                                                                                                                                                                                 |
+| [`jobs/`](../../packages/core/src/jobs)                                                        | The job queue: store and claim SQL, `tick`, the `receipt.extract` kind ([Background jobs](flows/jobs.md))                                                                                                                                                                                                                                                                                                                             |
+| [`ocr.ts`](../../packages/core/src/ocr.ts)                                                     | `runChain`: shared deadline, per-step timeout, which failures fall back                                                                                                                                                                                                                                                                                                                                                               |
+| [`quota.ts`](../../packages/core/src/quota.ts)                                                 | Turning usage counts into a verdict and a user-facing message                                                                                                                                                                                                                                                                                                                                                                         |
+| [`usage.ts`](../../packages/core/src/usage.ts)                                                 | The ledger's counting rules in SQL, the per-user advisory lock, rollups for usage pages                                                                                                                                                                                                                                                                                                                                               |
+| [`settings.ts`](../../packages/core/src/settings.ts)                                           | Zod schemas for plan limits and the chain, the cached loader, `save`                                                                                                                                                                                                                                                                                                                                                                  |
+| [`plans.ts`](../../packages/core/src/plans.ts)                                                 | Plan defaults (Free 20 a day, Pro 1,000), `FREE_FAILED_ROUNDS = 5`                                                                                                                                                                                                                                                                                                                                                                    |
+| [`files.ts`](../../packages/core/src/files.ts)                                                 | Magic-byte sniffing and upload validation                                                                                                                                                                                                                                                                                                                                                                                             |
+| [`workspace.ts`](../../packages/core/src/workspace.ts)                                         | Scope resolution, personal workspace creation, a fixed-window rate limiter                                                                                                                                                                                                                                                                                                                                                            |
+| [`admin.ts`](../../packages/core/src/admin.ts), [`audit.ts`](../../packages/core/src/audit.ts) | Admin writes with their audit row in one transaction                                                                                                                                                                                                                                                                                                                                                                                  |
+| [`admin-queries.ts`](../../packages/core/src/admin-queries.ts)                                 | Reads for the admin pages                                                                                                                                                                                                                                                                                                                                                                                                             |
+| [`groups.ts`](../../packages/core/src/groups.ts)                                               | Receipt groups: CRUD, bulk membership, permission checks, limits under a per-workspace lock                                                                                                                                                                                                                                                                                                                                           |
+| [`group-rules.ts`](../../packages/core/src/group-rules.ts)                                     | Group palette, limits, Zod schemas and types; no database code, so the browser imports it too                                                                                                                                                                                                                                                                                                                                         |
+| [`config.ts`](../../packages/core/src/config.ts)                                               | `DATABASE_URL`, `S3_*`, `OCR_DAILY_CAP` via Effect `Config`                                                                                                                                                                                                                                                                                                                                                                           |
+| [`analytics/spend.ts`](../../packages/core/src/analytics/spend.ts)                             | Home dashboard: one grouping-sets SQL statement per view, scoped to the workspace and to completed receipts (`receipts_org_created_at_idx`, base CTE materialized). Amounts are per currency and never summed across currencies; range presets with previous period, top 10 plus other for categories and merchants, 12 months, this month against last. `time-buckets.ts` and `dates.ts` are shared with the admin Operations charts |
 
 ## Data flow
 
@@ -164,8 +169,9 @@ and the count comes from a log of every attempt that is never edited or deleted.
 - All steps share a 50 s deadline (`OCR_DEADLINE_MS`), well under the receipt job's 90 s lease. Each step gets
   `min(step.timeoutMs, time left)`, and no step starts with under 2 s left.
 - Inside one step the AI SDK retries once (`STEP_MAX_RETRIES = 1`).
-- `timeout`, `rate-limited`, `provider-error` and `not-configured` fall through to the next model. `invalid-output`
-  and `bad-image` stop the chain: the image is usually the problem, and another model would cost another call.
+- `timeout`, `rate-limited`, `provider-error`, `not-configured`, `refused` and `unsupported-file` fall through to the
+  next model. `invalid-output` and `bad-image` stop the chain: the image is usually the problem, and another model
+  would cost another call.
 - Every attempt, successful or not, is returned with its kind, latency and usage, and becomes an `ocr_calls` row.
 
 **Settings fail closed.** A missing, invalid or unreadable `app_settings` row falls back to code defaults, never to
@@ -178,6 +184,28 @@ workspace (`FOR UPDATE`) so the "at least one owner" check can't race another ad
 **Files after rows.** Deletes remove database rows first and stored objects afterwards. A failed object delete is
 logged with its key (`receipt.object_delete_failed`, `admin.purge_failed`) rather than failing the request; an
 orphaned object costs storage only. On ingest, if the insert fails the just-stored object is removed.
+
+## Receipt groups
+
+A group is a named collection of receipts in a workspace; a receipt can be in several
+([data model](data-model.md#receipt-groups)).
+
+- **Who may do what.** Any member lists groups, creates them and adds or removes receipts (anyone's). Renaming,
+  recolouring and deleting is for the group's creator and the workspace's `owner` and `admin` roles
+  (`canManageGroup`, which fails closed like `canManageAnyReceipt`). Refusals are `Forbidden` (HTTP 403). A group whose
+  creator was deleted can only be managed by owners and admins. Deleting a group never deletes receipts.
+- **Scoping in SQL.** Every query filters on `organization_id`. A bulk add inserts with `insert ... select` from
+  `receipts` joined to `receipt_groups` on `organization_id`, so ids from another workspace are counted as
+  `notFound` and never linked. A group from another workspace is `NotFound`.
+- **Limits.** `MAX_GROUPS_PER_WORKSPACE` (100) and `MAX_GROUPS_PER_RECEIPT` (20). Every group write takes a
+  per-workspace advisory lock (namespace `7302`), so the counts and the case-insensitive name check can't be raced.
+  A bulk add skips receipts already in 20 groups and reports them as `atLimit` instead of failing the call.
+- **Input.** Names are trimmed, inner whitespace collapsed, 1 to 60 characters, no control or format characters
+  (bidi overrides, zero-width). Colours come from `GROUP_COLORS`. Bulk calls take 1 to 100 UUIDs, deduplicated. Core
+  validates with the same Zod schemas the routes use.
+- **History and export.** `ReceiptFilters.groups` matches receipts in any of the given groups; `exportRows` adds the
+  receipt's group names.
+- **Audit.** Group changes are workspace actions, not platform admin actions, so they write no `admin_audit_log` rows.
 
 ## How to test it
 

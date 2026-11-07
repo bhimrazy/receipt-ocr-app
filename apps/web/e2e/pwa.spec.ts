@@ -49,7 +49,8 @@ async function shareFile(page: Page, name: string, type = "image/png") {
   );
 }
 
-const queued = (page: Page) => page.getByRole("list", { name: "Receipts to read" });
+// Kept photos open the review sheet (#47) instead of joining the list; nothing uploads until Read.
+const review = (page: Page) => page.getByRole("dialog", { name: "Review photos" });
 const sharedNotice = (page: Page) => page.getByRole("status", { name: "Shared files" });
 
 /** Counts receipt uploads, to prove a share never uploads on its own. */
@@ -152,7 +153,7 @@ test("the worker registers in the app, never stores API or page responses, and s
   await expect(page.getByRole("heading", { level: 1, name: "History" })).toBeVisible();
 });
 
-test("a shared receipt waits for Keep, then for Read, and is never uploaded on its own", async ({
+test("a shared receipt waits for Keep, then for Read in the review sheet, and is never uploaded on its own", async ({
   page,
 }) => {
   await signUp(page, uniqueEmail("share"));
@@ -165,10 +166,11 @@ test("a shared receipt waits for Keep, then for Read, and is never uploaded on i
   await expect(sharedNotice(page)).toContainText("1 file shared from another app");
   await expect(sharedNotice(page)).toContainText("shared-receipt.png");
   await expect(sharedNotice(page)).toContainText("possibly before you signed in");
-  await expect(queued(page)).toHaveCount(0);
+  await expect(review(page)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Keep" }).click();
-  await expect(queued(page)).toContainText("shared-receipt.");
+  await expect(review(page)).toBeVisible();
+  await expect(review(page).getByRole("button", { name: "Read receipt" })).toBeVisible();
   await expect(sharedNotice(page)).toHaveCount(0);
   await page.waitForTimeout(500);
   expect(uploads.count).toBe(0);
@@ -177,7 +179,7 @@ test("a shared receipt waits for Keep, then for Read, and is never uploaded on i
   await page.reload();
   await expect(page.getByRole("button", { name: "Add receipt photos or PDFs" })).toBeVisible();
   await expect(sharedNotice(page)).toHaveCount(0);
-  await expect(queued(page)).toHaveCount(0);
+  await expect(review(page)).toHaveCount(0);
 });
 
 test("Discard drops a shared receipt without queueing it", async ({ page }) => {
@@ -186,7 +188,7 @@ test("Discard drops a shared receipt without queueing it", async ({ page }) => {
   await shareFile(page, "unwanted.png");
   await page.getByRole("button", { name: "Discard" }).click();
   await expect(sharedNotice(page)).toHaveCount(0);
-  await expect(queued(page)).toHaveCount(0);
+  await expect(review(page)).toHaveCount(0);
 });
 
 test("a share posted by another site is dropped by the worker", async ({ page }) => {
@@ -232,7 +234,8 @@ test("a share made while signed out waits for sign-in, and sign-out clears a wai
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(sharedNotice(page)).toContainText("after-sign-in.png");
   await page.getByRole("button", { name: "Keep" }).click();
-  await expect(queued(page)).toContainText("after-sign-in.");
+  await expect(review(page)).toBeVisible();
+  await review(page).getByRole("button", { name: "Back without uploading" }).click();
 
   // A share nobody picked up must not survive into the next account.
   await page.evaluate(async () => {

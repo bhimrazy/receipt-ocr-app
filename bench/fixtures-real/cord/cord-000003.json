@@ -1,0 +1,31 @@
+{
+  "category": "Meals",
+  "currency": "IDR",
+  "subtotal": 259000,
+  "tax": 52416,
+  "tip": null,
+  "total": 302016,
+  "items": [
+    {
+      "name": "Bintang Bremer",
+      "quantity": 1,
+      "unitPrice": 59000,
+      "totalPrice": 59000
+    },
+    {
+      "name": "Chicken H-H",
+      "quantity": 1,
+      "unitPrice": 190000,
+      "totalPrice": 190000
+    },
+    {
+      "name": "Ades",
+      "quantity": 1,
+      "unitPrice": 10000,
+      "totalPrice": 10000
+    }
+  ],
+  "_source": "https://huggingface.co/datasets/Voxel51/consolidated_receipt_dataset (samples.json index 3, data/000003.png; origin CORD v1 train, https://github.com/clovaai/cord)",
+  "_license": "CC-BY-4.0 (dataset card and CORD README). Attribution: NAVER CLOVA AI, Park et al. 2019, CORD.",
+  "_notes": "Merchant and date are blurred out in CORD (store info removed), so both are omitted. Currency IDR (Indonesian). Items, qty and totals read from the image and cross-checked against the dataset's menu.nm/cnt/price and subtotal/service/tax/total labels. Discount 19,000 and service 9,600 have no schema field. 259,000+9,600+52,416-19,000 = 302,016 (adds up). Subtotal keyed as printed pre-discount. Folded, creased photo."
+}

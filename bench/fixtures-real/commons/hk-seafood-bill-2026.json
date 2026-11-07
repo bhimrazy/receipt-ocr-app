@@ -1,0 +1,51 @@
+{
+  "merchant": ["食神麗宮 (西環)", "食神麗宮", "Chinese Banquet Seafood Restaurant"],
+  "receiptDate": "2026-01-11",
+  "category": "Meals",
+  "currency": "HKD",
+  "subtotal": 895,
+  "tax": null,
+  "tip": null,
+  "total": 985,
+  "items": [
+    {
+      "name": "瑤柱蛋白炒飯",
+      "quantity": 1,
+      "unitPrice": 108,
+      "totalPrice": 108
+    },
+    {
+      "name": "精選孖寶",
+      "quantity": 1,
+      "unitPrice": 198,
+      "totalPrice": 198
+    },
+    {
+      "name": "上湯海味雜菜煲(例)",
+      "quantity": 1,
+      "unitPrice": 118,
+      "totalPrice": 118
+    },
+    {
+      "name": "(一隻)白切文昌雞",
+      "quantity": 1,
+      "unitPrice": 188,
+      "totalPrice": 188
+    },
+    {
+      "name": "茶",
+      "quantity": 5,
+      "unitPrice": 9,
+      "totalPrice": 45
+    },
+    {
+      "name": "(份)大海斑兩味",
+      "quantity": 1,
+      "unitPrice": 238,
+      "totalPrice": 238
+    }
+  ],
+  "_source": "https://commons.wikimedia.org/wiki/File:HK_SYP_%E8%A5%BF%E7%92%B0_Sai_Ying_Pun_%E5%BE%B7%E8%BC%94%E9%81%93%E8%A5%BF_308_Des_Voeux_Road_West_%E9%A3%9F%E7%A5%9E%E9%BA%97%E5%AE%AE%E9%85%92%E5%AE%B6_Chinese_Banquet_Seafood_Restaurant_bill_receipt_January_2026_N13P_02.jpg",
+  "_license": "CC0 1.0",
+  "_notes": "Read by me. Real photo (Hong Kong, Chinese). Date printed DD-MM-YY 11-01-26, matching EXIF/upload date 2026-01-11. HKD inferred (no currency printed). 895 + 10% service 89.50 + rounding 0.5 = 985 (adds up). Service charge has no field so tax is null. Tea line 5 x 9 = 45 (unit derived). The 4th item name begins with two unreadable glyphs. Author: EVOW Sahgyune Paiem KAASEI 02238 (Wikimedia Commons user)."
+}

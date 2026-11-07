@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 import { AuthLayout, AuthNotConfiguredCard } from "@/components/auth/auth-layout";
 import { CredentialsForm, type SocialProvider } from "@/components/auth/credentials-form";
 import { authEnabled, authEnv } from "@/lib/env";
@@ -8,10 +9,13 @@ import { safeRedirect } from "@/lib/redirect";
 import { getSession } from "@/lib/session";
 import { redirect as nextRedirect } from "next/navigation";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Create account",
-  robots: { index: false, follow: true },
-};
+  description:
+    "Create a free receiptOCR account. Photograph a receipt or upload a PDF, check what was read and export a CSV. No card required.",
+  path: "/sign-up",
+  index: false,
+});
 
 export default async function SignUpPage({
   searchParams,

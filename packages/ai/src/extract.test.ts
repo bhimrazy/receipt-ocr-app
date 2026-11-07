@@ -40,7 +40,7 @@ const googleUsage = {
   outputTokens: { total: 300, text: 120, reasoning: 180 },
 };
 
-const reply = (text: string, finish: "stop" | "length" = "stop") =>
+const reply = (text: string, finish: "stop" | "length" | "content-filter" = "stop") =>
   new MockLanguageModelV4({
     doGenerate: {
       content: text ? [{ type: "text", text }] : [],
@@ -98,6 +98,19 @@ describe("extractWith (mock model)", () => {
     expect(error).toMatchObject({ kind: "invalid-output", usage: expectedUsage });
   });
 
+  it.each([
+    ["text that parses", JSON.stringify(FIXTURE_RECEIPTS[0])],
+    ["prose", "I can't help with that."],
+    ["no text", ""],
+  ])("reads a safety stop with %s as refused, keeping its usage", async (_, text) => {
+    const error = await extractWith(reply(text, "content-filter"), {
+      file: file("x"),
+      maxRetries: 0,
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OcrCallError);
+    expect(error).toMatchObject({ kind: "refused", usage: expectedUsage });
+  });
+
   it("has no usage when the provider call itself failed", async () => {
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
@@ -108,6 +121,28 @@ describe("extractWith (mock model)", () => {
       (e: unknown) => e,
     );
     expect(error).toMatchObject({ kind: "provider-error", usage: null });
+  });
+});
+
+describe("number-format guidance in the prompt", () => {
+  const promptSent = async () => {
+    const model = reply(JSON.stringify(FIXTURE_RECEIPTS[0]));
+    await extractWith(model, { file: file("x"), maxRetries: 0 });
+    return JSON.stringify(model.doGenerateCalls[0]!.prompt);
+  };
+
+  it("lets three-minor-unit currencies read three digits as the fraction", async () => {
+    const prompt = await promptSent();
+    for (const code of ["KWD", "BHD", "OMR", "JOD", "TND", "LYD", "KD", "DT"]) {
+      expect(prompt).toContain(code);
+    }
+    expect(prompt).toContain("three digits after the decimal mark are the fraction");
+  });
+
+  it("keeps the thousands rule for other currencies", async () => {
+    const prompt = await promptSent();
+    expect(prompt).toContain("almost always thousands");
+    expect(prompt).toContain("25.000");
   });
 });
 

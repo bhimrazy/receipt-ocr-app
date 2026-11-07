@@ -23,6 +23,9 @@ import {
 import { Ocr, providerOf, type ProviderCooldowns } from "./ocr";
 import { quotaExceeded, quotaGate, type QuotaLimits } from "./quota";
 import { Storage } from "./services";
+import { annotateEvent } from "./telemetry/current";
+import { errorFields } from "./telemetry/redact";
+import type { WideEventFields } from "./telemetry/schema";
 
 export type StepTiming = { step: string; ms: number };
 
@@ -38,6 +41,38 @@ const timed = <A, E, R>(timings: StepTiming[], step: string, effect: Effect.Effe
     }),
   );
 
+/** Step timings for the current wide event, read when the effect ends. */
+const annotateTimings = (timings: readonly StepTiming[]) =>
+  Effect.suspend(() =>
+    timings.length === 0
+      ? Effect.void
+      : annotateEvent({ timings_ms: Object.fromEntries(timings.map((t) => [t.step, t.ms])) }),
+  );
+
+/** The OCR summary of a round's calls for the wide event: models, tokens and cost, no content. */
+export function ocrFields(rows: readonly OcrCallRow[]): NonNullable<WideEventFields["ocr"]> {
+  const called = rows.filter((row) => row.model !== null);
+  const sum = (pick: (row: OcrCallRow) => number | null | undefined) =>
+    called.reduce<number | undefined>((total, row) => {
+      const value = pick(row);
+      return value == null ? total : (total ?? 0) + value;
+    }, undefined);
+  const lastCall = called.at(-1);
+  const last = rows.at(-1);
+  return {
+    calls: called.length,
+    model: lastCall?.model,
+    provider: lastCall?.provider,
+    fallback: called.some((row) => row.step > 0),
+    tokens_in: sum((row) => row.inputTokens),
+    tokens_out: sum((row) => row.outputTokens),
+    tokens_cached: sum((row) => row.cachedInputTokens),
+    tokens_reasoning: sum((row) => row.reasoningTokens),
+    cost_micro_usd: totalCost(rows) ?? undefined,
+    failure_kind: last && last.status !== "ok" ? last.status : undefined,
+  };
+}
+
 type CallContext = {
   receiptId: string;
   scope: ReceiptScope;
@@ -46,9 +81,21 @@ type CallContext = {
   at: Date;
 };
 
-/** One `ocr_calls` row per model call, priced now; the price is never recomputed later. */
+/**
+ * One `ocr_calls` row per step, priced now; the price is never recomputed later.
+ * A step skipped before any request keeps its provider but no model: queries
+ * read `model is not null` as "a model was called", so a skip doesn't use quota,
+ * count as unpriced or show up in latency.
+ */
 export function ocrCallRows(attempts: readonly OcrAttempt[], context: CallContext): OcrCallRow[] {
   return attempts.map((attempt) => {
+    if (attempt.skipped) {
+      return {
+        ...noCallRow(attempt.kind, context),
+        step: attempt.step,
+        provider: providerOf(attempt.model as ModelId),
+      };
+    }
     const cost = costOf(attempt.model, attempt.usage, context.at);
     return {
       receiptId: context.receiptId,
@@ -152,6 +199,7 @@ export const ingestUpload = (input: {
       ),
       // No row means nothing would ever delete the object.
       Effect.tapError(() => storage.remove([imageObjectKey]).pipe(Effect.ignore)),
+      Effect.ensuring(annotateTimings(timings)),
     );
     return { receipt: inserted.receipt, jobId: inserted.jobId, timings };
   });
@@ -248,6 +296,7 @@ export const runExtraction = (input: ExtractionInput) =>
       );
       const written = rowsFor(result.attempts);
       calls = written;
+      yield* annotateEvent({ ocr: ocrFields(written) });
       const receipt = yield* timed(
         timings,
         "db.complete",
@@ -262,6 +311,10 @@ export const runExtraction = (input: ExtractionInput) =>
       );
       // Written with the completion; the failure path must not write them again.
       recorded = true;
+      if (receipt) {
+        const confidence = receipt.confidence === null ? undefined : Number(receipt.confidence);
+        yield* annotateEvent({ ocr: { confidence, items_count: receipt.items.length } });
+      }
       if (!receipt) {
         // Deleted or superseded while the model ran.
         return { kind: "skipped", reason: "superseded" } satisfies ExtractionSkipped;
@@ -280,16 +333,18 @@ export const runExtraction = (input: ExtractionInput) =>
         const rows = failedCalls(error);
         return rows.length === 0
           ? Effect.void
-          : repo.recordCalls(rows).pipe(
+          : annotateEvent({ ocr: ocrFields(rows) }).pipe(
+              Effect.zipRight(repo.recordCalls(rows)),
               Effect.catchAll((dbError) =>
                 Effect.logError("receipt.calls_not_recorded", {
-                  receiptId: input.receiptId,
-                  unrecordedCalls: rows.length,
-                  error: dbError.message,
+                  receipt_id: input.receiptId,
+                  count: rows.length,
+                  error: errorFields(dbError),
                 }),
               ),
             );
       }),
+      Effect.ensuring(annotateTimings(timings)),
     );
   });
 
@@ -317,8 +372,8 @@ export const settleFailure = (input: {
   ).pipe(
     Effect.catchAll((error) =>
       Effect.logError("receipt.fail_not_recorded", {
-        receiptId: input.receiptId,
-        error: error.message,
+        receipt_id: input.receiptId,
+        error: errorFields(error),
       }).pipe(Effect.as(false)),
     ),
   );
@@ -360,12 +415,12 @@ export const deleteReceipt = (input: { receiptId: string; scope: ReceiptScope })
     const removed = yield* repo.remove(input.receiptId, input.scope);
     if (!removed) return yield* new NotFound({ message: "Receipt not found" });
     if (removed.imageObjectKey) {
-      // The row is already gone; a leftover object is logged with its key for a sweep.
+      // The row is already gone; a leftover object is logged with the receipt id for a sweep.
       yield* storage.remove([removed.imageObjectKey]).pipe(
         Effect.catchAll((error) =>
           Effect.logError("receipt.object_delete_failed", {
-            key: removed.imageObjectKey,
-            error: error.message,
+            receipt_id: input.receiptId,
+            error: errorFields(error),
           }),
         ),
       );

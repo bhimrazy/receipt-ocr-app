@@ -1,0 +1,31 @@
+{
+  "category": ["Groceries", "Meals"],
+  "currency": "IDR",
+  "subtotal": 10200,
+  "tax": null,
+  "tip": null,
+  "total": 10200,
+  "items": [
+    {
+      "name": "Arem-arem",
+      "quantity": 1,
+      "unitPrice": 8000,
+      "totalPrice": 4800
+    },
+    {
+      "name": "Lemper",
+      "quantity": 1,
+      "unitPrice": 9000,
+      "totalPrice": 5400
+    },
+    {
+      "name": "Plastik Kecil",
+      "quantity": 1,
+      "unitPrice": 0,
+      "totalPrice": 0
+    }
+  ],
+  "_source": "https://huggingface.co/datasets/Voxel51/consolidated_receipt_dataset (samples.json index 33, data/000033.png; origin CORD v1 train, https://github.com/clovaai/cord)",
+  "_license": "CC-BY-4.0 (dataset card and CORD README). Attribution: NAVER CLOVA AI, Park et al. 2019, CORD.",
+  "_notes": "Merchant and date are blurred out in CORD (store info removed), so both are omitted. Currency IDR (Indonesian). Items, qty and totals read from the image and cross-checked against the dataset's menu.nm/cnt/price and subtotal/service/tax/total labels. Low light, small image (576x864). Each item has a 40% line discount (-3,200, -3,600); I keyed totalPrice net of discount (4,800 / 5,400, sum 10,200 = total) with the gross unit price. AMBIGUOUS: a scorer may expect gross 8,000 / 9,000 (CORD menu.price). Category is a snack shop so Groceries or Meals."
+}

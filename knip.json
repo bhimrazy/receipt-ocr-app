@@ -3,8 +3,7 @@
   "include": ["files", "dependencies", "unlisted", "unresolved", "binaries", "duplicates"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/*.{ts,mjs}", "bench/*.{ts,mjs}", "bench/load/*.mjs"],
-      "ignoreDependencies": ["@types/react-dom"]
+      "entry": ["scripts/*.{ts,mjs}", "bench/*.{ts,mjs}", "bench/load/*.mjs"]
     },
     "apps/web": {
       "ignoreDependencies": ["tailwindcss"]

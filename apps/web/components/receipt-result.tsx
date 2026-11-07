@@ -36,7 +36,11 @@ import {
   formatMoney,
 } from "@/lib/format";
 import { ProcessingPoller } from "@/components/processing-poller";
-import { ReceiptActions, ReceiptWorkspace } from "@/components/receipt-actions";
+import {
+  ReceiptActions,
+  ReceiptEditingProvider,
+  ReceiptWorkspace,
+} from "@/components/receipt-actions";
 import { receiptTitle } from "@/components/receipt-list";
 import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
@@ -137,10 +141,13 @@ function Field({
 export function ReceiptResult({
   receipt,
   canEdit,
+  groups,
 }: {
   receipt: ReceiptWithItems;
   /** False for members viewing someone else's receipt: no edit or delete controls. */
   canEdit: boolean;
+  /** groups: the receipt's group chips and picker, shown under the title. */
+  groups?: React.ReactNode;
 }) {
   const inFlight = isInFlight(receipt.status);
   const completed = receipt.status === "completed";
@@ -170,8 +177,9 @@ export function ReceiptResult({
             </>
           )}
         </PageHeaderDescription>
+        {groups ? <div className="mt-3">{groups}</div> : null}
       </PageHeaderContent>
-      <ReceiptActions canEdit={canEdit} receipt={receipt} />
+      <ReceiptActions canEdit={canEdit} canRetry={failed && triesLeft > 0} receipt={receipt} />
     </PageHeader>
   );
 
@@ -225,8 +233,9 @@ export function ReceiptResult({
     </Card>
   );
 
+  // Phones get Back from the top bar and Scan from the tab bar.
   const back = (
-    <div className="mb-4 flex items-center justify-between gap-2">
+    <div className="mb-4 flex items-center justify-between gap-2 max-md:hidden">
       <Link
         className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-ml-3")}
         href="/app/history"
@@ -452,18 +461,20 @@ export function ReceiptResult({
   );
 
   return (
-    <div className="mx-auto max-w-6xl">
-      {back}
-      {header}
-      <ReceiptWorkspace
-        canEdit={canEdit}
-        checks={checksFor(receipt, money)}
-        details={details}
-        footer={footer}
-        image={image}
-        items={items}
-        receipt={receipt}
-      />
-    </div>
+    <ReceiptEditingProvider>
+      <div className="mx-auto max-w-6xl">
+        {back}
+        {header}
+        <ReceiptWorkspace
+          canEdit={canEdit}
+          checks={checksFor(receipt, money)}
+          details={details}
+          footer={footer}
+          image={image}
+          items={items}
+          receipt={receipt}
+        />
+      </div>
+    </ReceiptEditingProvider>
   );
 }

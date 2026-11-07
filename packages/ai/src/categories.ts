@@ -42,8 +42,6 @@ export const CATEGORY_DESCRIPTIONS: Record<ReceiptCategory, string> = {
 /**
  * Older values (the previous consumer list and free-text categories already
  * stored in rows) mapped onto the canonical list. Keys are lowercase.
- * `apps/web/drizzle/0004_canonical_categories.sql` must stay in sync; a test
- * checks it.
  */
 const SYNONYMS: Record<string, ReceiptCategory> = {
   grocery: "Groceries",

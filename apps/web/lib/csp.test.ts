@@ -23,4 +23,17 @@ describe("buildContentSecurityPolicy", () => {
     expect(directive(csp, "worker-src")).toBe("worker-src 'self'");
     expect(directive(csp, "manifest-src")).toBe("manifest-src 'self'");
   });
+
+  it("adds Google Analytics origins only when GA is on", () => {
+    const off = buildContentSecurityPolicy(undefined);
+    expect(off).not.toMatch(/google/);
+    expect(directive(off, "connect-src")).toBe("connect-src 'self'");
+
+    const on = buildContentSecurityPolicy(undefined, { googleAnalytics: true });
+    expect(directive(on, "script-src")).toContain("https://www.googletagmanager.com");
+    expect(directive(on, "connect-src")).toContain("https://*.google-analytics.com");
+    expect(directive(on, "connect-src")).toContain("https://*.analytics.google.com");
+    // GA4 without ads features: no doubleclick or ad-serving origins.
+    expect(on).not.toMatch(/doubleclick|googlesyndication|googleadservices/);
+  });
 });

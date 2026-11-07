@@ -523,7 +523,7 @@ export const workspaceDetail = (id: string, now = new Date()) =>
 // ---------- Audit log ----------
 
 export type AuditFilters = {
-  targetType?: "user" | "workspace" | "settings";
+  targetType?: "user" | "workspace" | "settings" | "job";
   targetId?: string;
   q?: string;
 };

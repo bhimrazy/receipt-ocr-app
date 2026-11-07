@@ -1,11 +1,18 @@
-import { OCR_MODELS, ocrModel, type ModelId, type OcrProviderId } from "@receipt-ocr/ai";
+import {
+  OCR_MODELS,
+  OCR_PROVIDERS,
+  ocrModel,
+  type ModelId,
+  type OcrProviderId,
+} from "@receipt-ocr/ai";
 import { appSettings, eq, type DbClient } from "@receipt-ocr/db";
 import { Config, Context, Effect, Layer, Option } from "effect";
 import { z } from "zod";
 import { insertAudit, transact, type AuditActor } from "./audit";
 import { InvalidInput, type Conflict, type DbError, type NotFound } from "./errors";
-import { DEFAULT_PLANS, type PlanTable } from "./plans";
+import { DEFAULT_BATCH_MAX, DEFAULT_PLANS, MAX_BATCH, type PlanTable } from "./plans";
 import { Db } from "./services";
+import { errorFields } from "./telemetry/redact";
 
 /**
  * Runtime settings an admin can change: plan limits and the OCR model chain.
@@ -15,18 +22,40 @@ import { Db } from "./services";
 
 const count = (max: number) => z.number().int().min(1).max(max);
 
-const planPolicySchema = z
-  .object({
-    workspaces: count(100),
-    receiptsPerDay: count(100_000),
-    receiptsPerMinute: count(1_000),
-  })
-  .refine((p) => p.receiptsPerMinute <= p.receiptsPerDay, {
-    message: "The per-minute limit can't be higher than the daily limit.",
-    path: ["receiptsPerMinute"],
-  });
+const policySchema = (batchMax: z.ZodType<number>) =>
+  z
+    .object({
+      workspaces: count(100),
+      receiptsPerDay: count(100_000),
+      receiptsPerMinute: count(1_000),
+      // Rows saved before this field existed get the default.
+      batchMax: batchMax.default(DEFAULT_BATCH_MAX),
+    })
+    .refine((p) => p.receiptsPerMinute <= p.receiptsPerDay, {
+      message: "The per-minute limit can't be higher than the daily limit.",
+      path: ["receiptsPerMinute"],
+    });
 
+const planPolicySchema = policySchema(count(MAX_BATCH));
+
+/** What an admin may save. */
 export const planTableSchema = z.object({ free: planPolicySchema, pro: planPolicySchema });
+
+/**
+ * What is read back: a stored `batchMax` over MAX_BATCH (saved before the cap was lowered) is
+ * clamped, so that one field doesn't send every customised limit back to the defaults.
+ */
+const storedPolicySchema = policySchema(
+  z
+    .number()
+    .int()
+    .min(1)
+    .transform((n) => Math.min(n, MAX_BATCH)),
+);
+export const storedPlanTableSchema = z.object({
+  free: storedPolicySchema,
+  pro: storedPolicySchema,
+});
 
 /** Per-step budget; the whole chain also shares one deadline (see `Ocr`). */
 export const DEFAULT_STEP_TIMEOUT_MS = 30_000;
@@ -71,13 +100,25 @@ const nonEmpty = (name: string) =>
   );
 
 /** Which providers can run: a key is present in env (the value is never read out). */
-export const providerAvailability: Effect.Effect<Record<OcrProviderId, boolean>> = Effect.all({
-  google: nonEmpty("GOOGLE_GENERATIVE_AI_API_KEY"),
-  fixture: Config.string("OCR_PROVIDER").pipe(
-    Config.map((value) => value === "fixture"),
-    Config.withDefault(false),
+export const providerAvailability: Effect.Effect<Record<OcrProviderId, boolean>> = Effect.all(
+  Object.fromEntries(
+    OCR_PROVIDERS.map((p) => [
+      p.id,
+      p.keyEnv
+        ? nonEmpty(p.keyEnv)
+        : // The keyless offline fixture runs only where OCR_PROVIDER=fixture opts in.
+          Config.string("OCR_PROVIDER").pipe(
+            Config.map((value) => value === "fixture"),
+            Config.withDefault(false),
+          ),
+    ]),
+  ) as Record<OcrProviderId, Config.Config<boolean>>,
+).pipe(
+  Effect.orElseSucceed(
+    () =>
+      Object.fromEntries(OCR_PROVIDERS.map((p) => [p.id, false])) as Record<OcrProviderId, boolean>,
   ),
-}).pipe(Effect.orElseSucceed(() => ({ google: false, fixture: false })));
+);
 
 /** The chain used until an admin saves one: whatever env configures, as before. */
 const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
@@ -90,10 +131,9 @@ const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
     const wanted = `google:${model}`;
     if (ocrModel(wanted)) return Effect.succeed(wanted as ModelId);
     // An unlisted model would leave the settings page with nothing that can run.
-    return Effect.logWarning("settings.unlisted_model", {
-      model: wanted,
-      using: `google:${DEFAULT_GOOGLE_MODEL}`,
-    }).pipe(Effect.as(`google:${DEFAULT_GOOGLE_MODEL}` as ModelId));
+    return Effect.logWarning("settings.unlisted_model", { ocr: { model: wanted } }).pipe(
+      Effect.as(`google:${DEFAULT_GOOGLE_MODEL}` as ModelId),
+    );
   }),
   Effect.map((model) => ({
     chain: [{ model, enabled: true, timeoutMs: DEFAULT_STEP_TIMEOUT_MS }],
@@ -103,7 +143,7 @@ const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
 const parse = <T>(schema: z.ZodType<T>, value: unknown, fallback: T, key: string) => {
   const result = schema.safeParse(value);
   if (result.success) return Effect.succeed(result.data);
-  return Effect.logWarning("settings.invalid_row", { key }).pipe(Effect.as(fallback));
+  return Effect.logWarning("settings.invalid_row", { kind: key }).pipe(Effect.as(fallback));
 };
 
 const firstIssue = (error: z.ZodError) => error.issues[0]?.message ?? "Those values aren't valid.";
@@ -147,7 +187,7 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
         }
         return {
           plans: plansRow
-            ? yield* parse(planTableSchema, plansRow.value, DEFAULT_PLANS, "plans")
+            ? yield* parse(storedPlanTableSchema, plansRow.value, DEFAULT_PLANS, "plans")
             : DEFAULT_PLANS,
           ocr: ocrRow
             ? ((yield* parse(ocrRoutingSchema, ocrRow.value, fallbackOcr, "ocr")) as OcrRouting)
@@ -157,7 +197,7 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
       }).pipe(
         // A database blip must not lift the limits: serve the defaults, briefly.
         Effect.catchAll((error) =>
-          Effect.logError("settings.load_failed", { error: error.message }).pipe(
+          Effect.logError("settings.load_failed", { error: errorFields(error) }).pipe(
             Effect.zipRight(defaultOcrRouting),
             Effect.map((ocr) => ({ plans: DEFAULT_PLANS, ocr, saved: {} })),
           ),
@@ -199,7 +239,8 @@ export class Settings extends Context.Tag("@receipt-ocr/core/Settings")<
           Effect.gen(function* () {
             const next = yield* validate(key, value);
             const fallback = key === "plans" ? DEFAULT_PLANS : yield* defaultOcrRouting;
-            const schema: z.ZodType<unknown> = key === "plans" ? planTableSchema : ocrRoutingSchema;
+            const schema: z.ZodType<unknown> =
+              key === "plans" ? storedPlanTableSchema : ocrRoutingSchema;
             const previous = yield* transact(async (tx) => {
               // Read under a row lock, not from the cache, so `previous` is what this save replaces.
               const [row] = await tx

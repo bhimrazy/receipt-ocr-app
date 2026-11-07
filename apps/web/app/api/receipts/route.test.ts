@@ -30,6 +30,11 @@ vi.mock("@/lib/http", async () => {
     jsonError: (status: number, error: string) => NextResponse.json({ error }, { status }),
     readFormData,
     runRoute: vi.fn(),
+    annotateCaller: vi.fn(),
+    withRequestEvent:
+      (_spec: unknown, handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown) =>
+      (request: Request, context?: unknown) =>
+        handler(request, context, { event: "test" }),
   };
 });
 

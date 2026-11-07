@@ -1,0 +1,111 @@
+import type { Filter } from "./filters";
+import { isConvex, type Point, type Quad } from "./geometry";
+
+/**
+ * What the reviewer changed on one image. Corners are normalised (0..1) in the frame of the
+ * image as shown, that is after `rotation`, so dragging never has to undo the rotation.
+ */
+export type Rotation = 0 | 90 | 180 | 270;
+export type EditState = {
+  rotation: Rotation;
+  quad: Quad;
+  /** The detected document outline, in the same frame as `quad`, if detection found one. */
+  detected: Quad | null;
+  filter: Filter;
+};
+
+export const FULL_QUAD: Quad = [
+  { x: 0, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 1 },
+  { x: 0, y: 1 },
+];
+
+/** Arrow-key step, and Shift + arrow. */
+export const NUDGE = 0.01;
+export const NUDGE_LARGE = 0.05;
+/** Corners closer than this (normalised) would collapse the crop. */
+const MIN_GAP = 0.04;
+
+/** Starts on the detected outline when there is one (the seam for better detectors later). */
+export function initialEdit(detected: Quad | null = null, filter: Filter = "original"): EditState {
+  return { rotation: 0, quad: detected ?? FULL_QUAD, detected, filter };
+}
+
+/** (x, y) in the old frame lands at (1 - y, x) after a quarter turn clockwise. */
+const turn = (p: Point): Point => ({ x: 1 - p.y, y: p.x });
+/** The old bottom-left becomes the new top-left, so the order rotates by one. */
+const turnQuad = (q: Quad): Quad => [turn(q[3]), turn(q[0]), turn(q[1]), turn(q[2])];
+
+export function rotateClockwise(state: EditState): EditState {
+  return {
+    ...state,
+    rotation: ((state.rotation + 90) % 360) as Rotation,
+    quad: turnQuad(state.quad),
+    detected: state.detected ? turnQuad(state.detected) : null,
+  };
+}
+
+/** Width and height of the image as shown after `rotation`. */
+export function rotatedSize(width: number, height: number, rotation: Rotation) {
+  return rotation % 180 === 0 ? { width, height } : { width: height, height: width };
+}
+
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+
+/**
+ * Moves one corner, clamped to the image. A move that would make the crop cross itself,
+ * fold or collapse is refused: the state comes back unchanged.
+ */
+export function moveCorner(state: EditState, index: number, to: Point): EditState {
+  const point = { x: clamp01(to.x), y: clamp01(to.y) };
+  const quad = state.quad.map((p, i) => (i === index ? point : p)) as Quad;
+  const tooClose = quad.some(
+    (p, i) => i !== index && Math.hypot(p.x - point.x, p.y - point.y) < MIN_GAP,
+  );
+  if (tooClose || !isConvex(quad)) return state;
+  return { ...state, quad };
+}
+
+export function nudgeCorner(state: EditState, index: number, dx: number, dy: number): EditState {
+  const p = state.quad[index]!;
+  return moveCorner(state, index, { x: p.x + dx, y: p.y + dy });
+}
+
+/** Arrow keys to a nudge; null for any other key. */
+export function arrowDelta(key: string, large: boolean): { dx: number; dy: number } | null {
+  const step = large ? NUDGE_LARGE : NUDGE;
+  switch (key) {
+    case "ArrowLeft":
+      return { dx: -step, dy: 0 };
+    case "ArrowRight":
+      return { dx: step, dy: 0 };
+    case "ArrowUp":
+      return { dx: 0, dy: -step };
+    case "ArrowDown":
+      return { dx: 0, dy: step };
+    default:
+      return null;
+  }
+}
+
+const sameQuad = (a: Quad, b: Quad) =>
+  a.every((p, i) => Math.abs(p.x - b[i]!.x) < 1e-6 && Math.abs(p.y - b[i]!.y) < 1e-6);
+
+export const isFullFrame = (quad: Quad) => sameQuad(quad, FULL_QUAD);
+export const isDetected = (state: EditState) =>
+  state.detected !== null && sameQuad(state.quad, state.detected);
+
+export const fullImage = (state: EditState): EditState => ({ ...state, quad: FULL_QUAD });
+export const resetToDetected = (state: EditState): EditState =>
+  state.detected ? { ...state, quad: state.detected } : state;
+
+/** Corners in pixels of the shown (rotated) image. */
+export function quadToPixels(quad: Quad, width: number, height: number): Quad {
+  return quad.map((p) => ({ x: p.x * width, y: p.y * height })) as Quad;
+}
+
+/** A stable key for an edit, so an encoded result can be reused while nothing changed. */
+export function editKey(state: EditState): string {
+  return `${state.rotation}:${state.filter}:${state.quad.map((p) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`).join(";")}`;
+}

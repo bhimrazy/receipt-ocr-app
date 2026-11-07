@@ -15,8 +15,10 @@ import { SettingsSection } from "@/components/settings-section";
 import { formatDateTime } from "@/lib/format";
 import { runtime } from "@/lib/runtime";
 import { requireAdmin } from "@/lib/session";
+import { ConnectionsCard } from "./connections-card";
 import { OcrChainForm } from "./ocr-chain-form";
 import { PlanLimitsForm } from "./plan-limits-form";
+import { logPageRender } from "@/lib/page-event";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -28,6 +30,7 @@ async function savedLine(saved?: { updatedAt: Date; updatedBy: string | null }) 
 }
 
 export default async function AdminSettingsPage() {
+  logPageRender("/admin/settings");
   await requireAdmin();
   const [snapshot, available, cap] = await runtime.runPromise(
     Effect.all([
@@ -81,6 +84,14 @@ export default async function AdminSettingsPage() {
           API keys stay in the server environment and are never shown here. To add a provider key,
           set it in the environment and redeploy.
         </p>
+      </SettingsSection>
+
+      <SettingsSection
+        description="Test the AI providers, file storage and email on demand. Results are statuses only; keys are never shown."
+        id="connections"
+        title="Connections"
+      >
+        <ConnectionsCard />
       </SettingsSection>
 
       <SettingsSection

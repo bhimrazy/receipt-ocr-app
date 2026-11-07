@@ -10,6 +10,11 @@ export class NotFound extends Data.TaggedError("NotFound")<{
   readonly message: string;
 }> {}
 
+/** The caller is in the workspace but their role doesn't allow this action. */
+export class Forbidden extends Data.TaggedError("Forbidden")<{
+  readonly message: string;
+}> {}
+
 /** The receipt is not in a state that allows the action (e.g. retrying a completed one). */
 export class Conflict extends Data.TaggedError("Conflict")<{
   readonly message: string;
@@ -47,6 +52,8 @@ export type OcrAttempt = {
   usage: ExtractionUsage | null;
   /** How long a rate-limited provider asked us to wait (its `Retry-After`). */
   retryAfterMs?: number;
+  /** Skipped before any request (the model can't take this file): free, and not a model call. */
+  skipped?: true;
 };
 
 export class OcrError extends Data.TaggedError("OcrError")<{
@@ -55,6 +62,8 @@ export class OcrError extends Data.TaggedError("OcrError")<{
   readonly kind: OcrFailureKind;
   readonly attempts: readonly OcrAttempt[];
   readonly cause?: unknown;
+  /** Steps were left out for a provider cooling down after a 429; the earliest that one ends. */
+  readonly coolingUntil?: Date;
 }> {}
 
 /** Every model in the chain belongs to a provider that is cooling down after a 429. */
@@ -67,6 +76,7 @@ export class ProvidersCooling extends Data.TaggedError("ProvidersCooling")<{
 export type AppError =
   | InvalidInput
   | NotFound
+  | Forbidden
   | Conflict
   | QuotaExceeded
   | NotConfigured
