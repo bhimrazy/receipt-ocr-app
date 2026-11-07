@@ -86,11 +86,31 @@ export function retryAfterMs(error: unknown, now = Date.now()): number | undefin
   if (!APICallError.isInstance(error)) return undefined;
   const headers = error.responseHeaders ?? {};
   const value = Object.entries(headers).find(([name]) => name.toLowerCase() === "retry-after")?.[1];
-  if (!value) return undefined;
+  if (!value) return retryDelayInBody(error.responseBody);
   const seconds = Number(value);
   if (Number.isFinite(seconds)) return seconds >= 0 ? seconds * 1000 : undefined;
   const at = Date.parse(value);
   return Number.isNaN(at) ? undefined : Math.max(0, at - now);
+}
+
+/**
+ * Gemini puts its hint in the 429 body, not a header: a google.rpc.RetryInfo
+ * detail with `retryDelay` like "17s" or "1.5s". Only that field is read.
+ */
+function retryDelayInBody(body: string | undefined): number | undefined {
+  if (!body) return undefined;
+  try {
+    const details = (JSON.parse(body) as { error?: { details?: unknown } }).error?.details;
+    if (!Array.isArray(details)) return undefined;
+    for (const detail of details as Array<Record<string, unknown>>) {
+      if (!String(detail["@type"] ?? "").endsWith("google.rpc.RetryInfo")) continue;
+      const match = /^(\d+(?:\.\d+)?)s$/.exec(String(detail.retryDelay ?? ""));
+      if (match) return Math.round(Number(match[1]) * 1000);
+    }
+  } catch {
+    // Not JSON: no hint.
+  }
+  return undefined;
 }
 
 export function classifyOcrError(error: unknown): OcrFailureKind {
