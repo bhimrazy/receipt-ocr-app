@@ -51,7 +51,8 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
   });
 
   it("keeps the check constraints", async () => {
-    const rows = await db`select conname from pg_constraint where contype = 'c'`;
+    const rows =
+      await db`select conname from pg_constraint where contype = 'c' and connamespace = 'public'::regnamespace`;
     expect(rows.map((r) => r.conname).sort()).toEqual([
       "jobs_attempts_check",
       "jobs_last_error_kind_check",
