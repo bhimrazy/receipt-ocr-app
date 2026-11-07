@@ -11,6 +11,7 @@ import {
 } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { cache } from "react";
+import { z } from "zod";
 import { runtime } from "./runtime";
 import { requireActiveScope } from "./session";
 
@@ -38,6 +39,14 @@ export const HISTORY_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
 const STATUSES = new Set(["uploaded", "processing", "completed", "failed", "needs-review"]);
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** Group filter from `?group=` (repeatable): valid ids only, at most MAX_GROUP_FILTERS. */
+export const MAX_GROUP_FILTERS = 20;
+const groupFilterSchema = z
+  .array(z.string())
+  .transform((ids) => [
+    ...new Set(ids.filter((id) => z.uuid().safeParse(id).success).map((id) => id.toLowerCase())),
+  ])
+  .transform((ids) => ids.slice(0, MAX_GROUP_FILTERS));
 
 /** Drops anything malformed, so URL params can be passed straight through. */
 export function cleanFilters(input: ReceiptListFilters): ReceiptFilters {
@@ -49,7 +58,13 @@ export function cleanFilters(input: ReceiptListFilters): ReceiptFilters {
     status: input.status && STATUSES.has(input.status) ? input.status : undefined,
     from: input.from && ISO_DATE.test(input.from) ? input.from : undefined,
     to: input.to && ISO_DATE.test(input.to) ? input.to : undefined,
+    groups: cleanGroups(input.groups),
   };
+}
+
+function cleanGroups(input: string[] | undefined) {
+  const parsed = groupFilterSchema.safeParse(input ?? []);
+  return parsed.success && parsed.data.length > 0 ? parsed.data : undefined;
 }
 
 /** Filters from URL search params (History page and the export route share these). */
@@ -61,12 +76,14 @@ export function filtersFromSearchParams(
     return (Array.isArray(value) ? value[0] : value) ?? undefined;
   };
   const page = Number.parseInt(get("page") ?? "", 10);
+  const groups = params instanceof URLSearchParams ? params.getAll("group") : params.group;
   return {
     q: get("q"),
     category: get("category"),
     status: get("status") as ReceiptListFilters["status"],
     from: get("from"),
     to: get("to"),
+    groups: groups === undefined ? undefined : Array.isArray(groups) ? groups : [groups],
     page: Number.isFinite(page) ? page : undefined,
   };
 }

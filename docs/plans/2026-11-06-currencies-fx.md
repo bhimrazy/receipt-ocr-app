@@ -620,7 +620,7 @@ columns reproduces every converted amount exactly.
   - New `country`: ISO 3166 alpha-2 or null, from the address, phone prefix or tax number.
 - Prompt (`packages/ai/src/extract.ts`):
   - Return `null` when the receipt doesn't show which currency it is, rather than guessing.
-  - The three-decimal fix to the thousands rule (KWD, BHD, OMR, JOD, TND, LYD, IQD) is shipping separately, by
+  - The three-decimal fix to the thousands rule (KWD, BHD, OMR, JOD, TND, LYD) is shipping separately, by
     another engineer, ahead of this plan. PR 5 builds on it and does not redo it.
   - Use the address, phone and tax numbers to decide an ambiguous symbol.
 - Core, after the call (deterministic, testable):
