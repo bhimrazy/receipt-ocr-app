@@ -98,7 +98,7 @@ Phone details: `touch-action: manipulation` on `<html>` (no double-tap delay), a
 | `GET /api/receipts/export`     | [`api/receipts/export/route.ts`](../../apps/web/app/api/receipts/export/route.ts)         | CSV with the History filters, up to 5,000 rows                                                     |
 | `POST /api/contact`            | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts)                         | Support form: origin check, honeypot, per-IP rate limit, mail to `SUPPORT_EMAIL`                   |
 | `POST /share-target`           | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                       | Share target fallback when no service worker took the share: `303` to the upload page, body unread |
-| `POST /share-target`                         | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                         | Share target fallback when no service worker took the share: `303` to the upload page, body unread    |
+| `POST /share-target`           | [`share-target/route.ts`](../../apps/web/app/share-target/route.ts)                       | Share target fallback when no service worker took the share: `303` to the upload page, body unread |
 
 Status codes come from one table in [`lib/http.ts`](../../apps/web/lib/http.ts):
 
