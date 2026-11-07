@@ -25,6 +25,8 @@ const LABELS: Record<string, string> = {
   "workspace.delete": "Deleted workspace",
   "settings.plans": "Changed plan limits",
   "settings.ocr": "Changed OCR models",
+  "connections.check": "Checked connections",
+  "connections.test_email": "Sent test email",
 };
 
 /** `<action>_failed` rows record a Better Auth call that failed after its audit row was written. */
@@ -87,6 +89,12 @@ function details(entry: AdminAuditEntry): string | null {
       return planChanges(meta.from as Record<string, Policy>, meta.to as Record<string, Policy>);
     case "settings.ocr":
       return `${chainText(meta.from as Chain)} became ${chainText(meta.to as Chain)}`;
+    case "connections.check": {
+      const statuses = Object.entries((meta.statuses ?? {}) as Record<string, string>);
+      return statuses.map(([id, status]) => `${id.replace("_", ": ")} ${status}`).join(", ");
+    }
+    case "connections.test_email":
+      return cap(meta.outcome);
     default:
       return typeof meta.error === "string" ? `Error: ${meta.error}` : null;
   }
