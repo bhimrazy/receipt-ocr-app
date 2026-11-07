@@ -142,6 +142,15 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    [currencies and FX](plans/2026-11-06-currencies-fx.md).
 10. Read-only agent access over MCP: personal tokens first, then OAuth for Claude.ai and ChatGPT ([MCP server](plans/2026-11-07-mcp-server.md)).
 
+## Later, once the app is stable (owner notes, 2026-11-07)
+
+- **Release-based deploys.** Today every push to `main` deploys after CI (migrations by hand). Move to deploying
+  tagged releases (for example `v0.x.y` with release notes), so `main` can take merges without each one going live.
+- **Self-hosting.** Vercel's free (Hobby) plan is for non-commercial use and has hard monthly limits; a busy month or
+  paying users outgrow it. The exit is already built: the Docker image (`docker/Dockerfile.prod`, Bun runtime), the
+  compose stack and the 1 vCPU / 1 GB load test. Decide between Vercel Pro and a small VPS (plus managed Postgres and
+  R2, which stay as they are) when traffic or billing makes it necessary.
+
 ## Known follow-ups
 
 - Deploy record (review P3-1, P3-2 on #55): the `production-deployed` tag is moved by `record-deploy` with
