@@ -38,7 +38,8 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - OCR: AI SDK with Google Gemini as v1 provider.
 - Backend workflow: Effect TS services.
 - Background jobs: a Postgres job queue in `packages/core/src/jobs` (claimed with `FOR UPDATE SKIP LOCKED`, leases,
-  retries, dead state). A worker app and drain route come next; BullMQ + Redis only past the plan's scale triggers.
+  retries, dead state), run by `drainOnce` from the `/api/jobs/drain` route (Supabase `pg_cron` + Vercel Cron,
+  `CRON_SECRET`). A worker app calls `runWorkerLoop` next; BullMQ + Redis only past the plan's scale triggers.
 
 ## Working Principles
 

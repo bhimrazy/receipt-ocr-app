@@ -42,18 +42,26 @@ receipt `failed`, so a failed first attempt leaves the receipt `processing` whil
 `tick(budget)` in [`runner.ts`](../../../packages/core/src/jobs/runner.ts) reaps expired leases, then claims and runs
 jobs until nothing is runnable or the budget says stop. Every runner calls it; nothing else changes between them.
 
-| Runner (today)                                    | When                                                          | Budget and waits                                                                           |
-| ------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `runJobNow` in `POST /api/receipts` instant mode  | First attempt of the upload                                   | In the request, this job only, no waiting                                                  |
-| `drainJobs` in `after()` of uploads and retries   | After the response                                            | Until 290 s after the route started; sleeps through backoff only for its own job, 90 s max |
-| `kickJob` in `after()` of `GET /api/receipts/:id` | A poll finds the receipt's job due, claimable and not running | That one job only, no waiting; returns at once if it can't claim it                        |
+| Runner (today)                                    | When                                                          | Budget and waits                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `runJobNow` in `POST /api/receipts` instant mode  | First attempt of the upload                                   | In the request, this job only, no waiting                                                      |
+| `drainJobs` in `after()` of uploads and retries   | After the response                                            | Until 290 s after the route started; sleeps through backoff only for its own job, 90 s max     |
+| `kickJob` in `after()` of `GET /api/receipts/:id` | A poll finds the receipt's job due, claimable and not running | That one job only, no waiting; returns at once if it can't claim it                            |
+| `drainOnce` in `GET/POST /api/jobs/drain`         | Supabase `pg_cron` each minute, Vercel Cron daily             | 55 s budget, claims only in the first 5 s, at most 10 jobs, 3 at once; never waits for backoff |
+| `runWorkerLoop` (future `apps/worker`)            | Continuously                                                  | `drainOnce` back to back, `idleMs` sleep when idle, stops on abort after the pass in progress  |
 
 Upload and retry drains also run anyone else's due jobs; the poll kick never does, so poll traffic can't become
 queue concurrency. Every unfiltered tick (one that may claim any job of its kinds, such as a drain)
 records the time per kind it serves in `job_controls` (scope `tick:<kind>`, at most every 30 s per process per kind),
 which the orphan rule below reads. Ticks filtered to a few ids (`runJobNow`, the poll kick) record nothing: they
-don't drain anyone else's jobs. A worker app and a cron-triggered drain route come next (Track B of the
-plan); they call the same `tick`.
+don't drain anyone else's jobs.
+
+The drain route and the worker loop are the two runners that need no request: both call `drainOnce`
+([`drain.ts`](../../../packages/core/src/jobs/drain.ts)), a bounded `tick` with a job cap (`maxJobs`) and no
+waiting for retries, free of any HTTP type. The route checks `CRON_SECRET` first (`401` wrong, `503` unset); it is
+the only thing standing between the internet and every workspace's queue. A job cut off by a deploy or a timeout is
+reaped when its lease runs out and re-run by the next drain, so recovery needs no open page. The `pg_cron` and Vault
+setup is in [production environment, step 8](../../production-environment.md#8-queue-drain-cron).
 
 ```mermaid
 sequenceDiagram
