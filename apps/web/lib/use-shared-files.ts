@@ -8,6 +8,11 @@ const SHARE_PROBLEMS: Record<string, string> = {
     "Sharing to receiptOCR isn't ready on this device yet. Add the files here instead; sharing works after the app has been opened once.",
 };
 
+/** The notice for a `?shared=` value; own keys only, so `__proto__` and `constructor` show nothing. */
+export function shareProblem(status: string | null): string | null {
+  return status && Object.hasOwn(SHARE_PROBLEMS, status) ? SHARE_PROBLEMS[status]! : null;
+}
+
 /**
  * Files shared to the app (Android share sheet), held back until the visitor keeps them: any site
  * can POST to /share-target, so nothing joins the queue unseen. `keep` puts them into `input`, a
@@ -30,7 +35,7 @@ export function useSharedFiles(input: RefObject<HTMLInputElement | null>) {
       history.replaceState(history.state, "", url);
     }
     void takeSharedFiles().then((shared) => {
-      setProblem(status ? (SHARE_PROBLEMS[status] ?? null) : null);
+      setProblem(shareProblem(status));
       setFiles(shared);
     });
   }, [input]);

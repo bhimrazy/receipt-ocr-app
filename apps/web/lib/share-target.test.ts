@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { shareProblem } from "./use-shared-files";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SHARE_TARGET_FIELD,
@@ -146,7 +147,7 @@ describe("public/sw.js", () => {
 
   it("drops shares posted from another site and files that aren't images or PDFs", () => {
     expect(sw).toContain('type === "" || type.startsWith("image/") || type === "application/pdf"');
-    expect(sw).toContain("const MAX_SHARED_BYTES = 25 * 1024 * 1024;");
+    expect(sw).toContain("const MAX_SHARED_BYTES = 10 * 1024 * 1024;");
     expect(sw).toContain(`const SHARED_TTL_MS = ${SHARED_TTL_MS / 60_000} * 60 * 1000;`);
   });
 });
@@ -161,5 +162,15 @@ describe("public/sw-killswitch.js", () => {
     expect(killswitch).toContain("self.skipWaiting()");
     expect(killswitch).toContain('name.startsWith("receiptocr-")');
     expect(killswitch).toContain("self.registration.unregister()");
+  });
+});
+
+describe("shareProblem", () => {
+  it("explains known reasons and ignores anything else, including prototype keys", () => {
+    expect(shareProblem("failed")).toContain("didn't come through");
+    expect(shareProblem("unavailable")).toContain("isn't ready");
+    for (const odd of ["__proto__", "constructor", "toString", "1", "", null]) {
+      expect(shareProblem(odd)).toBeNull();
+    }
   });
 });

@@ -23,16 +23,21 @@ export async function takeSharedFiles(now = Date.now()): Promise<File[]> {
   try {
     if (!(await caches.has(SHARED_CACHE))) return [];
     const cache = await caches.open(SHARED_CACHE);
-    const files: File[] = [];
+    // Collect the responses and delete the cache before reading any body, so a crash while
+    // reading a large file can't leave the same share to be read again on the next load.
+    const responses: Response[] = [];
     for (const request of await cache.keys()) {
       const response = await cache.match(request);
       const sharedAt = Number(response?.headers.get(SHARED_AT_HEADER));
-      if (!response || !(now - sharedAt <= SHARED_TTL_MS)) continue;
+      if (response && now - sharedAt <= SHARED_TTL_MS) responses.push(response);
+    }
+    await caches.delete(SHARED_CACHE);
+    const files: File[] = [];
+    for (const response of responses) {
       const type = response.headers.get(SHARED_TYPE_HEADER) ?? "";
       const name = fileName(response.headers.get(SHARED_NAME_HEADER), type);
       files.push(new File([await response.arrayBuffer()], name, { type }));
     }
-    await caches.delete(SHARED_CACHE);
     return files;
   } catch {
     return [];

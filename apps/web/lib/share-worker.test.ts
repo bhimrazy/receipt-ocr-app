@@ -108,4 +108,32 @@ describe("public/sw.js share POST", () => {
     await Promise.all(waits);
     expect(await cache.keys()).toHaveLength(0);
   });
+
+  it("refuses 21 files, an oversized file and an oversized total, keeping a pending share", async () => {
+    const worker = loadWorker();
+    expect((await share([png], "", worker)).location).toContain("shared=1");
+    const pending = [...worker.stores.get(SHARED_CACHE)!.keys()];
+    const many = Array.from({ length: 21 }, () => png);
+    expect((await share(many, "", worker)).location).toBe(`${ORIGIN}/app?shared=failed`);
+    const big = new File([new Uint8Array(11 * 1024 * 1024)], "big.png", { type: "image/png" });
+    expect((await share([big], "", worker)).location).toBe(`${ORIGIN}/app?shared=failed`);
+    const nine = () => new File([new Uint8Array(9 * 1024 * 1024)], "n.png", { type: "image/png" });
+    const six = Array.from({ length: 6 }, nine);
+    expect((await share(six, "", worker)).location).toBe(`${ORIGIN}/app?shared=failed`);
+    expect([...worker.stores.get(SHARED_CACHE)!.keys()]).toEqual(pending);
+  });
+
+  it("refuses a declared body that is too large before reading it", async () => {
+    const worker = loadWorker();
+    const request = {
+      url: `${ORIGIN}/share-target`,
+      method: "POST",
+      referrer: "",
+      headers: new Headers({ "content-length": String(200 * 1024 * 1024) }),
+      formData: () => Promise.reject(new Error("must not be read")),
+    };
+    let response: Promise<Response> | undefined;
+    worker.handlers.fetch({ request, respondWith: (r: Promise<Response>) => (response = r) });
+    expect((await response)?.headers.get("location")).toBe(`${ORIGIN}/app?shared=failed`);
+  });
 });

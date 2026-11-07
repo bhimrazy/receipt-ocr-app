@@ -109,6 +109,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Share target: a cross-site form can plant a share in a visitor's cache (the referrer can be hidden). The Keep and
+  Discard prompt, the 10-minute expiry and the size caps are the guard.
 - Image shrinking (browser, `apps/web/lib/upload-prep.ts`): decode large photos at reduced size
   (`createImageBitmap` `resizeWidth`/`resizeHeight`, after reading the dimensions from the header) to cut peak memory
   on phones; and strip metadata on the server for files the browser couldn't decode or encode (for example HEIC

@@ -54,7 +54,8 @@ function currentOffer(): Offer {
 
 /**
  * Registers the service worker (production builds only) and offers to install the app. Rendered by
- * the root layout, but active only under /app, so the landing and lab pages stay worker-free.
+ * the root layout, but active only under /app, so the landing and lab pages never register it. Once installed, the worker (scope "/") sees every
+ * same-origin navigation, but passes all but the offline fallback and the share target through.
  */
 export function Pwa() {
   const inApp = isAppPath(usePathname());

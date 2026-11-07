@@ -162,7 +162,7 @@ flowchart TD
   O -- yes --> S{POST /share-target?}
   S -- yes --> RF{Referrer is a web page on another site?}
   RF -- yes --> D[303 to /app, nothing stored]
-  RF -- no --> F[Keep images, PDFs and untyped files up to 25 MB, at most 20, in the receiptocr-shared cache]
+  RF -- no --> F[Keep images, PDFs and untyped files up to 10 MB each and 50 MB in all, at most 20, in the receiptocr-shared cache]
   F --> U[303 to /app/upload?shared=1, or /app?shared=failed]
   S -- no --> G{GET?}
   G -- no --> N

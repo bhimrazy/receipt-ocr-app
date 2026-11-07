@@ -3,7 +3,7 @@
 // HTML, no receipt images. Only the files below are cached, plus shared files for at most 10 minutes
 // (see lib/share-target.ts). Bump VERSION whenever this file or a precached file changes.
 // To switch the worker off in production, see "Disable the service worker" in docs/runbook.md.
-const VERSION = "3";
+const VERSION = "4";
 const STATIC_CACHE = `receiptocr-static-v${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/offline.js", "/icon.svg", "/icons/icon-192.png"];
@@ -18,7 +18,10 @@ const SHARED_AT_HEADER = "x-shared-at";
 const SHARED_TTL_MS = 10 * 60 * 1000;
 // The upload panel's batch limit, and a per-file cap well above anything it accepts.
 const MAX_SHARED_FILES = 20;
-const MAX_SHARED_BYTES = 25 * 1024 * 1024;
+const MAX_SHARED_BYTES = 10 * 1024 * 1024;
+// Total across one share, so a page posting 20 big files can't fill memory. The envelope is slack.
+const MAX_SHARED_TOTAL_BYTES = 50 * 1024 * 1024;
+const MAX_BODY_BYTES = MAX_SHARED_TOTAL_BYTES + 1024 * 1024;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -104,22 +107,28 @@ function acceptable(file) {
 }
 
 /**
- * Stores the shared files and sends the visitor to upload them. A new share replaces any earlier
- * one, expired or not. The upload panel still asks before queueing them, since any site can post here.
+ * Stores the shared files and sends the visitor to upload them. A new usable share replaces any
+ * earlier one, expired or not. The upload panel still asks before queueing them, since any site can post here.
  */
 async function receiveShare(request) {
   const redirect = (path) => Response.redirect(new URL(path, self.location.origin).href, 303);
   // Android apps send no referrer or an android-app:// one. Only a web page on another site is
   // dropped (it can hide its referrer, which is why the panel asks too).
   if (isForeignWebPage(request.referrer)) return redirect("/app");
+  // Checked before the body is read; a missing header is caught by the total check below.
+  const declared = Number(request.headers.get("content-length"));
+  if (declared > MAX_BODY_BYTES) return redirect("/app?shared=failed");
   try {
-    await caches.delete(SHARED_CACHE);
     const form = await request.formData();
-    const files = form
-      .getAll(SHARE_TARGET_FIELD)
-      .filter((value) => typeof value !== "string" && acceptable(value))
-      .slice(0, MAX_SHARED_FILES);
-    if (files.length === 0) return redirect("/app?shared=failed");
+    const all = form.getAll(SHARE_TARGET_FIELD).filter((value) => typeof value !== "string");
+    const files = all.filter(acceptable);
+    const total = files.reduce((sum, file) => sum + file.size, 0);
+    // Too many files or too many bytes in all: refuse the whole share rather than trim it.
+    if (files.length === 0 || files.length > MAX_SHARED_FILES || total > MAX_SHARED_TOTAL_BYTES) {
+      return redirect("/app?shared=failed");
+    }
+    // Only a usable share replaces an earlier one, so a junk post can't wipe a pending share.
+    await caches.delete(SHARED_CACHE);
     const cache = await caches.open(SHARED_CACHE);
     const sharedAt = String(Date.now());
     await Promise.all(
