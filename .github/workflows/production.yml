@@ -4,6 +4,8 @@ name: Vercel Production Deployment
 # changes apps/web/drizzle since the last production deploy: migrations run only by hand (Database
 # Migration workflow), so such a release waits for them and a manual run of this workflow. A manual
 # run from main deploys once CI passed on its commit and production-db ran the same migrations. See docs/deployment.md, Every release.
+# zizmor: ignore[dangerous-triggers] workflow_run runs main's own workflow file; the gate job only
+# proceeds for a successful CI push on main in this repository and deploys that CI-tested commit.
 on:
   workflow_run:
     workflows: [CI]
@@ -97,6 +99,7 @@ jobs:
     permissions:
       contents: read
     env:
+      VERCEL_BIN: ${{ github.workspace }}/.github/vercel-cli/node_modules/.bin/vercel
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
@@ -110,21 +113,20 @@ jobs:
       - name: Install Vercel CLI (pinned, own lockfile)
         run: |
           bun install --frozen-lockfile --cwd .github/vercel-cli
-          echo "$GITHUB_WORKSPACE/.github/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Pull Vercel environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel pull --yes --environment=production
+        run: $VERCEL_BIN pull --yes --environment=production
 
       # No token for the build step: it runs repository code, which only needs the pulled settings.
       - name: Build project
-        run: vercel build --prod
+        run: $VERCEL_BIN build --prod
 
       - name: Deploy to production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel deploy --prebuilt --prod --archive=tgz
+        run: $VERCEL_BIN deploy --prebuilt --prod --archive=tgz
 
   # Records what's live, for the next run's gate. Separate job: the only one with write access, and
   # it runs no repository code.

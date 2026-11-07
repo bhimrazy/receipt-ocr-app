@@ -69,6 +69,7 @@ jobs:
       contents: read
       pull-requests: write
     env:
+      VERCEL_BIN: ${{ github.workspace }}/.github/vercel-cli/node_modules/.bin/vercel
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
@@ -80,16 +81,15 @@ jobs:
       - name: Install Vercel CLI (pinned, own lockfile)
         run: |
           bun install --frozen-lockfile --cwd .github/vercel-cli
-          echo "$GITHUB_WORKSPACE/.github/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Pull Vercel environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel pull --yes --environment=preview
+        run: $VERCEL_BIN pull --yes --environment=preview
 
       # No token for the build step: it runs repository code, which only needs the pulled settings.
       - name: Build project
-        run: vercel build
+        run: $VERCEL_BIN build
 
       - name: Deploy to Vercel
         id: deploy
@@ -97,7 +97,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           # One archive upload instead of one request per build file (free plan: 5000 uploads/day).
-          url=$(vercel deploy --prebuilt --archive=tgz)
+          url=$("$VERCEL_BIN" deploy --prebuilt --archive=tgz)
           echo "preview_url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Find existing preview comment

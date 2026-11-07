@@ -26,6 +26,8 @@ jobs:
       code: ${{ steps.diff.outputs.code }}
       # Anything the running app, its tests or its build depend on: e2e jobs.
       app: ${{ steps.diff.outputs.app }}
+      # Anything under .github/: the workflow audit.
+      workflows: ${{ steps.diff.outputs.workflows }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,7 +36,7 @@ jobs:
           persist-credentials: false
       - id: diff
         run: |
-          code=true app=true
+          code=true app=true workflows=true
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             files=$(git diff --name-only HEAD^1 HEAD)
             if [ -n "$files" ]; then
@@ -44,10 +46,13 @@ jobs:
               [ -n "$rest" ] || code=false
               rest=$(echo "$files" | grep -vE '^(docs|bench)/|\.md$|^\.github/(workflows/(db-migrate|load|preview|production)\.yml|vercel-cli/|dependabot\.yml|ISSUE_TEMPLATE/)' || true)
               [ -n "$rest" ] || app=false
+              rest=$(echo "$files" | grep -E '^\.github/' || true)
+              [ -n "$rest" ] || workflows=false
             fi
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "workflows=$workflows" >> "$GITHUB_OUTPUT"
           echo "code=$code app=$app"
 
   static:
@@ -75,6 +80,20 @@ jobs:
             echo "::error::packages/db schema changed without a migration: run bun run db:generate and commit apps/web/drizzle."
             exit 1
           fi
+
+  # Static audit of the workflows (injection, excessive permissions, unpinned actions). Medium and up fails.
+  zizmor:
+    name: Workflow audit (zizmor)
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Exact pin, like every dependency; 1.31.1 is the newest release past the 7-day cooldown.
+      - run: pipx run --spec zizmor==1.31.1 zizmor --min-severity medium .github/
 
   checks:
     name: Typecheck, test, build
@@ -282,7 +301,7 @@ jobs:
   # The one check to require: a skipped job (docs-only PR) passes, a failed or cancelled one fails.
   ci-ok:
     name: CI OK
-    needs: [changes, static, checks, e2e, e2e-turnstile]
+    needs: [changes, static, zizmor, checks, e2e, e2e-turnstile]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 2
