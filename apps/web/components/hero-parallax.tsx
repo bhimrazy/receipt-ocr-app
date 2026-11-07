@@ -16,9 +16,6 @@ export function HeroParallax({
     const layer = layerRef.current;
     if (!layer) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    // The layer is display:none below xl; skip the listener there.
-    if (getComputedStyle(layer).display === "none") return;
-
     let frame = 0;
     const onMove = (event: MouseEvent) => {
       cancelAnimationFrame(frame);
@@ -30,9 +27,17 @@ export function HeroParallax({
       });
     };
 
-    window.addEventListener("mousemove", onMove, { passive: true });
+    // The layer is display:none below xl; listen only while it shows, and follow resizes.
+    const xl = window.matchMedia("(min-width: 80rem)");
+    const sync = () => {
+      window.removeEventListener("mousemove", onMove);
+      if (xl.matches) window.addEventListener("mousemove", onMove, { passive: true });
+    };
+    sync();
+    xl.addEventListener("change", sync);
     return () => {
       cancelAnimationFrame(frame);
+      xl.removeEventListener("change", sync);
       window.removeEventListener("mousemove", onMove);
     };
   }, []);

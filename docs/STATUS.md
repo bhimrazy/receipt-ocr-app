@@ -109,6 +109,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- FAQ uses a raw `<details>`; add a server-friendly Disclosure primitive to `packages/ui`.
 - Image shrinking (browser, `apps/web/lib/upload-prep.ts`): decode large photos at reduced size
   (`createImageBitmap` `resizeWidth`/`resizeHeight`, after reading the dimensions from the header) to cut peak memory
   on phones; and strip metadata on the server for files the browser couldn't decode or encode (for example HEIC
