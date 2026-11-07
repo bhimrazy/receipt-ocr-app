@@ -65,7 +65,7 @@ Set these in Vercel (Project → Settings → Environment Variables, Production)
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Yes               |                                                                                                                                                                                                      |
 | `S3_FORCE_PATH_STYLE`                      | No                | `true` for RustFS and other self-hosted stores.                                                                                                                                                      |
 | `GOOGLE_GENERATIVE_AI_API_KEY`             | Yes               | Gemini key.                                                                                                                                                                                          |
-| `GEMINI_MODEL`                             | No                | First-run default model. After that, choose models in **Admin → Settings**.                                                                                                                          |
+| `GEMINI_MODEL`                             | No                | Fallback after Claude Sonnet until a chain is saved. After that, choose models in **Admin → Settings**.                                                                                              |
 | `ANTHROPIC_API_KEY`                        | No                | Claude key. Offers the Claude models in **Admin → Settings**; Gemini stays the default. Use a key of its own with a monthly spend limit in the Anthropic Console.                                    |
 | `OCR_DAILY_CAP`                            | No                | Spend guard: OCR rounds per UTC day across all users (each upload or retry is one round, plus each provider attempt).                                                                                |
 | `RESEND_API_KEY`, `EMAIL_FROM`             | Yes in production | Without them, verification and reset links are only logged.                                                                                                                                          |
@@ -239,7 +239,8 @@ UPDATE "user" SET role = 'admin' WHERE email = 'you@example.com';
 ```
 
 Then open `/admin/settings` and check the plan limits and the OCR model chain. Until something is saved there, the
-app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day) and `GEMINI_MODEL`.
+app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day) and the chain Claude Sonnet 5.5,
+then `GEMINI_MODEL`; a step whose provider has no key is skipped.
 
 ### 7. Check it works
 
