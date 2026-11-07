@@ -23,23 +23,39 @@ Production runs on Vercel (app), Supabase (Postgres), Cloudflare R2 (receipt fil
    `VERCEL_GIT_COMMIT_SHA`, or `GIT_COMMIT_SHA` on Docker). Compare it with the last merge to `main`. If the problem
    started with that deploy, roll back first and investigate after (see [Rollback](#rollback)).
 
-3. Read the logs. Every request writes one JSON line to stdout (`apps/web/lib/log.ts`) with `event`, `outcome`,
-   `status_code`, `request_id` and `error`.
+3. Read the logs. Every unit of work writes one JSON line ([wide events](architecture/flows/observability.md)): each
+   API request, each `/app` and `/admin` page render, each job attempt and each queue tick. Every line has
+   `timestamp`, `level`, `event`, `outcome` and the deployment fields (`version` is the commit); requests add
+   `request_id`, `route`, `status_code` and `duration_ms`, failures add `error` (`type`, `kind`, `class`, `code`, never a
+   message).
    - Vercel: Project, Logs. Filter by `level:error` or by event name. Runtime logs are kept 1 hour on Hobby.
    - Docker: `docker logs <container> --since 30m | grep '"level":"error"'`.
+   - With `LOG_SAMPLE_RATE` below 1, fast successful polls, page renders and idle ticks are sampled (they carry
+     `sample_rate`). Errors, slow units (`LOG_SLOW_MS`) and anything that called a model are always kept.
+
+   **Find one request.** API responses carry the request id in the `x-request-id` header. Search for it:
+   `grep '"request_id":"<id>"'`. The request's own event and every `job.attempt` it started share that id.
+
+   **Find a receipt's history.** Search for `"receipt_id":"<id>"`: the upload or retry request, each `job.attempt`
+   (`attempt`, `round`, `queue.outcome`, `error.kind`, `ocr.model`) and the polls. `"job_id":"<id>"` narrows it to one
+   job.
 
    Events worth searching for:
 
-   | Event                               | Means                                                              |
-   | ----------------------------------- | ------------------------------------------------------------------ |
-   | `receipt.upload`, `receipt.retry`   | One upload or retry; `error.type` and `ocr.kind` say why it failed |
-   | `receipt.extract.background`        | A queued extraction finished or failed                             |
-   | `health.not_ready`                  | A readiness check failed (logged once per fresh check)             |
-   | `email.send_failed`                 | Resend rejected or could not be reached                            |
-   | `auth.email_rate_limited`           | An address hit 3 reset or verification emails in an hour           |
-   | `csp.violation`                     | The report-only CSP would have blocked something                   |
-   | `http.client_ip_unresolved`         | Rate limits can't see client IPs; check `TRUSTED_*` settings       |
-   | `route.failure`, `app.render_error` | Unhandled server errors                                            |
+   | Event                             | Means                                                                             |
+   | --------------------------------- | --------------------------------------------------------------------------------- |
+   | `receipt.upload`, `receipt.retry` | One upload or retry; `error.type` and `error.kind` say why it failed              |
+   | `job.attempt`                     | One job attempt (was `job.run`); `queue.outcome` is `succeeded`, `retry`, `dead`… |
+   | `job.tick`                        | One queue drain: what it claimed and reaped; `notices` lists `jobs.*_failed`      |
+   | `page.render` with `level:error`  | A server render failed; `error.digest` matches the error page the user saw        |
+   | `request.error`                   | Next.js caught an unhandled render, route or action error                         |
+   | `route.failure`                   | A server action's core call failed with a 5xx or a defect                         |
+   | `health.not_ready`                | A readiness check failed (logged once per fresh check)                            |
+   | `email.send_failed`               | Resend rejected or could not be reached; `error.kind` is Resend's error name      |
+   | `auth.email_rate_limited`         | An address hit 3 reset or verification emails in an hour                          |
+   | `csp.violation`                   | The report-only CSP would have blocked something                                  |
+   | `http.client_ip_unresolved`       | Rate limits can't see client IPs; check `TRUSTED_*` settings                      |
+   | an event with `dropped_fields`    | Code tried to log a field the schema doesn't allow; fix the call site             |
 
 ## Incidents
 
@@ -53,7 +69,7 @@ Production runs on Vercel (app), Supabase (Postgres), Cloudflare R2 (receipt fil
 
 ### OCR provider down (Gemini errors or 429s)
 
-Symptoms: uploads end as failed, `receipt.upload` events with `error.type: "OcrError"` and `ocr.kind` such as
+Symptoms: uploads end as failed, `job.attempt` events with `error.type: "OcrError"` and `error.kind` such as
 `rate-limited`, `timeout` or `provider-error`.
 
 1. Check <https://aistudio.google.com/status> and the Gemini project's quota page.
