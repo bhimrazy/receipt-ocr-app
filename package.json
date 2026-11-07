@@ -1,6 +1,7 @@
 {
   "name": "receipt-ocr-app",
   "private": true,
+  "license": "UNLICENSED",
   "packageManager": "bun@1.4.4",
   "workspaces": [
     "apps/*",
