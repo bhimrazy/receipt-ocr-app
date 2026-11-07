@@ -1,5 +1,6 @@
 import { detectQuad, DETECT_EDGE, type Detection } from "./detect-quad";
 import {
+  editKey,
   isFullFrame,
   quadToPixels,
   rotatedSize,
@@ -7,7 +8,7 @@ import {
   type Rotation,
 } from "./edit-state";
 import { applyFilter } from "./filters";
-import { straightenedSize, warpQuad, type Quad } from "./geometry";
+import { straightenedSize, warpQuad, type Pixels, type Quad } from "./geometry";
 
 /** Canvas rendering of an edit. Browser only; the maths lives in the pure modules beside it. */
 
@@ -150,23 +151,55 @@ export function renderedSize(
     : straightenedSize(box.local, budget.output);
 }
 
-/**
- * Rotates, straightens the crop and applies the filter. Intermediate canvases are released
- * here; the caller releases the one returned (`releaseCanvas`) once it is encoded.
- */
-export function renderEdit(bitmap: ImageBitmap, edit: EditState, budget: RenderBudget) {
+/** The rotated, cropped and straightened pixels, before any filter. */
+function straightened(bitmap: ImageBitmap, edit: EditState, budget: RenderBudget): Pixels {
   const rotated = rotatedCanvas(bitmap, edit.rotation, budget.source);
-  if (isPlain(edit)) return rotated;
-  let pixels: ImageData | ReturnType<typeof warpQuad>;
   try {
     // Read only the crop's bounding box, not the whole photo.
     const box = cropBox(edit, rotated.width, rotated.height);
     const src = context(rotated).getImageData(box.x0, box.y0, box.w, box.h);
     const size = straightenedSize(box.local, budget.output);
-    pixels = isFullFrame(edit.quad) ? src : warpQuad(src, box.local, size.width, size.height);
+    return isFullFrame(edit.quad) ? src : warpQuad(src, box.local, size.width, size.height);
   } finally {
     releaseCanvas(rotated);
   }
+}
+
+/**
+ * The few most recent straightened results of the small renders, so a filter change, the four
+ * filter thumbnails and the size estimate of one crop warp once. Dropped when the photo changes.
+ */
+const CACHE_ENTRIES = 4;
+let cache: { bitmap: ImageBitmap; entries: Map<string, Pixels> } | null = null;
+
+function cachedStraightened(bitmap: ImageBitmap, edit: EditState, budget: RenderBudget): Pixels {
+  if (cache?.bitmap !== bitmap) cache = { bitmap, entries: new Map() };
+  const key = `${budget.source}:${budget.output}:${editKey({ ...edit, filter: "original" })}`;
+  const hit = cache.entries.get(key);
+  if (hit) {
+    cache.entries.delete(key);
+    cache.entries.set(key, hit);
+    return hit;
+  }
+  const made = straightened(bitmap, edit, budget);
+  cache.entries.set(key, made);
+  if (cache.entries.size > CACHE_ENTRIES) cache.entries.delete(cache.entries.keys().next().value!);
+  return made;
+}
+
+/**
+ * Rotates, straightens the crop and applies the filter. Intermediate canvases are released
+ * here; the caller releases the one returned (`releaseCanvas`) once it is encoded. The small
+ * renders reuse the straightened pixels of an earlier render of the same crop (the filter runs
+ * on a copy); the full-size render used for upload never caches, as its pixels are large.
+ */
+export function renderEdit(bitmap: ImageBitmap, edit: EditState, budget: RenderBudget) {
+  if (isPlain(edit)) return rotatedCanvas(bitmap, edit.rotation, budget.source);
+  const shared = budget !== FULL_RENDER;
+  const base = shared
+    ? cachedStraightened(bitmap, edit, budget)
+    : straightened(bitmap, edit, budget);
+  const pixels: Pixels = shared ? { ...base, data: new Uint8ClampedArray(base.data) } : base;
   applyFilter(pixels, edit.filter);
   const out = document.createElement("canvas");
   out.width = pixels.width;
