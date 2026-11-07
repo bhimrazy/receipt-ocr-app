@@ -8,6 +8,8 @@ ANTHROPIC_API_KEY=... bun run bench:ocr --models anthropic:claude-haiku-5-5,anth
 bun run bench:ocr --dry-run --models anthropic:claude-haiku-5-5,anthropic:claude-sonnet-5-5   # cost estimate, no calls
 # Another fixture set, and a resolution sweep: every model runs once per prep mode.
 bun run bench:ocr --fixtures ~/receipt-ocr-real-receipts/nepal --prep none,app,long:1568,long:2400,short:1000 --dry-run
+# A/B of the extraction prompt (default: the app's PROMPT_VERSION).
+bun run bench:ocr --prompt v1 --models anthropic:claude-haiku-5-5 --prep app --concurrency 1
 ```
 
 Real provider calls, billed to the keys. `--models` takes any id in `OCR_MODELS`; a missing key for a chosen provider
@@ -30,9 +32,9 @@ test's receipt) are skipped.
   tip equals zero); merchant by edit similarity >= 0.8 after NFC, lower case and dropping everything but letters, marks
   and digits (marks are kept: Devanagari vowel signs are marks); items F1 (name similarity >= 0.7 and the
   same total price).
-- Output: `results/<date>.md` (summary, commit it; `<date>-<set>.md` for a set other than `fixtures`) and
-  `results/<date>[-<set>]-<model>-<prep>.json` (raw, gitignored, with each run's extraction so misses can be
-  inspected). Latency is
+- Output: `results/<date>[-<set>]-prompt-<version>.md` (summary, commit it) and
+  `results/<date>[-<set>]-prompt-<version>-<model>-<prep>.json` (raw, gitignored, with the prompt version and each
+  run's extraction so misses can be inspected). Latency is
   p50/p95 of successful calls, `cold` the first one to finish.
 - Cost: the usage `extractReceipt` returns (or a failed call's `OcrCallError.usage`), priced with `costOf` from the
   model registry's effective-dated table in `packages/ai/src/models.ts`, the same prices the app stores per call.

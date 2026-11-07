@@ -1,4 +1,4 @@
-import { costOf, type ModelId } from "@receipt-ocr/ai";
+import { costOf, PROMPT_VERSION, type ModelId } from "@receipt-ocr/ai";
 import { receiptObjectKey } from "@receipt-ocr/storage";
 import { Duration, Effect } from "effect";
 import {
@@ -64,6 +64,8 @@ export function ocrFields(rows: readonly OcrCallRow[]): NonNullable<WideEventFie
     model: lastCall?.model,
     provider: lastCall?.provider,
     fallback: called.some((row) => row.step > 0),
+    // The app always reads with the current prompt; set only when a model was called.
+    prompt_version: called.length > 0 ? PROMPT_VERSION : undefined,
     tokens_in: sum((row) => row.inputTokens),
     tokens_out: sum((row) => row.outputTokens),
     tokens_cached: sum((row) => row.cachedInputTokens),

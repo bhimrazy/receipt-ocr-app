@@ -1,7 +1,7 @@
 // OCR accuracy, latency and cost benchmark.
 //   bun run bench:ocr [--models google:gemini-3.8-flash,anthropic:claude-haiku-5-5,...]
 //     [--fixtures bench/fixtures] [--prep none,app,long:1568,short:1000] [--only id,id]
-//     [--concurrency 2] [--dry-run]
+//     [--concurrency 2] [--prompt v1|v2] [--dry-run]
 // Needs each chosen provider's key (GOOGLE_GENERATIVE_AI_API_KEY, ANTHROPIC_API_KEY); --dry-run needs none
 // and calls nothing. Fixtures: <id>.{png,jpg,jpeg,webp,pdf} + <id>.json (ground truth); images without one
 // are skipped. Every model runs on every prep mode; images are prepared in memory, sources never change.
@@ -14,8 +14,11 @@ import {
   OcrCallError,
   ocrModel,
   priceAt,
+  PROMPT_VERSION,
+  PROMPT_VERSIONS,
   type ExtractionUsage,
   type ModelId,
+  type PromptVersion,
 } from "@receipt-ocr/ai";
 import { imageTokens, parsePrep, prepare, prepLabel, type Prepared, type PrepSpec } from "./prep";
 import {
@@ -73,6 +76,7 @@ async function extract(model: string, sent: Prepared) {
     model: modelId(model),
     file: { data: sent.data, mediaType: sent.mediaType },
     keys,
+    promptVersion,
   });
   return { got: extraction as Predicted, usage };
 }
@@ -85,6 +89,11 @@ function arg(name: string, fallback: string) {
 const only = arg("only", "").split(",").filter(Boolean);
 const concurrency = Math.max(1, Number(arg("concurrency", "2")) || 2);
 const dryRun = process.argv.includes("--dry-run");
+const promptVersion = arg("prompt", PROMPT_VERSION) as PromptVersion;
+if (!PROMPT_VERSIONS.includes(promptVersion)) {
+  console.error(`unknown prompt "${promptVersion}" (one of ${PROMPT_VERSIONS.join(", ")})`);
+  process.exit(2);
+}
 const fixtureDir = path.resolve(arg("fixtures", path.join(root, "fixtures")));
 // Names the result files, so runs over different sets don't overwrite each other.
 const setName = path.basename(fixtureDir);
@@ -206,15 +215,15 @@ const safe = (s: string) => s.replace(/[^A-Za-z0-9.-]+/g, "_");
 
 /**
  * A rough, generous estimate with no calls. Prompt + schema + structured-output overhead
- * ~2000 tokens; the image per `imageTokens` on the prepared size (1600 when unknown, e.g. a
+ * ~2000 tokens for v1 and ~3500 for v2 (its system prompt and field definitions); the image per `imageTokens` on the prepared size (1600 when unknown, e.g. a
  * PDF page); output the ground truth's JSON at ~3 characters a token plus 1000 thinking tokens.
  */
 function printEstimate() {
-  const FIXED_INPUT = 2000;
+  const FIXED_INPUT = promptVersion === "v1" ? 2000 : 3500;
   const THINKING = 1000;
   const now = new Date();
   const lines = [
-    `Dry run: ${fixtures.length} fixtures in ${setName} x ${models.length} models x ${preps.length} prep modes, no calls made.`,
+    `Dry run: ${fixtures.length} fixtures in ${setName} x ${models.length} models x ${preps.length} prep modes, prompt ${promptVersion}, no calls made.`,
     "",
     "| model | prep | avg bytes | avg size | input tokens | output tokens | est. cost |",
     "|---|---|---|---|---|---|---|",
@@ -261,13 +270,13 @@ if (dryRun) {
 }
 
 const date = new Date().toISOString().slice(0, 10);
-const runId = setName === "fixtures" ? date : `${date}-${safe(setName)}`;
+const runId = `${setName === "fixtures" ? date : `${date}-${safe(setName)}`}-prompt-${promptVersion}`;
 mkdirSync(path.join(root, "results"), { recursive: true });
 const fieldNames = [...EXACT_FIELDS, ...AMOUNT_FIELDS, "merchant", "itemsF1"];
 const md = [
   `# OCR benchmark ${date}`,
   "",
-  `${fixtures.length} fixtures from \`${setName}\`, concurrency ${concurrency}, prep ${preps.map(prepLabel).join(", ")}.`,
+  `${fixtures.length} fixtures from \`${setName}\`, prompt ${promptVersion}, concurrency ${concurrency}, prep ${preps.map(prepLabel).join(", ")}.`,
   "",
   `| model | prep | ${fieldNames.join(" | ")} | p50 | p95 | cold | failed | timeouts | avg bytes | avg size | avg tokens in | tokens in/out | cost |`,
   `|${"---|".repeat(fieldNames.length + 12)}`,
@@ -299,7 +308,7 @@ for (const model of models) {
     const raw = path.join(root, "results", `${runId}-${safe(model)}-${safe(prep)}.json`);
     writeFileSync(
       raw,
-      `${JSON.stringify({ date, set: setName, model, prep, priceFrom: priceFrom(model), runs }, null, 2)}\n`,
+      `${JSON.stringify({ date, set: setName, model, prep, promptVersion, priceFrom: priceFrom(model), runs }, null, 2)}\n`,
     );
     for (const r of runs.filter((r) => !r.ok)) console.error(`  ${r.fixture}: ${r.error}`);
   }
