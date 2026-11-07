@@ -73,7 +73,7 @@ export function LandingH() {
                 Stop typing in receipts.
               </h1>
               <p className="mt-7 max-w-[34rem] text-pretty text-[17px] leading-[1.65] text-muted-foreground sm:text-lg">
-                Take a photo. receiptOCR reads the{" "}
+                Take a photo. ReceiptOCR scans the{" "}
                 <span className="text-foreground">
                   merchant, date, every line item, tax and total
                 </span>

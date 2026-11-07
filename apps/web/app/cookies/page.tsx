@@ -8,7 +8,7 @@ import { LEGAL_UPDATED, formatLegalDate, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Cookie policy",
   description:
-    "Every cookie and storage key receiptOCR uses, what it is for, how long it lasts, and how to change your choice.",
+    "Every cookie and storage key ReceiptOCR uses, what it is for, how long it lasts, and how to change your choice.",
   path: "/cookies",
 });
 
@@ -36,7 +36,7 @@ export default function CookiesPage() {
 
   return (
     <LegalPage
-      intro="This page lists every cookie and every item of browser storage receiptOCR uses, what each one is for and how long it lasts. It is generated from the same list the app is checked against, so it stays complete."
+      intro="This page lists every cookie and every item of browser storage ReceiptOCR uses, what each one is for and how long it lasts. It is generated from the same list the app is checked against, so it stays complete."
       sections={[
         {
           heading: "What needs your permission",

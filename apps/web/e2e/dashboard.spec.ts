@@ -45,7 +45,7 @@ async function noSidewaysScroll(page: Page) {
 test.describe("Home spending dashboard", () => {
   test("an empty workspace keeps the first-run Home, without a dashboard", async ({ page }) => {
     await signUp(page, uniqueEmail("dash-empty"));
-    await expect(page.getByRole("heading", { name: "Read your first receipt" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Scan your first receipt" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "How it works" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Spending" })).toHaveCount(0);
   });
@@ -105,6 +105,8 @@ test.describe("Home spending dashboard", () => {
       await sql.end();
     }
     await page.goto("/app");
-    await expect(page.getByText("Spending shows here once a receipt has been read.")).toBeVisible();
+    await expect(
+      page.getByText("Spending shows here once a receipt has been scanned."),
+    ).toBeVisible();
   });
 });

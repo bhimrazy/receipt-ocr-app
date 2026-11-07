@@ -99,7 +99,7 @@ function InstallPrompt() {
           <Download aria-hidden="true" className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">Install receiptOCR</p>
+          <p className="text-sm font-medium">Install ReceiptOCR</p>
           {offer === "ios" ? (
             <p className="mt-1 text-xs text-muted-foreground">
               Tap the Share button{" "}

@@ -47,7 +47,7 @@ const steps = (batchMax: number): { icon: LucideIcon; title: string; body: strin
   },
   {
     icon: ScanText,
-    title: "We read them",
+    title: "We scan them",
     body: "The merchant, date, line items, tax and total, usually in a few seconds each.",
   },
   {
@@ -94,14 +94,14 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
       count: counts.needsReview,
       href: "/app/history?status=needs-review",
       label: "Needs review",
-      hint: "Read with low confidence. Compare them with the photo.",
+      hint: "Scanned with low confidence. Compare them with the photo.",
       icon: TriangleAlert,
       tone: "text-warning border-warning/30 bg-warning/10",
     },
     {
       count: counts.failed,
       href: "/app/history?status=failed",
-      label: "Couldn't read",
+      label: "Couldn't scan",
       hint: "Try again, or upload a clearer photo.",
       icon: CircleAlert,
       tone: "text-destructive border-destructive/30 bg-destructive/10",
@@ -109,7 +109,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
     {
       count: counts.inFlight,
       href: "/app/history?status=processing",
-      label: "Reading now",
+      label: "Scanning now",
       hint: "No action needed. They finish on their own.",
       icon: Loader2,
       tone: "text-primary border-primary/25 bg-primary/10",
@@ -129,7 +129,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
       {open.length === 0 ? (
         <p className="flex items-start gap-3 px-4 py-5 text-sm text-muted-foreground">
           <CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
-          Nothing to check. Every receipt was read with high confidence.
+          Nothing to check. Every receipt was scanned with high confidence.
         </p>
       ) : (
         <ul className="divide-y divide-border">
@@ -176,7 +176,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
 
 async function HomeTitle() {
   const counts = await getReceiptCounts();
-  return counts.total === 0 ? "Read your first receipt" : "Home";
+  return counts.total === 0 ? "Scan your first receipt" : "Home";
 }
 
 async function UploadSection() {
@@ -251,7 +251,7 @@ function SpendSkeleton() {
 /**
  * The spending dashboard. Skipped for an empty workspace (the upload and
  * how-it-works content is the whole page then), and without a query while
- * nothing has been read yet: both follow from the counts the page already has.
+ * nothing has been scanned yet: both follow from the counts the page already has.
  */
 async function SpendSection({ searchParams }: { searchParams: SearchParams }) {
   const counts = await getReceiptCounts();
@@ -299,8 +299,8 @@ export default function HomePage({ searchParams }: { searchParams: SearchParams 
             </Suspense>
           </PageHeaderTitle>
           <PageHeaderDescription>
-            Add a photo of a receipt and we read the merchant, date, items and total. Several photos
-            are read in the background while you keep working.
+            Add a photo of a receipt and we scan the merchant, date, items and total. Several photos
+            are scanned in the background while you keep working.
           </PageHeaderDescription>
         </PageHeaderContent>
       </PageHeader>

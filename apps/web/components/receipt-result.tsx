@@ -266,7 +266,7 @@ export function ReceiptResult({
               className="mt-0.5 size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
             />
             <div>
-              <p className="font-medium">Reading this receipt</p>
+              <p className="font-medium">Scanning this receipt</p>
               <p className="mt-1 text-muted-foreground">
                 This usually takes a few seconds and the page updates by itself. You can leave; the
                 result is saved to History.
@@ -281,7 +281,7 @@ export function ReceiptResult({
           >
             <CircleAlert aria-hidden="true" className="size-5 shrink-0 max-sm:hidden" />
             <div className="min-w-0 flex-1">
-              <AlertTitle>This receipt couldn&apos;t be read</AlertTitle>
+              <AlertTitle>This receipt couldn&apos;t be scanned</AlertTitle>
               <AlertDescription className="mt-1">
                 {/* The generic message repeats the heading, so say only the useful part. */}
                 {!receipt.errorMessage || receipt.errorMessage === EXTRACTION_FAILED_MESSAGE
@@ -290,7 +290,7 @@ export function ReceiptResult({
               </AlertDescription>
               <p className="mt-2 text-xs text-muted-foreground">
                 {triesLeft > 0
-                  ? `${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left for this ${noun}. Your first ${FREE_FAILED_ROUNDS} failed reads each day don't count toward your daily limit.`
+                  ? `${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left for this ${noun}. Your first ${FREE_FAILED_ROUNDS} failed scans each day don't count toward your daily limit.`
                   : `This ${noun} was tried ${MAX_EXTRACTION_ATTEMPTS} times. Upload a clearer one instead.`}
               </p>
             </div>

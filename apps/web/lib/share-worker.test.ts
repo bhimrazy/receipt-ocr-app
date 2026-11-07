@@ -79,7 +79,7 @@ describe("public/sw.js share POST", () => {
     expect((await share([], "", worker)).location).toBe(`${ORIGIN}/app?shared=failed`);
   });
 
-  it("redirects to /app?shared=failed when the body can't be read", async () => {
+  it("redirects to /app?shared=failed when the body can't be scanned", async () => {
     const worker = loadWorker();
     const request = new Request(`${ORIGIN}/share-target`, {
       method: "POST",

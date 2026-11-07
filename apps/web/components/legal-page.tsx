@@ -19,7 +19,7 @@ export function SlimHeader() {
     <header className="border-b border-border px-5">
       <div className="mx-auto flex h-16 max-w-3xl items-center justify-between">
         <Link
-          aria-label="receiptOCR home"
+          aria-label="ReceiptOCR home"
           className={`inline-flex min-h-11 items-center rounded-lg ${focusRing}`}
           href="/"
         >

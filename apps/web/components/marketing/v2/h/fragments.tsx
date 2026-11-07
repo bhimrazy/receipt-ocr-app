@@ -14,13 +14,13 @@ function PanelHeader({ title, meta }: { title: React.ReactNode; meta?: React.Rea
   );
 }
 
-const statusLabel = { read: "Read", reading: "Reading", queued: "Queued" } as const;
+const statusLabel = { read: "Scanned", reading: "Scanning", queued: "Queued" } as const;
 
 export function UploadFragment() {
   const done = uploadQueue.filter((file) => file.status === "read").length;
   return (
     <div className="h-panel overflow-hidden">
-      <PanelHeader meta={`${done} of ${uploadQueue.length} read`} title="Upload" />
+      <PanelHeader meta={`${done} of ${uploadQueue.length} scanned`} title="Upload" />
       <ul className="divide-y divide-(--h-hairline)">
         {uploadQueue.map((file) => (
           <li className="flex items-center gap-3 px-5 py-3" key={file.name}>

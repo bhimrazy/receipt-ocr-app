@@ -34,7 +34,7 @@ test("a PDF over 10 pages is refused with a clear message", async ({ page }) => 
     mimeType: "application/pdf",
     buffer: pdf(11),
   });
-  await page.getByRole("button", { name: "Read receipt" }).click();
+  await page.getByRole("button", { name: "Scan receipt" }).click();
   await expect(page.getByText(/PDFs can have up to 10 pages/).first()).toBeVisible();
   await expect(page).toHaveURL(/\/app$/);
 });

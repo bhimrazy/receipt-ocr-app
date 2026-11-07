@@ -23,10 +23,10 @@ const prefersReducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function statusText(key: string | undefined) {
-  if (!key) return "Reading…";
-  if (key.startsWith("item-")) return "Reading line items…";
+  if (!key) return "Scanning…";
+  if (key.startsWith("item-")) return "Scanning line items…";
   if (key === "category" || key === "row") return "Categorising…";
-  return "Reading totals…";
+  return "Scanning totals…";
 }
 
 /** Grey bar holding a value's space until it is read, so nothing shifts. `w` sizes the bar. */
@@ -83,7 +83,7 @@ export function HeroDemo() {
     setSession((prev) => [s.id, ...prev.filter((id) => id !== s.id)]);
     setLanded(s.id);
     setAnnounce(
-      `${s.merchant} read: total ${usd(s.total)}, category ${s.category}. Row added to the export.`,
+      `${s.merchant} scanned: total ${usd(s.total)}, category ${s.category}. Row added to the export.`,
     );
   }, []);
 

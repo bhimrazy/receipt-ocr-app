@@ -145,8 +145,8 @@ export function Output() {
 function Uploads() {
   const files = [
     { name: "scan-0193.png", status: "Done", icon: CircleCheck, tone: "text-primary" },
-    { name: "IMG_2041.jpg", status: "Reading…", icon: Loader2, tone: "text-muted-foreground" },
-    { name: "lunch.jpg", status: "Couldn't read", icon: CircleAlert, tone: "text-destructive" },
+    { name: "IMG_2041.jpg", status: "Scanning…", icon: Loader2, tone: "text-muted-foreground" },
+    { name: "lunch.jpg", status: "Couldn't scan", icon: CircleAlert, tone: "text-destructive" },
   ];
   return (
     <ul aria-label="Example uploads and their status" className="divide-y divide-border">
@@ -158,7 +158,7 @@ function Uploads() {
             <span className={cn("flex shrink-0 items-center gap-1.5 font-medium", file.tone)}>
               <Icon aria-hidden className="size-3.5" />
               {file.status}
-              {file.status === "Couldn't read" && (
+              {file.status === "Couldn't scan" && (
                 <span className="ml-1 inline-flex items-center gap-1 text-foreground">
                   <RotateCcw aria-hidden className="size-3" />
                   Retry
@@ -216,7 +216,7 @@ function Export() {
 const steps = [
   {
     title: "Upload",
-    body: "Phone photos or scans: PNG, JPG or HEIC, up to 10 MB each and 20 at a time. They are read one after another. If one can't be read, it says so and you can retry.",
+    body: "Phone photos or scans: PNG, JPG or HEIC, up to 10 MB each and 20 at a time. They are scanned one after another. If one can't be scanned, it says so and you can retry.",
     visual: <Uploads />,
   },
   {
@@ -237,7 +237,7 @@ export function How() {
       <SectionHead
         id="how"
         label="How it works"
-        lead="receiptOCR reads each receipt. You check the result and decide what goes into your records."
+        lead="ReceiptOCR scans each receipt. You check the result and decide what goes into your records."
         title="Upload, check, export"
       />
       <ol className="mt-14 grid gap-5 md:grid-cols-3">

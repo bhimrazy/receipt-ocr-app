@@ -68,7 +68,7 @@ describe("llms.txt host gating", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/plain");
     const body = await res.text();
-    expect(body).toMatch(/^# receiptOCR/);
+    expect(body).toMatch(/^# ReceiptOCR/);
     expect(body).toContain(`${PRODUCTION_ORIGIN}/privacy`);
     expect(body).toContain("https://github.com/bhimrazy/receipt-ocr");
   });
@@ -78,7 +78,7 @@ describe("llms.txt host gating", () => {
     async (host) => {
       const res = llmsResponse(req(host), llmsFullTxt);
       expect(res.status).toBe(404);
-      expect(await res.text()).not.toContain("receiptOCR");
+      expect(await res.text()).not.toContain("ReceiptOCR");
     },
   );
 

@@ -123,7 +123,7 @@ const supportAddressValue = supportAddress();
 export const emailEnv = {
   /** Resend API key. Without it, mail is logged instead of sent. */
   resendApiKey: optional("RESEND_API_KEY"),
-  /** Verified sender, e.g. `receiptOCR <noreply@yourdomain.com>`. */
+  /** Verified sender, e.g. `ReceiptOCR <noreply@yourdomain.com>`. */
   from: optional("EMAIL_FROM"),
   /** Default Reply-To so answers to noreply mail reach the support inbox. */
   replyTo: supportAddressValue,

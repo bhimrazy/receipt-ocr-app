@@ -6,7 +6,7 @@ import { authEnabled } from "@/lib/env";
 
 export const metadata: Metadata = pageMetadata({
   title: "Reset password",
-  description: "Send yourself a link to reset your receiptOCR password.",
+  description: "Send yourself a link to reset your ReceiptOCR password.",
   path: "/forgot-password",
   index: false,
 });

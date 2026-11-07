@@ -15,7 +15,7 @@ export const steps = [
   {
     index: "01",
     title: "Drop in a stack of photos.",
-    body: "Phone snaps or desk scans, up to 20 at a time. PNG, JPG or HEIC up to 10 MB each. They're queued and read one after another.",
+    body: "Phone snaps or desk scans, up to 20 at a time. PNG, JPG or HEIC up to 10 MB each. They're queued and scanned one after another.",
     note: "PDF receipts are coming.",
   },
   {
@@ -43,7 +43,7 @@ export const dataStops = [
   },
   {
     name: "Google Gemini",
-    body: "Google's AI reads the image and returns the fields.",
+    body: "Google's AI scans the image and returns the fields.",
   },
   {
     name: "Your workspace",

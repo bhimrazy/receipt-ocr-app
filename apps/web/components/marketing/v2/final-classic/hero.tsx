@@ -23,7 +23,7 @@ export function Hero() {
             <span className="text-gradient block pb-1">spreadsheet rows</span>
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-foreground/80">
-            Upload a photo of a receipt. receiptOCR reads the merchant, date, line items, tax and
+            Upload a photo of a receipt. ReceiptOCR scans the merchant, date, line items, tax and
             total, marks each line it is not sure about, and gives you a CSV.
           </p>
           <Ctas className="mt-8 max-sm:max-w-sm" />

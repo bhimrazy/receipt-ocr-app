@@ -11,7 +11,7 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
         <Link
-          aria-label="receiptOCR home"
+          aria-label="ReceiptOCR home"
           className={cn("inline-flex min-h-11 items-center rounded-md", focusRing)}
           href="/"
         >

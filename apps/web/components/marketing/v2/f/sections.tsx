@@ -25,7 +25,7 @@ export function FTicker() {
   );
   return (
     <div className="f-on-ink f-marquee-wrap overflow-hidden border-y-2 border-[var(--f-ink)] bg-background py-4 text-foreground">
-      <p className="sr-only">What receiptOCR reads from each receipt</p>
+      <p className="sr-only">What ReceiptOCR scanneds from each receipt</p>
       <div className="f-marquee">
         {row(false)}
         {row(true)}
@@ -137,7 +137,7 @@ const card =
 function QueueCard() {
   return (
     <div
-      aria-label="Upload queue: one read, one reading, one queued"
+      aria-label="Upload queue: one scanned, one scanning, one queued"
       className={cn(card, "p-3")}
       role="img"
     >
@@ -158,7 +158,7 @@ function QueueCard() {
             >
               {row.done ? (
                 <Check className="size-3.5" strokeWidth={3} />
-              ) : row.status === "Reading" ? (
+              ) : row.status === "Scanning" ? (
                 <Loader className="size-3.5" strokeWidth={3} />
               ) : null}
               {row.status}

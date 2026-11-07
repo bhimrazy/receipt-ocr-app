@@ -6,7 +6,7 @@ import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Privacy policy",
   description:
-    "What receiptOCR collects, who processes it (including Google Gemini and Anthropic Claude AI), how long it is kept and how to delete it.",
+    "What ReceiptOCR collects, who processes it (including Google Gemini and Anthropic Claude AI), how long it is kept and how to delete it.",
   path: "/privacy",
 });
 
@@ -19,7 +19,7 @@ export default function PrivacyPage() {
     <LegalPage
       title="Privacy policy"
       updated={formatLegalDate(LEGAL_UPDATED.privacy)}
-      intro="receiptOCR reads the receipts you upload and turns them into data you can check and export. This policy explains what we collect, who processes it on our behalf, and how you can remove it."
+      intro="ReceiptOCR scans the receipts you upload and turns them into data you can check and export. This policy explains what we collect, who processes it on our behalf, and how you can remove it."
       sections={[
         {
           heading: "What we collect",
@@ -34,7 +34,7 @@ export default function PrivacyPage() {
         {
           heading: "How we use it",
           body: [
-            "To run the service: sign you in, read your receipts, store your history, let you edit and export it, and send account emails such as password resets and workspace invitations.",
+            "To run the service: sign you in, scan your receipts, store your history, let you edit and export it, and send account emails such as password resets and workspace invitations.",
             "To keep the service working and secure, for example by enforcing usage limits and investigating errors.",
             "To reply when you contact us.",
             ...(googleAnalytics || pageCounts
@@ -48,7 +48,7 @@ export default function PrivacyPage() {
         {
           heading: "Who processes your data",
           body: [
-            "Google (Gemini API) and Anthropic (Claude API): every receipt file you upload is sent to an AI model from one of these providers, which reads it and returns the extracted data. We choose the models and the order they are tried in, and we may change them. A file goes to the next provider only if the first can't read it, for example because it is slow, busy or unavailable, declines the file, or can't take its type or size. If a read is retried, the file may be sent again. Each provider handles the file under the terms of its paid API. Under those terms, neither provider uses your receipts to train its models, and each keeps a copy for a limited time only to check for misuse.",
+            "Google (Gemini API) and Anthropic (Claude API): every receipt file you upload is sent to an AI model from one of these providers, which scans it and returns the extracted data. We choose the models and the order they are tried in, and we may change them. A file goes to the next provider only if the first can't read it, for example because it is slow, busy or unavailable, declines the file, or can't take its type or size. If a read is retried, the file may be sent again. Each provider handles the file under the terms of its paid API. Under those terms, neither provider uses your receipts to train its models, and each keeps a copy for a limited time only to check for misuse.",
             "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
             "An email delivery provider sends account emails such as password resets and invitations.",
             "Google and GitHub, only if you choose to sign in with them.",
@@ -67,7 +67,7 @@ export default function PrivacyPage() {
                   "Cloudflare Turnstile: to tell people from bots, the sign-up, sign-in, password reset and contact forms run a Cloudflare Turnstile check. Cloudflare receives your IP address and browser details such as user agent and screen settings, and may set a cookie, under its own terms.",
                 ]
               : []),
-            "Only you and the people you invite to your workspace can see its receipts. receiptOCR administrators can access an account only to handle a support request.",
+            "Only you and the people you invite to your workspace can see its receipts. ReceiptOCR administrators can access an account only to handle a support request.",
           ],
         },
         {
@@ -76,7 +76,7 @@ export default function PrivacyPage() {
             "We keep your account and receipts until you delete them.",
             "Deleting a receipt removes it, its extracted data and its original file.",
             "Deleting your account from Settings removes your account and every workspace where you are the only member, with all of its receipts and files. Receipts you uploaded to a workspace shared with other people stay in that workspace, without your name on them, because they belong to the workspace. If you are the only owner of a shared workspace, make another member an owner first.",
-            "For billing and to enforce plan limits, we keep a usage record of each time the AI read a receipt: which model, how many tokens, the estimated cost and when. It holds no receipt contents or images. It stays after you delete the receipt, the workspace or your account, but is then no longer linked to them or to you.",
+            "For billing and to enforce plan limits, we keep a usage record of each time the AI scanned a receipt: which model, how many tokens, the estimated cost and when. It holds no receipt contents or images. It stays after you delete the receipt, the workspace or your account, but is then no longer linked to them or to you.",
           ],
         },
         {

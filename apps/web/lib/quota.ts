@@ -8,7 +8,7 @@ import { requireSession } from "./session";
 
 /**
  * Effect for routes: fails with QuotaExceeded when the user or the service is
- * out of room, before anything is stored. Reads the plan fresh from the
+ * out of room, before anything is stored. Scans the plan fresh from the
  * database; returns its id for logs and the limits that ingest and retry
  * enforce again under the user's lock.
  */

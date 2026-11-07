@@ -35,10 +35,10 @@ export function Hero() {
             className="mt-5 text-[40px] font-semibold leading-[1.02] tracking-[-0.035em] text-balance sm:text-[56px] lg:text-[60px]"
             id="g-hero-title"
           >
-            Every receipt, read line by line.
+            Every receipt, scanned line by line.
           </h1>
           <p className="mt-6 max-w-[46ch] text-[17px] leading-7 text-(--g-ink-2) text-pretty">
-            Upload a photo or scan. receiptOCR extracts the merchant, date, line items, tax and
+            Upload a photo or scan. ReceiptOCR extracts the merchant, date, line items, tax and
             total, scores how sure it is of each line, and exports the record you approve as CSV.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -59,7 +59,8 @@ export function Hero() {
           <ProductComposition />
           <div className="mt-3">
             <Fig n="1">
-              One receipt beside the record read from it. The 61% line is flagged for you to check.
+              One receipt beside the record scanned from it. The 61% line is flagged for you to
+              check.
             </Fig>
           </div>
         </div>

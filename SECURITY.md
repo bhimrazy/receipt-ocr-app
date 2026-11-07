@@ -19,7 +19,7 @@ keep it minimal.
 
 ## Scope
 
-In scope: this repository and the hosted receiptOCR app built from it, including sign-in, workspaces, receipt
+In scope: this repository and the hosted ReceiptOCR app built from it, including sign-in, workspaces, receipt
 uploads, storage and the admin panel.
 
 Out of scope: denial of service by volume, spam or social engineering, findings that need a compromised device or

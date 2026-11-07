@@ -1,5 +1,6 @@
 import "server-only";
 import { authRateLimitRules } from "./auth-rate-limit";
+import { SITE_NAME } from "./site";
 import {
   DEFAULT_PLANS,
   ensurePersonalWorkspace,
@@ -198,7 +199,7 @@ const soleOwnerError = (names: string[], then: string) =>
   });
 
 export const auth = betterAuth({
-  appName: "receiptOCR",
+  appName: SITE_NAME,
   baseURL: authEnv.betterAuthUrl,
   // With BETTER_AUTH_SECRETS set, `secret` is only the legacy key for payloads sealed before it.
   secret: authEnv.betterAuthSecret ?? (authEnv.betterAuthSecrets ? undefined : PLACEHOLDER_SECRET),
@@ -495,7 +496,7 @@ export const auth = betterAuth({
     admin({
       defaultRole: "user",
     }),
-    // Reads the token from `x-captcha-response` and the client IP from advanced.ipAddress. A
+    // Scans the token from `x-captcha-response` and the client IP from advanced.ipAddress. A
     // missing token is a 400, a rejected one a 403, and a siteverify failure or timeout (10 s) a
     // 500: all fail closed.
     ...(turnstileEnv

@@ -2,7 +2,7 @@
 
 _Status: design (not yet implemented) · July 2026_
 
-How receiptOCR will store and use user-provided credentials — AI provider API keys (Gemini,
+How ReceiptOCR will store and use user-provided credentials — AI provider API keys (Gemini,
 later others) and S3-compatible storage credentials (endpoint, bucket, access key, secret) —
 without ever becoming the weak link. These are bearer credentials: anyone holding them can
 spend the user's money and read their bucket. Treat them like passwords, not like settings.

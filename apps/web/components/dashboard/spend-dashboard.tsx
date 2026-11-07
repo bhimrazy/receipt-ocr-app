@@ -81,7 +81,7 @@ export function SpendDashboardView({
           Spending
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Read receipts by the date printed on them.{" "}
+          Scan receipts by the date printed on them.{" "}
           {dashboard.currencies.length > 1
             ? "Each currency has its own totals; amounts in different currencies are never added together."
             : null}

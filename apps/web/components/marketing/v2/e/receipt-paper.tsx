@@ -21,7 +21,7 @@ function Line({
   );
 }
 
-/** A thermal-paper receipt drawn in HTML. `active` outlines the line being read. */
+/** A thermal-paper receipt drawn in HTML. `active` outlines the line being scanned. */
 export function ReceiptPaper({
   sample,
   active = null,

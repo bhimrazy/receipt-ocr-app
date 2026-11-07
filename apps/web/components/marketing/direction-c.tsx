@@ -24,7 +24,7 @@ const pipeline = [
     step: "02",
     verb: "Read",
     detail: "merchant · items · tax · total",
-    note: "Google's Gemini model reads the image",
+    note: "Google's Gemini model scans the image",
   },
   { step: "03", verb: "Check", detail: "96% confidence", note: "Fix any field that's off" },
   { step: "04", verb: "Export", detail: "receipts.csv", note: "Or copy one receipt as JSON" },
@@ -33,7 +33,7 @@ const pipeline = [
 const dataFlow = [
   ["Your device", "You take a photo or pick a file on your phone or computer."],
   ["Private storage", "The image is stored for your workspace only."],
-  ["Google Gemini", "Google's AI reads the image and returns the fields."],
+  ["Google Gemini", "Google's AI scans the image and returns the fields."],
   ["Your workspace", "You review, edit and export. Delete whenever you like."],
 ];
 
@@ -64,7 +64,7 @@ export function DirectionC() {
                 Early access · Free plan
               </p>
               <h1 className="mt-6 text-balance font-mono text-[2.35rem] font-semibold leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.6rem]">
-                Receipts, read <span className="text-primary">line by line.</span>
+                Receipts, scanned <span className="text-primary">line by line.</span>
               </h1>
               <p className="mt-6 max-w-lg text-pretty text-base leading-7 text-foreground/80 md:text-lg md:leading-8">
                 Photograph or upload any receipt. You get the merchant, date, every line item, tax

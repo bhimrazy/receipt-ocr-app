@@ -25,7 +25,7 @@ const limits: Array<{ what: string; condition?: string; value: string }> = [
   { what: "Workspaces", condition: "With teammates you invite", value: String(free.workspaces) },
   { what: "Files", condition: "PNG, JPG or HEIC, 20 per batch", value: "10 MB each" },
   {
-    what: "Fields read",
+    what: "Fields scanned",
     condition: "Merchant, date, items, tax, total, category",
     value: "Included",
   },
@@ -35,7 +35,7 @@ const limits: Array<{ what: string; condition?: string; value: string }> = [
     condition: "Merchant, date, category, currency and totals",
     value: "Included",
   },
-  { what: "Line items", condition: "Read and scored", value: "Not editable yet" },
+  { what: "Line items", condition: "Scanned and scored", value: "Not editable yet" },
   { what: "CSV and JSON export", condition: "One receipt or the whole workspace", value: "$0" },
   { what: "Payment card", value: "Not needed" },
 ];

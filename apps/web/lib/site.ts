@@ -4,7 +4,10 @@ import { PRODUCTION_ORIGIN } from "@/lib/seo-hosts";
 // the page: non-production hosts are noindex, and their canonical then points at the real page.
 export const siteUrl = PRODUCTION_ORIGIN;
 
-export const siteTitle = "Receipt OCR: Turn Receipt Photos into CSV | receiptOCR";
+// The one spelling of the product name wherever users see it (the wordmark styling is separate).
+export const SITE_NAME = "ReceiptOCR";
+
+export const siteTitle = `Receipt OCR: Turn Receipt Photos into CSV | ${SITE_NAME}`;
 
 export const siteDescription = `Receipt OCR that turns receipt photos and PDFs into spreadsheet rows. Extracts merchant, date, line items, tax and total with confidence scores. Free to start, no card required.`;
 

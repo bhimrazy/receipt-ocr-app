@@ -5,9 +5,9 @@ import { SectionHead } from "./primitives";
 /** A slice of history with the app's real status words (components/receipt-status.tsx). */
 function Files() {
   const files = [
-    { name: "scan-0193.png", status: "Read", tone: "text-foreground" },
-    { name: "IMG_2041.jpg", status: "Reading…", tone: "text-muted-foreground" },
-    { name: "lunch.jpg", status: "Couldn't read · Retry", tone: "text-[var(--pp-accent)]" },
+    { name: "scan-0193.png", status: "Scanned", tone: "text-foreground" },
+    { name: "IMG_2041.jpg", status: "Scanning…", tone: "text-muted-foreground" },
+    { name: "lunch.jpg", status: "Couldn't scan · Retry", tone: "text-[var(--pp-accent)]" },
   ];
   return (
     <ul
@@ -103,7 +103,7 @@ function Export() {
 const steps = [
   {
     title: "Drop them in.",
-    body: "Phone photos or scans: PNG, JPG or HEIC, up to 10 MB each and 20 at a time. They're read one after another, and anything that can't be read says so, with a retry.",
+    body: "Phone photos or scans: PNG, JPG or HEIC, up to 10 MB each and 20 at a time. They're scanned one after another, and anything that can't be scanned says so, with a retry.",
     visual: <Files />,
   },
   {
@@ -125,7 +125,7 @@ export function HowPaper() {
         <SectionHead
           eyebrow="How it works"
           id="how"
-          lead="receiptOCR does the reading. You decide what goes in your books."
+          lead="ReceiptOCR does the scanning. You decide what goes in your books."
           title={
             <>
               Three steps. The middle one is <span className="pp-wonk">you.</span>

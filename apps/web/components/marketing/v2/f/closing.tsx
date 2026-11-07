@@ -207,7 +207,7 @@ export function FFooter() {
           </nav>
         </div>
         <p className="mt-12 border-t border-border pt-6 text-sm text-muted-foreground">
-          © {new Date().getFullYear()} receiptOCR
+          © {new Date().getFullYear()} ReceiptOCR
         </p>
       </div>
     </footer>
