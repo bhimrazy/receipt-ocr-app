@@ -25,6 +25,23 @@ import {
 /** Shown on a receipt whose job an admin cancelled. */
 export const EXTRACTION_CANCELLED_MESSAGE = "Reading this receipt was stopped. Try again.";
 
+/** Every model declined the file; retrying won't change that. */
+export const EXTRACTION_REFUSED_MESSAGE =
+  "The AI model declined to read this file. If it is a receipt or invoice, contact support; otherwise upload a receipt instead.";
+
+/** No configured model could take this file's type or size. */
+export const EXTRACTION_UNSUPPORTED_MESSAGE =
+  "This file is too large or in a format the AI models can't read. Upload a smaller JPEG, PNG or PDF copy.";
+
+const FINAL_MESSAGES = new Map<string, string>([
+  ["cancelled", EXTRACTION_CANCELLED_MESSAGE],
+  ["refused", EXTRACTION_REFUSED_MESSAGE],
+  ["unsupported-file", EXTRACTION_UNSUPPORTED_MESSAGE],
+]);
+
+/** The receipt's message for the job's final error kind; undefined means the generic one. */
+export const finalFailureMessage = (errorKind: string) => FINAL_MESSAGES.get(errorKind);
+
 /** Worth another attempt: the provider was slow, busy or down. The rest won't change on a retry. */
 const RETRYABLE_OCR: ReadonlySet<OcrFailureKind> = new Set([
   "timeout",
@@ -41,7 +58,8 @@ const MAX_COOLDOWN_MS = 10 * 60_000;
  * Maps a failed attempt to the job's next step:
  * - retry: timeout, rate-limited, provider-error, storage and database errors;
  * - dead now: invalid-output, bad-image, not-configured (an admin re-runs it
- *   once keys are fixed), and an unreadable stored file;
+ *   once keys are fixed), refused and unsupported-file (every model in the
+ *   chain was already tried), and an unreadable stored file;
  * - deferred, without spending an attempt: every provider is cooling down.
  */
 export function classifyExtractionError(error: ExtractionError): JobFailure {
@@ -157,7 +175,7 @@ export const receiptExtract: JobDefinition<
       receiptId: payload.receiptId,
       scope: scopeOf(payload),
       round: payload.round,
-      ...(errorKind === "cancelled" ? { message: EXTRACTION_CANCELLED_MESSAGE } : {}),
+      message: finalFailureMessage(errorKind),
       // A worker that died mid-call wrote nothing for this attempt; one row
       // says it ended, so the round stops reading as in flight.
       calls:

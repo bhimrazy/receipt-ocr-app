@@ -170,6 +170,8 @@ export const OCR_CALL_STATUSES = [
   "invalid-output",
   "bad-image",
   "not-configured",
+  "refused",
+  "unsupported-file",
   "storage-error",
 ] as const;
 

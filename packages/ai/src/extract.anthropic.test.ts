@@ -131,8 +131,20 @@ describe("the Anthropic request body", () => {
     const heic = { data: new Uint8Array([0, 0, 0, 24]), mediaType: "image/heic" };
     const error = await run("anthropic:claude-haiku-5-5", heic).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(OcrCallError);
-    expect(error).toMatchObject({ kind: "not-configured", usage: null });
+    expect(error).toMatchObject({ kind: "unsupported-file", usage: null });
     expect(calls).toHaveLength(0);
+  });
+
+  it("skips an image over Claude's 10 MB base64 limit without a call, and sends one just under", async () => {
+    const calls = mockFetch(json(message()));
+    // 7,500,000 bytes encode to exactly 10,000,000 base64 characters.
+    const under = { data: new Uint8Array(7_500_000), mediaType: "image/png" };
+    const over = { data: new Uint8Array(7_500_001), mediaType: "image/png" };
+    const error = await run("anthropic:claude-haiku-5-5", over).catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "unsupported-file", usage: null });
+    expect(calls).toHaveLength(0);
+    await run("anthropic:claude-haiku-5-5", under);
+    expect(calls).toHaveLength(1);
   });
 });
 
@@ -164,6 +176,28 @@ describe("the Anthropic response", () => {
     });
   });
 
+  it.each([
+    ["prose", [{ type: "text", text: "I can't help with reading this document." }]],
+    ["no", []],
+  ])("treats a refusal with %s text as refused, keeping its usage", async (_, content) => {
+    mockFetch(
+      json(
+        message({
+          content,
+          stop_reason: "refusal",
+          stop_details: { type: "refusal", category: null, explanation: null },
+        }),
+      ),
+    );
+    const error = await run("anthropic:claude-sonnet-5-5").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OcrCallError);
+    expect(error).toMatchObject({
+      kind: "refused",
+      usage: { inputTokens: 1500, outputTokens: 420 },
+    });
+    expect((error as Error).message).toBe("OCR call failed: refused");
+  });
+
   it("treats a refusal as a failed, billed call, even when its text parses", async () => {
     mockFetch(
       json(
@@ -176,10 +210,10 @@ describe("the Anthropic response", () => {
     const error = await run("anthropic:claude-opus-5-5").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(OcrCallError);
     expect(error).toMatchObject({
-      kind: "provider-error",
+      kind: "refused",
       usage: { inputTokens: 1500, outputTokens: 420 },
     });
-    expect((error as Error).message).toBe("OCR call failed: provider-error");
+    expect((error as Error).message).toBe("OCR call failed: refused");
   });
 });
 
@@ -209,6 +243,18 @@ describe("Anthropic errors", () => {
     const error = await run("anthropic:claude-opus-5-5", jpeg, 2).catch((e: unknown) => e);
     expect(error).toMatchObject({ kind: "bad-image" });
     expect(calls).toHaveLength(1);
+  });
+
+  it("402 billing_error: not-configured, so the chain falls back while an admin fixes billing", async () => {
+    mockFetch(apiError(402, "billing_error"));
+    const error = await run("anthropic:claude-haiku-5-5").catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "not-configured" });
+  });
+
+  it("413: unsupported-file, so the chain falls back", async () => {
+    mockFetch(apiError(413, "request_too_large"));
+    const error = await run("anthropic:claude-haiku-5-5").catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "unsupported-file" });
   });
 
   it("401: not-configured (bad or revoked key)", async () => {

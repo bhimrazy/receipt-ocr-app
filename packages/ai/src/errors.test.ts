@@ -25,8 +25,9 @@ describe("classifyOcrError", () => {
     [503, "provider-error"],
     [408, "timeout"],
     [400, "bad-image"],
-    [413, "bad-image"],
+    [413, "unsupported-file"],
     [401, "not-configured"],
+    [402, "not-configured"],
     [403, "not-configured"],
     [404, "not-configured"],
   ] as const)("maps HTTP %i to %s", (status, kind) => {

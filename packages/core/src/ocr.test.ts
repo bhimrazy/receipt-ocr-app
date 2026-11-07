@@ -86,16 +86,20 @@ describe("runChain", () => {
     expect(calls[0]?.maxRetries).toBe(1);
   });
 
-  it.each(["timeout", "rate-limited", "provider-error", "not-configured"] as const)(
-    "falls back to the next model on %s",
-    async (error) => {
-      const { call, calls } = fakeCall({ [A]: { error } });
-      const exit = await run(runChain([step(A), step(B)], call));
-      expect(Exit.isSuccess(exit) && exit.value.model).toBe(B);
-      expect(calls.map((c) => c.model)).toEqual([A, B]);
-      expect(Exit.isSuccess(exit) && exit.value.attempts.map((a) => a.kind)).toEqual([error, "ok"]);
-    },
-  );
+  it.each([
+    "timeout",
+    "rate-limited",
+    "provider-error",
+    "not-configured",
+    "refused",
+    "unsupported-file",
+  ] as const)("falls back to the next model on %s", async (error) => {
+    const { call, calls } = fakeCall({ [A]: { error } });
+    const exit = await run(runChain([step(A), step(B)], call));
+    expect(Exit.isSuccess(exit) && exit.value.model).toBe(B);
+    expect(calls.map((c) => c.model)).toEqual([A, B]);
+    expect(Exit.isSuccess(exit) && exit.value.attempts.map((a) => a.kind)).toEqual([error, "ok"]);
+  });
 
   it.each(["invalid-output", "bad-image"] as const)(
     "stops on %s without paying for a second model",

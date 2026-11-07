@@ -78,6 +78,13 @@
       "when": 1794031131250,
       "tag": "0010_jobs_created_at",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794037527019,
+      "tag": "0011_ocr_call_refused_unsupported",
+      "breakpoints": true
     }
   ]
 }

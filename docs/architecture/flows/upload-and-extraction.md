@@ -123,7 +123,7 @@ flowchart TD
   time -- no --> fail
   time -- yes --> model["Call the model<br/>timeout = min(step timeout, time left)<br/>1 retry inside the call"]
   model -- ok --> success([extraction + attempts])
-  model -- "timeout, rate-limited,<br/>provider-error, not-configured" --> next
+  model -- "timeout, rate-limited,<br/>provider-error, not-configured,<br/>refused, unsupported-file" --> next
   model -- "invalid-output, bad-image" --> fail
 ```
 

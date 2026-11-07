@@ -11,7 +11,12 @@ import {
 import { withoutCooling } from "../ocr";
 import type { OcrStep } from "../settings";
 import { backoffMs } from "./backoff";
-import { classifyExtractionError, cooldownsFrom } from "./kinds/receipt-extract";
+import {
+  classifyExtractionError,
+  cooldownsFrom,
+  EXTRACTION_REFUSED_MESSAGE,
+  finalFailureMessage,
+} from "./kinds/receipt-extract";
 import { receiptExtractJob, receiptExtractPayload } from "./receipt-extract-job";
 import { JOB_REGISTRY } from "./registry";
 
@@ -54,6 +59,22 @@ const attempt = (kind: OcrError["kind"] | "ok", retryAfterMs?: number) => ({
 const ocrError = (kind: OcrError["kind"], attempts = [attempt(kind)]) =>
   new OcrError({ message: "x", kind, attempts });
 
+describe("finalFailureMessage", () => {
+  it("tells the user a refusal won't change on a retry", () => {
+    expect(finalFailureMessage("refused")).toBe(EXTRACTION_REFUSED_MESSAGE);
+    expect(EXTRACTION_REFUSED_MESSAGE.toLowerCase()).not.toContain("try again");
+  });
+
+  it("names the file as the problem when no model could take it", () => {
+    expect(finalFailureMessage("unsupported-file")).toMatch(/too large or in a format/);
+  });
+
+  it("leaves other kinds to the generic message", () => {
+    expect(finalFailureMessage("invalid-output")).toBeUndefined();
+    expect(finalFailureMessage("constructor")).toBeUndefined();
+  });
+});
+
 describe("classifyExtractionError", () => {
   it.each(["timeout", "rate-limited", "provider-error"] as const)("retries %s", (kind) => {
     expect(classifyExtractionError(ocrError(kind))).toMatchObject({
@@ -62,15 +83,20 @@ describe("classifyExtractionError", () => {
     });
   });
 
-  it.each(["invalid-output", "bad-image", "not-configured"] as const)(
-    "gives up on %s at once",
-    (kind) => {
-      expect(classifyExtractionError(ocrError(kind))).toMatchObject({
-        _tag: "NonRetryableJobError",
-        kind,
-      });
-    },
-  );
+  // refused and unsupported-file already fell through every model in the chain;
+  // re-running it would only pay for the same answers again.
+  it.each([
+    "invalid-output",
+    "bad-image",
+    "not-configured",
+    "refused",
+    "unsupported-file",
+  ] as const)("gives up on %s at once", (kind) => {
+    expect(classifyExtractionError(ocrError(kind))).toMatchObject({
+      _tag: "NonRetryableJobError",
+      kind,
+    });
+  });
 
   it("retries storage and database errors, not an unreadable stored file or missing config", () => {
     expect(classifyExtractionError(new StorageError({ message: "x" }))._tag).toBe(

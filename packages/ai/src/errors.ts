@@ -24,6 +24,10 @@ export const OCR_FAILURE_KINDS = [
   "invalid-output",
   "bad-image",
   "not-configured",
+  /** The model declined (Claude's refusal, Gemini's safety stop). Another model may not. */
+  "refused",
+  /** This model can't take this file (type or size); another model may. */
+  "unsupported-file",
 ] as const;
 export type OcrFailureKind = (typeof OCR_FAILURE_KINDS)[number];
 
@@ -31,9 +35,11 @@ function fromStatus(status: number): OcrFailureKind {
   if (status === 408) return "timeout";
   if (status === 429) return "rate-limited";
   if (status >= 500) return "provider-error";
-  // Bad or revoked key, or a model id the provider doesn't know.
-  if (status === 401 || status === 403 || status === 404) return "not-configured";
-  // 400, 413, 422: the provider refused the input itself.
+  // Bad or revoked key, billing (Anthropic's 402), or a model id the provider doesn't know.
+  if (status === 401 || status === 402 || status === 403 || status === 404) return "not-configured";
+  // Too large for this provider; another may take it.
+  if (status === 413) return "unsupported-file";
+  // 400, 422: the provider refused the input itself.
   return "bad-image";
 }
 
@@ -84,6 +90,10 @@ export function classifyOcrError(error: unknown): OcrFailureKind {
   if (RetryError.isInstance(error)) return classifyOcrError(error.lastError);
   if (APICallError.isInstance(error)) {
     return error.statusCode === undefined ? "provider-error" : fromStatus(error.statusCode);
+  }
+  // A refusal with prose (or no) text fails parsing before the caller sees the finish reason.
+  if (NoObjectGeneratedError.isInstance(error) && error.finishReason === "content-filter") {
+    return "refused";
   }
   if (
     NoObjectGeneratedError.isInstance(error) ||

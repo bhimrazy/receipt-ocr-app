@@ -73,6 +73,8 @@ export const OCR_MODELS: readonly OcrModel[] = [
     provider: "anthropic",
     label: "Claude Haiku 5.5",
     // No published cache-read rate for Haiku 5.5 yet; we send no cache_control, so reads stay 0.
+    // cacheWrite is unset on all three Claude models for the same reason: no request writes
+    // to the cache today. Add it (1.25x input for a 5-minute write) with the first cache_control.
     prices: [
       {
         from: "2026-11-07",

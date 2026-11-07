@@ -106,7 +106,15 @@ const ANTHROPIC_OPTIONS: Record<
 /** Image types Claude reads; HEIC/HEIF are not among them. */
 const ANTHROPIC_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
-/** Thrown without a network call when a model can't take the file's type. */
+/**
+ * Claude API limit per image: 10 MB base64-encoded
+ * (https://platform.claude.com/docs/en/build-with-claude/vision, checked 2026-11-07).
+ * Read as 10,000,000 to stay on the safe side of MB vs MiB. Uploads may be 10 MB raw,
+ * about 13.4 MB in base64. PDFs fall under the 32 MB request limit instead.
+ */
+const ANTHROPIC_MAX_IMAGE_BASE64_BYTES = 10_000_000;
+
+/** Thrown without a network call when a model can't take the file's type or size. */
 export class UnsupportedFileError extends Error {
   override name = "UnsupportedFileError";
 }
@@ -123,16 +131,19 @@ function providerOptionsFor(model: Exclude<ModelId, "fixture">) {
   return options ? ({ anthropic: options } satisfies ProviderOptions) : undefined;
 }
 
-function checkFileType(model: Exclude<ModelId, "fixture">, mediaType: string) {
+/**
+ * Skips a step, before any request, for a file this model can't take. Not
+ * `bad-image`: the file may be fine for the next model, so the chain goes on.
+ */
+function checkFile(model: Exclude<ModelId, "fixture">, file: ExtractReceiptInput["file"]) {
   if (!model.startsWith("anthropic:")) return;
-  if (mediaType === "application/pdf" || ANTHROPIC_IMAGE_TYPES.has(mediaType)) return;
-  // `not-configured`, not `bad-image`: the file is fine, this model just can't
-  // read it, so the chain should go on to the next model rather than stop.
-  throw new OcrCallError(
-    "not-configured",
-    null,
-    new UnsupportedFileError(`${model} does not accept ${mediaType}`),
-  );
+  const unsupported = (why: string) =>
+    new OcrCallError("unsupported-file", null, new UnsupportedFileError(`${model}: ${why}`));
+  if (file.mediaType === "application/pdf") return;
+  if (!ANTHROPIC_IMAGE_TYPES.has(file.mediaType)) throw unsupported(`no ${file.mediaType}`);
+  if (Math.ceil(file.data.byteLength / 3) * 4 > ANTHROPIC_MAX_IMAGE_BASE64_BYTES) {
+    throw unsupported("image over 10 MB base64");
+  }
 }
 
 const NO_USAGE: ExtractionUsage = {
@@ -179,7 +190,7 @@ export async function extractReceipt(input: ExtractReceiptInput): Promise<Extrac
       throw new OcrCallError(classifyOcrError(error), null, error);
     }
   }
-  checkFileType(input.model, input.file.mediaType);
+  checkFile(input.model, input.file);
   const { extraction, usage } = await extractWith(
     registryFor(input.keys ?? {}).languageModel(input.model),
     { ...input, providerOptions: providerOptionsFor(input.model) },
@@ -215,9 +226,10 @@ export async function extractWith(
     // Before `output`: reading it throws on an empty or truncated reply, which was still billed.
     usage = toUsage(result.usage);
     // Claude's `stop_reason: "refusal"` (and Gemini's safety stop) arrive as
-    // content-filter. Whatever text came back is not an extraction, even if it parses.
+    // content-filter. Text that parsed is still not an extraction; text that
+    // didn't throws NoObjectGeneratedError, which classifyOcrError also reads as refused.
     if (result.finishReason === "content-filter") {
-      throw new OcrCallError("provider-error", usage, new RefusalError("model refused"));
+      throw new OcrCallError("refused", usage, new RefusalError("model refused"));
     }
     return { extraction: result.output, usage };
   } catch (error) {

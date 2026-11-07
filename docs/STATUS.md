@@ -47,6 +47,9 @@ Steps are in [deployment.md](deployment.md).
   `staging-db`, then `production-db` (no-ops at `0010`), then **Vercel Production Deployment** by hand. Manual
   deploys need a successful `production-db` run with the same migrations, and there is no `production-deployed` tag
   yet, so automatic deploys skip until that deploy creates it.
+- `feat/anthropic-provider` adds migration `0011_ocr_call_refused_unsupported` (widens `ocr_calls_status_check`
+  with `refused` and `unsupported-file`; existing rows stay valid). Run **Database Migration** before deploying it:
+  without it, a refused or skipped call fails its ledger insert.
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
   to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has

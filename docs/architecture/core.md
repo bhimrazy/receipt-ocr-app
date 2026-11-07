@@ -168,8 +168,9 @@ and the count comes from a log of every attempt that is never edited or deleted.
 - All steps share a 50 s deadline (`OCR_DEADLINE_MS`), well under the receipt job's 90 s lease. Each step gets
   `min(step.timeoutMs, time left)`, and no step starts with under 2 s left.
 - Inside one step the AI SDK retries once (`STEP_MAX_RETRIES = 1`).
-- `timeout`, `rate-limited`, `provider-error` and `not-configured` fall through to the next model. `invalid-output`
-  and `bad-image` stop the chain: the image is usually the problem, and another model would cost another call.
+- `timeout`, `rate-limited`, `provider-error`, `not-configured`, `refused` and `unsupported-file` fall through to the
+  next model. `invalid-output` and `bad-image` stop the chain: the image is usually the problem, and another model
+  would cost another call.
 - Every attempt, successful or not, is returned with its kind, latency and usage, and becomes an `ocr_calls` row.
 
 **Settings fail closed.** A missing, invalid or unreadable `app_settings` row falls back to code defaults, never to

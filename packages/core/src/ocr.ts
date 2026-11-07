@@ -30,14 +30,17 @@ const STEP_MAX_RETRIES = 1;
 
 /**
  * Worth trying the next model: the provider was slow, busy, down or
- * misconfigured. `invalid-output` and `bad-image` stop the chain: the image
- * is usually the problem, and a second model would cost a second call.
+ * misconfigured, refused, or can't take this file. `invalid-output` and
+ * `bad-image` stop the chain: the image is usually the problem, and a second
+ * model would cost a second call.
  */
 const FALLBACK_KINDS: ReadonlySet<OcrFailureKind> = new Set([
   "timeout",
   "rate-limited",
   "provider-error",
   "not-configured",
+  "refused",
+  "unsupported-file",
 ]);
 
 export const providerOf = (model: ModelId): OcrProviderId =>
@@ -147,7 +150,8 @@ const providerKeys: Effect.Effect<ProviderKeys> = Effect.forEach(
   OCR_PROVIDERS.flatMap((p) => (p.keyEnv ? [{ id: p.id, env: p.keyEnv }] : [])),
   ({ id, env }) =>
     Config.option(Config.string(env)).pipe(
-      Config.map((value) => [id, Option.getOrUndefined(value)] as const),
+      // Trimmed like providerAvailability reads them: a pasted newline isn't part of the key.
+      Config.map((value) => [id, Option.getOrUndefined(value)?.trim() || undefined] as const),
       Effect.orElseSucceed(() => [id, undefined] as const),
     ),
 ).pipe(Effect.map((entries) => Object.fromEntries(entries) as ProviderKeys));
