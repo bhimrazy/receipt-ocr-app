@@ -3,7 +3,8 @@
 2026-11-07. The owner shared a LinkedIn post by Jerry Liu (LlamaIndex CEO). It describes "two types of OCR": a fast,
 cheap first pass (pypdf, pymupdf, LlamaIndex's open-source LiteParse with open-weight OCR models) and accurate VLM
 parsing for complex, business-critical documents (OCRia-1, which powers LlamaParse, benchmarked on ParseBench). This
-review checks whether that split applies to ReceiptOCR. The post and its results chart come from a vendor, so both are
+review checks whether that split applies to ReceiptOCR. It also covers two LlamaIndex sources the owner added:
+OpenDocRouter and the Document Parsing Protocol. The post, its chart and both sources come from a vendor, so all are
 treated as claims. Nothing was installed, downloaded or run. Our numbers come from the 31-receipt benchmark in
 [PR #85](https://github.com/bhimrazy/receipt-ocr-app/pull/85) (`bench/results/2026-11-07-real.md` on
 `bench/results-2026-11-07-real`).
