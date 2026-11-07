@@ -32,6 +32,7 @@ import { allowAuthEmail } from "./email-limits";
 import {
   authEnabled,
   authEnv,
+  emailContext,
   emailEnv,
   isProduction,
   logUndeliveredMail,
@@ -121,6 +122,11 @@ export async function deleteOwnData(userId: string) {
   throw new Error("Could not delete the user's workspaces", { cause: exit.cause });
 }
 
+// Link lifetimes, set here so the emails quote the same numbers (Better Auth's defaults).
+const VERIFY_LINK_SECONDS = 60 * 60;
+const RESET_LINK_SECONDS = 60 * 60;
+const INVITATION_SECONDS = 60 * 60 * 24 * 7;
+
 export const auth = betterAuth({
   appName: "receiptOCR",
   baseURL: authEnv.betterAuthUrl,
@@ -137,10 +143,17 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 128,
     revokeSessionsOnPasswordReset: true,
+    resetPasswordTokenExpiresIn: RESET_LINK_SECONDS,
     requireEmailVerification,
     sendResetPassword: async ({ user, url }) => {
       if (!(await allowAuthEmail("password-reset", user.email))) return;
-      await deliver({ to: user.email, ...passwordResetEmail(url) });
+      await deliver({
+        to: user.email,
+        ...(await passwordResetEmail(emailContext, {
+          url,
+          expiresInSeconds: RESET_LINK_SECONDS,
+        })),
+      });
     },
   },
   emailVerification: {
@@ -148,9 +161,13 @@ export const auth = betterAuth({
     sendOnSignUp: requireEmailVerification || !isProduction,
     sendOnSignIn: requireEmailVerification,
     autoSignInAfterVerification: true,
+    expiresIn: VERIFY_LINK_SECONDS,
     sendVerificationEmail: async ({ user, url }) => {
       if (!(await allowAuthEmail("verification", user.email))) return;
-      await deliver({ to: user.email, ...verificationEmail(url) });
+      await deliver({
+        to: user.email,
+        ...(await verificationEmail(emailContext, { url, expiresInSeconds: VERIFY_LINK_SECONDS })),
+      });
     },
     afterEmailVerification: async (user) => {
       await promoteIfBootstrapAdmin({ ...user, emailVerified: true });
@@ -235,18 +252,19 @@ export const auth = betterAuth({
       creatorRole: "owner",
       // 7-day invitations. Cancel any older pending invite when re-inviting the
       // same email so a workspace never accumulates duplicate invitations.
-      invitationExpiresIn: 60 * 60 * 24 * 7,
+      invitationExpiresIn: INVITATION_SECONDS,
       cancelPendingInvitationsOnReInvite: true,
       requireEmailVerificationOnInvitation: true,
       sendInvitationEmail: async ({ email, invitation, organization, inviter }) => {
         const acceptUrl = `${authEnv.betterAuthUrl}/accept-invitation/${invitation.id}`;
         await deliver({
           to: email,
-          ...invitationEmail({
+          ...(await invitationEmail(emailContext, {
             organizationName: organization.name,
             inviterEmail: inviter.user.email,
             url: acceptUrl,
-          }),
+            expiresInSeconds: INVITATION_SECONDS,
+          })),
         });
       },
       organizationHooks: {

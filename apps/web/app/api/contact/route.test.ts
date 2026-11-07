@@ -32,6 +32,7 @@ vi.mock("@/lib/turnstile", () => ({ checkTurnstile: async () => env.turnstile })
 vi.mock("@/lib/log", () => ({ logger: { info: vi.fn() } }));
 vi.mock("@/lib/env", () => ({
   emailEnv: { resendApiKey: "key", from: "x <noreply@example.com>", replyTo: "help@example.com" },
+  emailContext: { appUrl: "https://app.test", supportEmail: "help@example.com" },
   logUndeliveredMail: () => false,
   get isProduction() {
     return env.isProduction;
