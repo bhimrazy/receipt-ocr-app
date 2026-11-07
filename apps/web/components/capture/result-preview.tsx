@@ -3,7 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { EditState } from "@/lib/capture/edit-state";
-import { FILTER_LABELS } from "@/lib/capture/filters";
+import { FILTER_LABELS, type Filter } from "@/lib/capture/filters";
 import { PREVIEW_RENDER, renderPreview } from "@/lib/capture/render";
 
 /**
@@ -12,12 +12,13 @@ import { PREVIEW_RENDER, renderPreview } from "@/lib/capture/render";
  * blanks or flashes between filters. Data URLs mean there is no object URL to revoke early.
  */
 export function ResultPreview({ bitmap, edit }: { bitmap: ImageBitmap; edit: EditState }) {
-  const [frame, setFrame] = useState<string | null>(null);
+  const [frame, setFrame] = useState<{ url: string; filter: Filter } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     // Let the pressed filter paint as selected before the render blocks the main thread.
     const timer = window.setTimeout(() => {
+      const filter = edit.filter;
       let url: string;
       try {
         url = renderPreview(bitmap, edit, PREVIEW_RENDER, 0.85);
@@ -31,7 +32,7 @@ export function ResultPreview({ bitmap, edit }: { bitmap: ImageBitmap; edit: Edi
         .decode()
         .catch(() => {})
         .then(() => {
-          if (!cancelled) setFrame(url);
+          if (!cancelled) setFrame({ url, filter });
         });
     }, 0);
     return () => {
@@ -52,10 +53,10 @@ export function ResultPreview({ bitmap, edit }: { bitmap: ImageBitmap; edit: Edi
     <div className="relative size-full">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        alt={`Receipt preview, ${FILTER_LABELS[edit.filter]}`}
+        alt={`Receipt preview, ${FILTER_LABELS[frame.filter]}`}
         className="absolute inset-0 size-full object-contain p-3"
-        data-filter={edit.filter}
-        src={frame}
+        data-filter={frame.filter}
+        src={frame.url}
       />
     </div>
   );

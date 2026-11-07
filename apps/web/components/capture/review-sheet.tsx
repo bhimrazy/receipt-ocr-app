@@ -14,7 +14,7 @@ import {
   ScanText,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   editKey,
   initialEdit,
@@ -37,7 +37,7 @@ import {
   THUMB_RENDER,
   type RenderBudget,
 } from "@/lib/capture/render";
-import { planSize, START_QUALITY, TARGET_BYTES } from "@/lib/upload-prep";
+import { planSize, predictEncode, START_QUALITY } from "@/lib/upload-prep";
 import { CropEditor } from "./crop-editor";
 import { FullScreen } from "./full-screen";
 import { ResultPreview } from "./result-preview";
@@ -75,15 +75,13 @@ function startingEdit(bitmap: ImageBitmap): EditState {
 const ESTIMATE_RENDER: RenderBudget = { source: 1_200_000, output: 300_000 };
 
 /**
- * The upload size, from a small render: its JPEG bytes per pixel at the upload quality, times
- * the pixels `prepareFile` will keep. A small copy packs more detail per pixel, so this leans
- * high; `prepareFile` then shrinks anything over TARGET_BYTES, so the estimate is capped there.
+ * The upload size, from a small render: its JPEG bytes per pixel at the upload quality, run
+ * through the same shrink loop `prepareFile` uses. A small copy packs more detail per pixel, so
+ * this leans high.
  */
-async function estimateBytes(bitmap: ImageBitmap, edit: EditState) {
+async function estimateUpload(bitmap: ImageBitmap, edit: EditState) {
   const small = await renderSmall(bitmap, edit, ESTIMATE_RENDER, START_QUALITY);
-  const planned = outputSize(bitmap, edit);
-  const bytes = (small.blob.size / (small.width * small.height)) * planned.width * planned.height;
-  return Math.min(TARGET_BYTES, Math.round(bytes));
+  return predictEncode(outputSize(bitmap, edit), small.blob.size / (small.width * small.height));
 }
 
 /** The pixel size the upload will have: the same plan `prepareFile` applies to the rendered crop. */
@@ -104,7 +102,7 @@ const Mono = ({ children }: { children: React.ReactNode }) => (
 );
 
 type Loaded = { id: string; bitmap: ImageBitmap };
-type Estimate = { key: string; bytes: number };
+type Estimate = { key: string; bytes: number; width: number; height: number };
 type Prepared = { key: string; file: File };
 
 /**
@@ -140,7 +138,11 @@ export default function ReviewSheet({
   // Photos whose edit couldn't be encoded; held back until the edit changes or Upload succeeds.
   const [editFailed, setEditFailed] = useState<Record<string, true>>({});
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [thumbs, setThumbs] = useState<Partial<Record<Filter, string>>>({});
+  // Tagged with the photo and crop they show, so another photo's strip is never reused.
+  const [thumbs, setThumbs] = useState<{
+    key: string;
+    urls: Partial<Record<Filter, string>>;
+  } | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -180,9 +182,11 @@ export default function ReviewSheet({
     if (estimates[current.id]?.key === key) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      estimateBytes(bitmap, edit)
-        .then((bytes) => {
-          if (!cancelled) setEstimates((all) => ({ ...all, [current.id]: { key, bytes } }));
+      estimateUpload(bitmap, edit)
+        .then(({ bytes, width, height }) => {
+          if (!cancelled) {
+            setEstimates((all) => ({ ...all, [current.id]: { key, bytes, width, height } }));
+          }
         })
         // No estimate this time; the upload still encodes for real.
         .catch(() => {});
@@ -194,7 +198,8 @@ export default function ReviewSheet({
   }, [step, bitmap, edit, current, estimates]);
 
   // Small previews of each filter on the flattened crop (preview step only).
-  const shapeKey = edit ? editKey({ ...edit, filter: "original" }) : "";
+  const shapeKey =
+    edit && current ? `${current.id}:${editKey({ ...edit, filter: "original" })}` : "";
   useEffect(() => {
     if (step !== "preview" || !bitmap || !edit) return;
     const timer = window.setTimeout(() => {
@@ -206,14 +211,12 @@ export default function ReviewSheet({
       } catch {
         // Out of canvas memory: the buttons still work without their previews.
       }
-      setThumbs(next);
+      setThumbs({ key: shapeKey, urls: next });
     }, 50);
     return () => window.clearTimeout(timer);
     // Filters only depend on the shape of the crop, not the chosen filter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, bitmap, shapeKey]);
-
-  const planned = useMemo(() => (bitmap && edit ? outputSize(bitmap, edit) : null), [bitmap, edit]);
 
   function update(next: EditState) {
     if (!current) return;
@@ -308,6 +311,7 @@ export default function ReviewSheet({
   const position = Math.min(index, count - 1) + 1;
   const adjusting = step === "adjust";
   const size = fresh ? formatSize(estimate.bytes) : null;
+  const stripThumbs = thumbs?.key === shapeKey ? thumbs.urls : {};
 
   const tool = "min-h-11 flex-1 px-1 text-xs md:justify-start md:px-3 md:text-sm";
 
@@ -319,6 +323,9 @@ export default function ReviewSheet({
       open
       title="Review photos"
     >
+      <p aria-live="polite" className="sr-only">
+        {adjusting ? "Crop" : "Preview"}
+      </p>
       <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-2 md:hidden">
         <Button
           aria-label={adjusting ? "Back without uploading" : "Back to adjust corners"}
@@ -346,7 +353,7 @@ export default function ReviewSheet({
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div
-          className="relative h-[clamp(14rem,46dvh,34rem)] shrink-0 bg-muted/40 md:h-auto md:min-w-0 md:flex-1"
+          className="relative h-[clamp(12rem,40dvh,34rem)] shrink-0 bg-muted/40 md:h-auto md:min-w-0 md:flex-1"
           data-testid="stage"
         >
           <div className="absolute inset-0 flex flex-col">
@@ -372,7 +379,7 @@ export default function ReviewSheet({
           </div>
         </div>
 
-        <div className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col gap-3 px-3 pt-3 pb-3 md:max-w-none md:flex-none md:basis-88 md:overflow-y-auto md:border-l md:border-border md:p-5">
+        <div className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col overflow-y-auto gap-3 px-3 pt-3 pb-3 md:max-w-none md:flex-none md:basis-88 md:border-l md:border-border md:p-5">
           <div className="hidden items-start gap-2 md:flex">
             <Button
               aria-label={adjusting ? "Back without uploading" : "Back to adjust corners"}
@@ -456,9 +463,9 @@ export default function ReviewSheet({
                         edit?.filter === filter ? "border-primary" : "border-transparent",
                       )}
                     >
-                      {thumbs[filter] ? (
+                      {stripThumbs[filter] ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img alt="" className="size-full object-cover" src={thumbs[filter]} />
+                        <img alt="" className="size-full object-cover" src={stripThumbs[filter]} />
                       ) : null}
                     </span>
                     {FILTER_LABELS[filter]}
@@ -473,22 +480,15 @@ export default function ReviewSheet({
               Drag a corner to the edge of the receipt, or select one and use the arrow keys.
             </p>
           ) : (
-            <div
-              aria-live="polite"
-              className="text-center text-xs text-muted-foreground md:text-left"
-            >
+            <div className="text-center text-xs text-muted-foreground md:text-left">
               <p className="h-4 whitespace-nowrap" data-testid="resolution">
-                {planned ? (
+                {fresh && size ? (
                   <>
-                    <Mono>{planned.width}</Mono> × <Mono>{planned.height}</Mono> px ·{" "}
-                    {size ? (
-                      <>
-                        about <Mono>{size.value}</Mono> {size.unit}
-                      </>
-                    ) : (
-                      "sizing…"
-                    )}
+                    <Mono>{estimate.width}</Mono> × <Mono>{estimate.height}</Mono> px · about{" "}
+                    <Mono>{size.value}</Mono> {size.unit}
                   </>
+                ) : edit ? (
+                  "sizing…"
                 ) : null}
               </p>
               <p className="mt-1 h-12">

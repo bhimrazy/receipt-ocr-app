@@ -184,6 +184,7 @@ test("the preview shows the chosen filter on the cropped image, swapped without 
 });
 
 for (const viewport of [
+  { width: 375, height: 667 },
   { width: 390, height: 844 },
   { width: 1280, height: 800 },
 ]) {
@@ -268,6 +269,20 @@ for (const viewport of [
     expect(stageAfter).toEqual(stageBefore);
   });
 }
+
+test("every control is reachable on a short phone", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await signUp(page, uniqueEmail("short-phone"));
+  const review = await pickTwo(page);
+  await review.getByRole("button", { name: "Next" }).click();
+  await expect(review.getByRole("img", { name: /^Receipt preview/ })).toBeVisible({
+    timeout: 15_000,
+  });
+  // Clicking scrolls the panel to the button, which only works if the panel scrolls.
+  await review.getByRole("button", { name: "Adjust corners", exact: true }).click();
+  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
+  await expect(review.getByRole("button", { name: "Next" })).toBeInViewport({ ratio: 1 });
+});
 
 test("picking more than the batch limit keeps the first ones and says so", async ({ page }) => {
   await signUp(page, uniqueEmail("batch-limit"));
