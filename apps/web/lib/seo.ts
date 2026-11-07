@@ -59,8 +59,8 @@ export function pageMetadata({
 
 /** Dates shown on the legal pages, also used as the sitemap's lastModified. */
 export const LEGAL_UPDATED = {
-  privacy: "2026-11-06",
-  terms: "2026-11-04",
+  privacy: "2026-11-07",
+  terms: "2026-11-07",
 } as const;
 
 export function formatLegalDate(isoDate: string): string {
