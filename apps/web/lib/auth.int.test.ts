@@ -197,7 +197,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     expect(await status(invite("member"))).toBe(200);
   });
 
-  it("M3: locks sign-in per address after repeated failures, the same for unknown addresses", async () => {
+  it("M3: locks sign-in per address after 10 attempts, atomically, the same for unknown addresses", async () => {
     const victim = `${tag}-victim@example.com`;
     const ghost = `${tag}-ghost@example.com`;
     const created = await auth.api.signUpEmail({ body: { email: victim, password, name: "V" } });
@@ -213,9 +213,13 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
           : error;
       }
     };
-    for (let i = 0; i < 10; i++) {
-      expect(await status(attempt(victim, "wrong-password-1"))).toBe(401);
-      expect(await status(attempt(ghost, "wrong-password-1"))).toBe(401);
+    // 15 parallel wrong guesses: at most 10 reach the password check (401), the rest are 429.
+    for (const address of [victim, ghost]) {
+      const codes = await Promise.all(
+        Array.from({ length: 15 }, () => status(attempt(address, "wrong-password-1"))),
+      );
+      expect(codes.filter((code) => code === 401)).toHaveLength(10);
+      expect(codes.filter((code) => code === 429)).toHaveLength(5);
     }
     const lockedKnown = await bodyOf(attempt(victim, password));
     const lockedUnknown = await bodyOf(attempt(ghost, password));
@@ -225,12 +229,73 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     await db.execute(
       sql`update rate_limit set last_request = last_request - ${16 * 60 * 1000} where id like 'signin-fail:%'`,
     );
+    // The real password then clears the count, so a fresh budget of wrong guesses follows.
+    expect(await status(attempt(victim, password))).toBe(200);
+    for (let i = 0; i < 9; i++) expect(await status(attempt(victim, "wrong-password-1"))).toBe(401);
     expect(await status(attempt(victim, password))).toBe(200);
     await db.execute(
       sql`delete from organization where id in (select organization_id from member where user_id = ${created.user.id})`,
     );
     await db.delete(user).where(eq(user.id, created.user.id));
     await db.execute(sql`delete from rate_limit where id like 'signin-fail:%'`);
+  });
+
+  it("guards the admin plugin endpoints: no last-admin demotion, no banning or removing admins", async () => {
+    const make = async (name: string, role: string) => {
+      const created = await auth.api.signUpEmail({
+        body: { email: `${tag}-${name}@example.com`, password, name },
+        returnHeaders: true,
+      });
+      await db
+        .update(user)
+        .set({ role, emailVerified: true })
+        .where(eq(user.id, created.response.user.id));
+      const signIn = await auth.api.signInEmail({
+        body: { email: `${tag}-${name}@example.com`, password },
+        returnHeaders: true,
+      });
+      const cookie = signIn.headers
+        .getSetCookie()
+        .map((c) => c.split(";")[0])
+        .filter((c) => c?.includes("session_token="))
+        .join("; ");
+      return { id: created.response.user.id, headers: new Headers({ cookie }) };
+    };
+    const a = await make("adm-a", "admin");
+    const b = await make("adm-b", "admin");
+    const plain = await make("adm-plain", "user");
+    // Isolate from admins other tests or a shared database may hold.
+    await db.execute(
+      sql`update "user" set banned = true where role like '%admin%' and id not in (${a.id}, ${b.id})`,
+    );
+    const setRole = (actor: typeof a, userId: string, role: string) =>
+      auth.api.setRole({ headers: actor.headers, body: { userId, role: role as "user" } });
+    expect(await status(setRole(a, a.id, "user"))).toBe(403);
+    expect(await status(auth.api.banUser({ headers: a.headers, body: { userId: b.id } }))).toBe(
+      403,
+    );
+    expect(await status(auth.api.removeUser({ headers: a.headers, body: { userId: b.id } }))).toBe(
+      403,
+    );
+    // Ordinary users are still manageable.
+    expect(await status(setRole(a, plain.id, "admin"))).toBe(200);
+    expect(await status(setRole(a, plain.id, "user"))).toBe(200);
+    // Last admin: with the actor itself no longer counted (banned after signing in), demoting the
+    // other admin would leave none.
+    await db.update(user).set({ banned: true }).where(eq(user.id, a.id));
+    const lastAdmin = await auth.api
+      .setRole({ headers: a.headers, body: { userId: b.id, role: "user" } })
+      .catch((error: unknown) => error);
+    expect(lastAdmin).toBeInstanceOf(APIError);
+    expect((lastAdmin as APIError).message).toMatch(/last admin/);
+    const [still] = await db.select({ role: user.role }).from(user).where(eq(user.id, b.id));
+    expect(still?.role).toBe("admin");
+    for (const id of [a.id, b.id, plain.id]) {
+      await db.execute(
+        sql`delete from organization where id in (select organization_id from member where user_id = ${id})`,
+      );
+      await db.delete(user).where(eq(user.id, id));
+    }
   });
 
   it("M3: caps password-change attempts per user", async () => {

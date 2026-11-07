@@ -111,19 +111,10 @@ export const hitRateLimit = (key: string, windowMs: number, max: number) =>
     }),
   );
 
-/**
- * Read-only check of a `hitRateLimit` counter: true once `max` hits are inside the
- * window. For limits that count only some outcomes (failed sign-ins), where the
- * caller hits after the fact.
- */
-export const rateLimitReached = (key: string, windowMs: number, max: number) =>
+/** Deletes a `hitRateLimit` counter, for limits a success resets (a correct sign-in). */
+export const clearRateLimit = (key: string) =>
   Effect.flatMap(Db, ({ use }) =>
     use(async (db) => {
-      const [row] = await db
-        .select({ count: rateLimit.count, lastRequest: rateLimit.lastRequest })
-        .from(rateLimit)
-        .where(eq(rateLimit.id, key))
-        .limit(1);
-      return !!row && (row.lastRequest ?? 0) >= Date.now() - windowMs && (row.count ?? 0) >= max;
+      await db.delete(rateLimit).where(eq(rateLimit.id, key));
     }),
   );
