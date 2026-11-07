@@ -9,7 +9,7 @@ import { MembersTable } from "@/components/members/members-table";
 import { PendingInvites } from "@/components/members/pending-invites";
 import { toRole } from "@/components/members/roles";
 import { auth } from "@/lib/auth";
-import { logger } from "@/lib/log";
+import { errorFields, logger } from "@/lib/log";
 import { requireActiveScope } from "@/lib/session";
 import { Alert } from "@receipt-ocr/ui/components/alert";
 import { headers } from "next/headers";
@@ -42,7 +42,7 @@ async function loadWorkspace(organizationId: string) {
         .map((i) => ({ id: i.id, email: i.email, role: toRole(i.role), expiresAt: i.expiresAt })),
     };
   } catch (error) {
-    logger.error({ event: "members.load_failed", message: String(error) });
+    logger.error({ event: "members.load_failed", unit: "log", error: errorFields(error) });
     return null;
   }
 }

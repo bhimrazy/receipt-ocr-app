@@ -1,10 +1,10 @@
 import { hitRateLimit } from "@receipt-ocr/core";
-import { sendEmail } from "@receipt-ocr/email";
+import { sendEmail, type EmailLogEvent } from "@receipt-ocr/email";
 import { NextResponse } from "next/server";
 import { contactEmail, isTopic } from "@/lib/contact-mail";
 import { emailEnv, isProduction, supportEmail } from "@/lib/env";
 import { clientIp, crossOriginResponse, withRequestEvent } from "@/lib/http";
-import type { WideEvent } from "@/lib/log";
+import { logger, type WideEvent } from "@/lib/log";
 import { runtime } from "@/lib/runtime";
 import { checkTurnstile } from "@/lib/turnstile";
 
@@ -13,6 +13,7 @@ const mailer = {
   apiKey: emailEnv.resendApiKey,
   from: emailEnv.from,
   logUndelivered: process.env.NODE_ENV === "development",
+  log: (event: EmailLogEvent) => logger.emit(event),
 };
 const MAX_MESSAGE = 2000;
 /** Per client IP; without a trusted IP header everyone shares one bucket. */
@@ -36,11 +37,7 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
   }
 
   const limit = await runtime.runPromise(
-    hitRateLimit(
-      `contact:${clientIp(request) ?? "unknown"}`,
-      RATE_LIMIT.windowMs,
-      RATE_LIMIT.max,
-    ),
+    hitRateLimit(`contact:${clientIp(request) ?? "unknown"}`, RATE_LIMIT.windowMs, RATE_LIMIT.max),
   );
   if (!limit.allowed) {
     event.status_code = 429;

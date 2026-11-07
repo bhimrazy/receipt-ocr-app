@@ -13,6 +13,7 @@ import {
   invitationEmail,
   passwordResetEmail,
   sendEmail,
+  type EmailLogEvent,
   verificationEmail,
   type SendEmailInput,
 } from "@receipt-ocr/email";
@@ -35,7 +36,7 @@ import {
   requireEmailVerification,
   turnstileEnv,
 } from "./env";
-import { logger } from "./log";
+import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 
 export { authEnabled };
@@ -55,6 +56,7 @@ const mailer = {
   apiKey: emailEnv.resendApiKey,
   from: emailEnv.from,
   logUndelivered: process.env.NODE_ENV === "development",
+  log: (event: EmailLogEvent) => logger.emit(event),
 };
 
 /**
@@ -270,8 +272,10 @@ export const auth = betterAuth({
           } catch (error) {
             logger.error({
               event: "groups.release_member_failed",
-              organizationId: organization.id,
-              error: error instanceof Error ? error.message : String(error),
+              unit: "log",
+              organization_id: organization.id,
+              user_id: removed.userId,
+              error: errorFields(error),
             });
           }
         },
