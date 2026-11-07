@@ -35,13 +35,13 @@ async function submitCredentials(
  * and the page stays on /sign-up (the flake seen on several PRs). Each sign-up gets its own
  * address instead. Specs that test the limit itself don't use this helper.
  */
-async function useFreshClientIp(page: Page) {
+async function giveFreshClientIp(page: Page) {
   const ip = `10.${(Math.random() * 255) | 0}.${(Math.random() * 255) | 0}.${(Math.random() * 254 + 1) | 0}`;
   await page.context().setExtraHTTPHeaders({ "x-forwarded-for": ip });
 }
 
 export async function signUp(page: Page, email: string) {
-  await useFreshClientIp(page);
+  await giveFreshClientIp(page);
   await page.goto("/sign-up");
   await submitCredentials(
     page,
