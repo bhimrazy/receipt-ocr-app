@@ -32,6 +32,13 @@ import { admin } from "better-auth/plugins/admin";
 import { captcha } from "better-auth/plugins/captcha";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
+import {
+  accountCreated,
+  accountDeleted,
+  accountLinking,
+  guardPasskeyDelete,
+  guardUnlink,
+} from "./auth-accounts";
 // --- two-factor + step-up (feat/two-factor) ---
 import {
   authMethodOf,
@@ -53,6 +60,7 @@ import {
   allowSignInAttempt,
   clearSignInAttempts,
   type AuthEmailKind,
+  verificationSend,
 } from "./email-limits";
 import {
   authEnabled,
@@ -285,7 +293,11 @@ export const auth = betterAuth({
     autoSignInAfterVerification: true,
     expiresIn: VERIFY_LINK_SECONDS,
     sendVerificationEmail: async ({ user, url }) => {
-      if (!(await allowAuthEmail("verification", user.email))) return;
+      if (!(await allowAuthEmail("verification", user.email))) {
+        const report = verificationSend.getStore();
+        if (report) report.suppressed = true;
+        return;
+      }
       await deliver({
         to: user.email,
         ...verificationEmail(emailContext, { url, expiresInSeconds: VERIFY_LINK_SECONDS }),
@@ -314,7 +326,7 @@ export const auth = betterAuth({
   },
   // Rows sealed before this was on stay readable: Better Auth passes non-hex
   // (plaintext) tokens through and seals them on the user's next sign-in.
-  account: { encryptOAuthTokens: true },
+  account: { encryptOAuthTokens: true, accountLinking },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
@@ -345,6 +357,14 @@ export const auth = betterAuth({
         if (email && !(await allowSignInAttempt(email))) {
           throw new APIError("TOO_MANY_REQUESTS", { message: SIGN_IN_LIMITED_MESSAGE });
         }
+        return;
+      }
+      if (ctx.path === "/unlink-account") {
+        await guardUnlink(ctx);
+        return;
+      }
+      if (ctx.path === "/passkey/delete-passkey") {
+        await guardPasskeyDelete(ctx);
         return;
       }
       if (ADMIN_GUARDED.has(ctx.path)) {
@@ -487,6 +507,10 @@ export const auth = betterAuth({
       // --- two-factor + step-up (feat/two-factor) ---
       update: { after: twoFactorUserUpdated(deliver) },
       // --- end two-factor + step-up ---
+    },
+    account: {
+      create: { after: accountCreated(deliver) },
+      delete: { after: accountDeleted(deliver) },
     },
     session: {
       create: {

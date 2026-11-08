@@ -1,4 +1,11 @@
-import { listAudit, policyFor, userDetail } from "@receipt-ocr/core";
+import {
+  isSocialProvider,
+  listAudit,
+  loadSignInMethods,
+  policyFor,
+  PROVIDER_LABELS,
+  userDetail,
+} from "@receipt-ocr/core";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
 import { Effect } from "effect";
@@ -45,6 +52,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
     runtime.runPromise(
       Effect.all([
         userDetail(id),
+        loadSignInMethods(id),
         listAudit({ targetType: "user", targetId: id }, { page: 1, pageSize: 20 }),
       ]),
     ),
@@ -54,7 +62,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       (error: unknown) => ({ error }) as const,
     ),
   ]);
-  const [user, audit] = data;
+  const [user, methods, audit] = data;
   if (!user) notFound();
   if ("error" in sessionOutcome) throw sessionOutcome.error;
   const sessionResult = sessionOutcome.value;
@@ -84,6 +92,21 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
     soloWorkspaces: user.memberships.filter((m) => m.members === 1).length,
   };
   const banEntry = audit.rows.find((entry) => entry.action === "user.ban");
+  const accounts = methods?.accounts ?? [];
+  const signIn: [string, string][] = [
+    [
+      "Password",
+      accounts.some((a) => a.providerId === "credential" && a.hasPassword) ? "Yes" : "No",
+    ],
+    ...accounts
+      .filter((a) => isSocialProvider(a.providerId))
+      .map((a): [string, string] => [
+        PROVIDER_LABELS[a.providerId as keyof typeof PROVIDER_LABELS],
+        `Connected ${formatDate(a.createdAt)}`,
+      ]),
+    ["Passkeys", String(methods?.passkeys ?? user.passkeys)],
+    ["Two-step sign-in", user.twoFactorEnabled ? "On" : "Off"],
+  ];
 
   return (
     <>
@@ -255,6 +278,21 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
             </CardHeader>
             <CardContent>
               <AccountControls isSelf={isSelf} plans={plans} user={actionUser} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Sign-in methods</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="divide-y divide-border text-sm">
+                {signIn.map(([label, value]) => (
+                  <div className="flex items-center justify-between gap-3 py-2" key={label}>
+                    <dt className="text-muted-foreground">{label}</dt>
+                    <dd className="text-right font-mono tabular-nums">{value}</dd>
+                  </div>
+                ))}
+              </dl>
             </CardContent>
           </Card>
           <Card className="border-destructive/30">
