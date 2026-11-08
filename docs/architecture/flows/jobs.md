@@ -164,6 +164,14 @@ so a finished or dead one is never repeated. An undelivered send is retried (up 
 with no mailer configured the job succeeds without sending. It logs `email.welcome_sent` (user id, plan, `delivered`;
 never the address or content).
 
+`email.contact-reply` ([`kinds/contact-reply.ts`](../../../packages/core/src/jobs/kinds/contact-reply.ts)) sends the
+"we got your message" reply to a contact-form sender. `/api/contact` queues it only after Turnstile passes and the
+support mail is sent, and only within `allowContactReply` in `lib/email-limits.ts`: 1 reply per address and 3 per IP a
+day (hashed keys in `rate_limits`; a limiter failure skips the reply). The payload is the typed address, a first name
+already cleaned by `greetingName` and the topic id, never the message. It is sent through `ContactReplyMailer`
+(`lib/contact-reply-mailer.ts`), 3 attempts. The kind sets `scrubPayload`, so `settle` replaces the payload with `{}` when the job
+succeeds or dies (a retry keeps it); the address and name are not kept in the `jobs` row.
+
 ## Tables
 
 `jobs` and `job_controls` come from migration

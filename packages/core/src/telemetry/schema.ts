@@ -173,6 +173,8 @@ export const EVENT_SCHEMA = {
   topic: "token",
   message_length: "int",
   delivered: "bool",
+  /** Contact form: `queued`, `rate_limited` or `enqueue_failed`. */
+  auto_reply: "token",
   turnstile_errors: "tokens",
   /** CSP reports: the directive and the blocked host or keyword only. */
   violations: { list: { directive: "token", blocked: "token" } },

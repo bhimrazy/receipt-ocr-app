@@ -319,7 +319,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   schema, admin settings and admin actions).
 - Bot protection: shipped, optional by env (`NEXT_PUBLIC_TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`). Turnstile guards
   sign-up, sign-in, password reset, resend confirmation (Better Auth `captcha` plugin) and `/api/contact`.
-  `scripts/test.sh --turnstile` runs its e2e with Cloudflare test keys; CI does not run that phase yet.
+  `scripts/test.sh --turnstile` and the CI job "E2E (Turnstile test keys)" run its e2e with Cloudflare test keys.
+- Contact-form auto-reply (`email.contact-reply` job, 1 per address and 3 per IP a day): the job's `scrubPayload` empties
+  the address and first name once it succeeds or dies. The reply promises an answer "usually within 2 business
+  days": owner to confirm or change that number.
 - Best-practice reviews ([Next.js](reviews/2026-11-06-nextjs.md), [React](reviews/2026-11-06-react.md),
   [shadcn/UI](reviews/2026-11-06-shadcn-ui.md)): quick wins in progress; later, shared primitives (Spinner, Meter,
   Checkbox, Avatar, Empty, Pagination), Button aligned with base-nova, one form system on `Field`.

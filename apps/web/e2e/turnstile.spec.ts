@@ -42,7 +42,9 @@ test.describe("with Turnstile on and a passing secret", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "Contact support" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByLabel("Your email").fill(uniqueEmail("turnstile-contact"));
+    await expect(dialog.getByLabel("Name", { exact: true })).toBeFocused();
+    await dialog.getByLabel("Name", { exact: true }).fill("E2E Visitor");
+    await dialog.getByLabel("Email", { exact: true }).fill(uniqueEmail("turnstile-contact"));
     await dialog.getByLabel("Message").fill("Does the contact form pass the check?");
     await expect(dialog.locator('[data-turnstile="ready"]')).toBeAttached({ timeout: 30_000 });
     const reply = page.waitForResponse("**/api/contact");
@@ -62,7 +64,7 @@ test.describe("with Turnstile on and a passing secret", () => {
 
     const contact = await request.post("/api/contact", {
       headers: { origin: baseURL! },
-      data: { email: uniqueEmail("turnstile-bot"), message: "Hello there, bot" },
+      data: { name: "Bot", email: uniqueEmail("turnstile-bot"), message: "Hello there, bot" },
     });
     expect(contact.status()).toBe(400);
   });
@@ -90,7 +92,8 @@ test.describe("with Turnstile on and a rejecting secret", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "Contact support" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByLabel("Your email").fill(uniqueEmail("turnstile-fail-contact"));
+    await dialog.getByLabel("Name", { exact: true }).fill("E2E Visitor");
+    await dialog.getByLabel("Email", { exact: true }).fill(uniqueEmail("turnstile-fail-contact"));
     await dialog.getByLabel("Message").fill("This should be turned away.");
     await expect(dialog.locator('[data-turnstile="ready"]')).toBeAttached({ timeout: 30_000 });
     await dialog.getByRole("button", { name: "Send message" }).click();

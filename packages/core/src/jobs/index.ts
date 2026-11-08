@@ -2,6 +2,7 @@ export * from "./admin";
 export * from "./backoff";
 export * from "./definition";
 export * from "./drain";
+export * from "./kinds/contact-reply";
 export * from "./kinds/receipt-extract";
 export * from "./kinds/welcome-email";
 export * from "./queue";

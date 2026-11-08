@@ -39,6 +39,59 @@ export async function allowAuthEmail(kind: AuthEmailKind, email: string): Promis
 }
 
 /**
+ * One mailbox, one key: lowercase, no `+tag`, and for Gmail no dots, so aliases of an address
+ * share the single reply a day. Only the reply cap uses it; sign-in and auth mail keep exact
+ * addresses so an alias can't lock someone out.
+ */
+export function replyAddressKey(email: string): string {
+  const [rawLocal = "", rawDomain = ""] = email
+    .trim()
+    .toLowerCase()
+    .split(/@(?=[^@]*$)/);
+  const gmail = rawDomain === "gmail.com" || rawDomain === "googlemail.com";
+  let local = rawLocal.split("+")[0] ?? "";
+  if (gmail) local = local.replaceAll(".", "");
+  return `${local}@${gmail ? "gmail.com" : rawDomain}`;
+}
+
+/** Contact-form auto-replies: per recipient address and per sending IP, in one day. */
+export const CONTACT_REPLY_LIMITS = {
+  windowMs: 24 * 60 * 60 * 1000,
+  perAddress: 1,
+  perIp: 3,
+} as const;
+
+/**
+ * Whether a contact-form submission (already past Turnstile) may get an auto-reply. The reply goes
+ * to whatever address was typed, so both caps bound how much mail we can be made to send. The IP
+ * counter is hit first, so an over-limit IP doesn't use up an address's one reply. Unlike auth
+ * mail, a limiter failure skips the reply: the message itself still reaches support. Without a
+ * client IP only the address cap applies (one shared bucket would silence everyone).
+ */
+export async function allowContactReply(email: string, ip: string | null): Promise<boolean> {
+  const { windowMs, perAddress, perIp } = CONTACT_REPLY_LIMITS;
+  try {
+    if (ip) {
+      const byIp = await runtime.runPromise(
+        hitRateLimit(`contact-reply:ip:${digestOf(ip)}`, windowMs, perIp),
+      );
+      if (!byIp.allowed) return false;
+    }
+    const byAddress = await runtime.runPromise(
+      hitRateLimit(`contact-reply:to:${digestOf(replyAddressKey(email))}`, windowMs, perAddress),
+    );
+    return byAddress.allowed;
+  } catch (error) {
+    logger.error({
+      event: "contact.reply_rate_limit_failed",
+      unit: "log",
+      error: errorFields(error),
+    });
+    return false;
+  }
+}
+
+/**
  * Lets a server action learn that the verification hook skipped the send because of the cap.
  * Better Auth awaits the hook for a signed-in resend, so the flag is set before the call returns.
  */

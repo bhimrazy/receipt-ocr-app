@@ -157,11 +157,15 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
       worker: string,
       leaseSeconds: number,
     ) => Effect.Effect<boolean, DbError>;
-    /** Records how the run ended; false when the job is no longer ours, so nothing changed. */
+    /**
+     * Records how the run ended; false when the job is no longer ours, so nothing changed.
+     * `scrubPayload` empties the payload when the job ends succeeded or dead.
+     */
     readonly settle: (
       job: Job,
       worker: string,
       outcome: JobOutcome,
+      options?: { scrubPayload?: boolean },
     ) => Effect.Effect<boolean, DbError>;
     /**
      * Running jobs whose lease ran out (crash, deploy, killed function) go
@@ -268,7 +272,7 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
           return result.length > 0;
         }),
 
-      settle: (job, worker, outcome) =>
+      settle: (job, worker, outcome, options) =>
         use(async (db) => {
           const kind = outcome.type === "succeeded" ? null : outcome.errorKind;
           const set =
@@ -279,9 +283,13 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
                 : outcome.type === "retry"
                   ? sql`state = 'queued', run_at = now() + make_interval(secs => ${outcome.delayMs / 1000}::float8)`
                   : sql`state = 'queued', run_at = ${ts(outcome.at)}, attempts = greatest(0, j.attempts - 1)`;
+          const scrub =
+            options?.scrubPayload && (outcome.type === "succeeded" || outcome.type === "dead")
+              ? sql`, payload = '{}'::jsonb`
+              : sql``;
           const errorSet =
             kind === null ? sql`` : sql`, last_error_kind = ${kind}, last_error_at = now()`;
-          const result = await db.execute(sql`update jobs j set ${set}${errorSet},
+          const result = await db.execute(sql`update jobs j set ${set}${errorSet}${scrub},
               attempt_log = ${appendLog(logEntry(outcome.type, kind))},
               locked_by = null, locked_until = null, updated_at = now()
             where j.id = ${job.id} and j.locked_by = ${worker} and j.attempts = ${job.attempts}
