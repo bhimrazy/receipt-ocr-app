@@ -2,7 +2,9 @@ import type { Instrumentation } from "next";
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    await (await import("./instrumentation-node")).loadEnvOrExit();
+    const node = await import("./instrumentation-node");
+    await node.loadEnvOrExit();
+    await node.logAuthNotConfigured();
   }
 }
 

@@ -86,6 +86,19 @@ describe("failureResponse (L2)", () => {
   });
 });
 
+describe("failureResponse for NotConfigured", () => {
+  it("tells the user nothing about the server's configuration", async () => {
+    const { Cause } = await import("effect");
+    const { NotConfigured } = await import("@receipt-ocr/core");
+    const res = failureResponse(
+      Cause.fail(new NotConfigured({ message: "No OCR model is turned on with an API key" })),
+    );
+    expect(res.status).toBe(503);
+    const body = JSON.stringify(await res.json());
+    expect(body).toBe('{"error":"This feature isn\'t available right now."}');
+  });
+});
+
 describe("withRequestEvent", () => {
   it("writes one event with route, method, status, duration and outcome", async () => {
     vi.mocked(logger.emit).mockClear();

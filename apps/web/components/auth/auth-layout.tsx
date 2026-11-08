@@ -4,6 +4,7 @@ import { Download, KeyRound, PencilLine, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { CookieSettingsButton } from "@/components/consent/cookie-settings-button";
+import { supportEmail } from "@/lib/env";
 import { getPlanTable } from "@/lib/plan-limits";
 import { AuthMessage } from "./auth-field";
 
@@ -113,26 +114,30 @@ export async function AuthLayout({
   );
 }
 
-/** Only reachable in a local setup without auth env vars, so it can speak to the developer. */
+/** Generic on purpose: what is missing is logged at boot (`auth.not_configured`), not shown. */
 export function AuthNotConfiguredCard() {
   return (
     <AuthMessage
       actions={
-        <Link className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full")} href="/">
-          Go to the home page
-        </Link>
+        <>
+          {supportEmail ? (
+            <a
+              className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full")}
+              href={`mailto:${supportEmail}`}
+            >
+              Contact support
+            </a>
+          ) : null}
+          <Link className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full")} href="/">
+            Go to the home page
+          </Link>
+        </>
       }
       icon={KeyRound}
-      title="Sign-in isn't set up"
+      title="Sign-in isn't set up yet"
       tone="warning"
     >
-      <p>
-        Add <code className="font-mono text-foreground">DATABASE_URL</code> and{" "}
-        <code className="font-mono text-foreground">BETTER_AUTH_SECRET</code> (or{" "}
-        <code className="font-mono text-foreground">BETTER_AUTH_SECRETS</code>) to{" "}
-        <code className="font-mono text-foreground">apps/web/.env.local</code> to turn on email and
-        social sign-in.
-      </p>
+      <p>Please contact the administrator.</p>
     </AuthMessage>
   );
 }
