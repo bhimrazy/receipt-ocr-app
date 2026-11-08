@@ -18,13 +18,14 @@ import {
   DrawerTrigger,
 } from "@receipt-ocr/ui/components/drawer";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { ChevronsUpDown, Cookie, LogOut, Settings, ShieldCheck } from "lucide-react";
+import { ChevronsUpDown, Cookie, LogOut, Settings, ShieldCheck, SunMoon } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOutAndClearHint } from "@/lib/auth-client";
 import { InstallAppMenuItem, InstallAppSheetAction } from "@/components/install-offer";
 import { useInstallAction } from "@/components/use-install-action";
+import { ThemeMenuRow, ThemeToggle } from "@/components/theme-toggle";
 import { CreateWorkspaceDialog, WorkspaceList } from "@/components/workspace-switcher";
 import { openConsentSettingsFrom } from "@/lib/consent/store";
 import type { WorkspaceOption } from "@/lib/workspaces";
@@ -103,6 +104,7 @@ export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boole
             </DropdownMenuItem>
           ) : null}
           {install.path ? <InstallAppMenuItem onSelect={install.start} /> : null}
+          <ThemeMenuRow />
           <DropdownMenuItem onClick={() => openConsentSettingsFrom(triggerRef.current)}>
             <Cookie aria-hidden="true" />
             Cookie settings
@@ -167,6 +169,7 @@ export function AccountSheet({
   const close = () => setOpen(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const install = useInstallAction("menu", null);
+  const themeLabel = useId();
 
   useEffect(() => {
     const openSheet = () => setOpen(true);
@@ -224,6 +227,13 @@ export function AccountSheet({
                 }}
               />
             ) : null}
+            <div className="flex min-h-12 items-center gap-3 pr-1 pl-3 text-sm font-medium">
+              <SunMoon aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
+              <span className="flex-1" id={themeLabel}>
+                Theme
+              </span>
+              <ThemeToggle aria-labelledby={themeLabel} />
+            </div>
             <DrawerAction
               onClick={() => {
                 close();

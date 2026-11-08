@@ -1,6 +1,6 @@
 # Light and System themes (2026-11-08)
 
-Status: proposed, design spec only. Owner questions are at the end, each with a recommended default.
+Status: decided 2026-11-08 (every recommendation taken). PR 1, tokens and mechanism: #163 (merged). PR 2, toggle and System default: #166.
 
 ## Goal
 
