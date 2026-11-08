@@ -11,7 +11,16 @@ import { PREVIEW_RENDER, renderPreview } from "@/lib/capture/render";
  * A new frame is rendered and decoded off screen, then swapped in, so the shown image never
  * blanks or flashes between filters. Data URLs mean there is no object URL to revoke early.
  */
-export function ResultPreview({ bitmap, edit }: { bitmap: ImageBitmap; edit: EditState }) {
+export function ResultPreview({
+  bitmap,
+  edit,
+  onInspect,
+}: {
+  bitmap: ImageBitmap;
+  edit: EditState;
+  /** Opens the full-size view. */
+  onInspect: () => void;
+}) {
   const [frame, setFrame] = useState<{ url: string; filter: Filter } | null>(null);
 
   useEffect(() => {
@@ -57,6 +66,12 @@ export function ResultPreview({ bitmap, edit }: { bitmap: ImageBitmap; edit: Edi
         className="absolute inset-0 size-full object-contain p-3"
         data-filter={frame.filter}
         src={frame.url}
+      />
+      <button
+        aria-label="See it at full size"
+        className="absolute inset-0 cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        onClick={onInspect}
+        type="button"
       />
     </div>
   );

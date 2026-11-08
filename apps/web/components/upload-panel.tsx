@@ -349,7 +349,7 @@ export function UploadPanel({
       setPreparing(true);
       let ready: File[];
       try {
-        ready = await Promise.all(pdfs.map(prepareFile));
+        ready = await Promise.all(pdfs.map((file) => prepareFile(file)));
       } finally {
         pendingRef.current -= pdfs.length;
         setPreparing(false);

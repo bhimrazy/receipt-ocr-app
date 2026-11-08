@@ -85,7 +85,7 @@ test("take two photos, edit one, and upload both", async ({ page }) => {
     "aria-pressed",
     "true",
   );
-  await expect(review.getByTestId("resolution")).toHaveText(/^\d+ × \d+ px · about \d+ (KB|MB)$/, {
+  await expect(review.getByTestId("resolution")).toHaveText(/^\d+ × \d+ px · ~\d+ (KB|MB)$/, {
     timeout: 15_000,
   });
   await expect(review.getByText(/Greyscale and B&W make the file smaller/)).toBeVisible();
@@ -121,6 +121,78 @@ test("a picked photo is reviewed, then read and opened", async ({ page }) => {
   ).toBeVisible();
   await uploadFromReview(page);
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
+});
+
+/** A synthetic phone-photo-sized receipt (no real data), drawn in the page as a JPEG. */
+async function largePhoto(page: Page) {
+  const data = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 3024;
+    c.height = 4032;
+    const x = c.getContext("2d")!;
+    x.fillStyle = "#f7f5ef";
+    x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = "#222";
+    x.font = "90px monospace";
+    for (let y = 200, i = 1; y < c.height - 200; y += 140, i++)
+      x.fillText(`Item ${i}  ${i}.99`, 300, y);
+    return c.toDataURL("image/jpeg", 0.9);
+  });
+  return {
+    name: "large.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.from(data.split(",")[1]!, "base64"),
+  };
+}
+
+test("a large photo offers upload sizes, shows the choice at full size and sends it", async ({
+  page,
+}) => {
+  await signUp(page, uniqueEmail("upload-size"));
+  await page.addInitScript(() => {
+    const sizes: unknown[] = [];
+    (window as unknown as { sizes: unknown[] }).sizes = sizes;
+    const send = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function (body) {
+      if (body instanceof FormData) sizes.push(body.get("size_choice"));
+      return send.call(this, body);
+    };
+  });
+  await page.goto("/app");
+  await expect(page.locator("[data-ready]")).toBeAttached();
+  await page.locator('input[type="file"][multiple]').setInputFiles(await largePhoto(page));
+  const review = page.getByRole("dialog", { name: "Review photos" });
+  await expect(review.getByRole("button", { name: /^Top-left corner/ })).toBeVisible({
+    timeout: 15_000,
+  });
+  const fullImage = review.getByRole("button", { name: "Use full image" });
+  if (await fullImage.isEnabled()) await fullImage.click();
+  await review.getByRole("button", { name: "Next" }).click();
+
+  const change = review.getByRole("button", { name: /Change/ });
+  await expect(change).toBeVisible({ timeout: 15_000 });
+  await expect(change).toHaveAttribute("aria-expanded", "false");
+  await expect(review.getByTestId("resolution")).toHaveText(/^\d+ × \d+ px · ~\d+ (KB|MB)$/);
+  await change.click();
+  const sizes = review.getByRole("group", { name: "Upload size" });
+  await expect(sizes.getByRole("radio", { name: /^Recommended/ })).toBeChecked();
+  await sizes.getByRole("radio", { name: /^Smaller/ }).check();
+  await expect(review.getByTestId("resolution")).toHaveText(/^800 × 1067 px · ~\d+ KB$/);
+
+  await review.getByRole("button", { name: "See it at full size" }).click();
+  const full = review.getByTestId("full-size").locator("img");
+  await expect(full).toBeVisible({ timeout: 15_000 });
+  expect(
+    await full.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight]),
+  ).toEqual([800, 1067]);
+  await review.getByRole("button", { name: "Done" }).click();
+  await expect(review.getByRole("img", { name: /^Receipt preview/ })).toBeVisible();
+
+  await review.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
+  expect(await page.evaluate(() => (window as unknown as { sizes: unknown[] }).sizes)).toEqual([
+    "smaller",
+  ]);
 });
 
 /** Two copies of the receipt fixture, opened in the review sheet on its corners step. */

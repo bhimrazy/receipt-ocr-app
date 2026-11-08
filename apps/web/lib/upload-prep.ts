@@ -79,7 +79,6 @@ export function planSize(
  */
 export const SIZE_IDS = ["smaller", "recommended", "larger"] as const;
 export type SizeId = (typeof SIZE_IDS)[number];
-export const SMALLER_SHORT_EDGE = HARD_MIN_SHORT_EDGE;
 export const LARGER_SHORT_EDGE = 1200;
 export const LARGER_MAX_PIXELS = 2_400_000;
 
@@ -96,9 +95,9 @@ function atShortEdge({ width, height }: Size, short: number): Size | null {
   };
 }
 
-/** The Smaller plan for a source, or null when its short edge is already at or under SMALLER_SHORT_EDGE. */
+/** The Smaller plan for a source, or null when its short edge is already at or under HARD_MIN_SHORT_EDGE. */
 export function smallerSize(source: Size): Size | null {
-  const size = atShortEdge(source, SMALLER_SHORT_EDGE);
+  const size = atShortEdge(source, HARD_MIN_SHORT_EDGE);
   return size && shortEdge(size) >= HARD_MIN_SHORT_EDGE ? size : null;
 }
 

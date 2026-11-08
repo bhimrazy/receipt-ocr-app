@@ -90,6 +90,12 @@ flowchart LR
   limit. A successful re-encode always replaces the original, so its metadata is gone. PDFs, images the browser can't
   decode (HEIC outside Safari) and images whose encode fails (for example a phone out of canvas memory) are sent
   unchanged, metadata included; stripping those on the server is a known follow-up.
+- In the review sheet's Preview step the size line ("W × H px · ~N KB · Change") opens a choice for the batch,
+  remembered for the session: **Recommended** (the automatic size above, the default), **Smaller** (800 px short
+  edge) and **Larger** (1,200 px short edge, offered only where the automatic encode shrinks under it for bytes and
+  1,200 px stays within about 2.4 MP, past which Gemini downsamples). Smaller and Larger keep their size and step only
+  quality, unless the file would pass 1 MB. Tapping the preview shows the real upload at one pixel per CSS pixel. The
+  applied choice is sent as `size_choice` and lands on the `receipt.upload` wide event and `receipt_uploaded`.
 - A file still over 4 MB (`DEPLOYMENT_BODY_LIMIT_BYTES` in
   [`upload-limits.ts`](../../../packages/core/src/upload-limits.ts)) is refused before upload.
 - **Upload.** One file uses instant mode and opens its receipt. Several upload two at a time in queued mode, each with
