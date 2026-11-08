@@ -17,7 +17,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: "unit",
-          include: ["apps/**/*.test.{ts,tsx}", "packages/**/*.test.ts", "bench/**/*.test.ts"],
+          include: ["apps/**/*.test.{ts,tsx}", "packages/**/*.test.ts"],
           exclude: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/*.int.test.ts"],
         },
       },

@@ -147,6 +147,7 @@ services:
       - /repo/apps/web/node_modules
       - /repo/apps/web/.next
       - /repo/packages/ai/node_modules
+      - /repo/packages/bench/node_modules
       - /repo/packages/core/node_modules
       - /repo/packages/db/node_modules
       - /repo/packages/email/node_modules

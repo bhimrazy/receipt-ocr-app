@@ -1,11 +1,11 @@
 // Measures the browser image shrinker (apps/web/lib/upload-prep.ts) in headless Chromium.
-//   bun bench/encode.mjs        (needs `bunx playwright install chromium`)
-// Inputs: the bench/fixtures PNGs plus synthetic noisy photos, including tall thermal receipts.
+//   bun packages/bench/encode.mjs        (needs `bunx playwright install chromium`)
+// Inputs: the packages/bench/fixtures PNGs plus synthetic noisy photos, including tall thermal receipts.
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "@playwright/test";
 
-const root = path.join(import.meta.dirname, "..");
+const root = path.join(import.meta.dirname, "..", "..");
 const built = await Bun.build({
   entrypoints: [path.join(root, "apps/web/lib/upload-prep.ts")],
   target: "browser",
@@ -14,11 +14,11 @@ const built = await Bun.build({
 if (!built.success) throw new Error("bundle failed");
 const script = await built.outputs[0].text();
 
-const fixtures = readdirSync(path.join(root, "bench/fixtures"))
+const fixtures = readdirSync(path.join(root, "packages/bench/fixtures"))
   .filter((f) => f.endsWith(".png"))
   .map((f) => ({
     name: f,
-    base64: readFileSync(path.join(root, "bench/fixtures", f)).toString("base64"),
+    base64: readFileSync(path.join(root, "packages/bench/fixtures", f)).toString("base64"),
   }));
 
 const browser = await chromium.launch();

@@ -98,13 +98,13 @@ under it.
 bun run test            # unit tests (Vitest)
 bun run test:e2e        # Playwright smoke suite; needs a built app and the stack (below)
 scripts/test.sh         # compose Postgres + RustFS, fresh test database, unit + e2e
-bun run bench:ocr       # OCR accuracy/latency/cost on bench/fixtures (needs a Gemini key)
+bun run bench:ocr       # OCR accuracy/latency/cost on packages/bench/fixtures (needs a Gemini key)
 ```
 
 The e2e suite (`apps/web/e2e`) drives the built app through the UI, with receipts seeded in SQL rather than
 through OCR. First run: `bunx playwright install chromium`. The upload spec runs only with `E2E_UPLOAD=1` and the
 fixture OCR provider (`OCR_PROVIDER=fixture`), which CI and `scripts/test.sh` set. Benchmark details and the k6 load
-test are in [`bench/README.md`](bench/README.md).
+test are in [`packages/bench/README.md`](packages/bench/README.md).
 
 CI (`.github/workflows/ci.yml`) runs the checks below, which you can run locally too:
 
@@ -115,7 +115,7 @@ CI (`.github/workflows/ci.yml`) runs the checks below, which you can run locally
 | `bun run check:deps`   | One version per package, exact pins, `bun.lock` in sync  |
 | `bun run knip`         | Unused files and dependencies                            |
 | `bun run audit`        | `bun audit`, failing on high or critical                 |
-| `bun run typecheck`    | `tsc` in every package and in `bench/`                   |
+| `bun run typecheck`    | `tsc` in every package                                   |
 
 ## License
 

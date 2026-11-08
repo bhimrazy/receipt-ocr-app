@@ -129,7 +129,7 @@ Sources, checked 2026-11-07: Anthropic's [prompting best practices](https://plat
 [structured output](https://aistudio.google.com/docs/structured-output).
 
 v1 (one text block before the file, no system prompt, no field definitions) stays selectable for the benchmark:
-`bun run bench:ocr --prompt v1`. Results: [`bench/results/2026-11-07-prompt-v1-vs-v2.md`](../../bench/results/2026-11-07-prompt-v1-vs-v2.md).
+`bun run bench:ocr --prompt v1`. Results: [`packages/bench/results/2026-11-07-prompt-v1-vs-v2.md`](../../packages/bench/results/2026-11-07-prompt-v1-vs-v2.md).
 
 ### Change the prompt
 
@@ -172,7 +172,7 @@ and one with none fails the `ready` check with `NotConfigured` before a receipt 
 replaces the chain with the offline fixture. `GEMINI_MODEL` no longer exists: the default names its models, and any
 other choice is made in **Admin → Settings → OCR models**, which replaces the default once saved.
 
-Why Haiku first: the 31-receipt [benchmark](../../bench/results/2026-11-07-real.md) and the
+Why Haiku first: the 31-receipt [benchmark](../../packages/bench/results/2026-11-07-real.md) and the
 [two-tier review](../reviews/2026-11-07-two-tier-ocr.md) found Haiku 5.5 (about $0.0006 a receipt) and Flash-Lite
 (about $0.0014) scoring the same as Sonnet 5.5 (about $0.011). Qwen on Groq is the last fallback, still a preview model
 (see [Groq](#groq)); the Groq data-retention precondition in [STATUS](../STATUS.md) applies.
