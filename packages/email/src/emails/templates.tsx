@@ -518,6 +518,7 @@ const contactReply: EmailDefinition = {
   render(v, shared) {
     const heading = "We got your message";
     const body = `Hi ${v.firstName}, thanks for writing. We've received ${v.topicPhrase} and will reply to this address, usually within 2 business days.`;
+    const signOff = `— The ${BRAND} team`;
     const reason = `You're receiving this because this address was entered in the contact form on ${shared.appHost}. Didn't write to us? Someone may have mistyped their address; you can ignore this email.`;
     return {
       html: (
@@ -528,9 +529,10 @@ const contactReply: EmailDefinition = {
           reason={reason}
         >
           <P>{body}</P>
+          <P>{signOff}</P>
         </Layout>
       ),
-      text: plainText(shared, { heading, body: [body], reason }),
+      text: plainText(shared, { heading, body: [body, signOff], reason }),
     };
   },
 };

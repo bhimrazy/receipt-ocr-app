@@ -151,9 +151,8 @@ export default function SupportPanel({
     >
       <div className="relative shrink-0 border-b border-border bg-secondary/30 p-4 pr-14">
         <p className="text-sm font-semibold" id={`${ids}-title`}>
-          Talk to us
+          How can we help?
         </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">We reply by email.</p>
         <button
           type="button"
           onClick={onClose}
