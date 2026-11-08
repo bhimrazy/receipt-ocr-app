@@ -12,12 +12,13 @@ import { scheduleFlush, type EventRecord } from "@receipt-ocr/core/telemetry";
 type Kind = "token" | "int" | "bool";
 
 const EVENTS = {
-  signed_up: { method: "token" },
+  signed_up: { method: "token", standalone: "bool" },
   receipt_uploaded: { mode: "token", plan: "token" },
   receipt_scanned: { trigger: "token", model: "token", fallback: "bool", calls: "int" },
   receipt_scan_failed: { trigger: "token", error_kind: "token" },
   csv_exported: { count: "int" },
   plan_limit_hit: { limit: "token", plan: "token" },
+  install_offer: { action: "token", surface: "token", platform: "token" },
 } as const satisfies Record<string, Record<string, Kind>>;
 
 export type ProductEventName = keyof typeof EVENTS;

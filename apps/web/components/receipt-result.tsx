@@ -35,6 +35,7 @@ import {
   formatDateTime,
   formatMoney,
 } from "@/lib/format";
+import { InstallOfferCard } from "@/components/install-offer";
 import { ProcessingPoller } from "@/components/processing-poller";
 import {
   ReceiptActions,
@@ -474,6 +475,8 @@ export function ReceiptResult({
           items={items}
           receipt={receipt}
         />
+        {/* Right after a receipt was read: the moment the app has shown what it's for. */}
+        <InstallOfferCard />
       </div>
     </ReceiptEditingProvider>
   );

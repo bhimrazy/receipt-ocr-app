@@ -23,6 +23,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOutAndClearHint } from "@/lib/auth-client";
+import { InstallAppMenuItem, InstallAppSheetAction } from "@/components/install-offer";
+import { useInstallAction } from "@/components/use-install-action";
 import { CreateWorkspaceDialog, WorkspaceList } from "@/components/workspace-switcher";
 import { openConsentSettingsFrom } from "@/lib/consent/store";
 import type { WorkspaceOption } from "@/lib/workspaces";
@@ -65,48 +67,55 @@ function useSignOut() {
 export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boolean }) {
   const handleSignOut = useSignOut();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const install = useInstallAction("menu", null);
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        ref={triggerRef}
-        aria-label="Account menu"
-        className="flex min-h-12 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-wash"
-      >
-        <Avatar className="size-8" user={user} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{user.name || "Your account"}</span>
-          <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
-        </span>
-        <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-60 max-w-[calc(100vw-2rem)]" side="top">
-        <div className="px-2.5 py-2">
-          <p className="truncate text-sm font-medium">{user.name || "Your account"}</p>
-          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-        </div>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem render={<Link href="/app/settings" />}>
-          <Settings aria-hidden="true" />
-          Settings
-        </DropdownMenuItem>
-        {showAdmin ? (
-          <DropdownMenuItem render={<Link href="/admin" />}>
-            <ShieldCheck aria-hidden="true" />
-            Admin
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          ref={triggerRef}
+          aria-label="Account menu"
+          className="flex min-h-12 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-wash"
+        >
+          <Avatar className="size-8" user={user} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">
+              {user.name || "Your account"}
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+          </span>
+          <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-60 max-w-[calc(100vw-2rem)]" side="top">
+          <div className="px-2.5 py-2">
+            <p className="truncate text-sm font-medium">{user.name || "Your account"}</p>
+            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+          </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem render={<Link href="/app/settings" />}>
+            <Settings aria-hidden="true" />
+            Settings
           </DropdownMenuItem>
-        ) : null}
-        <DropdownMenuItem onClick={() => openConsentSettingsFrom(triggerRef.current)}>
-          <Cookie aria-hidden="true" />
-          Cookie settings
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut}>
-          <LogOut aria-hidden="true" />
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {showAdmin ? (
+            <DropdownMenuItem render={<Link href="/admin" />}>
+              <ShieldCheck aria-hidden="true" />
+              Admin
+            </DropdownMenuItem>
+          ) : null}
+          {install.path ? <InstallAppMenuItem onSelect={install.start} /> : null}
+          <DropdownMenuItem onClick={() => openConsentSettingsFrom(triggerRef.current)}>
+            <Cookie aria-hidden="true" />
+            Cookie settings
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleSignOut}>
+            <LogOut aria-hidden="true" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {install.guide}
+    </>
   );
 }
 
@@ -152,6 +161,7 @@ export function AccountSheet({
   const handleSignOut = useSignOut();
   const close = () => setOpen(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const install = useInstallAction("menu", null);
 
   useEffect(() => {
     const openSheet = () => setOpen(true);
@@ -201,6 +211,14 @@ export function AccountSheet({
                 Admin
               </DrawerAction>
             ) : null}
+            {install.path ? (
+              <InstallAppSheetAction
+                onSelect={() => {
+                  close();
+                  void install.start();
+                }}
+              />
+            ) : null}
             <DrawerAction
               onClick={() => {
                 close();
@@ -218,6 +236,7 @@ export function AccountSheet({
         </DrawerContent>
       </Drawer>
       {workspace ? <CreateWorkspaceDialog onOpenChange={setCreateOpen} open={createOpen} /> : null}
+      {install.guide}
     </>
   );
 }
