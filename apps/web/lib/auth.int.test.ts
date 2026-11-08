@@ -5,9 +5,11 @@
  */
 import {
   account,
+  billingSubscriptions,
   createDb,
   eq,
   jobs,
+  member,
   organization,
   session,
   sql,
@@ -346,6 +348,101 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
   });
 
   // Last: it deletes this user's sessions.
+  it("M-A: the buyer of a charging subscription can't be removed, demoted or leave", async () => {
+    const sessionCookie = (headers: Headers) =>
+      headers
+        .getSetCookie()
+        .map((c) => c.split(";")[0])
+        .filter((c) => c?.includes("session_token="))
+        .join("; ");
+    const ownerHeaders = new Headers({ cookie });
+    const buyerEmail = `${tag}-buyer@example.com`;
+    const buyerUp = await auth.api.signUpEmail({
+      body: { email: buyerEmail, password, name: "Pat Payer" },
+      returnHeaders: true,
+    });
+    const buyerHeaders = new Headers({ cookie: sessionCookie(buyerUp.headers) });
+    const buyerId = buyerUp.response.user.id;
+
+    const orgId = crypto.randomUUID();
+    const memberId = crypto.randomUUID();
+    await db
+      .insert(organization)
+      .values({ id: orgId, name: "Pays", slug: `${tag}-pays`, createdAt: new Date() });
+    await db.insert(member).values([
+      {
+        id: crypto.randomUUID(),
+        organizationId: orgId,
+        userId,
+        role: "owner",
+        createdAt: new Date(),
+      },
+      {
+        id: memberId,
+        organizationId: orgId,
+        userId: buyerId,
+        role: "owner",
+        createdAt: new Date(),
+      },
+    ]);
+    const subscriptionId = `sub_${tag}`;
+    await db.insert(billingSubscriptions).values({
+      organizationId: orgId,
+      userId: buyerId,
+      provider: "paddle",
+      providerSubscriptionId: subscriptionId,
+      providerCustomerId: `ctm_${tag}`,
+      status: "active",
+      providerUpdatedAt: new Date(),
+    });
+
+    const message = async (promise: Promise<unknown>) => {
+      try {
+        await promise;
+        return "ok";
+      } catch (error) {
+        return error instanceof APIError ? String(error.body?.message) : String(error);
+      }
+    };
+    const cancelHint = "Cancel the subscription in Billing, or let it end, before";
+    expect(
+      await message(
+        auth.api.updateMemberRole({
+          headers: ownerHeaders,
+          body: { organizationId: orgId, memberId, role: "admin" },
+        }),
+      ),
+    ).toBe(`Pat Payer pays for Pro on this workspace. ${cancelHint} changing their role.`);
+    expect(
+      await message(
+        auth.api.removeMember({
+          headers: ownerHeaders,
+          body: { organizationId: orgId, memberIdOrEmail: memberId },
+        }),
+      ),
+    ).toBe(`Pat Payer pays for Pro on this workspace. ${cancelHint} removing them.`);
+    expect(
+      await message(
+        auth.api.leaveOrganization({ headers: buyerHeaders, body: { organizationId: orgId } }),
+      ),
+    ).toBe(`You pay for Pro on this workspace. ${cancelHint} leaving.`);
+
+    // Once it can't charge any more, the same actions go through.
+    await db
+      .update(billingSubscriptions)
+      .set({ status: "canceled" })
+      .where(eq(billingSubscriptions.providerSubscriptionId, subscriptionId));
+    expect(
+      await message(
+        auth.api.leaveOrganization({ headers: buyerHeaders, body: { organizationId: orgId } }),
+      ),
+    ).toBe("ok");
+    await db
+      .delete(billingSubscriptions)
+      .where(eq(billingSubscriptions.providerSubscriptionId, subscriptionId));
+    await db.delete(user).where(eq(user.id, buyerId));
+  });
+
   it("a revoked session stops working on auth endpoints at once (cookie cache off)", async () => {
     await db.delete(session).where(eq(session.userId, userId));
     const headers = new Headers({ cookie });

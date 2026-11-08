@@ -265,6 +265,22 @@ export async function hasChargingSubscription(
 export const workspaceHasChargingSubscription = (organizationId: string) =>
   Effect.flatMap(Db, ({ use }) => use((db) => hasChargingSubscription(db, organizationId)));
 
+/**
+ * Whether `userId` is the buyer (`billing_subscriptions.user_id`) of a
+ * subscription on this workspace that can still charge. Only the buyer can
+ * cancel in the app, so they can't be removed, demoted or leave meanwhile.
+ */
+export const userPaysForWorkspace = (organizationId: string, userId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const rows = await db.execute<{ pays: boolean }>(sql`
+        select exists (select 1 from billing_subscriptions s
+          where s.organization_id = ${organizationId} and s.user_id = ${userId}
+            and ${chargingSql}) as pays`);
+      return rows[0]?.pays === true;
+    }),
+  );
+
 // ---------- Webhooks ----------
 
 export type WebhookResult =
@@ -332,6 +348,8 @@ export type ApplyResult = {
   planChange?: PlanChange;
   userId?: string;
   unmatched?: UnmatchedReason;
+  /** The subscription has no workspace any more (deleted) but can still charge: someone is paying for nothing. */
+  orphanCharging?: true;
   /**
    * The provider subscription still needs cancelling: a chargeback or full
    * refund revoked Pro, or its workspace or buyer is gone and it could charge again.
@@ -528,6 +546,9 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
         return finish({
           outcome: "applied",
           organizationId,
+          ...(stored && !stored.organizationId && canStillCharge(snapshot)
+            ? { orphanCharging: true as const }
+            : {}),
           ...(from === to ? {} : { planChange: { from, to } }),
           ...(buyer ? { userId: buyer } : {}),
           ...(cancel ? { cancelSubscriptionId: snapshot.subscriptionId } : {}),
