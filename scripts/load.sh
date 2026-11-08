@@ -75,7 +75,7 @@ k6() { # k6 <extra docker args...> -- <k6 args...>
 }
 
 echo "==> seeding $USERS users with $RECEIPTS receipts each"
-k6 "$K6_IMAGE" run --quiet /packages/bench/load/seed.js >"$run_dir/seed.log" 2>&1 || { tail -20 "$run_dir/seed.log" >&2; exit 1; }
+k6 "$K6_IMAGE" run --quiet /bench/load/seed.js >"$run_dir/seed.log" 2>&1 || { tail -20 "$run_dir/seed.log" >&2; exit 1; }
 psql_app -q -v n_receipts="$RECEIPTS" <packages/bench/load/seed.sql >/dev/null || exit 1
 
 # Resource sampler: one line per container per tick ("<epoch>\t<docker stats json>") and Postgres connections.
@@ -108,7 +108,7 @@ run() {
   local start end
   start=$(date +%s)
   k6 "${envs[@]}" "$K6_IMAGE" run \
-    --summary-export="/out/$name.summary.json" /packages/bench/load/load.js >"$run_dir/$name.k6.log" 2>&1
+    --summary-export="/out/$name.summary.json" /bench/load/load.js >"$run_dir/$name.k6.log" 2>&1
   local status=$?
   end=$(date +%s)
   printf '%s %s %s\n' "$start" "$end" "$status" >"$run_dir/$name.window"
@@ -131,7 +131,7 @@ step() {
 echo "==> warm-up"
 # Next compiles routes and the JIT warms up on first use; the first minute would otherwise count against the SLOs.
 k6 -e SCENARIO=load -e RATE_READS=15 -e RATE_UPLOADS=2 -e DURATION=20s -e RUN=0 -e LATENCY_MS="$FIXTURE_LATENCY_MS" \
-  "$K6_IMAGE" run --quiet /packages/bench/load/load.js >"$run_dir/warmup.log" 2>&1
+  "$K6_IMAGE" run --quiet /bench/load/load.js >"$run_dir/warmup.log" 2>&1
 
 for scenario in "${scenarios[@]}"; do
   case "$scenario" in
