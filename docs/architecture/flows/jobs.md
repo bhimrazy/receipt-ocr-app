@@ -169,8 +169,8 @@ never the address or content).
 support mail is sent, and only within `allowContactReply` in `lib/email-limits.ts`: 1 reply per address and 3 per IP a
 day (hashed keys in `rate_limits`; a limiter failure skips the reply). The payload is the typed address, a first name
 already cleaned by `greetingName` and the topic id, never the message. It is sent through `ContactReplyMailer`
-(`lib/contact-reply-mailer.ts`), 3 attempts. The payload stays in the `jobs` row after the job finishes: there is no
-jobs retention yet.
+(`lib/contact-reply-mailer.ts`), 3 attempts. The kind sets `scrubPayload`, so `settle` replaces the payload with `{}` when the job
+succeeds or dies (a retry keeps it); the address and name are not kept in the `jobs` row.
 
 ## Tables
 

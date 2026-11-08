@@ -267,11 +267,13 @@ const attempt = <R>(registry: JobRegistry<R>, job: Job, worker: string) =>
     };
     const finish = (outcome: JobOutcome) =>
       Effect.gen(function* () {
-        const settled = yield* queue.settle(job, worker, outcome).pipe(
-          Effect.tapError(() => Effect.logError("jobs.settle_failed")),
-          // Unrecorded: the lease runs out and the reaper re-queues the job.
-          Effect.orElseSucceed(() => false),
-        );
+        const settled = yield* queue
+          .settle(job, worker, outcome, { scrubPayload: registry[job.kind]?.scrubPayload })
+          .pipe(
+            Effect.tapError(() => Effect.logError("jobs.settle_failed")),
+            // Unrecorded: the lease runs out and the reaper re-queues the job.
+            Effect.orElseSucceed(() => false),
+          );
         const ms = (yield* Clock.currentTimeMillis) - startedAt;
         const errorKind = outcome.type === "succeeded" ? undefined : outcome.errorKind;
         const runAt =

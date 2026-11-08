@@ -319,9 +319,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Bot protection: shipped, optional by env (`NEXT_PUBLIC_TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`). Turnstile guards
   sign-up, sign-in, password reset, resend confirmation (Better Auth `captcha` plugin) and `/api/contact`.
   `scripts/test.sh --turnstile` and the CI job "E2E (Turnstile test keys)" run its e2e with Cloudflare test keys.
-- Contact-form auto-reply (`email.contact-reply` job, 1 per address and 3 per IP a day): the recipient address and first
-  name stay in the finished `jobs` row because the queue has no retention yet. Add a retention sweep for finished
-  jobs (or scrub email payloads on success) before launch. The reply promises an answer "usually within 2 business
+- Contact-form auto-reply (`email.contact-reply` job, 1 per address and 3 per IP a day): the job's `scrubPayload` empties
+  the address and first name once it succeeds or dies. The reply promises an answer "usually within 2 business
   days": owner to confirm or change that number.
 - Best-practice reviews ([Next.js](reviews/2026-11-06-nextjs.md), [React](reviews/2026-11-06-react.md),
   [shadcn/UI](reviews/2026-11-06-shadcn-ui.md)): quick wins in progress; later, shared primitives (Spinner, Meter,

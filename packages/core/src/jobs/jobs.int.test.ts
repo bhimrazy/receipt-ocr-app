@@ -36,7 +36,7 @@ import { Db, Storage } from "../services";
 import { Settings } from "../settings";
 import { DEFAULT_PLANS } from "../plans";
 import { ensurePersonalWorkspace } from "../workspace";
-import type { JobDefinition } from "./definition";
+import { NonRetryableJobError, type JobDefinition } from "./definition";
 import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
 import { enqueueWelcomeEmail, welcomeEmail, WelcomeMailer } from "./kinds/welcome-email";
 import { tickScope } from "./live";
@@ -248,7 +248,17 @@ const slowKind: JobDefinition<{ ms: number }, never> = {
       Effect.onInterrupt(() => Effect.sync(() => void slowInterrupted++)),
     ),
 };
-const testRegistry = { [COUNT]: countKind, [SLOW]: slowKind };
+const SCRUB = `test.scrub.${tag}`;
+const scrubKind: JobDefinition<{ to: string; fail: boolean }, never> = {
+  kind: SCRUB,
+  payload: z.object({ to: z.string(), fail: z.boolean() }),
+  maxAttempts: 3,
+  leaseSeconds: 30,
+  backoff: { baseMs: 10, capMs: 10 },
+  scrubPayload: true,
+  run: ({ fail }) => (fail ? Effect.fail(new NonRetryableJobError({ kind: "boom" })) : Effect.void),
+};
+const testRegistry = { [COUNT]: countKind, [SLOW]: slowKind, [SCRUB]: scrubKind };
 
 describe.skipIf(!enabled)("job queue against Postgres", () => {
   let a: Scope;
@@ -864,6 +874,60 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     expect(
       await queue((q) => q.claim({ worker: `${tag}-p`, kinds, n: 1, ownerCap: 9, ids: [id] })),
     ).toHaveLength(1);
+  });
+
+  it("a scrubbing kind empties its payload when it succeeds or dies, not while it will retry", async () => {
+    const ids: string[] = [];
+    for (const fail of [false, true]) {
+      const result = await queue((q) =>
+        q.enqueue({ kind: SCRUB, payload: { to: "a@example.com", fail }, maxAttempts: 3 }),
+      );
+      ids.push("id" in result ? result.id : "");
+    }
+    await run(
+      tick({
+        worker: `${tag}-w`,
+        registry: testRegistry,
+        budgetMs: 5_000,
+        ids,
+        waitForRetries: false,
+      }),
+    );
+    const rows = await db((d) =>
+      d
+        .select({ state: jobs.state, payload: jobs.payload })
+        .from(jobs)
+        .where(inArray(jobs.id, ids)),
+    );
+    expect(rows.map((r) => r.state).sort()).toEqual(["dead", "succeeded"]);
+    for (const row of rows) expect(row.payload).toEqual({});
+
+    // A retry keeps the payload: it is still needed.
+    const retried = await queue((q) =>
+      q.enqueue({ kind: SCRUB, payload: { to: "b@example.com", fail: false }, maxAttempts: 3 }),
+    );
+    const id = "id" in retried ? retried.id : "";
+    const [claimed] = await queue((q) =>
+      q.claim({
+        worker: `${tag}-r`,
+        kinds: [{ kind: SCRUB, leaseSeconds: 30 }],
+        n: 1,
+        ownerCap: 9,
+        ids: [id],
+      }),
+    );
+    await queue((q) =>
+      q.settle(
+        claimed!,
+        `${tag}-r`,
+        { type: "retry", delayMs: 1000, errorKind: "x" },
+        { scrubPayload: true },
+      ),
+    );
+    expect(await queue((q) => q.get(id))).toMatchObject({
+      state: "queued",
+      payload: { to: "b@example.com" },
+    });
   });
 
   it("a malformed payload goes straight to dead", async () => {

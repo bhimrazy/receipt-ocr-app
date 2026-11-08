@@ -28,6 +28,7 @@ describe("contact auto-reply job", () => {
     expect(JOB_REGISTRY["email.contact-reply"]).toBe(contactReply);
     expect(contactReplyPayload.safeParse(payload).success).toBe(true);
     expect(contactReplyPayload.safeParse({ to: "a@example.com", topic: "x" }).success).toBe(false);
+    expect(contactReplyPayload.safeParse({ ...payload, to: "not an address" }).success).toBe(false);
     expect(contactReplyPayload.safeParse({ ...payload, name: "x".repeat(81) }).success).toBe(false);
   });
 

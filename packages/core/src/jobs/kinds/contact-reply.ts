@@ -20,7 +20,11 @@ export const CONTACT_REPLY_MAX_ATTEMPTS = 3;
  * `topic` is one of the app's fixed topic ids. Never the message itself.
  */
 export const contactReplyPayload = z.object({
-  to: z.string().min(3).max(320),
+  // Same shape the contact route accepts.
+  to: z
+    .string()
+    .max(320)
+    .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/),
   name: z.string().max(80),
   topic: z.string().min(1).max(40),
 });
@@ -68,6 +72,8 @@ export const contactReply: JobDefinition<ContactReplyPayload, ContactReplyMailer
   payload: contactReplyPayload,
   maxAttempts: CONTACT_REPLY_MAX_ATTEMPTS,
   leaseSeconds: 60,
+  // The address and name are deleted once the reply is sent (or given up on).
+  scrubPayload: true,
   backoff: { baseMs: 30_000, capMs: 10 * 60_000 },
 
   run: (payload) =>
