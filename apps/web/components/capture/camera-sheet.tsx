@@ -210,7 +210,8 @@ export default function CameraSheet({
 
   return (
     <FullScreen
-      className="bg-background text-foreground"
+      // Pinned dark in either theme: a photo context, like the native camera.
+      className="dark bg-background text-foreground"
       initialFocus={shutterRef}
       onClose={requestClose}
       open={open}
