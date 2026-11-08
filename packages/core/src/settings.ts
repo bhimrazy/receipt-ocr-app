@@ -1,10 +1,4 @@
-import {
-  OCR_MODELS,
-  OCR_PROVIDERS,
-  ocrModel,
-  type ModelId,
-  type OcrProviderId,
-} from "@receipt-ocr/ai";
+import { OCR_PROVIDERS, ocrModel, type ModelId, type OcrProviderId } from "@receipt-ocr/ai";
 import { appSettings, eq, type DbClient } from "@receipt-ocr/db";
 import { Config, Context, Effect, Layer, Option } from "effect";
 import { z } from "zod";
@@ -124,11 +118,6 @@ export type SettingsSnapshot = {
   saved: Partial<Record<SettingKey, { updatedAt: Date; updatedBy: string | null }>>;
 };
 
-/** The first allowlisted Gemini model: the fallback when GEMINI_MODEL isn't on the list. */
-const DEFAULT_GOOGLE_MODEL = OCR_MODELS.find((m) => m.provider === "google")!.id.slice(
-  "google:".length,
-);
-
 const nonEmpty = (name: string) =>
   Config.option(Config.string(name)).pipe(
     Config.map((value) => Option.isSome(value) && value.value.trim() !== ""),
@@ -155,27 +144,24 @@ export const providerAvailability: Effect.Effect<Record<OcrProviderId, boolean>>
   ),
 );
 
-/** First choice until an admin saves a chain; steps whose provider has no key are skipped. */
-const DEFAULT_PRIMARY_MODEL: ModelId = "anthropic:claude-sonnet-5-5";
+/**
+ * The chain used until an admin saves one. Steps whose provider has no key are skipped (see
+ * `activeChain`). No step sets an effort: Haiku runs at low (`CLAUDE_EFFORT`), Flash-Lite at the
+ * provider's default (minimal), Groq has none.
+ */
+export const DEFAULT_OCR_MODELS: readonly ModelId[] = [
+  "anthropic:claude-haiku-5-5",
+  "google:gemini-3.5-flash-lite",
+  "groq:qwen/qwen3.8-27b",
+];
 
-/** The chain used until an admin saves one: Claude Sonnet, then the env's Gemini model. */
-const defaultOcrRouting: Effect.Effect<OcrRouting> = Effect.all({
-  provider: Config.string("OCR_PROVIDER").pipe(Config.withDefault("google")),
-  model: Config.string("GEMINI_MODEL").pipe(Config.withDefault(DEFAULT_GOOGLE_MODEL)),
-}).pipe(
-  Effect.orElseSucceed(() => ({ provider: "google", model: DEFAULT_GOOGLE_MODEL })),
-  Effect.flatMap(({ provider, model }) => {
-    if (provider === "fixture") return Effect.succeed("fixture" as const);
-    const wanted = `google:${model}`;
-    if (ocrModel(wanted)) return Effect.succeed(wanted as ModelId);
-    // An unlisted model would leave the settings page with nothing that can run.
-    return Effect.logWarning("settings.unlisted_model", { ocr: { model: wanted } }).pipe(
-      Effect.as(`google:${DEFAULT_GOOGLE_MODEL}` as ModelId),
-    );
-  }),
-  Effect.map((model) => ({
-    chain: (model === "fixture" ? [model] : [DEFAULT_PRIMARY_MODEL, model]).map((id) => ({
-      model: id,
+/** `OCR_PROVIDER=fixture` swaps the chain for the offline fixture; nothing else configures it. */
+const defaultOcrRouting: Effect.Effect<OcrRouting> = Config.string("OCR_PROVIDER").pipe(
+  Config.withDefault("google"),
+  Effect.orElseSucceed(() => "google"),
+  Effect.map((provider) => ({
+    chain: (provider === "fixture" ? (["fixture"] as const) : DEFAULT_OCR_MODELS).map((model) => ({
+      model,
       enabled: true,
       timeoutMs: DEFAULT_STEP_TIMEOUT_MS,
     })),

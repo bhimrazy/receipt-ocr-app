@@ -1,6 +1,7 @@
 import { ConfigProvider, Effect, Exit, Layer } from "effect";
 import { OCR_MODELS } from "@receipt-ocr/ai";
 import { describe, expect, it } from "vitest";
+import { activeChain } from "./ocr";
 import { DEFAULT_PLANS, MAX_BATCH } from "./plans";
 import { Db } from "./services";
 import {
@@ -218,22 +219,44 @@ describe("providerAvailability", () => {
 });
 
 describe("Settings", () => {
-  it("defaults the chain to Claude Sonnet, then GEMINI_MODEL when it is on the allowlist", async () => {
+  it("defaults the chain to Haiku, Flash-Lite, then Qwen on Groq, ignoring GEMINI_MODEL", async () => {
     const run = settingsWith({ GEMINI_MODEL: "gemini-3.8-flash" });
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
-      "anthropic:claude-sonnet-5-5",
-      "google:gemini-3.8-flash",
+      "anthropic:claude-haiku-5-5",
+      "google:gemini-3.5-flash-lite",
+      "groq:qwen/qwen3.8-27b",
     ]);
+    expect(Exit.isSuccess(exit) && exit.value.chain.every((s) => s.effort === undefined)).toBe(
+      true,
+    );
   });
 
-  it("falls back to an allowlisted model when GEMINI_MODEL isn't on the list", async () => {
-    const run = settingsWith({ GEMINI_MODEL: "gemini-unlisted" });
+  it("uses only the offline fixture when OCR_PROVIDER=fixture", async () => {
+    const run = settingsWith({ OCR_PROVIDER: "fixture" });
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
-    expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
-      "anthropic:claude-sonnet-5-5",
-      "google:gemini-3.8-flash",
+    expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual(["fixture"]);
+  });
+
+  it("skips default steps whose provider has no key, leaving the rest to run", async () => {
+    const chainFor = async (env: Record<string, string>) => {
+      const exit = await settingsWith(env)(
+        Effect.gen(function* () {
+          const routing = yield* (yield* Settings).ocr;
+          return activeChain(routing, yield* providerAvailability).map((s) => s.model);
+        }),
+      );
+      return Exit.isSuccess(exit) ? exit.value : exit;
+    };
+    expect(await chainFor({ ANTHROPIC_API_KEY: "k", GOOGLE_GENERATIVE_AI_API_KEY: "k" })).toEqual([
+      "anthropic:claude-haiku-5-5",
+      "google:gemini-3.5-flash-lite",
     ]);
+    expect(await chainFor({ GOOGLE_GENERATIVE_AI_API_KEY: "k", GROQ_API_KEY: "k" })).toEqual([
+      "google:gemini-3.5-flash-lite",
+      "groq:qwen/qwen3.8-27b",
+    ]);
+    expect(await chainFor({})).toEqual([]);
   });
 
   it("ignores a saved chain naming a model that is no longer offered", async () => {
@@ -246,8 +269,9 @@ describe("Settings", () => {
     const run = settingsWith({ GEMINI_MODEL: "gemini-3.8-flash" }, [saved]);
     const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
     expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
-      "anthropic:claude-sonnet-5-5",
-      "google:gemini-3.8-flash",
+      "anthropic:claude-haiku-5-5",
+      "google:gemini-3.5-flash-lite",
+      "groq:qwen/qwen3.8-27b",
     ]);
   });
 
@@ -357,15 +381,6 @@ describe("Settings", () => {
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(
       "Turn on at least one model",
     );
-  });
-
-  it("keeps Gemini as the default chain when an Anthropic key is set", async () => {
-    const run = settingsWith({ ANTHROPIC_API_KEY: "k", GOOGLE_GENERATIVE_AI_API_KEY: "k" });
-    const exit = await run(Effect.flatMap(Settings, (s) => s.ocr));
-    expect(Exit.isSuccess(exit) && exit.value.chain.map((s) => s.model)).toEqual([
-      "anthropic:claude-sonnet-5-5",
-      "google:gemini-3.8-flash",
-    ]);
   });
 
   it("refuses to turn on a Claude model without ANTHROPIC_API_KEY", async () => {
