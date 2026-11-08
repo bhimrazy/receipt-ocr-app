@@ -74,12 +74,17 @@ export const billingApply: JobDefinition<BillingApplyPayload, Db | Settings | Bi
           billing: {
             outcome: result.outcome,
             ...(result.unmatched ? { unmatched_reason: result.unmatched } : {}),
+            ...(result.orphanCharging ? { orphan_charging: true } : {}),
             // The product event `plan_changed { from, to }`, for the upgrade funnel.
             ...(result.planChange
               ? { plan_from: result.planChange.from, plan_to: result.planChange.to }
               : {}),
           },
         }),
+      ),
+      // Error level, so it reaches Axiom and Sentry alerts.
+      Effect.tap((result) =>
+        result.orphanCharging ? Effect.logError("billing.orphan_charging") : Effect.void,
       ),
       Effect.tapError((error) => annotateEvent({ error: errorFields(error) })),
       Effect.mapError(applyFailure),

@@ -54,6 +54,7 @@ import {
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
 import {
   assertCanCreateWorkspace,
+  assertBuyerStays,
   assertNoLiveSubscription,
   assertWorkspaceRole,
   limitInvitations,
@@ -420,6 +421,16 @@ export const auth = betterAuth({
         if (refusal) throw refusal;
         return;
       }
+      if (ctx.path === "/organization/leave") {
+        // Better Auth's leave route runs no organization hook.
+        const current = await getSessionFromCtx(ctx);
+        const organizationId = (ctx.body as { organizationId?: unknown } | undefined)
+          ?.organizationId;
+        if (current && typeof organizationId === "string") {
+          await assertBuyerStays(organizationId, current.user.id, current.user.name, "leave");
+        }
+        return;
+      }
       if (passed !== "account.change_email" && passed !== "account.delete") return;
       const current = await getSessionFromCtx(ctx);
       if (!current) return;
@@ -610,7 +621,14 @@ export const auth = betterAuth({
         // so invitations stored before this check are re-checked here.
         beforeAcceptInvitation: async ({ invitation }) => assertWorkspaceRole(invitation.role),
         beforeAddMember: async ({ member }) => assertWorkspaceRole(member.role),
-        beforeUpdateMemberRole: async ({ newRole }) => assertWorkspaceRole(newRole),
+        beforeUpdateMemberRole: async ({ newRole, member, user, organization }) => {
+          assertWorkspaceRole(newRole);
+          if (newRole !== "owner") {
+            await assertBuyerStays(organization.id, member.userId, user.name, "demote");
+          }
+        },
+        beforeRemoveMember: async ({ member, user, organization }) =>
+          assertBuyerStays(organization.id, member.userId, user.name, "remove"),
         // Workspace owners remove members through Better Auth, not the admin path.
         afterRemoveMember: async ({ member: removed, organization }) => {
           try {
