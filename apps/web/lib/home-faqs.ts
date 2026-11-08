@@ -1,3 +1,5 @@
+import { PRO_PRICE_LABEL } from "./pricing";
+
 // Shared by the landing page FAQ, its FAQPage JSON-LD and llms-full.txt.
 export const homeFaqs = [
   {
@@ -14,7 +16,7 @@ export const homeFaqs = [
   },
   {
     q: "Is it really free to start?",
-    a: "Yes. The free plan needs no credit card and includes a daily allowance of receipt scans. If you need more, contact us.",
+    a: `Yes. The free plan needs no credit card and includes a daily and monthly allowance of receipt scans. When a workspace needs more, Pro is ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year for that workspace, and you can cancel any time.`,
   },
   {
     q: "Can I export what gets extracted?",

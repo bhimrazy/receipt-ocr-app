@@ -20,7 +20,8 @@ import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
 import { authEnv } from "@/lib/env";
-import { getCurrentPlan } from "@/lib/plan-limits";
+import { getAccountPlan, getCurrentPlan } from "@/lib/plan-limits";
+import { SEPARATE_UPGRADE } from "@/lib/plan-copy";
 import { planLabel } from "@/lib/plans";
 import { runtime } from "@/lib/runtime";
 import { requireActiveScope, requireSession } from "@/lib/session";
@@ -60,9 +61,10 @@ export default async function SettingsPage({
     searchParams,
   ]);
   const resumeStep = resume === "delete-account" ? resume : undefined;
-  const [{ plan, policy }, usage, workspace, readers, blocking, protectedAccount] =
+  const [{ plan, policy }, account, usage, workspace, readers, blocking, protectedAccount] =
     await Promise.all([
       getCurrentPlan(),
+      getAccountPlan(),
       getUsageSummary(),
       loadWorkspace(scope.organizationId),
       runtime.runPromise(
@@ -88,22 +90,55 @@ export default async function SettingsPage({
       </PageHeader>
 
       <SettingsSection
-        description={`Receipts reset at 00:00 UTC every day. Your first ${FREE_FAILED_ROUNDS} failed scans a day don't count.`}
+        description={
+          policy.scope === "workspace"
+            ? `This workspace's scans are shared by its members. Limits reset at 00:00 UTC: daily, and on the 1st of each month. The first ${FREE_FAILED_ROUNDS} failed scans don't count.`
+            : `Your scans count across every Free workspace you use. Limits reset at 00:00 UTC: daily, and on the 1st of each month. Your first ${FREE_FAILED_ROUNDS} failed scans don't count.`
+        }
         id="plan-heading"
         title="Plan and usage"
       >
         <div className="flex flex-col gap-3">
           <UsageMeter className="p-5" planLabel={planLabel(plan)} usage={usage} />
-          <dl className="grid grid-cols-2 gap-3">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Card className="p-4">
-              <dt className="text-xs text-muted-foreground">Receipts a day</dt>
+              <dt className="text-xs text-muted-foreground">
+                Scans a day{policy.scope === "workspace" ? ", this workspace" : ", you"}
+              </dt>
               <dd className="mt-1 font-mono text-lg tabular-nums">{policy.receiptsPerDay}</dd>
             </Card>
+            {policy.receiptsPerMonth !== null ? (
+              <Card className="p-4">
+                <dt className="text-xs text-muted-foreground">
+                  Scans a month{policy.scope === "workspace" ? ", this workspace" : ", you"}
+                </dt>
+                <dd className="mt-1 font-mono text-lg tabular-nums">{policy.receiptsPerMonth}</dd>
+              </Card>
+            ) : null}
             <Card className="p-4">
               <dt className="text-xs text-muted-foreground">Workspaces you can own</dt>
-              <dd className="mt-1 font-mono text-lg tabular-nums">{policy.workspaces}</dd>
+              <dd className="mt-1 font-mono text-lg tabular-nums">{account.policy.workspaces}</dd>
             </Card>
           </dl>
+          <Card className="flex flex-wrap items-center gap-3 p-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Billing</p>
+              <p className="text-xs text-muted-foreground">
+                {plan === "pro"
+                  ? "This workspace is on Pro."
+                  : scope.role === "owner" && account.plan === "pro"
+                    ? SEPARATE_UPGRADE
+                    : "Upgrade this workspace to Pro for more scans, shared by its members."}
+              </p>
+            </div>
+            <Link
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+              href="/app/settings/billing"
+            >
+              {plan === "pro" ? "Manage" : "See plans"}
+              <ChevronRight aria-hidden="true" />
+            </Link>
+          </Card>
         </div>
       </SettingsSection>
 
@@ -174,7 +209,8 @@ export default async function SettingsPage({
       </SettingsSection>
 
       <AccountSettings
-        blockingWorkspaces={blocking.map((w) => w.name)}
+        blockingWorkspaces={blocking.soleOwner.map((w) => w.name)}
+        subscribedWorkspaces={blocking.subscribed.map((w) => w.name)}
         email={session.user.email}
         emailVerified={session.user.emailVerified}
         name={session.user.name ?? ""}

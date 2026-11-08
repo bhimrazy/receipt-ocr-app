@@ -1,5 +1,6 @@
 export * from "./admin";
 export * from "./backoff";
+export * from "./billing-apply-job";
 export * from "./definition";
 export * from "./drain";
 export * from "./kinds/contact-reply";

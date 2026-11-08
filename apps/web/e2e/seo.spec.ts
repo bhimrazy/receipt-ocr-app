@@ -4,7 +4,7 @@ import { signUp, uniqueEmail } from "./helpers";
 // next.config.ts and app/robots.ts key on the request host; the test server is localhost.
 const PROD_HOST = "receipt-ocr.bhimraj.com.np";
 
-const INDEXABLE = ["/", "/privacy", "/terms", "/cookies"];
+const INDEXABLE = ["/", "/pricing", "/privacy", "/terms", "/cookies", "/refunds"];
 const NOINDEX_PUBLIC = ["/sign-in", "/sign-up", "/forgot-password", "/reset-password"];
 
 const meta = (page: Page, selector: string) =>

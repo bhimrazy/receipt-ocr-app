@@ -16,7 +16,7 @@ type PanelComponent = ComponentType<
   React.ComponentProps<typeof import("@/components/support-panel").default>
 >;
 
-/** Opens only when the visitor asks (launcher or a ContactButton); it never opens itself. */
+/** Opens only when the visitor asks (the launcher or `openSupportWidget`); it never opens itself. */
 export function SupportWidgetClient({ email }: { email?: string }) {
   const [Panel, setPanel] = useState<PanelComponent | null>(null);
   const [attempt, setAttempt] = useState(0);

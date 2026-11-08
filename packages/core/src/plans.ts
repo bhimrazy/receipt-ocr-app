@@ -1,23 +1,46 @@
 /**
- * Plan limit defaults and their shape. Imports nothing so client components
- * (marketing copy, the sign-up subtitle) can read the defaults without pulling
- * in Effect or the database. Runtime values come from the `Settings` service,
- * which falls back to these when no admin override is saved.
+ * The one source of plan limits: their shape and code defaults. Every limit a
+ * user sees or hits reads from here, through the `Settings` service (which
+ * applies what an admin saved in Admin → Settings and falls back to these).
+ * Imports nothing, so client components (marketing copy, the sign-up subtitle)
+ * can read the defaults without pulling in Effect or the database. The full
+ * table, with how each limit is counted, is in docs/architecture/flows/billing.md.
  */
 
+export const QUOTA_SCOPES = ["user", "workspace"] as const;
+/** Who a plan's day and month limits count: each person, or the workspace's members together. */
+export type QuotaScope = (typeof QUOTA_SCOPES)[number];
+
+/**
+ * Flat so the stored settings JSON and the admin audit diff stay one level
+ * deep; grouped below by what each limit is for.
+ */
 export interface PlanPolicy {
-  /** Workspaces a user may own. */
-  workspaces: number;
-  /** Receipts per UTC calendar day. */
+  // Scans: the allowance, counted for `scope` in UTC calendar windows.
+  /** `user`: each person, across every workspace on this plan (Free). `workspace`: shared by its members (Pro). */
+  scope: QuotaScope;
+  /** Scans per UTC day, for `scope`. */
   receiptsPerDay: number;
-  /** Burst ceiling per rolling minute. */
+  /** Scans per UTC calendar month, for `scope`; null = no monthly limit. */
+  receiptsPerMonth: number | null;
+
+  // Platform: spend guards across everyone on the plan.
+  /** Scans per UTC day across every user on this plan together; null = none. */
+  poolPerDay: number | null;
+
+  // Abuse and device limits, per user.
+  /** Burst ceiling per user per rolling minute. */
   receiptsPerMinute: number;
   /** Images in one upload batch (camera tray plus picked files). A client-side cap; the limits above still apply per upload. */
   batchMax: number;
+
+  // Account.
+  /** Workspaces a user on this account plan may own. */
+  workspaces: number;
 }
 
 /**
- * Failed reads per user per UTC day that don't count toward the daily limit.
+ * Failed reads per window (day or month) that don't count toward its limit.
  * Past this, each failed round counts like a receipt: every one is a paid
  * model call, so endless junk uploads can't run up cost for free.
  */
@@ -37,8 +60,27 @@ export const DEFAULT_BATCH_MAX = 10;
 export const MAX_BATCH = 20;
 
 export const DEFAULT_PLANS: PlanTable = {
-  free: { workspaces: 1, receiptsPerDay: 20, receiptsPerMinute: 10, batchMax: DEFAULT_BATCH_MAX },
-  pro: { workspaces: 5, receiptsPerDay: 1000, receiptsPerMinute: 30, batchMax: DEFAULT_BATCH_MAX },
+  // Per person across all their workspaces: 20 a day, 100 a month (below Pro's 500), and
+  // 300 a day for every Free user together.
+  free: {
+    scope: "user",
+    receiptsPerDay: 20,
+    receiptsPerMonth: 100,
+    poolPerDay: 300,
+    receiptsPerMinute: 10,
+    batchMax: DEFAULT_BATCH_MAX,
+    workspaces: 1,
+  },
+  // Per workspace, shared by its members: 500 a month, up to 200 a day.
+  pro: {
+    scope: "workspace",
+    receiptsPerDay: 200,
+    receiptsPerMonth: 500,
+    poolPerDay: null,
+    receiptsPerMinute: 30,
+    batchMax: DEFAULT_BATCH_MAX,
+    workspaces: 2,
+  },
 };
 
 export function isPlanId(value: unknown): value is PlanId {

@@ -152,7 +152,12 @@ export function AccountSheet({
   /** Settings has no tab in the three-tab bar, so the sheet carries it. */
   settingsLink?: boolean;
   /** Omitted in the admin shell, which has no active workspace of its own. */
-  workspace?: { activeId: string; canCreate: boolean; workspaces: WorkspaceOption[] };
+  workspace?: {
+    activeId: string;
+    canCreate: boolean;
+    planNote: string;
+    workspaces: WorkspaceOption[];
+  };
   /** The usage meter, rendered by the server layout. */
   usage?: React.ReactNode;
 }) {

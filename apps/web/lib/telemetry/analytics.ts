@@ -18,6 +18,7 @@ const EVENTS = {
   receipt_scan_failed: { trigger: "token", error_kind: "token" },
   csv_exported: { count: "int" },
   plan_limit_hit: { limit: "token", plan: "token" },
+  plan_changed: { from: "token", to: "token" },
   install_offer: { action: "token", surface: "token", platform: "token" },
 } as const satisfies Record<string, Record<string, Kind>>;
 
@@ -93,13 +94,13 @@ export function fromRecord(record: EventRecord): ProductEvent | null {
         props: { count: record.count as number | undefined },
       };
     }
-    // A plan limit (the day's receipts or the per-minute burst), not the service-wide cap,
+    // A plan limit (the day, the month, the Free pool or the per-minute burst), not the service-wide cap,
     // and not a repeat within the minute (`keepQuotaRejection` in http.ts).
     const limit = str(group(record.error).kind);
     if (
       status === 429 &&
       record.outcome === "QuotaExceeded" &&
-      (limit === "day" || limit === "minute") &&
+      (limit === "day" || limit === "month" || limit === "pool" || limit === "minute") &&
       group(record.flags).quota_repeat !== true
     ) {
       return {
@@ -110,6 +111,15 @@ export function fromRecord(record: EventRecord): ProductEvent | null {
       };
     }
     return null;
+  }
+
+  // A billing event that moved a workspace between plans, attributed to the buyer.
+  if (record.unit === "job_attempt" && group(record.queue).kind === "billing.apply_event") {
+    const billing = group(record.billing);
+    const from = str(billing.plan_from);
+    const to = str(billing.plan_to);
+    if (group(record.queue).outcome !== "succeeded" || !from || !to) return null;
+    return { name: "plan_changed", userId, workspaceId, props: { from, to } };
   }
 
   // An admin re-running a user's job isn't the user scanning.

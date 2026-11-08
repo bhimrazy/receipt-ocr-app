@@ -4,14 +4,11 @@ import { authRateLimitRules } from "./auth-rate-limit";
 import { SITE_NAME } from "./site";
 import {
   countOtherAdmins,
-  DEFAULT_PLANS,
   ensurePersonalWorkspace,
-  policyFor,
   prepareUserDeletion,
   workspacesBlockingDeletion,
   purgeReceiptFiles,
   releaseMemberGroups,
-  userPlan,
 } from "@receipt-ocr/core";
 import { and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
 import {
@@ -56,7 +53,13 @@ import {
 } from "./auth-two-factor";
 // --- end two-factor + step-up ---
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
-import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
+import {
+  assertCanCreateWorkspace,
+  assertNoLiveSubscription,
+  assertWorkspaceRole,
+  limitInvitations,
+  validateWorkspaceName,
+} from "./auth-guards";
 import {
   allowAuthEmail,
   allowPasswordChange,
@@ -81,10 +84,12 @@ import { runtime } from "./runtime";
 import { signUpMethod, track } from "./telemetry/analytics";
 import {
   DELETE_TOKEN_SECONDS,
+  WORKSPACE_HAS_SUBSCRIPTION,
   WORKSPACE_NEEDS_OWNER,
   deleteConfirmUrl,
   hasDeleteToken,
   soleOwnerMessage,
+  subscriptionMessage,
 } from "./account-deletion";
 
 export { authEnabled };
@@ -221,7 +226,8 @@ async function purgeFiles(owner: { organizationId: string } | { userId: string }
 
 /**
  * Before a user row goes: deletes the workspaces only they belong to (files
- * first) and refuses while they own a shared workspace with no other owner.
+ * first) and refuses while they own a shared workspace with no other owner, or
+ * a Pro subscription that can still charge would be orphaned.
  * Shared-workspace receipts they uploaded stay, with no uploader.
  */
 export async function deleteOwnData(userId: string) {
@@ -238,7 +244,8 @@ export async function deleteOwnData(userId: string) {
   const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
   if (failure?._tag === "Conflict") {
     // Core's message is worded for admins; name the workspaces for the user instead.
-    throw soleOwnerError(await blockingNames(userId).catch(() => []), "request a new link");
+    const refusal = await deletionRefusal(userId, "request a new link").catch(() => null);
+    throw refusal ?? new APIError("BAD_REQUEST", { message: failure.message });
   }
   throw new Error("Could not delete the user's workspaces", { cause: exit.cause });
 }
@@ -248,16 +255,30 @@ const VERIFY_LINK_SECONDS = 60 * 60;
 const RESET_LINK_SECONDS = 60 * 60;
 const INVITATION_SECONDS = 60 * 60 * 24 * 7;
 
-/** Shared workspaces only this user owns, by name: deletion is refused while there are any. */
-const blockingNames = async (userId: string) =>
-  (await runtime.runPromise(workspacesBlockingDeletion(userId))).map((w) => w.name);
-
-/** Settings checks this before offering deletion; the server checks again on every step. */
-const soleOwnerError = (names: string[], then: string) =>
-  new APIError("BAD_REQUEST", {
-    code: WORKSPACE_NEEDS_OWNER,
-    message: soleOwnerMessage(names, then),
-  });
+/**
+ * Why this user's account can't be deleted yet, as the error to answer with, or null: a shared
+ * workspace only they own, or a Pro subscription that can still charge. Settings checks this
+ * before offering deletion; the server checks again on every step.
+ */
+async function deletionRefusal(userId: string, then: string): Promise<APIError | null> {
+  const { soleOwner, subscribed } = await runtime.runPromise(workspacesBlockingDeletion(userId));
+  if (soleOwner.length > 0) {
+    return new APIError("BAD_REQUEST", {
+      code: WORKSPACE_NEEDS_OWNER,
+      message: soleOwnerMessage(
+        soleOwner.map((w) => w.name),
+        then,
+      ),
+    });
+  }
+  if (subscribed.length > 0) {
+    return new APIError("BAD_REQUEST", {
+      code: WORKSPACE_HAS_SUBSCRIPTION,
+      message: subscriptionMessage(subscribed.map((w) => w.name)),
+    });
+  }
+  return null;
+}
 
 export const auth = betterAuth({
   appName: SITE_NAME,
@@ -396,8 +417,8 @@ export const auth = betterAuth({
         // Better Auth spends the token before beforeDelete can refuse; check first so it survives.
         const current = await getSessionFromCtx(ctx);
         if (!current) return;
-        const names = await blockingNames(current.user.id);
-        if (names.length > 0) throw soleOwnerError(names, "open this link again");
+        const refusal = await deletionRefusal(current.user.id, "open this link again");
+        if (refusal) throw refusal;
         return;
       }
       if (passed !== "account.change_email" && passed !== "account.delete") return;
@@ -411,8 +432,8 @@ export const auth = betterAuth({
       }
       // Here, not in sendDeleteAccountVerification: Better Auth 1.7.18 logs and drops errors
       // thrown there, so the user would be told "check your email" for nothing.
-      const names = await blockingNames(current.user.id);
-      if (names.length > 0) throw soleOwnerError(names, "try again");
+      const refusal = await deletionRefusal(current.user.id, "try again");
+      if (refusal) throw refusal;
       await limitSignedInEmail("delete-account", current.user.email);
     }),
     after: createAuthMiddleware(async (ctx) => {
@@ -579,8 +600,10 @@ export const auth = betterAuth({
         });
       },
       organizationHooks: {
-        beforeCreateOrganization: ({ organization }) =>
-          validateWorkspaceName(organization, { required: true }),
+        beforeCreateOrganization: async ({ organization, user }) => {
+          await assertCanCreateWorkspace(user.id);
+          return validateWorkspaceName(organization, { required: true });
+        },
         beforeUpdateOrganization: ({ organization }) =>
           validateWorkspaceName(organization, { required: false }),
         beforeCreateInvitation: ({ invitation, inviter }) => {
@@ -607,22 +630,14 @@ export const auth = betterAuth({
           }
         },
         beforeDeleteOrganization: async ({ organization }) => {
+          await assertNoLiveSubscription(organization.id);
           await purgeFiles({ organizationId: organization.id });
         },
       },
-      // Returns true when the user has REACHED their plan's org limit. The plan
-      // is read fresh (the session user can be five minutes stale).
-      organizationLimit: async (user) => {
-        const limit = await runtime
-          .runPromise(userPlan(user.id))
-          .then(({ policy }) => policy.workspaces)
-          .catch(() => policyFor(DEFAULT_PLANS, null).workspaces);
-        const owned = await db
-          .select({ id: member.id })
-          .from(member)
-          .where(and(eq(member.userId, user.id), eq(member.role, "owner")));
-        return owned.length >= limit;
-      },
+      // The ownership cap (Free 1, Pro 2) is checked in beforeCreateOrganization,
+      // which can say why; Better Auth's own limit check runs first with a generic
+      // message, so it is left unlimited here.
+      organizationLimit: async () => false,
     }),
     admin({
       defaultRole: "user",

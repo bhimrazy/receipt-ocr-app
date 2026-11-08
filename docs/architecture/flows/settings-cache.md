@@ -14,7 +14,7 @@ Both are JSON rows in `app_settings`, read and written by the `Settings` service
 
 ```mermaid
 flowchart TD
-  caller["Ocr.extract, userPlan,<br/>admin pages"] --> cache{"Cached in this process<br/>less than 30 s ago?"}
+  caller["Ocr.extract, workspacePlan,<br/>admin pages"] --> cache{"Cached in this process<br/>less than 30 s ago?"}
   cache -- yes --> value[Snapshot]
   cache -- no --> load[SELECT * FROM app_settings]
   load -- "row valid (Zod)" --> value
@@ -70,6 +70,7 @@ Validation rules:
 | Other processes or function instances                                                                   | Within 30 s, on their next read after the cache expires |
 | Cached pages that print plan limits (`/terms`, `/sign-in`, `/sign-up`, password pages, invitation page) | After `revalidatePlanCopy()` regenerates them           |
 
-A user's own plan (Free or Pro, in `user.plan`) is not cached either: `userPlan`
-([`quota.ts`](../../../packages/core/src/quota.ts)) reads it from the database on every upload and retry, so an admin's
-plan change applies on the next request.
+A workspace's plan (Free or Pro) is not cached either: `workspacePlan`
+([`service.ts`](../../../packages/core/src/billing/service.ts)) reads the workspace's subscription and its
+owner's `user.plan` from the database on every upload and retry, so a webhook or an admin's plan change applies on the
+next request. See [Billing](billing.md).
