@@ -395,14 +395,16 @@ describe("contactReplyEmail", () => {
     for (const ctx of [withSupport, noSupport]) {
       const mail = contactReplyEmail(ctx, {
         name: "Ada Lovelace",
-        topicPhrase: "plans and limits",
+        topicPhrase: "your question about plans and limits",
       });
       expect(mail.subject).toBe("Thanks for contacting ReceiptOCR");
       const line =
-        "Hi Ada, thanks for writing. We'll reply about plans and limits to this address, usually within 2 business days.";
+        "Hi Ada, thanks for writing. We've received your question about plans and limits and will reply to this address, usually within 2 business days.";
       expect(mail.text).toContain(line);
-      expect(mail.html).toContain(line.replace("'", "&#x27;"));
-      expect(mail.text).toContain("Didn't write to us? You can ignore this email.");
+      expect(mail.html).toContain(line.replaceAll("'", "&#x27;"));
+      expect(mail.text).toContain(
+        "Didn't write to us? Someone may have mistyped their address; you can ignore this email.",
+      );
     }
   });
 

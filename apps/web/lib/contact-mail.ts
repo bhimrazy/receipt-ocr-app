@@ -6,10 +6,10 @@ const TOPIC_LABELS = {
   feature: "Feature request",
 } as const;
 
-/** How the auto-reply names the topic: "We'll reply about {phrase}". */
+/** How the auto-reply names the topic: "We've received {phrase}". */
 const TOPIC_PHRASES: Record<keyof typeof TOPIC_LABELS, string> = {
   "getting-started": "your question",
-  "use-case": "plans and limits",
+  "use-case": "your question about plans and limits",
   feature: "your feature request",
 };
 

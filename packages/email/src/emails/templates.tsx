@@ -517,8 +517,8 @@ const contactReply: EmailDefinition = {
   slots: ["firstName", "topicPhrase"],
   render(v, shared) {
     const heading = "We got your message";
-    const body = `Hi ${v.firstName}, thanks for writing. We'll reply about ${v.topicPhrase} to this address, usually within 2 business days.`;
-    const reason = `You're receiving this because this address was entered in the contact form on ${shared.appHost}. Didn't write to us? You can ignore this email.`;
+    const body = `Hi ${v.firstName}, thanks for writing. We've received ${v.topicPhrase} and will reply to this address, usually within 2 business days.`;
+    const reason = `You're receiving this because this address was entered in the contact form on ${shared.appHost}. Didn't write to us? Someone may have mistyped their address; you can ignore this email.`;
     return {
       html: (
         <Layout
