@@ -20,9 +20,31 @@ export function allowance(policy: PlanPolicy): string {
 export const allowanceOwner = (policy: PlanPolicy) =>
   policy.scope === "workspace" ? "for the workspace, shared by its members" : "per person";
 
+/**
+ * The scan line of a plan card: "20 scans a day and 100 a month for each member" (counted per
+ * person) or "500 scans a month shared by the workspace, up to 200 a day".
+ */
+export function scansLine(policy: PlanPolicy): string {
+  const day = policy.receiptsPerDay;
+  const month = policy.receiptsPerMonth;
+  if (policy.scope === "workspace") {
+    return month === null
+      ? `${n(day, "scan")} a day shared by the workspace`
+      : `${n(month, "scan")} a month shared by the workspace, up to ${day} a day`;
+  }
+  return month === null
+    ? `${n(day, "scan")} a day for each member`
+    : `${n(day, "scan")} a day and ${month} a month for each member`;
+}
+
+/** "Up to 3 members": members of one workspace, pending invitations included. */
+export const membersLine = (policy: PlanPolicy) =>
+  `Up to ${n(policy.membersPerWorkspace, "member")}`;
+
 export function freeFeatures(free: PlanPolicy): string[] {
   return [
-    `${allowance(free)}, ${allowanceOwner(free)}`,
+    scansLine(free),
+    membersLine(free),
     `${n(free.workspaces, "workspace")} to own`,
     "Merchant, items, tax and totals extracted",
     "Confidence scores and review flags",
@@ -31,19 +53,39 @@ export function freeFeatures(free: PlanPolicy): string[] {
 }
 
 export function proFeatures(pro: PlanPolicy): string[] {
-  const perWorkspace =
-    pro.scope === "workspace" && pro.receiptsPerMonth !== null
-      ? [
-          `${n(pro.receiptsPerMonth, "scan")} a month per workspace, up to ${pro.receiptsPerDay} a day`,
-          "Shared by everyone in the workspace",
-        ]
-      : [`${allowance(pro)}, ${allowanceOwner(pro)}`];
   return [
     "Everything in Free",
-    "1 workspace",
-    ...perWorkspace,
+    scansLine(pro),
+    membersLine(pro),
     `Own up to ${n(pro.workspaces, "workspace")} (each upgraded separately)`,
     "Cancel any time",
+  ];
+}
+
+/** The Custom card's fixed copy, shared by the landing and pricing pages. */
+export const CUSTOM_PLAN = {
+  name: "Custom",
+  price: "Let's talk",
+  description:
+    "For teams that need more than Pro. Tell us what you need and we'll say honestly what we can do.",
+  featuresLabel: "Talk to us about",
+  cta: "Talk to us",
+} as const;
+
+/**
+ * What the Custom card offers to talk about. Nothing here is a self-serve feature: each line is
+ * something we can arrange by hand, so the card says "talk to us", not "included".
+ */
+export function customTopics(pro: PlanPolicy): string[] {
+  const volume =
+    pro.receiptsPerMonth === null
+      ? `More than ${n(pro.receiptsPerDay, "scan")} a day`
+      : `More than ${n(pro.receiptsPerMonth, "scan")} a month`;
+  return [
+    "More members and workspaces",
+    volume,
+    "Yearly billing, with invoices from Paddle",
+    "Help bringing in the receipts you already have",
   ];
 }
 

@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { ContactButton } from "@/components/contact-button";
 import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
 import { LandingInstallOffer } from "@/components/landing-install";
 import { PlanCard } from "@/components/plan-card";
@@ -22,7 +23,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
 import { homeFaqs as faqs } from "@/lib/home-faqs";
-import { freeFeatures, proFeatures } from "@/lib/plan-copy";
+import { CUSTOM_PLAN, customTopics, freeFeatures, proFeatures } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { homeJsonLd, jsonLdScript } from "@/lib/seo";
 import type { PlanTable } from "@receipt-ocr/core/plans";
@@ -306,7 +307,7 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 a month or {PRO_PRICE_LABEL.year} a year.
               </p>
             </div>
-            <div className="mx-auto grid max-w-3xl items-stretch gap-5 md:grid-cols-2">
+            <div className="mx-auto grid max-w-md items-stretch gap-5 lg:max-w-none lg:grid-cols-3">
               <PlanCard
                 name="Free"
                 price="$0"
@@ -335,6 +336,20 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                       See pricing <ArrowRight className="size-4" />
                     </Link>
                   </Button>
+                }
+              />
+              <PlanCard
+                name={CUSTOM_PLAN.name}
+                price={CUSTOM_PLAN.price}
+                cadence=""
+                description={CUSTOM_PLAN.description}
+                features={customTopics(plans.pro)}
+                featuresLabel={CUSTOM_PLAN.featuresLabel}
+                quiet
+                cta={
+                  <ContactButton className="w-full" topic="use-case" variant="outline">
+                    {CUSTOM_PLAN.cta}
+                  </ContactButton>
                 }
               />
             </div>

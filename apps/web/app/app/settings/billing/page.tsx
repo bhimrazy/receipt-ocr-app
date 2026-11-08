@@ -67,7 +67,7 @@ export default async function BillingPage({
     requireSession(),
     searchParams,
   ]);
-  const [{ plan }, account, usage, plans, subscription, checkout] = await Promise.all([
+  const [{ plan, policy }, account, usage, plans, subscription, checkout] = await Promise.all([
     getCurrentPlan(),
     getAccountPlan(),
     getUsageSummary(),
@@ -160,8 +160,8 @@ export default async function BillingPage({
       <SettingsSection
         description={
           plan === "pro"
-            ? "Pro scans are shared by everyone in this workspace. Limits reset at 00:00 UTC: daily, and on the 1st of each month."
-            : "Free scans are per person, across every Free workspace you use. Limits reset at 00:00 UTC: daily, and on the 1st of each month."
+            ? `Pro scans are shared by everyone in this workspace, which can have up to ${policy.membersPerWorkspace} members. Limits reset at 00:00 UTC: daily, and on the 1st of each month.`
+            : `Free scans are per person, across every Free workspace you use. This workspace can have up to ${policy.membersPerWorkspace} members. Limits reset at 00:00 UTC: daily, and on the 1st of each month.`
         }
         id="billing-usage-heading"
         title="Plan and usage"
@@ -170,7 +170,7 @@ export default async function BillingPage({
       </SettingsSection>
 
       <SettingsSection
-        description={`Pro gives this workspace ${allowance(plans.pro)}. Paddle is the merchant of record: it takes the payment, adds tax and sends invoices.`}
+        description={`Pro gives this workspace ${allowance(plans.pro)} and up to ${plans.pro.membersPerWorkspace} members. Paddle is the merchant of record: it takes the payment, adds tax and sends invoices.`}
         id="billing-subscription-heading"
         title="Subscription"
       >

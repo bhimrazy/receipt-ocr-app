@@ -38,6 +38,7 @@ import {
 import {
   adjustmentRevokesPro,
   canStillCharge,
+  memberLimitMessage,
   isEntitled,
   PAST_DUE_GRACE_DAYS,
   PAST_DUE_GRACE_MS,
@@ -222,6 +223,55 @@ export const workspaceCreationCheck = (userId: string) =>
       limit: policy.workspaces,
       plan,
       message: allowed ? null : workspaceLimitMessage(plan, policy.workspaces),
+    };
+  });
+
+/**
+ * Whether a workspace may take one more member, and what to tell them when
+ * not: members plus pending, unexpired invitations must stay under the
+ * plan's `membersPerWorkspace`. `invite` counts pending invitations (so many
+ * invites can't overshoot the cap) except an earlier one to `email`, which a
+ * re-invite replaces; `accept` counts members only, since the invitation
+ * being accepted was counted when it was sent. Concurrent invites aren't
+ * serialised; the inviter's hourly invite limit bounds that race.
+ */
+export const memberLimitCheck = (
+  organizationId: string,
+  when: { kind: "invite"; email: string } | { kind: "accept" },
+  now = new Date(),
+) =>
+  Effect.gen(function* () {
+    const { use } = yield* Db;
+    const pending =
+      when.kind === "invite"
+        ? sql`(select count(*) from invitation i where i.organization_id = ${organizationId}
+            and i.status = 'pending' and i.expires_at > ${ts(now)}
+            and lower(i.email) <> lower(${when.email}))`
+        : sql`0`;
+    const [{ plan, policy }, plans, rows] = yield* Effect.all(
+      [
+        workspacePlan(organizationId, now),
+        Effect.flatMap(Settings, (settings) => settings.plans),
+        use((db) =>
+          db.execute<{ members: number; pending: number }>(sql`select
+            (select count(*) from member m where m.organization_id = ${organizationId})::int as members,
+            ${pending}::int as pending`),
+        ),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const members = rows[0]?.members ?? 0;
+    const used = members + (rows[0]?.pending ?? 0);
+    const limit = policy.membersPerWorkspace;
+    const allowed = used < limit;
+    return {
+      allowed,
+      used,
+      limit,
+      plan,
+      message: allowed
+        ? null
+        : memberLimitMessage(plan, limit, plans.pro.membersPerWorkspace, when.kind),
     };
   });
 

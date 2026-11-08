@@ -7,12 +7,15 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { PlanCard } from "@/components/plan-card";
-import { freeFeatures, proFeatures } from "@/lib/plan-copy";
+import { ContactButton } from "@/components/contact-button";
+import { CUSTOM_PLAN, customTopics, freeFeatures, proFeatures } from "@/lib/plan-copy";
 import { PRO_PRICE } from "@/lib/pricing";
 import { IntervalToggle, type BillingInterval } from "./interval-toggle";
 
 /**
- * Free and Pro side by side with a monthly/yearly switch (monthly first).
+ * Free, Pro and Custom side by side with a monthly/yearly switch (monthly
+ * first). Custom has no price; its button opens the support form on "Plans &
+ * limits".
  * "Get Pro" goes through sign-up to the workspace's billing page, where the
  * checkout opens; sign-up sends a signed-in visitor straight on. Nothing here
  * loads Paddle. While billing is off, Pro shows its price without a button.
@@ -23,7 +26,7 @@ export function PricingPlans({ plans, checkoutOpen }: { plans: PlanTable; checko
   return (
     <div className="flex flex-col items-center gap-8">
       <IntervalToggle onChange={setInterval} value={interval} />
-      <div className="grid w-full max-w-3xl items-stretch gap-5 md:grid-cols-2">
+      <div className="grid w-full max-w-md items-stretch gap-5 lg:max-w-none lg:grid-cols-3">
         <PlanCard
           cadence=""
           cta={
@@ -31,7 +34,7 @@ export function PricingPlans({ plans, checkoutOpen }: { plans: PlanTable; checko
               Start free
             </Link>
           }
-          description="For one person getting receipts into a spreadsheet. No card needed."
+          description="For getting receipts into a spreadsheet, alone or with a couple of teammates. No card needed."
           features={freeFeatures(plans.free)}
           name="Free"
           price="$0"
@@ -62,6 +65,20 @@ export function PricingPlans({ plans, checkoutOpen }: { plans: PlanTable; checko
           features={proFeatures(plans.pro)}
           name="Pro"
           price={`$${yearly ? PRO_PRICE.year : PRO_PRICE.month}`}
+        />
+        <PlanCard
+          cadence=""
+          cta={
+            <ContactButton className="w-full" topic="use-case" variant="outline">
+              {CUSTOM_PLAN.cta}
+            </ContactButton>
+          }
+          description={CUSTOM_PLAN.description}
+          features={customTopics(plans.pro)}
+          featuresLabel={CUSTOM_PLAN.featuresLabel}
+          name={CUSTOM_PLAN.name}
+          price={CUSTOM_PLAN.price}
+          quiet
         />
       </div>
     </div>

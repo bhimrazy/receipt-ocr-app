@@ -221,6 +221,41 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     expect(await status(invite("member"))).toBe(200);
   });
 
+  it("refuses an invitation past the Free member limit, counting pending ones", async () => {
+    const boss = `${tag}-seats@example.com`;
+    const signUp = await auth.api.signUpEmail({
+      body: { email: boss, password, name: "Seats" },
+      returnHeaders: true,
+    });
+    const headers = new Headers({
+      cookie: signUp.headers
+        .getSetCookie()
+        .map((c) => c.split(";")[0])
+        .filter((c) => c?.includes("session_token="))
+        .join("; "),
+    });
+    const [personal] = await db
+      .select({ id: member.organizationId })
+      .from(member)
+      .where(eq(member.userId, signUp.response.user.id));
+    const invite = (to: string) =>
+      auth.api.createInvitation({
+        headers,
+        body: { organizationId: personal!.id, email: `${tag}-${to}@example.com`, role: "member" },
+      });
+    // The owner plus two pending invitations fill Free's 3.
+    expect(await status(invite("one"))).toBe(200);
+    expect(await status(invite("two"))).toBe(200);
+    await expect(invite("three")).rejects.toMatchObject({
+      status: "FORBIDDEN",
+      body: { message: expect.stringContaining("Free workspaces have up to 3 members") },
+    });
+    // Re-inviting someone already invited replaces that invitation, so it still goes out.
+    expect(await status(invite("two"))).toBe(200);
+    await db.delete(organization).where(eq(organization.id, personal!.id));
+    await db.delete(user).where(eq(user.id, signUp.response.user.id));
+  });
+
   it("M3: locks sign-in per address after 10 attempts, atomically, the same for unknown addresses", async () => {
     const victim = `${tag}-victim@example.com`;
     const ghost = `${tag}-ghost@example.com`;

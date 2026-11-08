@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PricingPlans } from "@/components/billing/pricing-plans";
+import { ContactButton } from "@/components/contact-button";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
@@ -13,7 +14,7 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "Pricing",
-  description: `ReceiptOCR pricing: Free to start, Pro at ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year per workspace. Cancel any time; taxes handled by Paddle.`,
+  description: `ReceiptOCR pricing: Free to start, Pro at ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year per workspace, and custom plans for teams. Cancel any time; taxes handled by Paddle.`,
   path: "/pricing",
 });
 
@@ -47,10 +48,32 @@ export default async function PricingPage() {
               use.
             </li>
             <li>
+              A Free workspace can have up to {free.membersPerWorkspace} members and a Pro workspace
+              up to {pro.membersPerWorkspace}, counting pending invitations. Members a workspace
+              already has stay if it moves to Free.
+            </li>
+            <li>
               You can own {free.workspaces === 1 ? "1 workspace" : `${free.workspaces} workspaces`}{" "}
               on Free, and {pro.workspaces} once one of them is on Pro.
             </li>
           </ul>
+        </>
+      ),
+    },
+    {
+      q: "What if we need more than Pro?",
+      a: (
+        <>
+          Tell us with{" "}
+          <ContactButton
+            className="h-auto p-0 align-baseline max-md:h-auto max-md:px-0"
+            topic="use-case"
+            variant="link"
+          >
+            Talk to us
+          </ContactButton>{" "}
+          (more members, workspaces or scans, or help bringing in old receipts). We reply by email
+          and say plainly what we can and can&apos;t do.
         </>
       ),
     },

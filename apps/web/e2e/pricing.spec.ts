@@ -3,22 +3,41 @@ import { signUp, uniqueEmail } from "./helpers";
 
 // The e2e stack has no PADDLE_* settings, so billing is off: prices show, no checkout runs.
 
-test("pricing shows Free and Pro with a monthly/yearly switch, and the FAQ", async ({ page }) => {
+test("pricing shows Free, Pro and Custom with a monthly/yearly switch, and the FAQ", async ({
+  page,
+}) => {
   await page.goto("/pricing");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Start free");
   await expect(page.getByRole("heading", { name: "Free", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pro", exact: true })).toBeVisible();
   // Numbers come from the saved plan table; admin.spec.ts changes it for a moment, so match the shape.
-  await expect(page.getByText(/^\d+ scans a month per workspace, up to \d+ a day$/)).toBeVisible();
   await expect(
-    page.getByText("Shared by everyone in the workspace", { exact: true }),
+    page.getByText(/^\d+ scans a month shared by the workspace, up to \d+ a day$/),
   ).toBeVisible();
-  await expect(page.getByText(/^\d+ scans a day, up to \d+ a month, per person$/)).toBeVisible();
+  await expect(page.getByText(/^\d+ scans a day and \d+ a month for each member$/)).toBeVisible();
+  await expect(page.getByText(/^Up to \d+ members?$/)).toHaveCount(2);
+  await expect(page.getByText(/^\d+ workspaces? to own$/)).toBeVisible();
   await expect(
     page.getByText(/^Own up to \d+ workspaces \(each upgraded separately\)$/),
   ).toBeVisible();
+  // Pro states one workspace rule, not "1 workspace" next to "Own up to 2".
+  await expect(page.getByText("1 workspace", { exact: true })).toHaveCount(0);
   // Pro's list starts from Free.
   await expect(page.getByText("Everything in Free", { exact: true })).toBeVisible();
+
+  // Custom has no price; its button opens the support form on "Plans & limits".
+  await expect(page.getByRole("heading", { name: "Custom", exact: true })).toBeVisible();
+  await expect(page.getByText("Let's talk", { exact: true })).toBeVisible();
+  await expect(page.getByText("More members and workspaces", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Talk to us" }).first().click();
+  const form = page.getByRole("dialog");
+  await expect(form).toBeVisible();
+  await expect(form.getByRole("button", { name: "Plans & limits" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.keyboard.press("Escape");
+  await expect(form).toBeHidden();
 
   // Monthly is the default; the switch is a native radio group.
   await expect(page.getByRole("radio", { name: /Monthly/ })).toBeChecked();

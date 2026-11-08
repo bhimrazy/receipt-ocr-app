@@ -12,6 +12,7 @@ describe("policyFor", () => {
         poolPerDay: null,
         receiptsPerMinute: 2,
         batchMax: 3,
+        membersPerWorkspace: 3,
       },
       pro: DEFAULT_PLANS.pro,
     };
@@ -52,6 +53,11 @@ describe("default plans", () => {
 
   it("keeps Free's month below Pro's, so Free can't out-scan a paid workspace", () => {
     expect(DEFAULT_PLANS.free.receiptsPerMonth!).toBeLessThan(DEFAULT_PLANS.pro.receiptsPerMonth!);
+  });
+
+  it("allows 3 members in a Free workspace and 10 in a Pro one", () => {
+    expect(DEFAULT_PLANS.free.membersPerWorkspace).toBe(3);
+    expect(DEFAULT_PLANS.pro.membersPerWorkspace).toBe(10);
   });
 
   it("caps an upload batch at 10 images on every plan", () => {

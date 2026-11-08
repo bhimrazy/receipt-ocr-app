@@ -4,6 +4,7 @@ import { withStepUp } from "@/components/step-up/step-up";
 import {
   FREE_FAILED_ROUNDS,
   MAX_BATCH,
+  MAX_MEMBERS,
   type PlanId,
   type PlanPolicy,
   type PlanTable,
@@ -48,6 +49,11 @@ const FIELDS: { key: keyof PlanPolicy; label: string; hint: string; optional?: b
     key: "workspaces",
     label: "Workspaces they can own",
     hint: "Workspaces they join as a member don't count.",
+  },
+  {
+    key: "membersPerWorkspace",
+    label: "Members in a workspace",
+    hint: `Pending invitations count. Checked when someone is invited and when they accept; a workspace already over it keeps its members. At most ${MAX_MEMBERS}.`,
   },
 ];
 const PLANS: { id: PlanId; label: string }[] = [
