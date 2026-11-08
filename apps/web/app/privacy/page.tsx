@@ -87,7 +87,7 @@ export default function PrivacyPage() {
             "Google and GitHub, only if you choose to sign in with them.",
             ...(pageCounts
               ? [
-                  "Vercel Web Analytics: counts visits to our public pages (home, sign-in, sign-up and legal pages) without cookies. Vercel receives the page address without its query string, the referring site, and your IP address and browser details, which it uses to tell visits apart with a hash it discards after 24 hours. It never runs inside the app.",
+                  "Vercel Web Analytics: counts visits to our public pages (home, pricing, use-case pages, sign-in, sign-up and legal pages) without cookies. Vercel receives the page address without its query string, the referring site, and your IP address and browser details, which it uses to tell visits apart with a hash it discards after 24 hours. It never runs inside the app.",
                 ]
               : []),
             ...(googleAnalytics
