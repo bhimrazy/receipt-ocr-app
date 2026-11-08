@@ -226,7 +226,7 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
     design review's and the owner may revise them.
 13. ~~Custom plan card: its name, and how a custom deal is delivered~~ Decided 2026-11-08: the card stays "Custom";
     per-workspace overrides are deferred (see "Later, once the app is stable").
-14. Light and System themes ([spec](plans/2026-11-08-light-theme.md)): System as the default for everyone,
+14. ~~Light and System themes~~ Decided 2026-11-08 (owner took every recommendation in the [spec](plans/2026-11-08-light-theme.md)): System as the default for everyone,
     per-device storage (no account sync), toggle in Settings, account menu and footer (not the header), a light iOS
     splash set, emails out of scope.
 
