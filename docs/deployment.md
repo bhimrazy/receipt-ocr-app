@@ -375,8 +375,9 @@ Steps specific to one release, newest first.
 
 ### Squashed baseline again (2026-11-08)
 
-- **`0000_baseline` through `0003_schema_fixes` were squashed into a new `0000_baseline`**, before launch. drizzle-kit
-  tracks files by hash, so a database migrated with the old files must be reset, not migrated. Reset each one
+- **`0000_baseline` through `0003_schema_fixes` were squashed into a new `0000_baseline`**, before launch. A database
+  migrated with the old files already has these objects, so the baseline's `CREATE` statements would fail (and roll
+  back): it must be reset, not migrated. Reset each one
   (staging first) with the SQL below, then run the **Database Migration** workflow on `staging-db`, then
   `production-db` (the owner approves), then deploy by hand. Don't `DROP SCHEMA public`: it would lose Supabase's
   grants and default ACLs. The reset deletes every account and receipt, so it is only for these pre-launch databases.
@@ -484,7 +485,7 @@ column_name = 'receipt_date';` returns `date`.
   Post-check: `pg_tables` for `public` returns no rows, no enum types are left, and
   `has_schema_privilege('anon', 'public', 'USAGE')` is unchanged from the pre-check.
 
-- **RLS** is enabled on all 19 tables with no policies. The app role (`postgres`) bypasses it. In the Supabase
+- **RLS** is enabled on every table with no policies. The app role (`postgres`) bypasses it. In the Supabase
   dashboard each table shows the **RLS enabled** badge. The Data API is unused, so also remove `public` from
   Project Settings, Data API, **Exposed schemas**: then `anon` and `authenticated` cannot reach any table even by
   mistake. `service_role` bypasses RLS by design, so only removing `public` from the exposed schemas protects
