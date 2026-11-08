@@ -260,7 +260,7 @@ What "used" means is in [core: quota ledger semantics](../core.md#design-princip
 
 - **Verified emails.** The Paddle customer is found by the owner's email, so it relies on sign-in only trusting verified emails; an unverified address must never reach `startCheckoutAction`.
 - **Client token.** `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` must never be referenced from client code. It is sent only in the billing page's server-rendered payload (and read at build time by the CSP).
-- **Orphans.** A subscription that can still charge but has no workspace (deleted) logs `billing.orphan_charging` at error level when its next event is applied, and the job then cancels it with Paddle (as it does when the buyer's account is gone; see the failure modes).
+- **Orphans.** A subscription that can still charge but whose workspace or buyer was deleted logs `billing.orphan_charging` at error level when its next event is applied, and the job then cancels it with Paddle (see the failure modes).
 
 ## Pure files
 

@@ -779,6 +779,21 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         state: "dead",
         lastErrorKind: "billing-off",
       });
+      expect(await reapply(rearmed.eventId)).toMatchObject({ cancelSubscriptionId: id });
+      // A fresh event with the buyer gone is flagged as well as cancelled.
+      const again = event(
+        snapshot({
+          subscriptionId: id,
+          workspaceId,
+          userId: null,
+          updatedAt: new Date(Date.now() + 2_000),
+        }),
+      );
+      await run(recordBillingEvent(again));
+      expect(await reapply(again.eventId)).toMatchObject({
+        orphanCharging: true,
+        cancelSubscriptionId: id,
+      });
     });
   });
 

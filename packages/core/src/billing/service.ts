@@ -348,7 +348,7 @@ export type ApplyResult = {
   planChange?: PlanChange;
   userId?: string;
   unmatched?: UnmatchedReason;
-  /** The subscription has no workspace any more (deleted) but can still charge: someone is paying for nothing. */
+  /** Its workspace or buyer was deleted but it can still charge: someone is paying for nothing (it is also cancelled). */
   orphanCharging?: true;
   /**
    * The provider subscription still needs cancelling: a chargeback or full
@@ -538,17 +538,14 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
         }
         // What this subscription grants, before and after: the product event "plan changed".
         const revokedAt = stored?.revokedAt ?? (pending.length > 0 ? now : null);
-        const cancel =
-          (pending.length > 0 && values.status !== "canceled") ||
-          orphanCanCharge({ organizationId, userId: buyer, ...values });
+        const orphan = orphanCanCharge({ organizationId, userId: buyer, ...values });
+        const cancel = (pending.length > 0 && values.status !== "canceled") || orphan;
         const from = stored && isEntitled(entitlementOf(stored), now, prices) ? "pro" : "free";
         const to = isEntitled({ ...values, revokedAt }, now, prices) ? "pro" : "free";
         return finish({
           outcome: "applied",
           organizationId,
-          ...(stored && !stored.organizationId && canStillCharge(snapshot)
-            ? { orphanCharging: true as const }
-            : {}),
+          ...(orphan ? { orphanCharging: true as const } : {}),
           ...(from === to ? {} : { planChange: { from, to } }),
           ...(buyer ? { userId: buyer } : {}),
           ...(cancel ? { cancelSubscriptionId: snapshot.subscriptionId } : {}),
