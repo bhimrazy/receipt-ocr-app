@@ -79,6 +79,8 @@ export const EVENT_SCHEMA = {
   duration_ms: "number",
   /** Next.js's route type for a failed render (`render`, `route`, `action`). */
   route_type: "token",
+  /** How a page was opened, when we can tell: `pwa` for the installed app's start URL. */
+  launch_source: "token",
 
   // Who and what
   user_id: "id",
@@ -180,7 +182,7 @@ export const EVENT_SCHEMA = {
       rejection: "token",
       /** Why a new subscription wasn't linked: `workspace`, `owner`, `price`, or `subscription` (an adjustment for one we don't have). */
       unmatched_reason: "token",
-      /** A subscription whose workspace is gone can still charge: the buyer pays for nothing. Set from the stored row's workspace link and the event's status; no personal data. */
+      /** A subscription whose workspace or buyer is gone can still charge, so the job cancels it. Set from the stored row's workspace and buyer links and the event's status; no personal data. */
       orphan_charging: "bool",
       /** An adjustment's action: `refund`, `chargeback`, `credit` and their reversals. */
       adjustment_action: "token",

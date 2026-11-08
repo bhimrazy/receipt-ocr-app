@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { PWA_SOURCE } from "@/lib/signed-in-hint";
 import { SITE_NAME } from "@/lib/site";
 import { SHARE_TARGET_FIELD, SHARE_TARGET_PATH } from "@/lib/share-target";
 
@@ -11,7 +12,8 @@ export default function manifest(): MetadataRoute.Manifest {
     name: SITE_NAME,
     short_name: SITE_NAME,
     description: "Turn receipt photos and PDFs into rows you can check and export as CSV.",
-    start_url: "/app",
+    // The query marks home-screen launches (proxy.ts, page.render's launch_source); `id` stays.
+    start_url: `/app?source=${PWA_SOURCE}`,
     scope: "/",
     display: "standalone",
     // Portrait suits taking photos, but History's table and tablets read better sideways.

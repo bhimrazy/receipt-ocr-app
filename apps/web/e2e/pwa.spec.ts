@@ -70,7 +70,7 @@ test("the manifest is installable and every icon resolves at its declared size",
   const manifest = await (await request.get("/manifest.webmanifest")).json();
   expect(manifest).toMatchObject({
     id: "/app",
-    start_url: "/app",
+    start_url: "/app?source=pwa",
     scope: "/",
     display: "standalone",
     theme_color: "#0a0a0b",

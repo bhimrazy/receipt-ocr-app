@@ -220,13 +220,18 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
     `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
     which amounts are converted, sign-up default from country.
 12. UX decisions ([plan](plans/2026-11-07-ux-decisions.md)): five-slot phone bar with centred Scan and Groups (no
-    drawer), install offer after the first read with a snooze and an iOS 26 guide, the name spelled ReceiptOCR,
-    push notifications deferred until batch capture data.
+    drawer), the name spelled ReceiptOCR, push notifications deferred until batch capture data. The install offer
+    is built (`feat/install-offer`). Still open: measuring the landing install surfaces needs browser PostHog,
+    which needs the consent decision; the landing sheet's defaults (Android only, 7-day snooze, 3 shows) are the
+    design review's and the owner may revise them.
 
 ## Roadmap (order)
 
 **Next up (ordered, 2026-11-08):** [plans/2026-11-08-next-up.md](plans/2026-11-08-next-up.md). The list below is the
 longer-term roadmap.
+
+**Planned:** upgrade call-to-action for Free workspaces (Home card, account menu, at-limit banner):
+[plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), with owner decisions to make.
 
 From the [combined plan](plans/2026-11-06-combined-plan.md):
 
@@ -290,6 +295,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Linking a new subscription looks up early revoking adjustments in `billing_events` with a sequential scan. Add a
+  partial expression index `billing_events (provider, (payload->'adjustment'->>'subscriptionId')) where outcome =
+'unmatched'`; fold it into the next schema change.
 - Storage limit per plan (owner, 2026-11-08): today only each upload is capped (10 MB, 10 PDF pages), so total storage
   per workspace is unbounded on both Free and Pro, and R2's free tier is 10 GB. Decide a cap per plan (stored bytes or
   receipts per workspace, and maybe a retention period for Free), enforce it at upload from a per-workspace usage
