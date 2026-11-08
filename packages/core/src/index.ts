@@ -7,6 +7,7 @@ import { Settings } from "./settings";
 import { WideEventLoggerLive } from "./telemetry/logger";
 
 export { RECEIPT_CATEGORIES, type ReceiptCategory } from "@receipt-ocr/ai/categories";
+export * from "./account-security";
 export * from "./analytics/index";
 export * from "./config";
 export * from "./connections";
