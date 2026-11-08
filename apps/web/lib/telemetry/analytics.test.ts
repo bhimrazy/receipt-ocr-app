@@ -71,17 +71,26 @@ describe("fromRecord", () => {
     expect(
       fromRecord(record({ ...base, event: "receipt.export", status_code: 200, count: 12 }))?.name,
     ).toBe("csv_exported");
-    expect(
+    const quota = (kind: string, flags?: Record<string, boolean>) =>
       fromRecord(
         record({
           ...base,
-          event: "receipt.upload",
+          event: "receipt.retry",
           status_code: 429,
           outcome: "QuotaExceeded",
           plan: "free",
+          error: { type: "QuotaExceeded", kind },
+          ...(flags ? { flags } : {}),
         }),
-      ),
-    ).toMatchObject({ name: "plan_limit_hit", props: { limit: "uploads", plan: "free" } });
+      );
+    expect(quota("day")).toMatchObject({
+      name: "plan_limit_hit",
+      props: { limit: "day", plan: "free" },
+    });
+    expect(quota("minute")?.props).toEqual({ limit: "minute", plan: "free" });
+    // The service-wide cap isn't the user's plan, and a repeat in the same minute isn't news.
+    expect(quota("global")).toBeNull();
+    expect(quota("day", { quota_repeat: true })).toBeNull();
     expect(fromRecord(record({ ...base, event: "receipt.upload", status_code: 500 }))).toBeNull();
     expect(fromRecord(record({ ...base, event: "receipt.poll", status_code: 200 }))).toBeNull();
   });

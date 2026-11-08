@@ -90,12 +90,20 @@ export function fromRecord(record: EventRecord): ProductEvent | null {
         props: { count: record.count as number | undefined },
       };
     }
-    if (status === 429 && record.outcome === "QuotaExceeded") {
+    // A plan limit (the day's receipts or the per-minute burst), not the service-wide cap,
+    // and not a repeat within the minute (`keepQuotaRejection` in http.ts).
+    const limit = str(group(record.error).kind);
+    if (
+      status === 429 &&
+      record.outcome === "QuotaExceeded" &&
+      (limit === "day" || limit === "minute") &&
+      group(record.flags).quota_repeat !== true
+    ) {
       return {
         name: "plan_limit_hit",
         userId,
         workspaceId,
-        props: { limit: "uploads", plan: str(record.plan) },
+        props: { limit, plan: str(record.plan) },
       };
     }
     return null;

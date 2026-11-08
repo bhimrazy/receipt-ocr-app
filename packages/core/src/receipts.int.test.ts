@@ -27,6 +27,7 @@ import { FREE_FAILED_ROUNDS } from "./plans";
 import { checkQuota, quotaGate, usageWindow } from "./quota";
 import { ReceiptRepo, STALE_AFTER_MS } from "./repository";
 import { Db, Storage } from "./services";
+import { addEventSink, type EventRecord } from "./telemetry";
 import { receiptCalls, usageByDay, usageByModel, usageByWorkspace } from "./usage";
 import { ensurePersonalWorkspace, clearRateLimit, hitRateLimit, resolveScope } from "./workspace";
 
@@ -238,6 +239,34 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(receipt?.fileName).toBe("lunch.jpg");
     const [exported] = await run(Effect.flatMap(ReceiptRepo, (repo) => repo.exportRows(a, {}, 10)));
     expect(exported?.itemCount).toBe(receipt?.items.length);
+  });
+
+  it("an impersonated upload's job carries the admin into its attempt event", async () => {
+    const records: EventRecord[] = [];
+    const remove = addEventSink({
+      write: (record) => void records.push(record),
+      flush: async () => {},
+      shutdown: async () => {},
+    });
+    try {
+      const ingested = await run(
+        ingestUpload({
+          scope: { ...a, impersonatedBy: `${tag}-admin` },
+          fileName: "support.jpg",
+          body: JPEG,
+          limits,
+        }),
+      );
+      const [job] = await db((d) =>
+        d.select({ payload: jobs.payload }).from(jobs).where(eq(jobs.id, ingested.jobId)),
+      );
+      expect(job?.payload).toMatchObject({ impersonatedBy: `${tag}-admin` });
+      await extract(ingested.receipt.id);
+    } finally {
+      remove();
+    }
+    const attempt = records.find((r) => r.event === "job.attempt");
+    expect(attempt).toMatchObject({ user_id: a.userId, impersonated_by: `${tag}-admin` });
   });
 
   it("workspace isolation: org B cannot read, list, export, edit, retry or delete org A's receipt", async () => {

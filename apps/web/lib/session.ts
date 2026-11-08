@@ -100,13 +100,15 @@ export interface ActiveScope {
   organizationId: string;
   userId: string;
   role: string;
+  /** The admin's id when an admin is signed in as this user; their work never counts as the user's. */
+  impersonatedBy?: string;
 }
 
 export const getActiveScope = cache(async (): Promise<ActiveScope | null> => {
   const session = await getSession();
   if (!session) return null;
   const { user } = session;
-  return runtime.runPromise(
+  const scope = await runtime.runPromise(
     Effect.gen(function* () {
       const scope = yield* resolveScope(user.id, session.session.activeOrganizationId);
       if (scope) return scope;
@@ -115,6 +117,8 @@ export const getActiveScope = cache(async (): Promise<ActiveScope | null> => {
       return yield* resolveScope(user.id);
     }),
   );
+  const impersonatedBy = session.session.impersonatedBy;
+  return scope && impersonatedBy ? { ...scope, impersonatedBy } : scope;
 });
 
 /**

@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 const ipAddress = vi.hoisted(
   () => ({}) as { ipAddressHeaders?: string[]; trustedProxies?: string[] },
 );
-vi.mock("./runtime", () => ({ runtime: {} }));
+const runtime = vi.hoisted(() => ({ runPromise: vi.fn() }));
+vi.mock("./runtime", () => ({ runtime }));
 vi.mock("./log", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./log")>()),
   logger: { error: vi.fn(), info: vi.fn(), emit: vi.fn() },
@@ -17,8 +18,15 @@ vi.mock("./env", () => ({
   },
 }));
 
-const { clientIp, crossOriginResponse, discardBody, failureResponse, skipEvent, withRequestEvent } =
-  await import("./http");
+const {
+  annotateCaller,
+  clientIp,
+  crossOriginResponse,
+  discardBody,
+  failureResponse,
+  skipEvent,
+  withRequestEvent,
+} = await import("./http");
 const { logger } = await import("./log");
 
 const request = (headers: Record<string, string>) =>
@@ -175,13 +183,27 @@ describe("withRequestEvent", () => {
     ).toEqual({ routine: false });
   });
 
-  it("keeps every plan-quota 429: it is the upgrade signal, not a flood", async () => {
-    expect(
-      await optionsOf({ event: "receipt.upload", route: "/api/receipts" }, (event) => {
+  it("keeps a user's first few plan-quota 429s a minute and samples the rest", async () => {
+    const quota429 = (userId?: string) =>
+      optionsOf({ event: "receipt.upload", route: "/api/receipts" }, (event) => {
+        event.user_id = userId;
         event.outcome = "QuotaExceeded";
         return new Response(null, { status: 429 });
-      }),
-    ).toEqual({ routine: false });
+      });
+    let count = 0;
+    runtime.runPromise.mockImplementation(async () => ({ allowed: ++count <= 3 }));
+    for (let i = 0; i < 3; i++) expect(await quota429("u_1")).toEqual({ routine: false });
+    expect(await quota429("u_1")).toEqual({ routine: true });
+    const [repeat] = vi.mocked(logger.emit).mock.calls[0]!;
+    expect(repeat.flags).toEqual({ quota_repeat: true });
+    expect(runtime.runPromise).toHaveBeenCalledTimes(4);
+
+    // A counter that fails, and a rejection without a user, are treated as repeats.
+    runtime.runPromise.mockRejectedValue(new Error("db down"));
+    expect(await quota429("u_1")).toEqual({ routine: true });
+    runtime.runPromise.mockClear();
+    expect(await quota429()).toEqual({ routine: true });
+    expect(runtime.runPromise).not.toHaveBeenCalled();
   });
 
   it("writes nothing for an event the handler skipped", async () => {
@@ -191,6 +213,29 @@ describe("withRequestEvent", () => {
       return new Response(null, { status: 429 });
     })(new Request("https://app.example/api/x"));
     expect(logger.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("annotateCaller", () => {
+  it("marks impersonated requests from the scope alone, or from the session", () => {
+    const scope = { userId: "u_1", organizationId: "org_1", impersonatedBy: "admin_1" };
+    const fromScope: Parameters<typeof annotateCaller>[0] = { event: "x" };
+    annotateCaller(fromScope, { scope });
+    expect(fromScope).toMatchObject({
+      user_id: "u_1",
+      organization_id: "org_1",
+      impersonated_by: "admin_1",
+    });
+
+    const fromSession: Parameters<typeof annotateCaller>[0] = { event: "x" };
+    annotateCaller(fromSession, {
+      session: { user: { id: "u_1" }, session: { impersonatedBy: "admin_2" } },
+    });
+    expect(fromSession.impersonated_by).toBe("admin_2");
+
+    const own: Parameters<typeof annotateCaller>[0] = { event: "x" };
+    annotateCaller(own, { scope: { userId: "u_1", organizationId: "org_1" } });
+    expect(own).not.toHaveProperty("impersonated_by");
   });
 });
 
