@@ -185,7 +185,7 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 
 ## Decisions waiting on the owner
 
-1. Classic as the homepage (then delete `app/(lab)` and `components/marketing`, ~41% of TS code).
+1. ~~Classic as the homepage (then delete `app/(lab)` and `components/marketing`)~~ Done: the lab landing variants are removed.
 2. Plan limits: daily per user (today) or monthly per workspace; prices; payment provider. See
    [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
 3. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
@@ -296,7 +296,6 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   Checkbox, Avatar, Empty, Pagination), Button aligned with base-nova, one form system on `Field`.
 - Admin Settings shows "Last saved by…" for a saved OCR chain that was discarded as invalid.
 - HEIC conversion untested (no fixture or Safari in CI); add a WebKit e2e project later.
-- Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.
 - Better Auth: verify the OAuth callback turns a banned user into `?error=BANNED_USER`.
 - Better Auth 1.7.18 (#90): `runInBackgroundOrAwait` now logs and drops errors thrown in email callbacks
   (`sendResetPassword`, `sendVerificationEmail`, `sendDeleteAccountVerification`, `sendChangeEmailConfirmation`), so

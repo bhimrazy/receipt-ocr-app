@@ -22,8 +22,8 @@ const RULES: { name: string; pattern: RegExp }[] = [
   { name: "arbitrary opacity (use bg-wash or a /5 step)", pattern: /\/\[0?\.\d+\]/ },
 ];
 
-// Not checked: lab directions (deleted once one is picked) and Satori images (no CSS variables).
-const EXCLUDED = [/^app\/\(lab\)\//, /^components\/marketing\//, /opengraph-image\.tsx$/];
+// Not checked: Satori images (no CSS variables).
+const EXCLUDED = [/opengraph-image\.tsx$/];
 
 // Existing literals in files other open PRs own. Remove an entry once that file uses tokens;
 // new files are always checked.
