@@ -172,16 +172,23 @@ export const ocrRounds = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** `receipts.attempts` it started: 1 = the upload, 2+ = retries. */
     round: smallint("round").notNull(),
+    /**
+     * The workspace's plan when the round was accepted, i.e. the allowance it
+     * draws from: Free rounds count against their user, Pro rounds against their
+     * workspace, so neither uses up the other.
+     */
+    plan: text("plan").notNull().default("free"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("ocr_rounds_receipt_round_idx").on(table.receiptId, table.round),
     // Per-user quota windows.
     index("ocr_rounds_user_created_at_idx").on(table.userId, table.createdAt),
-    // Global cap.
+    // Global cap and the per-plan daily pool.
     index("ocr_rounds_created_at_idx").on(table.createdAt),
-    // The set-null when a workspace is deleted.
-    index("ocr_rounds_organization_id_idx").on(table.organizationId),
+    // Workspace-pooled (Pro) day and month windows, and the set-null when a workspace is deleted.
+    index("ocr_rounds_org_created_at_idx").on(table.organizationId, table.createdAt),
+    check("ocr_rounds_plan_check", sql`plan in ('free', 'pro')`),
   ],
 ).enableRLS();
 
@@ -473,6 +480,94 @@ export const receiptGroupMembers = pgTable(
   ],
 ).enableRLS();
 
+/** Provider subscription states we store; anything else is refused when parsed. */
+export const BILLING_STATUSES = ["active", "trialing", "past_due", "paused", "canceled"] as const;
+
+/**
+ * One row per provider subscription, written only by the `billing.apply_event`
+ * job from verified webhooks. A workspace is Pro while it has an entitling row
+ * (see `packages/core/src/billing`). `provider_updated_at` orders events: an
+ * older snapshot never overwrites a newer one. Ids and states only, no card or
+ * address data.
+ */
+export const billingSubscriptions = pgTable(
+  "billing_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Null once the workspace is deleted; the row stays as the billing record. */
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "set null",
+    }),
+    /** Who started the checkout. */
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    provider: text("provider").notNull(),
+    providerSubscriptionId: text("provider_subscription_id").notNull(),
+    providerCustomerId: text("provider_customer_id").notNull(),
+    /** One of `BILLING_STATUSES`. */
+    status: text("status").notNull(),
+    priceId: text("price_id"),
+    /** `month` or `year`. */
+    billingInterval: text("billing_interval"),
+    currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    /** A cancellation is scheduled for the period end; Pro holds until then. */
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    /** When it last became past_due; the grace period counts from here. */
+    pastDueSince: timestamp("past_due_since", { withTimezone: true }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    /** The provider's own `updated_at` for the snapshot stored here. */
+    providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("billing_subscriptions_provider_id_idx").on(
+      table.provider,
+      table.providerSubscriptionId,
+    ),
+    index("billing_subscriptions_org_idx").on(table.organizationId),
+    check(
+      "billing_subscriptions_status_check",
+      sql.raw(`status in (${BILLING_STATUSES.map((s) => `'${s}'`).join(", ")})`),
+    ),
+    check(
+      "billing_subscriptions_interval_check",
+      sql`billing_interval is null or billing_interval in ('month', 'year')`,
+    ),
+  ],
+).enableRLS();
+
+/**
+ * Every verified webhook, once: the unique provider event id makes a redelivery
+ * a no-op. `payload` is the provider-neutral snapshot the job applies (ids,
+ * states, dates), never the raw body, so it holds no address or card data.
+ */
+export const billingEvents = pgTable(
+  "billing_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    eventType: text("event_type").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    // No FK: the event log outlives a deleted workspace.
+    organizationId: text("organization_id"),
+    payload: jsonb("payload").notNull(),
+    /** `applied`, `stale` (older than the stored snapshot), `ignored` or `unmatched` (no workspace). */
+    outcome: text("outcome"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("billing_events_provider_event_idx").on(table.provider, table.providerEventId),
+    index("billing_events_org_idx").on(table.organizationId, table.receivedAt),
+    check(
+      "billing_events_outcome_check",
+      sql`outcome is null or outcome in ('applied', 'stale', 'ignored', 'unmatched')`,
+    ),
+  ],
+).enableRLS();
+
 export const receiptsRelations = relations(receipts, ({ many }) => ({
   items: many(receiptItems),
 }));
@@ -558,6 +653,8 @@ export const schema = {
   receiptGroupMembers,
   stepUpEvents,
   stepUpCodes,
+  billingSubscriptions,
+  billingEvents,
   receiptsRelations,
   receiptItemsRelations,
   // Better Auth tables (core + organization + admin plugins).
@@ -609,5 +706,6 @@ export type NewOcrCall = typeof ocrCalls.$inferInsert;
 export type JobRow = typeof jobs.$inferSelect;
 export type NewJobRow = typeof jobs.$inferInsert;
 export type AdminAuditEntry = typeof adminAuditLog.$inferSelect;
+export type BillingSubscription = typeof billingSubscriptions.$inferSelect;
 export type UserCredential = typeof userCredentials.$inferSelect;
 export type NewUserCredential = typeof userCredentials.$inferInsert;
