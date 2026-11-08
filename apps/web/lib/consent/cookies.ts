@@ -158,6 +158,15 @@ export const storageEntries: StorageEntry[] = [
     duration: "30 minutes",
   },
   {
+    name: "theme",
+    kind: "localStorage",
+    setBy: "ReceiptOCR",
+    category: "necessary",
+    purpose:
+      "Remembers the theme you chose (Light or Dark) on this device. Not set while you use System, which follows your device.",
+    duration: "Until you clear site data or choose System",
+  },
+  {
     name: "receiptocr:security-nudge-dismissed",
     kind: "localStorage",
     setBy: "ReceiptOCR",

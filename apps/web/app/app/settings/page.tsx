@@ -18,6 +18,7 @@ import { AccountSettings } from "@/components/account-settings";
 import { InstallAppSettings } from "@/components/install-offer";
 import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsSection } from "@/components/settings-section";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { UsageMeter } from "@/components/usage-meter";
 import { authEnv } from "@/lib/env";
 import { getAccountPlan, getCurrentPlan } from "@/lib/plan-limits";
@@ -170,6 +171,14 @@ export default async function SettingsPage({
             <ChevronRight aria-hidden="true" />
           </Link>
         </Card>
+      </SettingsSection>
+
+      <SettingsSection
+        description="Match your device, or choose one. Saved on this device."
+        id="appearance-heading"
+        title="Appearance"
+      >
+        <ThemeToggle aria-labelledby="appearance-heading" className="w-full sm:w-auto" labels />
       </SettingsSection>
 
       <ReceiptReadingSettings readers={readers} />

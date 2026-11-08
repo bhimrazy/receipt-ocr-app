@@ -5,6 +5,7 @@ import { GitHubIcon } from "@/components/github-icon";
 import { authorName, authorUrl, repoUrl } from "@/lib/site";
 import { CookieSettingsButton } from "@/components/consent/cookie-settings-button";
 import { GetTheAppEntry } from "@/components/landing-install";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const columns: Array<{ title: string; links: Array<{ label: string; href: string }> }> = [
   {
@@ -89,7 +90,10 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
           ))}
         </div>
         <div className="mt-10 flex flex-col gap-x-6 gap-y-1 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center">
-          <p className="sm:mr-auto">© {new Date().getFullYear()} ReceiptOCR</p>
+          <div className="flex items-center gap-4 sm:mr-auto">
+            <p>© {new Date().getFullYear()} ReceiptOCR</p>
+            <ThemeToggle />
+          </div>
           <p>
             A product by{" "}
             <a className={authorLinkClass} href={authorUrl} rel="noopener" target="_blank">
