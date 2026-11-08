@@ -33,6 +33,7 @@ import { admin } from "better-auth/plugins/admin";
 import { captcha } from "better-auth/plugins/captcha";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
+import { accountCreated, accountDeleted, accountLinking, guardUnlink } from "./auth-accounts";
 // --- two-factor + step-up (feat/two-factor) ---
 import {
   authMethodOf,
@@ -321,7 +322,7 @@ export const auth = betterAuth({
   },
   // Rows sealed before this was on stay readable: Better Auth passes non-hex
   // (plaintext) tokens through and seals them on the user's next sign-in.
-  account: { encryptOAuthTokens: true },
+  account: { encryptOAuthTokens: true, accountLinking },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
@@ -352,6 +353,10 @@ export const auth = betterAuth({
         if (email && !(await allowSignInAttempt(email))) {
           throw new APIError("TOO_MANY_REQUESTS", { message: SIGN_IN_LIMITED_MESSAGE });
         }
+        return;
+      }
+      if (ctx.path === "/unlink-account") {
+        await guardUnlink(ctx);
         return;
       }
       if (ADMIN_GUARDED.has(ctx.path)) {
@@ -491,6 +496,10 @@ export const auth = betterAuth({
       // --- two-factor + step-up (feat/two-factor) ---
       update: { after: twoFactorUserUpdated(deliver) },
       // --- end two-factor + step-up ---
+    },
+    account: {
+      create: { after: accountCreated(deliver) },
+      delete: { after: accountDeleted(deliver) },
     },
     session: {
       create: {
