@@ -274,6 +274,13 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- The one-time "protect your receipts" card (after the fifth receipt) is dismissed with a per-browser cookie, so it
+  shows once more on each new device. A per-user column (`user.security_prompt_dismissed_at`) needs a migration;
+  fold it into the next schema change.
+- The last-sign-in-method guard on `/unlink-account` reads, then Better Auth deletes: two disconnects sent at the same
+  moment (Google and GitHub, no password or passkey) could both pass. Needs a lock on the user's account rows if it
+  matters; the UI sends one at a time.
+
 - `/list-sessions` is an ungated read of the user's own sessions now that `freshAge` is 0 (Better Auth's freshness check
   was its only guard). Low: it shows a session thief the user's other devices; gate it with step-up if that matters.
 - Sign-ins finished through `/two-factor/verify-totp` or `/two-factor/verify-backup-code` aren't in `isSignIn`
