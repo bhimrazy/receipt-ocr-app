@@ -4,7 +4,8 @@
  * events: the schema and allowlist (`schema.ts`), sampling (`sampling.ts`)
  * and output (`logger.ts`) are documented there.
  */
-import type { ErrorFields } from "@receipt-ocr/core/telemetry";
+import { flushEventSinks, setFlushScheduler, type ErrorFields } from "@receipt-ocr/core/telemetry";
+import { after } from "next/server";
 
 export {
   errorFields,
@@ -13,6 +14,10 @@ export {
   type WideEvent,
   type WideEventFields,
 } from "@receipt-ocr/core/telemetry";
+
+// With an OTLP sink registered, events written during a request are sent in
+// one batch after the response, before a serverless instance can freeze.
+setFlushScheduler(() => after(() => flushEventSinks()));
 
 /**
  * Render failures seen by `onRequestError`, keyed by request id, until the

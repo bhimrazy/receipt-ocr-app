@@ -20,6 +20,8 @@
         "NEXT_PUBLIC_*",
         "OCR_*",
         "OPENAI_*",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
         "RESEND_API_KEY",
         "S3_*",
         "SUPPORT_EMAIL",
