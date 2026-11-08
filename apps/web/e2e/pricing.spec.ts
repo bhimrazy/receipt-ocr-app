@@ -19,7 +19,9 @@ test("pricing shows Free and Pro with a monthly/yearly switch, and the FAQ", asy
 
   // Yearly is the default; the switch is a native radio group.
   await expect(page.getByText("$90", { exact: true })).toBeVisible();
-  await page.getByRole("radio", { name: /Monthly/ }).check();
+  // The radio is visually hidden inside its label, which is what people click.
+  await page.locator("label", { hasText: "Monthly" }).click();
+  await expect(page.getByRole("radio", { name: /Monthly/ })).toBeChecked();
   await expect(page.getByText("$9", { exact: true })).toBeVisible();
 
   // Billing is off in this stack: no checkout link, no Paddle script.
