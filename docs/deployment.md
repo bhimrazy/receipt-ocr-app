@@ -373,7 +373,60 @@ codes sent in the last 10 minutes.
 
 Steps specific to one release, newest first.
 
-### Schema fixes: receipt dates as `date` (`0003_schema_fixes`)
+### Squashed baseline again (2026-11-08)
+
+- **`0000_baseline` through `0003_schema_fixes` were squashed into a new `0000_baseline`**, before launch. A database
+  migrated with the old files already has these objects, so the baseline's `CREATE` statements would fail (and roll
+  back): it must be reset, not migrated. Reset each one
+  (staging first) with the SQL below, then run the **Database Migration** workflow on `staging-db`, then
+  `production-db` (the owner approves), then deploy by hand. Don't `DROP SCHEMA public`: it would lose Supabase's
+  grants and default ACLs. The reset deletes every account and receipt, so it is only for these pre-launch databases.
+
+  Pre-check, and keep the output:
+
+  ```sql
+  show server_version; -- 17.x on Supabase
+  select tablename, tableowner from pg_tables where schemaname = 'public' order by 1; -- the 23 tables below
+  select typname from pg_type t join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typtype = 'e'; -- job_state, receipt_status
+  select current_user;
+  select has_schema_privilege('anon', 'public', 'USAGE') as anon_usage;
+  select jobname, schedule, active from cron.job order by 1;
+  select name from vault.secrets order by 1;
+  select 'receipts' as t, count(*) from public.receipts
+    union all select 'user', count(*) from public."user"; -- expect test data only
+  ```
+
+  Reset (no `CASCADE`, no `IF EXISTS`, so a missing or unexpected object rolls it all back). It lists every table the
+  old migrations created, and `drizzle` holds only the bookkeeping table:
+
+  ```sql
+  begin;
+  set local lock_timeout = '5s';
+  drop table
+    public.receipt_group_members, public.receipt_groups, public.receipt_items,
+    public.ocr_calls, public.ocr_rounds, public.jobs, public.job_controls,
+    public.admin_audit_log, public.app_settings, public.user_credentials,
+    public.receipts, public.step_up_codes, public.step_up_events,
+    public.passkey, public.two_factor, public.invitation, public.member,
+    public.session, public.account, public.verification, public.rate_limit,
+    public.organization, public."user";
+  drop type public.job_state, public.receipt_status;
+  drop table drizzle.__drizzle_migrations;
+  drop schema drizzle;
+  commit;
+  ```
+
+  Post-check: `pg_tables` for `public` returns no rows, no enum types are left, `select count(*) from pg_class c join
+pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'` is 0, the `drizzle` schema is gone, and
+  `anon_usage`, `cron.job` and the Vault secret names are unchanged from the pre-check. pg_cron, Vault and pg_net live
+  in their own schemas (`cron`, `vault`, `net`) and are not touched; the `drain-jobs` job fails its calls only while
+  the tables are missing. After the migration, `select hash from drizzle.__drizzle_migrations` returns one row.
+
+- **Tested locally** on Postgres 17.10 and 18.6: the old four files applied, then this reset, then the new baseline,
+  gives the same `pg_dump --schema-only` as the baseline on an empty database.
+
+### Schema fixes: receipt dates as `date` (`0003_schema_fixes`, now part of the baseline)
 
 - **Run Database Migration before deploying** (`staging-db`, then `production-db`, then deploy by hand, as in
   [Every release](#every-release)). Written for the empty databases of the 2026-11-08 reset; nothing to back up or
@@ -432,7 +485,7 @@ column_name = 'receipt_date';` returns `date`.
   Post-check: `pg_tables` for `public` returns no rows, no enum types are left, and
   `has_schema_privilege('anon', 'public', 'USAGE')` is unchanged from the pre-check.
 
-- **RLS** is enabled on all 19 tables with no policies. The app role (`postgres`) bypasses it. In the Supabase
+- **RLS** is enabled on every table with no policies. The app role (`postgres`) bypasses it. In the Supabase
   dashboard each table shows the **RLS enabled** badge. The Data API is unused, so also remove `public` from
   Project Settings, Data API, **Exposed schemas**: then `anon` and `authenticated` cannot reach any table even by
   mistake. `service_role` bypasses RLS by design, so only removing `public` from the exposed schemas protects

@@ -108,20 +108,23 @@ Every PR merged 2026-11-07 (plus #42 and #44 from 2026-11-06), by number. Detail
 | #109 | Make the concurrent drain tests race-free                                          |
 | #110 | Add OpenAI as an OCR provider                                                      |
 
-## Migrations squashed (2026-11-07)
+## Migrations squashed (2026-11-07, again 2026-11-08)
 
 Pre-launch, all migrations `0000`-`0010` were squashed into one `0000_baseline` that also enables row-level security on
-every table (no policies; the app role bypasses it, so it is defence in depth for Supabase's Data API). Both databases
-are empty and get reset. **From the first real user onward we never squash again.** Details:
+every table (no policies; the app role bypasses it, so it is defence in depth for Supabase's Data API). On 2026-11-08
+the four files since then (`0000`-`0003`) were squashed again into a new `0000_baseline`; its schema dump matches the
+old files' on Postgres 17 and 18 apart from column order in two tables. Both databases hold only test data and get
+reset. **From the first real user onward we never squash again.** Details:
 [data layer](architecture/db.md#migrations).
 
 ## Production to-dos (owner)
 
 Steps are in [deployment.md](deployment.md).
 
-- Reset `staging-db` and `production-db` (the explicit SQL in [deployment.md](deployment.md#release-notes), not `DROP SCHEMA public`), run **Database Migration** on
-  `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies the squashed baseline with
-  row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
+- Reset `staging-db` and `production-db` with the 2026-11-08 SQL (23 tables, two enum types, the `drizzle`
+  bookkeeping schema; [release note](deployment.md#squashed-baseline-again-2026-11-08), not `DROP SCHEMA public`),
+  run **Database Migration** on `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies
+  the squashed baseline with row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
   Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
 - Queue drain: done 2026-11-08. A new `CRON_SECRET` is in Vercel and in Supabase Vault (`cron_secret`); pg_cron job
   `drain-jobs` calls `/api/jobs/drain` every 5 minutes ([step 8](production-environment.md#8-queue-drain-cron)). Check
@@ -138,13 +141,6 @@ Steps are in [deployment.md](deployment.md).
   deploys need a successful `production-db` run with the same migrations. The automatic gate compares with the last
   run of the workflow on `main` whose `deploy-production` job succeeded; CI creates no git tags (tags are for real
   releases, later).
-- The Anthropic provider (#59) added migration `0001_ocr_call_refused_unsupported` (widens `ocr_calls_status_check`
-  with `refused` and `unsupported-file`; existing rows stay valid). Run **Database Migration** before deploying it:
-  without it, a refused or skipped call fails its ledger insert.
-- Schema fixes (migration `0003_schema_fixes`, #127): `receipts.receipt_date` becomes `date`, plus checks and
-  foreign-key indexes from the [database review](reviews/2026-11-07-full-database.md). **Run Database Migration**
-  (`staging-db`, then `production-db`) before deploying, and deploy right after: the previous release's dashboard
-  query fails against the `date` column ([release note](deployment.md#release-notes)).
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
   to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
@@ -170,10 +166,9 @@ Steps are in [deployment.md](deployment.md).
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                           |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------ |
-| #95  | Two-step sign-in (TOTP), passkeys and step-up for important actions. Owner approved 2026-11-08; merging after migration `0002` |
-| #127 | Schema fixes from the database review: `receipt_date` as `date`, checks, foreign-key indexes (migration `0003`)                |
+| PR   | Work                                                                                                                                                                                                                       |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #136 | Squash migrations `0000`-`0003` into one baseline; CI integration on Postgres 17 and 18, e2e on 17. Branches adding migrations (`feat/billing-paddle`, `feat/sign-in-methods`) regenerate theirs as `0001` after it merges |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).

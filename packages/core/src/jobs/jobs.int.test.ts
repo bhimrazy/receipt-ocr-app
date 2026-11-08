@@ -583,8 +583,11 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       [3, "succeeded", undefined],
     ]);
     // Each retry waited out its backoff: at least half of 100 ms, then of 200 ms.
-    expect(ended[1]! - ended[0]!).toBeGreaterThanOrEqual(50);
-    expect(ended[2]! - ended[1]!).toBeGreaterThanOrEqual(100);
+    // The queue schedules on the database clock and this measures on the runner's,
+    // so allow a few ms of drift between them.
+    const drift = 10;
+    expect(ended[1]! - ended[0]!).toBeGreaterThanOrEqual(50 - drift);
+    expect(ended[2]! - ended[1]!).toBeGreaterThanOrEqual(100 - drift);
     expect((await receiptOf(receipt.id, c))?.status).toBe("completed");
     expect(await callsOf(receipt.id)).toEqual([
       { round: 1, jobAttempt: 1, status: "provider-error" },
