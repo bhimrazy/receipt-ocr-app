@@ -104,6 +104,20 @@ const APP_FEATURES = [
   "Shared workspaces",
 ] as const;
 
+/** Other names for the site; Google's site-name result reads `alternateName` before falling back to the domain. */
+const SITE_ALTERNATE_NAMES = ["Receipt OCR"] as const;
+
+/** `@id`s of the home page's JSON-LD nodes, so other pages can point at them instead of repeating them. */
+export function siteNodeIds() {
+  const url = new URL("/", siteUrl).toString();
+  return {
+    person: `${OWNER.url}/#person`,
+    organization: `${url}#organization`,
+    website: `${url}#website`,
+    app: `${url}#app`,
+  };
+}
+
 /**
  * Organization (with its founder), WebSite and WebApplication for the home page. Only claims the
  * product backs today and the page shows: a free web app. No ratings, reviews or prices beyond
@@ -112,8 +126,7 @@ const APP_FEATURES = [
  */
 export function homeJsonLd(): Record<string, unknown> {
   const url = new URL("/", siteUrl).toString();
-  const orgId = `${url}#organization`;
-  const personId = `${OWNER.url}/#person`;
+  const { organization: orgId, person: personId, website, app } = siteNodeIds();
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -128,6 +141,7 @@ export function homeJsonLd(): Record<string, unknown> {
         "@type": "Organization",
         "@id": orgId,
         name: SITE_NAME,
+        alternateName: [...SITE_ALTERNATE_NAMES],
         url,
         logo: new URL("/icons/icon-512.png", siteUrl).toString(),
         founder: { "@id": personId },
@@ -135,8 +149,9 @@ export function homeJsonLd(): Record<string, unknown> {
       },
       {
         "@type": "WebSite",
-        "@id": `${url}#website`,
+        "@id": website,
         name: SITE_NAME,
+        alternateName: [...SITE_ALTERNATE_NAMES],
         url,
         description: homeDescription,
         inLanguage: "en",
@@ -144,7 +159,7 @@ export function homeJsonLd(): Record<string, unknown> {
       },
       {
         "@type": "WebApplication",
-        "@id": `${url}#app`,
+        "@id": app,
         name: SITE_NAME,
         url,
         description: homeDescription,

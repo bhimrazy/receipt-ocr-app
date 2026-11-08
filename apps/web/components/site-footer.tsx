@@ -4,8 +4,10 @@ import { Brand } from "@/components/brand";
 import { GitHubIcon } from "@/components/github-icon";
 import { authorName, authorUrl, repoUrl } from "@/lib/site";
 import { CookieSettingsButton } from "@/components/consent/cookie-settings-button";
+import { contentFooterColumns } from "@/lib/content";
 import { GetTheAppEntry } from "@/components/landing-install";
 
+// One column per content collection sits between Product and Account; the grid below counts them.
 const columns: Array<{ title: string; links: Array<{ label: string; href: string }> }> = [
   {
     title: "Product",
@@ -15,6 +17,7 @@ const columns: Array<{ title: string; links: Array<{ label: string; href: string
       { label: "FAQ", href: "/#faq" },
     ],
   },
+  ...contentFooterColumns(),
   {
     title: "Account",
     links: [
@@ -47,7 +50,7 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
         <div
           className={cn(
             "grid grid-cols-2 gap-x-6 gap-y-8",
-            narrow ? "sm:grid-cols-3" : "md:grid-cols-[1.5fr_repeat(3,1fr)]",
+            narrow ? "sm:grid-cols-4" : "md:grid-cols-[1.5fr_repeat(4,1fr)]",
           )}
         >
           {!narrow && (

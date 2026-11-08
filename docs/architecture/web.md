@@ -249,19 +249,56 @@ Only one host may be indexed: `PRODUCTION_HOST` in [`lib/seo-hosts.ts`](../../ap
 `Host` header only, never `X-Forwarded-Host`, so the config rules and the route handlers agree and a client can't
 spoof one.
 
-| Piece                                                                                                       | What it does                                                                                                                                                 |
-| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`app/robots.ts`](../../apps/web/app/robots.ts)                                                             | Decided per request: on the production host `Allow: /` with the private paths disallowed and the sitemap URL; on any other host `Disallow: /`                |
-| `X-Robots-Tag: noindex, nofollow` in [`next.config.ts`](../../apps/web/next.config.ts)                      | Added to every response whose host is not the production host (previews, localhost, the deployment's `*.vercel.app` URL), including images, JSON and PDFs    |
-| [`app/sitemap.ts`](../../apps/web/app/sitemap.ts)                                                           | The indexable public pages (home, privacy, terms, cookies) with real last-modified dates; `e2e/seo.spec.ts` checks each is served, canonical and not noindex |
-| [`app/llms.txt`](../../apps/web/app/llms.txt), `llms-full.txt`, [`lib/llms.ts`](../../apps/web/lib/llms.ts) | A plain-text summary of the product for AI assistants, and the long form                                                                                     |
-| `www` redirect in `next.config.ts`                                                                          | `www.receipt-ocr.bhimraj.com.np` answers `308` to the apex host, same path                                                                                   |
+| Piece                                                                                                       | What it does                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`app/robots.ts`](../../apps/web/app/robots.ts)                                                             | Decided per request: on the production host `Allow: /` with the private paths disallowed and the sitemap URL; on any other host `Disallow: /`                            |
+| `X-Robots-Tag: noindex, nofollow` in [`next.config.ts`](../../apps/web/next.config.ts)                      | Added to every response whose host is not the production host (previews, localhost, the deployment's `*.vercel.app` URL), including images, JSON and PDFs                |
+| [`app/sitemap.ts`](../../apps/web/app/sitemap.ts)                                                           | The indexable public pages (home, pricing, legal pages, content pages) with real last-modified dates; `e2e/seo.spec.ts` checks each is served, canonical and not noindex |
+| [`app/llms.txt`](../../apps/web/app/llms.txt), `llms-full.txt`, [`lib/llms.ts`](../../apps/web/lib/llms.ts) | A plain-text summary of the product for AI assistants, and the long form                                                                                                 |
+| `www` redirect in `next.config.ts`                                                                          | `www.receipt-ocr.bhimraj.com.np` answers `308` to the apex host, same path                                                                                               |
 
 Titles, descriptions and structured data (JSON-LD) for the public pages come from
 [`lib/seo.ts`](../../apps/web/lib/seo.ts): `homeTitle`/`homeDescription` are the home page's and the site-wide
 defaults, `pageMetadata` builds each page's canonical and social tags, and `homeJsonLd` emits one graph of `Person`,
 `Organization`, `WebSite` and `WebApplication` (free `Offer`, `featureList`; no ratings, since none exist). The landing
 page adds `FAQPage` from `lib/home-faqs.ts`; Google no longer shows FAQ rich results, so it only describes the page.
+
+### Content pages
+
+Search landing pages (use cases now; guides and comparisons next) are typed TypeScript data rendered by one layout:
+no MDX and no new dependency.
+
+| Piece                                                                                             | What it does                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`lib/content/types.ts`](../../apps/web/lib/content/types.ts)                                     | `ContentCollection` (a hub such as `/use-cases`) and `ContentPage` (title, description, h1, sections, sample receipt, FAQs, related paths, CTA, `updated`)                     |
+| [`lib/content/use-cases.ts`](../../apps/web/lib/content/use-cases.ts)                             | The use-case collection and its four pages                                                                                                                                     |
+| [`lib/content/index.ts`](../../apps/web/lib/content/index.ts)                                     | The registry (`contentCollections`, `contentPages`) and everything built from it: metadata through `pageMetadata`, JSON-LD, sitemap entries, llms.txt sections, footer columns |
+| [`components/content/content-page.tsx`](../../apps/web/components/content/content-page.tsx)       | `ContentPageView` and `ContentHubView`: the landing page's header, footer and styling, breadcrumbs, native `<details>` FAQ, related cards and a sign-up CTA                    |
+| [`components/content/content-example.tsx`](../../apps/web/components/content/content-example.tsx) | A sample receipt laid out like the receipt page, with Copy JSON or the History CSV from the real `receiptsToCsv`                                                               |
+
+Each page emits `BreadcrumbList`, `WebPage` (`isPartOf` the home page's `WebSite`, `about` its `WebApplication`, by
+`@id`) and `FAQPage` built from the same `faqs` array the page renders. A hub emits `CollectionPage` with an
+`ItemList` of its pages.
+
+To add a collection, such as guides at `/guides/<slug>`:
+
+1. Write `lib/content/guides.ts` with a `ContentCollection` and its `ContentPage[]`, and add both to the registry in
+   `lib/content/index.ts`. The sitemap, llms.txt and a footer column pick them up.
+2. Add `app/guides/page.tsx` (`ContentHubView`, `collectionMetadata`) and `app/guides/[slug]/page.tsx`
+   (`generateStaticParams` from `pagesIn("guides")`, `dynamicParams = false`, `contentMetadata`, `ContentPageView`).
+   Copy the use-case routes.
+3. Add the paths to `CONTENT` in `e2e/seo.spec.ts` and to the sitemap list in `lib/seo-routes.test.ts`.
+
+Rules, checked by [`lib/content/content.test.ts`](../../apps/web/lib/content/content.test.ts):
+
+- Full title at most 60 characters, description 120 to 155, both unique across the site; one unique h1.
+- `updated` is the page's own `YYYY-MM-DD` date (no time), used for the sitemap's `lastModified` and the
+  `WebPage`'s `dateModified`. It is never the build time or a shared constant; bump it only when that page's visible
+  content changes. The test rejects invalid dates and dates in the future.
+- 500 to 900 words of body copy, 3 to 5 FAQs, related links that resolve, and low word overlap between pages, so a
+  page can't be a keyword-swapped copy of another.
+- Only what the product does: no Excel or .xlsx, no API, no integrations. Sample receipts must add up the way the
+  receipt page checks them.
 
 ## Queue drain route
 

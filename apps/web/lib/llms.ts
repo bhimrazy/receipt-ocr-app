@@ -1,3 +1,4 @@
+import { contentLlmsSections } from "@/lib/content";
 import { homeFaqs } from "@/lib/home-faqs";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { OWNER, REPO_URL, homeDescription } from "@/lib/seo";
@@ -35,6 +36,7 @@ export function llmsTxt(): string {
     "",
     ...pages.map(([label, url, note]) => `- [${label}](${url}): ${note}`),
     "",
+    ...contentLlmsSections(),
     "## Open source and contact",
     "",
     `- [Source code](${REPO_URL}): the open-source repository; open an issue there for questions and bugs`,

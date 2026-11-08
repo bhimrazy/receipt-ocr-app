@@ -55,9 +55,19 @@ describe("sitemap", () => {
   it("lists only the public prod pages, each with lastModified", () => {
     const entries = sitemap();
     expect(entries.map((e) => e.url)).toEqual(
-      ["/", "/pricing", "/privacy", "/terms", "/cookies", "/refunds"].map((p) =>
-        new URL(p, PRODUCTION_ORIGIN).toString(),
-      ),
+      [
+        "/",
+        "/pricing",
+        "/privacy",
+        "/terms",
+        "/cookies",
+        "/refunds",
+        "/use-cases",
+        "/use-cases/expense-reports",
+        "/use-cases/bookkeeping",
+        "/use-cases/freelancers-taxes",
+        "/use-cases/small-businesses",
+      ].map((p) => new URL(p, PRODUCTION_ORIGIN).toString()),
     );
     for (const entry of entries) expect(entry.lastModified, entry.url).toBeTruthy();
     expect(entries.some((e) => /\/(app|admin|api|sign-|landing-|final-)/.test(e.url))).toBe(false);
@@ -135,6 +145,10 @@ describe("home JSON-LD", () => {
       expect(String(node.url)).toMatch(/^https:\/\//);
     }
     expect(byType("WebSite").url).toBe(`${PRODUCTION_ORIGIN}/`);
+    // The site name Google shows comes from name and alternateName.
+    for (const type of ["WebSite", "Organization"]) {
+      expect(byType(type)).toMatchObject({ name: "ReceiptOCR", alternateName: ["Receipt OCR"] });
+    }
   });
 
   it("describes the app honestly: web business app, free offer, real features, no ratings", () => {
