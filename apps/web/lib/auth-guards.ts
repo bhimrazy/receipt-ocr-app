@@ -4,6 +4,7 @@ import {
   parseWorkspaceName,
   WORKSPACE_ROLES,
   workspaceCreationCheck,
+  userPaysForWorkspace,
   workspaceHasChargingSubscription,
 } from "@receipt-ocr/core";
 import { APIError } from "better-auth/api";
@@ -64,6 +65,27 @@ export async function limitInvitations(inviterId: string): Promise<void> {
 export async function assertCanCreateWorkspace(userId: string): Promise<void> {
   const check = await runtime.runPromise(workspaceCreationCheck(userId));
   if (!check.allowed) throw new APIError("FORBIDDEN", { message: check.message ?? undefined });
+}
+
+/**
+ * Better Auth organization hooks and the leave path: the buyer of a
+ * subscription that can still charge can't be removed, demoted or leave,
+ * because only they can cancel it in the app.
+ */
+export async function assertBuyerStays(
+  organizationId: string,
+  userId: string,
+  name: string,
+  action: "remove" | "demote" | "leave",
+): Promise<void> {
+  if (!(await runtime.runPromise(userPaysForWorkspace(organizationId, userId)))) return;
+  const message =
+    action === "leave"
+      ? "You pay for Pro on this workspace. Cancel the subscription in Billing, or let it end, before leaving."
+      : `${name} pays for Pro on this workspace. Cancel the subscription in Billing, or let it end, before ${
+          action === "remove" ? "removing them" : "changing their role"
+        }.`;
+  throw new APIError("BAD_REQUEST", { message });
 }
 
 /**
