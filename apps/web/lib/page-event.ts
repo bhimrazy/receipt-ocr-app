@@ -2,7 +2,9 @@ import "server-only";
 import { headers } from "next/headers";
 import { after } from "next/server";
 import { logger, takeFailedRender, type WideEvent } from "./log";
+import { REQUESTED_PATH_HEADER } from "./redirect";
 import { REQUEST_ID_HEADER } from "./request-id";
+import { launchedFromPwa, PWA_SOURCE } from "./signed-in-hint";
 import { getActiveScope, getSession } from "./session";
 
 /**
@@ -33,6 +35,8 @@ export function logPageRender(route: string): void {
     const session = resolved?.[1];
     const scope = resolved?.[2];
     event.request_id = requestId;
+    // Opened from the home screen: the manifest's start_url carries ?source=pwa.
+    if (launchedFromPwa(resolved?.[0].get(REQUESTED_PATH_HEADER))) event.launch_source = PWA_SOURCE;
     event.user_id = session?.user.id;
     event.impersonated_by = session?.session.impersonatedBy;
     event.organization_id = scope?.organizationId;
@@ -45,6 +49,8 @@ export function logPageRender(route: string): void {
       event.outcome = "ok";
     }
     // Like ticks: a render that logged a notice is never sampled away.
-    logger.emit(event, { routine: (event.notices?.length ?? 0) === 0 });
+    logger.emit(event, {
+      routine: (event.notices?.length ?? 0) === 0 && event.launch_source === undefined,
+    });
   });
 }

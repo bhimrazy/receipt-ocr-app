@@ -1,7 +1,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { REQUESTED_PATH_HEADER } from "@/lib/redirect";
 import { REQUEST_ID_HEADER } from "@/lib/request-id";
-import { SIGNED_IN_HINT_COOKIE } from "@/lib/signed-in-hint";
+import { HAS_ACCOUNT_COOKIE, PWA_SOURCE, SIGNED_IN_HINT_COOKIE } from "@/lib/signed-in-hint";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
@@ -27,10 +27,18 @@ export default function proxy(request: NextRequest) {
     requestHeaders.set(REQUESTED_PATH_HEADER, `${pathname}${request.nextUrl.search}`);
     const sessionCookie = getSessionCookie(request);
     if (!sessionCookie) {
-      const signInUrl = new URL("/sign-in", request.url);
+      // The installed app's first launch on this device: new people need an account, not a
+      // sign-in form. Anyone who has signed in here before carries HAS_ACCOUNT_COOKIE.
+      const firstLaunch =
+        request.nextUrl.searchParams.get("source") === PWA_SOURCE &&
+        !request.cookies.has(HAS_ACCOUNT_COOKIE);
+      const signInUrl = new URL(firstLaunch ? "/sign-up" : "/sign-in", request.url);
       // Only the guarded path itself, so it is always a same-origin relative path;
       // the sign-in page still runs it through safeRedirect().
-      signInUrl.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`);
+      signInUrl.searchParams.set(
+        "redirect",
+        firstLaunch ? "/app" : `${pathname}${request.nextUrl.search}`,
+      );
       const redirect = NextResponse.redirect(signInUrl);
       if (request.cookies.has(SIGNED_IN_HINT_COOKIE))
         redirect.cookies.delete(SIGNED_IN_HINT_COOKIE);
@@ -49,6 +57,15 @@ export default function proxy(request: NextRequest) {
       sameSite: "lax",
       secure: request.nextUrl.protocol === "https:",
       maxAge: 60 * 60 * 24 * 30,
+    });
+  }
+  if (signedIn && !request.cookies.has(HAS_ACCOUNT_COOKIE)) {
+    response.cookies.set(HAS_ACCOUNT_COOKIE, "1", {
+      path: "/",
+      sameSite: "lax",
+      secure: request.nextUrl.protocol === "https:",
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 365,
     });
   }
   return response;

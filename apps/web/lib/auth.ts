@@ -1,4 +1,5 @@
 import "server-only";
+import { standaloneFromCookies } from "./display-mode";
 import { authRateLimitRules } from "./auth-rate-limit";
 import { SITE_NAME } from "./site";
 import {
@@ -519,6 +520,9 @@ export const auth = betterAuth({
             userId: user.id,
             props: {
               method: signUpMethod(ctx?.path, typeof provider === "string" ? provider : undefined),
+              standalone: standaloneFromCookies(
+                ctx?.headers?.get("cookie") ?? ctx?.request?.headers.get("cookie"),
+              ),
             },
           });
         },
