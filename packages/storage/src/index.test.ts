@@ -26,6 +26,31 @@ describe("signedGetUrl (L5)", () => {
     expect(query.get("response-content-type")).toBe("image/png");
   });
 
+  describe("caching", () => {
+    const key = receiptObjectKey("u1", "r1", "image/png");
+    const at = (iso: string) => signedGetUrl(config, key, 600, Date.parse(iso));
+
+    it("returns the same URL for every render inside a 5-minute window", async () => {
+      const first = await at("2026-11-08T10:00:00.000Z");
+      expect(await at("2026-11-08T10:02:30.000Z")).toBe(first);
+      expect(await at("2026-11-08T10:04:59.999Z")).toBe(first);
+    });
+
+    it("changes the URL in the next window", async () => {
+      expect(await at("2026-11-08T10:05:00.000Z")).not.toBe(await at("2026-11-08T10:04:59.999Z"));
+    });
+
+    it("is private and its max-age ends before the signature does", async () => {
+      const url = new URL(await at("2026-11-08T10:04:59.999Z"));
+      const cacheControl = url.searchParams.get("response-cache-control");
+      expect(cacheControl).toBe("private, max-age=300, immutable");
+      // Latest fetch in the window plus max-age must not pass the expiry.
+      const start = Date.parse("2026-11-08T10:00:00Z");
+      const expires = start + Number(url.searchParams.get("X-Amz-Expires")) * 1000;
+      expect(Date.parse("2026-11-08T10:04:59.999Z") + 300_000).toBeLessThanOrEqual(expires);
+    });
+  });
+
   it("downloads anything unknown as octet-stream", async () => {
     const query = await params("users/u1/receipts/r1.bin");
     expect(query.get("response-content-type")).toBe("application/octet-stream");

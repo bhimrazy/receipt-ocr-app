@@ -124,25 +124,43 @@ export async function deleteObjects(
 
 const TYPES = Object.fromEntries(Object.entries(EXTENSIONS).map(([type, ext]) => [ext, type]));
 
+/** Signing times are floored to this window, so renders within it get the same URL. */
+const SIGN_WINDOW_SECONDS = 60 * 5;
+
 /**
  * Short-lived read URL. The response type is pinned from the key's (sniffed)
  * extension, so a changed object's metadata can't turn it into HTML, and PDFs
  * download instead of rendering on the bucket's origin.
+ *
+ * The signature is dated at the start of the current 5-minute window, so the
+ * URL is identical for every render in it and the browser can reuse its cached
+ * response. The URL stays valid for at least `expiresIn` minus one window, and
+ * `max-age` is that remainder, so a cached copy never outlives the signature.
+ * `private` keeps shared caches out. `now` is for tests.
  */
-export async function signedGetUrl(config: S3StorageConfig, key: string, expiresIn = 60 * 10) {
+export async function signedGetUrl(
+  config: S3StorageConfig,
+  key: string,
+  expiresIn = 60 * 10,
+  now = Date.now(),
+) {
   const ext = key.slice(key.lastIndexOf(".") + 1);
   const type = TYPES[ext] ?? "application/octet-stream";
   const inline = type.startsWith("image/");
+  const windowMs = SIGN_WINDOW_SECONDS * 1000;
+  const maxAge = Math.max(expiresIn - SIGN_WINDOW_SECONDS, 0);
   return getSignedUrl(
     s3Client(config),
     new GetObjectCommand({
       Bucket: config.bucket,
       Key: key,
       ResponseContentType: type,
+      ResponseCacheControl: `private, max-age=${maxAge}, immutable`,
       ResponseContentDisposition: inline
         ? "inline"
         : `attachment; filename="receipt.${TYPES[ext] ? ext : "bin"}"`,
     }),
-    { expiresIn },
+    // The signing window starts before `now`, so the URL expires `expiresIn` after the window start.
+    { expiresIn, signingDate: new Date(Math.floor(now / windowMs) * windowMs) },
   );
 }
