@@ -7,7 +7,7 @@ import type { Job } from "../definition";
 import { JOB_REGISTRY } from "../registry";
 import { welcomeEmail, WelcomeMailer, welcomeEmailPayload } from "./welcome-email";
 
-/** A Db whose queries answer from `rows`, in call order: the user row, then the plan row. */
+/** A Db whose queries answer from `rows`, in call order: the user row, then the account plan row. */
 const fakeDb = (rows: unknown[][]) => {
   const queue = [...rows];
   return Layer.succeed(Db, {
@@ -56,7 +56,12 @@ describe("welcome email job", () => {
       ["pro", DEFAULT_PLANS.pro.receiptsPerDay],
     ] as const) {
       const sent: unknown[] = [];
-      const exit = await run([[{ email: "a@example.com" }], [{ plan }]], () => "delivered", sent);
+      // The second query is accountPlan: Pro when comped or owning a Pro workspace.
+      const exit = await run(
+        [[{ email: "a@example.com" }], [{ pro: plan === "pro" }]],
+        () => "delivered",
+        sent,
+      );
       expect(Exit.isSuccess(exit)).toBe(true);
       expect(sent).toEqual([{ to: "a@example.com", receiptsPerDay: limit }]);
     }
@@ -71,7 +76,7 @@ describe("welcome email job", () => {
   });
 
   it("does not retry when no mailer is configured, and retries a failed send", async () => {
-    const rows = () => [[{ email: "a@example.com" }], [{ plan: "free" }]];
+    const rows = () => [[{ email: "a@example.com" }], [{ pro: false }]];
     const unconfigured = await run(rows(), () => "not_configured");
     expect(Exit.isSuccess(unconfigured)).toBe(true);
     const failed = await run(rows(), () => "failed");
