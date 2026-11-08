@@ -1,5 +1,11 @@
 import "server-only";
-import { hitRateLimit, parseWorkspaceName, WORKSPACE_ROLES } from "@receipt-ocr/core";
+import {
+  hitRateLimit,
+  parseWorkspaceName,
+  WORKSPACE_ROLES,
+  workspaceCreationCheck,
+  workspaceHasChargingSubscription,
+} from "@receipt-ocr/core";
 import { APIError } from "better-auth/api";
 import { runtime } from "./runtime";
 
@@ -47,5 +53,29 @@ export async function limitInvitations(inviterId: string): Promise<void> {
       { message: "Too many invitations. Try again later." },
       { "Retry-After": String(retryAfterSeconds) },
     );
+  }
+}
+
+/**
+ * Better Auth organization hook: refuses a workspace past the creator's
+ * ownership cap (Free 1, Pro 2) with a message that says why. This is the
+ * server-side check; the switcher only hides the button.
+ */
+export async function assertCanCreateWorkspace(userId: string): Promise<void> {
+  const check = await runtime.runPromise(workspaceCreationCheck(userId));
+  if (!check.allowed) throw new APIError("FORBIDDEN", { message: check.message ?? undefined });
+}
+
+/**
+ * Better Auth organization hook: a workspace whose subscription can still
+ * charge (anything but canceled, unless the cancel is already scheduled; so
+ * also past_due after its grace, paused and trialing) can't be deleted, or
+ * Paddle would keep charging for a workspace that is gone.
+ */
+export async function assertNoLiveSubscription(organizationId: string): Promise<void> {
+  if (await runtime.runPromise(workspaceHasChargingSubscription(organizationId))) {
+    throw new APIError("BAD_REQUEST", {
+      message: "Cancel this workspace's Pro subscription in Settings, Billing before deleting it.",
+    });
   }
 }

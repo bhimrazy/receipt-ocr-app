@@ -7,8 +7,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const url = (path: string) => new URL(path, siteUrl).toString();
   return [
     { url: url("/"), lastModified: HOME_UPDATED },
+    { url: url("/pricing"), lastModified: LEGAL_UPDATED.pricing },
     { url: url("/privacy"), lastModified: LEGAL_UPDATED.privacy },
     { url: url("/terms"), lastModified: LEGAL_UPDATED.terms },
     { url: url("/cookies"), lastModified: LEGAL_UPDATED.cookies },
+    { url: url("/refunds"), lastModified: LEGAL_UPDATED.refunds },
   ];
 }

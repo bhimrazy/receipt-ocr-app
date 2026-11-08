@@ -32,6 +32,8 @@ import {
 } from "./templates";
 
 const withSupport = { appUrl: "https://app.example", supportEmail: "help@app.example" };
+const PLAN_LINE =
+  "Your Free plan includes 20 scans a day, up to 100 a month, per person. Limits reset at 00:00 UTC.";
 const noSupport = { appUrl: "https://app.example" };
 const token = "tok_9f8e7d6c5b4a39281706f5e4d3c2b1a0";
 const url = `https://app.example/api/auth/verify?token=${token}`;
@@ -140,8 +142,8 @@ const cases: Record<
     input: { firstName: "there", topicPhrase: "your question" },
   },
   welcome: {
-    make: (ctx) => welcomeEmail(ctx, { receiptsPerDay: 20 }),
-    input: { url: "https://app.example/app/upload", receiptsPerDay: "20" },
+    make: (ctx) => welcomeEmail(ctx, { planLine: PLAN_LINE }),
+    input: { url: "https://app.example/app/upload", planLine: PLAN_LINE },
   },
   emailChange: {
     make: (ctx) =>
@@ -576,18 +578,14 @@ describe("helpers", () => {
 });
 
 describe("welcomeEmail", () => {
-  it("states the plan's daily limit it was given, in both parts", () => {
-    for (const limit of [5, 20, 100]) {
-      const mail = welcomeEmail(withSupport, { receiptsPerDay: limit });
-      expect(mail.text).toContain(
-        `scans up to ${limit} receipts a day. The count resets every day.`,
-      );
-      expect(mail.html).toContain(`scans up to ${limit} receipts a day.`);
-    }
+  it("states the plan line it was given, in both parts", () => {
+    const mail = welcomeEmail(withSupport, { planLine: PLAN_LINE });
+    expect(mail.text).toContain(PLAN_LINE);
+    expect(mail.html).toContain(PLAN_LINE);
   });
 
   it("has the fixed subject, an ordered plain-text list and the upload link without expiry", () => {
-    const mail = welcomeEmail(withSupport, { receiptsPerDay: 20 });
+    const mail = welcomeEmail(withSupport, { planLine: PLAN_LINE });
     expect(mail.subject).toBe("Welcome to ReceiptOCR");
     expect(mail.text).toContain(
       "1. Take a photo or upload a file. Photos and PDFs both work, from your phone or computer.\n2. Check the fields.",
@@ -601,23 +599,23 @@ describe("welcomeEmail", () => {
   });
 
   it("points help at replies, or at the in-app button without a support inbox", () => {
-    expect(welcomeEmail(withSupport, { receiptsPerDay: 20 }).text).toContain(
+    expect(welcomeEmail(withSupport, { planLine: PLAN_LINE }).text).toContain(
       "Reply to this email and we'll answer.",
     );
-    expect(welcomeEmail(noSupport, { receiptsPerDay: 20 }).text).toContain(
+    expect(welcomeEmail(noSupport, { planLine: PLAN_LINE }).text).toContain(
       "Use the support button in the app.",
     );
   });
 
   it("renders the steps as an ordered list with hidden numbers", () => {
-    const { html } = welcomeEmail(withSupport, { receiptsPerDay: 20 });
+    const { html } = welcomeEmail(withSupport, { planLine: PLAN_LINE });
     expect(html.match(/<ol[\s>]/g)).toHaveLength(1);
     expect(html.match(/<li[\s>]/g)).toHaveLength(3);
     expect(html.match(/aria-hidden="true"/g)).toHaveLength(3);
   });
 
   it("loads no tracking pixel or remote font", () => {
-    const { html } = welcomeEmail(withSupport, { receiptsPerDay: 20 });
+    const { html } = welcomeEmail(withSupport, { planLine: PLAN_LINE });
     expect(html).not.toMatch(/@import|font-face|<link[^>]+stylesheet/);
     expect(html.match(/<img/g)).toHaveLength(1);
   });

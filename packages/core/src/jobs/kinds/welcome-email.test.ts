@@ -7,7 +7,7 @@ import type { Job } from "../definition";
 import { JOB_REGISTRY } from "../registry";
 import { welcomeEmail, WelcomeMailer, welcomeEmailPayload } from "./welcome-email";
 
-/** A Db whose queries answer from `rows`, in call order: the user row, then the plan row. */
+/** A Db whose queries answer from `rows`, in call order: the user row, then the account plan row. */
 const fakeDb = (rows: unknown[][]) => {
   const queue = [...rows];
   return Layer.succeed(Db, {
@@ -22,7 +22,7 @@ const run = (
   rows: unknown[][],
   send: (input: {
     to: string;
-    receiptsPerDay: number;
+    plan: string;
   }) => "delivered" | "not_configured" | "failed" | "rejected",
   sent: unknown[] = [],
 ) =>
@@ -50,15 +50,17 @@ describe("welcome email job", () => {
     expect(welcomeEmailPayload.safeParse({}).success).toBe(false);
   });
 
-  it("sends the plan's daily limit read at send time, not a fixed number", async () => {
-    for (const [plan, limit] of [
-      ["free", DEFAULT_PLANS.free.receiptsPerDay],
-      ["pro", DEFAULT_PLANS.pro.receiptsPerDay],
-    ] as const) {
+  it("sends the plan and its limits read at send time, not fixed numbers", async () => {
+    for (const plan of ["free", "pro"] as const) {
       const sent: unknown[] = [];
-      const exit = await run([[{ email: "a@example.com" }], [{ plan }]], () => "delivered", sent);
+      // The second query is accountPlan: Pro when comped or owning a Pro workspace.
+      const exit = await run(
+        [[{ email: "a@example.com" }], [{ pro: plan === "pro" }]],
+        () => "delivered",
+        sent,
+      );
       expect(Exit.isSuccess(exit)).toBe(true);
-      expect(sent).toEqual([{ to: "a@example.com", receiptsPerDay: limit }]);
+      expect(sent).toEqual([{ to: "a@example.com", plan, policy: DEFAULT_PLANS[plan] }]);
     }
     expect(DEFAULT_PLANS.free.receiptsPerDay).not.toBe(DEFAULT_PLANS.pro.receiptsPerDay);
   });
@@ -71,7 +73,7 @@ describe("welcome email job", () => {
   });
 
   it("does not retry when no mailer is configured, and retries a failed send", async () => {
-    const rows = () => [[{ email: "a@example.com" }], [{ plan: "free" }]];
+    const rows = () => [[{ email: "a@example.com" }], [{ pro: false }]];
     const unconfigured = await run(rows(), () => "not_configured");
     expect(Exit.isSuccess(unconfigured)).toBe(true);
     const failed = await run(rows(), () => "failed");

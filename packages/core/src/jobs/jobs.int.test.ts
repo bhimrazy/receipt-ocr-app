@@ -311,7 +311,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       },
     });
     // Waiting in the queue, the round counts as in flight.
-    expect((await run(checkQuota(a.userId, limits))).used).toBeGreaterThanOrEqual(1);
+    expect((await run(checkQuota(a, limits))).used).toBeGreaterThanOrEqual(1);
     await drain([jobId]);
     expect((await receiptOf(receipt.id, a))?.status).toBe("completed");
     expect((await jobsOf(receipt.id))[0]).toMatchObject({ state: "succeeded", attempts: 1 });
@@ -571,7 +571,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   it("retries with backoff, records every attempt's calls, and reserves quota once per round", async () => {
     const c = await createUser("retry");
     const before = await run(
-      Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+      Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))),
     );
     script = [{ kind: "provider-error" }, { kind: "timeout" }];
     const { receipt, jobId } = await upload(c);
@@ -613,10 +613,10 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     ]);
     // One round, one receipt read: the automatic retries cost the user nothing extra.
     const after = await run(
-      Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+      Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))),
     );
     expect(after.userMinute - before.userMinute).toBe(1);
-    expect(after.userDay - before.userDay).toBe(1);
+    expect(after.day - before.day).toBe(1);
     expect(
       await db((d) => d.select().from(ocrRounds).where(eq(ocrRounds.receiptId, receipt.id))),
     ).toHaveLength(1);
@@ -954,11 +954,11 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   it("a round between automatic retries keeps holding the user's quota", async () => {
     const c = await createUser("between");
     const usage = () =>
-      run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))));
-    const start = (await usage()).userDay;
+      run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))));
+    const start = (await usage()).day;
     script = Array.from({ length: 4 }, () => ({ kind: "provider-error" as const }));
     const { receipt, jobId } = await upload(c);
-    expect((await usage()).userDay).toBe(start + 1);
+    expect((await usage()).day).toBe(start + 1);
     for (let attempt = 1; attempt <= 4; attempt++) {
       await db((d) =>
         d
@@ -979,11 +979,11 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       );
       expect(runs.map((r) => r.outcome)).toEqual([attempt < 4 ? "retry" : "dead"]);
       // Its calls failed, but its job is live: still in flight, not a free failure.
-      if (attempt < 4) expect((await usage()).userDay).toBe(start + 1);
+      if (attempt < 4) expect((await usage()).day).toBe(start + 1);
     }
     expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
     // Settled: now one failed round, inside the day's free allowance, counted once.
-    expect((await usage()).userDay).toBe(start);
+    expect((await usage()).day).toBe(start);
     const failedRounds = await db((d) =>
       d.select().from(ocrRounds).where(eq(ocrRounds.receiptId, receipt.id)),
     );
@@ -993,7 +993,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   it("each model-calling retry attempt counts toward the global daily cap", async () => {
     const c = await createUser("global");
     const usage = () =>
-      run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))));
+      run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))));
     const before = (await usage()).globalDay!;
     script = [{ kind: "timeout" }, { kind: "timeout" }];
     const { jobId } = await upload(c);
@@ -1070,8 +1070,8 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     async (state) => {
       const c = await createUser(`overdue-${state}`);
       const usage = () =>
-        run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))));
-      const start = (await usage()).userDay;
+        run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))));
+      const start = (await usage()).day;
       const { receipt, jobId } = await upload(c);
       const longAgo = new Date(Date.now() - 6 * 60_000);
       await db((d) =>
@@ -1093,7 +1093,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       // And, for a queued job, nothing has drained the queue for as long.
       if (state === "queued") await setLastTick(SIX_MINUTES);
       expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
-      expect((await usage()).userDay).toBe(start);
+      expect((await usage()).day).toBe(start);
       const retried = await run(claimRetry({ receiptId: receipt.id, scope: c, limits }));
       expect(await queue((q) => q.get(jobId))).toMatchObject({
         state: "cancelled",
@@ -1107,8 +1107,8 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   it("a job waiting behind its owner's cap stays live while ticks run, and ages out once none do", async () => {
     const c = await createUser("capped");
     const usage = () =>
-      run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))));
-    const start = (await usage()).userDay;
+      run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))));
+    const start = (await usage()).day;
     // Two jobs already running for this user: the running cap.
     await db((d) =>
       d.insert(jobs).values(
@@ -1126,7 +1126,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     const { receipt, jobId } = await upload(c);
     await age(receipt.id, jobId);
     expect((await receiptOf(receipt.id, c))?.status).toBe("processing");
-    expect((await usage()).userDay).toBe(start + 1);
+    expect((await usage()).day).toBe(start + 1);
     // Not claimable, so a poll doesn't kick it.
     expect(await queue((q) => q.dueReceiptJob(receipt.id))).toBeNull();
     // Running jobs whose lease ran out don't hold the cap: then the poll may kick it.
@@ -1140,7 +1140,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     // Nothing has drained the queue for six minutes: now it is orphaned.
     await setLastTick(SIX_MINUTES);
     expect((await receiptOf(receipt.id, c))?.status).toBe("failed");
-    expect((await usage()).userDay).toBe(start);
+    expect((await usage()).day).toBe(start);
     await db((d) => d.delete(jobs).where(eq(jobs.userId, c.userId)));
   });
 
@@ -1270,7 +1270,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   });
 
   it("welcomes a user once: a second enqueue is a no-op, before and after the mail is sent", async () => {
-    const sent: { to: string; receiptsPerDay: number }[] = [];
+    const sent: { to: string; plan: string; policy: unknown }[] = [];
     const mailer = Layer.succeed(WelcomeMailer, {
       send: (input) => Effect.sync(() => (sent.push(input), "delivered" as const)),
     });
@@ -1292,7 +1292,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       }).pipe(Effect.provide(mailer)),
     );
     expect(sent).toEqual([
-      { to: expect.stringContaining("@"), receiptsPerDay: DEFAULT_PLANS.free.receiptsPerDay },
+      { to: expect.stringContaining("@"), plan: "free", policy: DEFAULT_PLANS.free },
     ]);
     expect((await welcomeJobs()).map((j) => j.state)).toEqual(["succeeded"]);
     expect(await run(enqueueWelcomeEmail(a.userId))).toBe(false);

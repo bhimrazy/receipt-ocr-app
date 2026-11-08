@@ -1,7 +1,7 @@
 # Status and handoff
 
 Where the project stands, what is in flight, and what needs a decision. Read this first when picking the work up on a
-new machine; keep it current when something merges or a decision is made. Last updated 2026-11-07 (after #110).
+new machine; keep it current when something merges or a decision is made. Last updated 2026-11-08 (billing v1 in review).
 
 How the system is built (every app and package, the main flows and the data model) is in
 [architecture](architecture/README.md).
@@ -148,6 +148,21 @@ Steps are in [deployment.md](deployment.md).
 - Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
   replaced on 2026-11-08 (only `BETTER_AUTH_SECRET`; keep its copy in a password manager).
 - Set `OCR_DAILY_CAP` in production as a spend guard.
+- Billing v1 (in review, #143). Before it can take money, in this order:
+  1. Run **Database Migration** (`staging-db`, then `production-db`) before deploying; the release adds `billing_events`,
+     `billing_subscriptions` and `ocr_rounds.plan`, and replaces `ocr_rounds_organization_id_idx` (migration
+     `0001_billing`, on top of the squashed baseline).
+  2. Add the six `PADDLE_*` variables (sandbox first) and the webhook destination, including the `adjustment.*` events
+     ([step 10](production-environment.md#10-payments-paddle)); redeploy so the CSP picks up the client token. Only
+     `PADDLE_API_KEY` and `PADDLE_WEBHOOK_SECRET` are Sensitive: the other four are read at build time, when `vercel
+pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the secrets come from.
+  3. Set `OCR_DAILY_CAP` to about 1000 (the all-plans fuse; the Free pool is 300 a day).
+  4. Test a sandbox checkout, then submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
+     account verification, and switch to live values ([10c](production-environment.md#10c-switch-from-sandbox-to-live)).
+  5. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).
+  6. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price,
+     and keep the old price id in `PADDLE_PRICE_PRO_LEGACY` ([runbook](architecture/flows/billing.md#runbook)). There is
+     no automated email for this yet.
 - Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
 - Standing decisions and dated reminders: [decisions.md](decisions.md).
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
@@ -166,9 +181,10 @@ Steps are in [deployment.md](deployment.md).
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                                                                                                                       |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #136 | Squash migrations `0000`-`0003` into one baseline; CI integration on Postgres 17 and 18, e2e on 17. Branches adding migrations (`feat/billing-paddle`, `feat/sign-in-methods`) regenerate theirs as `0001` after it merges |
+| PR   | Work                                                                                                                                                                                                                                        |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #136 | Squash migrations `0000`-`0003` into one baseline; CI integration on Postgres 17 and 18, e2e on 17. Branches adding migrations (`feat/billing-paddle`, `feat/sign-in-methods`) regenerate theirs as `0001` after it merges                  |
+| #143 | Billing v1: Paddle Billing subscription for Pro, plans per workspace, monthly pooled quota for Pro (500 a month, 200 a day), Free pool, `/pricing` and `/refunds`, migration `0001_billing`. Flow: [billing](architecture/flows/billing.md) |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).

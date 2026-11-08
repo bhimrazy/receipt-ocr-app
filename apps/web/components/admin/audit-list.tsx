@@ -40,9 +40,11 @@ function label(action: string): string {
 const cap = (value: unknown) =>
   typeof value === "string" ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : String(value);
 
-type Policy = Record<string, number>;
+type Policy = Record<string, number | null>;
 const FIELDS: [string, string][] = [
+  ["receiptsPerMonth", "a month"],
   ["receiptsPerDay", "a day"],
+  ["poolPerDay", "pool a day"],
   ["receiptsPerMinute", "a minute"],
   ["batchMax", "a batch"],
   ["workspaces", "workspaces"],
@@ -54,7 +56,9 @@ function planChanges(from: Record<string, Policy>, to: Record<string, Policy>): 
     for (const [field, unit] of FIELDS) {
       const before = from?.[plan]?.[field];
       const after = to[plan]?.[field];
-      if (before !== after) parts.push(`${cap(plan)}: ${before ?? "–"} → ${after} ${unit}`);
+      if (before !== after) {
+        parts.push(`${cap(plan)}: ${before ?? "–"} → ${after ?? "none"} ${unit}`);
+      }
     }
   }
   return parts.join(" · ") || "No change";

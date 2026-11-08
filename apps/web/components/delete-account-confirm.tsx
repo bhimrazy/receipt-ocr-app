@@ -10,7 +10,7 @@ import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
 import { clearSharedFiles } from "@/lib/share-target";
 import { clearSignedInHint } from "@/lib/signed-in-hint";
-import { WORKSPACE_NEEDS_OWNER } from "@/lib/account-deletion";
+import { WORKSPACE_HAS_SUBSCRIPTION, WORKSPACE_NEEDS_OWNER } from "@/lib/account-deletion";
 
 const LINK_INVALID = "This link has expired or was already used.";
 
@@ -31,8 +31,12 @@ export function DeleteAccountConfirm({ token }: { token: string | null }) {
     const { error: deleteError } = await authClient.deleteUser({ token });
     if (deleteError) {
       setPending(false);
-      // Rate limits and a workspace that still needs another owner leave the link usable.
-      if (deleteError.status === 429 || deleteError.code === WORKSPACE_NEEDS_OWNER)
+      // Rate limits, a workspace that still needs another owner and a live subscription leave the link usable.
+      if (
+        deleteError.status === 429 ||
+        deleteError.code === WORKSPACE_NEEDS_OWNER ||
+        deleteError.code === WORKSPACE_HAS_SUBSCRIPTION
+      )
         setError(authErrorMessage(deleteError));
       else
         setSpent(

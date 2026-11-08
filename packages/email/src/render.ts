@@ -36,7 +36,7 @@ export const SLOT_KINDS = {
   code: "line",
   provider: "line",
   passkeyName: "line",
-  receiptsPerDay: "line",
+  planLine: "line",
 } as const satisfies Record<string, SlotKind>;
 
 export type SlotName = keyof typeof SLOT_KINDS;

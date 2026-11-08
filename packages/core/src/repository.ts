@@ -32,7 +32,13 @@ import { enqueueJob } from "./jobs/queue";
 import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-job";
 import type { QuotaVerdict } from "./quota";
 import { Db } from "./services";
-import { countUsage, lockUserQuota, type UsageCounts, type UsageWindow } from "./usage";
+import {
+  countUsage,
+  lockQuota,
+  type UsageCounts,
+  type UsageSubject,
+  type UsageWindow,
+} from "./usage";
 import { isUuid } from "./ids";
 import { isIsoDay, parseCurrency, parseReceiptDate } from "./receipt-fields";
 
@@ -130,7 +136,7 @@ export type OcrCallRow = Omit<NewOcrCall, "id" | "status"> & {
 };
 
 /**
- * The quota check run under the user's lock, in the same transaction that
+ * The quota check run under the quota lock (the user's, and the workspace's on a pooled plan), in the same transaction that
  * records the new round, so parallel requests can't all pass it.
  */
 export type QuotaGate = {
@@ -395,7 +401,10 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
     readonly objectKeys: (
       owner: { organizationId: string } | { userId: string },
     ) => Effect.Effect<string[], DbError>;
-    readonly usage: (userId: string, window: UsageWindow) => Effect.Effect<UsageCounts, DbError>;
+    readonly usage: (
+      subject: UsageSubject,
+      window: UsageWindow,
+    ) => Effect.Effect<UsageCounts, DbError>;
   }
 >() {
   static readonly Live = Layer.effect(
@@ -404,8 +413,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       insert: ({ id, scope, fileName, imageObjectKey, priority }, quota) =>
         use((db) =>
           db.transaction(async (tx): Promise<InsertResult> => {
-            await lockUserQuota(tx, scope.userId);
-            const verdict = quota.decide(await countUsage(tx, scope.userId, quota.window));
+            await lockQuota(tx, scope, quota.window.scope === "workspace");
+            const verdict = quota.decide(await countUsage(tx, scope, quota.window));
             if (!verdict.allowed) return { kind: "quota", verdict };
             const [row] = await tx
               .insert(receipts)
@@ -424,6 +433,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               organizationId: scope.organizationId,
               userId: scope.userId,
               round: 1,
+              plan: quota.window.plan,
             });
             const job = await enqueueJob(
               tx,
@@ -508,8 +518,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
         use(async (db): Promise<RetryClaim> => {
           if (!isReceiptId(id)) return { kind: "not-found" };
           return db.transaction(async (tx): Promise<RetryClaim> => {
-            await lockUserQuota(tx, scope.userId);
-            const verdict = quota.decide(await countUsage(tx, scope.userId, quota.window));
+            await lockQuota(tx, scope, quota.window.scope === "workspace");
+            const verdict = quota.decide(await countUsage(tx, scope, quota.window));
             if (!verdict.allowed) return { kind: "quota", verdict };
             const now = new Date();
             const [claimed] = await tx
@@ -536,6 +546,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 organizationId: scope.organizationId,
                 userId: scope.userId,
                 round,
+                plan: quota.window.plan,
               });
               // A job still live for an older round can no longer write (the
               // round fences it); end it so the new round's job can be enqueued.
@@ -726,7 +737,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           return rows.flatMap((row) => (row.key ? [row.key] : []));
         }),
 
-      usage: (userId, window) => use((db) => countUsage(db, userId, window)),
+      usage: (subject, window) => use((db) => countUsage(db, subject, window)),
     })),
   );
 }

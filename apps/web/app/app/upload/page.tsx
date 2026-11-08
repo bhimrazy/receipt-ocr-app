@@ -24,7 +24,7 @@ async function Panel() {
   return (
     <UploadPanel
       batchMax={policy.batchMax}
-      resetsIn={formatTimeUntil(usage.resetsAt)}
+      resetsIn={formatTimeUntil(usage.opensAt)}
       usage={usage}
     />
   );

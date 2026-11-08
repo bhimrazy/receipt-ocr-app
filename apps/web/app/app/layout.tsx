@@ -78,7 +78,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     email: session.user.email,
     image: session.user.image ?? null,
   };
-  const workspace = { activeId: scope.organizationId, canCreate: allowance.canCreate, workspaces };
+  const workspace = {
+    activeId: scope.organizationId,
+    canCreate: allowance.canCreate,
+    planNote: allowance.planNote,
+    workspaces,
+  };
   const meter = (
     <Suspense fallback={<MeterSkeleton />}>
       <Meter />
