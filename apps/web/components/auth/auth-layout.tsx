@@ -42,7 +42,10 @@ export async function AuthLayout({
   return (
     <div className="relative grid min-h-dvh overflow-x-clip bg-background lg:grid-cols-2">
       <aside className="relative hidden flex-col justify-between gap-8 border-r border-border bg-secondary/20 p-10 lg:flex xl:p-12">
-        <div aria-hidden className="grid-mask pointer-events-none absolute inset-0 overflow-hidden opacity-30">
+        <div
+          aria-hidden
+          className="grid-mask pointer-events-none absolute inset-0 overflow-hidden opacity-30"
+        >
           <div className="receipt-grid absolute -inset-1" />
         </div>
         <div
