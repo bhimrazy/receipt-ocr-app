@@ -8,6 +8,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, Send, X } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Turnstile, useTurnstile } from "@/components/turnstile";
+import { hasSignedInHint } from "@/lib/signed-in-hint";
 import type { SupportTopic } from "@/lib/support-widget";
 
 const TOPICS: Array<{ id: SupportTopic; label: string; prompt: string }> = [
@@ -26,6 +27,9 @@ const fieldClass =
 
 type Status = "idle" | "sending" | "sent" | "error";
 
+/** The route's limit too. */
+const MAX_NAME = 80;
+
 /**
  * The support form, loaded on first open. It stays mounted after that (rendering nothing while
  * closed) so a half-written message survives closing; Turnstile mounts only while it is open.
@@ -41,17 +45,38 @@ export default function SupportPanel({
   onTopicChange: (topic: SupportTopic) => void;
   onClose: () => void;
 }) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  const emailRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const ids = useId();
   const turnstile = useTurnstile();
 
+  // Signed in: start from the account's name and address, still editable. The hint cookie spares
+  // visitors a session request.
+  useEffect(() => {
+    if (!hasSignedInHint()) return;
+    let live = true;
+    fetch("/api/auth/get-session", { credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: { user?: { name?: unknown; email?: unknown } } | null) => {
+        const user = body?.user;
+        if (!live || !user) return;
+        const { name: accountName, email: accountEmail } = user;
+        if (typeof accountName === "string") setName((v) => v || accountName.slice(0, MAX_NAME));
+        if (typeof accountEmail === "string") setEmail((v) => v || accountEmail);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (!open) return;
-    emailRef.current?.focus();
+    nameRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
@@ -77,7 +102,7 @@ export default function SupportPanel({
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...turnstile.fetchOptions?.headers },
-        body: JSON.stringify({ email, message, topic, company }),
+        body: JSON.stringify({ name, email, message, topic, company }),
       });
       turnstile.reset();
       if (!res.ok) {
@@ -85,7 +110,6 @@ export default function SupportPanel({
         throw new Error(body?.error ?? "Your message didn't send. Try again in a moment.");
       }
       setStatus("sent");
-      setEmail("");
       setMessage("");
     } catch (err) {
       turnstile.reset();
@@ -160,11 +184,26 @@ export default function SupportPanel({
             </fieldset>
 
             <Field>
+              <FieldLabel className="text-xs text-muted-foreground" htmlFor={`${ids}-name`}>
+                Your name
+              </FieldLabel>
+              <Input
+                ref={nameRef}
+                id={`${ids}-name`}
+                required
+                maxLength={MAX_NAME}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                autoComplete="name"
+                className={cn("h-11", fieldClass)}
+              />
+            </Field>
+
+            <Field>
               <FieldLabel className="text-xs text-muted-foreground" htmlFor={`${ids}-email`}>
                 Your email
               </FieldLabel>
               <Input
-                ref={emailRef}
                 id={`${ids}-email`}
                 type="email"
                 required

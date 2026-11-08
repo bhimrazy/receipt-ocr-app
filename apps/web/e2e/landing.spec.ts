@@ -29,6 +29,20 @@ test("a stale hint without a session lands on sign-in and is cleared", async ({
   expect((await context.cookies()).find((c) => c.name === "signed_in_hint")).toBeUndefined();
 });
 
+test("the support form starts from a signed-in visitor's name and email, both editable", async ({
+  page,
+}) => {
+  const email = uniqueEmail("support-prefill");
+  await signUp(page, email);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Contact support" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Your name")).toHaveValue("E2E User");
+  await expect(dialog.getByLabel("Your email")).toHaveValue(email);
+  await dialog.getByLabel("Your name").fill("Someone Else");
+  await expect(dialog.getByLabel("Your name")).toHaveValue("Someone Else");
+});
+
 test("a failed support panel chunk shows a fallback with retry instead of breaking the page", async ({
   page,
 }) => {
