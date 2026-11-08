@@ -290,6 +290,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Linking a new subscription looks up early revoking adjustments in `billing_events` with a sequential scan. Add a
+  partial expression index `billing_events (provider, (payload->'adjustment'->>'subscriptionId')) where outcome =
+'unmatched'`; fold it into the next schema change.
 - Storage limit per plan (owner, 2026-11-08): today only each upload is capped (10 MB, 10 PDF pages), so total storage
   per workspace is unbounded on both Free and Pro, and R2's free tier is 10 GB. Decide a cap per plan (stored bytes or
   receipts per workspace, and maybe a retention period for Free), enforce it at upload from a per-workspace usage
