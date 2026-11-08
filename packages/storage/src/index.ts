@@ -134,9 +134,10 @@ const SIGN_WINDOW_SECONDS = 60 * 5;
  *
  * The signature is dated at the start of the current 5-minute window, so the
  * URL is identical for every render in it and the browser can reuse its cached
- * response. The URL stays valid for at least `expiresIn` minus one window, and
- * `max-age` is that remainder, so a cached copy never outlives the signature.
- * `private` keeps shared caches out. `now` is for tests.
+ * response. It is signed for `expiresIn` plus one window, so every URL handed
+ * out stays valid for at least `expiresIn`. `max-age` is one window: after it
+ * pages render a new URL, so a longer cache would never be hit. `private`
+ * keeps shared caches out. `now` is for tests.
  */
 export async function signedGetUrl(
   config: S3StorageConfig,
@@ -148,19 +149,20 @@ export async function signedGetUrl(
   const type = TYPES[ext] ?? "application/octet-stream";
   const inline = type.startsWith("image/");
   const windowMs = SIGN_WINDOW_SECONDS * 1000;
-  const maxAge = Math.max(expiresIn - SIGN_WINDOW_SECONDS, 0);
   return getSignedUrl(
     s3Client(config),
     new GetObjectCommand({
       Bucket: config.bucket,
       Key: key,
       ResponseContentType: type,
-      ResponseCacheControl: `private, max-age=${maxAge}, immutable`,
+      ResponseCacheControl: `private, max-age=${SIGN_WINDOW_SECONDS}, immutable`,
       ResponseContentDisposition: inline
         ? "inline"
         : `attachment; filename="receipt.${TYPES[ext] ? ext : "bin"}"`,
     }),
-    // The signing window starts before `now`, so the URL expires `expiresIn` after the window start.
-    { expiresIn, signingDate: new Date(Math.floor(now / windowMs) * windowMs) },
+    {
+      expiresIn: expiresIn + SIGN_WINDOW_SECONDS,
+      signingDate: new Date(Math.floor(now / windowMs) * windowMs),
+    },
   );
 }

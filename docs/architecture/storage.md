@@ -14,7 +14,7 @@ All in [`src/index.ts`](../../packages/storage/src/index.ts):
 | `receiptObjectKey(userId, id, type)`   | `users/<userId>/receipts/<receiptId>.<ext>`                                        |
 | `putObject`, `getObject`               | Store and read one object                                                          |
 | `deleteObjects(config, keys)`          | Delete in batches of 1,000 (the S3 maximum); throws if any key fails               |
-| `signedGetUrl(config, key, expiresIn)` | A read URL valid 5 to 10 minutes by default, stable within a 5-minute window       |
+| `signedGetUrl(config, key, expiresIn)` | A read URL valid 10 to 15 minutes by default, stable within a 5-minute window      |
 | `s3Client(config)`                     | The cached client for a config                                                     |
 
 ## Data flow
@@ -44,8 +44,10 @@ for AWS), `S3_REGION` (default `auto`, right for R2), `S3_BUCKET`, `S3_ACCESS_KE
   type sniffed from the file's bytes. The uploaded file name is stored in `receipts.file_name` only.
 - **The bucket stays private.** Images reach the browser only through signed URLs.
 - **Signed URLs are cacheable, privately.** The signature is dated at the start of a 5-minute window, so repeat renders get the
-  same URL, and `ResponseCacheControl: private, max-age=<expiresIn - 300>, immutable` lets the browser reuse the image
-  without outliving the signature.
+  same URL. It is signed for `expiresIn` plus that window, so a URL handed out late in a window still works for the
+  full `expiresIn` (an "Open full size" click minutes later doesn't hit an expired link).
+  `ResponseCacheControl: private, max-age=300, immutable` lets the browser reuse the image for the window; after it,
+  pages render a new URL.
 - **Signed URLs pin the response type.** `ResponseContentType` comes from the key's extension, so a changed object's
   metadata can't make the bucket serve HTML. Images are served `inline`; PDFs and anything else as an `attachment`,
   so they never render on the bucket's origin.

@@ -17,7 +17,8 @@ describe("signedGetUrl (L5)", () => {
     const query = await params(receiptObjectKey("u1", "r1", "application/pdf"));
     expect(query.get("response-content-disposition")).toBe('attachment; filename="receipt.pdf"');
     expect(query.get("response-content-type")).toBe("application/pdf");
-    expect(query.get("X-Amz-Expires")).toBe("600");
+    // The default 600 s plus one 5-minute signing window.
+    expect(query.get("X-Amz-Expires")).toBe("900");
   });
 
   it("keeps images inline with their sniffed type", async () => {
@@ -40,14 +41,20 @@ describe("signedGetUrl (L5)", () => {
       expect(await at("2026-11-08T10:05:00.000Z")).not.toBe(await at("2026-11-08T10:04:59.999Z"));
     });
 
-    it("is private and its max-age ends before the signature does", async () => {
-      const url = new URL(await at("2026-11-08T10:04:59.999Z"));
-      const cacheControl = url.searchParams.get("response-cache-control");
-      expect(cacheControl).toBe("private, max-age=300, immutable");
-      // Latest fetch in the window plus max-age must not pass the expiry.
-      const start = Date.parse("2026-11-08T10:00:00Z");
-      const expires = start + Number(url.searchParams.get("X-Amz-Expires")) * 1000;
-      expect(Date.parse("2026-11-08T10:04:59.999Z") + 300_000).toBeLessThanOrEqual(expires);
+    it("dates the signature at the window start and caches privately for one window", async () => {
+      const query = new URL(await at("2026-11-08T10:04:59.999Z")).searchParams;
+      expect(query.get("X-Amz-Date")).toBe("20261108T100000Z");
+      expect(query.get("response-cache-control")).toBe("private, max-age=300, immutable");
+    });
+
+    it("stays valid for at least expiresIn, even when handed out at the end of a window", async () => {
+      for (const expiresIn of [120, 600]) {
+        const handedOut = Date.parse("2026-11-08T10:04:59.999Z");
+        const query = new URL(await signedGetUrl(config, key, expiresIn, handedOut)).searchParams;
+        const expires =
+          Date.parse("2026-11-08T10:00:00Z") + Number(query.get("X-Amz-Expires")) * 1000;
+        expect(expires - handedOut).toBeGreaterThanOrEqual(expiresIn * 1000);
+      }
     });
   });
 
