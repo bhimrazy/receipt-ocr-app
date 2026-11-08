@@ -308,3 +308,36 @@ body {
     mask-image: linear-gradient(to right, #000 calc(100% - var(--fade-end)), transparent);
   }
 }
+
+/* One-time-code input: blinking caret in the active empty box, one shake on error. */
+.otp-caret {
+  height: 1.25rem;
+  width: 1px;
+  background: var(--foreground);
+  animation: otp-caret-blink 1.1s steps(1) infinite;
+}
+@keyframes otp-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes otp-shake {
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .otp-shake {
+    animation: otp-shake 0.35s ease-in-out 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .otp-caret {
+    animation: none;
+  }
+}

@@ -30,11 +30,13 @@ test("turn on two-step sign-in, then sign in with a code and with a backup code"
 
   // The code page refuses a wrong code in plain words, then accepts the app's code.
   await passwordStep(page, email);
-  await page.getByLabel("Authentication code").fill("000000");
-  await page.getByRole("button", { name: "Verify" }).click();
+  // The sixth digit submits by itself; a wrong code clears the field and keeps focus on it.
+  const codeField = page.getByLabel("Authentication code");
+  await codeField.pressSequentially("000000");
   await expect(page.getByText("That code isn't right.")).toBeVisible();
-  await page.getByLabel("Authentication code").fill(totpCode(key));
-  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(codeField).toHaveValue("");
+  await expect(codeField).toBeFocused();
+  await codeField.pressSequentially(totpCode(key));
   await expect(page).toHaveURL(/\/app(\/|\?|$)/);
   await signOut(page);
 
@@ -56,8 +58,7 @@ test("new backup codes need a fresh 'confirm it's you' check", async ({ page }) 
 
   const dialog = page.getByRole("dialog", { name: "Confirm it's you" });
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Code from your app").fill(totpCode(key));
-  await dialog.getByRole("button", { name: "Confirm" }).click();
+  await dialog.getByLabel("Code from your app").pressSequentially(totpCode(key));
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("list", { name: "Backup codes" }).getByRole("listitem")).toHaveCount(
     10,

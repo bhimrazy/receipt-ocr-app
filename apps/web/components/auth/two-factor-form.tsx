@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
+import { OtpInput } from "@receipt-ocr/ui/components/otp-input";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -13,6 +14,7 @@ import {
   AuthError,
   AuthField,
   AuthHeading,
+  FieldShell,
   authCardClass,
   authFooterClass,
   authLinkClass,
@@ -39,28 +41,32 @@ export function TwoFactorForm({
   const [code, setCode] = useState("");
   const [trust, setTrust] = useState(false);
   const [pending, setPending] = useState(false);
+  const submitting = useRef(false);
   const [error, setError] = useState<{ message: string; restart: boolean } | null>(null);
   const signInHref =
     redirectTo === DEFAULT_REDIRECT
       ? "/sign-in"
       : `/sign-in?redirect=${encodeURIComponent(redirectTo)}`;
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const value = code.trim();
+  async function submit(typed: string) {
+    const value = typed.trim();
+    if (submitting.current) return;
     if (!value) {
       setError({ message: "Enter the code.", restart: false });
       return;
     }
+    submitting.current = true;
     setPending(true);
     setError(null);
     const { error: verifyError } = backup
       ? await authClient.twoFactor.verifyBackupCode({ code: value, trustDevice: trust })
       : await authClient.twoFactor.verifyTotp({ code: value, trustDevice: trust });
     if (verifyError) {
+      submitting.current = false;
       setPending(false);
       setError({ message: authErrorMessage(verifyError), restart: twoFactorRestart(verifyError) });
-      inputRef.current?.select();
+      if (backup) inputRef.current?.select();
+      else setCode("");
       return;
     }
     router.push(redirectTo);
@@ -78,23 +84,49 @@ export function TwoFactorForm({
         className="mt-5 flex flex-col gap-3.5"
         data-ready={hydrated}
         noValidate
-        onSubmit={submit}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit(code);
+        }}
       >
-        <AuthField
-          autoComplete="one-time-code"
-          autoFocus
-          className="font-mono tracking-widest"
-          hint="This sign-in step expires after 10 minutes."
-          id="two-factor-code"
-          inputMode={backup ? "text" : "numeric"}
-          key={backup ? "backup" : "totp"}
-          label={backup ? "Backup code" : "Authentication code"}
-          maxLength={backup ? 11 : 6}
-          onChange={(event) => setCode(event.target.value)}
-          ref={inputRef}
-          spellCheck={false}
-          value={code}
-        />
+        {backup ? (
+          <AuthField
+            autoComplete="one-time-code"
+            autoFocus
+            className="font-mono tracking-widest"
+            hint="This sign-in step expires after 10 minutes."
+            id="two-factor-code"
+            key="backup"
+            label="Backup code"
+            maxLength={11}
+            onChange={(event) => setCode(event.target.value)}
+            ref={inputRef}
+            spellCheck={false}
+            value={code}
+          />
+        ) : (
+          <FieldShell
+            hint="This sign-in step expires after 10 minutes."
+            id="two-factor-code"
+            label={
+              <>
+                Authentication code<span className="sr-only">, 6 digits</span>
+              </>
+            }
+          >
+            <OtpInput
+              aria-describedby="two-factor-code-hint"
+              autoFocus
+              id="two-factor-code"
+              invalid={Boolean(error)}
+              key="totp"
+              onComplete={(done) => void submit(done)}
+              onValueChange={setCode}
+              pending={pending}
+              value={code}
+            />
+          </FieldShell>
+        )}
         <label className="flex items-center gap-2 text-sm text-muted-foreground max-md:min-h-11">
           <input
             checked={trust}

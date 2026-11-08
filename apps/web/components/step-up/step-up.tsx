@@ -11,6 +11,7 @@ import {
 } from "@receipt-ocr/ui/components/dialog";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Input } from "@receipt-ocr/ui/components/input";
+import { OtpInput } from "@receipt-ocr/ui/components/otp-input";
 import { Fingerprint, Loader2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
@@ -71,6 +72,7 @@ export function StepUpForm({
 }) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const verifying = useRef(false);
   const [options, setOptions] = useState<StepUpOptions | null>(null);
   const [method, setMethod] = useState<Method | null>(null);
   const [code, setCode] = useState("");
@@ -105,7 +107,7 @@ export function StepUpForm({
   }, []);
 
   useEffect(() => {
-    if (autoFocus && (method !== "email" || sent)) inputRef.current?.focus();
+    if (autoFocus && method === "backup_code") inputRef.current?.focus();
   }, [autoFocus, method, sent]);
 
   async function usePasskey() {
@@ -129,17 +131,19 @@ export function StepUpForm({
     setNotice(options?.ok ? `We emailed a 6-digit code to ${options.email}.` : null);
   }
 
-  async function verify(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!method) return;
-    if (!code.trim()) return setError("Enter the code.");
+  async function verify(typed: string) {
+    if (!method || verifying.current) return;
+    if (!typed.trim()) return setError("Enter the code.");
+    verifying.current = true;
     setPending("verify");
     setError(null);
-    const result = await verifyStepUpAction({ action, method, code });
+    const result = await verifyStepUpAction({ action, method, code: typed });
+    verifying.current = false;
     setPending(null);
     if (!result.ok) {
       setError(result.error);
-      inputRef.current?.select();
+      if (method === "backup_code") inputRef.current?.select();
+      else setCode("");
       return;
     }
     onVerified();
@@ -217,7 +221,14 @@ export function StepUpForm({
   const hintId = `${id}-hint`;
 
   return (
-    <form className="flex flex-col gap-4" noValidate onSubmit={verify}>
+    <form
+      className="flex flex-col gap-4"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        void verify(code);
+      }}
+    >
       {passkeyButton ? (
         <>
           {passkeyButton}
@@ -238,22 +249,41 @@ export function StepUpForm({
       {showCode ? (
         <Field data-invalid={error ? true : undefined}>
           <FieldLabel htmlFor={`${id}-code`}>
-            {isBackup ? "Backup code" : isEmail ? "Code from the email" : "Code from your app"}
+            {isBackup ? (
+              "Backup code"
+            ) : (
+              <>
+                {isEmail ? "Code from the email" : "Code from your app"}
+                <span className="sr-only">, 6 digits</span>
+              </>
+            )}
           </FieldLabel>
-          <Input
-            aria-describedby={error ? `${hintId} ${errorId}` : hintId}
-            aria-invalid={error ? true : undefined}
-            autoComplete="one-time-code"
-            className="font-mono tracking-widest"
-            id={`${id}-code`}
-            inputMode={isBackup ? "text" : "numeric"}
-            maxLength={isBackup ? 11 : 6}
-            onChange={(event) => setCode(event.target.value)}
-            pattern={isBackup ? undefined : "[0-9]*"}
-            ref={inputRef}
-            spellCheck={false}
-            value={code}
-          />
+          {isBackup ? (
+            <Input
+              aria-describedby={error ? `${hintId} ${errorId}` : hintId}
+              aria-invalid={error ? true : undefined}
+              autoComplete="one-time-code"
+              className="font-mono tracking-widest"
+              id={`${id}-code`}
+              maxLength={11}
+              onChange={(event) => setCode(event.target.value)}
+              ref={inputRef}
+              spellCheck={false}
+              value={code}
+            />
+          ) : (
+            <OtpInput
+              aria-describedby={error ? `${hintId} ${errorId}` : hintId}
+              autoFocus={autoFocus}
+              id={`${id}-code`}
+              invalid={Boolean(error)}
+              key={method}
+              onComplete={(done) => void verify(done)}
+              onValueChange={setCode}
+              pending={pending === "verify"}
+              value={code}
+            />
+          )}
           <FieldDescription id={hintId}>
             {isBackup
               ? "One of the 10 codes you saved, like abcde-12345. Each works once."
