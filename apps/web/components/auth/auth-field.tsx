@@ -39,7 +39,10 @@ export function FieldShell({
   hint,
   aside,
   children,
-}: Pick<AuthFieldProps, "id" | "label" | "hint" | "aside"> & { children: React.ReactNode }) {
+}: Pick<AuthFieldProps, "id" | "hint" | "aside"> & {
+  label: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-3">

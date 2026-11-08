@@ -6,6 +6,7 @@ import { Card, CardContent } from "@receipt-ocr/ui/components/card";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Input } from "@receipt-ocr/ui/components/input";
+import { OtpInput } from "@receipt-ocr/ui/components/otp-input";
 import { Check, Copy, Download, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
@@ -132,18 +133,22 @@ function Scan({
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const verifying = useRef(false);
   const key = totpKeyFromUri(totpURI) ?? "";
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => headingRef.current?.focus(), []);
 
-  async function verify(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!/^\d{6}$/.test(code.trim())) return setError("Enter the 6-digit code from your app.");
+  async function verify(typed: string) {
+    if (verifying.current) return;
+    if (!/^\d{6}$/.test(typed.trim())) return setError("Enter the 6-digit code from your app.");
+    verifying.current = true;
     setPending(true);
     setError(null);
-    const { error: verifyError } = await authClient.twoFactor.verifyTotp({ code: code.trim() });
+    const { error: verifyError } = await authClient.twoFactor.verifyTotp({ code: typed.trim() });
+    verifying.current = false;
     setPending(false);
     if (verifyError) {
+      setCode("");
       return setError(
         verifyError.code === "INVALID_CODE"
           ? "That code isn't right. Check the time on your phone and try the newest code."
@@ -154,7 +159,14 @@ function Scan({
   }
 
   return (
-    <form className="flex flex-col gap-5" noValidate onSubmit={verify}>
+    <form
+      className="flex flex-col gap-5"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        void verify(code);
+      }}
+    >
       <h3 className="text-sm font-semibold outline-none" ref={headingRef} tabIndex={-1}>
         Set up your authenticator app
       </h3>
@@ -189,16 +201,13 @@ function Scan({
         <li>
           <Field data-invalid={error ? true : undefined}>
             <FieldLabel htmlFor={id}>Enter the 6-digit code it shows</FieldLabel>
-            <Input
+            <OtpInput
               aria-describedby={error ? `${id}-error` : undefined}
-              aria-invalid={error ? true : undefined}
-              autoComplete="one-time-code"
-              className="max-w-40 font-mono tracking-widest"
               id={id}
-              inputMode="numeric"
-              maxLength={6}
-              onChange={(event) => setCode(event.target.value)}
-              pattern="[0-9]*"
+              invalid={Boolean(error)}
+              onComplete={(done) => void verify(done)}
+              onValueChange={setCode}
+              pending={pending}
               value={code}
             />
           </Field>

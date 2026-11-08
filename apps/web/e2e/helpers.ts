@@ -108,8 +108,8 @@ export async function enrolAuthenticator(page: Page, email: string) {
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("img", { name: "QR code for your authenticator app" })).toBeVisible();
   const key = (await page.getByTestId("totp-key").textContent())!.replace(/\s/g, "");
-  await page.getByLabel("Enter the 6-digit code it shows").fill(totpFromBase32(key));
-  await page.getByRole("button", { name: "Turn on" }).click();
+  // The sixth digit turns it on.
+  await page.getByLabel("Enter the 6-digit code it shows").pressSequentially(totpFromBase32(key));
   const list = page.getByRole("list", { name: "Backup codes" });
   await expect(list).toBeVisible();
   const backupCodes = (await list.getByRole("listitem").allTextContents()).map((c) => c.trim());
@@ -127,8 +127,7 @@ export async function verifiedAdmin(page: Page, email: string) {
   const { key } = await enrolAuthenticator(page, email);
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/app\/settings\/security\/verify/);
-  await page.getByLabel("Code from your app").fill(totpFromBase32(key));
-  await page.getByRole("button", { name: "Confirm" }).click();
+  await page.getByLabel("Code from your app").pressSequentially(totpFromBase32(key));
   await expect(page).toHaveURL(/\/admin$/);
   return { key };
 }

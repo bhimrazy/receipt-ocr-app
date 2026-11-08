@@ -165,7 +165,7 @@ async function verifyEmailCode(sessionId: string, code: string): Promise<Verifie
   );
   if (result === "ok") return { ok: true };
   if (result === "invalid")
-    return { ok: false, error: "That code isn't right. Check the email and try again." };
+    return { ok: false, error: "That code isn't right. Use the code from the most recent email." };
   return { ok: false, error: "That code has expired or was used up. Send a new one." };
 }
 
