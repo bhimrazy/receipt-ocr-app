@@ -34,9 +34,11 @@ import { checkQuota, quotaGate, usageWindow } from "../quota";
 import { EXTRACTION_FAILED_MESSAGE, ReceiptRepo } from "../repository";
 import { Db, Storage } from "../services";
 import { Settings } from "../settings";
+import { DEFAULT_PLANS } from "../plans";
 import { ensurePersonalWorkspace } from "../workspace";
 import type { JobDefinition } from "./definition";
 import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
+import { enqueueWelcomeEmail, welcomeEmail, WelcomeMailer } from "./kinds/welcome-email";
 import { tickScope } from "./live";
 import { JobQueue } from "./queue";
 import { drainOnce } from "./drain";
@@ -581,8 +583,11 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       [3, "succeeded", undefined],
     ]);
     // Each retry waited out its backoff: at least half of 100 ms, then of 200 ms.
-    expect(ended[1]! - ended[0]!).toBeGreaterThanOrEqual(50);
-    expect(ended[2]! - ended[1]!).toBeGreaterThanOrEqual(100);
+    // The queue schedules on the database clock and this measures on the runner's,
+    // so allow a few ms of drift between them.
+    const drift = 10;
+    expect(ended[1]! - ended[0]!).toBeGreaterThanOrEqual(50 - drift);
+    expect(ended[2]! - ended[1]!).toBeGreaterThanOrEqual(100 - drift);
     expect((await receiptOf(receipt.id, c))?.status).toBe("completed");
     expect(await callsOf(receipt.id)).toEqual([
       { round: 1, jobAttempt: 1, status: "provider-error" },
@@ -1198,5 +1203,35 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     expect(listed.rows.map((r) => r.id)).not.toContain(receipt.id);
     await db((d) => d.delete(jobs).where(and(eq(jobs.receiptId, receipt.id))));
     expect((await receiptOf(receipt.id, b))?.status).toBe("failed");
+  });
+
+  it("welcomes a user once: a second enqueue is a no-op, before and after the mail is sent", async () => {
+    const sent: { to: string; receiptsPerDay: number }[] = [];
+    const mailer = Layer.succeed(WelcomeMailer, {
+      send: (input) => Effect.sync(() => (sent.push(input), "delivered" as const)),
+    });
+    const welcomeJobs = () =>
+      db((d) =>
+        d
+          .select()
+          .from(jobs)
+          .where(and(eq(jobs.kind, "email.welcome"), eq(jobs.userId, a.userId))),
+      );
+    expect(await run(enqueueWelcomeEmail(a.userId))).toBe(true);
+    expect(await run(enqueueWelcomeEmail(a.userId))).toBe(false);
+    await run(
+      tick({
+        worker: `${tag}-welcome`,
+        registry: { [welcomeEmail.kind]: welcomeEmail },
+        budgetMs: 30_000,
+        waitForRetries: false,
+      }).pipe(Effect.provide(mailer)),
+    );
+    expect(sent).toEqual([
+      { to: expect.stringContaining("@"), receiptsPerDay: DEFAULT_PLANS.free.receiptsPerDay },
+    ]);
+    expect((await welcomeJobs()).map((j) => j.state)).toEqual(["succeeded"]);
+    expect(await run(enqueueWelcomeEmail(a.userId))).toBe(false);
+    expect(await welcomeJobs()).toHaveLength(1);
   });
 });

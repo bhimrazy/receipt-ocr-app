@@ -193,3 +193,39 @@ export const passkeyAddedEmail: Notice = (ctx, input) =>
 
 export const passkeyRemovedEmail: Notice = (ctx, input) =>
   build("passkeyRemoved", `A passkey was removed from your ${BRAND} account`, ctx, input);
+
+/** An account that signed in only with Google or GitHub set a password. */
+export const passwordSetEmail: Notice = (ctx, input) =>
+  build("passwordSet", `A password was added to your ${BRAND} account`, ctx, input);
+
+/** `provider` is the app's fixed label, never user input. */
+type ProviderNotice = (
+  ctx: EmailContext,
+  input: { resetUrl: string; provider: "Google" | "GitHub" },
+) => EmailContent;
+
+export const signInConnectedEmail: ProviderNotice = (ctx, input) =>
+  build(
+    "signInConnected",
+    `${input.provider} sign-in was connected to your ${BRAND} account`,
+    ctx,
+    input,
+  );
+
+export const signInDisconnectedEmail: ProviderNotice = (ctx, input) =>
+  build(
+    "signInDisconnected",
+    `${input.provider} sign-in was disconnected from your ${BRAND} account`,
+    ctx,
+    input,
+  );
+/**
+ * Sent once to a new account. `receiptsPerDay` is the user's plan limit, read when sending, so the
+ * copy follows the plan table instead of a number written here. The link is the upload page.
+ */
+export function welcomeEmail(ctx: EmailContext, input: { receiptsPerDay: number }): EmailContent {
+  return build("welcome", `Welcome to ${BRAND}`, ctx, {
+    url: new URL("/app/upload", ctx.appUrl).toString(),
+    receiptsPerDay: String(input.receiptsPerDay),
+  });
+}

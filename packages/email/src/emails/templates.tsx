@@ -15,6 +15,7 @@ import {
   Note,
   P,
   plainText,
+  Steps,
   Strong,
   type Shared,
 } from "./layout";
@@ -361,16 +362,24 @@ const stepUpCode: EmailDefinition = {
  * A change to how the account signs in or confirms changes. Same shape as passwordChanged: what
  * happened, then "didn't do this?" with the reset link.
  */
-function factorNotice(copy: { heading: string; body: string; preheader: string }): EmailDefinition {
+function factorNotice(copy: {
+  heading: string | ((v: Values) => string);
+  body: string | ((v: Values) => string);
+  preheader: string;
+  /** Slots the heading or body read, beyond the reset link. */
+  slots?: readonly string[];
+}): EmailDefinition {
   return {
-    slots: ["resetUrl", "resetUrlLabel"],
+    slots: ["resetUrl", "resetUrlLabel", ...(copy.slots ?? [])],
     render(v, shared) {
       const help = contact(shared);
+      const heading = typeof copy.heading === "string" ? copy.heading : copy.heading(v);
+      const body = typeof copy.body === "string" ? copy.body : copy.body(v);
       const reason = `You're receiving this because the sign-in settings of this ${BRAND} account changed.`;
       return {
         html: (
-          <Layout shared={shared} preheader={copy.preheader} heading={copy.heading} reason={reason}>
-            <P>{copy.body}</P>
+          <Layout shared={shared} preheader={copy.preheader} heading={heading} reason={reason}>
+            <P>{body}</P>
             <Note className="mb-6">
               Didn&apos;t do this? Reset your password now and {help.html} so we can help secure
               your account.
@@ -379,9 +388,9 @@ function factorNotice(copy: { heading: string; body: string; preheader: string }
           </Layout>
         ),
         text: plainText(shared, {
-          heading: copy.heading,
+          heading,
           body: [
-            copy.body,
+            body,
             `Didn't do this? Reset your password now and ${help.text} so we can help secure your account.`,
           ],
           action: { label: "Reset password", url: v.resetUrl },
@@ -428,6 +437,73 @@ const passkeyRemoved = factorNotice({
   preheader: "That passkey can no longer sign in to your account.",
 });
 
+const passwordSet = factorNotice({
+  heading: "A password was added",
+  body: "A password was added to your account. You can now also sign in with your email address and this password.",
+  preheader: "Your account can now sign in with a password.",
+});
+
+const signInConnected = factorNotice({
+  heading: (v) => `${v.provider} sign-in was connected`,
+  body: (v) => `${v.provider} was connected to your account. It can now sign you in to ${BRAND}.`,
+  preheader: "A new way to sign in was added to your account.",
+  slots: ["provider"],
+});
+
+const signInDisconnected = factorNotice({
+  heading: (v) => `${v.provider} sign-in was disconnected`,
+  body: (v) => `${v.provider} was disconnected from your account and can no longer sign you in.`,
+  preheader: "A way to sign in was removed from your account.",
+  slots: ["provider"],
+});
+/** Sent once, after the account exists and its address is verified. The limit is the user's plan. */
+const welcome: EmailDefinition = {
+  slots: ["url", "urlLabel", "receiptsPerDay"],
+  render(v, shared) {
+    const heading = "Your account is ready";
+    const intro = `Thanks for joining ${BRAND}. It turns receipt photos into spreadsheet rows: merchant, date, line items, tax and total, each with a confidence score.`;
+    const steps = [
+      {
+        lead: "Take a photo or upload a file.",
+        rest: "Photos and PDFs both work, from your phone or computer.",
+      },
+      {
+        lead: "Check the fields.",
+        rest: "Low-confidence lines are marked so you know what to fix.",
+      },
+      { lead: "Export a CSV,", rest: "for one receipt or your whole history." },
+    ];
+    const plan = `Your plan scans up to ${v.receiptsPerDay} receipts a day. The count resets every day.`;
+    const note = shared.supportEmail
+      ? "Need help, or more than your plan includes? Reply to this email and we'll answer."
+      : "Need help, or more than your plan includes? Use the support button in the app.";
+    const reason = `You're receiving this because a ${BRAND} account was created with this address.`;
+    return {
+      html: (
+        <Layout
+          shared={shared}
+          preheader="Three steps to your first scan, and what your plan includes."
+          heading={heading}
+          reason={reason}
+        >
+          <P>{intro}</P>
+          <Steps items={steps} />
+          <P>{plan}</P>
+          <Action label="Scan a receipt" url={v.url} urlLabel={v.urlLabel} />
+          <Note>{note}</Note>
+        </Layout>
+      ),
+      text: plainText(shared, {
+        heading,
+        body: [intro, steps.map((s, i) => `${i + 1}. ${s.lead} ${s.rest}`).join("\n"), plan],
+        action: { label: "Scan a receipt", url: v.url },
+        note,
+        reason,
+      }),
+    };
+  },
+};
+
 export const definitions = {
   verification,
   passwordReset,
@@ -444,6 +520,10 @@ export const definitions = {
   backupCodesRegenerated,
   passkeyAdded,
   passkeyRemoved,
+  passwordSet,
+  signInConnected,
+  signInDisconnected,
+  welcome,
 } satisfies Record<string, EmailDefinition>;
 
 export type TemplateName = keyof typeof definitions;

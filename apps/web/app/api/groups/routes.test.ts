@@ -15,7 +15,6 @@ const core = vi.hoisted(() => ({
   setReceiptGroup: vi.fn(),
 }));
 
-vi.mock("server-only", () => ({}));
 vi.mock("@/lib/env", () => ({
   authEnv: {
     betterAuthUrl: "https://app.example",

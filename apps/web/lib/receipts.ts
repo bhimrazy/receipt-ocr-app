@@ -2,6 +2,7 @@ import "server-only";
 import { parseCategory } from "@receipt-ocr/ai/categories";
 import {
   getReceiptWithImage,
+  isIsoDay,
   ReceiptRepo,
   type ReceiptCounts,
   type ReceiptExportRow,
@@ -38,7 +39,6 @@ export type ReceiptSummaryPage = {
 export const HISTORY_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
 const STATUSES = new Set(["uploaded", "processing", "completed", "failed", "needs-review"]);
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 /** Group filter from `?group=` (repeatable): valid ids only, at most MAX_GROUP_FILTERS. */
 export const MAX_GROUP_FILTERS = 20;
 const groupFilterSchema = z
@@ -56,8 +56,8 @@ export function cleanFilters(input: ReceiptListFilters): ReceiptFilters {
     // Old free-text values in a URL still find canonical rows.
     category: input.category ? (parseCategory(input.category) ?? input.category) : undefined,
     status: input.status && STATUSES.has(input.status) ? input.status : undefined,
-    from: input.from && ISO_DATE.test(input.from) ? input.from : undefined,
-    to: input.to && ISO_DATE.test(input.to) ? input.to : undefined,
+    from: input.from && isIsoDay(input.from) ? input.from : undefined,
+    to: input.to && isIsoDay(input.to) ? input.to : undefined,
     groups: cleanGroups(input.groups),
   };
 }

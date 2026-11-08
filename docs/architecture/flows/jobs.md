@@ -13,6 +13,7 @@ the queue, retried with backoff, and only then allowed to fail the receipt. The 
 - [Retries, dead jobs and cooldowns](#retries-dead-jobs-and-cooldowns)
 - [Quota and cost](#quota-and-cost)
 - [Orphaned jobs](#orphaned-jobs)
+- [Other job kinds](#other-job-kinds)
 - [Tables](#tables)
 
 ## Two state machines
@@ -151,6 +152,17 @@ killed at its time limit. Two things cover that until a worker or cron drain exi
    A job that is only waiting its turn (a backlog, its owner at the running cap, a pause) stays live, because ticks
    keep running, so its receipt reads as processing and its round keeps holding quota. An orphaned job's receipt
    reads as failed, its round frees the quota, and the user's retry cancels the old job.
+
+## Other job kinds
+
+`email.welcome` ([`kinds/welcome-email.ts`](../../../packages/core/src/jobs/kinds/welcome-email.ts)) sends a new user's
+welcome email. The payload is the user id only. At send time the job reads the user's address and plan
+(`userPlan(...).policy.receiptsPerDay`, so the copy follows the plan table) and calls the `WelcomeMailer` service, which
+the web app provides (`lib/welcome-mailer.ts`; core has no mail dependency). Once-only: the idempotency key
+`welcome:<userId>` stops two live jobs, and `enqueueWelcomeEmail` also checks for any earlier welcome job of that user,
+so a finished or dead one is never repeated. An undelivered send is retried (up to 5 attempts, 30 s backoff doubling);
+with no mailer configured the job succeeds without sending. It logs `email.welcome_sent` (user id, plan, `delivered`;
+never the address or content).
 
 ## Tables
 

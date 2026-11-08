@@ -24,7 +24,6 @@ import { hotp, base32Decode, totpStep } from "./totp";
 const enabled = process.env.INTEGRATION === "1";
 const sent: SendEmailInput[] = [];
 
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
   sendEmail: async (_config: unknown, input: SendEmailInput) => {
