@@ -228,6 +228,9 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 **Next up (ordered, 2026-11-08):** [plans/2026-11-08-next-up.md](plans/2026-11-08-next-up.md). The list below is the
 longer-term roadmap.
 
+**Planned:** upgrade call-to-action for Free workspaces (Home card, account menu, at-limit banner):
+[plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), with owner decisions to make.
+
 From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 1. ~~Usage capture + quota ledger~~ (shipped in #27).
