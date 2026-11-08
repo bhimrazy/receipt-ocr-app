@@ -4,7 +4,14 @@ import { signUp, uniqueEmail } from "./helpers";
 // next.config.ts and app/robots.ts key on the request host; the test server is localhost.
 const PROD_HOST = "receipt-ocr.bhimraj.com.np";
 
-const INDEXABLE = ["/", "/pricing", "/privacy", "/terms", "/cookies", "/refunds"];
+const CONTENT = [
+  "/use-cases",
+  "/use-cases/expense-reports",
+  "/use-cases/bookkeeping",
+  "/use-cases/freelancers-taxes",
+  "/use-cases/small-businesses",
+];
+const INDEXABLE = ["/", "/pricing", "/privacy", "/terms", "/cookies", "/refunds", ...CONTENT];
 const NOINDEX_PUBLIC = ["/sign-in", "/sign-up", "/forgot-password", "/reset-password"];
 
 const meta = (page: Page, selector: string) =>
@@ -80,6 +87,41 @@ test("the home page's structured data is valid and makes no rating or review cla
   expect(blocks.join("")).not.toMatch(/aggregateRating|"review"/i);
   // FAQPage is only honest while the FAQ is on the page.
   await expect(page.locator("#faq details")).not.toHaveCount(0);
+});
+
+test("content pages carry breadcrumbs and FAQ structured data that match what is on the page", async ({
+  page,
+}) => {
+  for (const path of CONTENT) {
+    await page.goto(path);
+    const graph = (await page.locator('script[type="application/ld+json"]').allTextContents())
+      .map((text) => JSON.parse(text) as { "@graph"?: Array<Record<string, unknown>> })
+      .flatMap((data) => data["@graph"] ?? []);
+    const crumbs = graph.find((n) => n["@type"] === "BreadcrumbList") as
+      { itemListElement: Array<{ item: string }> } | undefined;
+    expect(crumbs, path).toBeTruthy();
+    expect(new URL(crumbs!.itemListElement.at(-1)!.item).pathname, path).toBe(path);
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" }), path).toBeVisible();
+    await expect(page.getByRole("link", { name: /get started free/i }).first(), path).toBeVisible();
+
+    const faq = graph.find((n) => n["@type"] === "FAQPage") as
+      { mainEntity: Array<{ name: string }> } | undefined;
+    if (path === "/use-cases") {
+      // The hub links every use case.
+      for (const other of CONTENT.slice(1)) {
+        await expect(page.locator(`main a[href="${other}"]`), other).not.toHaveCount(0);
+      }
+      continue;
+    }
+    expect(faq, path).toBeTruthy();
+    const questions = await page.locator("details summary").allTextContents();
+    expect(
+      questions.map((q) => q.trim()),
+      path,
+    ).toEqual(faq!.mainEntity.map((q) => q.name));
+    await expect(page.locator(`footer a[href="${path}"]`), path).toHaveCount(1);
+  }
+  expect(await page.request.get("/use-cases/no-such-page").then((r) => r.status())).toBe(404);
 });
 
 test("auth pages are noindex but still describe themselves", async ({ page }) => {

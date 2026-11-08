@@ -1,5 +1,6 @@
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
+import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   ArrowRight,
   Briefcase,
@@ -85,15 +86,17 @@ const steps = [
   },
 ];
 
-const useCases = [
+const useCases: Array<{ icon: typeof Users; title: string; href?: string; desc: string }> = [
   {
     icon: Briefcase,
     title: "Founders & freelancers",
+    href: "/use-cases/freelancers-taxes",
     desc: "Keep expenses in order without typing every receipt by hand.",
   },
   {
     icon: Calculator,
     title: "Bookkeepers",
+    href: "/use-cases/bookkeeping",
     desc: "Tax, totals and confidence for every receipt in one CSV, with a Needs review filter for the ones to check.",
   },
   {
@@ -104,6 +107,7 @@ const useCases = [
   {
     icon: Users,
     title: "Small teams",
+    href: "/use-cases/small-businesses",
     desc: "A shared, searchable history so nothing gets lost between people or months.",
   },
 ];
@@ -280,16 +284,42 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
               {useCases.map((useCase) => {
                 const Icon = useCase.icon;
                 return (
-                  <Card className="p-6" key={useCase.title}>
+                  <Card
+                    className={cn(
+                      "relative p-6",
+                      useCase.href && "transition hover:border-primary/40",
+                    )}
+                    key={useCase.title}
+                  >
                     <div className="mb-4 flex size-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
                       <Icon className="size-5" />
                     </div>
-                    <h3 className="font-semibold">{useCase.title}</h3>
+                    <h3 className="font-semibold">
+                      {useCase.href ? (
+                        // The link covers the whole card.
+                        <Link
+                          className="rounded-sm after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          href={useCase.href}
+                        >
+                          {useCase.title}
+                        </Link>
+                      ) : (
+                        useCase.title
+                      )}
+                    </h3>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">{useCase.desc}</p>
                   </Card>
                 );
               })}
             </div>
+            <p className="mt-8 text-center text-sm">
+              <Link
+                className="inline-flex min-h-11 items-center gap-1 rounded-sm text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                href="/use-cases"
+              >
+                See how each of them uses ReceiptOCR <ArrowRight aria-hidden className="size-4" />
+              </Link>
+            </p>
           </div>
         </section>
 
