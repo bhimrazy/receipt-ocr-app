@@ -5,6 +5,7 @@ export async function register() {
     const node = await import("./instrumentation-node");
     await node.startErrorReporting();
     await node.startTelemetryExport();
+    await node.startProductAnalytics();
     await node.loadEnvOrExit();
     await node.logAuthNotConfigured();
   }

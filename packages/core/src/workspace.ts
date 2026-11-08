@@ -13,7 +13,7 @@ import { personalWorkspaceName } from "./workspace-name";
  */
 export const resolveScope = (userId: string, preferredOrganizationId?: string | null) =>
   Effect.flatMap(Db, ({ use }) =>
-    use(async (db): Promise<Required<ReceiptScope> | null> => {
+    use(async (db): Promise<Required<Omit<ReceiptScope, "impersonatedBy">> | null> => {
       const [row] = await db
         .select({ organizationId: member.organizationId, role: member.role })
         .from(member)

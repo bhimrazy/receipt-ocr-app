@@ -75,6 +75,7 @@ import { errorFields, logger } from "./log";
 import { mailer } from "./mailer";
 import { isEmailChangeVerification, queueWelcomeEmail, welcomeAtCreation } from "./welcome";
 import { runtime } from "./runtime";
+import { signUpMethod, track } from "./telemetry/analytics";
 import {
   DELETE_TOKEN_SECONDS,
   WORKSPACE_NEEDS_OWNER,
@@ -494,7 +495,7 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        after: async (user) => {
+        after: async (user, ctx) => {
           // Personal workspace + owner membership, in one transaction (U4).
           await runtime.runPromise(ensurePersonalWorkspace(user));
           // OAuth sign-ups can arrive already verified.
@@ -502,6 +503,15 @@ export const auth = betterAuth({
           // Verified at creation (Google, GitHub) or nothing to verify: welcome now. Email sign-ups
           // that must verify are welcomed from afterEmailVerification.
           if (welcomeAtCreation(user, requireEmailVerification)) await queueWelcomeEmail(user.id);
+          // The method comes from the endpoint Better Auth ran, never from the request body.
+          const provider = (ctx?.params as { id?: unknown } | undefined)?.id;
+          track({
+            name: "signed_up",
+            userId: user.id,
+            props: {
+              method: signUpMethod(ctx?.path, typeof provider === "string" ? provider : undefined),
+            },
+          });
         },
       },
       // --- two-factor + step-up (feat/two-factor) ---

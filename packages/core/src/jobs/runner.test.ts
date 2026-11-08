@@ -109,6 +109,15 @@ describe("job.attempt events", () => {
     expect(lines[0]).not.toHaveProperty("dropped_fields");
   });
 
+  it("attributes a job enqueued while impersonating to the admin too", async () => {
+    await runTick(() => Effect.succeed({ ok: true }), undefined, [
+      { ...JOB, payload: { n: 1, impersonatedBy: "admin-1" } },
+      { ...JOB, payload: null },
+    ]);
+    const attempts = lines.filter((line) => line.event === "job.attempt");
+    expect(attempts.map((line) => line.impersonated_by)).toEqual(["admin-1", undefined]);
+  });
+
   it("records a retry with its error kind and when it runs next", async () => {
     await runTick(
       () => Effect.fail(new RetryableJobError({ kind: "rate-limited" })),

@@ -1,5 +1,5 @@
 import "server-only";
-import { withWideEvent, type AppError, type AppServices } from "@receipt-ocr/core";
+import { hitRateLimit, withWideEvent, type AppError, type AppServices } from "@receipt-ocr/core";
 import { getIP } from "better-auth/api";
 import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
@@ -48,6 +48,11 @@ function report(error: unknown, fields: ErrorFields, status: number, event?: Wid
   });
 }
 
+/** OCR failures the photo caused (unreadable, declined, wrong file): logged, not reported. */
+const PHOTO_FAILURES = new Set(["invalid-output", "bad-image", "refused", "unsupported-file"]);
+const userInputFailure = (error: AppError) =>
+  error._tag === "OcrError" && PHOTO_FAILURES.has(error.kind);
+
 /**
  * Records a failure on the wide event and returns its HTTP response. The
  * event gets the error's tag, kind and cause class, never its message:
@@ -74,7 +79,7 @@ export function failureResponse(cause: Cause.Cause<AppError>, event?: WideEvent)
     event.outcome = status >= 500 ? "error" : error._tag;
     event.error = fields;
   }
-  if (status >= 500) report(error, fields, status, event);
+  if (status >= 500 && !userInputFailure(error)) report(error, fields, status, event);
   const headers =
     error._tag === "QuotaExceeded" ? { "Retry-After": String(error.retryAfterSeconds) } : undefined;
   const message = PUBLIC.has(error._tag)
@@ -141,13 +146,45 @@ export function skipEvent(event: WideEvent): void {
   skipped.add(event);
 }
 
+/** Plan-quota rejections kept per user per minute; the rest of a burst is sampled. */
+export const QUOTA_REJECTIONS_KEPT = 3;
+
+/**
+ * Whether this plan-quota 429 is one of the user's first few this minute. A
+ * client retrying in a loop would otherwise keep every rejection and turn
+ * each into `plan_limit_hit`. A repeat is marked so analytics skips it too.
+ * Counter failures count as repeats: the rejection itself never depends on them.
+ */
+async function keepQuotaRejection(event: WideEvent): Promise<boolean> {
+  if (event.status_code !== 429 || event.outcome !== "QuotaExceeded" || !event.user_id) {
+    return false;
+  }
+  let kept = false;
+  try {
+    const key = `quota429:${event.user_id}`;
+    kept = (await runtime.runPromise(hitRateLimit(key, 60_000, QUOTA_REJECTIONS_KEPT))).allowed;
+  } catch {
+    // Counted as a repeat.
+  }
+  if (!kept) event.flags = { ...event.flags, quota_repeat: true };
+  return kept;
+}
+
 /**
  * Whether a finished request is routine for sampling. A 429 is, so a flood
  * of rejected requests can't flood the logs, unless the route keeps them;
- * anything that logged a notice never is (the same rule as job ticks).
+ * anything that logged a notice never is (the same rule as job ticks). A
+ * user's first few plan-quota rejections a minute are kept: they are the
+ * upgrade signal (`plan_limit_hit`), not a flood.
  */
-function isRoutine(spec: RequestEventSpec, request: Request, event: WideEvent): boolean {
+function isRoutine(
+  spec: RequestEventSpec,
+  request: Request,
+  event: WideEvent,
+  keptQuotaRejection: boolean,
+): boolean {
   if ((event.notices?.length ?? 0) > 0) return false;
+  if (keptQuotaRejection) return false;
   if (event.status_code === 429) return spec.keepRateLimited !== true;
   if (typeof spec.routine === "function") {
     try {
@@ -199,23 +236,28 @@ export function withRequestEvent<C = unknown>(
         event.duration_ms = Date.now() - startedAt;
         const status = event.status_code ?? 500;
         event.outcome ??= status >= 500 ? "error" : status >= 400 ? "rejected" : "ok";
-        logger.emit(event, { routine: isRoutine(spec, request, event) });
+        const keptQuotaRejection = await keepQuotaRejection(event);
+        logger.emit(event, { routine: isRoutine(spec, request, event, keptQuotaRejection) });
       }
     }
   };
 }
 
-/** The caller's ids on the event. Requests made while impersonating carry the admin's id. */
+/**
+ * The caller's ids on the event. Requests made while impersonating carry the
+ * admin's id, from the scope or the session, so a route passing either one
+ * keeps the admin's work out of product analytics.
+ */
 export function annotateCaller(
   event: WideEvent,
   caller: {
     session?: { user: { id: string }; session: { impersonatedBy?: string | null } } | null;
-    scope?: { userId: string; organizationId: string } | null;
+    scope?: { userId: string; organizationId: string; impersonatedBy?: string } | null;
   },
 ): void {
   event.user_id = caller.scope?.userId ?? caller.session?.user.id ?? event.user_id;
   event.organization_id = caller.scope?.organizationId ?? event.organization_id;
-  const impersonatedBy = caller.session?.session.impersonatedBy;
+  const impersonatedBy = caller.scope?.impersonatedBy ?? caller.session?.session.impersonatedBy;
   if (impersonatedBy) event.impersonated_by = impersonatedBy;
 }
 

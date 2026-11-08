@@ -106,8 +106,16 @@ export function setFlushScheduler(scheduler: (() => void) | undefined): void {
   state.scheduler = scheduler;
 }
 
+/**
+ * Schedules the sinks' flush after the current unit of work, as writing an
+ * event does. For sinks fed outside `emit` (product events from `track()`).
+ */
+export function scheduleFlush(): void {
+  requestFlush();
+}
+
 function requestFlush() {
-  if (state.flushPending || !state.scheduler) return;
+  if (sinks.size === 0 || state.flushPending || !state.scheduler) return;
   try {
     state.scheduler();
     state.flushPending = true;

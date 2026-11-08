@@ -102,6 +102,7 @@ export const quotaExceeded = (verdict: QuotaVerdict) =>
   new QuotaExceeded({
     message: quotaMessage(verdict),
     retryAfterSeconds: verdict.retryAfterSeconds ?? 60,
+    kind: verdict.window,
   });
 
 export function quotaMessage(verdict: QuotaVerdict): string {

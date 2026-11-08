@@ -33,7 +33,7 @@ const TOOLS: Tool[] = [
     // Region only; the host itself isn't shown.
     href: (env) =>
       env.POSTHOG_HOST?.includes("eu.") ? "https://eu.posthog.com/" : "https://us.posthog.com/",
-    adds: "product funnels and, with browser capture on, web vitals",
+    adds: "product funnels from server-side events (sign-ups, uploads, scans, exports, plan limits)",
   },
 ];
 

@@ -215,6 +215,12 @@ const runTick = <R>(options: TickOptions<R>) =>
     };
   });
 
+/** A payload's `impersonatedBy` (any kind may carry it), so the attempt is attributed like its request. */
+const impersonation = (payload: unknown): { impersonated_by?: string } => {
+  const by = (payload as { impersonatedBy?: unknown } | null)?.impersonatedBy;
+  return typeof by === "string" && by.length > 0 ? { impersonated_by: by } : {};
+};
+
 /** Runs one claimed job and writes its `job.attempt` event, from claim to settle. */
 const runClaimed = <R>(
   registry: JobRegistry<R>,
@@ -235,6 +241,7 @@ const runClaimed = <R>(
       max_attempts: job.maxAttempts,
       worker,
       queue: { kind: job.kind, priority: job.priority, wait_ms: job.waitMs },
+      ...impersonation(job.payload),
     };
     const run: JobRunRecord = yield* attempt(registry, job, worker).pipe(withWideEvent(event));
     const now = yield* Clock.currentTimeMillis;

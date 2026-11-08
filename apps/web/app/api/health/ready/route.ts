@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { commitSha, readiness } from "@/lib/health";
-import { withRequestEvent } from "@/lib/http";
+import { skipEvent, withRequestEvent } from "@/lib/http";
 
 /** Readiness: database (and storage, when configured) answer within 2 s. 503 otherwise. */
 export const GET = withRequestEvent(
@@ -8,6 +8,8 @@ export const GET = withRequestEvent(
   async (_request, _context, event) => {
     const result = await readiness();
     event.checks = result.checks;
+    // A healthy answer to an uptime pinger carries nothing; a failing check is always written.
+    if (result.ok) skipEvent(event);
     return NextResponse.json(
       { ...result, commit: commitSha() },
       {

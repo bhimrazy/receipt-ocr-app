@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { gaMeasurementId, turnstileOn } from "@/lib/consent/env";
 import { logStorageName } from "@/lib/processors";
+import { parsePostHog } from "@/lib/telemetry/posthog-config";
 import { parseSentryDsn } from "@/lib/telemetry/sentry-config";
 import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = pageMetadata({
 
 const googleAnalytics = Boolean(gaMeasurementId);
 const errorReporting = Boolean(parseSentryDsn(process.env.SENTRY_DSN));
+const productAnalytics = Boolean(parsePostHog(process.env));
 const logStorage = logStorageName(
   process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
 );
@@ -50,6 +52,11 @@ export default function PrivacyPage() {
                   "To count visits to our public pages and see which ones help people, as described under Cookies and analytics.",
                 ]
               : []),
+            ...(productAnalytics
+              ? [
+                  "To understand which features are used, so we know what to improve, from a few named events and never your receipts (see PostHog below).",
+                ]
+              : []),
             "We don't sell your data, and we don't use it for advertising.",
           ],
         },
@@ -69,6 +76,11 @@ export default function PrivacyPage() {
             ...(errorReporting
               ? [
                   "Sentry, to tell us when something breaks: for an error on our servers or in your browser, it receives the type of error, where in our code it happened, the page or API route (without query strings, and with IDs and tokens in the address removed), your browser and operating system names, and a request ID. It doesn't receive your email address, cookies, receipt files or their contents, or error messages that could contain them. Your browser connects to Sentry directly to send a report, so Sentry sees your IP address; we set it not to store it.",
+                ]
+              : []),
+            ...(productAnalytics
+              ? [
+                  "PostHog, to see which features people use: our servers (never your browser) send it a few named events, such as signing up, uploading or scanning a receipt, exporting a CSV and reaching a plan limit, each with your account's random ID, your workspace's ID and details like the upload mode, plan and AI model. It never receives your name, email address, IP address, cookies, receipts or what's on them, and nothing is sent while an administrator is signed in as you for support.",
                 ]
               : []),
             "Google and GitHub, only if you choose to sign in with them.",
