@@ -1,10 +1,16 @@
 import "server-only";
-import { ensurePersonalWorkspace, resolveScope } from "@receipt-ocr/core";
+import {
+  adminAccess,
+  ensurePersonalWorkspace,
+  loadStepUpSession,
+  resolveScope,
+} from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { auth, authEnabled, type Session } from "./auth";
+import { adminMfaEnforced } from "./env";
 import { REQUESTED_PATH_HEADER } from "./redirect";
 import { runtime } from "./runtime";
 
@@ -42,12 +48,41 @@ export function isAdmin(session: Session | null): boolean {
   return session?.user.role === "admin";
 }
 
+/** Where a signed-in admin proves their second factor for this session. */
+export const ADMIN_VERIFY_PATH = "/app/settings/security/verify";
+export const ADMIN_ENROL_PATH = "/app/settings/security?required=admin";
+
+/** Whether this admin session may use /admin: enrolled, and a factor proved this session. */
+export const adminSessionAccess = cache(async (session: Session) => {
+  const row = await runtime.runPromise(loadStepUpSession(session.session.id));
+  return adminAccess({
+    enforce: adminMfaEnforced,
+    subject: {
+      isAdmin: true,
+      twoFactorEnabled: row?.twoFactorEnabled ?? false,
+      passkeys: row?.passkeys ?? 0,
+    },
+    authMethod: row?.authMethod ?? null,
+    stepUpMethod: row?.stepUpMethod ?? null,
+  });
+});
+
 /**
  * For admin pages and server actions: requires a signed-in admin. Redirects
  * anonymous visitors to /sign-in and 404s non-admins (avoids leaking that the
- * admin area exists).
+ * admin area exists). An admin without a second factor goes to Settings →
+ * Security, and one whose session hasn't proved it goes to the verify page.
  */
 export async function requireAdmin(): Promise<Session> {
+  const session = await requireAdminRole();
+  const access = await adminSessionAccess(session);
+  if (access === "enrol") redirect(ADMIN_ENROL_PATH);
+  if (access === "verify") redirect(ADMIN_VERIFY_PATH);
+  return session;
+}
+
+/** The admin role alone, for the verify page itself (outside /admin, so no redirect loop). */
+export async function requireAdminRole(): Promise<Session> {
   const session = await requireSession();
   if (!isAdmin(session)) notFound();
   return session;

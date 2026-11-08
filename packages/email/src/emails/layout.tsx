@@ -44,6 +44,15 @@ export function Strong({ children }: { children: ReactNode }) {
   return <strong className="font-semibold break-words text-ink dark:text-d-ink">{children}</strong>;
 }
 
+/** A one-time code, large and monospaced so it reads and copies easily. */
+export function Code({ children }: { children: ReactNode }) {
+  return (
+    <Text className="m-0 mb-4 font-mono text-[28px] leading-[36px] font-semibold tracking-[0.2em] text-ink dark:text-d-ink">
+      {children}
+    </Text>
+  );
+}
+
 /** An inline link inside body copy or a note. */
 export function InlineLink({ href, children }: { href: string; children: ReactNode }) {
   return (

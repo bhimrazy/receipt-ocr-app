@@ -7,18 +7,20 @@ whether an undelivered message is an error.
 
 ## Public API
 
-| Export (from [`src/index.ts`](../../packages/email/src/index.ts) and [`src/templates.ts`](../../packages/email/src/templates.ts)) | Does                                                                                                              |
-| --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `sendEmail(config, { to, subject, html, text, replyTo? })` (`config.replyTo`, set from `SUPPORT_EMAIL`, is the default Reply-To)  | Returns `{ delivered: true, id }` or `{ delivered: false, reason: "not_configured" or "failed" }`                 |
-| `verificationEmail(ctx, { url, expiresInSeconds })`                                                                               | `{ subject, html, text }` for "confirm your email"                                                                |
-| `passwordResetEmail(ctx, { url, expiresInSeconds })`                                                                              | Same for a reset link                                                                                             |
-| `invitationEmail(ctx, { organizationName, inviterEmail, url, expiresInSeconds })`                                                 | Same for a workspace invitation                                                                                   |
-| `deleteAccountEmail(ctx, { url, expiresInSeconds, resetUrl })`                                                                    | The account-deletion confirmation link (single use; red button)                                                   |
-| `passwordChangedEmail(ctx, { resetUrl })`                                                                                         | "Your password was changed", with the reset page and support contact                                              |
-| `emailChangeEmail(ctx, { currentEmail, newEmail, url, resetUrl, expiresInSeconds })`                                              | To the current address: approve a change from `currentEmail` to `newEmail` (`url` is Better Auth's approval link) |
-| `supportMessageEmail(ctx, { from, topicLabel, message })`                                                                         | A contact-form message for the support inbox                                                                      |
-| `testEmail(ctx)`                                                                                                                  | The admin console's delivery check                                                                                |
-| `escapeHtml(value)`, `absoluteUrl(value)`                                                                                         | The escaping and link check the templates use                                                                     |
+| Export (from [`src/index.ts`](../../packages/email/src/index.ts) and [`src/templates.ts`](../../packages/email/src/templates.ts))                                                   | Does                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `sendEmail(config, { to, subject, html, text, replyTo? })` (`config.replyTo`, set from `SUPPORT_EMAIL`, is the default Reply-To)                                                    | Returns `{ delivered: true, id }` or `{ delivered: false, reason: "not_configured" or "failed" }`                 |
+| `verificationEmail(ctx, { url, expiresInSeconds })`                                                                                                                                 | `{ subject, html, text }` for "confirm your email"                                                                |
+| `passwordResetEmail(ctx, { url, expiresInSeconds })`                                                                                                                                | Same for a reset link                                                                                             |
+| `invitationEmail(ctx, { organizationName, inviterEmail, url, expiresInSeconds })`                                                                                                   | Same for a workspace invitation                                                                                   |
+| `deleteAccountEmail(ctx, { url, expiresInSeconds, resetUrl })`                                                                                                                      | The account-deletion confirmation link (single use; red button)                                                   |
+| `passwordChangedEmail(ctx, { resetUrl })`                                                                                                                                           | "Your password was changed", with the reset page and support contact                                              |
+| `emailChangeEmail(ctx, { currentEmail, newEmail, url, resetUrl, expiresInSeconds })`                                                                                                | To the current address: approve a change from `currentEmail` to `newEmail` (`url` is Better Auth's approval link) |
+| `stepUpCodeEmail(ctx, { code, expiresInSeconds })`                                                                                                                                  | The 6-digit "Confirm it's you" code for an account with no second factor (never in the subject)                   |
+| `twoFactorEnabledEmail`, `twoFactorDisabledEmail` (`byAdmin` picks the reset copy), `backupCodesRegeneratedEmail`, `passkeyAddedEmail`, `passkeyRemovedEmail` `(ctx, { resetUrl })` | Factor-change notices, with the reset page and support contact                                                    |
+| `supportMessageEmail(ctx, { from, topicLabel, message })`                                                                                                                           | A contact-form message for the support inbox                                                                      |
+| `testEmail(ctx)`                                                                                                                                                                    | The admin console's delivery check                                                                                |
+| `escapeHtml(value)`, `absoluteUrl(value)`                                                                                                                                           | The escaping and link check the templates use                                                                     |
 
 All template functions are synchronous. `ctx` is an `EmailContext`: `{ appUrl, supportEmail? }`. The package reads no
 environment; the web app builds it once as `emailContext` in [`lib/env.ts`](../../apps/web/lib/env.ts) from
@@ -28,16 +30,18 @@ off `appUrl`, so a preview deployment's mail points at the preview. Without `sup
 
 ## Who sends what
 
-| Message          | Sent from                                                                                                  | When undelivered in production                                     |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Verification     | Better Auth `sendVerificationEmail` in [`lib/auth.ts`](../../apps/web/lib/auth.ts)                         | The auth request fails                                             |
-| Password reset   | Better Auth `sendResetPassword`                                                                            | The auth request fails                                             |
-| Invitation       | Organization plugin `sendInvitationEmail`                                                                  | The invite request fails                                           |
-| Delete account   | Better Auth `sendDeleteAccountVerification`                                                                | Logged only (Better Auth 1.7.18 drops callback errors; see STATUS) |
-| Email change     | Better Auth `sendChangeEmailConfirmation`, to the current address                                          | Logged only (Better Auth 1.7.18 drops callback errors; see STATUS) |
-| Password changed | `onPasswordReset` and the `/change-password` after hook                                                    | Logged (`auth.notice_sent`); the change stands                     |
-| Support message  | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts), to `SUPPORT_EMAIL`, reply-to the sender | The route returns `503`                                            |
-| Test email       | Admin settings, [`lib/test-email.ts`](../../apps/web/lib/test-email.ts)                                    | The admin sees "failed"                                            |
+| Message          | Sent from                                                                                                          | When undelivered in production                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Verification     | Better Auth `sendVerificationEmail` in [`lib/auth.ts`](../../apps/web/lib/auth.ts)                                 | The auth request fails                                             |
+| Password reset   | Better Auth `sendResetPassword`                                                                                    | The auth request fails                                             |
+| Invitation       | Organization plugin `sendInvitationEmail`                                                                          | The invite request fails                                           |
+| Delete account   | Better Auth `sendDeleteAccountVerification`                                                                        | Logged only (Better Auth 1.7.18 drops callback errors; see STATUS) |
+| Email change     | Better Auth `sendChangeEmailConfirmation`, to the current address                                                  | Logged only (Better Auth 1.7.18 drops callback errors; see STATUS) |
+| Password changed | `onPasswordReset` and the `/change-password` after hook                                                            | Logged (`auth.notice_sent`); the change stands                     |
+| Step-up code     | `sendStepUpCode` in [`lib/step-up.ts`](../../apps/web/lib/step-up.ts)                                              | The dialog says the email couldn't be sent                         |
+| Factor notices   | [`lib/auth-two-factor.ts`](../../apps/web/lib/auth-two-factor.ts) hooks; admin Reset 2FA in `app/admin/actions.ts` | Logged; the change stands                                          |
+| Support message  | [`api/contact/route.ts`](../../apps/web/app/api/contact/route.ts), to `SUPPORT_EMAIL`, reply-to the sender         | The route returns `503`                                            |
+| Test email       | Admin settings, [`lib/test-email.ts`](../../apps/web/lib/test-email.ts)                                            | The admin sees "failed"                                            |
 
 In `lib/auth.ts`, `deliver()` throws when a message is not delivered and `NODE_ENV` is production, so a user is never
 told "check your inbox" for mail that was not sent. Link lifetimes are constants there (`VERIFY_LINK_SECONDS`, which

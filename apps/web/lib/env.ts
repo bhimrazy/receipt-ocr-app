@@ -30,6 +30,16 @@ export const requireEmailVerification =
     ? isProduction
     : process.env.AUTH_REQUIRE_EMAIL_VERIFICATION !== "false";
 /**
+ * Platform admins must have a second factor and prove it once per session (see
+ * docs/plans/2026-11-06-passkeys-2fa.md). On in production and the production-mode e2e run;
+ * `ADMIN_MFA_ENFORCE=false` is the emergency off switch, `=true` turns it on in development.
+ */
+export const adminMfaEnforced =
+  process.env.ADMIN_MFA_ENFORCE === undefined
+    ? isProduction
+    : process.env.ADMIN_MFA_ENFORCE !== "false";
+
+/**
  * `next build` runs with NODE_ENV=production but without runtime secrets: on Vercel they are stored
  * as Sensitive, so `vercel pull` in CI gets empty or placeholder values for them.
  */
@@ -189,6 +199,9 @@ const appUrl = betterAuthUrl();
 
 /** What every message links back to: the app origin (BETTER_AUTH_URL) and the support inbox. */
 export const emailContext = { appUrl, supportEmail };
+
+/** The "didn't do this?" link in security notices. */
+export const resetPasswordUrl = () => new URL("/forgot-password", appUrl).toString();
 
 /** Origins allowed to call auth and mutating routes: the app URL, plus both hosts of a preview. */
 const trustedOrigins = [...new Set([new URL(appUrl).origin, ...previewOrigins()])];

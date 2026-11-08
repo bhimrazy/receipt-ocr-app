@@ -25,7 +25,7 @@ The owner's standing decisions, and what has to happen later because of them. Op
 
 ### When something ships
 
-- **Two-step sign-in (#95):** first set `BETTER_AUTH_SECRETS=1:<current secret>` so sealed rows carry a version. From then on, TOTP secrets and backup codes are sealed with the auth secret. Never drop a
+- **Two-step sign-in (#95):** `BETTER_AUTH_SECRETS=1:<current secret>` was set in production on 2026-11-08, before it shipped, so sealed rows carry a version. From then on, TOTP secrets and backup codes are sealed with the auth secret. Never drop a
   secret version while rows sealed under it exist. A rotation then needs the current value, so keep it in a password
   manager: Vercel Sensitive variables can't be read back.
 - **Effort `xhigh`/`max`:** stay hidden until an OCR call may run longer than 50 s (a worker app or a longer function

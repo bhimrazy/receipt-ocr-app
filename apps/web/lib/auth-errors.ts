@@ -29,6 +29,16 @@ const messages: Record<string, string> = {
   INVALID_TOKEN: "This link is not valid or was already used. Request a new one.",
   TOKEN_EXPIRED: "This link has expired. Request a new one.",
   USER_NOT_FOUND: "We couldn't find an account for this link.",
+  // Two-step sign-in (Better Auth's twoFactor plugin).
+  INVALID_CODE: "That code isn't right. Check your app and enter the newest code.",
+  INVALID_BACKUP_CODE: "That backup code isn't right, or it was already used.",
+  TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE: "Too many wrong codes. Sign in again to get a new try.",
+  INVALID_TWO_FACTOR_COOKIE: "This sign-in step has expired. Sign in again.",
+  ACCOUNT_TEMPORARILY_LOCKED:
+    "Too many wrong codes. Sign-in with a code is paused for 15 minutes; try again later.",
+  TOTP_ALREADY_ENABLED: "Two-step sign-in is already on.",
+  STEP_UP_REQUIRED: "Confirm it's you to continue.",
+  IMPERSONATING: "You can't do this while signed in as another user.",
   // Turnstile (Better Auth's captcha plugin).
   MISSING_RESPONSE: "Finish the security check, then try again.",
   VERIFICATION_FAILED: "The security check failed. Reload the page and try again.",
@@ -53,8 +63,10 @@ const RATE_LIMITED = "Too many attempts. Wait 1 minute and try again.";
 /** Copy for an error returned by an `authClient` call. */
 export function authErrorMessage(error: AuthErrorLike | null | undefined): string {
   if (!error) return FALLBACK;
-  if (error.status === 429) return RATE_LIMITED;
   const code = error.code?.toUpperCase();
+  // The 2FA lockout is a 429 with its own code and a 15-minute wait.
+  if (code === "ACCOUNT_TEMPORARILY_LOCKED") return messages[code]!;
+  if (error.status === 429) return RATE_LIMITED;
   if (code && messages[code]) return messages[code];
   return error.message?.trim() || FALLBACK;
 }
@@ -70,4 +82,32 @@ export function callbackErrorMessage(code: string | string[] | undefined): strin
   const known = callbackMessages[upper] ?? messages[upper];
   if (known) return known;
   return "We couldn't sign you in. Try again, or use your email and password.";
+}
+
+/** Errors on the code step that need a fresh password step: the challenge is gone. */
+export function twoFactorRestart(error: AuthErrorLike | null | undefined): boolean {
+  const code = error?.code?.toUpperCase();
+  return code === "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE" || code === "INVALID_TWO_FACTOR_COOKIE";
+}
+
+/** Copy for a failed passkey ceremony; a cancel or timeout is the common case. */
+export function passkeyErrorMessage(error: AuthErrorLike | null | undefined): string {
+  const code = error?.code?.toUpperCase() ?? "";
+  // SimpleWebAuthn reports a dismissed or timed-out prompt (NotAllowedError) as a passthrough.
+  if (
+    code === "AUTH_CANCELLED" ||
+    code === "ERROR_CEREMONY_ABORTED" ||
+    code === "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY"
+  ) {
+    return "Cancelled or timed out. Try again.";
+  }
+  if (code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" || code === "PREVIOUSLY_REGISTERED") {
+    return "This passkey is already on your account.";
+  }
+  if (code === "SESSION_NOT_FRESH")
+    return "For your safety, sign out and in again, then add the passkey.";
+  if (code === "PASSKEY_NOT_FOUND" || code === "AUTHENTICATION_FAILED") {
+    return "That passkey didn't work here. Use another one, or sign in with your password.";
+  }
+  return authErrorMessage(error);
 }

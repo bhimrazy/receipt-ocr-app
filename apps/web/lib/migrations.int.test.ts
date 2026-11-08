@@ -57,6 +57,8 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "jobs_attempts_check",
       "jobs_last_error_kind_check",
       "ocr_calls_status_check",
+      "step_up_events_method_check",
+      "step_up_events_outcome_check",
     ]);
   });
 

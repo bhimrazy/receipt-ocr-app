@@ -264,6 +264,12 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     const a = await make("adm-a", "admin");
     const b = await make("adm-b", "admin");
     const plain = await make("adm-plain", "user");
+    // Admin mutations need a passed factor check first; two-factor.int.test.ts covers passing one.
+    await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, a.id));
+    await db
+      .update(session)
+      .set({ stepUpAt: new Date(), stepUpMethod: "totp" })
+      .where(eq(session.userId, a.id));
     // Isolate from admins other tests or a shared database may hold.
     await db.execute(
       sql`update "user" set banned = true where role like '%admin%' and id not in (${a.id}, ${b.id})`,
@@ -299,6 +305,11 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
   });
 
   it("M3: caps password-change attempts per user", async () => {
+    // Past the step-up gate, which refuses before the cap counts.
+    await db
+      .update(session)
+      .set({ stepUpAt: new Date(), stepUpMethod: "email" })
+      .where(eq(session.userId, userId));
     const headers = new Headers({ cookie });
     const change = () =>
       auth.api.changePassword({

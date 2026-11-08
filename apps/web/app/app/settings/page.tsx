@@ -13,10 +13,7 @@ import {
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { Effect } from "effect";
 import { AboutSettings } from "@/components/about-settings";
-import { AccountSettings, type ResumeStep } from "@/components/account-settings";
-import type { SignInMethods } from "@/components/reauth-dialog";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { AccountSettings } from "@/components/account-settings";
 import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
@@ -28,7 +25,7 @@ import { requireActiveScope, requireSession } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getUsageSummary } from "@/lib/receipts";
@@ -49,20 +46,6 @@ async function loadWorkspace(organizationId: string) {
   return { name: org?.name ?? "This workspace", members: Number(row?.value ?? 0) };
 }
 
-/** How this user can sign in again when a change needs a fresh session. */
-async function signInMethods(): Promise<SignInMethods> {
-  const accounts = await auth.api.listUserAccounts({ headers: await headers() });
-  const linked = new Set(accounts.map((linkedAccount) => linkedAccount.providerId));
-  return {
-    password: linked.has("credential"),
-    providers: (["google", "github"] as const).filter(
-      (provider) => linked.has(provider) && Boolean(authEnv[provider]),
-    ),
-  };
-}
-
-const RESUME_STEPS: readonly ResumeStep[] = ["delete-account", "change-email"];
-
 export default async function SettingsPage({
   searchParams,
 }: {
@@ -74,8 +57,8 @@ export default async function SettingsPage({
     requireSession(),
     searchParams,
   ]);
-  const resumeStep = RESUME_STEPS.find((step) => step === resume);
-  const [{ plan, policy }, usage, workspace, readers, methods, blocking] = await Promise.all([
+  const resumeStep = resume === "delete-account" ? resume : undefined;
+  const [{ plan, policy }, usage, workspace, readers, blocking] = await Promise.all([
     getCurrentPlan(),
     getUsageSummary(),
     loadWorkspace(scope.organizationId),
@@ -86,7 +69,6 @@ export default async function SettingsPage({
         receiptReaders,
       ),
     ),
-    signInMethods(),
     runtime.runPromise(workspacesBlockingDeletion(session.user.id)),
   ]);
 
@@ -153,11 +135,42 @@ export default async function SettingsPage({
 
       <ReceiptReadingSettings readers={readers} />
 
+      <SettingsSection
+        description="Two-step sign-in, and the check before important changes."
+        id="security-heading"
+        title="Security"
+      >
+        <Card className="flex flex-wrap items-center gap-3 p-4">
+          <span
+            aria-hidden="true"
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"
+          >
+            <ShieldCheck className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">
+              Two-step sign-in is {session.user.twoFactorEnabled ? "on" : "off"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {session.user.twoFactorEnabled
+                ? "Your password alone isn't enough to sign in."
+                : "Protect your account with a code from an app on your phone."}
+            </p>
+          </div>
+          <Link
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+            href="/app/settings/security"
+          >
+            {session.user.twoFactorEnabled ? "Manage" : "Set up"}
+            <ChevronRight aria-hidden="true" />
+          </Link>
+        </Card>
+      </SettingsSection>
+
       <AccountSettings
         blockingWorkspaces={blocking.map((w) => w.name)}
         email={session.user.email}
         emailVerified={session.user.emailVerified}
-        methods={methods}
         name={session.user.name ?? ""}
         resume={resumeStep}
       />

@@ -9,6 +9,7 @@ import type { ReactElement } from "react";
 import {
   Action,
   BRAND,
+  Code,
   InlineLink,
   Layout,
   Note,
@@ -329,6 +330,104 @@ const emailChange: EmailDefinition = {
   },
 };
 
+/** The step-up code for an account with no second factor. The code is never in the subject. */
+const stepUpCode: EmailDefinition = {
+  slots: ["code", "expiry"],
+  render(v, shared) {
+    const heading = "Confirm it's you";
+    const body = `Enter this code in ${BRAND} to finish what you started. It works once and expires in ${v.expiry}.`;
+    const note =
+      "Never share this code; we will never ask you for it. Didn't ask for it? Someone may know your password, so change it.";
+    const reason = `You're receiving this because someone signed in to this ${BRAND} account asked to confirm an important change.`;
+    return {
+      html: (
+        <Layout
+          shared={shared}
+          preheader="Your one-time code to confirm an important change."
+          heading={heading}
+          reason={reason}
+        >
+          <P>{body}</P>
+          <Code>{v.code}</Code>
+          <Note>{note}</Note>
+        </Layout>
+      ),
+      text: plainText(shared, { heading, body: [body, v.code], note, reason }),
+    };
+  },
+};
+
+/**
+ * A change to how the account signs in or confirms changes. Same shape as passwordChanged: what
+ * happened, then "didn't do this?" with the reset link.
+ */
+function factorNotice(copy: { heading: string; body: string; preheader: string }): EmailDefinition {
+  return {
+    slots: ["resetUrl", "resetUrlLabel"],
+    render(v, shared) {
+      const help = contact(shared);
+      const reason = `You're receiving this because the sign-in settings of this ${BRAND} account changed.`;
+      return {
+        html: (
+          <Layout shared={shared} preheader={copy.preheader} heading={copy.heading} reason={reason}>
+            <P>{copy.body}</P>
+            <Note className="mb-6">
+              Didn&apos;t do this? Reset your password now and {help.html} so we can help secure
+              your account.
+            </Note>
+            <Action label="Reset password" url={v.resetUrl} urlLabel={v.resetUrlLabel} />
+          </Layout>
+        ),
+        text: plainText(shared, {
+          heading: copy.heading,
+          body: [
+            copy.body,
+            `Didn't do this? Reset your password now and ${help.text} so we can help secure your account.`,
+          ],
+          action: { label: "Reset password", url: v.resetUrl },
+          reason,
+        }),
+      };
+    },
+  };
+}
+
+const twoFactorEnabled = factorNotice({
+  heading: "Two-step sign-in is on",
+  body: "An authenticator app was added to your account. Signing in with your password now also asks for a code from that app.",
+  preheader: "An authenticator app now guards your sign-in.",
+});
+
+const twoFactorDisabled = factorNotice({
+  heading: "Two-step sign-in is off",
+  body: "Two-step sign-in was turned off for your account. Signing in now only needs your password.",
+  preheader: "Signing in now only needs your password.",
+});
+
+const twoFactorReset = factorNotice({
+  heading: "Two-step sign-in was reset",
+  body: "An administrator reset two-step sign-in on your account, removing your authenticator app and passkeys, usually because you asked for help after losing them. You've been signed out everywhere; sign in with your password and set them up again in Settings, Security.",
+  preheader: "An administrator removed your authenticator app and passkeys.",
+});
+
+const backupCodesRegenerated = factorNotice({
+  heading: "New backup codes",
+  body: "New backup codes were created for your account. The old ones no longer work.",
+  preheader: "Your old backup codes no longer work.",
+});
+
+const passkeyAdded = factorNotice({
+  heading: "A passkey was added",
+  body: "A passkey was added to your account. It can now sign you in and confirm important changes.",
+  preheader: "A new passkey can sign in to your account.",
+});
+
+const passkeyRemoved = factorNotice({
+  heading: "A passkey was removed",
+  body: "A passkey was removed from your account and can no longer sign you in.",
+  preheader: "That passkey can no longer sign in to your account.",
+});
+
 export const definitions = {
   verification,
   passwordReset,
@@ -338,6 +437,13 @@ export const definitions = {
   deleteAccount,
   passwordChanged,
   emailChange,
+  stepUpCode,
+  twoFactorEnabled,
+  twoFactorDisabled,
+  twoFactorReset,
+  backupCodesRegenerated,
+  passkeyAdded,
+  passkeyRemoved,
 } satisfies Record<string, EmailDefinition>;
 
 export type TemplateName = keyof typeof definitions;

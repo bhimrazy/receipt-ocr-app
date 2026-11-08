@@ -1,66 +1,212 @@
+import "server-only";
+import {
+  consumeStepUpCode,
+  issueStepUpCode,
+  loadTotpSecret,
+  markStepUp,
+  recordStepUpEvent,
+  stepUpMethods,
+  STEP_UP_CODE_TTL_MS,
+  stepUpLockedFor,
+  totpStepUsed,
+  type StepUpAction,
+  type StepUpMethod,
+} from "@receipt-ocr/core";
+import { stepUpCodeEmail } from "@receipt-ocr/email";
+import { APIError } from "better-auth/api";
+import { symmetricDecrypt } from "better-auth/crypto";
+import { createHmac, randomInt } from "node:crypto";
+import { auth, deliverEmail } from "./auth";
+import { emailContext } from "./env";
+import { errorFields, logger } from "./log";
+import { runtime } from "./runtime";
+import { checkStepUp, STEP_UP_MESSAGES, subjectOf } from "./step-up-check";
+import { matchTotpStep } from "./totp";
+
 /**
- * Step-up rules for account changes an attacker with a stolen session would want: requesting
- * account deletion and changing the email. Shared by the Better Auth hook (lib/auth.ts) and the
- * settings UI, so it must stay free of server-only imports.
+ * Running a "verify it's you" check: the methods on offer, sending an emailed
+ * code, and verifying a TOTP code, backup code or emailed code. Every send and
+ * every pass or failure is written to `step_up_events`.
  */
 
-/** How long after sign-in a session may make those changes (Better Auth `session.freshAge`). */
-export const FRESH_AGE_SECONDS = 15 * 60;
+export type StepUpOptions =
+  | { ok: true; fresh: boolean; methods: StepUpMethod[]; email: string }
+  | { ok: false; error: string; enrol?: boolean };
 
-/** Lifetime of an emailed account-deletion link (`user.deleteUser.deleteTokenExpiresIn`). */
-export const DELETE_TOKEN_SECONDS = 60 * 60;
+export type StepUpResult = { ok: true } | { ok: false; error: string; locked?: boolean };
 
-/** Better Auth's error code for a session older than `freshAge`. */
-export const SESSION_NOT_FRESH = "SESSION_NOT_FRESH";
+type Caller = {
+  session: { id: string };
+  user: { id: string; email: string };
+  ip: string | null;
+  headers: Headers;
+};
 
-/** Settings page the deletion email links to; it posts the token back to `/delete-user`. */
-export const DELETE_CONFIRM_PATH = "/app/settings/delete-account";
+const wait = (seconds: number) => {
+  const minutes = Math.ceil(seconds / 60);
+  return `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+};
 
-function hasToken(body: unknown): boolean {
-  const token = (body as { token?: unknown } | null | undefined)?.token;
-  return typeof token === "string" && token.length > 0;
+export async function stepUpOptions(caller: Caller, action: StepUpAction): Promise<StepUpOptions> {
+  const check = await checkStepUp(caller.session.id, action);
+  if (check.ok) {
+    const methods = check.row.twoFactorEnabled ? (["totp", "backup_code"] as const) : [];
+    return { ok: true, fresh: true, methods: [...methods], email: caller.user.email };
+  }
+  if (check.reason !== "required") {
+    return { ok: false, error: STEP_UP_MESSAGES[check.reason], enrol: check.reason === "enrol" };
+  }
+  return { ok: true, fresh: false, methods: check.methods, email: caller.user.email };
 }
 
-/**
- * Better Auth checks `freshAge` only on list-sessions, unlink-account and a delete-user call
- * without a password or emailed confirmation; change-email never. A delete that carries the
- * emailed token is exempt: opening the link already proves the inbox.
- */
-export function needsFreshSession(path: string | undefined, body: unknown): boolean {
-  if (path === "/change-email") return true;
-  if (path === "/delete-user") return !hasToken(body);
-  return false;
+/** HMAC under the auth secret, bound to the session: a database read alone can't test guesses. */
+async function codeHash(sessionId: string, code: string) {
+  const { secret } = await auth.$context;
+  return createHmac("sha256", secret).update(`step-up:${sessionId}:${code}`).digest("hex");
 }
 
-export function isSessionFresh(
-  createdAt: Date | string,
-  now: number = Date.now(),
-  freshAgeSeconds: number = FRESH_AGE_SECONDS,
-): boolean {
-  return now - new Date(createdAt).getTime() < freshAgeSeconds * 1000;
+/** Who may run a check now, with which methods; refusals are user-safe messages. */
+async function admit(caller: Caller, method: StepUpMethod, action: StepUpAction) {
+  const check = await checkStepUp(caller.session.id, action);
+  if (!check.ok && check.reason !== "required") {
+    return { error: STEP_UP_MESSAGES[check.reason] } as const;
+  }
+  // From the enrolled factors even when the session is already fresh, so a user with a factor
+  // can never pass (and refresh) a check with the weaker emailed code.
+  const methods = check.ok ? stepUpMethods(subjectOf(check.row), action) : check.methods;
+  if (!methods.includes(method)) {
+    return { error: "That way of confirming isn't available for your account." } as const;
+  }
+  const lockedFor = await runtime.runPromise(stepUpLockedFor(caller.user.id));
+  if (lockedFor > 0) return { error: wait(lockedFor), locked: true } as const;
+  return { ok: true } as const;
 }
 
-/** Our confirmation page on the same origin as Better Auth's own link. */
-export function deleteConfirmUrl(betterAuthLink: string, token: string): string {
-  const url = new URL(DELETE_CONFIRM_PATH, betterAuthLink);
-  url.searchParams.set("token", token);
-  return url.toString();
+export async function sendStepUpCode(caller: Caller, action: StepUpAction): Promise<StepUpResult> {
+  const admitted = await admit(caller, "email", action);
+  if (!("ok" in admitted)) return { ok: false, ...admitted };
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  const issued = await runtime.runPromise(
+    issueStepUpCode({
+      sessionId: caller.session.id,
+      userId: caller.user.id,
+      codeHash: await codeHash(caller.session.id, code),
+    }),
+  );
+  if (!issued.ok) {
+    const minutes = Math.ceil(issued.retryAfterSeconds / 60);
+    return {
+      ok: false,
+      error: `We've sent several codes already. Use the latest one, or try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+    };
+  }
+  try {
+    await deliverEmail({
+      to: caller.user.email,
+      ...stepUpCodeEmail(emailContext, { code, expiresInSeconds: STEP_UP_CODE_TTL_MS / 1000 }),
+    });
+  } catch (error) {
+    logger.error({
+      event: "auth.step_up_email_failed",
+      unit: "log",
+      user_id: caller.user.id,
+      action,
+      error: errorFields(error),
+    });
+    return { ok: false, error: "We couldn't send the email. Try again in a minute." };
+  }
+  await runtime.runPromise(
+    recordStepUpEvent({
+      userId: caller.user.id,
+      sessionId: caller.session.id,
+      action,
+      method: "email",
+      outcome: "sent",
+      ip: caller.ip,
+    }),
+  );
+  return { ok: true };
 }
 
-/** Better Auth's deletion tokens: 32 characters of 0-9 and a-z. */
-export function isDeleteToken(value: unknown): value is string {
-  return typeof value === "string" && /^[0-9a-z]{32}$/.test(value);
+type Verified = { ok: true; totpCounter?: number } | { ok: false; error: string };
+
+async function verifyTotp(userId: string, code: string): Promise<Verified> {
+  const sealed = await runtime.runPromise(loadTotpSecret(userId));
+  if (!sealed) return { ok: false, error: "Two-step sign-in isn't set up on this account." };
+  const { secretConfig } = await auth.$context;
+  const step = matchTotpStep(await symmetricDecrypt({ key: secretConfig, data: sealed }), code);
+  if (step === null)
+    return { ok: false, error: "That code isn't right. Check your app and try again." };
+  if (await runtime.runPromise(totpStepUsed(userId, step))) {
+    return { ok: false, error: "That code was already used. Wait for the next one." };
+  }
+  return { ok: true, totpCounter: step };
 }
 
-/** Why the account can't be deleted yet, naming the shared workspaces the user alone owns. */
-export function soleOwnerMessage(workspaces: readonly string[], then: string): string {
-  const names =
-    workspaces.length <= 1
-      ? (workspaces[0] ?? "a workspace")
-      : `${workspaces.slice(0, -1).join(", ")} and ${workspaces.at(-1)}`;
-  const which = workspaces.length > 1 ? "which have" : "which has";
-  const owner = workspaces.length > 1 ? "an owner of each" : "an owner";
-  return `You own ${names}, ${which} other members. Make one of them ${owner}, then ${then}.`;
+async function verifyBackupCode(headers: Headers, code: string): Promise<Verified> {
+  try {
+    // Session path of the plugin: consumes the code (compare-and-swap), creates no session.
+    await auth.api.verifyBackupCode({ body: { code: code.trim(), disableSession: true }, headers });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof APIError) {
+      return { ok: false, error: "That backup code isn't right, or was already used." };
+    }
+    throw error;
+  }
 }
 
-export const WORKSPACE_NEEDS_OWNER = "WORKSPACE_NEEDS_OWNER";
+async function verifyEmailCode(sessionId: string, code: string): Promise<Verified> {
+  const digits = code.replace(/\s/g, "");
+  if (!/^\d{6}$/.test(digits))
+    return { ok: false, error: "Enter the 6-digit code from the email." };
+  const result = await runtime.runPromise(
+    consumeStepUpCode({ sessionId, codeHash: await codeHash(sessionId, digits) }),
+  );
+  if (result === "ok") return { ok: true };
+  if (result === "invalid")
+    return { ok: false, error: "That code isn't right. Check the email and try again." };
+  return { ok: false, error: "That code has expired or was used up. Send a new one." };
+}
+
+export async function verifyStepUp(
+  caller: Caller,
+  input: { action: StepUpAction; method: StepUpMethod; code: string },
+): Promise<StepUpResult> {
+  if (input.method === "passkey") {
+    return { ok: false, error: "Passkeys aren't available yet. Use your authenticator app." };
+  }
+  const admitted = await admit(caller, input.method, input.action);
+  if (!("ok" in admitted)) return { ok: false, ...admitted };
+
+  const result =
+    input.method === "totp"
+      ? await verifyTotp(caller.user.id, input.code)
+      : input.method === "backup_code"
+        ? await verifyBackupCode(caller.headers, input.code)
+        : await verifyEmailCode(caller.session.id, input.code);
+
+  const event = {
+    userId: caller.user.id,
+    sessionId: caller.session.id,
+    action: input.action,
+    method: input.method,
+    ip: caller.ip,
+  };
+  logger.info({
+    event: "auth.step_up",
+    unit: "log",
+    user_id: caller.user.id,
+    action: input.action,
+    kind: input.method,
+    outcome: result.ok ? "verified" : "failed",
+  });
+  if (!result.ok) {
+    await runtime.runPromise(recordStepUpEvent({ ...event, outcome: "failed" }));
+    return result;
+  }
+  await runtime.runPromise(
+    markStepUp({ ...event, outcome: "verified", totpCounter: result.totpCounter ?? null }),
+  );
+  return { ok: true };
+}

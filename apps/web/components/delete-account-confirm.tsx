@@ -10,7 +10,7 @@ import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
 import { clearSharedFiles } from "@/lib/share-target";
 import { clearSignedInHint } from "@/lib/signed-in-hint";
-import { WORKSPACE_NEEDS_OWNER } from "@/lib/step-up";
+import { WORKSPACE_NEEDS_OWNER } from "@/lib/account-deletion";
 
 const LINK_INVALID = "This link has expired or was already used.";
 

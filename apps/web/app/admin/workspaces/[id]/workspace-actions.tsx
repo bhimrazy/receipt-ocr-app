@@ -1,5 +1,6 @@
 "use client";
 
+import { withStepUp } from "@/components/step-up/step-up";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { ConfirmDialog, type ConfirmDialogProps } from "@receipt-ocr/ui/components/confirm-dialog";
 import {
@@ -49,8 +50,8 @@ const ROLES = [
 ];
 const label = (role: string) => ROLES.find((r) => r.value === role)?.label ?? role;
 
-async function settle(promise: Promise<ActionResult>, success: string): Promise<string | void> {
-  const result = await promise;
+async function settle(call: () => Promise<ActionResult>, success: string): Promise<string | void> {
+  const result = await withStepUp(call);
   if (!result.ok) return result.error;
   toast.add({ title: success, type: "success" });
 }
@@ -118,7 +119,12 @@ export function MembersTable({
                       confirmLabel: "Change role",
                       onConfirm: () =>
                         settle(
-                          setMemberRoleAction({ organizationId, memberId: m.memberId, role: next }),
+                          () =>
+                            setMemberRoleAction({
+                              organizationId,
+                              memberId: m.memberId,
+                              role: next,
+                            }),
                           "Role changed.",
                         ),
                     });
@@ -155,7 +161,7 @@ export function MembersTable({
                       destructive: true,
                       onConfirm: () =>
                         settle(
-                          removeMemberAction({ organizationId, memberId: m.memberId }),
+                          () => removeMemberAction({ organizationId, memberId: m.memberId }),
                           "Member removed.",
                         ),
                     })
@@ -218,7 +224,7 @@ export function InvitationsList({
                   destructive: true,
                   onConfirm: () =>
                     settle(
-                      cancelInvitationAction({ organizationId, invitationId: inv.id }),
+                      () => cancelInvitationAction({ organizationId, invitationId: inv.id }),
                       "Invitation cancelled.",
                     ),
                 })
@@ -261,7 +267,7 @@ export function DeleteWorkspace({
             destructive: true,
             onConfirm: (typed) =>
               settle(
-                deleteWorkspaceAction({ organizationId, confirm: typed }),
+                () => deleteWorkspaceAction({ organizationId, confirm: typed }),
                 "Workspace deleted.",
               ),
           })

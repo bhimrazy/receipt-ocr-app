@@ -33,6 +33,19 @@ import { admin } from "better-auth/plugins/admin";
 import { captcha } from "better-auth/plugins/captcha";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
+// --- two-factor + step-up (feat/two-factor) ---
+import {
+  authMethodOf,
+  authMethodSessionField,
+  factorChangedAfter,
+  replaceSessionOnSignIn,
+  trustDeviceIdentifier,
+  passkeyPlugin,
+  stepUpGate,
+  twoFactorPlugin,
+  twoFactorUserUpdated,
+} from "./auth-two-factor";
+// --- end two-factor + step-up ---
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
 import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
 import {
@@ -47,6 +60,7 @@ import {
   authEnv,
   emailContext,
   emailEnv,
+  resetPasswordUrl,
   isProduction,
   logUndeliveredMail,
   requireEmailVerification,
@@ -56,14 +70,11 @@ import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 import {
   DELETE_TOKEN_SECONDS,
-  FRESH_AGE_SECONDS,
-  SESSION_NOT_FRESH,
   WORKSPACE_NEEDS_OWNER,
   deleteConfirmUrl,
-  isSessionFresh,
-  needsFreshSession,
+  hasDeleteToken,
   soleOwnerMessage,
-} from "./step-up";
+} from "./account-deletion";
 
 export { authEnabled };
 
@@ -96,6 +107,9 @@ async function deliver(input: SendEmailInput) {
     throw new Error(`Email not delivered (${result.reason})`);
   }
 }
+
+// two-factor + step-up (feat/two-factor): step-up codes are sent the same way.
+export { deliver as deliverEmail };
 
 /**
  * For emails a signed-in user asked for (deletion, email change). Unlike sign-up and reset,
@@ -164,9 +178,7 @@ async function notify(input: SendEmailInput, userId: string, kind: string) {
 }
 
 /** Password reset page for "if this wasn't you" in notices. */
-const recovery = () => ({
-  resetUrl: new URL("/forgot-password", authEnv.betterAuthUrl).toString(),
-});
+const recovery = () => ({ resetUrl: resetPasswordUrl() });
 
 async function notifyPasswordChanged(user: { id: string; email: string }, kind: string) {
   await notify(
@@ -304,19 +316,25 @@ export const auth = betterAuth({
     customRules: authRateLimitRules,
   },
   // Reset and verification tokens are stored as hashes: a database read alone can't use them.
-  verification: { storeIdentifier: "hashed" },
+  verification: {
+    storeIdentifier: { default: "hashed", overrides: { "trust-device-": trustDeviceIdentifier } },
+  },
   // Rows sealed before this was on stay readable: Better Auth passes non-hex
   // (plaintext) tokens through and seals them on the user's next sign-in.
   account: { encryptOAuthTokens: true },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
-    // Requesting account deletion and changing the email need a sign-in this recent (hooks
-    // below); Better Auth itself applies it to list-sessions and unlink-account.
-    freshAge: FRESH_AGE_SECONDS,
+    // Off: our step-up (hooks.before) is the freshness control. Better Auth's check would refuse
+    // a passkey registration that already passed step-up in an older session; unlink-account,
+    // its only other guarded write, needs step-up instead.
+    freshAge: 0,
     // Off: with the cache on, a revoked or banned session keeps working on
     // /api/auth/* for its maxAge (see GHSA-fvxx). App reads skip it anyway.
     cookieCache: { enabled: false },
+    // --- two-factor + step-up (feat/two-factor) ---
+    additionalFields: authMethodSessionField,
+    // --- end two-factor + step-up ---
   },
   advanced: {
     ipAddress: authEnv.ipAddress,
@@ -325,8 +343,9 @@ export const auth = betterAuth({
     before: createAuthMiddleware(async (ctx) => {
       // Deletes on a single GET; our confirm page posts the token to /delete-user instead.
       if (ctx.path === "/delete-user/callback") throw new APIError("NOT_FOUND");
-      // New early-return branches go below any step-up gate (PR #95's stepUpGate), which must stay
-      // first so sensitive endpoints are gated before these checks run.
+      // First, so nothing below (a sent email, a counted attempt) happens without a passed check.
+      // New early-return branches go below it.
+      const passed = await stepUpGate(ctx);
       if (ctx.path === "/sign-in/email") {
         // Counted here, atomically, before the password check; a correct sign-in clears it in `after`.
         const email = signInEmail(ctx.body);
@@ -349,7 +368,7 @@ export const auth = betterAuth({
         }
         return;
       }
-      if (ctx.path === "/delete-user" && !needsFreshSession(ctx.path, ctx.body)) {
+      if (ctx.path === "/delete-user" && hasDeleteToken(ctx.body)) {
         // Better Auth spends the token before beforeDelete can refuse; check first so it survives.
         const current = await getSessionFromCtx(ctx);
         if (!current) return;
@@ -357,36 +376,24 @@ export const auth = betterAuth({
         if (names.length > 0) throw soleOwnerError(names, "open this link again");
         return;
       }
-      if (!needsFreshSession(ctx.path, ctx.body)) return;
+      if (passed !== "account.change_email" && passed !== "account.delete") return;
       const current = await getSessionFromCtx(ctx);
-      // No session: the endpoint itself answers 401.
       if (!current) return;
-      if (isSessionFresh(current.session.createdAt)) {
-        // Counts attempts, not sends: Better Auth sends nothing when the new address is taken,
-        // so capping only real sends would answer 429 for a free address and 200 for a taken one.
-        if (ctx.path === "/change-email")
-          await limitSignedInEmail("change-email", current.user.email);
-        if (ctx.path === "/delete-user") {
-          // Here, not in sendDeleteAccountVerification: Better Auth 1.7.18 logs and drops errors
-          // thrown there, so the user would be told "check your email" for nothing.
-          const names = await blockingNames(current.user.id);
-          if (names.length > 0) throw soleOwnerError(names, "try again");
-          await limitSignedInEmail("delete-account", current.user.email);
-        }
+      // Counts attempts, not sends: Better Auth sends nothing when the new address is taken,
+      // so capping only real sends would answer 429 for a free address and 200 for a taken one.
+      if (passed === "account.change_email") {
+        await limitSignedInEmail("change-email", current.user.email);
         return;
       }
-      logger.info({
-        event: "auth.step_up_required",
-        unit: "log",
-        user_id: current.user.id,
-        action: ctx.path.slice(1),
-      });
-      throw new APIError("FORBIDDEN", {
-        code: SESSION_NOT_FRESH,
-        message: "Sign in again to continue.",
-      });
+      // Here, not in sendDeleteAccountVerification: Better Auth 1.7.18 logs and drops errors
+      // thrown there, so the user would be told "check your email" for nothing.
+      const names = await blockingNames(current.user.id);
+      if (names.length > 0) throw soleOwnerError(names, "try again");
+      await limitSignedInEmail("delete-account", current.user.email);
     }),
     after: createAuthMiddleware(async (ctx) => {
+      await factorChangedAfter(ctx, deliver);
+      await replaceSessionOnSignIn(ctx);
       if (ctx.path === "/sign-in/email") {
         // Only a successful sign-in (the real password) resets the count.
         const email = signInEmail(ctx.body);
@@ -481,10 +488,13 @@ export const auth = betterAuth({
           await promoteIfBootstrapAdmin(user);
         },
       },
+      // --- two-factor + step-up (feat/two-factor) ---
+      update: { after: twoFactorUserUpdated(deliver) },
+      // --- end two-factor + step-up ---
     },
     session: {
       create: {
-        before: async (session) => {
+        before: async (session, ctx) => {
           // Default the active organization to the user's personal workspace
           // (their first membership) so org-scoped APIs work immediately.
           const [membership] = await db
@@ -496,6 +506,8 @@ export const auth = betterAuth({
             data: {
               ...session,
               activeOrganizationId: membership?.organizationId ?? null,
+              // two-factor + step-up (feat/two-factor)
+              authMethod: authMethodOf(session as { authMethod?: string | null }, ctx),
             },
           };
         },
@@ -572,6 +584,9 @@ export const auth = betterAuth({
     admin({
       defaultRole: "user",
     }),
+    // two-factor + step-up (feat/two-factor)
+    twoFactorPlugin(),
+    passkeyPlugin(authEnv.betterAuthUrl),
     // Reads the token from `x-captcha-response` and the client IP from advanced.ipAddress. A
     // missing token is a 400, a rejected one a 403, and a siteverify failure or timeout (10 s) a
     // 500: all fail closed.

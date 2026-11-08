@@ -1,6 +1,7 @@
 /**
- * Account deletion, email change and password notices against real Postgres. Skipped unless
- * INTEGRATION=1; run with `bun run --filter @receipt-ocr/web test:int` after `bun run db:migrate`,
+ * Account deletion, email change and password notices against real Postgres, through the shared
+ * step-up gate (lib/step-up-check.ts): an account with no second factor confirms each with the
+ * emailed code, and a recent sign-in never counts. Skipped unless INTEGRATION=1; run with `bun run --filter @receipt-ocr/web test:int` after `bun run db:migrate`,
  * with DATABASE_URL, BETTER_AUTH_URL and BETTER_AUTH_SECRET set.
  */
 import { createDb, eq, member, rateLimit, session, sql, user, verification } from "@receipt-ocr/db";
@@ -54,11 +55,11 @@ describe.skipIf(!enabled)(
       return { email, id: res.response.user.id, cookie: sessionCookie(res.headers) };
     }
 
-    /** Makes every session of the user older than `freshAge`. */
-    const ageSessions = (userId: string) =>
+    /** Moves every passed check of the user past the step-up window. */
+    const expireStepUps = (userId: string) =>
       db
         .update(session)
-        .set({ createdAt: new Date(Date.now() - 60 * 60 * 1000) })
+        .set({ stepUpAt: new Date(Date.now() - 60 * 60 * 1000) })
         .where(eq(session.userId, userId));
 
     const exists = async (userId: string) =>
@@ -84,7 +85,24 @@ describe.skipIf(!enabled)(
         }),
       );
 
+    /** Passes the emailed-code step-up for an account with no factor, reading the code from the mail. */
+    async function emailStepUp(
+      account: { cookie: string },
+      action: "account.change_email" | "account.change_password" | "account.delete",
+    ) {
+      const stepUp = await import("./step-up");
+      const headers = new Headers({ cookie: account.cookie });
+      const current = await auth.api.getSession({ headers, query: { disableCookieCache: true } });
+      const who = { session: current!.session, user: current!.user, ip: null, headers };
+      expect(await stepUp.sendStepUpCode(who, action)).toEqual({ ok: true });
+      const code = sent.at(-1)!.text.match(/\b\d{6}\b/)![0];
+      expect(await stepUp.verifyStepUp(who, { action, method: "email", code })).toEqual({
+        ok: true,
+      });
+    }
+
     const requestDeletion = async (account: { email: string; cookie: string }) => {
+      await emailStepUp(account, "account.delete");
       const res = await auth.api.deleteUser({
         headers: new Headers({ cookie: account.cookie }),
         body: {},
@@ -125,42 +143,70 @@ describe.skipIf(!enabled)(
       );
     });
 
-    it("needs a fresh session to request deletion or change the email", async () => {
-      const a = await newUser("stale");
-      await ageSessions(a.id);
+    it("a new sign-in alone confirms neither deletion nor an email or password change", async () => {
+      const a = await newUser("fresh");
       const headers = new Headers({ cookie: a.cookie });
       expect(await errorOf(auth.api.deleteUser({ headers, body: {} }))).toEqual({
         status: 403,
-        code: "SESSION_NOT_FRESH",
+        code: "STEP_UP_REQUIRED",
+      });
+      // A password in the body doesn't stand in for the check.
+      expect(await errorOf(auth.api.deleteUser({ headers, body: { password } }))).toEqual({
+        status: 403,
+        code: "STEP_UP_REQUIRED",
       });
       expect(
         await errorOf(
           auth.api.changeEmail({ headers, body: { newEmail: `${tag}-stale-new@example.com` } }),
         ),
-      ).toEqual({ status: 403, code: "SESSION_NOT_FRESH" });
+      ).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+      expect(
+        await errorOf(
+          auth.api.changePassword({
+            headers,
+            body: { currentPassword: password, newPassword: `${password}-2` },
+          }),
+        ),
+      ).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
       const http = await post("/delete-user", a.cookie, {});
       expect(http.status).toBe(403);
+      expect(((await http.json()) as { code?: string }).code).toBe("STEP_UP_REQUIRED");
       // Sign-up's verification email is the only one sent.
       expect(sent.filter((m) => m.to === a.email).map((m) => m.subject)).toEqual([
         "Confirm your ReceiptOCR email",
       ]);
 
-      // Signing in again gives a fresh session that may.
+      // Signing in again doesn't help either.
       const again = await auth.api.signInEmail({
         body: { email: a.email, password },
         returnHeaders: true,
       });
-      const fresh = await auth.api.deleteUser({
-        headers: new Headers({ cookie: sessionCookie(again.headers) }),
+      const signedInAgain = { ...a, cookie: sessionCookie(again.headers) };
+      expect(
+        await errorOf(
+          auth.api.deleteUser({ headers: new Headers({ cookie: signedInAgain.cookie }), body: {} }),
+        ),
+      ).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+
+      // The emailed code does, and only until it expires.
+      await emailStepUp(signedInAgain, "account.delete");
+      const confirmed = await auth.api.deleteUser({
+        headers: new Headers({ cookie: signedInAgain.cookie }),
         body: {},
       });
-      expect(fresh.message).toBe("Verification email sent");
+      expect(confirmed.message).toBe("Verification email sent");
+      await expireStepUps(a.id);
+      expect(
+        await errorOf(
+          auth.api.deleteUser({ headers: new Headers({ cookie: signedInAgain.cookie }), body: {} }),
+        ),
+      ).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
     });
 
-    it("the emailed link deletes the account once, from a session of any age", async () => {
+    it("the emailed link deletes the account once, without a fresh check", async () => {
       const a = await newUser("confirm");
       const token = await requestDeletion(a);
-      await ageSessions(a.id);
+      await expireStepUps(a.id);
       const res = await post("/delete-user", a.cookie, { token });
       expect(res.status).toBe(200);
       expect(await exists(a.id)).toBe(false);
@@ -238,6 +284,7 @@ describe.skipIf(!enabled)(
 
     it("emails a notice after a password change, and not after a wrong current password", async () => {
       const a = await newUser("change");
+      await emailStepUp(a, "account.change_password");
       const headers = new Headers({ cookie: a.cookie });
       expect(
         await errorOf(
@@ -276,6 +323,7 @@ describe.skipIf(!enabled)(
       const a = await newUser("email");
       await db.update(user).set({ emailVerified: true }).where(eq(user.id, a.id));
       const newEmail = `${tag}-email-new@example.com`;
+      await emailStepUp(a, "account.change_email");
       await auth.api.changeEmail({
         headers: new Headers({ cookie: a.cookie }),
         body: { newEmail, callbackURL: "/app/settings" },
@@ -302,6 +350,7 @@ describe.skipIf(!enabled)(
       const taken = await newUser("taken");
       await db.update(user).set({ emailVerified: true }).where(eq(user.id, a.id));
       const headers = new Headers({ cookie: a.cookie });
+      await emailStepUp(a, "account.change_email");
       const change = (newEmail: string) => auth.api.changeEmail({ headers, body: { newEmail } });
       for (let i = 0; i < 3; i++) expect(await change(taken.email)).toEqual({ status: true });
       // Nothing was sent for the taken address, yet the cap is used up for both kinds of answer.
@@ -327,10 +376,82 @@ describe.skipIf(!enabled)(
       expect(await exists(a.id)).toBe(false);
     });
 
+    it("a fresh sign-in alone doesn't confirm an email change, verified or not", async () => {
+      // Unverified: Better Auth would send the only link to the new address.
+      const a = await newUser("email-fresh");
+      const change = () =>
+        auth.api.changeEmail({
+          headers: new Headers({ cookie: a.cookie }),
+          body: { newEmail: `${tag}-email-fresh-new@example.com` },
+        });
+      expect(await errorOf(change())).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+      await db.update(user).set({ emailVerified: true }).where(eq(user.id, a.id));
+      expect(await errorOf(change())).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+      expect(sent.some((m) => m.to === `${tag}-email-fresh-new@example.com`)).toBe(false);
+    });
+
+    it("signing in again from a signed-in browser replaces that session", async () => {
+      const a = await newUser("resign");
+      const [before] = await db
+        .select({ id: session.id, org: session.activeOrganizationId })
+        .from(session)
+        .where(eq(session.userId, a.id));
+      const again = await auth.api.signInEmail({
+        body: { email: a.email, password },
+        headers: new Headers({ cookie: a.cookie }),
+        returnHeaders: true,
+      });
+      const rows = await db
+        .select({ id: session.id, org: session.activeOrganizationId })
+        .from(session)
+        .where(eq(session.userId, a.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.id).not.toBe(before!.id);
+      expect(rows[0]!.org).toBe(before!.org);
+      // The old cookie no longer works; the new one does.
+      expect(await auth.api.getSession({ headers: new Headers({ cookie: a.cookie }) })).toBeNull();
+      expect(
+        await auth.api.getSession({
+          headers: new Headers({ cookie: sessionCookie(again.headers) }),
+        }),
+      ).not.toBeNull();
+
+      // A different user's sign-in leaves this browser's other session alone.
+      const b = await newUser("resign-other");
+      await auth.api.signInEmail({
+        body: { email: a.email, password },
+        headers: new Headers({ cookie: b.cookie }),
+      });
+      expect(await db.select().from(session).where(eq(session.userId, b.id))).toHaveLength(1);
+    });
+
+    it("a fresh sign-in never stands in for an admin's second factor", async () => {
+      const admin = await newUser("admin-fresh");
+      const target = await newUser("target-fresh");
+      await db.update(user).set({ role: "admin" }).where(eq(user.id, admin.id));
+      const set = () =>
+        auth.api.setUserPassword({
+          headers: new Headers({ cookie: admin.cookie }),
+          body: { userId: target.id, newPassword: `${password}-admin` },
+        });
+      // No factor yet: admins must enrol one; with one, they must use it.
+      expect(await errorOf(set())).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+      await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, admin.id));
+      expect(await errorOf(set())).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+    });
+
     it("emails the notice when an admin sets a user's password", async () => {
       const admin = await newUser("admin");
       const target = await newUser("target");
-      await db.update(user).set({ role: "admin" }).where(eq(user.id, admin.id));
+      // Admin calls need a passed factor check; two-factor.int.test.ts covers passing one.
+      await db
+        .update(user)
+        .set({ role: "admin", twoFactorEnabled: true })
+        .where(eq(user.id, admin.id));
+      await db
+        .update(session)
+        .set({ stepUpAt: new Date(), stepUpMethod: "totp" })
+        .where(eq(session.userId, admin.id));
       await auth.api.setUserPassword({
         headers: new Headers({ cookie: admin.cookie }),
         body: { userId: target.id, newPassword: `${password}-admin` },

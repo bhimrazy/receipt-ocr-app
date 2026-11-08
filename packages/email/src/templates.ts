@@ -153,3 +153,43 @@ export function emailChangeEmail(
     resetUrl: input.resetUrl,
   });
 }
+
+/** The step-up code for an account with no second factor; never in the subject. */
+export function stepUpCodeEmail(
+  ctx: EmailContext,
+  input: { code: string; expiresInSeconds: number },
+): EmailContent {
+  return build("stepUpCode", `Your ${BRAND} verification code`, ctx, {
+    code: input.code,
+    expiry: formatDuration(input.expiresInSeconds),
+  });
+}
+
+/** Security notices for sign-in factor changes; each links the password reset page. */
+type Notice = (ctx: EmailContext, input: { resetUrl: string }) => EmailContent;
+
+export const twoFactorEnabledEmail: Notice = (ctx, input) =>
+  build("twoFactorEnabled", `Two-step sign-in is on for your ${BRAND} account`, ctx, input);
+
+/** Turned off by the user, or reset by an administrator (who also signed them out everywhere). */
+export function twoFactorDisabledEmail(
+  ctx: EmailContext,
+  input: { resetUrl: string; byAdmin: boolean },
+): EmailContent {
+  return input.byAdmin
+    ? build("twoFactorReset", `Two-step sign-in was reset on your ${BRAND} account`, ctx, {
+        resetUrl: input.resetUrl,
+      })
+    : build("twoFactorDisabled", `Two-step sign-in is off for your ${BRAND} account`, ctx, {
+        resetUrl: input.resetUrl,
+      });
+}
+
+export const backupCodesRegeneratedEmail: Notice = (ctx, input) =>
+  build("backupCodesRegenerated", `New backup codes for your ${BRAND} account`, ctx, input);
+
+export const passkeyAddedEmail: Notice = (ctx, input) =>
+  build("passkeyAdded", `A passkey was added to your ${BRAND} account`, ctx, input);
+
+export const passkeyRemovedEmail: Notice = (ctx, input) =>
+  build("passkeyRemoved", `A passkey was removed from your ${BRAND} account`, ctx, input);

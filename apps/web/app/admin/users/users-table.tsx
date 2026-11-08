@@ -18,6 +18,15 @@ type Row = AdminUserRow & { limit: number };
 const linkClass =
   "rounded-md outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-ring";
 
+/** Which second factors a user has: "App", "2 passkeys", "App + 1 passkey" or "Off". */
+function factorLabel(user: { twoFactorEnabled: boolean; passkeys: number }) {
+  const parts = [
+    user.twoFactorEnabled ? "App" : null,
+    user.passkeys > 0 ? `${user.passkeys} passkey${user.passkeys === 1 ? "" : "s"}` : null,
+  ].filter(Boolean);
+  return parts.join(" + ") || "Off";
+}
+
 function Empty({ filtered }: { filtered: boolean }) {
   return (
     <p className="px-4 py-12 text-center text-sm text-muted-foreground">
@@ -64,6 +73,7 @@ export function UsersTable({
                   </div>
                   <div className="mt-2.5 flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="shrink-0">{planLabel(user.plan)}</span>
+                    <span className="shrink-0">2FA: {factorLabel(user)}</span>
                     <Meter
                       className="flex-1"
                       label={`Receipts used today by ${user.email}`}
@@ -85,6 +95,7 @@ export function UsersTable({
             <TableRow>
               <TableHead>User</TableHead>
               <TableHead>Plan</TableHead>
+              <TableHead>2FA</TableHead>
               <TableHead className="w-48">Used today</TableHead>
               <TableHead className="text-right">Workspaces</TableHead>
               <TableHead className="text-right">Joined</TableHead>
@@ -93,7 +104,7 @@ export function UsersTable({
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={6}>
                   <Empty filtered={filtered} />
                 </TableCell>
               </TableRow>
@@ -120,6 +131,13 @@ export function UsersTable({
                   </TableCell>
                   <TableCell className="text-sm">
                     {planLabel(user.plan).replace(" plan", "")}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {user.twoFactorEnabled || user.passkeys > 0 ? (
+                      factorLabel(user)
+                    ) : (
+                      <span className="text-muted-foreground">Off</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Meter

@@ -166,10 +166,9 @@ Steps are in [deployment.md](deployment.md).
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                                                   |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| #95  | Two-step sign-in (TOTP), passkeys and step-up for important actions. Reviewed; waiting for the owner's go on migration `0002` and on decision 10 below |
-| #111 | Per-model reasoning effort in the OCR chain (Admin → Settings). Fix round after review                                                                 |
+| PR  | Work                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------ |
+| #95 | Two-step sign-in (TOTP), passkeys and step-up for important actions. Owner approved 2026-11-08; merging after migration `0002` |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -202,9 +201,9 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 8. BYOK tables (`user_credentials`, `storage_source`): keep or delete.
 9. Usage ledger: retention period (suggested 13 months, then a purge job and a privacy-page line); whether the
    global cap needs a platform-wide lock (it can overshoot by the number of users uploading at the same moment).
-10. Passkeys and two-factor (PR #95, migration `0002`) ([plan](plans/2026-11-06-passkeys-2fa.md)): passkey rpID (host or apex via
-    `PASSKEY_RP_ID`), require passkey or password+TOTP for platform admins, `session.freshAge` 24 h → 1 h, no email
-    OTP, trusted-device length, nudges.
+10. ~~Passkeys and two-factor~~ Decided 2026-11-08: go for #95 and migration `0002`; a recent sign-in no longer
+    counts as step-up, so users without a factor confirm with the emailed code. Still open: whether the everyday
+    History CSV export needs step-up.
 11. Currencies and conversion ([plan](plans/2026-11-06-currencies-fx.md)): home currency per workspace,
     `numeric(19,4)` amounts, Frankfurter as the only v1 rate source (self-host as the exit), backfill depth,
     which amounts are converted, sign-up default from country.
@@ -232,8 +231,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    OCR-first parser ([two-tier OCR review](reviews/2026-11-07-two-tier-ocr.md)).
 5. Providers: Anthropic, Groq and OpenAI are wired in (#59, #106, #110) and benchmarked (#85). Next: per-model options
    and limits on the model table, effort per step (#111), then key source (BYOK).
-6. Passkeys and two-factor ([plan](plans/2026-11-06-passkeys-2fa.md)): PR A TOTP + backup codes + Settings →
-   Security; PR B passkeys (primary sign-in) + admin enforcement. Each adds a migration after the baseline.
+6. ~~Passkeys and two-factor~~ (#95): TOTP, backup codes, passkeys, step-up and admin enforcement.
 7. Members, seats and per-workspace quota; monthly limits and billing after decisions.
    Payment provider for a Nepal-based seller: Paddle (MoR) first, Dodo fallback, Khalti/eSewa prepaid months for NPR
    later; no Stripe Atlas yet ([payments](plans/2026-11-07-payments.md), [NPR rails](plans/2026-11-07-payments-nepal.md)).
@@ -269,6 +267,16 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   R2, which stay as they are) when traffic or billing makes it necessary.
 
 ## Known follow-ups
+
+- `/list-sessions` is an ungated read of the user's own sessions now that `freshAge` is 0 (Better Auth's freshness check
+  was its only guard). Low: it shows a session thief the user's other devices; gate it with step-up if that matters.
+- Sign-ins finished through `/two-factor/verify-totp` or `/two-factor/verify-backup-code` aren't in `isSignIn`
+  (`lib/auth-two-factor.ts`), so a TOTP user's second sign-in from the same browser doesn't replace the earlier
+  session. The password step clears the session cookie first, so the earlier token has to be carried through the
+  challenge to find it.
+- Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
+  rows older than 90 days with a job kind in `packages/core/src/jobs` (there is no retention job yet), keeping the last
+  pass and recent failures that the lockout reads; then update the privacy policy.
 
 - Share target: a cross-site form can plant a share in a visitor's cache (the referrer can be hidden). The Keep and
   Discard prompt, the 10-minute expiry and the size caps are the guard.

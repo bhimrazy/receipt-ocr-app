@@ -2,8 +2,10 @@
 
 Authentication is [Better Auth](https://better-auth.com), configured in [`lib/auth.ts`](../../../apps/web/lib/auth.ts)
 and served at `/api/auth/*`. It stores users, sessions, accounts, workspaces (organizations), members and
-invitations in Postgres through the Drizzle adapter. Three plugins are on: **organization** (workspaces), **admin**
-(platform roles, bans, impersonation) and `nextCookies` (cookies from server actions).
+invitations in Postgres through the Drizzle adapter. The plugins: **organization** (workspaces), **admin**
+(platform roles, bans, impersonation), **twoFactor** (authenticator apps and backup codes), **passkey**
+(`@better-auth/passkey`, WebAuthn) and `nextCookies` (cookies from server actions). The two-factor, passkey and
+step-up wiring lives in [`lib/auth-two-factor.ts`](../../../apps/web/lib/auth-two-factor.ts).
 
 ## Contents
 
@@ -12,6 +14,10 @@ invitations in Postgres through the Drizzle adapter. Three plugins are on: **org
 - [Email sign-in](#email-sign-in)
 - [Google or GitHub sign-in](#google-or-github-sign-in)
 - [Every request after sign-in](#every-request-after-sign-in)
+- [Two-step sign-in](#two-step-sign-in)
+- ["Confirm it's you" (step-up)](#confirm-its-you-step-up)
+- [Passkeys](#passkeys)
+- [Admins](#admins)
 - [Invitations](#invitations)
 - [Password reset and account deletion](#password-reset-and-account-deletion)
 - [Sensitive account changes](#sensitive-account-changes)
@@ -23,11 +29,12 @@ invitations in Postgres through the Drizzle adapter. Three plugins are on: **org
 | Passwords                     | 8 to 128 characters; all sessions revoked on reset                                                                      |
 | Email verification            | Required in production (`AUTH_REQUIRE_EMAIL_VERIFICATION`, default true there)                                          |
 | Sessions                      | 7 days, refreshed daily; cookie cache off, so every read checks the session row                                         |
-| Fresh session (`freshAge`)    | 15 minutes; needed to request account deletion or change the email                                                      |
 | Rate limits (database-backed) | Sign-in 5 per minute, sign-up 3 per minute, invite 20 per hour, delete-user and change-email 10 per hour, per client IP |
 | Tokens at rest                | Verification and reset tokens hashed; OAuth tokens encrypted with the auth secret                                       |
 | Social providers              | Google and GitHub, each on only when its ID and secret are both set                                                     |
 | First admin                   | `ADMIN_EMAILS`, granted only once that address is verified                                                              |
+| Two-step sign-in              | TOTP (6 digits, 30 s, ±1 step) and 10 backup codes, sealed with the auth secret                                         |
+| Step-up                       | Fresh for 10 minutes per session; factor first; without one an emailed code (a recent sign-in never counts)             |
 
 Client IPs for rate limits come from `TRUSTED_IP_HEADERS` and `TRUSTED_PROXIES` ([`lib/env.ts`](../../../apps/web/lib/env.ts)),
 so the app's own limiters ([`clientIp`](../../../apps/web/lib/http.ts)) and Better Auth's agree.
@@ -115,7 +122,134 @@ flowchart LR
 - Banned users and revoked sessions fail `getSession` on the next request. The cookie cache is off in
   [`lib/auth.ts`](../../../apps/web/lib/auth.ts) (with it on, a revoked session kept working on `/api/auth/*` for the
   cache's lifetime, GHSA-fvxx), and server reads also pass `disableCookieCache: true`.
-- `/admin` additionally requires `user.role = 'admin'` (`requireAdmin`), and answers 404 otherwise.
+- `/admin` additionally requires `user.role = 'admin'` (`requireAdmin`), and answers 404 otherwise. With
+  `ADMIN_MFA_ENFORCE` on (production) it also needs a second factor, [below](#admins).
+- Each new session records how it was created in `session.auth_method` (`password`, `mfa`, `oauth`, `email_link`,
+  `passkey`, `impersonation`), set in `databaseHooks.session.create.before` by
+  [`auth-method.ts`](../../../apps/web/lib/auth-method.ts). A rotated session (2FA on or off) keeps its predecessor's.
+
+## Two-step sign-in
+
+Turned on in **Settings → Security** ([`two-factor-card.tsx`](../../../apps/web/components/security/two-factor-card.tsx)):
+password (if the account has one), then a QR code with the key also shown as text, then a code from the app. Only that
+first verified code sets `user.two_factor_enabled`, so an abandoned set-up leaves no half-on account. The 10 backup
+codes are shown once, to copy or download.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant BA as Better Auth
+  participant DB as Postgres
+
+  B->>BA: signIn.email(email, password)
+  BA->>DB: create session, then twoFactor's after-hook deletes it
+  BA->>DB: verification rows: 2fa-<id> (user id) and its attempt counter, 10 min
+  BA-->>B: { twoFactorRedirect } + signed two_factor cookie
+  B->>B: /sign-in/two-factor
+  B->>BA: twoFactor.verifyTotp(code, trustDevice?) or verifyBackupCode
+  BA->>DB: 5 tries per challenge; 10 failures lock the account 15 min
+  BA->>DB: create session (auth_method = mfa)
+  BA-->>B: session cookie (+ 30-day trust_device cookie if ticked)
+```
+
+- Google and GitHub sign-ins aren't asked for the code (the plugin only hooks password sign-in). For those users
+  the authenticator still guards step-up and admin access, and the Security page says so.
+- Turning it off needs the password and a fresh step-up. A `user.update.after` hook then deletes every trusted-device
+  row of the user, not only the current device's. Trust rows are stored as `trust-device:` plus a SHA-256 (a
+  `verification.storeIdentifier` override), so this leaves the user's pending reset and deletion links alone. An
+  admin reset deletes every `verification` row of the user on purpose.
+- An impersonation session can't call any `/two-factor/*` or `/passkey/*` endpoint (`IMPERSONATING`), so an admin
+  can't enrol their own authenticator on a customer's account.
+- Emails: "two-step sign-in is on", "is off", "new backup codes" and "was reset by an administrator". A failed send is
+  logged and never fails the change.
+
+## "Confirm it's you" (step-up)
+
+Important actions need a check passed in the last 10 minutes on **this session**. The state is two session columns,
+`step_up_at` and `step_up_method`, so nothing can be carried to another session. The policy is pure and unit-tested
+([`step-up/policy.ts`](../../../packages/core/src/step-up/policy.ts)):
+
+| Account                   | Can verify with                       |
+| ------------------------- | ------------------------------------- |
+| Has a passkey             | The passkey (a fresh passkey sign-in) |
+| Has an authenticator app  | App code or a backup code             |
+| No second factor          | A 6-digit code emailed to them        |
+| Platform admin, no factor | Nothing: must enrol first             |
+
+A recent sign-in never passes a check on its own (owner decision, 2026-11-08): a session stolen right after sign-in
+would otherwise pass.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant S as Server action or Better Auth hook
+  participant V as step-up actions
+  participant DB as Postgres
+
+  B->>S: important action
+  S->>DB: requireStepUp / checkStepUp: session step_up_at, method, user factors
+  S-->>B: { code: STEP_UP_REQUIRED }
+  B->>B: withStepUp opens the dialog
+  B->>V: verifyStepUpAction(method, code)
+  V->>DB: lockout check (5 failures in 15 min), TOTP step not used before
+  V->>DB: one transaction: session.step_up_at = now(), step_up_events row
+  B->>S: same action again, passes
+```
+
+- **One server gate.** `requireStepUp(session, action)` in
+  [`step-up-check.ts`](../../../apps/web/lib/step-up-check.ts) for server actions (every admin mutation calls it in
+  `run()`), and a global Better Auth `hooks.before` for auth endpoints, mapped in
+  [`step-up-paths.ts`](../../../apps/web/lib/step-up-paths.ts): `/delete-user`, `/change-email`, `/change-password`,
+  `/unlink-account`, `/two-factor/disable`, `/two-factor/generate-backup-codes`, `/passkey/delete-passkey`,
+  `/organization/delete`,
+  owner grants through `/organization/update-member-role` or `/organization/invite-member`, and every mutating
+  `/admin/*` endpoint. Calling the API directly can't skip it. Left open on purpose: ending sessions
+  (`/revoke-session`, `/revoke-other-sessions`, `/revoke-sessions`), the victim's way out, and renaming a passkey.
+- **Methods come from the enrolled factors** on every check, even while the session is fresh, so a user with a factor
+  can't pass or refresh a check with the emailed code.
+- **Signing in again replaces the session.** A sign-in (`/sign-in/email`, `/sign-in/social`, `/callback/*`) from a
+  browser holding a session of the same user deletes that session and keeps its workspace (`replacePreviousSession`;
+  passkey step-ups do the same through `adoptPasskeySession`), so re-signing in leaves no second live session.
+- **One client dialog.** [`step-up.tsx`](../../../apps/web/components/step-up/step-up.tsx): `withStepUp(call)` runs the
+  call, opens the dialog only when the server says `STEP_UP_REQUIRED`, and retries once.
+- **Codes.** TOTP is checked by our RFC 6238 helper ([`totp.ts`](../../../apps/web/lib/totp.ts)) against the
+  decrypted plugin secret, so the matched time step is stored and can't be replayed. Backup codes go through the
+  plugin (single use, compare-and-swap). Emailed codes are `randomInt` 6 digits, stored as an HMAC under the auth
+  secret and bound to the session, 10 minutes, 5 guesses, at most 3 sends per 10 minutes.
+- **Audit.** Every send, pass and failure is a `step_up_events` row and an `auth.step_up` wide event.
+
+## Passkeys
+
+- rpID is the host of `BETTER_AUTH_URL` (production `receipt-ocr.bhimraj.com.np`) and the expected origin is exactly
+  that origin; resident keys and user verification are required, so a passkey alone is a two-factor sign-in.
+- Added in Settings → Security (needs a fresh step-up; Better Auth's `freshAge` is off), renamed and removed
+  there; removing needs a step-up. Each add and remove emails the user.
+- Sign-in: "Use a passkey" on `/sign-in`, and autofill through `autocomplete="username webauthn"` with conditional
+  mediation where the browser supports it. The session gets `auth_method = passkey`.
+- As a step-up: the dialog runs a passkey sign-in; an after-hook on `/passkey/verify-authentication` marks the new
+  session verified, keeps the previous session's active workspace and deletes the previous session.
+- Rate limits per IP: authenticate options 20/min, verify 10/min, register options 10/min.
+
+## Admins
+
+```mermaid
+flowchart LR
+  a["/admin request"] --> role{"role = admin?"}
+  role -- no --> nf[404]
+  role -- yes --> enrolled{"second factor?"}
+  enrolled -- no --> sec["/app/settings/security?required=admin"]
+  enrolled -- yes --> proved{"auth_method mfa or passkey,<br/>or a factor step-up this session?"}
+  proved -- no --> verify["/app/settings/security/verify"]
+  proved -- yes --> ok[Admin]
+```
+
+Enforced in `requireAdmin()` ([`session.ts`](../../../apps/web/lib/session.ts)), so every admin page and action
+inherits it. `ADMIN_MFA_ENFORCE=false` is the emergency off switch; it is on by default in production. Admins never
+get the emailed code. An admin can reset another user's two-step sign-in (Admin → Users → user → Reset 2FA): one
+transaction removes the authenticator, trusted devices and every session and writes `user.two_factor_reset` to the
+audit log; the user is emailed.
 
 ## Invitations
 
@@ -176,21 +310,21 @@ plan's `workspaces` limit, read fresh from the database.
 A stolen or unlocked session must not be enough to delete an account, take it over by changing its email, or change
 the password unnoticed.
 
-| Change          | What it needs                                                                      | Mechanism                                                                                                               |
-| --------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Delete account  | A session under 15 minutes old to ask; then the emailed link (1 hour, once)        | Better Auth `user.deleteUser.sendDeleteAccountVerification`, `deleteTokenExpiresIn`; our `hooks.before` freshness check |
-| Change email    | A session under 15 minutes old; the current address approves; the new one confirms | Better Auth `user.changeEmail.sendChangeEmailConfirmation`; our `hooks.before` freshness check                          |
-| Change password | The current password                                                               | Better Auth `changePassword`; a notice to the account address from our `hooks.after`                                    |
-| Admin sets one  | The admin role                                                                     | Admin plugin `setUserPassword`; the same notice from our `hooks.after`                                                  |
-| Reset password  | The emailed reset link                                                             | A notice from `emailAndPassword.onPasswordReset`                                                                        |
+| Change          | What it needs                                                 | Mechanism                                                                                                                      |
+| --------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Delete account  | A step-up to ask; then the emailed link (1 hour, once)        | Better Auth `user.deleteUser.sendDeleteAccountVerification`, `deleteTokenExpiresIn`; the shared step-up gate in `hooks.before` |
+| Change email    | A step-up; the current address approves; the new one confirms | Better Auth `user.changeEmail.sendChangeEmailConfirmation`; the shared step-up gate                                            |
+| Change password | A step-up and the current password                            | Better Auth `changePassword`; the shared step-up gate; a notice to the account address from our `hooks.after`                  |
+| Admin sets one  | The admin role and an admin step-up (a factor)                | Admin plugin `setUserPassword`; the same notice from our `hooks.after`                                                         |
+| Reset password  | The emailed reset link                                        | A notice from `emailAndPassword.onPasswordReset`                                                                               |
 
-Better Auth applies `session.freshAge` itself only to list-sessions, unlink-account and a delete-user call that has
-neither a password nor an emailed confirmation. The `hooks.before` in [`lib/auth.ts`](../../../apps/web/lib/auth.ts)
-(rules in [`lib/step-up.ts`](../../../apps/web/lib/step-up.ts)) adds it to `/delete-user` without a token and to
-`/change-email`, answering `403 SESSION_NOT_FRESH`. Settings then opens
-[`reauth-dialog.tsx`](../../../apps/web/components/reauth-dialog.tsx): password users sign in again in place (with
-Turnstile when it is on) and the step retries; Google or GitHub users sign in with the provider and come back to
-`/app/settings?resume=…`.
+These use the same ["Confirm it's you"](#confirm-its-you-step-up) gate as every other important action: the
+`hooks.before` in [`lib/auth.ts`](../../../apps/web/lib/auth.ts) calls `stepUpGate` first, answering
+`403 STEP_UP_REQUIRED`, and only then runs the sole-owner check and the per-address caps, so a refused request sends
+nothing and counts nothing. A `/delete-user` call carrying the emailed token is exempt: opening the link proves the
+inbox. Settings wraps each call in `withStepUp`. With a factor, the dialog asks for it; without one, it sends an
+emailed code. Better Auth's own `session.freshAge` is 0 (off): it would refuse a passkey
+registration that already passed step-up, and `/unlink-account`, its only other guarded write, needs step-up.
 
 ```mermaid
 sequenceDiagram
@@ -202,8 +336,8 @@ sequenceDiagram
   participant M as Resend
 
   B->>BA: deleteUser({}) after typing the account email
-  BA->>H: hooks.before: session under 15 minutes old?
-  H-->>B: no: 403 SESSION_NOT_FRESH, Settings asks to sign in again
+  BA->>H: hooks.before: stepUpGate (factor check, or a sign-in under 10 minutes old)
+  H-->>B: no: 403 STEP_UP_REQUIRED, the dialog asks to confirm
   BA->>DB: verification row delete-account-{token}, 1 hour (hashed)
   BA->>H: sendDeleteAccountVerification (3 per hour per address)
   H->>M: link to /app/settings/delete-account?token=
@@ -236,5 +370,4 @@ sequenceDiagram
   Requests and completions are logged as `user.delete_requested`, `user.deleted`, `user.email_change_requested`,
   `user.password_changed` and `auth.step_up_required`, with the user id only.
 
-**Planned:** passkeys and TOTP two-factor ([plan](../../plans/2026-11-06-passkeys-2fa.md)), and bot protection with
-Cloudflare Turnstile ([STATUS follow-ups](../../STATUS.md#known-follow-ups)).
+Plan and decisions: [passkeys and two-factor](../../plans/2026-11-06-passkeys-2fa.md).

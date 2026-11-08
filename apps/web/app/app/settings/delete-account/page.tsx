@@ -7,7 +7,7 @@ import {
 import { DeleteAccountConfirm } from "@/components/delete-account-confirm";
 import { logPageRender } from "@/lib/page-event";
 import { requireSession } from "@/lib/session";
-import { isDeleteToken } from "@/lib/step-up";
+import { isDeleteToken } from "@/lib/account-deletion";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Delete account" };

@@ -1,5 +1,6 @@
 "use client";
 
+import { withStepUp } from "@/components/step-up/step-up";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@receipt-ocr/ui/components/card";
@@ -87,10 +88,11 @@ export function SessionsList({
 
   async function confirm(): Promise<string | void> {
     if (!pending) return;
-    const result =
+    const result = await withStepUp(() =>
       pending.kind === "all"
-        ? await revokeUserSessionsAction({ userId })
-        : await revokeUserSessionAction({ sessionId: pending.session.id, userId });
+        ? revokeUserSessionsAction({ userId })
+        : revokeUserSessionAction({ sessionId: pending.session.id, userId }),
+    );
     if (!result.ok) return result.error;
     toast.add({
       title: pending.kind === "all" ? "Signed out on every device." : "Device signed out.",

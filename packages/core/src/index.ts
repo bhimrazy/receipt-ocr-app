@@ -21,6 +21,7 @@ export * from "./quota";
 export * from "./repository";
 export * from "./services";
 export * from "./settings";
+export * from "./step-up/index";
 export * from "./telemetry";
 export * from "./usage";
 export * from "./plans";

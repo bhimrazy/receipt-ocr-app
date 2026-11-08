@@ -1,6 +1,14 @@
 import { expect, test, type Browser } from "@playwright/test";
 import postgres from "postgres";
-import { PASSWORD, signIn, signOut, signUp, uniqueEmail, waitForAuthForm } from "./helpers";
+import {
+  PASSWORD,
+  signIn,
+  signOut,
+  signUp,
+  uniqueEmail,
+  waitForAuthForm,
+  verifiedAdmin,
+} from "./helpers";
 
 async function sql<T>(run: (db: postgres.Sql) => Promise<T>) {
   const db = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
@@ -35,6 +43,7 @@ async function adminPage(browser: Browser) {
   const email = uniqueEmail("admin");
   await signUp(page, email);
   await sql((db) => db`update "user" set role = 'admin' where email = ${email}`);
+  await verifiedAdmin(page, email);
   return { email, page, context };
 }
 
@@ -118,6 +127,15 @@ test("plan limits saved by an admin show on the customer's settings page", async
     await target.context.close();
     await admin.context.close();
   }
+});
+
+test("an admin without two-step sign-in is sent to Security first", async ({ page }) => {
+  const email = uniqueEmail("admin-no-2fa");
+  await signUp(page, email);
+  await sql((db) => db`update "user" set role = 'admin' where email = ${email}`);
+  await page.goto("/admin/users");
+  await expect(page).toHaveURL(/\/app\/settings\/security\?required=admin/);
+  await expect(page.getByText("Admin accounts must use two-step sign-in.")).toBeVisible();
 });
 
 test("non-admins get a 404 for the admin area", async ({ page }) => {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { authErrorMessage, callbackErrorMessage, SUSPENDED_MESSAGE } from "./auth-errors";
+import {
+  authErrorMessage,
+  callbackErrorMessage,
+  passkeyErrorMessage,
+  SUSPENDED_MESSAGE,
+  twoFactorRestart,
+} from "./auth-errors";
 
 describe("authErrorMessage", () => {
   it("replaces Better Auth's developer wording by code", () => {
@@ -30,6 +36,43 @@ describe("authErrorMessage", () => {
     );
     expect(authErrorMessage({})).toBe("Something went wrong. Try again.");
     expect(authErrorMessage(null)).toBe("Something went wrong. Try again.");
+  });
+});
+
+describe("two-step sign-in errors", () => {
+  it("maps the plugin's codes, and the lockout before the generic 429", () => {
+    expect(authErrorMessage({ code: "INVALID_CODE", status: 401 })).toMatch(/newest code/);
+    expect(authErrorMessage({ code: "INVALID_BACKUP_CODE" })).toMatch(/already used/);
+    expect(authErrorMessage({ code: "ACCOUNT_TEMPORARILY_LOCKED", status: 429 })).toMatch(
+      /15 minutes/,
+    );
+    expect(authErrorMessage({ code: "STEP_UP_REQUIRED", status: 403 })).toMatch(/Confirm it's you/);
+  });
+
+  it("asks for a new password step only when the challenge is gone", () => {
+    expect(twoFactorRestart({ code: "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE" })).toBe(true);
+    expect(twoFactorRestart({ code: "INVALID_TWO_FACTOR_COOKIE" })).toBe(true);
+    expect(twoFactorRestart({ code: "INVALID_CODE" })).toBe(false);
+  });
+});
+
+describe("passkeyErrorMessage", () => {
+  it("treats a dismissed or timed-out prompt as a cancel", () => {
+    for (const code of [
+      "AUTH_CANCELLED",
+      "ERROR_CEREMONY_ABORTED",
+      "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY",
+    ]) {
+      expect(passkeyErrorMessage({ code })).toBe("Cancelled or timed out. Try again.");
+    }
+  });
+
+  it("explains a duplicate, an unknown passkey and a stale session", () => {
+    expect(passkeyErrorMessage({ code: "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" })).toMatch(
+      /already on your account/,
+    );
+    expect(passkeyErrorMessage({ code: "PASSKEY_NOT_FOUND" })).toMatch(/didn't work here/);
+    expect(passkeyErrorMessage({ code: "SESSION_NOT_FRESH" })).toMatch(/sign out and in again/);
   });
 });
 

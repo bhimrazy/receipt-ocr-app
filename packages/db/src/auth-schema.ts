@@ -33,6 +33,8 @@ export const user = pgTable(
     banned: boolean("banned").notNull().default(false),
     banReason: text("ban_reason"),
     banExpires: timestamp("ban_expires", { withTimezone: true }),
+    // twoFactor plugin field: true once an authenticator app is enrolled and verified.
+    twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
@@ -57,6 +59,15 @@ export const session = pgTable(
     activeOrganizationId: text("active_organization_id"),
     // Admin plugin field.
     impersonatedBy: text("impersonated_by"),
+    /**
+     * How the session was created (`password`, `mfa`, `oauth`, `email_link`, `passkey`,
+     * `impersonation`); kept across rotations. Null on rows from before it existed.
+     */
+    authMethod: text("auth_method"),
+    /** Last passed "verify it's you" check on this session; fresh for 10 minutes. */
+    stepUpAt: timestamp("step_up_at", { withTimezone: true }),
+    /** The factor used for it: `totp`, `backup_code`, `passkey` or `email`. */
+    stepUpMethod: text("step_up_method"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
@@ -179,6 +190,56 @@ export const rateLimit = pgTable(
     lastRequest: bigint("last_request", { mode: "number" }),
   },
   (table) => [index("rate_limit_key_idx").on(table.key)],
+).enableRLS();
+
+/**
+ * twoFactor plugin: one authenticator per user. `secret` and `backup_codes`
+ * are sealed by Better Auth (XChaCha20-Poly1305 under BETTER_AUTH_SECRETS).
+ */
+export const twoFactor = pgTable(
+  "two_factor",
+  {
+    id: text("id").primaryKey(),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // False between "enable" and the first verified code.
+    verified: boolean("verified").notNull().default(true),
+    failedVerificationCount: integer("failed_verification_count").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  },
+  (table) => [uniqueIndex("two_factor_user_id_idx").on(table.userId)],
+).enableRLS();
+
+/**
+ * Passkey plugin (`@better-auth/passkey`): WebAuthn credentials. Only public
+ * keys; the private key never leaves the authenticator. Field names follow the
+ * plugin's model (`credentialID`).
+ */
+export const passkey = pgTable(
+  "passkey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    publicKey: text("public_key").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    credentialID: text("credential_id").notNull(),
+    // WebAuthn signature counters are uint32, past integer's range.
+    counter: bigint("counter", { mode: "number" }).notNull(),
+    deviceType: text("device_type").notNull(),
+    backedUp: boolean("backed_up").notNull(),
+    transports: text("transports"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    aaguid: text("aaguid"),
+  },
+  (table) => [
+    index("passkey_user_id_idx").on(table.userId),
+    uniqueIndex("passkey_credential_id_idx").on(table.credentialID),
+  ],
 ).enableRLS();
 
 export type AuthUser = typeof user.$inferSelect;

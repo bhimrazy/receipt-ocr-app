@@ -27,6 +27,10 @@ erDiagram
   organization ||--o{ member : "has"
   organization ||--o{ invitation : "has pending"
   user ||--o{ invitation : "sent (inviter_id)"
+  user ||--o| two_factor : "authenticator"
+  user ||--o{ passkey : "WebAuthn credentials"
+  user ||--o{ step_up_events : "verified"
+  session ||--o{ step_up_codes : "emailed code for"
 
   user {
     text id PK
@@ -35,6 +39,40 @@ erDiagram
     text plan "free or pro"
     text role "user or admin (platform)"
     boolean banned
+    boolean two_factor_enabled
+  }
+  two_factor {
+    text id PK
+    text user_id FK,UK
+    text secret "sealed"
+    text backup_codes "sealed"
+    boolean verified
+    int failed_verification_count
+  }
+  passkey {
+    text id PK
+    text user_id FK
+    text credential_id UK
+    text public_key
+    bigint counter
+    boolean backed_up "synced"
+    text aaguid "authenticator model"
+  }
+  step_up_events {
+    uuid id PK
+    text user_id FK
+    text session_id FK "set null"
+    text action
+    text method "totp, backup_code, passkey, email"
+    text outcome "sent, verified, failed"
+    bigint totp_counter "replay guard"
+  }
+  step_up_codes {
+    uuid id PK
+    text session_id FK
+    text code_hash "HMAC"
+    timestamptz expires_at
+    smallint attempts
   }
   session {
     text id PK
@@ -42,6 +80,9 @@ erDiagram
     text user_id FK
     text active_organization_id "preference only"
     text impersonated_by
+    text auth_method "how it was created"
+    timestamptz step_up_at "last passed check"
+    text step_up_method
   }
   account {
     text id PK
@@ -68,6 +109,13 @@ erDiagram
     text status "pending, accepted, rejected, canceled"
   }
 ```
+
+`two_factor` is the twoFactor plugin's table: the secret and backup codes are sealed with the auth secret
+(XChaCha20-Poly1305, versioned with `BETTER_AUTH_SECRETS`), never hashed, because the plugin must read them back.
+`step_up_events` is the "confirm it's you" audit trail and also feeds the lockout and TOTP replay checks; it keeps rows
+when the session ends (`session_id` set null) and goes with the user. It holds the client IP of each check. There is
+no time-based pruning yet (proposed: 90 days, a follow-up in STATUS). `step_up_codes` holds only an HMAC of each
+emailed code.
 
 Also owned by Better Auth, with no foreign keys: `verification` (hashed email-verification and reset tokens) and
 `rate_limit` (fixed-window counters for auth endpoints, also used by the app's own limiters through `hitRateLimit`).
@@ -257,11 +305,11 @@ erDiagram
 
 ## What happens on delete
 
-| When this is deleted | Rows that cascade (are deleted)                                                         | Rows that stay with the id set to null                                                                                                                                                              |
-| -------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`              | `receipts.user_id`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by` |
-| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups` | `ocr_rounds.organization_id`, `ocr_calls.organization_id`                                                                                                                                           |
-| A receipt            | `receipt_items`, its `receipt_group_members` rows                                       | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                             |
+| When this is deleted | Rows that cascade (are deleted)                                                                                                        | Rows that stay with the id set to null                                                                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `passkey`, `step_up_events`, `step_up_codes` | `receipts.user_id`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by` |
+| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`                                                | `ocr_rounds.organization_id`, `ocr_calls.organization_id`                                                                                                                                           |
+| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                      | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                             |
 
 Two rules sit on top of the cascades, in [packages/core](core.md):
 
@@ -278,6 +326,9 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `session`               | `session_token_idx` on `token`                                                               | Session lookup                                                                                                                                                      |
 | `organization`          | `organization_slug_idx` on `slug`                                                            | Personal workspaces use the user id as slug, with a random suffix on collision                                                                                      |
 | `member`                | `member_org_user_idx` on `(organization_id, user_id)`                                        | One membership per user per workspace                                                                                                                               |
+| `two_factor`            | `two_factor_user_id_idx` on `user_id`                                                        | One authenticator per user (`0002`)                                                                                                                                 |
+| `passkey`               | `passkey_credential_id_idx` on `credential_id`                                               | A WebAuthn credential belongs to one account                                                                                                                        |
+| `step_up_events`        | `method` and `outcome` checks                                                                | Only the known methods and `sent` / `verified` / `failed`                                                                                                           |
 | `ocr_rounds`            | `ocr_rounds_receipt_round_idx` on `(receipt_id, round)`                                      | A round is recorded once                                                                                                                                            |
 | `ocr_calls`             | `ocr_calls_receipt_round_attempt_step_idx` on `(receipt_id, round, job_attempt, step)`       | An attempt's calls written twice (a lost commit acknowledgement, then the failure path) are billed once (`onConflictDoNothing`); each automatic retry keeps its own |
 | `jobs`                  | `jobs_idempotency_idx` on `idempotency_key`, where queued or running                         | A replayed upload or double-clicked retry enqueues nothing                                                                                                          |

@@ -8,6 +8,12 @@ const requireAdmin = vi.fn();
 const after = vi.fn();
 const drainJobs = vi.fn();
 vi.mock("@/lib/session", () => ({ requireAdmin }));
+vi.mock("server-only", () => ({}));
+const requireStepUp = vi.fn();
+vi.mock("@/lib/step-up-check", async () => ({
+  ...(await vi.importActual<Record<string, unknown>>("@/lib/step-up-check")),
+  requireStepUp,
+}));
 vi.mock("@/lib/runtime", () => ({ runtime: { runPromiseExit } }));
 vi.mock("@/lib/http", () => ({ clientIp: () => "203.0.113.1" }));
 vi.mock("@/lib/jobs", () => ({ drainJobs, ROUTE_BUDGET_MS: 290_000 }));
@@ -32,6 +38,7 @@ const calls: [string, () => Promise<unknown>][] = [
 ];
 
 beforeEach(() => {
+  requireStepUp.mockReset().mockResolvedValue(undefined);
   runPromiseExit.mockReset();
   after.mockReset();
   requireAdmin.mockRejectedValue(new Error(NOT_FOUND));
@@ -47,6 +54,19 @@ describe("job admin actions for a non-admin", () => {
 
   it.each(calls)("%s 404s before touching the queue", async (_name, call) => {
     await expect(call()).rejects.toThrow(NOT_FOUND);
+    expect(runPromiseExit).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
+  });
+});
+
+describe("job admin actions without a fresh step-up", () => {
+  it.each(calls)("%s asks for step-up before touching the queue", async (_name, call) => {
+    const { StepUpRequiredError } = await import("@/lib/step-up-check");
+    requireAdmin.mockResolvedValue({ session: { id: "s" }, user: { id: "a", email: "a@x.com" } });
+    requireStepUp.mockImplementation(async (_session, action) => {
+      throw new StepUpRequiredError(action, "required");
+    });
+    expect(await call()).toMatchObject({ ok: false, code: "STEP_UP_REQUIRED" });
     expect(runPromiseExit).not.toHaveBeenCalled();
     expect(after).not.toHaveBeenCalled();
   });

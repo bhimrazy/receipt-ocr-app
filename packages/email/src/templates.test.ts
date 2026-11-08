@@ -3,16 +3,22 @@ import { checkSlots, prerenderAll, renderSource } from "./emails/prerender";
 import { TEMPLATES } from "./generated";
 import { escapeHtml, fill } from "./render";
 import {
+  backupCodesRegeneratedEmail,
   deleteAccountEmail,
   displayUrl,
   emailChangeEmail,
   emailSlots,
   formatDuration,
   invitationEmail,
+  passkeyAddedEmail,
+  passkeyRemovedEmail,
   passwordChangedEmail,
   passwordResetEmail,
+  stepUpCodeEmail,
   supportMessageEmail,
   testEmail,
+  twoFactorDisabledEmail,
+  twoFactorEnabledEmail,
   verificationEmail,
   type EmailContent,
   type EmailContext,
@@ -82,6 +88,28 @@ const cases: Record<
     make: (ctx) => passwordChangedEmail(ctx, { resetUrl }),
     input: { resetUrl },
   },
+  stepUpCode: {
+    make: (ctx) => stepUpCodeEmail(ctx, { code: "123456", expiresInSeconds: 600 }),
+    input: { code: "123456", expiry: "10 minutes" },
+  },
+  twoFactorEnabled: {
+    make: (ctx) => twoFactorEnabledEmail(ctx, { resetUrl }),
+    input: { resetUrl },
+  },
+  twoFactorDisabled: {
+    make: (ctx) => twoFactorDisabledEmail(ctx, { resetUrl, byAdmin: false }),
+    input: { resetUrl },
+  },
+  twoFactorReset: {
+    make: (ctx) => twoFactorDisabledEmail(ctx, { resetUrl, byAdmin: true }),
+    input: { resetUrl },
+  },
+  backupCodesRegenerated: {
+    make: (ctx) => backupCodesRegeneratedEmail(ctx, { resetUrl }),
+    input: { resetUrl },
+  },
+  passkeyAdded: { make: (ctx) => passkeyAddedEmail(ctx, { resetUrl }), input: { resetUrl } },
+  passkeyRemoved: { make: (ctx) => passkeyRemovedEmail(ctx, { resetUrl }), input: { resetUrl } },
   emailChange: {
     make: (ctx) =>
       emailChangeEmail(ctx, {
@@ -361,6 +389,41 @@ describe("security notices", () => {
   it("verification to the new address never names the old one", () => {
     const mail = verificationEmail(withSupport, { url, expiresInSeconds: hour });
     expect(mail.text + mail.html).not.toContain("old@example.com");
+  });
+});
+
+describe("security emails", () => {
+  it("puts the step-up code in the body only, escaped", () => {
+    const mail = stepUpCodeEmail(withSupport, { code: "123456", expiresInSeconds: 600 });
+    expect(mail.subject).not.toContain("123456");
+    expect(mail.text).toContain("123456");
+    expect(mail.html).toContain("123456");
+    expect(mail.text).toContain("10 minutes");
+    expect(stepUpCodeEmail(withSupport, { code: "<b>", expiresInSeconds: 600 }).html).toContain(
+      "&lt;b&gt;",
+    );
+  });
+
+  it("tells the user how to react to a factor change they didn't make", () => {
+    for (const mail of [
+      twoFactorEnabledEmail(withSupport, { resetUrl }),
+      twoFactorDisabledEmail(withSupport, { resetUrl, byAdmin: false }),
+      backupCodesRegeneratedEmail(withSupport, { resetUrl }),
+      passkeyAddedEmail(withSupport, { resetUrl }),
+      passkeyRemovedEmail(withSupport, { resetUrl }),
+    ]) {
+      expect(mail.text).toContain("Didn't do this? Reset your password now");
+      expect(mail.html).toContain(`href="${resetUrl}"`);
+    }
+  });
+
+  it("says when an administrator made the reset", () => {
+    const reset = twoFactorDisabledEmail(withSupport, { resetUrl, byAdmin: true });
+    expect(reset.subject).toContain("was reset");
+    expect(reset.text).toContain("signed out everywhere");
+    expect(twoFactorDisabledEmail(withSupport, { resetUrl, byAdmin: false }).subject).toContain(
+      "is off",
+    );
   });
 });
 

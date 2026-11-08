@@ -1,6 +1,7 @@
 import { SkipLink } from "@/components/skip-link";
 import { Brand } from "@/components/brand";
 import { MobileTopBar } from "@/components/app-nav";
+import { StepUpProvider } from "@/components/step-up/step-up";
 import { AccountSheet, UserMenu, type MenuUser } from "@/components/user-menu";
 import { requireAdmin } from "@/lib/session";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
@@ -97,6 +98,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
         <AdminTabBar />
       </div>
+      <StepUpProvider />
     </Toaster>
   );
 }

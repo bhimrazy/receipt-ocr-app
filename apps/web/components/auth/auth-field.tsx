@@ -22,6 +22,7 @@ export function AuthHeading({ title, children }: { title: string; children?: Rea
 }
 
 export type AuthFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
+  ref?: React.Ref<HTMLInputElement>;
   id: string;
   label: string;
   hint?: React.ReactNode;

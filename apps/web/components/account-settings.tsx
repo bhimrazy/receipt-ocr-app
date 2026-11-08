@@ -8,20 +8,12 @@ import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { ReauthDialog, type SignInMethods } from "@/components/reauth-dialog";
+import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/settings-section";
+import { withStepUp } from "@/components/step-up/step-up";
+import { soleOwnerMessage } from "@/lib/account-deletion";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
-import { SESSION_NOT_FRESH, soleOwnerMessage } from "@/lib/step-up";
-
-/** Where a Google or GitHub re-sign-in returns, so the interrupted step can continue. */
-export type ResumeStep = "delete-account" | "change-email";
-
-const returnTo = (step: ResumeStep) => `/app/settings?resume=${step}`;
-
-const isNotFresh = (error: { code?: string | null } | null | undefined) =>
-  error?.code === SESSION_NOT_FRESH;
 
 function Status({ ok, error, id }: { ok: string | null; error: string | null; id?: string }) {
   if (error) {
@@ -105,46 +97,21 @@ function ProfileCard({ initialName }: { initialName: string }) {
   );
 }
 
-function EmailCard({
-  email,
-  emailVerified,
-  methods,
-  resumed,
-}: {
-  email: string;
-  emailVerified: boolean;
-  methods: SignInMethods;
-  resumed: boolean;
-}) {
+function EmailCard({ email, emailVerified }: { email: string; emailVerified: boolean }) {
   const [next, setNext] = useState("");
   const [pending, setPending] = useState(false);
-  const [reauth, setReauth] = useState(false);
-  const [ok, setOk] = useState<string | null>(
-    resumed ? "You signed in again. Enter the new address to continue." : null,
-  );
+  const [ok, setOk] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Back from a Google or GitHub re-sign-in: bring the user to the field they were filling in.
-  useEffect(() => {
-    if (!resumed) return;
-    inputRef.current?.scrollIntoView({ block: "center" });
-    inputRef.current?.focus({ preventScroll: true });
-  }, [resumed]);
 
   async function request(newEmail: string) {
     setPending(true);
     setError(null);
     setOk(null);
-    const { error: changeError } = await authClient.changeEmail({
-      newEmail,
-      callbackURL: "/app/settings",
-    });
+    const { error: changeError } = await withStepUp(
+      () => authClient.changeEmail({ newEmail, callbackURL: "/app/settings" }),
+      "account.change_email",
+    );
     setPending(false);
-    if (isNotFresh(changeError)) {
-      setReauth(true);
-      return;
-    }
     if (changeError) {
       setError(authErrorMessage(changeError));
       return;
@@ -191,7 +158,6 @@ function EmailCard({
               inputMode="email"
               onChange={(event) => setNext(event.target.value)}
               placeholder="name@example.com"
-              ref={inputRef}
               type="email"
               value={next}
             />
@@ -207,15 +173,6 @@ function EmailCard({
           </div>
         </form>
       </CardContent>
-      <ReauthDialog
-        action="change your email"
-        email={email}
-        methods={methods}
-        onConfirmed={() => request(next.trim().toLowerCase())}
-        onOpenChange={setReauth}
-        open={reauth}
-        returnTo={returnTo("change-email")}
-      />
     </Card>
   );
 }
@@ -241,14 +198,18 @@ function PasswordCard() {
     }
     setPending(true);
     setError(null);
-    const { error: changeError } = await authClient.changePassword({
-      currentPassword: current,
-      newPassword: next,
-      revokeOtherSessions: revokeOthers,
-    });
+    const { error: changeError } = await withStepUp(
+      () =>
+        authClient.changePassword({
+          currentPassword: current,
+          newPassword: next,
+          revokeOtherSessions: revokeOthers,
+        }),
+      "account.change_password",
+    );
     setPending(false);
     if (changeError) {
-      setError(changeError.message ?? "Couldn't change your password. Try again.");
+      setError(authErrorMessage(changeError));
       return;
     }
     setCurrent("");
@@ -309,20 +270,17 @@ function PasswordCard() {
 
 function DangerCard({
   email,
-  methods,
   resumed,
   blockingWorkspaces,
 }: {
   email: string;
-  methods: SignInMethods;
   resumed: boolean;
   /** Shared workspaces only this user owns: deletion would be refused, so it isn't offered. */
   blockingWorkspaces: string[];
 }) {
   const blocked = blockingWorkspaces.length > 0;
-  // Back from a Google or GitHub re-sign-in: pick up where the user left off.
+  // Sent back from an expired or refused deletion link: reopen the request.
   const [open, setOpen] = useState(resumed && !blocked);
-  const [reauth, setReauth] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -332,11 +290,10 @@ function DangerCard({
   async function request(): Promise<string | void> {
     setNotice(null);
     setError(null);
-    const { error: requestError } = await authClient.deleteUser({});
-    if (isNotFresh(requestError)) {
-      setReauth(true);
-      return;
-    }
+    const { error: requestError } = await withStepUp(
+      () => authClient.deleteUser({}),
+      "account.delete",
+    );
     if (requestError) return authErrorMessage(requestError);
     setNotice(sent);
   }
@@ -379,18 +336,6 @@ function DangerCard({
         open={open}
         title="Delete your account?"
       />
-      <ReauthDialog
-        action="delete your account"
-        email={email}
-        methods={methods}
-        onConfirmed={async () => {
-          const failed = await request();
-          if (failed) setError(failed);
-        }}
-        onOpenChange={setReauth}
-        open={reauth}
-        returnTo={returnTo("delete-account")}
-      />
     </Card>
   );
 }
@@ -400,17 +345,16 @@ export function AccountSettings({
   email,
   emailVerified,
   name,
-  methods,
   resume,
 }: {
   blockingWorkspaces: string[];
   email: string;
   emailVerified: boolean;
   name: string;
-  methods: SignInMethods;
-  resume?: ResumeStep;
+  /** `?resume=delete-account` from the deletion confirm page reopens the delete dialog. */
+  resume?: "delete-account";
 }) {
-  // Drop ?resume= so a reload doesn't reopen the step.
+  // Drop ?resume= so a reload doesn't reopen the dialog.
   useEffect(() => {
     if (resume) window.history.replaceState(null, "", "/app/settings");
   }, [resume]);
@@ -429,12 +373,7 @@ export function AccountSettings({
         id="email-heading"
         title="Email"
       >
-        <EmailCard
-          email={email}
-          emailVerified={emailVerified}
-          methods={methods}
-          resumed={resume === "change-email"}
-        />
+        <EmailCard email={email} emailVerified={emailVerified} />
       </SettingsSection>
       <SettingsSection
         description="For email sign-in. If you sign in with Google or GitHub, change your password there."
@@ -451,7 +390,6 @@ export function AccountSettings({
         <DangerCard
           blockingWorkspaces={blockingWorkspaces}
           email={email}
-          methods={methods}
           resumed={resume === "delete-account"}
         />
       </SettingsSection>
