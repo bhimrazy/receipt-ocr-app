@@ -15,6 +15,7 @@ import {
   Note,
   P,
   plainText,
+  Steps,
   Strong,
   type Shared,
 } from "./layout";
@@ -428,6 +429,54 @@ const passkeyRemoved = factorNotice({
   preheader: "That passkey can no longer sign in to your account.",
 });
 
+/** Sent once, after the account exists and its address is verified. The limit is the user's plan. */
+const welcome: EmailDefinition = {
+  slots: ["url", "urlLabel", "receiptsPerDay"],
+  render(v, shared) {
+    const heading = "Your account is ready";
+    const intro = `Thanks for joining ${BRAND}. It turns receipt photos into spreadsheet rows: merchant, date, line items, tax and total, each with a confidence score.`;
+    const steps = [
+      {
+        lead: "Take a photo or upload a file.",
+        rest: "Photos and PDFs both work, from your phone or computer.",
+      },
+      {
+        lead: "Check the fields.",
+        rest: "Low-confidence lines are marked so you know what to fix.",
+      },
+      { lead: "Export a CSV,", rest: "for one receipt or your whole history." },
+    ];
+    const plan = `Your plan scans up to ${v.receiptsPerDay} receipts a day. The count resets every day.`;
+    const note = shared.supportEmail
+      ? "Need help, or more than the daily limit? Reply to this email and we'll answer."
+      : "Need help, or more than the daily limit? Use the support button in the app.";
+    const reason = `You're receiving this because a ${BRAND} account was created with this address.`;
+    return {
+      html: (
+        <Layout
+          shared={shared}
+          preheader="Three steps to your first scan, and what your plan includes."
+          heading={heading}
+          reason={reason}
+        >
+          <P>{intro}</P>
+          <Steps items={steps} />
+          <P>{plan}</P>
+          <Action label="Scan a receipt" url={v.url} urlLabel={v.urlLabel} />
+          <Note>{note}</Note>
+        </Layout>
+      ),
+      text: plainText(shared, {
+        heading,
+        body: [intro, steps.map((s, i) => `${i + 1}. ${s.lead} ${s.rest}`).join("\n"), plan],
+        action: { label: "Scan a receipt", url: v.url },
+        note,
+        reason,
+      }),
+    };
+  },
+};
+
 export const definitions = {
   verification,
   passwordReset,
@@ -444,6 +493,7 @@ export const definitions = {
   backupCodesRegenerated,
   passkeyAdded,
   passkeyRemoved,
+  welcome,
 } satisfies Record<string, EmailDefinition>;
 
 export type TemplateName = keyof typeof definitions;
