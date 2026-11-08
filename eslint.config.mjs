@@ -8,7 +8,7 @@ const config = [
       "**/node_modules/**",
       "**/dist/**",
       "**/.turbo/**",
-      "bench/results/**",
+      "packages/bench/results/**",
       "packages/email/src/generated.ts",
       "apps/web/playwright-report/**",
       "apps/web/test-results/**",
@@ -27,7 +27,7 @@ const config = [
   },
   {
     // Server packages have no React; Effect's `Service.use(...)` is not a hook.
-    files: ["packages/{ai,core,db,email,storage}/**", "bench/**"],
+    files: ["packages/{ai,bench,core,db,email,storage}/**"],
     rules: { "react-hooks/rules-of-hooks": "off" },
   },
 ];

@@ -3,19 +3,17 @@
   "include": ["files", "dependencies", "unlisted", "unresolved", "binaries", "duplicates"],
   "workspaces": {
     ".": {
-      "entry": [
-        "vitest.server-only.ts",
-        "scripts/*.{ts,mjs}",
-        "bench/*.{ts,mjs}",
-        "bench/load/*.mjs"
-      ]
+      "entry": ["vitest.server-only.ts", "scripts/*.{ts,mjs}"]
     },
     "apps/web": {
       "ignoreDependencies": ["tailwindcss"]
+    },
+    "packages/bench": {
+      "entry": ["*.{ts,mjs}", "load/*.mjs"]
     },
     "packages/email": {
       "entry": ["scripts/*.ts"]
     }
   },
-  "ignore": ["bench/load/*.js", "apps/web/public/*.js"]
+  "ignore": ["packages/bench/load/*.js", "apps/web/public/*.js"]
 }

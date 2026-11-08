@@ -1,5 +1,5 @@
-// Turns a scripts/load.sh run directory into bench/results/load-<date>.json and .md.
-//   bun bench/load/report.mjs <run-dir> <output-prefix>
+// Turns a scripts/load.sh run directory into packages/bench/results/load-<date>.json and .md.
+//   bun packages/bench/load/report.mjs <run-dir> <output-prefix>
 // Inputs per run: <name>.summary.json (k6), <name>.window ("start end k6-exit"), <name>.pgss.json.
 // Shared: samples.tsv (docker stats + Postgres connections), app.log (the app's wide events), meta.json.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";

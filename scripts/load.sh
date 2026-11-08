@@ -8,9 +8,9 @@
 #   scripts/load.sh soak                long run at a steady rate (SOAK_DURATION, default 30m)
 #   scripts/load.sh smoke load spike    any combination, in order
 #
-# Output: bench/results/load-<date>.json and .md (the raw per-run files stay in bench/results/load-<date>/).
+# Output: packages/bench/results/load-<date>.json and .md (the raw per-run files stay in packages/bench/results/load-<date>/).
 # Exit status is non-zero if a smoke, load, spike or soak scenario crossed a threshold. Capacity steps are expected
-# to fail at the top, so they never set it. Also writes bench/results/latest.md (gitignored) for CI.
+# to fail at the top, so they never set it. Also writes packages/bench/results/latest.md (gitignored) for CI.
 #
 # Env (defaults in brackets):
 #   APP_CPUS [1] APP_MEM [1g] PG_CPUS [1] PG_MEM [512m] FIXTURE_LATENCY_MS [3000] DATABASE_POOL_MAX [5]
@@ -44,9 +44,9 @@ for s in "${scenarios[@]}"; do
 done
 
 date_tag="$(date -u +%Y-%m-%d)"
-run_dir="bench/results/load-$date_tag"
+run_dir="packages/bench/results/load-$date_tag"
 rm -rf "$run_dir"
-rm -f bench/results/latest.md
+rm -f packages/bench/results/latest.md
 mkdir -p "$run_dir"
 
 dc() { docker compose -p "$PROJECT" -f docker-compose.yml -f docker-compose.load.yml --profile app "$@"; }
@@ -69,14 +69,14 @@ done
 curl -fsS -o /dev/null "http://localhost:$APP_PORT/" || { echo "load.sh: app did not come up" >&2; dc logs app | tail -20 >&2; exit 1; }
 
 k6() { # k6 <extra docker args...> -- <k6 args...>
-  docker run --rm --name "${PROJECT}-k6-1" --network "${PROJECT}_default" -v "$PWD/bench:/bench:ro" -v "$PWD/$run_dir:/out" \
+  docker run --rm --name "${PROJECT}-k6-1" --network "${PROJECT}_default" -v "$PWD/packages/bench:/bench:ro" -v "$PWD/$run_dir:/out" \
     -e BASE_URL=http://app:3000 -e USERS="$USERS" -e RECEIPTS="$RECEIPTS" \
     -e UPLOAD_MODE="${UPLOAD_MODE:-queued}" "$@"
 }
 
 echo "==> seeding $USERS users with $RECEIPTS receipts each"
-k6 "$K6_IMAGE" run --quiet /bench/load/seed.js >"$run_dir/seed.log" 2>&1 || { tail -20 "$run_dir/seed.log" >&2; exit 1; }
-psql_app -q -v n_receipts="$RECEIPTS" <bench/load/seed.sql >/dev/null || exit 1
+k6 "$K6_IMAGE" run --quiet /packages/bench/load/seed.js >"$run_dir/seed.log" 2>&1 || { tail -20 "$run_dir/seed.log" >&2; exit 1; }
+psql_app -q -v n_receipts="$RECEIPTS" <packages/bench/load/seed.sql >/dev/null || exit 1
 
 # Resource sampler: one line per container per tick ("<epoch>\t<docker stats json>") and Postgres connections.
 sample() {
@@ -108,7 +108,7 @@ run() {
   local start end
   start=$(date +%s)
   k6 "${envs[@]}" "$K6_IMAGE" run \
-    --summary-export="/out/$name.summary.json" /bench/load/load.js >"$run_dir/$name.k6.log" 2>&1
+    --summary-export="/out/$name.summary.json" /packages/bench/load/load.js >"$run_dir/$name.k6.log" 2>&1
   local status=$?
   end=$(date +%s)
   printf '%s %s %s\n' "$start" "$end" "$status" >"$run_dir/$name.window"
@@ -131,7 +131,7 @@ step() {
 echo "==> warm-up"
 # Next compiles routes and the JIT warms up on first use; the first minute would otherwise count against the SLOs.
 k6 -e SCENARIO=load -e RATE_READS=15 -e RATE_UPLOADS=2 -e DURATION=20s -e RUN=0 -e LATENCY_MS="$FIXTURE_LATENCY_MS" \
-  "$K6_IMAGE" run --quiet /bench/load/load.js >"$run_dir/warmup.log" 2>&1
+  "$K6_IMAGE" run --quiet /packages/bench/load/load.js >"$run_dir/warmup.log" 2>&1
 
 for scenario in "${scenarios[@]}"; do
   case "$scenario" in
@@ -167,7 +167,7 @@ cat >"$run_dir/meta.json" <<JSON
   "k6": "$K6_IMAGE"
 }
 JSON
-bun bench/load/report.mjs "$run_dir" "bench/results/load-$date_tag" || exit 1
-cp "bench/results/load-$date_tag.md" bench/results/latest.md
-echo "==> bench/results/load-$date_tag.md"
+bun packages/bench/load/report.mjs "$run_dir" "packages/bench/results/load-$date_tag" || exit 1
+cp "packages/bench/results/load-$date_tag.md" packages/bench/results/latest.md
+echo "==> packages/bench/results/load-$date_tag.md"
 exit "$failed"

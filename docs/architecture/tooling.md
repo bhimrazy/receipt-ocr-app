@@ -30,26 +30,26 @@ directly (`transpilePackages`).
 
 ## OCR benchmark
 
-[`bench/ocr.ts`](../../bench/ocr.ts), run with `bun run bench:ocr`. It calls real models, billed to each chosen
+[`packages/bench/ocr.ts`](../../packages/bench/ocr.ts), run with `bun run bench:ocr`. It calls real models, billed to each chosen
 provider's key (`GOOGLE_GENERATIVE_AI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`). `--dry-run` prints a cost estimate and calls
 nothing.
 
 ```mermaid
 flowchart LR
-  fixtures[bench/fixtures<br/>image + ground-truth JSON] --> run[bench/ocr.ts]
+  fixtures[packages/bench/fixtures<br/>image + ground-truth JSON] --> run[packages/bench/ocr.ts]
   run -- "extractReceipt per model" --> ai[packages/ai]
   ai --> run
-  run -- "scoreReceipt" --> score[bench/score.ts]
+  run -- "scoreReceipt" --> score[packages/bench/score.ts]
   run -- "costOf, same price table as the app" --> ai
-  run --> out[bench/results/date.md]
+  run --> out[packages/bench/results/date.md]
 ```
 
 - Fixtures are `<id>.png|jpg|pdf` plus `<id>.json`. The five today are synthetic, made by
-  [`make-fixtures.mjs`](../../bench/make-fixtures.mjs) (`bun run bench:fixtures`).
-- [`score.ts`](../../bench/score.ts) scores exact fields, amounts within 0.01, merchant by edit similarity, and line
-  items by F1. It is unit-tested ([`score.test.ts`](../../bench/score.test.ts)).
+  [`make-fixtures.mjs`](../../packages/bench/make-fixtures.mjs) (`bun run bench:fixtures`).
+- [`score.ts`](../../packages/bench/score.ts) scores exact fields, amounts within 0.01, merchant by edit similarity, and line
+  items by F1. It is unit-tested ([`score.test.ts`](../../packages/bench/score.test.ts)).
 - Cost uses `costOf` from [`packages/ai/src/models.ts`](../../packages/ai/src/models.ts), so benchmark and app agree.
-- Details and flags: [`bench/README.md`](../../bench/README.md).
+- Details and flags: [`packages/bench/README.md`](../../packages/bench/README.md).
 
 **Planned:** a set of 20 to 30 real, PII-free receipts and more engines to compare
 ([parsers landscape](../plans/2026-11-06-parsers-landscape.md)). No benchmark results are committed yet.
@@ -70,12 +70,12 @@ flowchart LR
   D --> E[Sample docker stats and Postgres]
   D --> F[report.mjs]
   E --> F
-  F --> G[bench/results/latest.md and load-date.json]
+  F --> G[packages/bench/results/latest.md and load-date.json]
 ```
 
 Scenarios are smoke, load, spike, soak and a capacity ladder; thresholds are k6 SLOs in
-[`bench/load/load.js`](../../bench/load/load.js). The report joins k6 results with container CPU and memory, Postgres
-connections, per-statement times and the app's wide events. Details: [`bench/README.md`](../../bench/README.md).
+[`packages/bench/load/load.js`](../../packages/bench/load/load.js). The report joins k6 results with container CPU and memory, Postgres
+connections, per-statement times and the app's wide events. Details: [`packages/bench/README.md`](../../packages/bench/README.md).
 
 ## Scripts
 
@@ -118,7 +118,7 @@ Images are pinned by digest. Containers have no restart policy, so they stay sto
 - A new push to a PR cancels its running CI; runs on `main` are never cancelled, because production deploys the commit
   whose CI succeeded.
 - `changes` lists the PR's files (merge commit against its base). Docs and Markdown only: just `static`. Also
-  `bench/` and unrelated workflows: `static` and `checks` but no e2e. Pushes to `main` run everything.
+  `packages/bench/` and unrelated workflows: `static` and `checks` but no e2e. Pushes to `main` run everything.
 - Skipped jobs report success. `ci-ok` is the one job to require: it fails if any job failed or was cancelled.
 - [`next-cache`](../../.github/actions/next-cache/action.yml) keeps `apps/web/.next/cache` (Turbopack's build cache) per
   job, keyed by lockfile and source hash. [`playwright`](../../.github/actions/playwright/action.yml) caches the
@@ -139,7 +139,7 @@ The free plan allows 100 deployments a day and 10 GB of function storage, and ev
 bundles, and production deploys count toward the same limit. Until launch a PR gets a preview only when it carries
 the `preview` label (drafts and docs-only PRs included). With the repository variable `PREVIEW_MODE=auto`, every PR
 that is not a draft and changes a file that ships also gets one. Never for Dependabot or fork PRs. A newer push cancels the deploy in flight, and
-labels other than `preview` don't. Docs, Markdown, tests, `bench/`, `scripts/` and CI config other than `preview.yml` don't
+labels other than `preview` don't. Docs, Markdown, tests, `packages/bench/`, `scripts/` and CI config other than `preview.yml` don't
 count as shipping.
 
 All third-party actions are pinned to a commit SHA. [`.github/actions/setup-bun`](../../.github/actions/setup-bun/action.yml)
