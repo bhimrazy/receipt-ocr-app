@@ -15,15 +15,15 @@ container images and GitHub workflows. Deployment as a flow is on [its own page]
 
 ## Monorepo tooling
 
-| Tool       | Where                                                                                    | Notes                                                                                              |
-| ---------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Bun        | [`package.json`](../../package.json) `packageManager`                                    | Installs, runs scripts and tests; runs the production Docker image                                 |
-| Turborepo  | [`turbo.json`](../../turbo.json)                                                         | `build`, `dev`, `typecheck`, `test` across workspaces. Lists every env variable the build may read |
-| Vitest     | [`vitest.config.mts`](../../vitest.config.mts)                                           | One Node config for every `*.test.ts`; aliases point packages at their `src`                       |
-| Playwright | [`apps/web/playwright.config.ts`](../../apps/web/playwright.config.ts)                   | Starts `next start` on 3004; one Chromium project; a random `x-forwarded-for` per worker           |
-| ESLint     | [`eslint.config.mjs`](../../eslint.config.mjs)                                           | `eslint-config-next`                                                                               |
-| bun fmt    | [`.prettierrc.json`](../../.prettierrc.json), [`.prettierignore`](../../.prettierignore) | Bun's built-in formatter, Prettier-compatible output; also formats Markdown                        |
-| knip       | [`knip.json`](../../knip.json)                                                           | Unused files and dependencies                                                                      |
+| Tool       | Where                                                                                    | Notes                                                                                                                               |
+| ---------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Bun        | [`package.json`](../../package.json) `packageManager`                                    | Installs, runs scripts and tests; runs the production Docker image                                                                  |
+| Turborepo  | [`turbo.json`](../../turbo.json)                                                         | `build`, `dev`, `typecheck`, `test` across workspaces. Lists every env variable the build may read                                  |
+| Vitest     | [`vitest.config.mts`](../../vitest.config.mts)                                           | Two projects, `unit` and `int`, over one alias table that points packages at their `src`; `server-only` is aliased to an empty stub |
+| Playwright | [`apps/web/playwright.config.ts`](../../apps/web/playwright.config.ts)                   | Starts `next start` on 3004; one Chromium project; a random `x-forwarded-for` per worker                                            |
+| ESLint     | [`eslint.config.mjs`](../../eslint.config.mjs)                                           | `eslint-config-next`                                                                                                                |
+| bun fmt    | [`.prettierrc.json`](../../.prettierrc.json), [`.prettierignore`](../../.prettierignore) | Bun's built-in formatter, Prettier-compatible output; also formats Markdown                                                         |
+| knip       | [`knip.json`](../../knip.json)                                                           | Unused files and dependencies                                                                                                       |
 
 Packages have no build output: each `build` script is `tsc --noEmit`, and Next.js compiles their TypeScript source
 directly (`transpilePackages`).
@@ -79,11 +79,11 @@ connections, per-statement times and the app's wide events. Details: [`bench/REA
 
 ## Scripts
 
-| Script                                                   | Does                                                                                                                                                                      |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`scripts/test.sh`](../../scripts/test.sh)               | Unit tests, then compose Postgres and RustFS, a throwaway database, migrations, build and Playwright e2e. `--unit` stops after unit tests; `--keep-db` keeps the database |
-| [`scripts/check-deps.ts`](../../scripts/check-deps.ts)   | `bun run check:deps`: one version per package across the workspace, exact pins only, `bun.lock` in sync                                                                   |
-| [`scripts/screenshot.mjs`](../../scripts/screenshot.mjs) | Full-page screenshots of a running instance at desktop and phone widths, optionally signed in                                                                             |
+| Script                                                   | Does                                                                                                                                                                                         |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`scripts/test.sh`](../../scripts/test.sh)               | Unit tests, then compose Postgres and RustFS, a throwaway database, migrations, integration tests, build and Playwright e2e. `--unit` stops after unit tests; `--keep-db` keeps the database |
+| [`scripts/check-deps.ts`](../../scripts/check-deps.ts)   | `bun run check:deps`: one version per package across the workspace, exact pins only, `bun.lock` in sync                                                                                      |
+| [`scripts/screenshot.mjs`](../../scripts/screenshot.mjs) | Full-page screenshots of a running instance at desktop and phone widths, optionally signed in                                                                                                |
 
 ## Docker
 
@@ -124,6 +124,10 @@ Images are pinned by digest. Containers have no restart policy, so they stay sto
   job, keyed by lockfile and source hash. [`playwright`](../../.github/actions/playwright/action.yml) caches the
   Chromium download by Playwright version; system libraries are installed every time.
 - In `e2e` the integration suites and `next build` run side by side: the build needs no database.
+- Running tests: `bun run test` is the `unit` project (everything except `*.int.test.ts`, no services). `bun run
+test:int` is the `int` project: every `*.int.test.ts` found by glob (no file list to keep in sync), one file at a
+  time, with `INTEGRATION=1`; it needs migrated Postgres and RustFS (`scripts/test.sh` sets them up). Browser tests are
+  `bun run test:e2e`. `scripts/test.sh` runs all three, as CI does.
 - Unit tests: one Vitest run takes about 13 s on a runner and is dominated by startup and one 8 s file
   (`pdf-pages.test.ts`), so pool settings are left at the defaults.
 - E2E auth forms set `data-ready` once hydrated and the helpers wait for it. Typing before hydration is lost and an early

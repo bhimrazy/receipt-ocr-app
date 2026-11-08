@@ -8,7 +8,6 @@ const env = vi.hoisted(() => ({
     { ok: true } | { ok: false; reason: "missing" | "rejected" | "unavailable" },
 }));
 
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
   sendEmail,
