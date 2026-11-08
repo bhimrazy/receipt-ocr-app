@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { LandingPage } from "@/components/landing-page";
-import { homeDescription, pageMetadata } from "@/lib/seo";
-import { siteTitle } from "@/lib/site";
+import { homeDescription, homeTitle, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
-  title: siteTitle,
+  title: homeTitle,
   absoluteTitle: true,
   description: homeDescription,
   path: "/",

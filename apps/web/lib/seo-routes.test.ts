@@ -3,7 +3,7 @@ import nextConfig from "../next.config";
 import { robotsFor } from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import { llmsFullTxt, llmsResponse, llmsTxt } from "@/lib/llms";
-import { homeJsonLd, jsonLdScript } from "@/lib/seo";
+import { APP_FEATURES, homeDescription, homeJsonLd, homeTitle, jsonLdScript } from "@/lib/seo";
 import { PRODUCTION_HOST, PRODUCTION_ORIGIN } from "@/lib/seo-hosts";
 
 const req = (host: string) => new Request("http://internal/llms.txt", { headers: { host } });
@@ -90,27 +90,80 @@ describe("llms.txt host gating", () => {
   });
 });
 
+describe("home title and description", () => {
+  it("fit what Google shows and lead with the term people search for", () => {
+    expect(homeTitle).toMatch(/^Receipt Scanner/);
+    expect(homeTitle).toMatch(/· ReceiptOCR$/);
+    expect(homeTitle.length).toBeLessThanOrEqual(60);
+    expect(homeDescription.length).toBeGreaterThanOrEqual(120);
+    expect(homeDescription.length).toBeLessThanOrEqual(155);
+  });
+
+  it("name only outputs the product has (CSV and JSON, never Excel) and the free plan", () => {
+    for (const text of [homeTitle, homeDescription]) {
+      expect(text).toMatch(/CSV/);
+      expect(text).toMatch(/JSON/);
+      expect(text).not.toMatch(/excel|xlsx|\bapi\b/i);
+    }
+    expect(homeDescription).toMatch(/^Free /);
+  });
+});
+
 describe("home JSON-LD", () => {
-  const graph = homeJsonLd()["@graph"] as Array<Record<string, unknown>>;
+  const data = homeJsonLd();
+  const graph = data["@graph"] as Array<Record<string, unknown>>;
   const byType = (type: string) => graph.find((n) => n["@type"] === type)!;
 
-  it("has the expected nodes with absolute prod URLs", () => {
+  it("has the expected nodes with absolute prod URLs and linked ids", () => {
+    expect(data["@context"]).toBe("https://schema.org");
     expect(graph.map((n) => n["@type"])).toEqual([
       "Person",
       "Organization",
       "WebSite",
-      "SoftwareApplication",
+      "WebApplication",
     ]);
+    const orgId = byType("Organization")["@id"];
     expect(byType("Organization").logo).toBe(`${PRODUCTION_ORIGIN}/icons/icon-512.png`);
     expect(byType("Organization").founder).toEqual({ "@id": byType("Person")["@id"] });
     expect(byType("Person").name).toBe("Bhimraj Yadav");
+    expect(byType("WebSite").publisher).toEqual({ "@id": orgId });
+    expect(byType("WebApplication").publisher).toEqual({ "@id": orgId });
+    for (const node of graph) {
+      expect(String(node["@id"]), String(node["@type"])).toMatch(/^https:\/\//);
+      expect(String(node.url)).toMatch(/^https:\/\//);
+    }
+    expect(byType("WebSite").url).toBe(`${PRODUCTION_ORIGIN}/`);
   });
 
-  it("describes the app honestly", () => {
-    const app = byType("SoftwareApplication");
-    expect(app.applicationCategory).toBe("FinanceApplication");
-    expect(app.offers).toMatchObject({ "@type": "Offer", price: "0", priceCurrency: "USD" });
-    expect(JSON.stringify(graph)).not.toMatch(/aggregateRating|review/i);
+  it("describes the app honestly: web business app, free offer, real features, no ratings", () => {
+    const app = byType("WebApplication");
+    expect(app).toMatchObject({
+      name: "ReceiptOCR",
+      description: homeDescription,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      isAccessibleForFree: true,
+      featureList: [...APP_FEATURES],
+    });
+    expect(app.offers).toEqual({
+      "@type": "Offer",
+      name: "Free plan",
+      price: "0",
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      url: `${PRODUCTION_ORIGIN}/sign-up`,
+    });
+    const text = JSON.stringify(graph);
+    expect(text).not.toMatch(/aggregateRating|"review"|ratingValue/i);
+    expect(text).not.toMatch(/excel|xlsx/i);
+    // Every node's text is a string, number, boolean or nested object; no empty values.
+    const walk = (value: unknown, path: string) => {
+      if (value === "" || value === null || value === undefined) throw new Error(`empty ${path}`);
+      if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}[${i}]`));
+      else if (typeof value === "object")
+        for (const [k, v] of Object.entries(value as object)) walk(v, `${path}.${k}`);
+    };
+    walk(data, "$");
   });
 
   it("escapes < so text cannot close the script tag", () => {

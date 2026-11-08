@@ -75,7 +75,7 @@ test("the home page's structured data is valid and makes no rating or review cla
     return data["@graph"]?.map((node) => node["@type"]) ?? [data["@type"]];
   });
   expect(types).toEqual(
-    expect.arrayContaining(["Organization", "WebSite", "SoftwareApplication", "FAQPage"]),
+    expect.arrayContaining(["Organization", "WebSite", "WebApplication", "FAQPage"]),
   );
   expect(blocks.join("")).not.toMatch(/aggregateRating|"review"/i);
   // FAQPage is only honest while the FAQ is on the page.

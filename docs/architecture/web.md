@@ -251,7 +251,11 @@ spoof one.
 | [`app/llms.txt`](../../apps/web/app/llms.txt), `llms-full.txt`, [`lib/llms.ts`](../../apps/web/lib/llms.ts) | A plain-text summary of the product for AI assistants, and the long form                                                                                     |
 | `www` redirect in `next.config.ts`                                                                          | `www.receipt-ocr.bhimraj.com.np` answers `308` to the apex host, same path                                                                                   |
 
-Structured data (JSON-LD) on the public pages comes from [`lib/seo.ts`](../../apps/web/lib/seo.ts).
+Titles, descriptions and structured data (JSON-LD) for the public pages come from
+[`lib/seo.ts`](../../apps/web/lib/seo.ts): `homeTitle`/`homeDescription` are the home page's and the site-wide
+defaults, `pageMetadata` builds each page's canonical and social tags, and `homeJsonLd` emits one graph of `Person`,
+`Organization`, `WebSite` and `WebApplication` (free `Offer`, `featureList`; no ratings, since none exist). The landing
+page adds `FAQPage` from `lib/home-faqs.ts`; Google no longer shows FAQ rich results, so it only describes the page.
 
 ## Queue drain route
 

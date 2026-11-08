@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
 import { SITE_NAME, siteUrl } from "@/lib/site";
 
+/**
+ * Home page title and description, also the site-wide defaults. "Receipt scanner" is the term
+ * people search for (receipt OCR lives in the brand); the rest names what comes out. Google shows
+ * about 60 title and 155 description characters, so each fact is pulled from the site's own copy.
+ * Outputs are CSV and JSON only: nothing writes .xlsx, so Excel is never named.
+ */
+export const homeTitle = `Receipt Scanner: Extract Data to CSV & JSON · ${SITE_NAME}`;
 export const homeDescription =
-  "Receipt OCR that turns receipt photos and PDFs into spreadsheet rows: merchant, date, line items, tax and total, with confidence scores. Free to start.";
+  "Free receipt scanner: turn photos and PDFs into structured data (merchant, date, line items, tax, total) with confidence scores. Export CSV or copy JSON.";
 
 // The root opengraph-image. A page's own `openGraph` drops the inherited file image, so it is
 // named here; a segment with its own opengraph-image file still overrides this.
@@ -10,7 +17,7 @@ const DEFAULT_IMAGE = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: `${SITE_NAME}: Turn receipt photos into spreadsheet rows`,
+  alt: `${SITE_NAME}: receipt photos and PDFs to structured data, CSV and JSON`,
 };
 
 /**
@@ -63,7 +70,7 @@ export const LEGAL_UPDATED = {
 } as const;
 
 /** Home page copy last changed; the sitemap's lastModified for "/". */
-export const HOME_UPDATED = "2026-11-07";
+export const HOME_UPDATED = "2026-11-08";
 
 export const OWNER = {
   name: "Bhimraj Yadav",
@@ -81,10 +88,23 @@ export function formatLegalDate(isoDate: string): string {
   });
 }
 
+/** What the app does, in the words the site uses; the WebApplication node's featureList. */
+export const APP_FEATURES = [
+  "Receipt photo and PDF upload (JPEG, PNG, WebP, HEIC, PDF)",
+  "Merchant, date, line items, tax and total extracted",
+  "Confidence score per receipt and per line item",
+  "Totals that do not add up are flagged for review",
+  "Searchable receipt history",
+  "CSV export and JSON copy",
+  "Shared workspaces",
+  "Installable as a PWA on iOS and Android",
+] as const;
+
 /**
- * Organization (with its founder), WebSite and SoftwareApplication for the home page. Only claims
- * the product backs today: a free web app, installable as a PWA. No ratings, reviews or prices
- * beyond the free plan; the custom plan has no public price, so it has no Offer.
+ * Organization (with its founder), WebSite and WebApplication for the home page. Only claims the
+ * product backs today: a free web app, installable as a PWA. No ratings, reviews or prices beyond
+ * the free plan; the custom plan has no public price, so it has no Offer. Google's software rich
+ * result needs a rating or review, so none is expected; the nodes describe the entity.
  */
 export function homeJsonLd(): Record<string, unknown> {
   const url = new URL("/", siteUrl).toString();
@@ -114,19 +134,29 @@ export function homeJsonLd(): Record<string, unknown> {
         "@id": `${url}#website`,
         name: SITE_NAME,
         url,
+        description: homeDescription,
         inLanguage: "en",
         publisher: { "@id": orgId },
       },
       {
-        "@type": "SoftwareApplication",
+        "@type": "WebApplication",
         "@id": `${url}#app`,
         name: SITE_NAME,
         url,
         description: homeDescription,
-        applicationCategory: "FinanceApplication",
+        applicationCategory: "BusinessApplication",
         operatingSystem: "Web",
+        browserRequirements: "Requires JavaScript",
+        featureList: [...APP_FEATURES],
         isAccessibleForFree: true,
-        offers: { "@type": "Offer", price: "0", priceCurrency: "USD", description: "Free plan" },
+        offers: {
+          "@type": "Offer",
+          name: "Free plan",
+          price: "0",
+          priceCurrency: "USD",
+          availability: "https://schema.org/InStock",
+          url: new URL("/sign-up", siteUrl).toString(),
+        },
         publisher: { "@id": orgId },
         author: { "@id": personId },
       },
