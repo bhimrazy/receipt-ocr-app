@@ -205,6 +205,8 @@ export const EVENT_SCHEMA = {
   /** Contact form: `queued`, `rate_limited` or `enqueue_failed`. */
   auto_reply: "token",
   turnstile_errors: "tokens",
+  /** Newsletter routes: the step and its result (`confirm_sent`, `confirmed`, `expired`). No address. */
+  newsletter: "token",
   /** CSP reports: the directive and the blocked host or keyword only. */
   violations: { list: { directive: "token", blocked: "token" } },
 } as const satisfies FieldSpec;
