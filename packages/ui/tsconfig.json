@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@receipt-ocr/ui/*": ["./src/*"]
