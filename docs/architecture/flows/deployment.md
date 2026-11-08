@@ -110,6 +110,36 @@ against in step 1. Migrations only go forward; a damaged database is restored fr
 Two connection strings exist because Supabase's transaction pooler (6543, used by the app as `DATABASE_URL`) can't run
 DDL. [`drizzle.config.ts`](../../../apps/web/drizzle.config.ts) uses `DIRECT_URL` when set.
 
+## Nightly backup
+
+[`db-backup.yml`](../../../.github/workflows/db-backup.yml) runs
+[`scripts/db-backup.sh`](../../../scripts/db-backup.sh) every night on `main`, in the GitHub environment `db-backup`
+(`main` only, no reviewer). The job installs Bun (no packages) and a checksum-pinned age; Postgres tools run from a
+digest-pinned `postgres:17` image whose major version must equal the server's. Setup and restores are in the
+[runbook](../../runbook.md#backups).
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant J as db-backup.yml
+  participant DB as Production Postgres
+  participant R2 as R2 receipt-ocr-backups
+  participant T as Throwaway Postgres (in the job)
+
+  J->>DB: one read-only snapshot: row counts per table, then pg_dump -n public -n drizzle (backup_reader)
+  J->>J: age-encrypt to the owner's key and a one-off drill key
+  J->>R2: put daily/<date>/<name>.dump.age
+  J->>R2: get it back, compare sha256
+  J->>J: decrypt with the drill key, then delete that key
+  J->>T: pg_restore (one transaction, stop on error)
+  J->>T: row counts per table, equal to the source's, or the run fails
+  J->>R2: put <name>.manifest.json (only after the drill passed)
+```
+
+The encrypted files are readable only with the owner's offline key; the job never has it. A monthly manual restore
+with that key checks the part the drill can't. `scripts/db-backup-test.sh` runs the same script against local
+containers.
+
 ## Self-hosted (Docker)
 
 ```mermaid

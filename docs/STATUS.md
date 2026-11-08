@@ -147,6 +147,10 @@ Steps are in [deployment.md](deployment.md).
   no outside collaborators. The full fix is a separate Vercel project for previews, with its own token.
 - Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
   replaced on 2026-11-08 (only `BETTER_AUTH_SECRET`; keep its copy in a password manager).
+- Backups (**Database Backup**, nightly to R2 with a restore drill): once it is merged, do the
+  [one-time setup](runbook.md#one-time-setup): check `show server_version` is 17, create `backup_reader`
+  (`scripts/db-backup-role.sql`), the R2 bucket, token and lifecycle rules, the age key (offline), the `db-backup`
+  environment, then a first run and the monthly check with your key.
 - Set `OCR_DAILY_CAP` in production as a spend guard.
 - Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
 - Standing decisions and dated reminders: [decisions.md](decisions.md).

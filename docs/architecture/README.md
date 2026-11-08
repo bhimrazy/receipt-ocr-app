@@ -35,6 +35,8 @@ flowchart LR
   cron[pg_cron on Supabase,<br/>daily Vercel cron]
   resend[Resend<br/>transactional email]
   oauth[Google and GitHub<br/>OAuth]
+  backup[Database Backup<br/>nightly GitHub Actions job]
+  r2b[(R2 bucket<br/>receipt-ocr-backups)]
 
   user -- "pages, API calls" --> web
   user -. "loads receipt image<br/>by signed URL" .-> s3
@@ -48,20 +50,23 @@ flowchart LR
   web -- "verify, reset,<br/>invite mail" --> resend
   user -- "OAuth redirect" --> oauth
   oauth -- "callback with code" --> web
+  backup -- "pg_dump as backup_reader" --> pg
+  backup -- "age-encrypted dump,<br/>manifest" --> r2b
 ```
 
-| External service      | What the app uses it for                                            | Configured by                                              |
-| --------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Postgres              | Every table: auth, workspaces, receipts, usage ledger, admin        | `DATABASE_URL` (app), `DIRECT_URL` (migrations)            |
-| S3-compatible storage | The uploaded receipt files; the bucket stays private                | `S3_*`                                                     |
-| Google Gemini         | Reading the receipt into the extraction schema                      | `GOOGLE_GENERATIVE_AI_API_KEY`, Admin → Settings           |
-| Anthropic Claude      | First step of the default chain (Sonnet 5.5); other models optional | `ANTHROPIC_API_KEY`, Admin → Settings                      |
-| Groq                  | Optional OCR model (Qwen 3.8 27B, free tier) in the chain           | `GROQ_API_KEY`, Admin → Settings                           |
-| OpenAI                | Optional OCR models (GPT-6 Luna, GPT-6.1 Terra) in the chain        | `OPENAI_API_KEY`, Admin → Settings                         |
-| Resend                | Verification, password reset, invitation and support mail           | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`            |
-| Google, GitHub OAuth  | Optional social sign-in                                             | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET` |
-| Google Analytics 4    | Optional visit counts on public pages, only after consent           | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))        |
-| Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                       | automatic when `VERCEL=1`                                  |
+| External service      | What the app uses it for                                              | Configured by                                              |
+| --------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Postgres              | Every table: auth, workspaces, receipts, usage ledger, admin          | `DATABASE_URL` (app), `DIRECT_URL` (migrations)            |
+| S3-compatible storage | The uploaded receipt files; the bucket stays private                  | `S3_*`                                                     |
+| Google Gemini         | Reading the receipt into the extraction schema                        | `GOOGLE_GENERATIVE_AI_API_KEY`, Admin → Settings           |
+| Anthropic Claude      | First step of the default chain (Sonnet 5.5); other models optional   | `ANTHROPIC_API_KEY`, Admin → Settings                      |
+| Groq                  | Optional OCR model (Qwen 3.8 27B, free tier) in the chain             | `GROQ_API_KEY`, Admin → Settings                           |
+| OpenAI                | Optional OCR models (GPT-6 Luna, GPT-6.1 Terra) in the chain          | `OPENAI_API_KEY`, Admin → Settings                         |
+| Resend                | Verification, password reset, invitation and support mail             | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`            |
+| R2 backup bucket      | Nightly encrypted database backups ([runbook](../runbook.md#backups)) | `db-backup` GitHub environment (`BACKUP_*`)                |
+| Google, GitHub OAuth  | Optional social sign-in                                               | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET` |
+| Google Analytics 4    | Optional visit counts on public pages, only after consent             | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))        |
+| Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                         | automatic when `VERCEL=1`                                  |
 
 Every service except Postgres and auth is optional at runtime: without a Gemini key the app still serves history and
 exports, and without Resend mail is logged instead of sent. The full variable list is in

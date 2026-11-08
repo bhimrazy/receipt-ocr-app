@@ -296,7 +296,8 @@ A release without migration changes deploys by itself after CI. For one with mig
 2. **Read each new migration.** They are plain SQL files. Look for anything that rewrites or drops data, or that the
    live code can't run against.
 
-3. **Back up** production. On Supabase, check point-in-time recovery or take a backup from the dashboard. Elsewhere:
+3. **Back up** production: Actions → **Database Backup** → Run workflow on `main`, and wait for it to pass (it
+   restores the backup in the job; see [the runbook](runbook.md#backups)). Without that workflow (Docker hosts):
 
    ```bash
    pg_dump "$DIRECT_URL" --format=custom --file=backup-$(date +%F).dump

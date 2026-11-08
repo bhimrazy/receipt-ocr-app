@@ -98,7 +98,7 @@ Symptoms: `/api/health/ready` returns `"database":"down"`, pages fail, `DbError`
 2. Check the pooler: too many connections shows up as connection errors. The app opens at most 5 per instance
    (`DATABASE_POOL_MAX`).
 3. If the password was changed, update `DATABASE_URL` in Vercel and redeploy.
-4. If data is damaged, restore from backup (see [Rollback](#rollback)).
+4. If data is damaged, restore from backup (see [Backups, Restore](#restore)).
 
 ### Storage down
 
@@ -268,7 +268,180 @@ To turn the worker back on, restore `public/sw.js` from git, bump `VERSION` in i
 - **Code on Docker:** run the previous image tag.
 - **Database:** migrations only go forward, and old code runs against the newer schema, so a code rollback normally
   needs nothing else. If a migration damaged data, restore the backup taken before the release (deployment.md,
-  Every release, step 3) into a new database, check it, then point `DATABASE_URL` at it.
+  Every release, step 3), or the last nightly one, into a new database ([Restore](#restore)), check it, then point
+  `DATABASE_URL` and `DIRECT_URL` at it.
+
+## Backups
+
+**Database Backup** ([`db-backup.yml`](../.github/workflows/db-backup.yml), running
+[`scripts/db-backup.sh`](../scripts/db-backup.sh)) backs up production every night at 21:15 UTC (03:00 in Kathmandu),
+and can be started by hand from `main`:
+
+1. `pg_dump` (custom format, zstd) of the schemas `public` (every app table, Better Auth's included) and `drizzle`
+   (the migrations journal), as the read-only `backup_reader` role. Supabase's own schemas (`auth`, `storage`,
+   `vault`, `cron`, `net`...) are left out: the app doesn't use `auth` or `storage`, and the pg_cron job and its
+   Vault secret are recreated from [production-environment.md, step 8](production-environment.md#8-queue-drain-cron).
+   Row counts for every table are read in the same snapshot as the dump.
+2. Encrypted with [age](https://age-encryption.org) to the owner's public key, so neither R2 nor GitHub holds
+   readable data. Only the owner's offline key can decrypt a stored backup.
+3. Uploaded to the R2 bucket `receipt-ocr-backups` as `daily/<YYYY-MM-DD>/receipt-ocr-<time>-<commit>.dump.age`.
+   On the 1st of the month a second copy goes under `monthly/<YYYY-MM>/`.
+4. **Restore drill**, every run: the file is downloaded again, decrypted and restored into a throwaway Postgres
+   container in the job, and the run fails unless every table's row count matches the source and the migrations
+   journal isn't empty. A dump with broken foreign keys fails here too.
+5. A `.manifest.json` is uploaded next to the dump only after the drill passes: table row counts, migration count,
+   Postgres version, sizes and sha256 of the dump and of the encrypted file. **A dump without a manifest did not
+   pass its drill; don't rely on it.**
+
+Retention (R2 lifecycle rules): `daily/` 30 days, `monthly/` 180 days. A red run emails whoever last changed the
+`schedule` line in the workflow. The run's summary says the object name and sizes; row counts stay out of the logs,
+because this repository's Actions logs are public.
+
+**How the drill decrypts without the owner's key.** Each run makes a one-off age key and encrypts to it as well as
+to the owner's key. The drill decrypts the downloaded file with it, then deletes it; its private half never leaves
+the runner's temp directory and is never stored. So the drill checks the stored file end to end without the owner's
+private key being in GitHub. What it can't check is that the owner's key itself still decrypts: that is the
+[monthly check](#monthly-check-with-the-owners-key).
+
+What is **not** in the backup: receipt images and PDFs in the receipts bucket (R2 has no versioning; a deleted file
+is gone), Supabase roles and settings, and the pg_cron job and Vault secret.
+
+### One-time setup
+
+The owner does these; nothing here runs automatically.
+
+1. **Check the Postgres version.** In the Supabase SQL editor, `show server_version;`. The backup uses pg_dump 17
+   (`BACKUP_PG_IMAGE` in `scripts/db-backup.sh`) and stops with a clear error if the server's major version differs.
+   If it says 18, pin the script to a `postgres:18` image digest first.
+
+2. **Create the `backup_reader` role.** Make a password with `openssl rand -hex 32` and keep it in the password
+   manager. Run [`scripts/db-backup-role.sql`](../scripts/db-backup-role.sql) in the SQL editor (or through the
+   Management API) with `REPLACE_WITH_PASSWORD` replaced:
+
+   ```sql
+   create role backup_reader with login password 'REPLACE_WITH_PASSWORD' bypassrls connection limit 3;
+   alter role backup_reader set default_transaction_read_only = on;
+   grant usage on schema public, drizzle to backup_reader;
+   grant select on all tables in schema public, drizzle to backup_reader;
+   grant select on all sequences in schema public, drizzle to backup_reader;
+   alter default privileges for role postgres in schema public, drizzle grant select on tables to backup_reader;
+   alter default privileges for role postgres in schema public, drizzle grant select on sequences to backup_reader;
+   ```
+
+   Why `bypassrls`: every app table has RLS on with no policies. pg_dump turns row security off and stops with
+   "query would be affected by row-level security policy" for a role that RLS would filter, so without it the
+   backup fails rather than missing rows. Supabase's `postgres` role has `bypassrls` and can grant it. The role
+   can read only `public` and `drizzle` (not `auth`, `storage` or `vault`), sessions are read-only by default, and
+   default privileges cover tables added by later migrations. Check:
+
+   ```sql
+   select rolcanlogin, rolbypassrls, rolsuper, rolconnlimit from pg_roles where rolname = 'backup_reader';
+   -- expect: t, t, f, 3
+   select count(*) from information_schema.role_table_grants
+     where grantee = 'backup_reader' and privilege_type <> 'SELECT';
+   -- expect: 0
+   ```
+
+   If `bypassrls` is refused, stop: don't add a policy or use the `postgres` login instead without deciding it.
+
+3. **The connection string** for `BACKUP_DATABASE_URL` uses the **session pooler** (port 5432; the direct host is
+   IPv6 only and GitHub runners are IPv4; the transaction pooler can't hold the snapshot the dump and counts share),
+   with the pooler's `role.project-ref` user:
+
+   ```text
+   postgresql://backup_reader.<project-ref>:<password>@<pooler-host>:5432/postgres?sslmode=require
+   ```
+
+   Take the host from Supabase, Connect, Session pooler.
+
+4. **R2 bucket and token.** In Cloudflare, R2: create the bucket `receipt-ocr-backups` (separate from the receipts
+   bucket). In its Settings, Object lifecycle rules, add: prefix `daily/`, delete after 30 days; prefix
+   `monthly/`, delete after 180 days; and abort incomplete multipart uploads after 1 day. Then Manage API tokens,
+   create a token with **Object Read & Write** applied to `receipt-ocr-backups` only. Note the Access Key ID, the
+   Secret Access Key and the S3 endpoint `https://<account-id>.r2.cloudflarestorage.com`.
+   Optional: a bucket lock rule on `daily/` for 7 days, so a leaked token can't delete the last week.
+
+5. **The age key, on your own machine** (not a Codespace). Install age (`brew install age`, `apt install age`, or
+   the [release](https://github.com/FiloSottile/age/releases)) and run:
+
+   ```bash
+   age-keygen -o receipt-ocr-backup.key   # prints "Public key: age1..."
+   ```
+
+   Save the whole file (it holds the private key) in the password manager, plus one offline copy (printed or on a
+   USB stick kept safe). Then delete the file. The private key never goes into GitHub, Vercel, R2 or a Codespace.
+   Losing it means every backup is unreadable. To add a second holder later, put their public key on a second
+   line of the variable below.
+
+6. **GitHub environment.** Settings, Environments, New environment `db-backup`. Deployment branches: selected
+   branches, `main` only. No required reviewers (a nightly run can't wait for approval). Then:
+
+   ```bash
+   gh secret set BACKUP_DATABASE_URL --env db-backup          # paste the URL from step 3
+   gh secret set BACKUP_R2_ENDPOINT --env db-backup           # https://<account-id>.r2.cloudflarestorage.com
+   gh secret set BACKUP_R2_BUCKET --env db-backup --body receipt-ocr-backups
+   gh secret set BACKUP_R2_ACCESS_KEY_ID --env db-backup
+   gh secret set BACKUP_R2_SECRET_ACCESS_KEY --env db-backup
+   gh variable set BACKUP_AGE_RECIPIENT --env db-backup --body 'age1...'   # public key, not a secret
+   ```
+
+   The recipient is a variable so its value stays visible for checking; it is a public key.
+
+7. **First run.** Actions, **Database Backup**, Run workflow on `main`. Green means the drill passed. Then do the
+   [monthly check](#monthly-check-with-the-owners-key) once, to prove your key decrypts what the job stored.
+
+8. **Alerts.** Scheduled-run failures email the person who last changed the workflow's `schedule` line; make sure
+   that is the owner's account and that Settings, Notifications, Actions sends failed runs by email. GitHub disables
+   schedules in a public repository after 60 days without activity (it emails first); re-enable it from the
+   Actions tab.
+
+### Monthly check with the owner's key
+
+On the 1st of each month, on your own machine, about 10 minutes. It proves the offline key still decrypts and the
+newest backup restores.
+
+1. Download the newest `daily/<date>/*.dump.age` and its `.manifest.json` from the bucket in the Cloudflare
+   dashboard.
+2. Decrypt and restore into a throwaway local Postgres 17:
+
+   ```bash
+   age -d -i receipt-ocr-backup.key -o backup.dump receipt-ocr-*.dump.age   # key file from the password manager
+   sha256sum backup.dump                                                   # equals .dump.sha256 in the manifest
+   docker run -d --rm --name restore-check -e POSTGRES_PASSWORD=check \
+     postgres:17.10-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+   docker cp backup.dump restore-check:/tmp/backup.dump
+   docker exec restore-check sh -c '
+     until pg_isready -q -h 127.0.0.1 -U postgres; do sleep 1; done
+     pg_restore -l /tmp/backup.dump | grep -vE "^[0-9]+; [0-9]+ [0-9]+ SCHEMA - public " >/tmp/list
+     pg_restore -U postgres -d postgres --use-list=/tmp/list --single-transaction --exit-on-error \
+       --no-owner --no-privileges /tmp/backup.dump'
+   docker exec restore-check psql -U postgres -c 'select count(*) from "user"' -c 'select count(*) from receipts'
+   jq '.tables["public.user"], .tables["public.receipts"]' receipt-ocr-*.manifest.json   # same numbers
+   ```
+
+3. Clean up: `docker rm -f restore-check`, then delete `backup.dump`, the key file and the downloads.
+
+### Restore
+
+Every restore uses the steps of the monthly check: decrypt on the owner's machine, then `pg_restore` with the list
+that skips `CREATE SCHEMA public` and with `--single-transaction --exit-on-error --no-owner --no-privileges`. The
+target must have no app tables and no `drizzle` schema. Restoring as `postgres` on Supabase, the new tables get
+Supabase's default grants, as migrations would give them. Afterwards, run `scripts/db-backup-role.sql` again on that
+database if it will be backed up.
+
+- **Locally:** as the monthly check, or into the compose Postgres's empty database.
+- **Staging:** drop the app tables first (the pre-check and reset SQL in
+  [deployment.md, Release notes](deployment.md#squashed-baseline-and-row-level-security-2026-11-07), with today's
+  table list from `select tablename from pg_tables where schemaname = 'public'`), then
+  `pg_restore --dbname="$DIRECT_URL" ...` with staging's `DIRECT_URL`. Staging then holds production data: treat it
+  as production.
+- **Production, in an emergency, only with the owner's go.** Everything written since the backup (up to a day) is
+  lost, so first decide whether that is worse than the damage. Prefer a **new Supabase project**: restore there,
+  check the counts against the manifest, sign in on a preview pointed at it, then change `DATABASE_URL` and
+  `DIRECT_URL` in Vercel and redeploy; the damaged database stays as it is for investigation. Recreate the pg_cron
+  job and Vault secret ([production-environment.md, step 8](production-environment.md#8-queue-drain-cron)) and the
+  `backup_reader` role there. Restoring over the live database instead means the reset SQL first, which is
+  destructive: take a fresh backup (run **Database Backup**) before it.
 
 ## Secret rotation
 
@@ -276,18 +449,20 @@ Names only; values live in Vercel (Production environment), the container enviro
 After any rotation, redeploy and run the smoke test from [deployment.md](deployment.md#7-check-it-works). Rotate all of
 them once a year, and at once when someone with access leaves.
 
-| Secret                                                                                                                   | Where it lives                                                                                    | How to rotate                                                                                                      | What breaks                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`, `BETTER_AUTH_SECRETS`                                                                              | Vercel / container                                                                                | Versioned: see [Rotating the auth secret](deployment.md#rotating-the-auth-secret)                                  | Nothing if versioned; changing the current version signs everyone out                          |
-| `DATABASE_URL`, `DIRECT_URL`                                                                                             | Vercel / container; `DIRECT_URL` also in the `staging-db` and `production-db` GitHub environments | Supabase, Database settings, reset the database password; update both URLs, in Vercel and the GitHub environment   | Every instance until redeployed with the new URL                                               |
-| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`                                                                               | Vercel / container                                                                                | Cloudflare R2, Manage API tokens: create a new token for the bucket, deploy it, then delete the old one            | Uploads and images until redeployed; signed image URLs already issued expire within 10 minutes |
-| `GOOGLE_GENERATIVE_AI_API_KEY`                                                                                           | Vercel / container                                                                                | Google AI Studio or Cloud Console, API keys: create a key in the paid project, deploy, delete the old key          | OCR until redeployed                                                                           |
-| `ANTHROPIC_API_KEY`                                                                                                      | Vercel / container                                                                                | Anthropic Console, API keys: create a key in the same workspace (keep its spend limit), deploy, delete the old key | Claude steps in the OCR chain until redeployed                                                 |
-| `RESEND_API_KEY`                                                                                                         | Vercel / container                                                                                | Resend, API Keys: create a sending key, deploy, revoke the old one                                                 | Account emails until redeployed                                                                |
-| `GOOGLE_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | Google Cloud Console, Credentials, the OAuth client: add a secret, deploy, disable the old one                     | Google sign-ins in progress during the switch                                                  |
-| `GITHUB_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | GitHub, Developer settings, OAuth Apps: generate a new secret, deploy, delete the old one                          | GitHub sign-ins in progress during the switch                                                  |
-| `VERCEL_TOKEN`                                                                                                           | GitHub environment `vercel`                                                                       | Vercel, Account settings, Tokens: create a token, update the environment secret, delete the old token              | Deploys from Actions until updated                                                             |
-| `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                                                     | GitHub environment `vercel`                                                                       | Identifiers, not credentials; change only when the project moves                                                   | Nothing                                                                                        |
-| `TURNSTILE_SECRET_KEY` (site key `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is inlined at build time: changing it needs a rebuild) | Vercel / container                                                                                | Cloudflare, Turnstile, the widget: rotate the secret key, deploy; rebuild if the site key changed                  | Protected forms until redeployed                                                               |
+| Secret                                                                                                                   | Where it lives                                                                                    | How to rotate                                                                                                                                                | What breaks                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_SECRETS`                                                                              | Vercel / container                                                                                | Versioned: see [Rotating the auth secret](deployment.md#rotating-the-auth-secret)                                                                            | Nothing if versioned; changing the current version signs everyone out                          |
+| `DATABASE_URL`, `DIRECT_URL`                                                                                             | Vercel / container; `DIRECT_URL` also in the `staging-db` and `production-db` GitHub environments | Supabase, Database settings, reset the database password; update both URLs, in Vercel and the GitHub environment                                             | Every instance until redeployed with the new URL                                               |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`                                                                               | Vercel / container                                                                                | Cloudflare R2, Manage API tokens: create a new token for the bucket, deploy it, then delete the old one                                                      | Uploads and images until redeployed; signed image URLs already issued expire within 10 minutes |
+| `GOOGLE_GENERATIVE_AI_API_KEY`                                                                                           | Vercel / container                                                                                | Google AI Studio or Cloud Console, API keys: create a key in the paid project, deploy, delete the old key                                                    | OCR until redeployed                                                                           |
+| `ANTHROPIC_API_KEY`                                                                                                      | Vercel / container                                                                                | Anthropic Console, API keys: create a key in the same workspace (keep its spend limit), deploy, delete the old key                                           | Claude steps in the OCR chain until redeployed                                                 |
+| `RESEND_API_KEY`                                                                                                         | Vercel / container                                                                                | Resend, API Keys: create a sending key, deploy, revoke the old one                                                                                           | Account emails until redeployed                                                                |
+| `GOOGLE_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | Google Cloud Console, Credentials, the OAuth client: add a secret, deploy, disable the old one                                                               | Google sign-ins in progress during the switch                                                  |
+| `GITHUB_CLIENT_SECRET`                                                                                                   | Vercel / container                                                                                | GitHub, Developer settings, OAuth Apps: generate a new secret, deploy, delete the old one                                                                    | GitHub sign-ins in progress during the switch                                                  |
+| `BACKUP_DATABASE_URL`, `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY`                                          | GitHub environment `db-backup`                                                                    | Database: `alter role backup_reader password '<new>'` and update the secret. R2: create a new bucket-scoped token, update both secrets, delete the old token | The next nightly backup, until updated                                                         |
+| age backup key (private)                                                                                                 | Owner's password manager and offline copy; never in GitHub                                        | Make a new key, set `BACKUP_AGE_RECIPIENT` to its public key, keep the old private key until the last backup made with it has expired (180 days)             | Nothing; old backups still need the old key                                                    |
+| `VERCEL_TOKEN`                                                                                                           | GitHub environment `vercel`                                                                       | Vercel, Account settings, Tokens: create a token, update the environment secret, delete the old token                                                        | Deploys from Actions until updated                                                             |
+| `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                                                     | GitHub environment `vercel`                                                                       | Identifiers, not credentials; change only when the project moves                                                                                             | Nothing                                                                                        |
+| `TURNSTILE_SECRET_KEY` (site key `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is inlined at build time: changing it needs a rebuild) | Vercel / container                                                                                | Cloudflare, Turnstile, the widget: rotate the secret key, deploy; rebuild if the site key changed                                                            | Protected forms until redeployed                                                               |
 
 Not secrets, but worth checking after a leak: `ADMIN_EMAILS` (who becomes admin on sign-up) and `SUPPORT_EMAIL`.
