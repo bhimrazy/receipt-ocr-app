@@ -15,7 +15,7 @@ test.beforeEach(async ({ context }) => {
   await context.setExtraHTTPHeaders({ "x-forwarded-for": `10.${octet()}.${octet()}.${octet()}` });
 });
 
-const receipt = path.join(import.meta.dirname, "../../../bench/fixtures/npr-lakh.png");
+const receipt = path.join(import.meta.dirname, "../../../packages/bench/fixtures/npr-lakh.png");
 
 /**
  * Records the type and first bytes of every uploaded file in the page: Playwright can't read

@@ -94,6 +94,15 @@ export const storageEntries: StorageEntry[] = [
     duration: "30 days",
   },
   {
+    name: "receiptocr_security_prompt",
+    kind: "cookie",
+    setBy: "ReceiptOCR",
+    category: "necessary",
+    purpose:
+      "Remembers that you closed the one-time reminder to add a passkey or authenticator app. It holds your account id.",
+    duration: "400 days",
+  },
+  {
     name: "tz",
     kind: "cookie",
     setBy: "ReceiptOCR",

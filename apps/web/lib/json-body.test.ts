@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-vi.mock("server-only", () => ({}));
-
 const { readJson } = await import("./json-body");
 
 const schema = z.object({ name: z.string() });

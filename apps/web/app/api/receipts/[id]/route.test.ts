@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 const runRoute = vi.fn();
 
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/ai/categories", () => ({ parseCategory: (value: string) => value }));
 vi.mock("@receipt-ocr/core", () => ({
   deleteReceipt: vi.fn(),

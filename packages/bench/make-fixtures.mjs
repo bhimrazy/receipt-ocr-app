@@ -1,5 +1,5 @@
-// Renders the synthetic receipts in bench/fixtures: <id>.png plus <id>.json ground truth.
-//   bun bench/make-fixtures.mjs        (needs `bunx playwright install chromium`)
+// Renders the synthetic receipts in packages/bench/fixtures: <id>.png plus <id>.json ground truth.
+//   bun packages/bench/make-fixtures.mjs        (needs `bunx playwright install chromium`)
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "@playwright/test";

@@ -20,7 +20,6 @@ import {
   passwordChangedEmail,
   passwordResetEmail,
   sendEmail,
-  type EmailLogEvent,
   verificationEmail,
   type SendEmailInput,
 } from "@receipt-ocr/email";
@@ -33,6 +32,13 @@ import { admin } from "better-auth/plugins/admin";
 import { captcha } from "better-auth/plugins/captcha";
 import { organization as organizationPlugin } from "better-auth/plugins/organization";
 import { isBootstrapAdmin } from "./admin-bootstrap";
+import {
+  accountCreated,
+  accountDeleted,
+  accountLinking,
+  guardPasskeyDelete,
+  guardUnlink,
+} from "./auth-accounts";
 // --- two-factor + step-up (feat/two-factor) ---
 import {
   authMethodOf,
@@ -54,19 +60,20 @@ import {
   allowSignInAttempt,
   clearSignInAttempts,
   type AuthEmailKind,
+  verificationSend,
 } from "./email-limits";
 import {
   authEnabled,
   authEnv,
   emailContext,
-  emailEnv,
   resetPasswordUrl,
   isProduction,
-  logUndeliveredMail,
   requireEmailVerification,
   turnstileEnv,
 } from "./env";
 import { errorFields, logger } from "./log";
+import { mailer } from "./mailer";
+import { isEmailChangeVerification, queueWelcomeEmail, welcomeAtCreation } from "./welcome";
 import { runtime } from "./runtime";
 import {
   DELETE_TOKEN_SECONDS,
@@ -88,14 +95,6 @@ const PLACEHOLDER_DATABASE_URL = "postgres://placeholder:placeholder@localhost:5
 const PLACEHOLDER_SECRET = "auth-disabled-placeholder-secret-do-not-use-0000";
 
 const db = createDb(authEnv.databaseUrl ?? PLACEHOLDER_DATABASE_URL);
-
-const mailer = {
-  apiKey: emailEnv.resendApiKey,
-  from: emailEnv.from,
-  replyTo: emailEnv.replyTo,
-  logUndelivered: logUndeliveredMail(),
-  log: (event: EmailLogEvent) => logger.emit(event),
-};
 
 /**
  * In production an undelivered reset/verification/invite mail fails the
@@ -294,14 +293,20 @@ export const auth = betterAuth({
     autoSignInAfterVerification: true,
     expiresIn: VERIFY_LINK_SECONDS,
     sendVerificationEmail: async ({ user, url }) => {
-      if (!(await allowAuthEmail("verification", user.email))) return;
+      if (!(await allowAuthEmail("verification", user.email))) {
+        const report = verificationSend.getStore();
+        if (report) report.suppressed = true;
+        return;
+      }
       await deliver({
         to: user.email,
         ...verificationEmail(emailContext, { url, expiresInSeconds: VERIFY_LINK_SECONDS }),
       });
     },
-    afterEmailVerification: async (user) => {
+    afterEmailVerification: async (user, request) => {
       await promoteIfBootstrapAdmin({ ...user, emailVerified: true });
+      // Verifying a changed address is not a new account.
+      if (!isEmailChangeVerification(request)) await queueWelcomeEmail(user.id);
     },
   },
   socialProviders: {
@@ -321,7 +326,7 @@ export const auth = betterAuth({
   },
   // Rows sealed before this was on stay readable: Better Auth passes non-hex
   // (plaintext) tokens through and seals them on the user's next sign-in.
-  account: { encryptOAuthTokens: true },
+  account: { encryptOAuthTokens: true, accountLinking },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
@@ -352,6 +357,14 @@ export const auth = betterAuth({
         if (email && !(await allowSignInAttempt(email))) {
           throw new APIError("TOO_MANY_REQUESTS", { message: SIGN_IN_LIMITED_MESSAGE });
         }
+        return;
+      }
+      if (ctx.path === "/unlink-account") {
+        await guardUnlink(ctx);
+        return;
+      }
+      if (ctx.path === "/passkey/delete-passkey") {
+        await guardPasskeyDelete(ctx);
         return;
       }
       if (ADMIN_GUARDED.has(ctx.path)) {
@@ -486,11 +499,18 @@ export const auth = betterAuth({
           await runtime.runPromise(ensurePersonalWorkspace(user));
           // OAuth sign-ups can arrive already verified.
           await promoteIfBootstrapAdmin(user);
+          // Verified at creation (Google, GitHub) or nothing to verify: welcome now. Email sign-ups
+          // that must verify are welcomed from afterEmailVerification.
+          if (welcomeAtCreation(user, requireEmailVerification)) await queueWelcomeEmail(user.id);
         },
       },
       // --- two-factor + step-up (feat/two-factor) ---
       update: { after: twoFactorUserUpdated(deliver) },
       // --- end two-factor + step-up ---
+    },
+    account: {
+      create: { after: accountCreated(deliver) },
+      delete: { after: accountDeleted(deliver) },
     },
     session: {
       create: {

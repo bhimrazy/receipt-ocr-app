@@ -8,6 +8,7 @@ import { UsageMeter, type Usage } from "@/components/usage-meter";
 import { AccountSheet, UserMenu, WorkspaceNameButton, type MenuUser } from "@/components/user-menu";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { SecurityNudge } from "@/components/security/security-nudge";
+import { SecurityPrompt } from "@/components/security/security-prompt";
 import { StepUpProvider } from "@/components/step-up/step-up";
 import { errorFields, logger } from "@/lib/log";
 import { getCurrentPlan } from "@/lib/plan-limits";
@@ -18,6 +19,7 @@ import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getUsageSummary } from "@/lib/receipts";
+import { showSecurityPrompt } from "@/lib/security-prompt";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { Suspense } from "react";
 
@@ -56,10 +58,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     !session.user.twoFactorEnabled &&
     !session.session.impersonatedBy &&
     (scope.role === "owner" || scope.role === "admin");
-  const [allowance, workspaces, nudge] = await Promise.all([
+  // The one-time card after the fifth receipt; never next to the nudge.
+  const [allowance, workspaces, nudge, prompt] = await Promise.all([
     getWorkspaceAllowance(),
     listWorkspaces(),
     mayNudge ? isSharedWorkspace(scope.organizationId) : false,
+    showSecurityPrompt(session),
   ]);
   const showAdmin = isAdmin(session);
   const user: MenuUser = {
@@ -122,7 +126,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               tabIndex={-1}
               className="min-w-0 flex-1 px-4 pt-5 pb-[calc(2rem+var(--app-bottom-inset,0px))] md:px-10 md:py-10"
             >
-              {nudge ? <SecurityNudge /> : null}
+              {nudge ? <SecurityNudge /> : prompt ? <SecurityPrompt /> : null}
               {children}
             </main>
           </div>

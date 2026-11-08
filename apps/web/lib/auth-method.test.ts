@@ -40,6 +40,8 @@ describe("stepUpActionFor", () => {
     ["/revoke-sessions", {}, null],
     ["/passkey/update-passkey", {}, null],
     ["/change-password", {}, "account.change_password"],
+    // Connecting needs the provider to vouch for the same verified address (lib/auth-accounts.ts).
+    ["/link-social", { provider: "google" }, null],
     ["/change-email", {}, "account.change_email"],
     ["/two-factor/disable", {}, "two_factor.disable"],
     ["/two-factor/generate-backup-codes", {}, "two_factor.regenerate_backup_codes"],

@@ -1,4 +1,5 @@
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { clearRateLimit, hitRateLimit } from "@receipt-ocr/core";
 import { errorFields, logger } from "./log";
@@ -36,6 +37,12 @@ export async function allowAuthEmail(kind: AuthEmailKind, email: string): Promis
     return true;
   }
 }
+
+/**
+ * Lets a server action learn that the verification hook skipped the send because of the cap.
+ * Better Auth awaits the hook for a signed-in resend, so the flag is set before the call returns.
+ */
+export const verificationSend = new AsyncLocalStorage<{ suppressed: boolean }>();
 
 /** Sign-in attempts one address may make per window; a correct one resets the count. */
 export const SIGN_IN_ATTEMPTS_PER_WINDOW = 10;

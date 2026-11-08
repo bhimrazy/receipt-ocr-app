@@ -106,22 +106,6 @@ export const LARGEST_RECEIPTS = 5;
 /** Earlier in the month a straight-line projection says more about one receipt than the month. */
 export const PROJECT_FROM_DAY = 7;
 
-// The YYYY-MM-DD the extraction prompt asks for, with a real month and a plausible day.
-const DATE_SHAPE = "^[1-9][0-9]{3}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$";
-
-/**
- * `receipt_date` as a date, or null when it isn't a real ISO date. CASE
- * branches are evaluated in order, so the cast never sees text that would
- * make it throw (a bad shape, or a day past the end of its month).
- */
-const parsedDate = sql`case
-  when r.receipt_date !~ ${DATE_SHAPE} then null
-  when substr(r.receipt_date, 9, 2)::int > extract(day from
-    make_date(substr(r.receipt_date, 1, 4)::int, substr(r.receipt_date, 6, 2)::int, 1)
-    + interval '1 month' - interval '1 day')::int then null
-  else r.receipt_date::date
-end`;
-
 type Windows = {
   range: SpendRange;
   today: string;
@@ -161,24 +145,23 @@ const d = (iso: string) => sql`${iso}::date`;
  * the dashboard's range.
  *
  * `created_at >= windowFrom - 2 days` lets `receipts_org_created_at_idx` bound
- * the scan. It assumes nothing is dated after it was uploaded (two days of
- * slack for time zones); a misread future date on an old upload is left out.
+ * the scan. It holds because `receipts_receipt_date_check` keeps every date
+ * within a day of its UTC upload day; the second day is slack for time zones.
  * `materialized` computes each row's date once instead of in every filter.
  */
 function tagged(scope: AnalyticsScope, w: Windows): SQL {
   const scanFrom = `${addDays(w.windowFrom, -2)}T00:00:00Z`;
   return sql`with base as materialized (
     select r.id,
-      upper(coalesce(nullif(btrim(r.currency), ''), 'USD')) as currency,
+      coalesce(r.currency, 'USD') as currency,
       r.total,
       coalesce(r.tax, 0) as tax,
       r.category,
       nullif(lower(btrim(r.merchant)), '') as merchant_key,
       nullif(btrim(r.merchant), '') as merchant,
-      p.parsed,
-      coalesce(p.parsed, (r.created_at at time zone ${w.tz})::date) as eff
+      r.receipt_date as parsed,
+      coalesce(r.receipt_date, (r.created_at at time zone ${w.tz})::date) as eff
     from receipts r
-    cross join lateral (select ${parsedDate} as parsed) p
     where r.organization_id = ${scope.organizationId}
       and r.status = 'completed'
       and r.total is not null

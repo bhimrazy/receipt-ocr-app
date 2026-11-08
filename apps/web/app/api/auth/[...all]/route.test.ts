@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const emit = vi.hoisted(() => vi.fn());
-vi.mock("server-only", () => ({}));
 vi.mock("@/lib/env", () => ({ authEnv: { betterAuthUrl: "https://app.example", ipAddress: {} } }));
 vi.mock("@/lib/log", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/log")>()),

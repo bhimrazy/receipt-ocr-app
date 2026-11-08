@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 const ipAddress = vi.hoisted(
   () => ({}) as { ipAddressHeaders?: string[]; trustedProxies?: string[] },
 );
-vi.mock("server-only", () => ({}));
 vi.mock("./runtime", () => ({ runtime: {} }));
 vi.mock("./log", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./log")>()),

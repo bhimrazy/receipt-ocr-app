@@ -2,7 +2,6 @@ import { APIError } from "better-auth/api";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const hits = new Map<string, number>();
-vi.mock("server-only", () => ({}));
 vi.mock("./runtime", () => ({
   runtime: { runPromise: async (result: unknown) => result },
 }));

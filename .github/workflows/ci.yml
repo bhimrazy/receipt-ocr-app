@@ -44,7 +44,7 @@ jobs:
               # `|| true`: grep -v exits 1 when every file is filtered out.
               rest=$(echo "$files" | grep -vE '^docs/|\.md$' || true)
               [ -n "$rest" ] || code=false
-              rest=$(echo "$files" | grep -vE '^(docs|bench)/|\.md$|^\.github/(workflows/(db-migrate|load|preview|production)\.yml|vercel-cli/|dependabot\.yml|ISSUE_TEMPLATE/)' || true)
+              rest=$(echo "$files" | grep -vE '^(docs|packages/bench)/|\.md$|^\.github/(workflows/(db-migrate|load|preview|production)\.yml|vercel-cli/|dependabot\.yml|ISSUE_TEMPLATE/)' || true)
               [ -n "$rest" ] || app=false
               rest=$(echo "$files" | grep -E '^\.github/' || true)
               [ -n "$rest" ] || workflows=false
@@ -130,6 +130,79 @@ jobs:
             exit 1
           fi
 
+  # Migrations and the integration suites on both majors: Supabase runs 17, self-hosted Docker runs 18.
+  integration:
+    name: Integration (Postgres ${{ matrix.postgres.major }})
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres:
+          # Supabase's major (production runs 17.11; bump once it clears the cooldown).
+          - major: 17
+            image: postgres:17.10-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+          # Same digest as docker-compose.yml.
+          - major: 18
+            image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: ${{ matrix.postgres.image }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: receipt_ocr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d receipt_ocr"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      rustfs:
+        # rustfs/rustfs:1.0.4, same digest as docker-compose.yml.
+        image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+        env:
+          RUSTFS_ACCESS_KEY: rustfsadmin
+          RUSTFS_SECRET_KEY: rustfsadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -fsS http://localhost:9000/health || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/receipt_ocr
+      DIRECT_URL: postgres://postgres:postgres@localhost:5432/receipt_ocr
+      BETTER_AUTH_URL: http://localhost:3004
+      BETTER_AUTH_SECRET: ci-secret-not-for-production-000000000
+      GOOGLE_GENERATIVE_AI_API_KEY: dummy-ci
+      OCR_PROVIDER: fixture
+      # No mailer in CI, so sign-up skips verification (on by default in production).
+      AUTH_REQUIRE_EMAIL_VERIFICATION: "false"
+      TRUSTED_IP_HEADERS: x-forwarded-for
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: receipt-ocr
+      S3_ACCESS_KEY_ID: rustfsadmin
+      S3_SECRET_ACCESS_KEY: rustfsadmin
+      S3_FORCE_PATH_STYLE: "true"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - name: Create the S3 bucket
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --aws-sigv4 aws:amz:us-east-1:s3 \
+            --user rustfsadmin:rustfsadmin -X PUT http://localhost:9000/receipt-ocr)
+          case "$code" in 200|409) ;; *) echo "bucket create failed: HTTP $code" >&2; exit 1 ;; esac
+      - run: bun run db:migrate
+      - name: Integration tests (Postgres + RustFS)
+        run: bun run --filter @receipt-ocr/core test:int && bun run --filter @receipt-ocr/web test:int
+        env:
+          INTEGRATION: "1"
+
   e2e:
     name: E2E (Playwright)
     needs: changes
@@ -138,8 +211,8 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        # postgres:18.6-alpine, same digest as docker-compose.yml.
-        image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+        # postgres:17.10-alpine, Supabase's major (production runs 17.11; bump once it clears the cooldown).
+        image: postgres:17.10-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -194,18 +267,7 @@ jobs:
         with:
           scope: e2e
       - uses: ./.github/actions/playwright
-      # The build doesn't touch the database, so it overlaps the integration suites.
-      - name: Integration tests (Postgres + RustFS) and build
-        run: |
-          bun run build > "$RUNNER_TEMP/build.log" 2>&1 &
-          build=$!
-          status=0
-          bun run --filter @receipt-ocr/core test:int && bun run --filter @receipt-ocr/web test:int || status=$?
-          wait "$build" || status=$?
-          cat "$RUNNER_TEMP/build.log"
-          exit "$status"
-        env:
-          INTEGRATION: "1"
+      - run: bun run build
       - run: bun run test:e2e
       # The GA id is inlined at build time, so the consent flow with GA needs its own build.
       - name: Build with a test GA measurement id
@@ -234,8 +296,8 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        # postgres:18.6-alpine, same digest as docker-compose.yml.
-        image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+        # postgres:17.10-alpine, Supabase's major (production runs 17.11; bump once it clears the cooldown).
+        image: postgres:17.10-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -316,9 +378,10 @@ jobs:
           retention-days: 7
 
   # The one check to require: a skipped job (docs-only PR) passes, a failed or cancelled one fails.
+  # A matrix job reports failure when any leg fails, so both Postgres majors must pass.
   ci-ok:
     name: CI OK
-    needs: [changes, static, zizmor, checks, e2e, e2e-turnstile]
+    needs: [changes, static, zizmor, checks, integration, e2e, e2e-turnstile]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 2

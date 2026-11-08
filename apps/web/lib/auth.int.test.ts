@@ -7,6 +7,7 @@ import {
   account,
   createDb,
   eq,
+  jobs,
   organization,
   session,
   sql,
@@ -21,7 +22,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 const enabled = process.env.INTEGRATION === "1";
 const sent: SendEmailInput[] = [];
 
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
   sendEmail: async (_config: unknown, input: SendEmailInput) => {
@@ -61,6 +61,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     await db.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
     const [row] = await db.select({ id: user.id }).from(user).where(eq(user.email, email));
     if (row) {
+      await db.delete(jobs).where(eq(jobs.userId, row.id));
       await db.execute(
         sql`delete from organization where id in (select organization_id from member where user_id = ${row.id})`,
       );
@@ -77,6 +78,17 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       throw error;
     }
   };
+
+  // With verification required the welcome waits for afterEmailVerification, which needs a mailbox.
+  it.skipIf(process.env.AUTH_REQUIRE_EMAIL_VERIFICATION !== "false")(
+    "queues exactly one welcome email job when sign-up needs no verification",
+    async () => {
+      const { queueWelcomeEmail } = await import("./welcome");
+      await queueWelcomeEmail(userId);
+      const rows = await db.select().from(jobs).where(eq(jobs.userId, userId));
+      expect(rows.filter((j) => j.kind === "email.welcome")).toHaveLength(1);
+    },
+  );
 
   it("P1-1: the personal workspace built from a hostile display name is plain text", async () => {
     const [org] = await db.execute<{ name: string }>(

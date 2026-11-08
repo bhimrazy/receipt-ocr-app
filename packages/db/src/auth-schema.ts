@@ -148,9 +148,8 @@ export const member = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("member_organization_id_idx").on(table.organizationId),
     index("member_user_id_idx").on(table.userId),
-    // One membership per user per organization.
+    // One membership per user per organization; also serves lookups by organization.
     uniqueIndex("member_org_user_idx").on(table.organizationId, table.userId),
   ],
 ).enableRLS();
@@ -174,6 +173,8 @@ export const invitation = pgTable(
   (table) => [
     index("invitation_organization_id_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
+    // The cascade when the inviter's account is deleted.
+    index("invitation_inviter_id_idx").on(table.inviterId),
   ],
 ).enableRLS();
 
@@ -233,7 +234,7 @@ export const passkey = pgTable(
     deviceType: text("device_type").notNull(),
     backedUp: boolean("backed_up").notNull(),
     transports: text("transports"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     aaguid: text("aaguid"),
   },
   (table) => [

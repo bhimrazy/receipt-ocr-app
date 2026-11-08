@@ -15,23 +15,26 @@ import type { Tx } from "./audit";
 import { Conflict, DbError, Forbidden, InvalidInput, NotFound } from "./errors";
 import {
   canManageGroup,
-  createGroupSchema,
-  groupIdSchema,
   MAX_GROUPS_PER_RECEIPT,
   MAX_GROUPS_PER_WORKSPACE,
-  receiptIdsSchema,
-  updateGroupSchema,
-  type CreateGroupInput,
   type GroupColor,
   type MembershipChange,
   type ReceiptGroup,
   type ReceiptGroupRef,
-  type UpdateGroupInput,
 } from "./group-rules";
+import {
+  createGroupSchema,
+  groupIdSchema,
+  receiptIdsSchema,
+  updateGroupSchema,
+  type CreateGroupInput,
+  type UpdateGroupInput,
+} from "./group-schemas";
 import type { ReceiptScope } from "./repository";
 import { Db } from "./services";
 
 export * from "./group-rules";
+export * from "./group-schemas";
 
 /**
  * Receipt groups: named collections in a workspace ("Berlin trip"). A receipt

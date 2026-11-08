@@ -5,7 +5,8 @@ and served at `/api/auth/*`. It stores users, sessions, accounts, workspaces (or
 invitations in Postgres through the Drizzle adapter. The plugins: **organization** (workspaces), **admin**
 (platform roles, bans, impersonation), **twoFactor** (authenticator apps and backup codes), **passkey**
 (`@better-auth/passkey`, WebAuthn) and `nextCookies` (cookies from server actions). The two-factor, passkey and
-step-up wiring lives in [`lib/auth-two-factor.ts`](../../../apps/web/lib/auth-two-factor.ts).
+step-up wiring lives in [`lib/auth-two-factor.ts`](../../../apps/web/lib/auth-two-factor.ts); linking, unlinking and
+their notices in [`lib/auth-accounts.ts`](../../../apps/web/lib/auth-accounts.ts).
 
 ## Contents
 
@@ -17,6 +18,7 @@ step-up wiring lives in [`lib/auth-two-factor.ts`](../../../apps/web/lib/auth-tw
 - [Two-step sign-in](#two-step-sign-in)
 - ["Confirm it's you" (step-up)](#confirm-its-you-step-up)
 - [Passkeys](#passkeys)
+- [Sign-in methods](#sign-in-methods)
 - [Admins](#admins)
 - [Invitations](#invitations)
 - [Password reset and account deletion](#password-reset-and-account-deletion)
@@ -70,6 +72,10 @@ sequenceDiagram
   If that hook fails, the next request self-heals it (see below).
 - Admin is granted only after verification, so registering someone else's address first gains nothing.
 - Without verification required (local dev, CI), sign-up returns a session at once.
+- The welcome email is an `email.welcome` job ([jobs](jobs.md#other-job-kinds)), queued by `queueWelcomeEmail` in
+  [`lib/welcome.ts`](../../../apps/web/lib/welcome.ts): from `afterEmailVerification` for email sign-ups, and from the
+  user-create hook when the account is already verified (Google, GitHub) or verification is off. Invited users take
+  the same paths. Signing in again queues nothing, and the queue welcomes a user once.
 
 ## Email sign-in
 
@@ -232,6 +238,55 @@ sequenceDiagram
   session verified, keeps the previous session's active workspace and deletes the previous session.
 - Rate limits per IP: authenticate options 20/min, verify 10/min, register options 10/min.
 
+## Sign-in methods
+
+Settings → Security opens with a checklist (email confirmed; a passkey or two-step sign-in; more than one way to
+sign in), each unmet item linking to its control, then a **Sign-in methods** card: email and password, each
+configured provider (Google, GitHub), and passkeys. Admin → Users → a user shows the same list read-only. The data
+comes from `loadSignInMethods` in [`packages/core/src/account-security.ts`](../../../packages/core/src/account-security.ts).
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant BA as Better Auth
+  participant P as Google or GitHub
+  participant DB as Postgres
+
+  B->>BA: linkSocial(provider, callbackURL ?linked=, errorCallbackURL ?link=)
+  BA-->>B: redirect to provider (state carries the user and session)
+  B->>P: consent
+  P-->>B: /api/auth/callback/{provider}?code
+  B->>BA: callback
+  BA->>P: profile
+  alt same address as the account, verified by the provider
+    BA->>DB: create account row
+    Note over BA,DB: account.create.after: notice email, auth.account_linked
+    BA-->>B: /app/settings/security?linked=provider
+  else different or unverified address, or linked to another user
+    BA-->>B: /app/settings/security?link=provider&error=code
+  end
+```
+
+- **Linking rules** (`accountLinking`, written out in `lib/auth-accounts.ts`): the provider must report the account's
+  own address, verified; no trusted providers; different addresses are refused (`email_does_not_match`). So a stolen
+  session can't attach the thief's Google or GitHub, and connecting needs no step-up: owning that address already
+  allows a password reset. The same rule covers Better Auth linking at sign-in, which also sends the notice.
+- **Disconnect** (`/unlink-account`) needs a step-up (`account.unlink`), then `guardUnlink` in `hooks.before`
+  refuses with `400 LAST_SIGN_IN_METHOD` if nothing would be left: a password, a configured provider or a passkey.
+  Better Auth's own last-account check ignores passkeys, so `allowUnlinkingAll` is on and this guard replaces it.
+  `account.delete.after` sends the notice (only for `/unlink-account`, not account deletion).
+  `/passkey/delete-passkey` gets the same refusal (`guardPasskeyDelete`) for a user's only passkey when no password or
+  configured provider remains. Known edge: the check reads, then Better Auth deletes, so two concurrent unlinks could
+  both pass. It needs the user to send them at once, and Forgot password recreates a credential, so it is accepted.
+- **Set a password** (Google/GitHub-only accounts): a server action calls Better Auth's server-only `setPassword`
+  after `requireStepUp(account.change_password)`; that endpoint has no path, so the `hooks.before` gate can't see
+  it and the action's check is the only one. A notice follows.
+- **Confirm email** from the checklist resends the link server-side (no captcha); the per-address cap applies.
+- **One-time prompt.** After a user's fifth completed receipt, with no passkey and two-step sign-in off, the app shows
+  one dismissible card. Dismissing sets a cookie with the user id (per browser; a per-user column needs a
+  migration). The shared-workspace nudge wins when both apply.
+
 ## Admins
 
 ```mermaid
@@ -317,6 +372,8 @@ the password unnoticed.
 | Change password | A step-up and the current password                            | Better Auth `changePassword`; the shared step-up gate; a notice to the account address from our `hooks.after`                  |
 | Admin sets one  | The admin role and an admin step-up (a factor)                | Admin plugin `setUserPassword`; the same notice from our `hooks.after`                                                         |
 | Reset password  | The emailed reset link                                        | A notice from `emailAndPassword.onPasswordReset`                                                                               |
+| Set a password  | A step-up (Google/GitHub-only accounts)                       | Server action → `auth.api.setPassword` after `requireStepUp`; a notice                                                         |
+| Disconnect      | A step-up; never the last way to sign in                      | The shared step-up gate, then `guardUnlink` in `hooks.before`; a notice from `account.delete.after`                            |
 
 These use the same ["Confirm it's you"](#confirm-its-you-step-up) gate as every other important action: the
 `hooks.before` in [`lib/auth.ts`](../../../apps/web/lib/auth.ts) calls `stepUpGate` first, answering
