@@ -4,23 +4,46 @@ import { defineConfig } from "vitest/config";
 const root = import.meta.dirname;
 
 /**
- * One config for the whole workspace. These are unit tests over pure logic —
- * no database, no network, no browser DOM (components render to static markup) — so a single Node environment covers all of
- * them and keeps `bun run test` fast enough to run on every change.
+ * Two projects over one alias table. `unit` is pure logic (no database, no network, no browser DOM; components render
+ * to static markup). `int` is every `*.int.test.ts`, found by glob, against the compose Postgres and RustFS
+ * (`scripts/test.sh`, CI `e2e` job); files run one at a time because they share one database.
  */
 export default defineConfig({
   oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "node",
-    include: ["apps/**/*.test.{ts,tsx}", "packages/**/*.test.ts", "bench/**/*.test.ts"],
-    exclude: ["**/node_modules/**", "**/.next/**", "**/dist/**"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          include: ["apps/**/*.test.{ts,tsx}", "packages/**/*.test.ts"],
+          exclude: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/*.int.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "int",
+          include: ["apps/**/*.int.test.ts", "packages/**/*.int.test.ts"],
+          exclude: ["**/node_modules/**", "**/.next/**", "**/dist/**"],
+          env: { INTEGRATION: "1" },
+          fileParallelism: false,
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
+        },
+      },
+    ],
   },
   resolve: {
+    // Mirrors each package's `exports`: a new subpath export needs a line here too.
     alias: {
+      "server-only": path.join(root, "vitest.server-only.ts"),
       "@/": `${path.join(root, "apps/web")}/`,
       "@receipt-ocr/ai/categories": path.join(root, "packages/ai/src/categories.ts"),
       "@receipt-ocr/ai/models": path.join(root, "packages/ai/src/models.ts"),
       "@receipt-ocr/ai": path.join(root, "packages/ai/src/index.ts"),
+      "@receipt-ocr/core/telemetry/otlp": path.join(root, "packages/core/src/telemetry/otlp.ts"),
       "@receipt-ocr/core/telemetry": path.join(root, "packages/core/src/telemetry/index.ts"),
       "@receipt-ocr/core/group-rules": path.join(root, "packages/core/src/group-rules.ts"),
       "@receipt-ocr/core/plans": path.join(root, "packages/core/src/plans.ts"),

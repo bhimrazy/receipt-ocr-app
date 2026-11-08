@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 const ipAddress = vi.hoisted(
   () => ({}) as { ipAddressHeaders?: string[]; trustedProxies?: string[] },
 );
-vi.mock("server-only", () => ({}));
-vi.mock("./runtime", () => ({ runtime: {} }));
+const runtime = vi.hoisted(() => ({ runPromise: vi.fn() }));
+vi.mock("./runtime", () => ({ runtime }));
 vi.mock("./log", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./log")>()),
   logger: { error: vi.fn(), info: vi.fn(), emit: vi.fn() },
@@ -18,8 +18,15 @@ vi.mock("./env", () => ({
   },
 }));
 
-const { clientIp, crossOriginResponse, discardBody, failureResponse, skipEvent, withRequestEvent } =
-  await import("./http");
+const {
+  annotateCaller,
+  clientIp,
+  crossOriginResponse,
+  discardBody,
+  failureResponse,
+  skipEvent,
+  withRequestEvent,
+} = await import("./http");
 const { logger } = await import("./log");
 
 const request = (headers: Record<string, string>) =>
@@ -83,6 +90,29 @@ describe("failureResponse (L2)", () => {
     expect(res.status).toBe(500);
     expect(event.error).toEqual({ type: "DbError", class: "Error", code: "23505" });
     expect(JSON.stringify(event)).not.toContain("Jane Doe");
+  });
+});
+
+describe("failureResponse error reporting", () => {
+  it("reports provider and infra 5xx, never a photo the model couldn't read", async () => {
+    const { Cause } = await import("effect");
+    const { OcrError } = await import("@receipt-ocr/core");
+    const { setErrorReporter } = await import("./telemetry/errors");
+    const reported: string[] = [];
+    setErrorReporter((report) => void reported.push(String(report.fields.kind)));
+    try {
+      for (const kind of ["invalid-output", "bad-image", "refused", "unsupported-file"] as const) {
+        const res = failureResponse(Cause.fail(new OcrError({ message: "x", kind, attempts: [] })));
+        expect(res.status).toBe(502);
+      }
+      expect(reported).toEqual([]);
+      for (const kind of ["timeout", "provider-error"] as const) {
+        failureResponse(Cause.fail(new OcrError({ message: "x", kind, attempts: [] })));
+      }
+      expect(reported).toEqual(["timeout", "provider-error"]);
+    } finally {
+      setErrorReporter(undefined);
+    }
   });
 });
 
@@ -176,6 +206,29 @@ describe("withRequestEvent", () => {
     ).toEqual({ routine: false });
   });
 
+  it("keeps a user's first few plan-quota 429s a minute and samples the rest", async () => {
+    const quota429 = (userId?: string) =>
+      optionsOf({ event: "receipt.upload", route: "/api/receipts" }, (event) => {
+        event.user_id = userId;
+        event.outcome = "QuotaExceeded";
+        return new Response(null, { status: 429 });
+      });
+    let count = 0;
+    runtime.runPromise.mockImplementation(async () => ({ allowed: ++count <= 3 }));
+    for (let i = 0; i < 3; i++) expect(await quota429("u_1")).toEqual({ routine: false });
+    expect(await quota429("u_1")).toEqual({ routine: true });
+    const [repeat] = vi.mocked(logger.emit).mock.calls[0]!;
+    expect(repeat.flags).toEqual({ quota_repeat: true });
+    expect(runtime.runPromise).toHaveBeenCalledTimes(4);
+
+    // A counter that fails, and a rejection without a user, are treated as repeats.
+    runtime.runPromise.mockRejectedValue(new Error("db down"));
+    expect(await quota429("u_1")).toEqual({ routine: true });
+    runtime.runPromise.mockClear();
+    expect(await quota429()).toEqual({ routine: true });
+    expect(runtime.runPromise).not.toHaveBeenCalled();
+  });
+
   it("writes nothing for an event the handler skipped", async () => {
     vi.mocked(logger.emit).mockClear();
     await withRequestEvent({ event: "x", route: "/api/x" }, (_r, _c, event) => {
@@ -183,6 +236,29 @@ describe("withRequestEvent", () => {
       return new Response(null, { status: 429 });
     })(new Request("https://app.example/api/x"));
     expect(logger.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("annotateCaller", () => {
+  it("marks impersonated requests from the scope alone, or from the session", () => {
+    const scope = { userId: "u_1", organizationId: "org_1", impersonatedBy: "admin_1" };
+    const fromScope: Parameters<typeof annotateCaller>[0] = { event: "x" };
+    annotateCaller(fromScope, { scope });
+    expect(fromScope).toMatchObject({
+      user_id: "u_1",
+      organization_id: "org_1",
+      impersonated_by: "admin_1",
+    });
+
+    const fromSession: Parameters<typeof annotateCaller>[0] = { event: "x" };
+    annotateCaller(fromSession, {
+      session: { user: { id: "u_1" }, session: { impersonatedBy: "admin_2" } },
+    });
+    expect(fromSession.impersonated_by).toBe("admin_2");
+
+    const own: Parameters<typeof annotateCaller>[0] = { event: "x" };
+    annotateCaller(own, { scope: { userId: "u_1", organizationId: "org_1" } });
+    expect(own).not.toHaveProperty("impersonated_by");
   });
 });
 

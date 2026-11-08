@@ -5,8 +5,11 @@
  */
 import {
   account,
+  billingSubscriptions,
   createDb,
   eq,
+  jobs,
+  member,
   organization,
   session,
   sql,
@@ -21,7 +24,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 const enabled = process.env.INTEGRATION === "1";
 const sent: SendEmailInput[] = [];
 
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
   sendEmail: async (_config: unknown, input: SendEmailInput) => {
@@ -61,6 +63,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     await db.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
     const [row] = await db.select({ id: user.id }).from(user).where(eq(user.email, email));
     if (row) {
+      await db.delete(jobs).where(eq(jobs.userId, row.id));
       await db.execute(
         sql`delete from organization where id in (select organization_id from member where user_id = ${row.id})`,
       );
@@ -77,6 +80,17 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       throw error;
     }
   };
+
+  // With verification required the welcome waits for afterEmailVerification, which needs a mailbox.
+  it.skipIf(process.env.AUTH_REQUIRE_EMAIL_VERIFICATION !== "false")(
+    "queues exactly one welcome email job when sign-up needs no verification",
+    async () => {
+      const { queueWelcomeEmail } = await import("./welcome");
+      await queueWelcomeEmail(userId);
+      const rows = await db.select().from(jobs).where(eq(jobs.userId, userId));
+      expect(rows.filter((j) => j.kind === "email.welcome")).toHaveLength(1);
+    },
+  );
 
   it("P1-1: the personal workspace built from a hostile display name is plain text", async () => {
     const [org] = await db.execute<{ name: string }>(
@@ -181,10 +195,20 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       .filter((c) => c?.includes("session_token="))
       .join("; ");
     const headers = new Headers({ cookie });
-    const org = await auth.api.createOrganization({
+    // Comped to Pro above, the user owns their personal workspace and "Acme Books": the
+    // Pro cap of 2. A third is refused on the server, saying why.
+    const third = auth.api.createOrganization({
       headers,
       body: { name: "Roles", slug: `${tag}-roles` },
     });
+    await expect(third).rejects.toMatchObject({
+      status: "FORBIDDEN",
+      body: { message: expect.stringContaining("the most on Pro") },
+    });
+    const [org] = await db
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.slug, `${tag}-c`));
     const invite = (role: string) =>
       auth.api.createInvitation({
         headers,
@@ -324,6 +348,101 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
   });
 
   // Last: it deletes this user's sessions.
+  it("M-A: the buyer of a charging subscription can't be removed, demoted or leave", async () => {
+    const sessionCookie = (headers: Headers) =>
+      headers
+        .getSetCookie()
+        .map((c) => c.split(";")[0])
+        .filter((c) => c?.includes("session_token="))
+        .join("; ");
+    const ownerHeaders = new Headers({ cookie });
+    const buyerEmail = `${tag}-buyer@example.com`;
+    const buyerUp = await auth.api.signUpEmail({
+      body: { email: buyerEmail, password, name: "Pat Payer" },
+      returnHeaders: true,
+    });
+    const buyerHeaders = new Headers({ cookie: sessionCookie(buyerUp.headers) });
+    const buyerId = buyerUp.response.user.id;
+
+    const orgId = crypto.randomUUID();
+    const memberId = crypto.randomUUID();
+    await db
+      .insert(organization)
+      .values({ id: orgId, name: "Pays", slug: `${tag}-pays`, createdAt: new Date() });
+    await db.insert(member).values([
+      {
+        id: crypto.randomUUID(),
+        organizationId: orgId,
+        userId,
+        role: "owner",
+        createdAt: new Date(),
+      },
+      {
+        id: memberId,
+        organizationId: orgId,
+        userId: buyerId,
+        role: "owner",
+        createdAt: new Date(),
+      },
+    ]);
+    const subscriptionId = `sub_${tag}`;
+    await db.insert(billingSubscriptions).values({
+      organizationId: orgId,
+      userId: buyerId,
+      provider: "paddle",
+      providerSubscriptionId: subscriptionId,
+      providerCustomerId: `ctm_${tag}`,
+      status: "active",
+      providerUpdatedAt: new Date(),
+    });
+
+    const message = async (promise: Promise<unknown>) => {
+      try {
+        await promise;
+        return "ok";
+      } catch (error) {
+        return error instanceof APIError ? String(error.body?.message) : String(error);
+      }
+    };
+    const cancelHint = "Cancel the subscription in Billing, or let it end, before";
+    expect(
+      await message(
+        auth.api.updateMemberRole({
+          headers: ownerHeaders,
+          body: { organizationId: orgId, memberId, role: "admin" },
+        }),
+      ),
+    ).toBe(`Pat Payer pays for Pro on this workspace. ${cancelHint} changing their role.`);
+    expect(
+      await message(
+        auth.api.removeMember({
+          headers: ownerHeaders,
+          body: { organizationId: orgId, memberIdOrEmail: memberId },
+        }),
+      ),
+    ).toBe(`Pat Payer pays for Pro on this workspace. ${cancelHint} removing them.`);
+    expect(
+      await message(
+        auth.api.leaveOrganization({ headers: buyerHeaders, body: { organizationId: orgId } }),
+      ),
+    ).toBe(`You pay for Pro on this workspace. ${cancelHint} leaving.`);
+
+    // Once it can't charge any more, the same actions go through.
+    await db
+      .update(billingSubscriptions)
+      .set({ status: "canceled" })
+      .where(eq(billingSubscriptions.providerSubscriptionId, subscriptionId));
+    expect(
+      await message(
+        auth.api.leaveOrganization({ headers: buyerHeaders, body: { organizationId: orgId } }),
+      ),
+    ).toBe("ok");
+    await db
+      .delete(billingSubscriptions)
+      .where(eq(billingSubscriptions.providerSubscriptionId, subscriptionId));
+    await db.delete(user).where(eq(user.id, buyerId));
+  });
+
   it("a revoked session stops working on auth endpoints at once (cookie cache off)", async () => {
     await db.delete(session).where(eq(session.userId, userId));
     const headers = new Headers({ cookie });

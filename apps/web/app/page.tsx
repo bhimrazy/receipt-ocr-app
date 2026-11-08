@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import { LandingPage } from "@/components/landing-page";
-import { homeDescription, pageMetadata } from "@/lib/seo";
-import { siteTitle } from "@/lib/site";
+import { getPlanTable } from "@/lib/plan-limits";
+import { homeDescription, homeTitle, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
-  title: siteTitle,
+  title: homeTitle,
   absoluteTitle: true,
   description: homeDescription,
   path: "/",
 });
 
-export default function Page() {
-  return <LandingPage />;
+// Prints the plan limits; an admin save also revalidates (revalidatePlanCopy).
+export const revalidate = 3600;
+
+export default async function Page() {
+  return <LandingPage plans={await getPlanTable()} />;
 }

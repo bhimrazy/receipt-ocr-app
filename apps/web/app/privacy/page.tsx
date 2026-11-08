@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { gaMeasurementId, turnstileOn } from "@/lib/consent/env";
+import { logStorageName } from "@/lib/processors";
+import { parsePostHog } from "@/lib/telemetry/posthog-config";
+import { parseSentryDsn } from "@/lib/telemetry/sentry-config";
 import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
@@ -11,6 +14,11 @@ export const metadata: Metadata = pageMetadata({
 });
 
 const googleAnalytics = Boolean(gaMeasurementId);
+const errorReporting = Boolean(parseSentryDsn(process.env.SENTRY_DSN));
+const productAnalytics = Boolean(parsePostHog(process.env));
+const logStorage = logStorageName(
+  process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+);
 // Vercel Web Analytics runs only in Vercel builds.
 const pageCounts = process.env.VERCEL === "1";
 
@@ -29,8 +37,8 @@ export default function PrivacyPage() {
             "Workspace details: the workspaces you create or join, their members and the invitations you send.",
             "Sign-in security: if you turn on two-step sign-in, the secret behind your authenticator app's codes and your backup codes, both encrypted. When you confirm it's you before an important change, a record of when, how (passkey, app code, backup code or emailed code), what it was for and the IP address, kept until you delete your account; an emailed code is stored only as a one-way hash and expires after 10 minutes.",
             "Passkeys: if you add one, its public key, a credential ID, the authenticator model when your device shares it, whether it syncs between your devices, and when you added it. Your fingerprint, face or device PIN never leave your device.",
-            "Messages: if you write to us through the support button, your email address and your message.",
-            "Technical data: a session cookie that keeps you signed in and a few other necessary cookies (all listed in the cookie policy), server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors, and short-lived counters that limit how often we send account emails to one address (they hold a one-way hash of the address, not the address).",
+            "Messages: if you write to us through the support button, your name, email address and message. We send one automatic reply to that address to confirm we got it (at most one a day per address); it contains your first name and topic, never your message, and the name and address used for it are deleted once it is sent.",
+            "Technical data: a session cookie that keeps you signed in and a few other necessary cookies (all listed in the cookie policy), server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors, and short-lived counters that limit how often we send account emails and contact-form replies to one address or from one IP address (each holds a one-way hash, not the address itself).",
           ],
         },
         {
@@ -44,6 +52,11 @@ export default function PrivacyPage() {
                   "To count visits to our public pages and see which ones help people, as described under Cookies and analytics.",
                 ]
               : []),
+            ...(productAnalytics
+              ? [
+                  "To understand which features are used, so we know what to improve, from a few named events and never your receipts (see PostHog below).",
+                ]
+              : []),
             "We don't sell your data, and we don't use it for advertising.",
           ],
         },
@@ -55,6 +68,22 @@ export default function PrivacyPage() {
             "OpenAI (OpenAI API), only if we or your workspace turn it on: the receipt file is sent to a model OpenAI hosts, which scans it the same way. OpenAI doesn't use data sent to its API to train its models unless a customer opts in, and we don't. It may keep requests and responses for up to 30 days to check for abuse, and longer where the law requires it or where that is reasonably necessary to protect its services or others from harm. We ask OpenAI not to store the response for reuse. Zero data retention is available only with OpenAI's prior approval and is not part of this setup.",
             "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
             "An email delivery provider sends account emails such as password resets and invitations.",
+            "Paddle (Paddle.com Market Ltd), only when a workspace owner buys or manages Pro: Paddle is our reseller and the merchant of record for every order. It runs the checkout, takes the payment, charges the right sales tax or VAT, sends receipts and invoices, and handles refunds, under its own privacy policy. Paddle receives your email address, your payment details and your country or address for tax. We never see or store your card details. Paddle sends us the subscription's status, its plan and billing period, and its Paddle ids, which we keep to decide which workspaces are on Pro.",
+            ...(logStorage
+              ? [
+                  `${logStorage} stores a copy of our server logs so we can search them when investigating errors: which request was made, when, how long it took and how it ended, the IDs of the account, workspace and receipt involved, the AI model used and its token counts, and error types. The logs never contain your receipt files or their contents, your email address, your IP address or your messages.`,
+                ]
+              : []),
+            ...(errorReporting
+              ? [
+                  "Sentry, to tell us when something breaks: for an error on our servers or in your browser, it receives the type of error, where in our code it happened, the page or API route (without query strings, and with IDs and tokens in the address removed), your browser and operating system names, and a request ID. It doesn't receive your email address, cookies, receipt files or their contents, or error messages that could contain them. Your browser connects to Sentry directly to send a report, so Sentry sees your IP address; we set it not to store it.",
+                ]
+              : []),
+            ...(productAnalytics
+              ? [
+                  "PostHog, to see which features people use: our servers (never your browser) send it a few named events, such as signing up, uploading or scanning a receipt, exporting a CSV and reaching a plan limit, each with your account's random ID, your workspace's ID and details like the upload mode, plan and AI model. It never receives your name, email address, IP address, cookies, receipts or what's on them, and nothing is sent while an administrator is signed in as you for support.",
+                ]
+              : []),
             "Google and GitHub, only if you choose to sign in with them.",
             ...(pageCounts
               ? [
@@ -80,6 +109,7 @@ export default function PrivacyPage() {
             "We keep your account and receipts until you delete them.",
             "Deleting a receipt removes it, its extracted data and its original file.",
             "Deleting your account from Settings removes your account and every workspace where you are the only member, with all of its receipts and files. Receipts you uploaded to a workspace shared with other people stay in that workspace, without your name on them, because they belong to the workspace. If you are the only owner of a shared workspace, make another member an owner first.",
+            "We keep a workspace's subscription record (its status, plan, billing period and Paddle ids) and the billing notices Paddle sends us for as long as the workspace exists, and afterwards as a billing record that no longer names the workspace. Paddle keeps its own order and tax records as merchant of record.",
             "For billing and to enforce plan limits, we keep a usage record of each time the AI scanned a receipt: which model, how many tokens, the estimated cost and when. It holds no receipt contents or images. It stays after you delete the receipt, the workspace or your account, but is then no longer linked to them or to you.",
           ],
         },

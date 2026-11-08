@@ -7,8 +7,9 @@ import { CookieSettingsButton } from "@/components/consent/cookie-settings-butto
 import { supportEmail } from "@/lib/env";
 import { getPlanTable } from "@/lib/plan-limits";
 import { AuthMessage } from "./auth-field";
+import { allowance } from "@/lib/plan-copy";
 
-const valueProps = (freePerDay: number) => [
+const valueProps = (freeAllowance: string) => [
   {
     icon: ScanLine,
     title: "Scans the whole receipt",
@@ -22,7 +23,7 @@ const valueProps = (freePerDay: number) => [
   {
     icon: Download,
     title: "Export a CSV",
-    desc: `Free plan: ${freePerDay} receipts a day, no card required.`,
+    desc: `Free plan: ${freeAllowance}, no card required.`,
   },
 ];
 
@@ -62,7 +63,7 @@ export async function AuthLayout({
           </p>
           <p className="mt-4 text-pretty leading-7 text-muted-foreground">{subtitle}</p>
           <ul className="mt-8 flex flex-col gap-5">
-            {valueProps(plans.free.receiptsPerDay).map(({ icon: Icon, title, desc }) => (
+            {valueProps(allowance(plans.free)).map(({ icon: Icon, title, desc }) => (
               <li className="flex items-start gap-4" key={title}>
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
                   <Icon aria-hidden className="size-5" />

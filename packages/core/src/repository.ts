@@ -9,6 +9,7 @@ import {
   jobs,
   lt,
   lte,
+  MAX_EXTRACTION_ATTEMPTS,
   ocrCalls,
   ocrRounds,
   or,
@@ -25,14 +26,21 @@ import {
   user,
 } from "@receipt-ocr/db";
 import { Context, Effect, Layer } from "effect";
-import type { DbError } from "./errors";
+import { InvalidInput, type DbError } from "./errors";
 import { liveReceiptJob, STALE_AFTER_MS } from "./jobs/live";
 import { enqueueJob } from "./jobs/queue";
 import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-job";
 import type { QuotaVerdict } from "./quota";
 import { Db } from "./services";
-import { countUsage, lockUserQuota, type UsageCounts, type UsageWindow } from "./usage";
+import {
+  countUsage,
+  lockQuota,
+  type UsageCounts,
+  type UsageSubject,
+  type UsageWindow,
+} from "./usage";
 import { isUuid } from "./ids";
+import { isIsoDay, parseCurrency, parseReceiptDate } from "./receipt-fields";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -50,6 +58,8 @@ export type ReceiptScope = {
    * or admin can.
    */
   role?: string;
+  /** The admin acting as this user, when impersonating; product analytics skips their work. */
+  impersonatedBy?: string;
 };
 
 /** Owners and admins may edit or delete any receipt in the workspace. Fails closed without a role. */
@@ -126,7 +136,7 @@ export type OcrCallRow = Omit<NewOcrCall, "id" | "status"> & {
 };
 
 /**
- * The quota check run under the user's lock, in the same transaction that
+ * The quota check run under the quota lock (the user's, and the workspace's on a pooled plan), in the same transaction that
  * records the new round, so parallel requests can't all pass it.
  */
 export type QuotaGate = {
@@ -145,7 +155,7 @@ export type RetryClaim =
   | { kind: "attempts-exhausted" };
 
 /** Upload plus two retries: a receipt that keeps failing can't loop provider calls. */
-export const MAX_EXTRACTION_ATTEMPTS = 3;
+export { MAX_EXTRACTION_ATTEMPTS };
 
 /** Completed receipts below this overall confidence are flagged "needs review". */
 export const NEEDS_REVIEW_BELOW = 0.9;
@@ -214,8 +224,10 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
   } else if (filters.status) {
     conditions.push(sql`${effectiveStatus} = ${filters.status}`);
   }
-  if (filters.from) conditions.push(gte(receipts.receiptDate, filters.from));
-  if (filters.to) conditions.push(lte(receipts.receiptDate, filters.to));
+  // Only real days reach the date comparison, where Postgres would reject the rest.
+  if (filters.from && isIsoDay(filters.from))
+    conditions.push(gte(receipts.receiptDate, filters.from));
+  if (filters.to && isIsoDay(filters.to)) conditions.push(lte(receipts.receiptDate, filters.to));
   const groupIds = filters.groups?.filter(isReceiptId) ?? [];
   if (groupIds.length > 0) {
     // Qualified by hand, as in exportRows. The group must also be this workspace's.
@@ -263,6 +275,18 @@ const toSummary = (row: SummaryRow): ReceiptSummary => ({
 });
 
 const decimal = (value: number | null) => (value == null ? null : String(value));
+
+/** The latest receipt date the row's `receipts_receipt_date_check` allows: a day past the UTC upload day. */
+const latestReceiptDate = sql`(${receipts.createdAt} at time zone 'UTC')::date + 1`;
+
+/**
+ * An extracted date, or null when it is after the upload: a misread, or a
+ * Bikram Sambat year (2080) given as AD. Null shows as "No date found".
+ */
+const plausibleDate = (date: string | null) =>
+  date === null
+    ? null
+    : sql`case when ${date}::date <= ${latestReceiptDate} then ${date}::date end`;
 
 /**
  * Writes the calls of a round. The workspace or the user may have been
@@ -358,12 +382,16 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       filters: ReceiptFilters,
       limit: number,
     ) => Effect.Effect<ReceiptExportRow[], DbError>;
-    /** Applies user corrections; false when nothing matched or the caller may not edit it. */
+    /**
+     * Applies user corrections; false when nothing matched or the caller may not
+     * edit it. Fails InvalidInput for a date that isn't a real day from 2000 on,
+     * or is after the day the receipt was uploaded.
+     */
     readonly update: (
       id: string,
       scope: ReceiptScope,
       patch: ReceiptPatch,
-    ) => Effect.Effect<boolean, DbError>;
+    ) => Effect.Effect<boolean, DbError | InvalidInput>;
     /** Deletes the row (items cascade); returns its object key, or null when nothing matched or not allowed. */
     readonly remove: (
       id: string,
@@ -373,7 +401,10 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
     readonly objectKeys: (
       owner: { organizationId: string } | { userId: string },
     ) => Effect.Effect<string[], DbError>;
-    readonly usage: (userId: string, window: UsageWindow) => Effect.Effect<UsageCounts, DbError>;
+    readonly usage: (
+      subject: UsageSubject,
+      window: UsageWindow,
+    ) => Effect.Effect<UsageCounts, DbError>;
   }
 >() {
   static readonly Live = Layer.effect(
@@ -382,8 +413,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       insert: ({ id, scope, fileName, imageObjectKey, priority }, quota) =>
         use((db) =>
           db.transaction(async (tx): Promise<InsertResult> => {
-            await lockUserQuota(tx, scope.userId);
-            const verdict = quota.decide(await countUsage(tx, scope.userId, quota.window));
+            await lockQuota(tx, scope, quota.window.scope === "workspace");
+            const verdict = quota.decide(await countUsage(tx, scope, quota.window));
             if (!verdict.allowed) return { kind: "quota", verdict };
             const [row] = await tx
               .insert(receipts)
@@ -402,6 +433,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               organizationId: scope.organizationId,
               userId: scope.userId,
               round: 1,
+              plan: quota.window.plan,
             });
             const job = await enqueueJob(
               tx,
@@ -411,6 +443,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                   organizationId: scope.organizationId,
                   userId: scope.userId,
                   round: 1,
+                  ...(scope.impersonatedBy ? { impersonatedBy: scope.impersonatedBy } : {}),
                 },
                 priority ?? PRIORITY_INTERACTIVE,
               ),
@@ -429,9 +462,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               .set({
                 status: "completed",
                 merchant: extraction.merchant,
-                receiptDate: extraction.receiptDate,
+                receiptDate: plausibleDate(parseReceiptDate(extraction.receiptDate)),
                 category: normalizeCategory(extraction.category),
-                currency: extraction.currency.toUpperCase(),
+                currency: parseCurrency(extraction.currency),
                 subtotal: decimal(extraction.subtotal),
                 tax: decimal(extraction.tax),
                 tip: decimal(extraction.tip),
@@ -485,8 +518,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
         use(async (db): Promise<RetryClaim> => {
           if (!isReceiptId(id)) return { kind: "not-found" };
           return db.transaction(async (tx): Promise<RetryClaim> => {
-            await lockUserQuota(tx, scope.userId);
-            const verdict = quota.decide(await countUsage(tx, scope.userId, quota.window));
+            await lockQuota(tx, scope, quota.window.scope === "workspace");
+            const verdict = quota.decide(await countUsage(tx, scope, quota.window));
             if (!verdict.allowed) return { kind: "quota", verdict };
             const now = new Date();
             const [claimed] = await tx
@@ -513,6 +546,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 organizationId: scope.organizationId,
                 userId: scope.userId,
                 round,
+                plan: quota.window.plan,
               });
               // A job still live for an older round can no longer write (the
               // round fences it); end it so the new round's job can be enqueued.
@@ -541,6 +575,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                     organizationId: scope.organizationId,
                     userId: scope.userId,
                     round,
+                    ...(scope.impersonatedBy ? { impersonatedBy: scope.impersonatedBy } : {}),
                   },
                   PRIORITY_INTERACTIVE,
                 ),
@@ -637,19 +672,47 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           return rows.map((row) => ({ ...row, ...toSummary(row) }));
         }),
 
-      update: (id, scope, patch) =>
-        use(async (db) => {
-          if (!isReceiptId(id)) return false;
-          const fields = Object.fromEntries(
-            Object.entries(patch).filter(([, v]) => v !== undefined),
+      update: (id, scope, patch) => {
+        const date = patch.receiptDate;
+        if (date != null && parseReceiptDate(date) !== date) {
+          return Effect.fail(
+            new InvalidInput({ message: "Enter a real date from 2000 on, as YYYY-MM-DD." }),
           );
-          const [row] = await db
-            .update(receipts)
-            .set({ ...fields, updatedAt: new Date() })
-            .where(writable(id, scope))
-            .returning({ id: receipts.id });
-          return Boolean(row);
-        }),
+        }
+        return Effect.flatMap(
+          use(async (db) => {
+            if (!isReceiptId(id)) return false;
+            const fields = Object.fromEntries(
+              Object.entries(patch).filter(([, v]) => v !== undefined),
+            );
+            const [row] = await db
+              .update(receipts)
+              .set({ ...fields, updatedAt: new Date() })
+              .where(
+                and(
+                  writable(id, scope),
+                  date == null ? undefined : sql`${date}::date <= ${latestReceiptDate}`,
+                ),
+              )
+              .returning({ id: receipts.id });
+            if (row || date == null) return Boolean(row);
+            // Tell a date after the upload apart from a receipt the caller can't edit.
+            const [editable] = await db
+              .select({ id: receipts.id })
+              .from(receipts)
+              .where(writable(id, scope));
+            return editable ? ("date-after-upload" as const) : false;
+          }),
+          (result) =>
+            result === "date-after-upload"
+              ? Effect.fail(
+                  new InvalidInput({
+                    message: "The date can't be after the day the receipt was uploaded.",
+                  }),
+                )
+              : Effect.succeed(result),
+        );
+      },
 
       remove: (id, scope) =>
         use(async (db) => {
@@ -674,7 +737,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           return rows.flatMap((row) => (row.key ? [row.key] : []));
         }),
 
-      usage: (userId, window) => use((db) => countUsage(db, userId, window)),
+      usage: (subject, window) => use((db) => countUsage(db, subject, window)),
     })),
   );
 }

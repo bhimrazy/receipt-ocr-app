@@ -7,11 +7,12 @@ import { Input } from "@receipt-ocr/ui/components/input";
 import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Check, Loader2, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/settings-section";
 import { withStepUp } from "@/components/step-up/step-up";
-import { soleOwnerMessage } from "@/lib/account-deletion";
+import { cancelSubscriptionFirst, soleOwnerMessage } from "@/lib/account-deletion";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
 
@@ -272,13 +273,16 @@ function DangerCard({
   email,
   resumed,
   blockingWorkspaces,
+  subscribedWorkspaces,
 }: {
   email: string;
   resumed: boolean;
   /** Shared workspaces only this user owns: deletion would be refused, so it isn't offered. */
   blockingWorkspaces: string[];
+  /** Workspaces whose Pro subscription can still charge: also refused until it is canceled. */
+  subscribedWorkspaces: string[];
 }) {
-  const blocked = blockingWorkspaces.length > 0;
+  const blocked = blockingWorkspaces.length > 0 || subscribedWorkspaces.length > 0;
   // Sent back from an expired or refused deletion link: reopen the request.
   const [open, setOpen] = useState(resumed && !blocked);
   const [notice, setNotice] = useState<string | null>(null);
@@ -305,10 +309,19 @@ function DangerCard({
           Permanently removes your account, your workspaces and every receipt in them. We email you
           a link to confirm. You can&apos;t undo this.
         </p>
-        {blocked ? (
+        {blockingWorkspaces.length > 0 ? (
           <Alert variant="warning">
             {soleOwnerMessage(blockingWorkspaces, "come back here")} Owners change roles in that
             workspace&apos;s Settings, under Members.
+          </Alert>
+        ) : null}
+        {subscribedWorkspaces.length > 0 ? (
+          <Alert variant="warning">
+            {cancelSubscriptionFirst(subscribedWorkspaces)}, in that workspace&apos;s{" "}
+            <Link className="font-medium underline underline-offset-4" href="/app/settings/billing">
+              Billing
+            </Link>{" "}
+            settings, then come back here.
           </Alert>
         ) : null}
         {notice ? (
@@ -346,8 +359,10 @@ export function AccountSettings({
   emailVerified,
   name,
   resume,
+  subscribedWorkspaces,
 }: {
   blockingWorkspaces: string[];
+  subscribedWorkspaces: string[];
   email: string;
   emailVerified: boolean;
   name: string;
@@ -391,6 +406,7 @@ export function AccountSettings({
           blockingWorkspaces={blockingWorkspaces}
           email={email}
           resumed={resume === "delete-account"}
+          subscribedWorkspaces={subscribedWorkspaces}
         />
       </SettingsSection>
     </>

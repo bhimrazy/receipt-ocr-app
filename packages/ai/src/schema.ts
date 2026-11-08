@@ -5,7 +5,7 @@ import type { PromptVersion } from "./prompt";
 
 /**
  * Field definitions, sent in the JSON schema from v2 on so both providers read the same ones.
- * They follow the benchmark's answer-key rules (`bench/README.md`).
+ * They follow the benchmark's answer-key rules (`packages/bench/README.md`).
  */
 export const FIELD_DESCRIPTIONS = {
   merchant:

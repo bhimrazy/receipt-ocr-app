@@ -11,6 +11,7 @@ import {
 } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { insertAudit, transact, type AuditActor, type Tx } from "./audit";
+import { chargingWorkspacesOf, hasChargingSubscription } from "./billing/service";
 import { Conflict, NotFound } from "./errors";
 import { clearGroupCreator } from "./groups";
 import type { PlanId } from "./plans";
@@ -90,6 +91,7 @@ export const deleteWorkspace = (organizationId: string, audit: AuditActor) =>
         .where(eq(organization.id, organizationId))
         .for("update");
       if (!org) throw new NotFound({ message: "That workspace no longer exists." });
+      if (await hasChargingSubscription(tx, organizationId)) throw subscriptionConflict([org.name]);
       const keys = await objectKeysOf(tx, [organizationId]);
       await tx.delete(organization).where(eq(organization.id, organizationId));
       await insertAudit(tx, {
@@ -132,33 +134,50 @@ function splitForDeletion(userId: string, organizationIds: string[], rows: Membe
   return { solo, blocked };
 }
 
+/** Why an account can't be deleted yet, by workspace. */
+export type DeletionBlockers = {
+  /** Shared workspaces where the user is the only owner. */
+  soleOwner: { id: string; name: string }[];
+  /** Workspaces with a subscription that can still charge (`chargingWorkspacesOf`). */
+  subscribed: { id: string; name: string }[];
+};
+
 /**
- * Shared workspaces that would refuse this user's account deletion, by name. A read without
- * locks, so Settings can explain before a deletion link is sent; `prepareUserDeletion` re-checks
- * under lock.
+ * What would refuse this user's account deletion, by workspace name. A read without locks, so
+ * Settings can explain before a deletion link is sent; `prepareUserDeletion` re-checks under lock.
  */
 export const workspacesBlockingDeletion = (userId: string) =>
   Effect.flatMap(Db, ({ use }) =>
-    use(async (db) => {
+    use(async (db): Promise<DeletionBlockers> => {
       const mine = await db
         .select({ organizationId: member.organizationId })
         .from(member)
         .where(eq(member.userId, userId));
       const organizationIds = [...new Set(mine.map((m) => m.organizationId))];
-      if (organizationIds.length === 0) return [];
+      const subscribed = await chargingWorkspacesOf(db, userId);
+      if (organizationIds.length === 0) return { soleOwner: [], subscribed };
       const rows = await db
         .select({ organizationId: member.organizationId, userId: member.userId, role: member.role })
         .from(member)
         .where(inArray(member.organizationId, organizationIds));
       const { blocked } = splitForDeletion(userId, organizationIds, rows);
-      if (blocked.length === 0) return [];
-      return db
-        .select({ id: organization.id, name: organization.name })
-        .from(organization)
-        .where(inArray(organization.id, blocked))
-        .orderBy(organization.name);
+      const soleOwner =
+        blocked.length === 0
+          ? []
+          : await db
+              .select({ id: organization.id, name: organization.name })
+              .from(organization)
+              .where(inArray(organization.id, blocked))
+              .orderBy(organization.name);
+      return { soleOwner, subscribed };
     }),
   );
+
+/** The admin-facing refusal while a subscription would be orphaned. */
+const subscriptionConflict = (names: string[]) =>
+  new Conflict({
+    message: `${names.join(", ")} ${names.length === 1 ? "has" : "have"} a Pro subscription that can still charge. Cancel it in Paddle first.`,
+  });
 
 export const prepareUserDeletion = (userId: string, audit?: AuditActor) =>
   Effect.gen(function* () {
@@ -180,6 +199,9 @@ export const prepareUserDeletion = (userId: string, audit?: AuditActor) =>
           message: `This user owns ${names.map((n) => n.name).join(", ")}, which has other members. Make one of them an owner first.`,
         });
       }
+      // Under the member locks, so a solo workspace can't gain a member between check and delete.
+      const subscribed = await chargingWorkspacesOf(tx, userId);
+      if (subscribed.length > 0) throw subscriptionConflict(subscribed.map((w) => w.name));
 
       const keys = solo.length > 0 ? await objectKeysOf(tx, solo) : [];
       if (solo.length > 0) await tx.delete(organization).where(inArray(organization.id, solo));

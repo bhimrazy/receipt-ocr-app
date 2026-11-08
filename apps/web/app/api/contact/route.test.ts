@@ -8,15 +8,26 @@ const env = vi.hoisted(() => ({
     { ok: true } | { ok: false; reason: "missing" | "rejected" | "unavailable" },
 }));
 
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
   sendEmail,
 }));
-vi.mock("@receipt-ocr/core", () => ({ hitRateLimit: () => ({}) }));
-vi.mock("@/lib/runtime", () => ({
-  runtime: { runPromise: async () => ({ allowed: true, retryAfterSeconds: 0 }) },
+const enqueued = vi.hoisted(() => [] as unknown[]);
+const allowContactReply = vi.fn<(email: string, ip: string | null) => Promise<boolean>>();
+vi.mock("@receipt-ocr/core", () => ({
+  hitRateLimit: () => ({ limit: true }),
+  enqueueContactReply: (payload: unknown) => ({ enqueue: payload }),
 }));
+vi.mock("@/lib/runtime", () => ({
+  runtime: {
+    runPromise: async (effect: { enqueue?: unknown }) => {
+      if (effect.enqueue) enqueued.push(effect.enqueue);
+      return { allowed: true, retryAfterSeconds: 0 };
+    },
+  },
+}));
+vi.mock("@/lib/email-limits", () => ({ allowContactReply }));
+vi.mock("@/lib/mailer", () => ({ mailer: { replyTo: "help@example.com" } }));
 const specs = vi.hoisted(() => [] as unknown[]);
 vi.mock("@/lib/http", () => ({
   clientIp: () => "1.1.1.1",
@@ -31,7 +42,10 @@ vi.mock("@/lib/http", () => ({
   },
 }));
 vi.mock("@/lib/turnstile", () => ({ checkTurnstile: async () => env.turnstile }));
-vi.mock("@/lib/log", () => ({ logger: { info: vi.fn() } }));
+vi.mock("@/lib/log", () => ({
+  logger: { info: vi.fn(), error: vi.fn() },
+  errorFields: () => ({}),
+}));
 vi.mock("@/lib/env", () => ({
   emailEnv: { resendApiKey: "key", from: "x <noreply@example.com>", replyTo: "help@example.com" },
   emailContext: { appUrl: "https://app.test", supportEmail: "help@example.com" },
@@ -48,10 +62,18 @@ const { POST } = await import("./route");
 
 const post = (body: unknown) =>
   POST(new Request("http://localhost/api/contact", { method: "POST", body: JSON.stringify(body) }));
-const valid = { email: "me@example.com", message: "Hello there, a question", topic: "feature" };
+const valid = {
+  name: "Ada Lovelace",
+  email: "me@example.com",
+  message: "Hello there, a question",
+  topic: "feature",
+};
 
 beforeEach(() => {
   sendEmail.mockReset();
+  enqueued.length = 0;
+  allowContactReply.mockReset();
+  allowContactReply.mockResolvedValue(true);
   env.isProduction = false;
   env.supportEmail = "help@example.com";
   env.turnstile = { ok: true };
@@ -67,6 +89,8 @@ describe("POST /api/contact", () => {
     const res = await post(valid);
     expect(res.status).toBe(status);
     expect(sendEmail).not.toHaveBeenCalled();
+    expect(allowContactReply).not.toHaveBeenCalled();
+    expect(enqueued).toEqual([]);
   });
 
   it("refuses an oversized body with 413 before parsing it, declared or streamed", async () => {
@@ -114,6 +138,52 @@ describe("POST /api/contact", () => {
     expect(input.subject).toBe("[ReceiptOCR support] Feature request");
   });
 
+  it("names the sender in the support mail", async () => {
+    sendEmail.mockResolvedValue({ delivered: true });
+    await post(valid);
+    const input = sendEmail.mock.calls[0][1];
+    expect(input.text).toContain("From Ada Lovelace (me@example.com)");
+  });
+
+  it.each([
+    ["missing", { name: undefined }],
+    ["blank", { name: " \n\t " }],
+    ["too long", { name: "x".repeat(81) }],
+  ])("rejects a %s name and sends nothing", async (_label, override) => {
+    const res = await post({ ...valid, ...override });
+    expect(res.status).toBe(400);
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(enqueued).toEqual([]);
+  });
+
+  it("queues an auto-reply with the cleaned first name and no message text", async () => {
+    sendEmail.mockResolvedValue({ delivered: true });
+    expect((await post({ ...valid, name: "Ada\u0007 Lovelace" })).status).toBe(200);
+    expect(allowContactReply).toHaveBeenCalledWith("me@example.com", "1.1.1.1");
+    expect(enqueued).toEqual([{ to: "me@example.com", name: "Ada", topic: "feature" }]);
+  });
+
+  it("greets a link-like name as 'there'", async () => {
+    sendEmail.mockResolvedValue({ delivered: true });
+    await post({ ...valid, name: "https://evil.example/win" });
+    expect(enqueued).toEqual([expect.objectContaining({ name: "there" })]);
+  });
+
+  it("still accepts the message when the auto-reply is over its cap, without queueing one", async () => {
+    sendEmail.mockResolvedValue({ delivered: true });
+    allowContactReply.mockResolvedValue(false);
+    expect((await post(valid)).status).toBe(200);
+    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(enqueued).toEqual([]);
+  });
+
+  it("sends no auto-reply when the support mail failed in production", async () => {
+    env.isProduction = true;
+    sendEmail.mockResolvedValue({ delivered: false, reason: "failed" });
+    expect((await post(valid)).status).toBe(503);
+    expect(enqueued).toEqual([]);
+  });
+
   it("escapes HTML in the message", async () => {
     sendEmail.mockResolvedValue({ delivered: true });
     await post({ ...valid, message: "<script>alert(1)</script>" });
@@ -151,5 +221,6 @@ describe("POST /api/contact", () => {
     const res = await post({ ...valid, company: "Acme" });
     expect(res.status).toBe(200);
     expect(sendEmail).not.toHaveBeenCalled();
+    expect(enqueued).toEqual([]);
   });
 });

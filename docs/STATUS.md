@@ -1,7 +1,7 @@
 # Status and handoff
 
 Where the project stands, what is in flight, and what needs a decision. Read this first when picking the work up on a
-new machine; keep it current when something merges or a decision is made. Last updated 2026-11-07 (after #110).
+new machine; keep it current when something merges or a decision is made. Last updated 2026-11-08 (billing v1 in review).
 
 How the system is built (every app and package, the main flows and the data model) is in
 [architecture](architecture/README.md).
@@ -30,7 +30,7 @@ How the system is built (every app and package, the main flows and the data mode
 | #36           | UX sweep: honest landing copy, no sideways scroll at 390 px, quota wording that matches the ledger                                                                                                                     |
 | #37           | Postgres job queue: `jobs` table, leases, retries with backoff, per-user fairness, provider cooldowns; uploads and retries run through it in `after()` ([flow](architecture/flows/jobs.md)); migration `0008`          |
 | #38           | Hardening: session check before the upload body, PDF page cap, per-email auth limits, CSP reports, health endpoints, SECURITY.md, [runbook](runbook.md)                                                                |
-| #40           | Load test suite on a 1 vCPU / 1 GB server (`scripts/load.sh`, manual `load.yml`); [results](../bench/results/load-2026-11-06.md)                                                                                       |
+| #40           | Load test suite on a 1 vCPU / 1 GB server (`scripts/load.sh`, manual `load.yml`); [results](../packages/bench/results/load-2026-11-06.md)                                                                              |
 
 ## Shipped to `main` (2026-11-07)
 
@@ -108,20 +108,23 @@ Every PR merged 2026-11-07 (plus #42 and #44 from 2026-11-06), by number. Detail
 | #109 | Make the concurrent drain tests race-free                                          |
 | #110 | Add OpenAI as an OCR provider                                                      |
 
-## Migrations squashed (2026-11-07)
+## Migrations squashed (2026-11-07, again 2026-11-08)
 
 Pre-launch, all migrations `0000`-`0010` were squashed into one `0000_baseline` that also enables row-level security on
-every table (no policies; the app role bypasses it, so it is defence in depth for Supabase's Data API). Both databases
-are empty and get reset. **From the first real user onward we never squash again.** Details:
+every table (no policies; the app role bypasses it, so it is defence in depth for Supabase's Data API). On 2026-11-08
+the four files since then (`0000`-`0003`) were squashed again into a new `0000_baseline`; its schema dump matches the
+old files' on Postgres 17 and 18 apart from column order in two tables. Both databases hold only test data and get
+reset. **From the first real user onward we never squash again.** Details:
 [data layer](architecture/db.md#migrations).
 
 ## Production to-dos (owner)
 
 Steps are in [deployment.md](deployment.md).
 
-- Reset `staging-db` and `production-db` (the explicit SQL in [deployment.md](deployment.md#release-notes), not `DROP SCHEMA public`), run **Database Migration** on
-  `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies the squashed baseline with
-  row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
+- Reset `staging-db` and `production-db` with the 2026-11-08 SQL (23 tables, two enum types, the `drizzle`
+  bookkeeping schema; [release note](deployment.md#squashed-baseline-again-2026-11-08), not `DROP SCHEMA public`),
+  run **Database Migration** on `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies
+  the squashed baseline with row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
   Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
 - Queue drain: done 2026-11-08. A new `CRON_SECRET` is in Vercel and in Supabase Vault (`cron_secret`); pg_cron job
   `drain-jobs` calls `/api/jobs/drain` every 5 minutes ([step 8](production-environment.md#8-queue-drain-cron)). Check
@@ -138,9 +141,6 @@ Steps are in [deployment.md](deployment.md).
   deploys need a successful `production-db` run with the same migrations. The automatic gate compares with the last
   run of the workflow on `main` whose `deploy-production` job succeeded; CI creates no git tags (tags are for real
   releases, later).
-- The Anthropic provider (#59) added migration `0001_ocr_call_refused_unsupported` (widens `ocr_calls_status_check`
-  with `refused` and `unsupported-file`; existing rows stay valid). Run **Database Migration** before deploying it:
-  without it, a refused or skipped call fails its ledger insert.
 - `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
   to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
@@ -148,6 +148,21 @@ Steps are in [deployment.md](deployment.md).
 - Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
   replaced on 2026-11-08 (only `BETTER_AUTH_SECRET`; keep its copy in a password manager).
 - Set `OCR_DAILY_CAP` in production as a spend guard.
+- Billing v1 (in review, #143). Before it can take money, in this order:
+  1. Run **Database Migration** (`staging-db`, then `production-db`) before deploying; the release adds `billing_events`,
+     `billing_subscriptions` and `ocr_rounds.plan`, and replaces `ocr_rounds_organization_id_idx` (migration
+     `0001_billing`, on top of the squashed baseline).
+  2. Add the six `PADDLE_*` variables (sandbox first) and the webhook destination, including the `adjustment.*` events
+     ([step 10](production-environment.md#10-payments-paddle)); redeploy so the CSP picks up the client token. Only
+     `PADDLE_API_KEY` and `PADDLE_WEBHOOK_SECRET` are Sensitive: the other four are read at build time, when `vercel
+pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the secrets come from.
+  3. Set `OCR_DAILY_CAP` to about 1000 (the all-plans fuse; the Free pool is 300 a day).
+  4. Test a sandbox checkout, then submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
+     account verification, and switch to live values ([10c](production-environment.md#10c-switch-from-sandbox-to-live)).
+  5. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).
+  6. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price,
+     and keep the old price id in `PADDLE_PRICE_PRO_LEGACY` ([runbook](architecture/flows/billing.md#runbook)). There is
+     no automated email for this yet.
 - Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
 - Standing decisions and dated reminders: [decisions.md](decisions.md).
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
@@ -166,9 +181,9 @@ Steps are in [deployment.md](deployment.md).
 
 Open pull requests only.
 
-| PR  | Work                                                                                                                           |
-| --- | ------------------------------------------------------------------------------------------------------------------------------ |
-| #95 | Two-step sign-in (TOTP), passkeys and step-up for important actions. Owner approved 2026-11-08; merging after migration `0002` |
+| PR   | Work                                                                                                                                                                                                                       |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #148 | SEO: home title leads with "receipt scanner" and names CSV and JSON (never Excel; nothing writes .xlsx); one source for the home title/description; WebApplication JSON-LD with featureList and the free Offer, no ratings |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -189,11 +204,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
    [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
 3. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
-4. Default OCR chain. Today it is Claude Sonnet 5.5, then the env Gemini model (your choice in #93). The 31-receipt
-   benchmark (#85) and the [two-tier review](reviews/2026-11-07-two-tier-ocr.md) found Haiku 5.5 ($0.0006 a receipt)
-   and Gemini Flash-Lite ($0.0014) scoring the same as Sonnet ($0.011): about 10x the cost for no measured gain.
-   Keep Sonnet first, or put Haiku (then Flash-Lite) first? Reviews recommend Haiku-first; nothing changes until you
-   decide ([ai.md](architecture/ai.md#default-chain)).
+4. Default OCR chain: decided 2026-11-08. Claude Haiku 5.5, then Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; steps
+   without an API key are skipped ([ai.md](architecture/ai.md#default-chain)). Groq zero data retention must be on first.
 5. PostHog: server-only first (recommended) or browser too; Sentry tracing off; source-map upload approach.
 6. Members: free seats 3 or 5, single owner + transfer, pending invites count. See
    [members plan](plans/2026-11-06-members-admin-plan.md).
@@ -220,7 +232,13 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 1. ~~Usage capture + quota ledger~~ (shipped in #27).
 2. Usage surfaces for customers and admins ([usage design](plans/2026-11-06-usage-design.md)).
-3. Observability: wide events (#52), then OTLP export to Axiom, then the optional Sentry and server PostHog extras
+3. Observability: wide events (#52), then OTLP export to Axiom (#135), Sentry errors (#139) and server PostHog (#141), all
+   off unless their env is set; provider privacy settings done 2026-11-08
+   ([§9e](production-environment.md#9e-provider-privacy-and-alert-settings); its quota, alert and dashboard
+   steps are still to do). Next: Sentry source maps (separate `sentry-cli`
+   step); browser PostHog after a consent decision, which needs `instrumentation-client.ts`, an `/ingest` rewrite
+   proxy with `skipTrailingSlashRedirect`, cookieless mode or consent, `identify`/`reset`, and
+   `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`/`HOST`; PostHog `groupIdentify` for the workspace plan once billing lands
    ([observability](plans/2026-11-06-observability.md)) with the [security requirements](reviews/2026-11-06-security-plan.md).
 4. Accuracy: arithmetic checks, low thinking, a real benchmark set, then Flash-Lite-first cascade
    ([extraction cost and accuracy](plans/2026-11-06-extraction-cost-accuracy.md)). No Docling/OCR-first pipeline.
@@ -239,7 +257,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    Payment provider for a Nepal-based seller: Paddle (MoR) first, Dodo fallback, Khalti/eSewa prepaid months for NPR
    later; no Stripe Atlas yet ([payments](plans/2026-11-07-payments.md), [NPR rails](plans/2026-11-07-payments-nepal.md)).
 8. Load test: `scripts/load.sh` (by hand, and from `.github/workflows/load.yml` on demand) runs the production image on
-   1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
+   1 vCPU / 1 GB against k6; [`packages/bench/README.md`](../packages/bench/README.md#load-test-small-server). Re-run it after changes
    to the hot path and commit the new summary. Latest: reads hold 200/s; uploads hold 12/s and fail by 48/s since the job queue (ladder not yet filled in).
 9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
    Currency honesty (no USD default, 3-decimal amounts) and conversion to a home currency:
@@ -250,7 +268,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
 13. In-app feedback: "Send feedback" in the account menu and Settings, "Your feedback" list, admin inbox with email
     replies; public board later ([feedback and requests](plans/2026-11-07-feedback-and-requests.md)).
-14. Dual-calendar dates: `receipt_date` as a real AD `date`, BS derived from a vendored month table, the model
+14. Dual-calendar dates: `receipt_date` as a real AD `date` (column, check and index landed in #127; the
+    `receipt_date_check` column comes with the resolver), BS derived from a vendored month table, the model
     transcribes dates and code cross-checks AD against the Miti; BS display, `date_bs` CSV, Nepal fiscal-year
     presets ([dual-calendar dates](plans/2026-11-07-dual-calendar-dates.md)).
 
@@ -271,12 +290,35 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Storage limit per plan (owner, 2026-11-08): today only each upload is capped (10 MB, 10 PDF pages), so total storage
+  per workspace is unbounded on both Free and Pro, and R2's free tier is 10 GB. Decide a cap per plan (stored bytes or
+  receipts per workspace, and maybe a retention period for Free), enforce it at upload from a per-workspace usage
+  total, show it in Settings → Billing and the plan table, and list it on `/pricing`.
+- The one-time "protect your receipts" card (after the fifth receipt) is dismissed with a per-browser cookie, so it
+  shows once more on each new device. A per-user column (`user.security_prompt_dismissed_at`) needs a migration;
+  fold it into the next schema change.
+- The last-sign-in-method guard on `/unlink-account` reads, then Better Auth deletes: two disconnects sent at the same
+  moment (Google and GitHub, no password or passkey) could both pass. Needs a lock on the user's account rows if it
+  matters; the UI sends one at a time. Accepted (user-initiated, recoverable: Forgot password recreates a
+  credential). The same read-then-delete applies to `/passkey/delete-passkey`. Recoverable because Better Auth
+  1.7.18's `resetCredentialPassword` (`better-auth/dist/utils/password.mjs`, called by `/reset-password`) creates a
+  `credential` account when the user has none; re-check that on every Better Auth upgrade, since the acceptance rests on
+  it.
+- Settings → Security shows a connected Google or GitHub account by its connection date only (the per-view
+  `accountInfo` call to the provider was removed). Showing the address or username would mean storing it at link time.
+
 - `/list-sessions` is an ungated read of the user's own sessions now that `freshAge` is 0 (Better Auth's freshness check
   was its only guard). Low: it shows a session thief the user's other devices; gate it with step-up if that matters.
 - Sign-ins finished through `/two-factor/verify-totp` or `/two-factor/verify-backup-code` aren't in `isSignIn`
   (`lib/auth-two-factor.ts`), so a TOTP user's second sign-in from the same browser doesn't replace the earlier
   session. The password step clears the session cookie first, so the earlier token has to be carried through the
   challenge to find it.
+- Database review items not done in the schema-fixes PR (#127): backups and a restore drill (H1), the
+  `maintenance.purge` retention job and its `step_up_codes (expires_at)` index (H2, M5), revoking `anon` and
+  `authenticated` grants and checking the Data API is off (H4), pool on `globalThis` and role-level timeouts (M3), the
+  quota statement profile (M4), an `ocr_call_status` lookup table (M1), dropping `user_credentials` and
+  `storage_source` with BYOK (M6, L5), trigram search and admin indexes when they slow down (L2, L3), lock ordering
+  between admin re-run and user retry (L4).
 - Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
   rows older than 90 days with a job kind in `packages/core/src/jobs` (there is no retention job yet), keeping the last
   pass and recent failures that the lockout reads; then update the privacy policy.
@@ -301,7 +343,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   schema, admin settings and admin actions).
 - Bot protection: shipped, optional by env (`NEXT_PUBLIC_TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`). Turnstile guards
   sign-up, sign-in, password reset, resend confirmation (Better Auth `captcha` plugin) and `/api/contact`.
-  `scripts/test.sh --turnstile` runs its e2e with Cloudflare test keys; CI does not run that phase yet.
+  `scripts/test.sh --turnstile` and the CI job "E2E (Turnstile test keys)" run its e2e with Cloudflare test keys.
+- Contact-form auto-reply (`email.contact-reply` job, 1 per address and 3 per IP a day): the job's `scrubPayload` empties
+  the address and first name once it succeeds or dies. The reply promises an answer "usually within 2 business
+  days": owner to confirm or change that number.
 - Best-practice reviews ([Next.js](reviews/2026-11-06-nextjs.md), [React](reviews/2026-11-06-react.md),
   [shadcn/UI](reviews/2026-11-06-shadcn-ui.md)): quick wins in progress; later, shared primitives (Spinner, Meter,
   Checkbox, Avatar, Empty, Pagination), Button aligned with base-nova, one form system on `Field`.
@@ -322,7 +367,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Email change: the new address gets the sign-up wording ("finish setting up your account") from
   `verificationEmail`; and an unverified account's old address gets no notice (Better Auth skips the approval step).
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
-- Benchmark: results are committed for 31 real receipts ([2026-11-07-real](../bench/results/2026-11-07-real.md)); the Nepal set is still small, and the arithmetic-checks cascade (`--cascade`) does not exist yet.
+- Benchmark: results are committed for 31 real receipts ([2026-11-07-real](../packages/bench/results/2026-11-07-real.md)); the Nepal set is still small, and the arithmetic-checks cascade (`--cascade`) does not exist yet.
 - Load test findings (after #37): upload capacity on the small server fell from 64/s to between 12/s (holds) and
   48/s (fails: end-to-end p95 17 s, Postgres CPU 87%). The quota count (`ocr_rounds` per user, per page and twice per
   upload) is still the top Postgres statement, with the job queue queries next. Next: a performance track that fills

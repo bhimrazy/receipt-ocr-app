@@ -67,11 +67,12 @@ export function CredentialsForm({
   redirectTo = DEFAULT_REDIRECT,
   notice,
   initialError,
-  freeReceiptsPerDay,
+  freeAllowance,
 }: {
   mode: "sign-in" | "sign-up";
   /** The free plan's saved daily limit, shown on sign-up. */
-  freeReceiptsPerDay?: number;
+  /** The Free plan's allowance in words ("20 scans a day, up to 100 a month"). */
+  freeAllowance?: string;
   providers: SocialProvider[];
   /** Where to land after auth succeeds, e.g. back to an invite accept page. */
   redirectTo?: string;
@@ -237,8 +238,8 @@ export function CredentialsForm({
   return (
     <div className={authCardClass}>
       <AuthHeading title={isSignUp ? "Create your account" : "Sign in to ReceiptOCR"}>
-        {isSignUp && freeReceiptsPerDay !== undefined
-          ? `Free plan: ${freeReceiptsPerDay} receipts a day. No card required.`
+        {isSignUp && freeAllowance !== undefined
+          ? `Free plan: ${freeAllowance}. No card required.`
           : undefined}
       </AuthHeading>
       {notice ? (

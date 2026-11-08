@@ -1,12 +1,15 @@
 import { and, asc, count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { authEnv } from "./env";
-import { getCurrentPlan } from "./plan-limits";
+import { workspaceCapNote } from "./plan-copy";
+import { getAccountPlan } from "./plan-limits";
 import { getSession } from "./session";
 
 export interface WorkspaceAllowance {
   owned: number;
   limit: number;
   canCreate: boolean;
+  /** Why "Create workspace" is missing, for the account's plan. */
+  planNote: string;
 }
 
 /**
@@ -15,10 +18,11 @@ export interface WorkspaceAllowance {
  * lock "Create workspace" after being invited to a second workspace.
  */
 export async function getWorkspaceAllowance(): Promise<WorkspaceAllowance> {
-  const [session, { policy }] = await Promise.all([getSession(), getCurrentPlan()]);
+  const [session, { plan, policy }] = await Promise.all([getSession(), getAccountPlan()]);
   const limit = policy.workspaces;
+  const planNote = workspaceCapNote(plan, limit);
   if (!session || !authEnv.databaseUrl) {
-    return { owned: 0, limit, canCreate: false };
+    return { owned: 0, limit, canCreate: false, planNote };
   }
 
   const db = createDb(authEnv.databaseUrl);
@@ -28,7 +32,7 @@ export async function getWorkspaceAllowance(): Promise<WorkspaceAllowance> {
     .where(and(eq(member.userId, session.user.id), eq(member.role, "owner")));
 
   const owned = Number(row?.value ?? 0);
-  return { owned, limit, canCreate: owned < limit };
+  return { owned, limit, canCreate: owned < limit, planNote };
 }
 
 export interface WorkspaceOption {

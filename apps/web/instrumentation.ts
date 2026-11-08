@@ -3,6 +3,9 @@ import type { Instrumentation } from "next";
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const node = await import("./instrumentation-node");
+    await node.startErrorReporting();
+    await node.startTelemetryExport();
+    await node.startProductAnalytics();
     await node.loadEnvOrExit();
     await node.logAuthNotConfigured();
   }
@@ -36,5 +39,16 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
     route: context.routePath,
     route_type: context.routeType,
     error: fields,
+  });
+  const { reportError } = await import("./lib/telemetry/errors");
+  reportError({
+    error,
+    fields,
+    tags: {
+      request_id: requestId,
+      method: request.method,
+      route: context.routePath,
+      route_type: context.routeType,
+    },
   });
 };

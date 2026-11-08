@@ -2,10 +2,10 @@
 
 Two settings can be changed at runtime from **Admin → Settings**, without a deploy:
 
-| Key     | Holds                                                                                                                | Code default                                                                                                         |
-| ------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `plans` | Per plan: workspaces a user may own, receipts per UTC day, per minute, images per upload batch (`batchMax`, 1 to 20) | `DEFAULT_PLANS` in [`plans.ts`](../../../packages/core/src/plans.ts): Free 1 / 20 / 10 / 10, Pro 5 / 1,000 / 30 / 10 |
-| `ocr`   | The model chain: up to 5 steps, each with a model, on/off and a timeout                                              | Claude Sonnet 5.5, then `GEMINI_MODEL` (or only `fixture` when `OCR_PROVIDER=fixture`), 30 s each                    |
+| Key     | Holds                                                                                                                | Code default                                                                                                             |
+| ------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `plans` | Per plan: workspaces a user may own, receipts per UTC day, per minute, images per upload batch (`batchMax`, 1 to 20) | `DEFAULT_PLANS` in [`plans.ts`](../../../packages/core/src/plans.ts): Free 1 / 20 / 10 / 10, Pro 5 / 1,000 / 30 / 10     |
+| `ocr`   | The model chain: up to 5 steps, each with a model, on/off and a timeout                                              | Claude Haiku 5.5, Gemini 3.5 Flash-Lite, Qwen 3.8 27B on Groq (or only `fixture` when `OCR_PROVIDER=fixture`), 30 s each |
 
 Both are JSON rows in `app_settings`, read and written by the `Settings` service in
 [`settings.ts`](../../../packages/core/src/settings.ts).
@@ -14,7 +14,7 @@ Both are JSON rows in `app_settings`, read and written by the `Settings` service
 
 ```mermaid
 flowchart TD
-  caller["Ocr.extract, userPlan,<br/>admin pages"] --> cache{"Cached in this process<br/>less than 30 s ago?"}
+  caller["Ocr.extract, workspacePlan,<br/>admin pages"] --> cache{"Cached in this process<br/>less than 30 s ago?"}
   cache -- yes --> value[Snapshot]
   cache -- no --> load[SELECT * FROM app_settings]
   load -- "row valid (Zod)" --> value
@@ -31,8 +31,6 @@ flowchart TD
 - A failed load is cached like a successful one, so during a database outage the defaults are served for up to 30 s
   before the next attempt.
 - Defaults are never "unlimited". An unknown plan id gets the default plan's limits (`policyFor`).
-- `GEMINI_MODEL` that is not in the model list falls back to the first listed Gemini model, with a
-  `settings.unlisted_model` warning, so the settings page always has a model that can run.
 - The web app's `getPlanTable()` ([`lib/plan-limits.ts`](../../../apps/web/lib/plan-limits.ts)) wraps the read in a
   3 s timeout and also falls back to the defaults.
 
@@ -72,6 +70,7 @@ Validation rules:
 | Other processes or function instances                                                                   | Within 30 s, on their next read after the cache expires |
 | Cached pages that print plan limits (`/terms`, `/sign-in`, `/sign-up`, password pages, invitation page) | After `revalidatePlanCopy()` regenerates them           |
 
-A user's own plan (Free or Pro, in `user.plan`) is not cached either: `userPlan`
-([`quota.ts`](../../../packages/core/src/quota.ts)) reads it from the database on every upload and retry, so an admin's
-plan change applies on the next request.
+A workspace's plan (Free or Pro) is not cached either: `workspacePlan`
+([`service.ts`](../../../packages/core/src/billing/service.ts)) reads the workspace's subscription and its
+owner's `user.plan` from the database on every upload and retry, so a webhook or an admin's plan change applies on the
+next request. See [Billing](billing.md).

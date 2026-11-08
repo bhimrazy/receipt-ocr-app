@@ -73,6 +73,8 @@ export type JobDefinition<P, R> = {
   readonly backoff: BackoffPolicy;
   /** Its result is reported to the caller of `tick` (wide events); it is not stored. */
   readonly run: (payload: P, context: JobContext) => Effect.Effect<unknown, JobFailure, R>;
+  /** Replaces the payload with `{}` once the job succeeds or dies, for payloads holding personal data. */
+  readonly scrubPayload?: boolean;
   /**
    * Runs once the job is dead (retries exhausted, not retryable, lease expired
    * on the last attempt) or cancelled: settles the domain row, e.g. marks the

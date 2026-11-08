@@ -12,7 +12,7 @@ import {
 } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { liveReceiptJob } from "./jobs/live";
-import { FREE_FAILED_ROUNDS } from "./plans";
+import { FREE_FAILED_ROUNDS, type PlanId, type QuotaScope } from "./plans";
 import { isReceiptId } from "./repository";
 import { Db } from "./services";
 
@@ -20,25 +20,52 @@ import { Db } from "./services";
  * Usage counted from the append-only ledger (`ocr_rounds`, `ocr_calls`), never
  * from `receipts`, so deleting a receipt or a workspace gives nothing back.
  *
- * - A round is one upload or one retry, recorded when it is accepted.
- * - A user's day: receipts read successfully that day, counted once, plus
- *   rounds still in flight (their job is live, or they are recent with no
- *   calls yet), plus finished failed rounds beyond the first
- *   `FREE_FAILED_ROUNDS` of the day. A few bad photos are free; a stream of
- *   them (each one a paid model call) is not.
- * - The burst limit counts rounds, failed ones included. The global cap
- *   counts rounds plus model-calling retry attempts: each one costs.
+ * - A round is one upload or one retry, recorded when it is accepted, with the
+ *   plan of its workspace at that moment (`ocr_rounds.plan`): the allowance it
+ *   draws from.
+ * - A plan's `scope` says whose rounds its day and month limits count.
+ *   `user` (Free): the user's rounds of that plan across every workspace, so an
+ *   extra free workspace adds nothing. `workspace` (Pro): the workspace's
+ *   rounds of that plan, whoever uploaded them. A member's Pro scans never use
+ *   up their own Free allowance, nor the reverse.
+ * - Within a window: receipts read successfully, counted once, plus rounds
+ *   still in flight (their job is live, or they are recent with no calls yet),
+ *   plus finished failed rounds beyond the first `FREE_FAILED_ROUNDS` of the
+ *   window. A few bad photos are free; a stream of them (each one a paid model
+ *   call) is not.
+ * - The burst limit counts a user's rounds, failed ones included. The plan's
+ *   daily pool counts rounds of that plan, platform-wide. The global cap counts
+ *   rounds plus model-calling retry attempts: each one costs.
  */
 
-export type UsageCounts = { userMinute: number; userDay: number; globalDay: number | null };
+export type UsageCounts = {
+  userMinute: number;
+  /** Today's and this month's rounds of the plan for its scope (the user or the workspace). */
+  day: number;
+  /** Null when the plan has no monthly limit. */
+  month: number | null;
+  /** Rounds of the plan today across every user; null when the plan has no pool. */
+  planDay: number | null;
+  globalDay: number | null;
+};
 
 export type UsageWindow = {
   dayStart: Date;
   minuteStart: Date;
+  /** Set when the plan has a monthly limit. */
+  monthStart: Date | null;
   /** Rounds younger than this with no calls yet are in flight. */
   pendingSince: Date;
+  /** The allowance this round draws from, written to `ocr_rounds.plan`. */
+  plan: PlanId;
+  /** Whose rounds the day and month count. */
+  scope: QuotaScope;
+  includePlanPool: boolean;
   includeGlobal: boolean;
 };
+
+/** Whose usage is counted: the uploader, and the workspace for pooled plans. */
+export type UsageSubject = { userId: string; organizationId: string };
 
 /** A database handle or an open transaction. */
 export type Queryable = Pick<DbClient, "execute">;
@@ -62,52 +89,85 @@ const liveJobForRound = sql`exists (select 1 from jobs j where j.receipt_id = r.
 const failedPaid = sql`(not ${readOk} and not ${liveJobForRound} and exists (select 1 from ocr_calls c where c.receipt_id = r.receipt_id and c.round = r.round and c.model is not null))`;
 
 /**
- * A user's "used today" (see the rules above) as a scalar subquery.
- * `pendingSince` null leaves rounds in flight out (admin lists).
+ * "Used" (see the rules above) for the rounds `which` selects, as a scalar
+ * subquery. `pendingSince` null leaves rounds in flight out (admin lists).
  */
-export const usedSinceSql = (userId: SQL | string, since: Date, pendingSince: Date | null) => {
+const usedSql = (which: SQL, since: Date, pendingSince: Date | null) => {
   const inFlight =
     pendingSince === null
       ? sql`false`
       : sql`(${liveJobForRound} or (r.created_at >= ${ts(pendingSince)} and ${noCalls}))`;
-  const mine = sql`r.user_id = ${userId} and r.created_at >= ${ts(since)}`;
+  const mine = sql`${which} and r.created_at >= ${ts(since)}`;
   return sql<number>`((select count(distinct r.receipt_id) from ocr_rounds r where ${mine} and (${readOk} or ${inFlight}))
     + greatest(0, (select count(*) from ocr_rounds r where ${mine} and ${failedPaid}) - ${FREE_FAILED_ROUNDS}))::int`;
 };
 
+const NULL_INT = sql`null::int`;
+
 export async function countUsage(
   db: Queryable,
-  userId: string,
+  subject: UsageSubject,
   window: UsageWindow,
 ): Promise<UsageCounts> {
-  const global = window.includeGlobal ? roundsSince(window.dayStart) : sql`null::int`;
+  const { userId, organizationId } = subject;
+  const whose =
+    window.scope === "workspace"
+      ? sql`r.organization_id = ${organizationId} and r.plan = ${window.plan}`
+      : sql`r.user_id = ${userId} and r.plan = ${window.plan}`;
   const rows = await db.execute<{
     user_minute: number;
-    user_day: number;
+    day: number;
+    month: number | null;
+    plan_day: number | null;
     global_day: number | null;
   }>(sql`select
     (select count(*)::int from ocr_rounds r
       where r.user_id = ${userId} and r.created_at >= ${ts(window.minuteStart)}) as user_minute,
-    ${usedSinceSql(userId, window.dayStart, window.pendingSince)} as user_day,
-    ${global} as global_day`);
+    ${usedSql(whose, window.dayStart, window.pendingSince)} as day,
+    ${window.monthStart ? usedSql(whose, window.monthStart, window.pendingSince) : NULL_INT} as month,
+    ${window.includePlanPool ? planRoundsSince(window.plan, window.dayStart) : NULL_INT} as plan_day,
+    ${window.includeGlobal ? roundsSince(window.dayStart) : NULL_INT} as global_day`);
   const row = rows[0];
+  const orZero = (value: number | null | undefined, on: boolean) => (on ? (value ?? 0) : null);
   return {
     userMinute: row?.user_minute ?? 0,
-    userDay: row?.user_day ?? 0,
-    globalDay: window.includeGlobal ? (row?.global_day ?? 0) : null,
+    day: row?.day ?? 0,
+    month: orZero(row?.month, window.monthStart !== null),
+    planDay: orZero(row?.plan_day, window.includePlanPool),
+    globalDay: orZero(row?.global_day, window.includeGlobal),
   };
 }
 
-/** Serializes one user's quota check and reservation; released at commit. */
-export const lockUserQuota = (db: Queryable, userId: string) =>
-  db.execute(sql`select pg_advisory_xact_lock(${QUOTA_LOCK_NAMESPACE}, hashtext(${userId}))`);
+/**
+ * Serializes one subject's quota check and reservation; released at commit.
+ * Always the user, and the workspace too on a workspace-scoped plan, in that
+ * order, so two members can't both take a workspace's last scan. The platform-wide pool and
+ * the global cap take no lock: concurrent uploads by different users can pass
+ * them together, so either can overshoot by at most the number of uploads in
+ * flight at that moment.
+ */
+export async function lockQuota(db: Queryable, subject: UsageSubject, pooled: boolean) {
+  await db.execute(
+    sql`select pg_advisory_xact_lock(${USER_LOCK_NAMESPACE}, hashtext(${subject.userId}))`,
+  );
+  if (pooled) {
+    await db.execute(
+      sql`select pg_advisory_xact_lock(${WORKSPACE_LOCK_NAMESPACE}, hashtext(${subject.organizationId}))`,
+    );
+  }
+}
 
-/** First key of the two-key advisory lock, so these locks can't collide with others. */
-const QUOTA_LOCK_NAMESPACE = 7_301;
+/** First keys of the two-key advisory locks, so these locks can't collide with others. */
+const USER_LOCK_NAMESPACE = 7_301;
+const WORKSPACE_LOCK_NAMESPACE = 7_302;
 
-/** Per-user "used today" for admin lists: the quota's rule without rounds in flight. */
+/** Per-user "used today" for admin lists, every plan: the quota's rule without rounds in flight. */
 export const receiptsReadSince = (userColumn: SQL, since: Date) =>
-  usedSinceSql(userColumn, since, null);
+  usedSql(sql`r.user_id = ${userColumn}`, since, null);
+
+/** A plan's daily pool: rounds of that plan started since `since`, every user, failed ones included. */
+const planRoundsSince = (plan: PlanId, since: Date) =>
+  sql<number>`(select count(*) from ocr_rounds r where r.plan = ${plan} and r.created_at >= ${ts(since)})::int`;
 
 /**
  * What OCR_DAILY_CAP is checked against, all users since `since`: rounds

@@ -17,6 +17,8 @@ unlocks part of the app, and you can stop after step 3 with a working app.
 | [6. Bot protection (Turnstile)](#6-bot-protection-turnstile) | Spam protection on sign-up and forms | Optional | 5 min  |
 | [7. Deploy and check](#7-deploy-and-check)                   | Everything above goes live           | Yes      | 5 min  |
 | [8. Queue drain (cron)](#8-queue-drain-cron)                 | Failed or cut-off reads retry alone  | Yes      | 10 min |
+| [9. Optional extras](#9-optional-extras)                     | Analytics, logs, error tracking      | Optional | varies |
+| [10. Payments (Paddle)](#10-payments-paddle)                 | Pro subscriptions                    | Optional | 30 min |
 
 The database, auth secret and site URL are already set; see [Already set](#already-set).
 
@@ -32,6 +34,12 @@ The database, auth secret and site URL are already set; see [Already set](#alrea
   your password manager first.
 - **Config**: a setting that isn't secret (a bucket name, an email address). Leave Sensitive off so you can see it
   later.
+
+**Never mark a variable that is read at build Sensitive.** Production is built in GitHub Actions (`vercel pull`, then
+`vercel build`), and `vercel pull` returns Sensitive values empty, so the build sees them as unset while the running
+site still gets them. Read at build: every `NEXT_PUBLIC_*`, `SENTRY_DSN`, `POSTHOG_KEY` and
+`OTEL_EXPORTER_OTLP_ENDPOINT` (they decide what the browser bundle, CSP and privacy page include). None of them is a
+secret.
 
 Nothing changes on the live site until the next deploy ([step 7](#7-deploy-and-check)).
 
@@ -468,6 +476,220 @@ nothing.
 `runWorkerLoop({ registry: JOB_REGISTRY, worker, budgetMs, stopClaimingBeforeMs, maxJobs, idleMs, signal })` from
 `@receipt-ocr/core` on the shared runtime and aborts `signal` on SIGTERM. Keep the cron on as a fallback: whatever is
 free does the work.
+
+---
+
+## 9. Optional extras
+
+None of these is needed to run the app. Each is off until its variables are set; unset, its code isn't loaded and
+it makes no network calls.
+
+| Service              | What it adds                                        | Status                                                           |
+| -------------------- | --------------------------------------------------- | ---------------------------------------------------------------- |
+| Vercel Web Analytics | Cookie-free page counts on public pages             | **Works.** Vercel → Analytics → Enable; no variable              |
+| Google Analytics 4   | Visitor analytics on public pages, after consent    | **Works.** Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` (9a)              |
+| Axiom                | Searchable logs kept longer than Vercel's           | **Works.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` and `_HEADERS` (9b) |
+| Sentry               | Error grouping and alerts, server and browser       | **Works.** Set `SENTRY_DSN` (9c)                                 |
+| PostHog              | Product analytics (funnels, retention), server-side | **Works.** Set `POSTHOG_KEY` and `POSTHOG_HOST` (9d)             |
+
+Do them in this order when the time comes: Axiom first (logs are what you need during an incident), then Sentry, then
+PostHog once there are users to learn from.
+
+### 9a. Google Analytics 4
+
+1. [analytics.google.com](https://analytics.google.com) → **Admin → Create → Property**. Name `ReceiptOCR`, your time
+   zone and currency. Skip the business questions.
+2. **Data collection → Data streams → Add stream → Web.** URL `https://receipt-ocr.bhimraj.com.np`, name `Production`.
+   Copy the **Measurement ID** (`G-…`).
+3. In the stream's **Enhanced measurement** settings, turn off **Page changes based on browser history events**. The
+   app sends its own page views without query strings; GA's would send the full URL.
+4. **Admin → Data settings → Data retention:** 2 months. Leave **Google signals** and ads links off.
+5. Vercel: add `NEXT_PUBLIC_GA_MEASUREMENT_ID` (Production, **Config**, not Sensitive). It is read at build time, so
+   redeploy ([step 7](#7-deploy-and-check)).
+6. Check: open the site in a private window. A cookie banner appears; after **Accept**, GA → Reports → Realtime shows
+   you. In `/app` nothing is sent.
+
+### 9b. Axiom
+
+1. [app.axiom.co](https://app.axiom.co) → sign up → **Datasets → New dataset** `receipt-ocr` (kind **Events**, which
+   Axiom asks for OpenTelemetry logs).
+2. **Settings → API tokens → New token**, with only **Ingest** on that dataset. Copy it (`xaat-…`).
+3. Vercel (**Production only**, not Preview: previews would spend the query allowance):
+   `OTEL_EXPORTER_OTLP_ENDPOINT=https://api.axiom.co` (Config) and
+   `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>,X-Axiom-Dataset=receipt-ocr` (Secret).
+4. Redeploy. Events keep going to Vercel's logs too; Axiom gets the same events, already sampled and scrubbed. The
+   privacy page then names Axiom as the log store (it reads the endpoint at build time).
+5. Check: sign in and open `/app`, then open the dataset's **Stream** in Axiom: a `page.render` or request event appears within
+   a few seconds. Nothing arriving: look in Vercel's logs for `telemetry.export_failed` (a wrong token or dataset) or
+   `telemetry.start_failed`. The free Personal plan is US-only (the EU edge is paid). Optional:
+   `OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production` (Config).
+
+### 9c. Sentry
+
+1. [sentry.io](https://sentry.io) → **Create project → Next.js**, name `receipt-ocr`. Copy the **DSN**.
+2. **Security & Privacy** and **Allowed Domains:** see [9e](#9e-provider-privacy-and-alert-settings) (the privacy page says IPs
+   aren't stored).
+3. Vercel (Production): `SENTRY_DSN` (Config). It is read at build too: the build inlines it into the browser code
+   and adds Sentry's ingest host to the CSP, so redeploy after setting it. No `NEXT_PUBLIC_` copy is needed. A value
+   that isn't a DSN (say, an auth token pasted by mistake) leaves Sentry off.
+4. Alerts and quota protection: see [9e](#9e-provider-privacy-and-alert-settings).
+5. Check: `curl -s https://<host>/api/health` shows the commit; issues carry the same 7-character release.
+
+What is sent: server 5xx and defects (from `failureResponse` and `onRequestError`), uncaught exceptions, unhandled
+rejections, dead jobs, and browser errors outside or inside error boundaries. Errors only: no tracing, Replay,
+Feedback or Logs. Each event is rebuilt from an allowlist (see [observability](architecture/flows/observability.md#sentry)).
+
+Not yet: source-map upload. Stack frames point at the built files. The planned step is a separate `sentry-cli`
+upload in `production.yml` that runs no repo code, with `SENTRY_AUTH_TOKEN` as a GitHub Actions secret only (never
+in Vercel), maps deleted before deploy (security plan M11). Docker: pass `--build-arg SENTRY_DSN=...` and
+`--build-arg GIT_COMMIT_SHA=$(git rev-parse HEAD)` to `docker/Dockerfile.prod` for browser reporting and the release;
+`SENTRY_DSN` in the container's environment alone turns on server reporting only.
+
+### 9d. PostHog
+
+1. [posthog.com](https://posthog.com) → sign up, region **US** (or EU; it decides the host). Project `ReceiptOCR`.
+2. **Billing:** stay on Free with no card: usage is hard-capped at the free allotment (1M events a month) and PostHog
+   emails at 80% and 100%. If a card is ever added, set **Product analytics → billing limit $0** the same day.
+3. Vercel (Production): `POSTHOG_KEY` (the `phc_` project key, **Config**, not Sensitive: it is read at build for the
+   privacy page, and PostHog designs it to be public; it has no `NEXT_PUBLIC_` name because only the server sends
+   events) and `POSTHOG_HOST`
+   (`https://us.i.posthog.com` or `https://eu.i.posthog.com`).
+4. Redeploy: the privacy page names PostHog only when `POSTHOG_KEY` is set at build.
+5. Check: sign up or upload a receipt, then **Activity** in PostHog shows `signed_up` or `receipt_uploaded` with the
+   user's id as the person and no email or name.
+
+Events (server-side only, `lib/telemetry/analytics.ts`): `signed_up` (`method`), `receipt_uploaded` (`mode`, `plan`),
+`receipt_scanned` (`trigger`, `model`, `fallback`, `calls`), `receipt_scan_failed` (`trigger`, `error_kind`),
+`csv_exported` (`count`), `plan_limit_hit` (`limit`: `day` or `minute`, `plan`; a user's first 3 a minute). Each
+carries the user id, `workspace_id` as a plain prop (PostHog's `groups` need the paid group-analytics add-on) and the
+`workspace` group. Nothing is sent for what an admin does while impersonating a user,
+including the scans of receipts they upload. Browser PostHog (page views, landing-page funnels) needs a consent
+decision first and is not built (see `docs/STATUS.md`).
+
+### 9e. Provider privacy and alert settings
+
+Set once per provider; recheck after creating a new project. Why each one, and the free-plan limits:
+[observability on free plans](reviews/2026-11-08-observability-free-tier.md).
+
+**Privacy** (done for production on 2026-11-08):
+
+- [x] **Sentry → Settings → Projects → receipt-ocr → Security & Privacy:** **Data Scrubber** on, **Use Default
+      Scrubbers** on, **Prevent Storing of IP Addresses** on, **Additional Sensitive Fields** `email`. The same
+      switches exist org-wide under **Settings → receiptocr → Security & Privacy**.
+- [x] **Sentry → Projects → receipt-ocr → Client Security → Allowed Domains:** `receipt-ocr.bhimraj.com.np` (not
+      `*`); add staging domains as extra lines. Server-side events are unaffected (they send no `Origin` header).
+      Keep **Enable JavaScript source fetching** on until source maps are uploaded.
+- [x] **PostHog → Settings → Project → Privacy → IP data capture configuration:** **Discard client IP data** on.
+- [x] **Vercel:** `POSTHOG_KEY` stored as Config, not Sensitive (see above: a Sensitive value is empty at build, and the
+      privacy page then omits PostHog).
+
+**Quota, alerts and dashboards** (O1 to O10 in the review):
+
+- [ ] **Sentry → Settings → Projects → receipt-ocr → Inbound Filters:** on for browser extension errors, events
+      from localhost, legacy browsers (all), web crawlers, React hydration errors, ChunkLoadErrors and health-check
+      transactions. Filtered events don't count against the 5k a month.
+- [ ] **Sentry → Settings → Spike Protection:** enable for receipt-ocr, add the Sentry Notification action, then
+      **User Settings → Notifications → Spike Protection** on. It needs a month of baseline.
+- [ ] **Sentry → Alerts → Create Alert → Issues:** "A new issue is created" OR "The issue changes state from
+      resolved to unresolved", filter `environment` = `production`, email, every 30 minutes. Delete the default
+      every-new-issue rule.
+- [ ] **Sentry → Projects → receipt-ocr → Client Keys (DSN) → Configure:** Allowed Domains as above; **Rate limits**
+      30 per minute if the field is editable on the free plan.
+- [ ] **Axiom → Monitors → New → Threshold**, notifier Email (the free plan's 3; confirm the attribute path from
+      one event in **Stream** first): server errors (`severity_text == "error"`, not `job.attempt`, ≥ 3 in 10 min,
+      every 5 min); scans retrying (`job.attempt` with `queue.outcome` `retry` or `lost`, ≥ 5 in 15 min); OCR
+      spend (`sum(ocr.cost_micro_usd)` ≥ 2,000,000 in 60 min, every 15 min).
+- [ ] **Axiom:** `OTEL_EXPORTER_OTLP_*` in Vercel for Production only; dataset `receipt-ocr`, ingest-only token.
+- [ ] **Axiom → Dashboards → "Ops"**, default range 24 h: requests by status class per 15 min, p95 `duration_ms`
+      by route, scans by `queue.outcome` per hour, p50/p95 `timings_ms.ai.extract` by `ocr.model`, OCR spend per
+      hour. Check **Settings → Usage** monthly (10 GB-hours of query compute is the binding limit).
+- [ ] **PostHog → Organization → Billing:** no card (see 9d).
+- [ ] **PostHog → Dashboards → "Founder weekly"**, last 30 days: activation funnel `signed_up` → `receipt_uploaded`
+      → `receipt_scanned` → `csv_exported` (7-day window, breakdown by `method`), weekly active uploaders, 8-week
+      `receipt_uploaded` retention, `plan_limit_hit` by `plan`. **⋯ → Subscribe**, weekly, Monday morning.
+- [ ] **Uptime:** a free external check (UptimeRobot, Better Stack or similar) on `GET /api/health/ready` every
+      5 minutes, email after 2 failures. Healthy answers aren't logged, so the pinger costs no log volume.
+
+---
+
+## 10. Payments (Paddle)
+
+Pro subscriptions are sold through Paddle Billing, the merchant of record. Billing is on only when **all six**
+required variables below are set; with any missing, the app shows no Upgrade button and the webhook answers `503`. How
+it works is in [Billing](architecture/flows/billing.md).
+
+| Variable                          | Kind   | Value                                                                                |
+| --------------------------------- | ------ | ------------------------------------------------------------------------------------ |
+| `PADDLE_ENV`                      | Config | `sandbox` or `production`                                                            |
+| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | Config | Paddle → Developer tools → Authentication, client-side tokens. Public by design      |
+| `PADDLE_PRICE_PRO_MONTHLY`        | Config | Price id (`pri_...`) of the monthly Pro price                                        |
+| `PADDLE_PRICE_PRO_YEARLY`         | Config | Price id (`pri_...`) of the yearly Pro price                                         |
+| `PADDLE_API_KEY`                  | Secret | Same page, API keys. Needs write access to transactions, customers and subscriptions |
+| `PADDLE_WEBHOOK_SECRET`           | Secret | The webhook destination's secret key (Notifications)                                 |
+| `PADDLE_PRICE_PRO_LEGACY`         | Config | Optional. Comma-separated old Pro price ids that existing subscriptions still pay    |
+
+**Keep the four Config values Config (not Sensitive).** They are read at build time: the pricing page decides whether
+to show the checkout, and the client token adds Paddle's origins to the Content Security Policy. Production builds in
+GitHub Actions after `vercel pull`, which returns Sensitive values empty, so a Sensitive one would turn the checkout
+off on the built pages. The two Secrets are read only when a request runs (checkout, portal, webhook), so they can and
+should be Sensitive. **Redeploy after changing a Config value.**
+
+**`PADDLE_ENV` must match the account the secrets come from.** Set the sandbox and live values in separate
+environments (Preview and Production). A sandbox key never works on the live API, but the webhook check only proves the
+event was signed with `PADDLE_WEBHOOK_SECRET`: with `PADDLE_ENV=production` and a sandbox destination's secret, the
+live site would accept sandbox (test) events as real subscriptions. While Production still has `PADDLE_ENV=sandbox`,
+the pricing page says Pro opens soon and only platform admins see the checkout, marked "Test mode: no real charge".
+
+Also set `OCR_DAILY_CAP` to about `1000`. It is the emergency fuse across all plans and should sit above the Free pool
+(300 a day) and normal Pro use.
+
+### 10a. Webhook destination
+
+1. Paddle → **Developer tools → Notifications → New destination**.
+2. URL: `https://receipt-ocr.bhimraj.com.np/api/billing/paddle/webhook`. Type: webhook.
+3. Events: `subscription.created`, `subscription.updated`, `subscription.activated`, `subscription.canceled`,
+   `subscription.past_due`, `subscription.paused`, `subscription.resumed`, `transaction.completed`,
+   `adjustment.created` and `adjustment.updated` (refunds and chargebacks). Other events are answered with 200 and
+   dropped.
+4. Save, then copy the destination's **secret key** into `PADDLE_WEBHOOK_SECRET` (Secret) and redeploy.
+
+The sandbox and the live account each need their own destination.
+
+### 10b. Check it in the sandbox
+
+1. Open **Settings → Billing** in a workspace you own. The Upgrade button should appear.
+2. Pay with a Paddle sandbox test card (see Paddle's "test payment methods" page; for example `4242 4242 4242 4242`,
+   any future expiry, any CVC).
+3. The page shows "Payment received" and refreshes until the workspace is Pro (usually a few seconds).
+4. In the database, `billing_events` should have the new rows with `outcome = 'applied'` and `billing_subscriptions`
+   one row for the workspace. An outcome of `unmatched` means the workspace was missing or unknown, the buyer isn't its
+   owner, or the price isn't one of the `PADDLE_PRICE_PRO_*` ids (`billing.unmatched_reason` on the job's log line).
+5. In **Admin → Jobs** (`/admin/jobs`), `billing.apply_event` jobs should be `succeeded`. A `dead` job names the problem
+   in the logs (`billing.outcome`, `error`).
+6. In Paddle, **Notifications → the destination → Logs** lists each delivery and its HTTP status. `401` means the
+   secret is wrong or the server clock is far off (the tolerance is 30 seconds).
+7. Cancel from **Billing → Cancel subscription** (the Paddle portal). The page should say Pro stays until the period
+   end.
+8. Refunds: refund a test transaction in full in Paddle. The workspace should drop to Free at once and the subscription
+   show as canceled in Paddle shortly after. After a partial refund, cancel the subscription in Paddle yourself if Pro
+   should end ([runbook](architecture/flows/billing.md#runbook)).
+
+### 10c. Switch from sandbox to live
+
+1. Finish Paddle's live account verification (business details and payout). This can take days; run it in parallel.
+2. Submit the website review once `/pricing` and `/refunds` are live (Paddle reads them). Wait for approval.
+3. In the live Paddle account, create the Pro product and its monthly and yearly prices (same amounts as the sandbox),
+   and note the two new price ids.
+4. Create the live webhook destination ([10a](#10a-webhook-destination)) and copy its secret.
+5. Create a live API key and a live client-side token.
+6. In Vercel (Production), replace: `PADDLE_ENV=production`, `PADDLE_API_KEY`, `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN`,
+   `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_PRO_MONTHLY` and `PADDLE_PRICE_PRO_YEARLY`. Keep the sandbox values in
+   Preview.
+7. Redeploy (the client token and the CSP are built in).
+8. Make one real purchase with a card you control, check [10b](#10b-check-it-in-the-sandbox) steps 3 to 6, then refund
+   it in Paddle.
+
+Subscriptions made in the sandbox do not exist in live. Do not reuse sandbox ids in production.
 
 ---
 

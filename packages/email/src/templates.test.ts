@@ -4,28 +4,36 @@ import { TEMPLATES } from "./generated";
 import { escapeHtml, fill } from "./render";
 import {
   backupCodesRegeneratedEmail,
+  contactReplyEmail,
   deleteAccountEmail,
   displayUrl,
   emailChangeEmail,
   emailSlots,
   formatDuration,
+  greetingName,
   invitationEmail,
   passkeyAddedEmail,
   passkeyRemovedEmail,
   passwordChangedEmail,
   passwordResetEmail,
+  passwordSetEmail,
+  signInConnectedEmail,
+  signInDisconnectedEmail,
   stepUpCodeEmail,
   supportMessageEmail,
   testEmail,
   twoFactorDisabledEmail,
   twoFactorEnabledEmail,
   verificationEmail,
+  welcomeEmail,
   type EmailContent,
   type EmailContext,
   type TemplateName,
 } from "./templates";
 
 const withSupport = { appUrl: "https://app.example", supportEmail: "help@app.example" };
+const PLAN_LINE =
+  "Your Free plan includes 20 scans a day, up to 100 a month, per person. Limits reset at 00:00 UTC.";
 const noSupport = { appUrl: "https://app.example" };
 const token = "tok_9f8e7d6c5b4a39281706f5e4d3c2b1a0";
 const url = `https://app.example/api/auth/verify?token=${token}`;
@@ -69,11 +77,13 @@ const cases: Record<
   supportMessage: {
     make: (ctx) =>
       supportMessageEmail(ctx, {
+        senderName: hostile,
         from: 'x"><img src=x onerror=alert(1)>@example.com',
         topicLabel: "Question",
         message: `Line one\r\n\r\n${hostile}\u0007`,
       }),
     input: {
+      senderName: hostile,
       from: 'x"><img src=x onerror=alert(1)>@example.com',
       topicLabel: "Question",
       message: `Line one\r\n\r\n${hostile}\u0007`,
@@ -108,8 +118,33 @@ const cases: Record<
     make: (ctx) => backupCodesRegeneratedEmail(ctx, { resetUrl }),
     input: { resetUrl },
   },
-  passkeyAdded: { make: (ctx) => passkeyAddedEmail(ctx, { resetUrl }), input: { resetUrl } },
-  passkeyRemoved: { make: (ctx) => passkeyRemovedEmail(ctx, { resetUrl }), input: { resetUrl } },
+  // The name is user-chosen, so the golden renders a hostile one.
+  passkeyAdded: {
+    make: (ctx) => passkeyAddedEmail(ctx, { resetUrl, passkeyName: hostile }),
+    input: { resetUrl, passkeyName: hostile },
+  },
+  passkeyRemoved: {
+    make: (ctx) => passkeyRemovedEmail(ctx, { resetUrl, passkeyName: hostile }),
+    input: { resetUrl, passkeyName: hostile },
+  },
+  passwordSet: { make: (ctx) => passwordSetEmail(ctx, { resetUrl }), input: { resetUrl } },
+  signInConnected: {
+    make: (ctx) => signInConnectedEmail(ctx, { resetUrl, provider: "Google" }),
+    input: { resetUrl, provider: "Google" },
+  },
+  signInDisconnected: {
+    make: (ctx) => signInDisconnectedEmail(ctx, { resetUrl, provider: "GitHub" }),
+    input: { resetUrl, provider: "GitHub" },
+  },
+  contactReply: {
+    // The hostile name is cleaned to "there" before it reaches the template.
+    make: (ctx) => contactReplyEmail(ctx, { name: hostile, topicPhrase: "your question" }),
+    input: { firstName: "there", topicPhrase: "your question" },
+  },
+  welcome: {
+    make: (ctx) => welcomeEmail(ctx, { planLine: PLAN_LINE }),
+    input: { url: "https://app.example/app/upload", planLine: PLAN_LINE },
+  },
   emailChange: {
     make: (ctx) =>
       emailChangeEmail(ctx, {
@@ -330,6 +365,68 @@ describe("supportMessageEmail", () => {
   });
 });
 
+describe("greetingName", () => {
+  it.each([
+    ["Ada Lovelace", "Ada"],
+    ["  Jean-Luc  Picard ", "Jean-Luc"],
+    ["O'Neil", "O'Neil"],
+    ["J.", "J"],
+    ["José", "José"],
+    ["Zoë‮", "Zoë"],
+    ["山田 太郎", "山田"],
+    ["<Bob>", "Bob"],
+    ["{{url}}", "url"],
+    ["Ada\u0007\u0000Smith", "Ada"],
+    ["x".repeat(60), "x".repeat(30)],
+  ])("%j greets as %j", (raw, expected) => {
+    expect(greetingName(raw)).toBe(expected);
+  });
+
+  it.each([
+    "",
+    "   ",
+    "1234",
+    "!!!",
+    "<b>Bob</b>",
+    "https://evil.example",
+    "evil.example/login",
+    "www.evil",
+    "bit.ly",
+    "me@evil.example",
+    "ｅｖｉｌ．ｃｏｍ",
+  ])("%j greets as 'there'", (raw) => {
+    expect(greetingName(raw)).toBe("there");
+  });
+});
+
+describe("contactReplyEmail", () => {
+  it("greets by first name, names the topic and promises a reply by email", () => {
+    for (const ctx of [withSupport, noSupport]) {
+      const mail = contactReplyEmail(ctx, {
+        name: "Ada Lovelace",
+        topicPhrase: "your question about plans and limits",
+      });
+      expect(mail.subject).toBe("Thanks for contacting ReceiptOCR");
+      const line =
+        "Hi Ada, thanks for writing. We've received your question about plans and limits and will reply to this address, usually within 2 business days.";
+      expect(mail.text).toContain(line);
+      expect(mail.html).toContain(line.replaceAll("'", "&#x27;"));
+      expect(mail.text).toContain(
+        "Didn't write to us? Someone may have mistyped their address; you can ignore this email.",
+      );
+    }
+  });
+
+  it("links only to the app itself", () => {
+    const { html, text } = contactReplyEmail(withSupport, { name: "Ada", topicPhrase: "x" });
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+    for (const href of hrefs) expect(href).toMatch(/^(https:\/\/app\.example\/|mailto:help@)/);
+    expect(text.match(/https?:\/\/\S+/g)?.every((u) => u.startsWith("https://app.example"))).toBe(
+      true,
+    );
+  });
+});
+
 describe("security notices", () => {
   it("delete confirmation: red button, single-use link, nothing changes until confirmed on the page", () => {
     const delUrl = "https://app.example/app/settings/delete-account?token=abc";
@@ -409,12 +506,32 @@ describe("security emails", () => {
       twoFactorEnabledEmail(withSupport, { resetUrl }),
       twoFactorDisabledEmail(withSupport, { resetUrl, byAdmin: false }),
       backupCodesRegeneratedEmail(withSupport, { resetUrl }),
-      passkeyAddedEmail(withSupport, { resetUrl }),
-      passkeyRemovedEmail(withSupport, { resetUrl }),
+      passkeyAddedEmail(withSupport, { resetUrl, passkeyName: "Work laptop" }),
+      passkeyRemovedEmail(withSupport, { resetUrl, passkeyName: "Work laptop" }),
+      passwordSetEmail(withSupport, { resetUrl }),
+      signInConnectedEmail(withSupport, { resetUrl, provider: "Google" }),
+      signInDisconnectedEmail(withSupport, { resetUrl, provider: "GitHub" }),
     ]) {
       expect(mail.text).toContain("Didn't do this? Reset your password now");
       expect(mail.html).toContain(`href="${resetUrl}"`);
     }
+  });
+
+  it("names the provider that was connected or disconnected", () => {
+    const connected = signInConnectedEmail(withSupport, { resetUrl, provider: "Google" });
+    expect(connected.subject).toBe("Google sign-in was connected to your ReceiptOCR account");
+    expect(connected.text).toContain("Google was connected to your account.");
+    const disconnected = signInDisconnectedEmail(withSupport, { resetUrl, provider: "GitHub" });
+    expect(disconnected.html).toContain("GitHub sign-in was disconnected");
+  });
+
+  it("names the passkey in the body, escaped, and never in the subject", () => {
+    const added = passkeyAddedEmail(withSupport, { resetUrl, passkeyName: "Work laptop" });
+    expect(added.text).toContain("The passkey “Work laptop” was added to your account.");
+    const removed = passkeyRemovedEmail(withSupport, { resetUrl, passkeyName: "<b>Phone</b>" });
+    expect(removed.subject).not.toContain("Phone");
+    expect(removed.text).toContain("The passkey “<b>Phone</b>” was removed");
+    expect(removed.html).toContain("&lt;b&gt;Phone&lt;/b&gt;");
   });
 
   it("says when an administrator made the reset", () => {
@@ -457,5 +574,49 @@ describe("helpers", () => {
     expect(formatDuration(7200)).toBe("2 hours");
     expect(formatDuration(604800)).toBe("7 days");
     expect(formatDuration(900)).toBe("15 minutes");
+  });
+});
+
+describe("welcomeEmail", () => {
+  it("states the plan line it was given, in both parts", () => {
+    const mail = welcomeEmail(withSupport, { planLine: PLAN_LINE });
+    expect(mail.text).toContain(PLAN_LINE);
+    expect(mail.html).toContain(PLAN_LINE);
+  });
+
+  it("has the fixed subject, an ordered plain-text list and the upload link without expiry", () => {
+    const mail = welcomeEmail(withSupport, { planLine: PLAN_LINE });
+    expect(mail.subject).toBe("Welcome to ReceiptOCR");
+    expect(mail.text).toContain(
+      "1. Take a photo or upload a file. Photos and PDFs both work, from your phone or computer.\n2. Check the fields.",
+    );
+    expect(mail.text).toMatch(/\n3\. Export a CSV, for one receipt or your whole history\./);
+    expect(mail.text).toContain("Scan a receipt:\nhttps://app.example/app/upload");
+    expect(mail.text).not.toMatch(/expires/);
+    expect(mail.html).toContain(">01<");
+    expect(mail.html).toContain(">03<");
+    expect(mail.html).toContain(">Three steps to your first scan, and what your plan includes.<");
+  });
+
+  it("points help at replies, or at the in-app button without a support inbox", () => {
+    expect(welcomeEmail(withSupport, { planLine: PLAN_LINE }).text).toContain(
+      "Reply to this email and we'll answer.",
+    );
+    expect(welcomeEmail(noSupport, { planLine: PLAN_LINE }).text).toContain(
+      "Use the support button in the app.",
+    );
+  });
+
+  it("renders the steps as an ordered list with hidden numbers", () => {
+    const { html } = welcomeEmail(withSupport, { planLine: PLAN_LINE });
+    expect(html.match(/<ol[\s>]/g)).toHaveLength(1);
+    expect(html.match(/<li[\s>]/g)).toHaveLength(3);
+    expect(html.match(/aria-hidden="true"/g)).toHaveLength(3);
+  });
+
+  it("loads no tracking pixel or remote font", () => {
+    const { html } = welcomeEmail(withSupport, { planLine: PLAN_LINE });
+    expect(html).not.toMatch(/@import|font-face|<link[^>]+stylesheet/);
+    expect(html.match(/<img/g)).toHaveLength(1);
   });
 });

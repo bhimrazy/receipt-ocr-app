@@ -104,7 +104,7 @@ export async function enrolAuthenticator(page: Page, email: string) {
   await markSteppedUp(email);
   await page.goto("/app/settings/security");
   await page.getByRole("button", { name: "Set up authenticator app" }).click();
-  await page.getByLabel(/Confirm your password/).fill(PASSWORD);
+  await page.getByLabel("Your password").fill(PASSWORD);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("img", { name: "QR code for your authenticator app" })).toBeVisible();
   const key = (await page.getByTestId("totp-key").textContent())!.replace(/\s/g, "");

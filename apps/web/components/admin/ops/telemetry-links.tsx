@@ -1,5 +1,6 @@
 import "server-only";
 import { ExternalLink } from "lucide-react";
+import { logStorageName } from "@/lib/processors";
 
 type Tool = {
   name: string;
@@ -7,12 +8,16 @@ type Tool = {
   keys: string[];
   href: (env: NodeJS.ProcessEnv) => string;
   adds: string;
+  /** Beyond the keys being set; read without showing any value. */
+  matches?: (env: NodeJS.ProcessEnv) => boolean;
 };
 
 const TOOLS: Tool[] = [
   {
     name: "Axiom",
-    keys: ["AXIOM_TOKEN", "AXIOM_DATASET"],
+    // OTLP export; this card counts it as Axiom only when the endpoint is Axiom's.
+    keys: ["OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS"],
+    matches: (env) => logStorageName(env.OTEL_EXPORTER_OTLP_ENDPOINT) === "Axiom",
     href: () => "https://app.axiom.co/",
     adds: "request latency and status per route, from the wide events the app already logs",
   },
@@ -28,12 +33,12 @@ const TOOLS: Tool[] = [
     // Region only; the host itself isn't shown.
     href: (env) =>
       env.POSTHOG_HOST?.includes("eu.") ? "https://eu.posthog.com/" : "https://us.posthog.com/",
-    adds: "product funnels and, with browser capture on, web vitals",
+    adds: "product funnels from server-side events (sign-ups, uploads, scans, exports, plan limits)",
   },
 ];
 
 const configured = (tool: Tool, env: NodeJS.ProcessEnv) =>
-  tool.keys.every((key) => Boolean(env[key]));
+  tool.keys.every((key) => Boolean(env[key])) && (tool.matches?.(env) ?? true);
 
 /** "Open in …" for each telemetry tool that is configured; a line on what the others would add. */
 export function TelemetryLinks({ env = process.env }: { env?: NodeJS.ProcessEnv }) {

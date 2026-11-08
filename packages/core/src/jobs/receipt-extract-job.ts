@@ -17,6 +17,8 @@ export const receiptExtractPayload = z.object({
   userId: z.string().min(1),
   /** `receipts.attempts` when enqueued; the job may only write that round. */
   round: z.number().int().min(1),
+  /** Set when an admin enqueued it while impersonating; the attempt event carries it. */
+  impersonatedBy: z.string().min(1).optional(),
 });
 
 export type ReceiptExtractPayload = z.infer<typeof receiptExtractPayload>;

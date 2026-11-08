@@ -129,7 +129,7 @@ Sources, checked 2026-11-07: Anthropic's [prompting best practices](https://plat
 [structured output](https://aistudio.google.com/docs/structured-output).
 
 v1 (one text block before the file, no system prompt, no field definitions) stays selectable for the benchmark:
-`bun run bench:ocr --prompt v1`. Results: [`bench/results/2026-11-07-prompt-v1-vs-v2.md`](../../bench/results/2026-11-07-prompt-v1-vs-v2.md).
+`bun run bench:ocr --prompt v1`. Results: [`packages/bench/results/2026-11-07-prompt-v1-vs-v2.md`](../../packages/bench/results/2026-11-07-prompt-v1-vs-v2.md).
 
 ### Change the prompt
 
@@ -160,20 +160,27 @@ only if the new one is better or equal on totals.
 
 ## Default chain
 
-Until an admin saves a chain, `defaultOcrRouting` in [`settings.ts`](../../packages/core/src/settings.ts) uses
-`anthropic:claude-sonnet-5-5` first, then the environment's Gemini model (`GEMINI_MODEL`, else the built-in default) as
-the fallback. Steps whose provider has no key are skipped, so a deployment with only a Google key still runs on Gemini.
-`OCR_PROVIDER=fixture` replaces the chain with the offline fixture. This was the owner's choice in #93.
+Until an admin saves a chain, `defaultOcrRouting` in [`settings.ts`](../../packages/core/src/settings.ts) uses, in this
+fixed order (owner decision 2026-11-08):
 
-**Open owner decision:** the [two-tier OCR review](../reviews/2026-11-07-two-tier-ocr.md) and the 31-receipt
-[benchmark](../../bench/results/2026-11-07-real.md) found Haiku 5.5 (about $0.0006 a receipt) and Gemini Flash-Lite (about $0.0014) scoring
-the same as Sonnet 5.5 (about $0.011), so the default costs roughly ten times more for no measured gain. Whether to put
-Haiku (or Flash-Lite) first is tracked in [STATUS](../STATUS.md); the code and this page stay as they are until then.
+1. `anthropic:claude-haiku-5-5` (effort low, the model default)
+2. `google:gemini-3.5-flash-lite` (provider default effort, minimal)
+3. `groq:qwen/qwen3.8-27b` (no effort setting)
+
+Steps whose provider has no key are skipped by `activeChain`, so a deployment with only some keys runs on the rest,
+and one with none fails the `ready` check with `NotConfigured` before a receipt is stored. `OCR_PROVIDER=fixture`
+replaces the chain with the offline fixture. `GEMINI_MODEL` no longer exists: the default names its models, and any
+other choice is made in **Admin → Settings → OCR models**, which replaces the default once saved.
+
+Why Haiku first: the 31-receipt [benchmark](../../packages/bench/results/2026-11-07-real.md) and the
+[two-tier review](../reviews/2026-11-07-two-tier-ocr.md) found Haiku 5.5 (about $0.0006 a receipt) and Flash-Lite
+(about $0.0014) scoring the same as Sonnet 5.5 (about $0.011). Qwen on Groq is the last fallback, still a preview model
+(see [Groq](#groq)); the Groq data-retention precondition in [STATUS](../STATUS.md) applies.
 
 ## Anthropic (Claude)
 
 Three models: `anthropic:claude-haiku-5-5`, `anthropic:claude-sonnet-5-5`, `anthropic:claude-opus-5-5` (bare ids,
-never date-suffixed). Sonnet 5.5 is the first step of the [default chain](#default-chain); an admin picks any of them in
+never date-suffixed). Haiku 5.5 is the first step of the [default chain](#default-chain); an admin picks any of them in
 **Admin → Settings → OCR models**. All need `ANTHROPIC_API_KEY`; a step whose provider has no key is skipped. The request settings live in `ANTHROPIC_OPTIONS` in
 [`extract.ts`](../../packages/ai/src/extract.ts), one entry per model:
 
@@ -210,8 +217,8 @@ never date-suffixed). Sonnet 5.5 is the first step of the [default chain](#defau
 
 ## Groq
 
-One model, not in the default chain (admin opt-in): `groq:qwen/qwen3.8-27b` ("Qwen 3.8 27B (Groq, preview)"). An admin adds it in
-**Admin → Settings → OCR models** once `GROQ_API_KEY` is set. It uses `@ai-sdk/groq` 4.0.74 (Vercel, `vercel/ai`).
+One model, the last step of the [default chain](#default-chain): `groq:qwen/qwen3.8-27b` ("Qwen 3.8 27B (Groq, preview)"). It runs once `GROQ_API_KEY` is set; an admin can reorder or turn it off in
+**Admin → Settings → OCR models**. It uses `@ai-sdk/groq` 4.0.74 (Vercel, `vercel/ai`).
 Facts below are from Groq's docs ([vision](https://console.groq.com/docs/vision),
 [models](https://console.groq.com/docs/models), [structured outputs](https://console.groq.com/docs/structured-outputs),
 [rate limits](https://console.groq.com/docs/rate-limits)), checked 2026-11-07. Nothing here has run against the real

@@ -27,6 +27,7 @@ import { FREE_FAILED_ROUNDS } from "./plans";
 import { checkQuota, quotaGate, usageWindow } from "./quota";
 import { ReceiptRepo, STALE_AFTER_MS } from "./repository";
 import { Db, Storage } from "./services";
+import { addEventSink, type EventRecord } from "./telemetry";
 import { receiptCalls, usageByDay, usageByModel, usageByWorkspace } from "./usage";
 import { ensurePersonalWorkspace, clearRateLimit, hitRateLimit, resolveScope } from "./workspace";
 
@@ -175,6 +176,62 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(await run(ensurePersonalWorkspace({ id, email: `${id}@example.com` }))).toBeNull();
   });
 
+  it("stores only plausible dates and ISO currencies; edits outside the date bounds are refused", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    // Its own workspace, so the other tests' counts don't see these receipts.
+    const c = await createUser("carol");
+    const complete = async (receiptDate: string | null, currency: string) => {
+      const id = (await run(ingestUpload({ scope: c, fileName: "d.jpg", body: JPEG, limits })))
+        .receipt.id;
+      await dropJob(id);
+      const extraction = { ...FIXTURE_RECEIPTS[0]!, receiptDate, currency };
+      return repo((r) => r.complete(id, c, 1, extraction, "fixture", []));
+    };
+    expect(await complete(" 2026-01-31 ", "eur")).toMatchObject({
+      receiptDate: "2026-01-31",
+      currency: "EUR",
+    });
+    // Not a real day, day-first, a Bikram Sambat year read as AD, before 2000: no date.
+    for (const date of ["2026-02-30", "31/01/2026", "2080-04-09", "1999-12-31"]) {
+      expect((await complete(date, "USD"))?.receiptDate).toBeNull();
+    }
+    expect((await complete(null, "US$"))?.currency).toBeNull();
+
+    const row = await complete("2026-01-31", "USD");
+    const id = row!.id;
+    const latest = new Date(row!.createdAt.getTime() + 86_400_000).toISOString().slice(0, 10);
+    const update = (receiptDate: string) =>
+      runExit(Effect.flatMap(ReceiptRepo, (r) => r.update(id, c, { receiptDate })));
+    expect(await update(latest)).toMatchObject({ _tag: "Success", value: true });
+    expect((await repo((r) => r.get(id, c)))?.receiptDate).toBe(latest);
+    for (const bad of ["2026-02-30", "1999-12-31", "2099-01-01"]) {
+      const exit = await update(bad);
+      expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("InvalidInput");
+    }
+    expect((await repo((r) => r.get(id, c)))?.receiptDate).toBe(latest);
+
+    // The table refuses what slips past the code.
+    const write = (set: Record<string, unknown>) =>
+      db(async (d) => {
+        try {
+          await d.update(receipts).set(set).where(eq(receipts.id, id));
+          return "ok";
+        } catch (error) {
+          // Drizzle wraps the driver's error; the constraint is on the cause.
+          for (let e = error; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
+            const name = (e as { constraint_name?: string }).constraint_name;
+            if (name) return name;
+          }
+          throw error;
+        }
+      });
+    expect(await write({ receiptDate: "2099-01-01" })).toBe("receipts_receipt_date_check");
+    expect(await write({ currency: "usd" })).toBe("receipts_currency_check");
+    expect(await write({ attempts: 4 })).toBe("receipts_attempts_check");
+    await run(purgeReceiptFiles({ organizationId: c.organizationId }));
+  });
+
   it("completes through the fixture provider with a canonical category", async () => {
     const receipt = await run(Effect.flatMap(ReceiptRepo, (repo) => repo.get(receiptId, a)));
     expect(receipt?.status).toBe("completed");
@@ -182,6 +239,37 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(receipt?.fileName).toBe("lunch.jpg");
     const [exported] = await run(Effect.flatMap(ReceiptRepo, (repo) => repo.exportRows(a, {}, 10)));
     expect(exported?.itemCount).toBe(receipt?.items.length);
+  });
+
+  it("an impersonated upload's job carries the admin into its attempt event", async () => {
+    const records: EventRecord[] = [];
+    const remove = addEventSink({
+      write: (record) => void records.push(record),
+      flush: async () => {},
+      shutdown: async () => {},
+    });
+    // Its own user, so the receipt doesn't change other tests' counts.
+    const d = await createUser("dana");
+    try {
+      const ingested = await run(
+        ingestUpload({
+          scope: { ...d, impersonatedBy: `${tag}-admin` },
+          fileName: "support.jpg",
+          body: JPEG,
+          limits,
+        }),
+      );
+      const [job] = await db((d) =>
+        d.select({ payload: jobs.payload }).from(jobs).where(eq(jobs.id, ingested.jobId)),
+      );
+      expect(job?.payload).toMatchObject({ impersonatedBy: `${tag}-admin` });
+      await extract(ingested.receipt.id);
+    } finally {
+      remove();
+    }
+    const attempt = records.find((r) => r.event === "job.attempt");
+    expect(attempt).toMatchObject({ user_id: d.userId, impersonated_by: `${tag}-admin` });
+    await run(purgeReceiptFiles({ organizationId: d.organizationId }));
   });
 
   it("workspace isolation: org B cannot read, list, export, edit, retry or delete org A's receipt", async () => {
@@ -283,6 +371,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect((await list({ category: "Software" })).total).toBe(0);
     expect((await list({ from: receipt!.receiptDate, to: receipt!.receiptDate })).total).toBe(1);
     expect((await list({ from: "2099-01-01" })).total).toBe(0);
+    // Not a day: ignored rather than failing the date cast.
+    expect((await list({ from: "2026-02-30" })).total).toBe((await list({})).total);
     const needsReview = Number(receipt!.confidence) < 0.9 ? 1 : 0;
     expect((await list({ status: "needs-review" })).total).toBe(needsReview);
     const counts = await run(Effect.flatMap(ReceiptRepo, (r) => r.counts(a)));
@@ -292,7 +382,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
 
   it("U2: a receipt stuck in processing with no live job reads as failed and stops counting against quota", async () => {
     const stuck = await run(ingestUpload({ scope: a, fileName: "stuck.jpg", body: JPEG, limits }));
-    const before = await run(checkQuota(a.userId, limits));
+    const before = await run(checkQuota(a, limits));
     await db((d) =>
       d
         .update(receipts)
@@ -317,7 +407,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       Effect.flatMap(ReceiptRepo, (r) => r.list(a, { status: "failed" }, { limit: 50, offset: 0 })),
     );
     expect(failedRows.rows.map((row) => row.id)).toContain(stuck.receipt.id);
-    expect((await run(checkQuota(a.userId, limits))).used).toBe(before.used - 1);
+    expect((await run(checkQuota(a, limits))).used).toBe(before.used - 1);
     // Fresh in-flight receipts: the processing filter matches Home's "Reading now" count.
     const fresh = await run(
       ingestUpload({ scope: a, fileName: "fresh.jpg", body: new Uint8Array([...JPEG, 1]), limits }),
@@ -355,10 +445,10 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const markFailed = () => repo((r) => r.fail(id, a, attempt, "unreadable", []));
 
     await markFailed();
-    const before = await repo((r) => r.usage(a.userId, window()));
+    const before = await repo((r) => r.usage(a, window()));
     expect(await repo((r) => r.claimRetry(id, a, g))).toMatchObject({ kind: "claimed" });
     attempt += 1;
-    const after = await repo((r) => r.usage(a.userId, window()));
+    const after = await repo((r) => r.usage(a, window()));
     expect(after.userMinute).toBe(before.userMinute + 1);
     expect(after.globalDay).toBe((before.globalDay ?? 0) + 1);
 
@@ -429,8 +519,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
   });
 
   describe("usage ledger", () => {
-    const usedToday = (userId: string, l = limits) =>
-      run(checkQuota(userId, l)).then((v) => v.used);
+    const usedToday = (subject: typeof a, l = limits) =>
+      run(checkQuota(subject, l)).then((v) => v.used);
     const readAndExtract = async (scope: typeof a, body = JPEG) => {
       const { receipt } = await run(ingestUpload({ scope, fileName: "r.jpg", body, limits }));
       await extract(receipt.id);
@@ -440,14 +530,14 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     it("P0-1: deleting a receipt gives back neither the user's quota nor the global count", async () => {
       const c = await createUser("deleter");
       const id = await readAndExtract(c);
-      expect(await usedToday(c.userId)).toBe(1);
+      expect(await usedToday(c)).toBe(1);
       const before = await run(
-        Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+        Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))),
       );
       await run(deleteReceipt({ receiptId: id, scope: c }));
-      expect(await usedToday(c.userId)).toBe(1);
+      expect(await usedToday(c)).toBe(1);
       const after = await run(
-        Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+        Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))),
       );
       expect(after).toEqual(before);
     });
@@ -455,13 +545,13 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     it("a failed read costs no quota but counts toward the global cap, and so do its retries", async () => {
       const c = await createUser("failer");
       const window = () => usageWindow(new Date(), true);
-      const usage = () => run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, window())));
+      const usage = () => run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c, window())));
       const start = await usage();
       const id = await readAndExtract(c, FAILING_JPEG);
       await run(claimRetry({ receiptId: id, scope: c, limits }));
       await extract(id);
       const end = await usage();
-      expect(end.userDay).toBe(start.userDay);
+      expect(end.day).toBe(start.day);
       // Two rounds, however many automatic attempts each took.
       expect(end.userMinute).toBe(start.userMinute + 2);
       expect(end.globalDay! - start.globalDay!).toBeGreaterThanOrEqual(2);
@@ -488,7 +578,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
           if (!Exit.isSuccess(exit)) throw new Error(`upload ${i + 1} was refused`);
           await extractOnce(exit.value.receipt.id);
         }
-        expect(await usedToday(c.userId, tight)).toBe(20);
+        expect(await usedToday(c, tight)).toBe(20);
         const refused = await upload();
         expect(Exit.isFailure(refused) && JSON.stringify(refused.cause)).toContain("QuotaExceeded");
       },
@@ -509,7 +599,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       for (let i = 0; i < FREE_FAILED_ROUNDS + 1; i++) {
         expect(Exit.isSuccess(await read(FAILING_JPEG))).toBe(true);
       }
-      expect(await usedToday(c.userId, tight)).toBe(3);
+      expect(await usedToday(c, tight)).toBe(3);
       expect(Exit.isFailure(await read(JPEG))).toBe(true);
     });
 
@@ -518,10 +608,10 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       const { receipt } = await run(
         ingestUpload({ scope: c, fileName: "n.jpg", body: JPEG, limits }),
       );
-      expect(await usedToday(c.userId)).toBe(1); // in flight
+      expect(await usedToday(c)).toBe(1); // in flight
       await run(Effect.flatMap(Storage, (s) => s.remove([receipt.imageObjectKey!])));
       await extract(receipt.id);
-      expect(await usedToday(c.userId)).toBe(0);
+      expect(await usedToday(c)).toBe(0);
       const rows = await db((d) =>
         d.select().from(ocrCalls).where(eq(ocrCalls.receiptId, receipt.id)),
       );
@@ -538,9 +628,9 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     it("B4: deleting the workspace keeps its usage, unlinked, and the user's quota stays used", async () => {
       const c = await createUser("ws-deleter");
       const id = await readAndExtract(c);
-      expect(await usedToday(c.userId)).toBe(1);
+      expect(await usedToday(c)).toBe(1);
       await db((d) => d.delete(organization).where(eq(organization.id, c.organizationId)));
-      expect(await usedToday(c.userId)).toBe(1);
+      expect(await usedToday(c)).toBe(1);
       const [call] = await db((d) => d.select().from(ocrCalls).where(eq(ocrCalls.receiptId, id)));
       expect(call).toMatchObject({ organizationId: null, userId: c.userId, status: "ok" });
     });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { authMethodFor } from "./auth-method";
-import { isFactorEndpoint, stepUpActionFor } from "./step-up-paths";
+import { isImpersonationBlocked, stepUpActionFor } from "./step-up-paths";
 
 describe("authMethodFor", () => {
   it.each([
@@ -40,6 +40,8 @@ describe("stepUpActionFor", () => {
     ["/revoke-sessions", {}, null],
     ["/passkey/update-passkey", {}, null],
     ["/change-password", {}, "account.change_password"],
+    // Connecting needs the provider to vouch for the same verified address (lib/auth-accounts.ts).
+    ["/link-social", { provider: "google" }, null],
     ["/change-email", {}, "account.change_email"],
     ["/two-factor/disable", {}, "two_factor.disable"],
     ["/two-factor/generate-backup-codes", {}, "two_factor.regenerate_backup_codes"],
@@ -67,9 +69,36 @@ describe("stepUpActionFor", () => {
     expect(stepUpActionFor(path, body)).toBe(expected);
   });
 
-  it("knows the factor endpoints blocked while impersonating", () => {
-    expect(isFactorEndpoint("/two-factor/enable")).toBe(true);
-    expect(isFactorEndpoint("/passkey/generate-register-options")).toBe(true);
-    expect(isFactorEndpoint("/change-password")).toBe(false);
+  it.each([
+    ["/two-factor/enable", true],
+    ["/passkey/generate-register-options", true],
+    // An admin must not connect their own Google/GitHub or mail the customer a link.
+    ["/link-social", true],
+    ["/send-verification-email", true],
+    ["/get-access-token", true],
+    ["/refresh-token", true],
+    ["/update-user", true],
+    ["/revoke-session", true],
+    ["/revoke-sessions", true],
+    ["/revoke-other-sessions", true],
+    ["/organization/create", true],
+    ["/organization/update", true],
+    ["/organization/delete", true],
+    ["/organization/leave", true],
+    ["/organization/invite-member", true],
+    ["/organization/remove-member", true],
+    ["/organization/update-member-role", true],
+    ["/organization/accept-invitation", true],
+    ["/organization/reject-invitation", true],
+    ["/organization/cancel-invitation", true],
+    // Reads, and switching to the customer's workspace, stay open.
+    ["/organization/set-active", false],
+    ["/organization/list", false],
+    ["/organization/get-full-organization", false],
+    ["/change-password", false],
+    ["/get-session", false],
+    ["/admin/stop-impersonating", false],
+  ])("blocks %s while impersonating: %s", (path, expected) => {
+    expect(isImpersonationBlocked(path)).toBe(expected);
   });
 });

@@ -49,8 +49,8 @@ test("add a passkey, confirm a change with it, sign in with it by autofill, then
   await markSteppedUp(email);
   await page.goto("/app/settings/security");
   await page.getByRole("button", { name: "Add a passkey" }).click();
-  await page.getByLabel("Name it (optional)").fill("E2E laptop");
-  await page.getByRole("button", { name: "Create passkey" }).click();
+  await page.getByLabel("Name (optional)").fill("E2E laptop");
+  await page.getByRole("button", { name: "Add passkey", exact: true }).click();
   await expect(page.getByText("Passkey added.")).toBeVisible();
   await expect(page.getByRole("list", { name: "Your passkeys" })).toContainText("E2E laptop");
   expect(await authenticator.credentials()).toHaveLength(1);

@@ -6,7 +6,6 @@ const state = vi.hoisted(() => ({
 }));
 const readFormData = vi.fn();
 
-vi.mock("server-only", () => ({}));
 vi.mock("next/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/server")>()),
   after: vi.fn(),

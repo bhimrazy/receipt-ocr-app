@@ -65,7 +65,6 @@ Set these in Vercel (Project → Settings → Environment Variables, Production)
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Yes               |                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `S3_FORCE_PATH_STYLE`                      | No                | `true` for RustFS and other self-hosted stores.                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `GOOGLE_GENERATIVE_AI_API_KEY`             | Yes               | Gemini key.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `GEMINI_MODEL`                             | No                | Fallback after Claude Sonnet until a chain is saved. After that, choose models in **Admin → Settings**.                                                                                                                                                                                                                                                                                                                                                        |
 | `ANTHROPIC_API_KEY`                        | No                | Claude key. Offers the Claude models in **Admin → Settings**; Gemini stays the default. Use a key of its own with a monthly spend limit in the Anthropic Console.                                                                                                                                                                                                                                                                                              |
 | `GROQ_API_KEY`                             | No                | Groq key. Offers Qwen 3.8 27B (vision) in **Admin → Settings**. Free-plan limits (30 requests and 8K tokens a minute, 1K requests a day) are in [ai.md](architecture/ai.md#groq). **Before adding a site key, enable Zero Data Retention** in the Groq org's Data Controls settings: without it Groq may log inputs and outputs for up to 30 days ([Your Data](https://console.groq.com/docs/your-data), checked 2026-11-07), which the privacy policy states. |
 | `OPENAI_API_KEY`                           | No                | OpenAI key. Offers GPT-6 Luna and GPT-6.1 Terra in **Admin → Settings**. Use a project key with a spend limit. OpenAI keeps requests up to 30 days for abuse monitoring; zero data retention needs OpenAI's approval (see [ai.md](architecture/ai.md#openai)).                                                                                                                                                                                                 |
@@ -247,8 +246,8 @@ UPDATE "user" SET role = 'admin' WHERE email = 'you@example.com';
 ```
 
 Then open `/admin/settings` and check the plan limits and the OCR model chain. Until something is saved there, the
-app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day) and the chain Claude Sonnet 5.5,
-then `GEMINI_MODEL`; a step whose provider has no key is skipped.
+app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day and 100 a month) and the chain Claude Haiku 5.5,
+Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; a step whose provider has no key is skipped.
 
 ### 7. Check it works
 
@@ -374,6 +373,81 @@ codes sent in the last 10 minutes.
 
 Steps specific to one release, newest first.
 
+### Squashed baseline again (2026-11-08)
+
+- **`0000_baseline` through `0003_schema_fixes` were squashed into a new `0000_baseline`**, before launch. A database
+  migrated with the old files already has these objects, so the baseline's `CREATE` statements would fail (and roll
+  back): it must be reset, not migrated. Reset each one
+  (staging first) with the SQL below, then run the **Database Migration** workflow on `staging-db`, then
+  `production-db` (the owner approves), then deploy by hand. Don't `DROP SCHEMA public`: it would lose Supabase's
+  grants and default ACLs. The reset deletes every account and receipt, so it is only for these pre-launch databases.
+
+  Pre-check, and keep the output:
+
+  ```sql
+  show server_version; -- 17.x on Supabase
+  select tablename, tableowner from pg_tables where schemaname = 'public' order by 1; -- the 23 tables below
+  select typname from pg_type t join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typtype = 'e'; -- job_state, receipt_status
+  select current_user;
+  select has_schema_privilege('anon', 'public', 'USAGE') as anon_usage;
+  select jobname, schedule, active from cron.job order by 1;
+  select name from vault.secrets order by 1;
+  select 'receipts' as t, count(*) from public.receipts
+    union all select 'user', count(*) from public."user"; -- expect test data only
+  ```
+
+  Reset (no `CASCADE`, no `IF EXISTS`, so a missing or unexpected object rolls it all back). It lists every table the
+  old migrations created, and `drizzle` holds only the bookkeeping table:
+
+  ```sql
+  begin;
+  set local lock_timeout = '5s';
+  drop table
+    public.receipt_group_members, public.receipt_groups, public.receipt_items,
+    public.ocr_calls, public.ocr_rounds, public.jobs, public.job_controls,
+    public.admin_audit_log, public.app_settings, public.user_credentials,
+    public.receipts, public.step_up_codes, public.step_up_events,
+    public.passkey, public.two_factor, public.invitation, public.member,
+    public.session, public.account, public.verification, public.rate_limit,
+    public.organization, public."user";
+  drop type public.job_state, public.receipt_status;
+  drop table drizzle.__drizzle_migrations;
+  drop schema drizzle;
+  commit;
+  ```
+
+  From migration `0001_billing` on, the list also needs `public.billing_events, public.billing_subscriptions` (before
+  `public.organization` and `public."user"`, which `billing_subscriptions` references).
+
+  Post-check: `pg_tables` for `public` returns no rows, no enum types are left, `select count(*) from pg_class c join
+pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'` is 0, the `drizzle` schema is gone, and
+  `anon_usage`, `cron.job` and the Vault secret names are unchanged from the pre-check. pg_cron, Vault and pg_net live
+  in their own schemas (`cron`, `vault`, `net`) and are not touched; the `drain-jobs` job fails its calls only while
+  the tables are missing. After the migration, `select hash from drizzle.__drizzle_migrations` returns one row.
+
+- **Tested locally** on Postgres 17.10 and 18.6: the old four files applied, then this reset, then the new baseline,
+  gives the same `pg_dump --schema-only` as the baseline on an empty database.
+
+### Schema fixes: receipt dates as `date` (`0003_schema_fixes`, now part of the baseline)
+
+- **Run Database Migration before deploying** (`staging-db`, then `production-db`, then deploy by hand, as in
+  [Every release](#every-release)). Written for the empty databases of the 2026-11-08 reset; nothing to back up or
+  backfill.
+- **Not fully backward compatible:** it changes `receipts.receipt_date` from text to `date`, and the previous
+  release's dashboard query runs text functions on that column. Between the migration and the deploy, Home's spending
+  section fails for anyone with completed receipts, saving an unreal date (`2026-02-30`) in the editor fails, and a
+  receipt whose model date isn't a plausible ISO day fails to complete (it can be retried after the deploy). Deploy
+  right after `production-db` succeeds. Rolling the code back afterwards has the same effect, so roll forward instead.
+- **What it changes:** the `USING` cast keeps a real `YYYY-MM-DD` day from 2000 to the upload day + 1 and nulls
+  anything else; `currency` is upper-cased and anything that isn't three letters becomes null. New checks on
+  `receipt_date`, `currency`, `attempts` (1 to 3) and `receipt_items.quantity` (at least 1); new indexes on
+  `(organization_id, receipt_date)` and on five foreign keys; `receipts_last_attempt_at_idx` and
+  `member_organization_id_idx` dropped; `passkey.created_at` set not null. The file starts with
+  `SET LOCAL lock_timeout = '5s'`, so if it waits on a lock it fails cleanly and can be rerun.
+- **Check after migrating:** `select data_type from information_schema.columns where table_name = 'receipts' and
+column_name = 'receipt_date';` returns `date`.
+
 ### Squashed baseline and row-level security (2026-11-07)
 
 - **Migrations were squashed into one `0000_baseline`**, before launch. Both databases must be reset, not migrated.
@@ -414,7 +488,7 @@ Steps specific to one release, newest first.
   Post-check: `pg_tables` for `public` returns no rows, no enum types are left, and
   `has_schema_privilege('anon', 'public', 'USAGE')` is unchanged from the pre-check.
 
-- **RLS** is enabled on all 19 tables with no policies. The app role (`postgres`) bypasses it. In the Supabase
+- **RLS** is enabled on every table with no policies. The app role (`postgres`) bypasses it. In the Supabase
   dashboard each table shows the **RLS enabled** badge. The Data API is unused, so also remove `public` from
   Project Settings, Data API, **Exposed schemas**: then `anon` and `authenticated` cannot reach any table even by
   mistake. `service_role` bypasses RLS by design, so only removing `public` from the exposed schemas protects

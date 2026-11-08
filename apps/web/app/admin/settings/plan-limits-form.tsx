@@ -15,11 +15,24 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { savePlansAction } from "../actions";
 
-const FIELDS: { key: keyof PlanPolicy; label: string; hint: string }[] = [
+/** `optional` fields may be left empty for "no limit". */
+const FIELDS: { key: keyof PlanPolicy; label: string; hint: string; optional?: boolean }[] = [
+  {
+    key: "receiptsPerMonth",
+    label: "Receipts a month",
+    hint: "From the 1st at 00:00 UTC, counted like the daily limit: per person on Free (across every workspace they use), per workspace on Pro (shared by its members). Empty means no monthly limit.",
+    optional: true,
+  },
   {
     key: "receiptsPerDay",
     label: "Receipts a day",
-    hint: `Counted per user from 00:00 UTC. The first ${FREE_FAILED_ROUNDS} failed reads a day don't count.`,
+    hint: `From 00:00 UTC: per person on Free (across every workspace they use), per workspace on Pro. The first ${FREE_FAILED_ROUNDS} failed reads in each window don't count.`,
+  },
+  {
+    key: "poolPerDay",
+    label: "Plan pool a day",
+    hint: "Receipts a day across everyone on this plan, platform-wide, as a spend guard. Empty means none. OCR_DAILY_CAP stays the fuse over every plan.",
+    optional: true,
   },
   {
     key: "receiptsPerMinute",
@@ -48,15 +61,25 @@ const toDraft = (table: PlanTable): Draft =>
   Object.fromEntries(
     PLANS.map(({ id }) => [
       id,
-      Object.fromEntries(FIELDS.map(({ key }) => [key, String(table[id][key])])),
+      Object.fromEntries(FIELDS.map(({ key }) => [key, String(table[id][key] ?? "")])),
     ]),
   ) as Draft;
 
-const toTable = (draft: Draft) =>
+/**
+ * Empty optional fields save as null (no limit); the server validates the rest.
+ * `scope` (who a plan counts) isn't editable here; it is kept from the saved table.
+ */
+const toTable = (draft: Draft, base: PlanTable) =>
   Object.fromEntries(
     PLANS.map(({ id }) => [
       id,
-      Object.fromEntries(FIELDS.map(({ key }) => [key, Number(draft[id][key])])),
+      Object.fromEntries([
+        ["scope", base[id].scope],
+        ...FIELDS.map(({ key, optional }) => [
+          key,
+          optional && draft[id][key] === "" ? null : Number(draft[id][key]),
+        ]),
+      ]),
     ]),
   );
 
@@ -69,14 +92,18 @@ export function PlanLimitsForm({ current, defaults }: { current: PlanTable; defa
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const isDefault = JSON.stringify(draft) === JSON.stringify(toDraft(defaults));
   const lowered = PLANS.some(
-    ({ id }) => Number(draft[id].receiptsPerDay) < Number(saved[id].receiptsPerDay),
+    ({ id }) =>
+      Number(draft[id].receiptsPerDay) < Number(saved[id].receiptsPerDay) ||
+      (draft[id].receiptsPerMonth !== "" &&
+        (saved[id].receiptsPerMonth === "" ||
+          Number(draft[id].receiptsPerMonth) < Number(saved[id].receiptsPerMonth))),
   );
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setError(null);
-    const result = await withStepUp(() => savePlansAction(toTable(draft)));
+    const result = await withStepUp(() => savePlansAction(toTable(draft, current)));
     setPending(false);
     if (!result.ok) {
       setError(result.error);
@@ -132,7 +159,8 @@ export function PlanLimitsForm({ current, defaults }: { current: PlanTable; defa
                             },
                           }))
                         }
-                        required
+                        placeholder={field.optional ? "None" : undefined}
+                        required={!field.optional}
                         value={draft[plan.id][field.key]}
                       />
                     </div>
@@ -146,8 +174,8 @@ export function PlanLimitsForm({ current, defaults }: { current: PlanTable; defa
 
       {lowered ? (
         <p className="mt-3 text-sm text-warning" role="status">
-          Lowering a daily limit stops anyone who already used more today from uploading until 00:00
-          UTC.
+          Lowering a limit stops anyone who already used more today, or this month, from uploading
+          until it resets at 00:00 UTC.
         </p>
       ) : null}
       {error ? (

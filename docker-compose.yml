@@ -111,7 +111,6 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       OCR_PROVIDER: ${OCR_PROVIDER:-google}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
       S3_ENDPOINT: http://rustfs:9000
@@ -148,6 +147,7 @@ services:
       - /repo/apps/web/node_modules
       - /repo/apps/web/.next
       - /repo/packages/ai/node_modules
+      - /repo/packages/bench/node_modules
       - /repo/packages/core/node_modules
       - /repo/packages/db/node_modules
       - /repo/packages/email/node_modules

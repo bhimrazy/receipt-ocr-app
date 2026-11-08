@@ -3,7 +3,7 @@ import nextConfig from "../next.config";
 import { robotsFor } from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import { llmsFullTxt, llmsResponse, llmsTxt } from "@/lib/llms";
-import { homeJsonLd, jsonLdScript } from "@/lib/seo";
+import { homeDescription, homeJsonLd, homeTitle, jsonLdScript } from "@/lib/seo";
 import { PRODUCTION_HOST, PRODUCTION_ORIGIN } from "@/lib/seo-hosts";
 
 const req = (host: string) => new Request("http://internal/llms.txt", { headers: { host } });
@@ -55,7 +55,9 @@ describe("sitemap", () => {
   it("lists only the public prod pages, each with lastModified", () => {
     const entries = sitemap();
     expect(entries.map((e) => e.url)).toEqual(
-      ["/", "/privacy", "/terms", "/cookies"].map((p) => new URL(p, PRODUCTION_ORIGIN).toString()),
+      ["/", "/pricing", "/privacy", "/terms", "/cookies", "/refunds"].map((p) =>
+        new URL(p, PRODUCTION_ORIGIN).toString(),
+      ),
     );
     for (const entry of entries) expect(entry.lastModified, entry.url).toBeTruthy();
     expect(entries.some((e) => /\/(app|admin|api|sign-|landing-|final-)/.test(e.url))).toBe(false);
@@ -82,35 +84,93 @@ describe("llms.txt host gating", () => {
     },
   );
 
-  it("the full file adds plans and FAQ without inventing a price for Custom", () => {
+  it("the full file adds Free, Pro at its list price, and the FAQ; no Custom plan", () => {
     const full = llmsFullTxt();
     expect(full).toContain("## FAQ");
-    expect(full).toContain("There is no public price");
+    expect(full).toContain("- Pro: $9 a month or $90 a year for one workspace");
+    expect(full).not.toMatch(/Custom|contact us|no public price/i);
     expect(full).not.toContain("## Optional");
   });
 });
 
+describe("home title and description", () => {
+  it("fit what Google shows and stay on brand", () => {
+    expect(homeTitle).toMatch(/· ReceiptOCR$/);
+    expect(homeTitle.length).toBeLessThanOrEqual(60);
+    expect(homeDescription.length).toBeGreaterThanOrEqual(120);
+    expect(homeDescription.length).toBeLessThanOrEqual(155);
+  });
+
+  it("name only outputs the product has (CSV and JSON, never Excel) and the free plan", () => {
+    for (const text of [homeTitle, homeDescription]) {
+      expect(text).toMatch(/CSV/);
+      expect(text).toMatch(/JSON/);
+      expect(text).not.toMatch(/excel|xlsx|\bapi\b/i);
+    }
+    expect(homeDescription).toMatch(/\bfree\b/i);
+  });
+});
+
 describe("home JSON-LD", () => {
-  const graph = homeJsonLd()["@graph"] as Array<Record<string, unknown>>;
+  const data = homeJsonLd();
+  const graph = data["@graph"] as Array<Record<string, unknown>>;
   const byType = (type: string) => graph.find((n) => n["@type"] === type)!;
 
-  it("has the expected nodes with absolute prod URLs", () => {
+  it("has the expected nodes with absolute prod URLs and linked ids", () => {
+    expect(data["@context"]).toBe("https://schema.org");
     expect(graph.map((n) => n["@type"])).toEqual([
       "Person",
       "Organization",
       "WebSite",
-      "SoftwareApplication",
+      "WebApplication",
     ]);
+    const orgId = byType("Organization")["@id"];
     expect(byType("Organization").logo).toBe(`${PRODUCTION_ORIGIN}/icons/icon-512.png`);
     expect(byType("Organization").founder).toEqual({ "@id": byType("Person")["@id"] });
     expect(byType("Person").name).toBe("Bhimraj Yadav");
+    expect(byType("WebSite").publisher).toEqual({ "@id": orgId });
+    expect(byType("WebApplication").publisher).toEqual({ "@id": orgId });
+    for (const node of graph) {
+      expect(String(node["@id"]), String(node["@type"])).toMatch(/^https:\/\//);
+      expect(String(node.url)).toMatch(/^https:\/\//);
+    }
+    expect(byType("WebSite").url).toBe(`${PRODUCTION_ORIGIN}/`);
   });
 
-  it("describes the app honestly", () => {
-    const app = byType("SoftwareApplication");
-    expect(app.applicationCategory).toBe("FinanceApplication");
-    expect(app.offers).toMatchObject({ "@type": "Offer", price: "0", priceCurrency: "USD" });
-    expect(JSON.stringify(graph)).not.toMatch(/aggregateRating|review/i);
+  it("describes the app honestly: web business app, free offer, real features, no ratings", () => {
+    const app = byType("WebApplication");
+    expect(app).toMatchObject({
+      name: "ReceiptOCR",
+      description: homeDescription,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      isAccessibleForFree: true,
+    });
+    const features = app.featureList as string[];
+    expect(features.length).toBeGreaterThan(0);
+    expect(features.every((f) => typeof f === "string" && f.length > 0)).toBe(true);
+    expect(features).toEqual(
+      expect.arrayContaining([expect.stringMatching(/CSV/), expect.stringMatching(/JSON/)]),
+    );
+    expect(app.offers).toEqual({
+      "@type": "Offer",
+      name: "Free plan",
+      price: "0",
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      url: `${PRODUCTION_ORIGIN}/sign-up`,
+    });
+    const text = JSON.stringify(graph);
+    expect(text).not.toMatch(/aggregateRating|"review"|ratingValue/i);
+    expect(text).not.toMatch(/excel|xlsx/i);
+    // Every node's text is a string, number, boolean or nested object; no empty values.
+    const walk = (value: unknown, path: string) => {
+      if (value === "" || value === null || value === undefined) throw new Error(`empty ${path}`);
+      if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}[${i}]`));
+      else if (typeof value === "object")
+        for (const [k, v] of Object.entries(value as object)) walk(v, `${path}.${k}`);
+    };
+    walk(data, "$");
   });
 
   it("escapes < so text cannot close the script tag", () => {

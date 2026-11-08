@@ -4,6 +4,7 @@ import { Button, buttonVariants } from "@receipt-ocr/ui/components/button";
 import { RotateCw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
+import { reportBoundaryError } from "@/lib/telemetry/client-errors";
 
 /** Shown when an admin page fails to load, usually a database error. */
 export default function AdminError({
@@ -22,6 +23,7 @@ export default function AdminError({
         digest: error.digest,
       }),
     );
+    reportBoundaryError(error);
   }, [error]);
 
   return (

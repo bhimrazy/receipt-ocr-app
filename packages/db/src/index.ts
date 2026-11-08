@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -61,6 +62,9 @@ export const receiptStatus = pgEnum("receipt_status", [
   "failed",
 ]);
 
+/** Upload plus retries; `receipts_attempts_check` enforces it. */
+export const MAX_EXTRACTION_ATTEMPTS = 3;
+
 export const receipts = pgTable(
   "receipts",
   {
@@ -75,8 +79,13 @@ export const receipts = pgTable(
      */
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     merchant: text("merchant"),
-    receiptDate: text("receipt_date"),
+    /**
+     * The transaction day in AD, a plain calendar date (no time zone), read as
+     * `YYYY-MM-DD`. Null when none was read or it failed the plausibility check.
+     */
+    receiptDate: date("receipt_date", { mode: "string" }),
     category: text("category"),
+    /** ISO 4217, upper case. Null = not read; readers show it as USD. */
     currency: text("currency").default("USD"),
     subtotal: numeric("subtotal", { precision: 12, scale: 2 }),
     tax: numeric("tax", { precision: 12, scale: 2 }),
@@ -93,7 +102,7 @@ export const receipts = pgTable(
     errorMessage: text("error_message"),
     /** Extraction attempts so far (1 = the upload itself); retries are capped on this. */
     attempts: integer("attempts").notNull().default(1),
-    /** When the latest retry started; quota windows count it like a new upload. */
+    /** When the latest retry started. Written, not read: quota counts the ledger. */
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     /** `provider:model` that produced the extraction; null until one has. */
     model: text("model"),
@@ -101,14 +110,23 @@ export const receipts = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // Serves the per-user quota count over a time window.
+    // A user's uploads, and the set-null on account delete.
     index("receipts_user_created_at_idx").on(table.userId, table.createdAt),
-    // Serves the global daily OCR cap.
+    // Admin upload charts and counts across workspaces.
     index("receipts_created_at_idx").on(table.createdAt),
     // History lists a workspace newest-first; this index serves that directly.
     index("receipts_org_created_at_idx").on(table.organizationId, table.createdAt),
-    // Lets the quota query BitmapOr retries in with created_at instead of scanning.
-    index("receipts_last_attempt_at_idx").on(table.lastAttemptAt),
+    // History's date filters and date ranges within a workspace.
+    index("receipts_org_receipt_date_idx").on(table.organizationId, table.receiptDate),
+    // Not before 2000, and at most a day after the UTC upload day (time zones):
+    // a misread or Bikram Sambat year stored as AD fails this. The dashboard's
+    // created_at scan bound relies on the upper limit.
+    check(
+      "receipts_receipt_date_check",
+      sql`receipt_date >= '2000-01-01' and receipt_date <= (created_at at time zone 'UTC')::date + 1`,
+    ),
+    check("receipts_currency_check", sql`currency ~ '^[A-Z]{3}$'`),
+    check("receipts_attempts_check", sql.raw(`attempts between 1 and ${MAX_EXTRACTION_ATTEMPTS}`)),
   ],
 ).enableRLS();
 
@@ -120,13 +138,17 @@ export const receiptItems = pgTable(
       .notNull()
       .references(() => receipts.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** Whole units, at least 1 (core rounds a weight or a 0 up to 1). */
     quantity: integer("quantity").notNull().default(1),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }),
     totalPrice: numeric("total_price", { precision: 12, scale: 2 }),
     confidence: numeric("confidence", { precision: 5, scale: 4 }),
   },
-  // Loading a receipt's items and the cascade delete both look up by receipt.
-  (table) => [index("receipt_items_receipt_id_idx").on(table.receiptId)],
+  (table) => [
+    // Loading a receipt's items and the cascade delete both look up by receipt.
+    index("receipt_items_receipt_id_idx").on(table.receiptId),
+    check("receipt_items_quantity_check", sql`quantity >= 1`),
+  ],
 ).enableRLS();
 
 /**
@@ -150,14 +172,23 @@ export const ocrRounds = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** `receipts.attempts` it started: 1 = the upload, 2+ = retries. */
     round: smallint("round").notNull(),
+    /**
+     * The workspace's plan when the round was accepted, i.e. the allowance it
+     * draws from: Free rounds count against their user, Pro rounds against their
+     * workspace, so neither uses up the other.
+     */
+    plan: text("plan").notNull().default("free"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("ocr_rounds_receipt_round_idx").on(table.receiptId, table.round),
     // Per-user quota windows.
     index("ocr_rounds_user_created_at_idx").on(table.userId, table.createdAt),
-    // Global cap.
+    // Global cap and the per-plan daily pool.
     index("ocr_rounds_created_at_idx").on(table.createdAt),
+    // Workspace-pooled (Pro) day and month windows, and the set-null when a workspace is deleted.
+    index("ocr_rounds_org_created_at_idx").on(table.organizationId, table.createdAt),
+    check("ocr_rounds_plan_check", sql`plan in ('free', 'pro')`),
   ],
 ).enableRLS();
 
@@ -224,6 +255,8 @@ export const ocrCalls = pgTable(
     index("ocr_calls_org_created_at_idx").on(table.organizationId, table.createdAt),
     // Admin windows.
     index("ocr_calls_created_at_idx").on(table.createdAt),
+    // The set-null when an account is deleted.
+    index("ocr_calls_user_id_idx").on(table.userId),
     // A receipt's calls and the quota's "was this round read" lookup. Unique, so
     // an attempt's calls written twice (e.g. a lost COMMIT ack, then the
     // failure path) are billed once, while each automatic retry keeps its own.
@@ -307,6 +340,8 @@ export const jobs = pgTable(
     index("jobs_running_idx")
       .on(table.userId)
       .where(sql`state = 'running'`),
+    // The set-null when an account is deleted (finished jobs included).
+    index("jobs_user_id_idx").on(table.userId),
     // One live job per key; a finished job frees its key.
     uniqueIndex("jobs_idempotency_idx").on(table.idempotencyKey).where(LIVE_JOB),
     // At most one live job per receipt.
@@ -384,6 +419,8 @@ export const adminAuditLog = pgTable(
   (table) => [
     index("admin_audit_log_created_at_idx").on(table.createdAt),
     index("admin_audit_log_target_idx").on(table.targetType, table.targetId, table.createdAt),
+    // The set-null when an admin's account is deleted.
+    index("admin_audit_log_actor_id_idx").on(table.actorId),
   ],
 ).enableRLS();
 
@@ -440,6 +477,96 @@ export const receiptGroupMembers = pgTable(
     primaryKey({ columns: [table.groupId, table.receiptId] }),
     // Groups of a receipt, the History filter, and the cascade on receipt delete.
     index("receipt_group_members_receipt_id_idx").on(table.receiptId),
+  ],
+).enableRLS();
+
+/** Provider subscription states we store; anything else is refused when parsed. */
+export const BILLING_STATUSES = ["active", "trialing", "past_due", "paused", "canceled"] as const;
+
+/**
+ * One row per provider subscription, written only by the `billing.apply_event`
+ * job from verified webhooks. A workspace is Pro while it has an entitling row
+ * (see `packages/core/src/billing`). `provider_updated_at` orders events: an
+ * older snapshot never overwrites a newer one. Ids and states only, no card or
+ * address data.
+ */
+export const billingSubscriptions = pgTable(
+  "billing_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Null once the workspace is deleted; the row stays as the billing record. */
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "set null",
+    }),
+    /** Who started the checkout. */
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    provider: text("provider").notNull(),
+    providerSubscriptionId: text("provider_subscription_id").notNull(),
+    providerCustomerId: text("provider_customer_id").notNull(),
+    /** One of `BILLING_STATUSES`. */
+    status: text("status").notNull(),
+    priceId: text("price_id"),
+    /** `month` or `year`. */
+    billingInterval: text("billing_interval"),
+    currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    /** A cancellation is scheduled for the period end; Pro holds until then. */
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    /** When it last became past_due; the grace period counts from here. */
+    pastDueSince: timestamp("past_due_since", { withTimezone: true }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    /** A chargeback or full refund ended Pro at this time; the provider cancel follows. */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /** The provider's own `updated_at` for the snapshot stored here. */
+    providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("billing_subscriptions_provider_id_idx").on(
+      table.provider,
+      table.providerSubscriptionId,
+    ),
+    index("billing_subscriptions_org_idx").on(table.organizationId),
+    check(
+      "billing_subscriptions_status_check",
+      sql.raw(`status in (${BILLING_STATUSES.map((s) => `'${s}'`).join(", ")})`),
+    ),
+    check(
+      "billing_subscriptions_interval_check",
+      sql`billing_interval is null or billing_interval in ('month', 'year')`,
+    ),
+  ],
+).enableRLS();
+
+/**
+ * Every verified webhook, once: the unique provider event id makes a redelivery
+ * a no-op. `payload` is the provider-neutral snapshot the job applies (ids,
+ * states, dates), never the raw body, so it holds no address or card data.
+ */
+export const billingEvents = pgTable(
+  "billing_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    eventType: text("event_type").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    // No FK: the event log outlives a deleted workspace.
+    organizationId: text("organization_id"),
+    payload: jsonb("payload").notNull(),
+    /** `applied`, `stale` (older than the stored snapshot), `ignored` or `unmatched` (no workspace). */
+    outcome: text("outcome"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("billing_events_provider_event_idx").on(table.provider, table.providerEventId),
+    index("billing_events_org_idx").on(table.organizationId, table.receivedAt),
+    check(
+      "billing_events_outcome_check",
+      sql`outcome is null or outcome in ('applied', 'stale', 'ignored', 'unmatched')`,
+    ),
   ],
 ).enableRLS();
 
@@ -528,6 +655,8 @@ export const schema = {
   receiptGroupMembers,
   stepUpEvents,
   stepUpCodes,
+  billingSubscriptions,
+  billingEvents,
   receiptsRelations,
   receiptItemsRelations,
   // Better Auth tables (core + organization + admin plugins).
@@ -579,5 +708,6 @@ export type NewOcrCall = typeof ocrCalls.$inferInsert;
 export type JobRow = typeof jobs.$inferSelect;
 export type NewJobRow = typeof jobs.$inferInsert;
 export type AdminAuditEntry = typeof adminAuditLog.$inferSelect;
+export type BillingSubscription = typeof billingSubscriptions.$inferSelect;
 export type UserCredential = typeof userCredentials.$inferSelect;
 export type NewUserCredential = typeof userCredentials.$inferInsert;

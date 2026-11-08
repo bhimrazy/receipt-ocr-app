@@ -176,11 +176,11 @@ export function CreateWorkspaceDialog({
   );
 }
 
-const PLAN_NOTE = "Your plan includes 1 workspace. Contact us for more.";
-
 type SwitcherProps = {
   activeId: string;
   canCreate: boolean;
+  /** Shown instead of "Create workspace" at the ownership cap (lib/workspaces.ts). */
+  planNote: string;
   workspaces: WorkspaceOption[];
 };
 
@@ -190,7 +190,7 @@ type SwitcherProps = {
  * `canCreate` comes from the server (lib/workspaces.ts) and counts only the workspaces the
  * user OWNS, so memberships elsewhere don't lock creation.
  */
-export function WorkspaceSwitcher({ activeId, canCreate, workspaces }: SwitcherProps) {
+export function WorkspaceSwitcher({ activeId, canCreate, planNote, workspaces }: SwitcherProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const current = workspaces.find((org) => org.id === activeId) ?? workspaces[0];
@@ -251,7 +251,7 @@ export function WorkspaceSwitcher({ activeId, canCreate, workspaces }: SwitcherP
               Create workspace
             </DropdownMenuItem>
           ) : (
-            <p className="px-2.5 py-2 text-xs leading-5 text-muted-foreground">{PLAN_NOTE}</p>
+            <p className="px-2.5 py-2 text-xs leading-5 text-muted-foreground">{planNote}</p>
           )}
           {error ? (
             <p className="px-2.5 py-1.5 text-xs text-destructive" role="alert">
@@ -272,6 +272,7 @@ export function WorkspaceSwitcher({ activeId, canCreate, workspaces }: SwitcherP
 export function WorkspaceList({
   activeId,
   canCreate,
+  planNote,
   workspaces,
   onSwitched,
   onCreate,
@@ -311,7 +312,7 @@ export function WorkspaceList({
           Create workspace
         </DrawerAction>
       ) : (
-        <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">{PLAN_NOTE}</p>
+        <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">{planNote}</p>
       )}
       {error ? (
         <p className="px-3 py-1.5 text-xs text-destructive" role="alert">

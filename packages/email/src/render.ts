@@ -28,9 +28,15 @@ export const SLOT_KINDS = {
   newEmail: "line",
   currentEmail: "line",
   from: "line",
+  senderName: "line",
+  firstName: "line",
+  topicPhrase: "line",
   topicLabel: "line",
   message: "multiline",
   code: "line",
+  provider: "line",
+  passkeyName: "line",
+  planLine: "line",
 } as const satisfies Record<string, SlotKind>;
 
 export type SlotName = keyof typeof SLOT_KINDS;

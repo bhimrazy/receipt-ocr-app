@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const runPromise = vi.hoisted(() => vi.fn());
 const logger = vi.hoisted(() => ({ info: vi.fn(), error: vi.fn() }));
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/core", () => ({ checkReadiness: "checkReadiness" }));
 vi.mock("@/lib/runtime", () => ({ runtime: { runPromise } }));
 vi.mock("@/lib/log", () => ({ logger }));
+const skipEvent = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/http", () => ({
+  skipEvent,
   withRequestEvent:
     (_spec: unknown, handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown) =>
     (request: Request, context?: unknown) =>
@@ -19,6 +20,7 @@ const ready = await import("./ready/route");
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   runPromise.mockReset();
+  skipEvent.mockReset();
   logger.error.mockReset();
   vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "0123456789abcdef");
 });
@@ -30,6 +32,8 @@ describe("GET /api/health", () => {
     expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=10");
     expect(await res.json()).toEqual({ ok: true, commit: "0123456" });
     expect(runPromise).not.toHaveBeenCalled();
+    // An uptime pinger's answers aren't logged.
+    expect(skipEvent).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -45,6 +49,7 @@ describe("GET /api/health/ready", () => {
       checks: { database: "ok", storage: "ok" },
       commit: "0123456",
     });
+    expect(skipEvent).toHaveBeenCalledTimes(1);
   });
 
   it("is 503 when the runtime can't build, and logs once per fresh check", async () => {
@@ -56,6 +61,8 @@ describe("GET /api/health/ready", () => {
     const body = await res.json();
     expect(body.checks.database).toBe("down");
     expect(JSON.stringify(body)).not.toContain("DATABASE_URL");
+    // A failing check is always written.
+    expect(skipEvent).not.toHaveBeenCalled();
     await ready.GET(new Request("https://app.example/api/health/ready"));
     expect(runPromise).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledTimes(1);

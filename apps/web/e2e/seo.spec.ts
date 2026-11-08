@@ -4,7 +4,7 @@ import { signUp, uniqueEmail } from "./helpers";
 // next.config.ts and app/robots.ts key on the request host; the test server is localhost.
 const PROD_HOST = "receipt-ocr.bhimraj.com.np";
 
-const INDEXABLE = ["/", "/privacy", "/terms", "/cookies"];
+const INDEXABLE = ["/", "/pricing", "/privacy", "/terms", "/cookies", "/refunds"];
 const NOINDEX_PUBLIC = ["/sign-in", "/sign-up", "/forgot-password", "/reset-password"];
 
 const meta = (page: Page, selector: string) =>
@@ -75,7 +75,7 @@ test("the home page's structured data is valid and makes no rating or review cla
     return data["@graph"]?.map((node) => node["@type"]) ?? [data["@type"]];
   });
   expect(types).toEqual(
-    expect.arrayContaining(["Organization", "WebSite", "SoftwareApplication", "FAQPage"]),
+    expect.arrayContaining(["Organization", "WebSite", "WebApplication", "FAQPage"]),
   );
   expect(blocks.join("")).not.toMatch(/aggregateRating|"review"/i);
   // FAQPage is only honest while the FAQ is on the page.

@@ -87,8 +87,21 @@ a collector at `http://otel-collector:4318` with no headers.
 2. **OTLP export**: `@effect/opentelemetry` with the OTLP log and trace exporters, wired in `register()` only when
    `OTEL_EXPORTER_OTLP_ENDPOINT` is set; `after()` flush; a test that an unset endpoint loads nothing. Pin versions at
    implementation time (7-day rule), and check that `@effect/opentelemetry` peers match `effect@3.22.4`.
+   **Built (2026-11-08)** as an event sink on the one `emit` ([flow](../architecture/flows/observability.md#otlp-export)):
+   `@opentelemetry/sdk-logs` with the OTLP/HTTP protobuf (default) and JSON log exporters, no trace exporter and no
+   `@effect/opentelemetry`, because every Effect log already goes through `emit`. The `after()` flush is scheduled by
+   the first event of a request instead of at each call site.
 3. **Sentry extras** (optional): errors, releases and source maps, as in sections 3 and 4.
+   **Built (2026-11-08)** without source maps ([flow](../architecture/flows/observability.md#sentry)):
+   `@sentry/node` on the server and a bare `@sentry/browser` client instead of `@sentry/nextjs`, because without
+   `withSentryConfig` (no build plugin, no tunnel) the Next SDK adds only `captureRequestError`, and the lean client
+   keeps tracing and Replay code out of the bundle. No edge config: nothing runs on the edge runtime. Source maps
+   wait for the separate `sentry-cli` step (security plan M11).
 4. **PostHog server events** (optional): as in section 2, server side only.
+   **Built (2026-11-08)** ([flow](../architecture/flows/observability.md#posthog)): events are projected from the
+   wide events through an event sink rather than called at each route, with a closed, runtime-checked catalogue:
+   `signed_up`, `receipt_uploaded`, `receipt_scanned`, `receipt_scan_failed`, `csv_exported`, `plan_limit_hit`
+   (uploads only so far). Not yet: `workspace_created`, invites, `receipt_retried`, `$ai_generation`, browser PostHog.
 
 ## Earlier design (vendor-specific, superseded where it conflicts)
 

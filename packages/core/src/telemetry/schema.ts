@@ -163,6 +163,33 @@ export const EVENT_SCHEMA = {
     },
   },
 
+  /** A billing webhook or its apply job. Provider ids and states only, never amounts or emails. */
+  billing: {
+    group: {
+      provider: "token",
+      /** The provider's event type, e.g. `subscription.updated`. */
+      event_type: "token",
+      /** The provider's event id (`evt_…`). */
+      event_id: "id",
+      subscription_id: "id",
+      /** The subscription status the event carried. */
+      status: "token",
+      /** `recorded`, `duplicate`, `ignored`, `rejected`, or the apply outcome (`applied`, `stale`, `unmatched`). */
+      outcome: "token",
+      /** Why a webhook was refused: `missing-signature`, `bad-signature`, `stale-signature`, `bad-body`. */
+      rejection: "token",
+      /** Why a new subscription wasn't linked: `workspace`, `owner`, `price`, or `subscription` (an adjustment for one we don't have). */
+      unmatched_reason: "token",
+      /** A subscription whose workspace is gone can still charge: the buyer pays for nothing. Set from the stored row's workspace link and the event's status; no personal data. */
+      orphan_charging: "bool",
+      /** An adjustment's action: `refund`, `chargeback`, `credit` and their reversals. */
+      adjustment_action: "token",
+      /** Set when an applied event moved its workspace between plans (`free`, `pro`): the `plan_changed` product event. */
+      plan_from: "token",
+      plan_to: "token",
+    },
+  },
+
   error: { group: ERROR_FIELDS },
   /** Names of problems logged while this unit ran (`receipt.calls_not_recorded`). */
   notices: "tokens",
@@ -173,6 +200,8 @@ export const EVENT_SCHEMA = {
   topic: "token",
   message_length: "int",
   delivered: "bool",
+  /** Contact form: `queued`, `rate_limited` or `enqueue_failed`. */
+  auto_reply: "token",
   turnstile_errors: "tokens",
   /** CSP reports: the directive and the blocked host or keyword only. */
   violations: { list: { directive: "token", blocked: "token" } },

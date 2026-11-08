@@ -111,9 +111,48 @@ export function invitationEmail(
 /** A contact-form message to the support inbox; `topicLabel` comes from the app's fixed list. */
 export function supportMessageEmail(
   ctx: EmailContext,
-  input: { from: string; topicLabel: string; message: string },
+  input: { senderName: string; from: string; topicLabel: string; message: string },
 ): EmailContent {
   return build("supportMessage", `[${BRAND} support] ${input.topicLabel}`, ctx, input);
+}
+
+const MAX_FIRST_NAME = 30;
+// Link-like: a scheme, "www.", an address, a path, or a dot followed by letters ("x.com").
+const LINK_LIKE = /:\/\/|www\.|@|\/|\\|\.\p{L}{2}/iu;
+// Kept: letters, combining marks, apostrophes, hyphens and dots ("O'Neil", "Jean-Luc", "J.").
+const NOT_NAME_CHAR = /[^\p{L}\p{M}'’.-]/gu;
+
+/**
+ * The first name a contact-form auto-reply greets, from what the visitor typed: letters only, at
+ * most 30 characters, and "there" when nothing usable is left or it looks like a link (an
+ * auto-reply can be aimed at anyone's address, so it must not carry a stranger's URL).
+ */
+export function greetingName(raw: string): string {
+  const first =
+    raw
+      .normalize("NFKC")
+      .trim()
+      .split(/[\s\p{Cc}\p{Cf}]+/u)[0] ?? "";
+  if (LINK_LIKE.test(first)) return "there";
+  const name = first
+    .replace(NOT_NAME_CHAR, "")
+    .replace(/^[.'’-]+|[.'’-]+$/gu, "")
+    .slice(0, MAX_FIRST_NAME);
+  return /\p{L}/u.test(name) ? name : "there";
+}
+
+/**
+ * The automatic "we got your message" to a contact-form sender. `topicPhrase` comes from the
+ * app's fixed list; the name is cleaned here whatever the caller passes.
+ */
+export function contactReplyEmail(
+  ctx: EmailContext,
+  input: { name: string; topicPhrase: string },
+): EmailContent {
+  return build("contactReply", `Thanks for contacting ${BRAND}`, ctx, {
+    firstName: greetingName(input.name),
+    topicPhrase: input.topicPhrase,
+  });
 }
 
 /** The admin console's delivery check. */
@@ -188,8 +227,51 @@ export function twoFactorDisabledEmail(
 export const backupCodesRegeneratedEmail: Notice = (ctx, input) =>
   build("backupCodesRegenerated", `New backup codes for your ${BRAND} account`, ctx, input);
 
-export const passkeyAddedEmail: Notice = (ctx, input) =>
+/** `passkeyName` is what the Security page calls it: user-chosen text, so body only, never the subject. */
+type PasskeyNotice = (
+  ctx: EmailContext,
+  input: { resetUrl: string; passkeyName: string },
+) => EmailContent;
+
+export const passkeyAddedEmail: PasskeyNotice = (ctx, input) =>
   build("passkeyAdded", `A passkey was added to your ${BRAND} account`, ctx, input);
 
-export const passkeyRemovedEmail: Notice = (ctx, input) =>
+export const passkeyRemovedEmail: PasskeyNotice = (ctx, input) =>
   build("passkeyRemoved", `A passkey was removed from your ${BRAND} account`, ctx, input);
+
+/** An account that signed in only with Google or GitHub set a password. */
+export const passwordSetEmail: Notice = (ctx, input) =>
+  build("passwordSet", `A password was added to your ${BRAND} account`, ctx, input);
+
+/** `provider` is the app's fixed label, never user input. */
+type ProviderNotice = (
+  ctx: EmailContext,
+  input: { resetUrl: string; provider: "Google" | "GitHub" },
+) => EmailContent;
+
+export const signInConnectedEmail: ProviderNotice = (ctx, input) =>
+  build(
+    "signInConnected",
+    `${input.provider} sign-in was connected to your ${BRAND} account`,
+    ctx,
+    input,
+  );
+
+export const signInDisconnectedEmail: ProviderNotice = (ctx, input) =>
+  build(
+    "signInDisconnected",
+    `${input.provider} sign-in was disconnected from your ${BRAND} account`,
+    ctx,
+    input,
+  );
+/**
+ * Sent once to a new account. `planLine` states the user's plan and its limits, worded by the
+ * caller from the plan table when sending, so no number is written here. The link is the upload
+ * page.
+ */
+export function welcomeEmail(ctx: EmailContext, input: { planLine: string }): EmailContent {
+  return build("welcome", `Welcome to ${BRAND}`, ctx, {
+    url: new URL("/app/upload", ctx.appUrl).toString(),
+    planLine: input.planLine,
+  });
+}
