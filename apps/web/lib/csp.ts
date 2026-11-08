@@ -4,11 +4,15 @@
  * Cloudflare's origin joins script and frame sources only when Turnstile is on (the site
  * key is inlined at build time, so this matches the client bundle). Google Analytics origins join
  * only when a measurement id is set (Google's CSP guide, GA4 without ads features). Vercel Web
- * Analytics needs nothing extra: production builds load it from the site's own origin.
+ * Analytics needs nothing extra: production builds load it from the site's own origin. Sentry's
+ * ingest origin joins connect-src only when browser error reporting is built in (a valid DSN).
  */
 export function buildContentSecurityPolicy(
   turnstileSiteKey: string | undefined,
-  { googleAnalytics = false }: { googleAnalytics?: boolean } = {},
+  {
+    googleAnalytics = false,
+    sentryIngest,
+  }: { googleAnalytics?: boolean; sentryIngest?: string } = {},
 ): string {
   const turnstile = turnstileSiteKey?.trim() ? " https://challenges.cloudflare.com" : "";
   const gaScript = googleAnalytics ? " https://www.googletagmanager.com" : "";
@@ -21,7 +25,7 @@ export function buildContentSecurityPolicy(
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https: http://localhost:9000",
     "font-src 'self' data:",
-    `connect-src 'self'${gaConnect}`,
+    `connect-src 'self'${gaConnect}${sentryIngest ? ` ${sentryIngest}` : ""}`,
     // public/sw.js; without this, worker-src falls back to script-src.
     "worker-src 'self'",
     "manifest-src 'self'",

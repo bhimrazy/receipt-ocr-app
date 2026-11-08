@@ -4,9 +4,10 @@ import { getIP } from "better-auth/api";
 import { Cause, Effect, Exit, Option } from "effect";
 import { NextResponse } from "next/server";
 import { authEnv } from "./env";
-import { errorFields, logger, type WideEvent } from "./log";
+import { errorFields, logger, type ErrorFields, type WideEvent } from "./log";
 import { REQUEST_ID_HEADER } from "./request-id";
 import { runtime } from "./runtime";
+import { reportError } from "./telemetry/errors";
 
 const STATUS: Record<AppError["_tag"], number> = {
   InvalidInput: 400,
@@ -32,6 +33,21 @@ const PUBLIC = new Set<AppError["_tag"]>([
 export const jsonError = (status: number, error: string, headers?: HeadersInit) =>
   NextResponse.json({ error }, { status, headers });
 
+/** Server failures (5xx and defects) go to error reporting too; expected 4xx never do. */
+function report(error: unknown, fields: ErrorFields, status: number, event?: WideEvent) {
+  reportError({
+    error,
+    fields,
+    tags: {
+      route: event?.route,
+      method: event?.method,
+      request_id: event?.request_id,
+      event: event?.event,
+      status_code: status,
+    },
+  });
+}
+
 /**
  * Records a failure on the wide event and returns its HTTP response. The
  * event gets the error's tag, kind and cause class, never its message:
@@ -40,20 +56,25 @@ export const jsonError = (status: number, error: string, headers?: HeadersInit) 
 export function failureResponse(cause: Cause.Cause<AppError>, event?: WideEvent): Response {
   const failure = Cause.failureOption(cause);
   if (Option.isNone(failure)) {
+    const defect = Cause.squash(cause);
+    const fields: ErrorFields = { ...errorFields(defect), type: "Defect" };
     if (event) {
       event.outcome = "error";
       event.status_code = 500;
-      event.error = { ...errorFields(Cause.squash(cause)), type: "Defect" };
+      event.error = fields;
     }
+    report(defect, fields, 500, event);
     return jsonError(500, "Something went wrong");
   }
   const error = failure.value;
   const status = STATUS[error._tag];
+  const fields = errorFields(error);
   if (event) {
     event.status_code = status;
     event.outcome = status >= 500 ? "error" : error._tag;
-    event.error = errorFields(error);
+    event.error = fields;
   }
+  if (status >= 500) report(error, fields, status, event);
   const headers =
     error._tag === "QuotaExceeded" ? { "Retry-After": String(error.retryAfterSeconds) } : undefined;
   const message = PUBLIC.has(error._tag)

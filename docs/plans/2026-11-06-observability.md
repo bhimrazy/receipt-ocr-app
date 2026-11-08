@@ -92,6 +92,11 @@ a collector at `http://otel-collector:4318` with no headers.
    `@effect/opentelemetry`, because every Effect log already goes through `emit`. The `after()` flush is scheduled by
    the first event of a request instead of at each call site.
 3. **Sentry extras** (optional): errors, releases and source maps, as in sections 3 and 4.
+   **Built (2026-11-08)** without source maps ([flow](../architecture/flows/observability.md#sentry)):
+   `@sentry/node` on the server and a bare `@sentry/browser` client instead of `@sentry/nextjs`, because without
+   `withSentryConfig` (no build plugin, no tunnel) the Next SDK adds only `captureRequestError`, and the lean client
+   keeps tracing and Replay code out of the bundle. No edge config: nothing runs on the edge runtime. Source maps
+   wait for the separate `sentry-cli` step (security plan M11).
 4. **PostHog server events** (optional): as in section 2, server side only.
 
 ## Earlier design (vendor-specific, superseded where it conflicts)

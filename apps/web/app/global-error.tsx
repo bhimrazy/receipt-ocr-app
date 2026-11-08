@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportBoundaryError } from "@/lib/telemetry/client-errors";
 
 /**
  * Last-resort boundary for errors in the root layout, where the app's CSS and fonts may not
@@ -22,6 +23,7 @@ export default function GlobalError({
         digest: error.digest,
       }),
     );
+    reportBoundaryError(error);
   }, [error]);
 
   return (

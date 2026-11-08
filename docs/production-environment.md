@@ -482,7 +482,7 @@ it makes no network calls.
 | Vercel Web Analytics | Cookie-free page counts on public pages             | **Works.** Vercel → Analytics → Enable; no variable              |
 | Google Analytics 4   | Visitor analytics on public pages, after consent    | **Works.** Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` (9a)              |
 | Axiom                | Searchable logs kept longer than Vercel's           | **Works.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` and `_HEADERS` (9b) |
-| Sentry               | Error grouping, alerts, stack traces with source    | Planned: needs `@sentry/nextjs` wired in                         |
+| Sentry               | Error grouping and alerts, server and browser       | **Works.** Set `SENTRY_DSN` (9c)                                 |
 | PostHog              | Product analytics (funnels, retention), server-side | Planned: needs the server PostHog client and a consent decision  |
 
 Do them in this order when the time comes: Axiom first (logs are what you need during an incident), then Sentry, then
@@ -516,13 +516,25 @@ PostHog once there are users to learn from.
    `telemetry.start_failed`. EU org: use the regional edge URL from Axiom's settings as the endpoint. Optional:
    `OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production` (Config).
 
-### 9c. Sentry (once wired in)
+### 9c. Sentry
 
 1. [sentry.io](https://sentry.io) → **Create project → Next.js**, name `receipt-ocr`. Copy the **DSN**.
-2. **Settings → Security & Privacy:** turn on **Data scrubbing** and **Prevent storing IP addresses**.
-3. Vercel (Production): `SENTRY_DSN` (Config). For readable stack traces, also an auth token for source-map upload
-   in CI (Secret, GitHub Actions only).
+2. **Settings → Security & Privacy:** turn on **Data scrubbing** and **Prevent storing IP addresses** (the privacy
+   page says IPs aren't stored).
+3. Vercel (Production): `SENTRY_DSN` (Config). It is read at build too: the build inlines it into the browser code
+   and adds Sentry's ingest host to the CSP, so redeploy after setting it. No `NEXT_PUBLIC_` copy is needed. A value
+   that isn't a DSN (say, an auth token pasted by mistake) leaves Sentry off.
 4. Set an alert: **Alerts → new issue**, email.
+5. Check: `curl -s https://<host>/api/health` shows the commit; issues carry the same 7-character release.
+
+What is sent: server 5xx and defects (from `failureResponse` and `onRequestError`), uncaught exceptions, unhandled
+rejections, dead jobs, and browser errors outside or inside error boundaries. Errors only: no tracing, Replay,
+Feedback or Logs. Each event is rebuilt from an allowlist (see [observability](architecture/flows/observability.md#sentry)).
+
+Not yet: source-map upload. Stack frames point at the built files. The planned step is a separate `sentry-cli`
+upload in `production.yml` that runs no repo code, with `SENTRY_AUTH_TOKEN` as a GitHub Actions secret only (never
+in Vercel), maps deleted before deploy (security plan M11). Docker: `SENTRY_DSN` must be a build arg for browser
+reporting; at runtime alone it turns on server reporting only.
 
 ### 9d. PostHog (once wired in)
 
