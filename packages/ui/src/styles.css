@@ -267,6 +267,12 @@ body {
   color: var(--foreground);
 }
 
+/* Set for one frame while the theme changes, so every surface switches at once. */
+[data-theme-switching],
+[data-theme-switching] * {
+  transition: none !important;
+}
+
 ::selection {
   background: color-mix(in oklab, var(--primary) 34%, transparent);
 }
