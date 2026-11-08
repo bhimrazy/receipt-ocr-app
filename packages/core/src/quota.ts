@@ -1,49 +1,53 @@
-import { eq, user } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { loadDailyOcrCap } from "./config";
 import { QuotaExceeded } from "./errors";
-import { DEFAULT_PLAN, isPlanId, policyFor, type PlanId, type PlanPolicy } from "./plans";
+import { DEFAULT_PLAN, type PlanId, type PlanPolicy, type QuotaScope } from "./plans";
 import { ReceiptRepo, STALE_AFTER_MS, type QuotaGate } from "./repository";
-import { Db } from "./services";
-import { Settings } from "./settings";
-import type { UsageCounts, UsageWindow } from "./usage";
-
-export type QuotaLimits = { perMinute: number; perDay: number };
-
-export const quotaLimits = (policy: PlanPolicy): QuotaLimits => ({
-  perMinute: policy.receiptsPerMinute,
-  perDay: policy.receiptsPerDay,
-});
+import type { UsageCounts, UsageSubject, UsageWindow } from "./usage";
 
 /**
- * The user's plan read from the database, with the limits an admin has set
- * for it. Not from the session: its cookie cache would delay a plan change
- * by up to five minutes.
+ * The limits one upload is checked against, from its workspace's plan
+ * (`quotaLimits`). `perDay` and `perMonth` count `scope`: the user, or the
+ * workspace. Omitted fields (tests, older callers) mean Free, per user, no
+ * monthly limit and no pool.
  */
-export const userPlan = (userId: string) =>
-  Effect.gen(function* () {
-    const { use } = yield* Db;
-    const settings = yield* Settings;
-    const [rows, plans] = yield* Effect.all(
-      [
-        use((db) => db.select({ plan: user.plan }).from(user).where(eq(user.id, userId)).limit(1)),
-        settings.plans,
-      ],
-      { concurrency: "unbounded" },
-    );
-    const stored = rows[0]?.plan;
-    const plan: PlanId = isPlanId(stored) ? stored : DEFAULT_PLAN;
-    return { plan, policy: policyFor(plans, plan) };
-  });
+export type QuotaLimits = {
+  perMinute: number;
+  perDay: number;
+  perMonth?: number | null;
+  scope?: QuotaScope;
+  /** Rounds of this plan per UTC day across every user. */
+  planPoolPerDay?: number | null;
+  /** The allowance this upload draws from. */
+  plan?: PlanId;
+};
+
+export const quotaLimits = (plan: PlanId, policy: PlanPolicy): QuotaLimits => ({
+  plan,
+  scope: policy.scope,
+  perMinute: policy.receiptsPerMinute,
+  perDay: policy.receiptsPerDay,
+  perMonth: policy.receiptsPerMonth,
+  planPoolPerDay: policy.poolPerDay,
+});
+
+export type QuotaWindowName = "minute" | "day" | "month" | "pool" | "global";
 
 export type QuotaVerdict = {
   allowed: boolean;
   /** Which limit was hit, when `allowed` is false. */
-  window?: "minute" | "day" | "global";
-  /** The user's own count and limit for today, for the usage meter. */
+  window?: QuotaWindowName;
+  /** The meter's period: the month when the plan has a monthly limit, else the day. */
+  period: "day" | "month";
+  /** Whose usage the counts are: the user's or the workspace's. */
+  scope: QuotaScope;
+  /** The count and limit for `period`, for the usage meter. */
   used: number;
   limit: number;
+  /** When `period` resets. */
   resetsAt: Date;
+  /** With a monthly limit: today's count and limit as well. */
+  day?: { used: number; limit: number };
   retryAfterSeconds?: number;
 };
 
@@ -55,47 +59,101 @@ export const utcDayStart = (now: Date) =>
 
 export const nextUtcMidnight = (now: Date) => new Date(utcDayStart(now).getTime() + DAY_MS);
 
+/** The monthly window is the UTC calendar month. */
+export const utcMonthStart = (now: Date) =>
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+export const nextUtcMonthStart = (now: Date) =>
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+const secondsUntil = (at: Date, now: Date) =>
+  Math.max(1, Math.ceil((at.getTime() - now.getTime()) / 1000));
+
+/**
+ * Checked in this order, first refusal wins:
+ * 1. the global fuse (`OCR_DAILY_CAP`, every plan, platform-wide);
+ * 2. the plan's platform pool for today (Free: every Free user together);
+ * 3. the month, for the plan's scope (Free: the user; Pro: the workspace);
+ * 4. the day, for the same scope;
+ * 5. the user's burst minute.
+ */
 export function decideQuota(
   counts: UsageCounts,
   limits: QuotaLimits,
   globalCap: number | undefined,
   now: Date,
 ): QuotaVerdict {
-  const resetsAt = nextUtcMidnight(now);
-  const untilReset = Math.max(1, Math.ceil((resetsAt.getTime() - now.getTime()) / 1000));
-  const base = { used: counts.userDay, limit: limits.perDay, resetsAt };
+  const midnight = nextUtcMidnight(now);
+  const untilMidnight = secondsUntil(midnight, now);
+  const scope = limits.scope ?? "user";
+  const perMonth = limits.perMonth ?? null;
+  const base: QuotaVerdict =
+    perMonth !== null
+      ? {
+          allowed: true,
+          period: "month",
+          scope,
+          used: counts.month ?? 0,
+          limit: perMonth,
+          resetsAt: nextUtcMonthStart(now),
+          day: { used: counts.day, limit: limits.perDay },
+        }
+      : {
+          allowed: true,
+          period: "day",
+          scope,
+          used: counts.day,
+          limit: limits.perDay,
+          resetsAt: midnight,
+        };
+  const blocked = (window: QuotaWindowName, retryAfterSeconds: number): QuotaVerdict => ({
+    ...base,
+    allowed: false,
+    window,
+    retryAfterSeconds,
+  });
+
   if (globalCap !== undefined && (counts.globalDay ?? 0) >= globalCap) {
-    return { ...base, allowed: false, window: "global", retryAfterSeconds: untilReset };
+    return blocked("global", untilMidnight);
   }
-  if (counts.userDay >= limits.perDay) {
-    return { ...base, allowed: false, window: "day", retryAfterSeconds: untilReset };
+  const pool = limits.planPoolPerDay ?? null;
+  if (pool !== null && (counts.planDay ?? 0) >= pool) return blocked("pool", untilMidnight);
+  if (perMonth !== null && (counts.month ?? 0) >= perMonth) {
+    return blocked("month", secondsUntil(base.resetsAt, now));
   }
-  if (counts.userMinute >= limits.perMinute) {
-    return { ...base, allowed: false, window: "minute", retryAfterSeconds: 60 };
-  }
-  return { ...base, allowed: true };
+  if (counts.day >= limits.perDay) return blocked("day", untilMidnight);
+  if (counts.userMinute >= limits.perMinute) return blocked("minute", 60);
+  return base;
 }
 
-export const usageWindow = (now: Date, includeGlobal: boolean): UsageWindow => ({
+export const usageWindow = (
+  now: Date,
+  includeGlobal: boolean,
+  limits: Pick<QuotaLimits, "plan" | "scope" | "perMonth" | "planPoolPerDay"> = {},
+): UsageWindow => ({
   dayStart: utcDayStart(now),
   minuteStart: new Date(now.getTime() - 60_000),
+  monthStart: (limits.perMonth ?? null) !== null ? utcMonthStart(now) : null,
   pendingSince: new Date(now.getTime() - STALE_AFTER_MS),
+  plan: limits.plan ?? DEFAULT_PLAN,
+  scope: limits.scope ?? "user",
+  includePlanPool: (limits.planPoolPerDay ?? null) !== null,
   includeGlobal,
 });
 
-/** The check `ReceiptRepo.insert` / `claimRetry` run under the user's lock. */
+/** The check `ReceiptRepo.insert` / `claimRetry` run under the quota lock. */
 export const quotaGate = (limits: QuotaLimits, now = new Date()) =>
   Effect.map(loadDailyOcrCap, (globalCap): QuotaGate => ({
-    window: usageWindow(now, globalCap !== undefined),
+    window: usageWindow(now, globalCap !== undefined, limits),
     decide: (counts) => decideQuota(counts, limits, globalCap, now),
   }));
 
 /** Read-only check, for the usage meter and to refuse early before storing a file. */
-export const checkQuota = (userId: string, limits: QuotaLimits, now = new Date()) =>
+export const checkQuota = (subject: UsageSubject, limits: QuotaLimits, now = new Date()) =>
   Effect.gen(function* () {
     const repo = yield* ReceiptRepo;
     const gate = yield* quotaGate(limits, now);
-    return gate.decide(yield* repo.usage(userId, gate.window));
+    return gate.decide(yield* repo.usage(subject, gate.window));
   });
 
 export const quotaExceeded = (verdict: QuotaVerdict) =>
@@ -104,19 +162,39 @@ export const quotaExceeded = (verdict: QuotaVerdict) =>
     retryAfterSeconds: verdict.retryAfterSeconds ?? 60,
   });
 
+const scans = (n: number) => `${n} ${n === 1 ? "scan" : "scans"}`;
+
+const monthDay = (date: Date) =>
+  date.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+
+/** What a refused upload is told: which limit, when it resets, and where more room is. */
 export function quotaMessage(verdict: QuotaVerdict): string {
+  const reset = `They reset on ${monthDay(verdict.resetsAt)} at 00:00 UTC.`;
+  const workspace = verdict.scope === "workspace";
   switch (verdict.window) {
     case "minute":
       return "Too many uploads at once. Wait a minute and try again.";
     case "global":
       return "Receipt reading is at capacity for today. Try again after 00:00 UTC.";
-    default:
-      return `You've used all ${verdict.limit} ${verdict.limit === 1 ? "receipt" : "receipts"} for today. You can upload again after 00:00 UTC.`;
+    case "pool":
+      return "Free scanning is busy today. Try again tomorrow, or upgrade to Pro.";
+    case "month":
+      return workspace
+        ? `This workspace has used all ${scans(verdict.limit)} for this month. ${reset}`
+        : `You've used all ${scans(verdict.limit)} on the Free plan this month. ${reset} Upgrade a workspace to Pro for more scans.`;
+    default: {
+      const day = verdict.day?.limit ?? verdict.limit;
+      if (workspace) {
+        const left = Math.max(0, verdict.limit - verdict.used);
+        return `Daily limit reached. It resets at midnight UTC. ${left} of ${scans(verdict.limit)} left this month.`;
+      }
+      return `You've used all ${day} ${day === 1 ? "receipt" : "receipts"} for today. You can upload again after 00:00 UTC.`;
+    }
   }
 }
 
-/** Fails with QuotaExceeded when the user (or the whole service) is out of room. */
-export const enforceQuota = (userId: string, limits: QuotaLimits) =>
-  Effect.flatMap(checkQuota(userId, limits), (verdict) =>
+/** Fails with QuotaExceeded when the user, the workspace or the service is out of room. */
+export const enforceQuota = (subject: UsageSubject, limits: QuotaLimits) =>
+  Effect.flatMap(checkQuota(subject, limits), (verdict) =>
     verdict.allowed ? Effect.succeed(verdict) : Effect.fail(quotaExceeded(verdict)),
   );

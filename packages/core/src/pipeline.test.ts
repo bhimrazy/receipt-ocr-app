@@ -47,7 +47,13 @@ function harness(
   const objects = new Map<string, Uint8Array>();
   /** Every `ocr_calls` row written, with the outcome it was written with. */
   const calls: (OcrCallRow & { with: "complete" | "fail" | "record" })[] = [];
-  const counts = () => ({ userMinute: 0, userDay: options.usedToday ?? 0, globalDay: null });
+  const counts = () => ({
+    userMinute: 0,
+    day: options.usedToday ?? 0,
+    month: null,
+    planDay: null,
+    globalDay: null,
+  });
 
   const repo = Layer.succeed(ReceiptRepo, {
     insert: ({ id, scope, fileName, imageObjectKey }, quota) =>

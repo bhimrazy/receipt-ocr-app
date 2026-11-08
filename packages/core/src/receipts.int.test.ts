@@ -350,7 +350,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
 
   it("U2: a receipt stuck in processing with no live job reads as failed and stops counting against quota", async () => {
     const stuck = await run(ingestUpload({ scope: a, fileName: "stuck.jpg", body: JPEG, limits }));
-    const before = await run(checkQuota(a.userId, limits));
+    const before = await run(checkQuota(a, limits));
     await db((d) =>
       d
         .update(receipts)
@@ -375,7 +375,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       Effect.flatMap(ReceiptRepo, (r) => r.list(a, { status: "failed" }, { limit: 50, offset: 0 })),
     );
     expect(failedRows.rows.map((row) => row.id)).toContain(stuck.receipt.id);
-    expect((await run(checkQuota(a.userId, limits))).used).toBe(before.used - 1);
+    expect((await run(checkQuota(a, limits))).used).toBe(before.used - 1);
     // Fresh in-flight receipts: the processing filter matches Home's "Reading now" count.
     const fresh = await run(
       ingestUpload({ scope: a, fileName: "fresh.jpg", body: new Uint8Array([...JPEG, 1]), limits }),
@@ -413,10 +413,10 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const markFailed = () => repo((r) => r.fail(id, a, attempt, "unreadable", []));
 
     await markFailed();
-    const before = await repo((r) => r.usage(a.userId, window()));
+    const before = await repo((r) => r.usage(a, window()));
     expect(await repo((r) => r.claimRetry(id, a, g))).toMatchObject({ kind: "claimed" });
     attempt += 1;
-    const after = await repo((r) => r.usage(a.userId, window()));
+    const after = await repo((r) => r.usage(a, window()));
     expect(after.userMinute).toBe(before.userMinute + 1);
     expect(after.globalDay).toBe((before.globalDay ?? 0) + 1);
 
@@ -487,8 +487,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
   });
 
   describe("usage ledger", () => {
-    const usedToday = (userId: string, l = limits) =>
-      run(checkQuota(userId, l)).then((v) => v.used);
+    const usedToday = (subject: typeof a, l = limits) =>
+      run(checkQuota(subject, l)).then((v) => v.used);
     const readAndExtract = async (scope: typeof a, body = JPEG) => {
       const { receipt } = await run(ingestUpload({ scope, fileName: "r.jpg", body, limits }));
       await extract(receipt.id);
@@ -498,14 +498,14 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     it("P0-1: deleting a receipt gives back neither the user's quota nor the global count", async () => {
       const c = await createUser("deleter");
       const id = await readAndExtract(c);
-      expect(await usedToday(c.userId)).toBe(1);
+      expect(await usedToday(c)).toBe(1);
       const before = await run(
-        Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+        Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))),
       );
       await run(deleteReceipt({ receiptId: id, scope: c }));
-      expect(await usedToday(c.userId)).toBe(1);
+      expect(await usedToday(c)).toBe(1);
       const after = await run(
-        Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, usageWindow(new Date(), true))),
+        Effect.flatMap(ReceiptRepo, (r) => r.usage(c, usageWindow(new Date(), true))),
       );
       expect(after).toEqual(before);
     });
@@ -513,13 +513,13 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     it("a failed read costs no quota but counts toward the global cap, and so do its retries", async () => {
       const c = await createUser("failer");
       const window = () => usageWindow(new Date(), true);
-      const usage = () => run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c.userId, window())));
+      const usage = () => run(Effect.flatMap(ReceiptRepo, (r) => r.usage(c, window())));
       const start = await usage();
       const id = await readAndExtract(c, FAILING_JPEG);
       await run(claimRetry({ receiptId: id, scope: c, limits }));
       await extract(id);
       const end = await usage();
-      expect(end.userDay).toBe(start.userDay);
+      expect(end.day).toBe(start.day);
       // Two rounds, however many automatic attempts each took.
       expect(end.userMinute).toBe(start.userMinute + 2);
       expect(end.globalDay! - start.globalDay!).toBeGreaterThanOrEqual(2);
@@ -546,7 +546,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
           if (!Exit.isSuccess(exit)) throw new Error(`upload ${i + 1} was refused`);
           await extractOnce(exit.value.receipt.id);
         }
-        expect(await usedToday(c.userId, tight)).toBe(20);
+        expect(await usedToday(c, tight)).toBe(20);
         const refused = await upload();
         expect(Exit.isFailure(refused) && JSON.stringify(refused.cause)).toContain("QuotaExceeded");
       },
@@ -567,7 +567,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       for (let i = 0; i < FREE_FAILED_ROUNDS + 1; i++) {
         expect(Exit.isSuccess(await read(FAILING_JPEG))).toBe(true);
       }
-      expect(await usedToday(c.userId, tight)).toBe(3);
+      expect(await usedToday(c, tight)).toBe(3);
       expect(Exit.isFailure(await read(JPEG))).toBe(true);
     });
 
@@ -576,10 +576,10 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       const { receipt } = await run(
         ingestUpload({ scope: c, fileName: "n.jpg", body: JPEG, limits }),
       );
-      expect(await usedToday(c.userId)).toBe(1); // in flight
+      expect(await usedToday(c)).toBe(1); // in flight
       await run(Effect.flatMap(Storage, (s) => s.remove([receipt.imageObjectKey!])));
       await extract(receipt.id);
-      expect(await usedToday(c.userId)).toBe(0);
+      expect(await usedToday(c)).toBe(0);
       const rows = await db((d) =>
         d.select().from(ocrCalls).where(eq(ocrCalls.receiptId, receipt.id)),
       );
@@ -596,9 +596,9 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     it("B4: deleting the workspace keeps its usage, unlinked, and the user's quota stays used", async () => {
       const c = await createUser("ws-deleter");
       const id = await readAndExtract(c);
-      expect(await usedToday(c.userId)).toBe(1);
+      expect(await usedToday(c)).toBe(1);
       await db((d) => d.delete(organization).where(eq(organization.id, c.organizationId)));
-      expect(await usedToday(c.userId)).toBe(1);
+      expect(await usedToday(c)).toBe(1);
       const [call] = await db((d) => d.select().from(ocrCalls).where(eq(ocrCalls.receiptId, id)));
       expect(call).toMatchObject({ organizationId: null, userId: c.userId, status: "ok" });
     });

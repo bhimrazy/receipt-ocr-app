@@ -71,8 +71,31 @@ describe("storedPlanTableSchema", () => {
     };
     expect(planTableSchema.safeParse(stored).success).toBe(false);
     const read = storedPlanTableSchema.parse(stored);
-    expect(read.free).toEqual({ ...policy, receiptsPerDay: 42, batchMax: MAX_BATCH });
+    expect(read.free).toEqual({
+      ...policy,
+      receiptsPerDay: 42,
+      batchMax: MAX_BATCH,
+      scope: "user",
+      receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
+      poolPerDay: DEFAULT_PLANS.free.poolPerDay,
+    });
     expect(read.pro.batchMax).toBe(15);
+  });
+
+  it("gives a row saved before the monthly and pool limits each plan's own defaults", () => {
+    const read = storedPlanTableSchema.parse({ free: policy, pro: policy });
+    expect(read.free).toMatchObject({ scope: "user", receiptsPerMonth: 100, poolPerDay: 300 });
+    expect(read.pro).toMatchObject({ scope: "workspace", receiptsPerMonth: 500, poolPerDay: null });
+  });
+
+  it("keeps a saved null (no limit) and refuses a day above the month", () => {
+    const pro = { ...policy, receiptsPerMonth: null, poolPerDay: null };
+    expect(storedPlanTableSchema.parse({ free: policy, pro }).pro.receiptsPerMonth).toBeNull();
+    const result = planTableSchema.safeParse({
+      free: policy,
+      pro: { ...policy, receiptsPerDay: 600, receiptsPerMonth: 500 },
+    });
+    expect(result.success).toBe(false);
   });
 
   it("still rejects a batchMax that isn't a positive whole number", () => {
@@ -348,6 +371,9 @@ describe("Settings", () => {
       ...policy,
       receiptsPerDay: 42,
       batchMax: MAX_BATCH,
+      scope: "user",
+      receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
+      poolPerDay: DEFAULT_PLANS.free.poolPerDay,
     });
   });
 
