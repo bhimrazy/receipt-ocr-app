@@ -2,6 +2,7 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   confirmNewsletter,
+  isNewsletterEmail,
   NewsletterGateway,
   requestNewsletterSubscription,
   signNewsletterToken,
@@ -12,6 +13,7 @@ import {
 import { Db } from "./services";
 
 const secret = "test-secret-with-enough-length-0123456789";
+let secrets: string[] = [secret];
 const now = Date.UTC(2026, 10, 8);
 
 describe("newsletter tokens", () => {
@@ -59,9 +61,12 @@ describe("newsletter tokens", () => {
 });
 
 function setup(options: { allowed?: boolean; gateway?: GatewayOutcome } = {}) {
+  secrets = [secret];
   const calls: Record<string, unknown[]> = { mail: [], subscribe: [], unsubscribe: [] };
   const gateway = Layer.succeed(NewsletterGateway, {
-    secret,
+    get secrets() {
+      return secrets;
+    },
     appUrl: "https://app.example",
     sendConfirmation: (input) => {
       calls.mail!.push(input);
@@ -90,6 +95,65 @@ function setup(options: { allowed?: boolean; gateway?: GatewayOutcome } = {}) {
     Effect.runPromise(effect.pipe(Effect.provide(Layer.merge(gateway, db))));
   return { calls, run };
 }
+
+describe("newsletter token hardening", () => {
+  it("accepts only a plain address", () => {
+    expect(isNewsletterEmail("ada@example.com")).toBe(true);
+    expect(isNewsletterEmail("a.b+tag@sub.example.co")).toBe(true);
+    for (const bad of [
+      "x<victim@t.com>",
+      '"x"@t.com',
+      "victim@t.com\u200b",
+      "vi\u200bctim@t.com",
+      "a b@t.com",
+      "a@t.com,b@t.com",
+      "a@t.com;b",
+      "(c)a@t.com",
+      "a@[1.2.3.4]",
+      "é@t.com",
+      "a@t.com\n",
+      "a@t",
+    ]) {
+      expect(isNewsletterEmail(bad), bad).toBe(false);
+    }
+  });
+
+  it("refuses an empty secret to sign or verify", () => {
+    expect(() => signNewsletterToken("", "unsubscribe", "a@b.co")).toThrow();
+    const token = signNewsletterToken(secret, "unsubscribe", "a@b.co");
+    expect(verifyNewsletterToken("", "unsubscribe", token).ok).toBe(false);
+    expect(verifyNewsletterToken([""], "unsubscribe", token).ok).toBe(false);
+  });
+
+  it("rejects a confirm token that has no expiry", () => {
+    const forever = signNewsletterToken(secret, "confirm", "a@b.co");
+    expect(verifyNewsletterToken(secret, "confirm", forever)).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+  });
+
+  it("keeps old links working after the secret rotates, and signs new ones with the new secret", async () => {
+    const old = signNewsletterToken(secret, "unsubscribe", "a@b.co");
+    const rotated = ["new-secret-new-secret-new-secret-00", secret];
+    expect(verifyNewsletterToken(rotated, "unsubscribe", old).ok).toBe(true);
+    const fresh = signNewsletterToken(rotated[0]!, "unsubscribe", "a@b.co");
+    expect(verifyNewsletterToken(rotated, "unsubscribe", fresh).ok).toBe(true);
+    expect(verifyNewsletterToken(secret, "unsubscribe", fresh).ok).toBe(false);
+  });
+
+  it("sends nothing for a lookalike address or without a secret", async () => {
+    const a = setup();
+    expect(await a.run(requestNewsletterSubscription("x<victim@t.com>"))).toBe("invalid");
+    expect(a.calls.mail).toHaveLength(0);
+    const b = setup();
+    secrets = [];
+    expect(await b.run(requestNewsletterSubscription("a@b.co"))).toBe("not_configured");
+    expect(b.calls.mail).toHaveLength(0);
+    const leave = signNewsletterToken(secret, "unsubscribe", "a@b.co");
+    expect(await b.run(unsubscribeNewsletter(leave))).toBe("invalid");
+  });
+});
 
 describe("newsletter service", () => {
   it("mails a confirm link and an unsubscribe link, and adds nobody yet", async () => {

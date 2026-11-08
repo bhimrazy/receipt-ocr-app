@@ -24,7 +24,7 @@ let client: Resend | null = null;
  * address, and subjects can carry a workspace or inviter name.
  */
 export type EmailLogEvent = {
-  event: "email.sent" | "email.send_failed" | "email.not_configured";
+  event: "email.sent" | "email.send_failed" | "email.not_configured" | "email.contact_failed";
   unit: "log";
   level: "info" | "error";
   error?: { type: string; kind?: string };
@@ -157,7 +157,7 @@ export async function subscribeContact(
     }
     return { ok: true };
   } catch (cause) {
-    log({ event: "email.send_failed", unit: "log", level: "error", error: errorOf(cause) });
+    log({ event: "email.contact_failed", unit: "log", level: "error", error: errorOf(cause) });
     return { ok: false, reason: "failed" };
   }
 }
@@ -174,7 +174,7 @@ export async function unsubscribeContact(
     if (error && error.statusCode !== 404) throw error;
     return { ok: true };
   } catch (cause) {
-    log({ event: "email.send_failed", unit: "log", level: "error", error: errorOf(cause) });
+    log({ event: "email.contact_failed", unit: "log", level: "error", error: errorOf(cause) });
     return { ok: false, reason: "failed" };
   }
 }

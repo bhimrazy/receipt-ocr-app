@@ -140,20 +140,6 @@ export const emailEnv = {
 };
 
 /**
- * Product-updates list. The signup form, its routes and the confirm mail are on only when the
- * Resend segment (formerly "audience") id is set. Adding contacts needs a full-access
- * RESEND_API_KEY; a sending-only key sends the confirmation mail but cannot add anyone.
- */
-export const newsletterEnv = {
-  segmentId: optional("RESEND_NEWSLETTER_SEGMENT_ID"),
-};
-export const newsletterEnabled = Boolean(newsletterEnv.segmentId);
-
-/** Signs newsletter tokens: the current versioned secret when rotation is on, else the single one. */
-export const newsletterSecret = () =>
-  authEnv.betterAuthSecrets?.[0]?.value ?? authEnv.betterAuthSecret;
-
-/**
  * Bearer secret for the queue drain route (`/api/jobs/drain`), sent by Vercel Cron and pg_net.
  * Read at call time. Optional: without it the route answers 401 and drains nothing.
  */
@@ -356,6 +342,31 @@ export const authEnv = {
   google: socialProvider("GOOGLE"),
   github: socialProvider("GITHUB"),
 };
+
+/**
+ * Product-updates list. The signup form, its routes and the confirm mail are on only when the
+ * Resend segment (formerly "audience") id and a signing secret are both set. Adding contacts
+ * needs a full-access RESEND_API_KEY; a sending-only key sends the confirmation mail but cannot
+ * add anyone.
+ */
+export const newsletterEnv = {
+  segmentId: optional("RESEND_NEWSLETTER_SEGMENT_ID"),
+};
+
+/**
+ * Newsletter token secrets, current first: the versioned `BETTER_AUTH_SECRETS` list, then the
+ * single `BETTER_AUTH_SECRET`. Unsubscribe links never expire, so every secret still configured
+ * must keep verifying them after a rotation.
+ */
+export const newsletterSecrets = (): string[] => [
+  ...new Set(
+    [...(authEnv.betterAuthSecrets?.map((s) => s.value) ?? []), authEnv.betterAuthSecret].filter(
+      (value): value is string => Boolean(value),
+    ),
+  ),
+];
+
+export const newsletterEnabled = Boolean(newsletterEnv.segmentId && newsletterSecrets().length > 0);
 
 /**
  * Auth requires a database and a signing secret (BETTER_AUTH_SECRET or BETTER_AUTH_SECRETS). When either is missing the

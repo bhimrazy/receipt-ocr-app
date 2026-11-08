@@ -9,7 +9,7 @@ import {
 } from "@receipt-ocr/email";
 import { requestNewsletterSubscription } from "@receipt-ocr/core";
 import { Effect, Layer } from "effect";
-import { emailContext, emailEnv, newsletterEnabled, newsletterEnv, newsletterSecret } from "./env";
+import { emailContext, emailEnv, newsletterEnabled, newsletterEnv, newsletterSecrets } from "./env";
 import { errorFields, logger } from "./log";
 import { mailer } from "./mailer";
 import { runtime } from "./runtime";
@@ -21,14 +21,16 @@ const outcome = (result: ContactResult) =>
 
 /**
  * Wires the newsletter service to Resend: the confirmation mail goes through the shared mailer,
- * contacts through the product-updates segment. Without a signing secret the service is off.
+ * contacts through the product-updates segment. Secrets are read per call; without one the
+ * service refuses to sign or verify.
  */
 export const NewsletterGatewayLive = Layer.succeed(NewsletterGateway, {
-  secret: newsletterSecret() ?? "",
+  get secrets() {
+    return newsletterSecrets();
+  },
   appUrl: emailContext.appUrl,
   sendConfirmation: ({ to, confirmUrl, unsubscribeUrl, expiresInSeconds }) =>
     Effect.promise(async () => {
-      if (!newsletterSecret()) return "not_configured" as const;
       const result = await sendEmail(mailer, {
         to,
         ...newsletterConfirmEmail(emailContext, {

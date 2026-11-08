@@ -3,10 +3,12 @@
 import { confirmNewsletter, unsubscribeNewsletter } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { redirect } from "next/navigation";
+import { newsletterEnabled } from "@/lib/env";
 import { NewsletterGatewayLive } from "@/lib/newsletter";
 import { runtime } from "@/lib/runtime";
 
 const run = (step: "confirm" | "unsubscribe", token: unknown) => {
+  if (!newsletterEnabled) return Promise.resolve("unavailable" as const);
   if (typeof token !== "string" || token.length > 1024) return Promise.resolve("invalid" as const);
   const effect = step === "confirm" ? confirmNewsletter(token) : unsubscribeNewsletter(token);
   return runtime.runPromise(effect.pipe(Effect.provide(NewsletterGatewayLive)));

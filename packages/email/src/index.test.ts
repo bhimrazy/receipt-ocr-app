@@ -137,6 +137,7 @@ describe("newsletter contacts", () => {
       reason: "failed",
     });
     expect(JSON.stringify(log.mock.calls)).not.toContain("b.co");
+    expect(log.mock.calls[0]?.[0]).toMatchObject({ event: "email.contact_failed" });
   });
 
   it("unsubscribes by address and treats a missing contact as done", async () => {
