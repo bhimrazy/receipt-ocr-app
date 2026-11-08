@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { gaMeasurementId, turnstileOn } from "@/lib/consent/env";
 import { logStorageName } from "@/lib/processors";
+import { parseSentryDsn } from "@/lib/telemetry/sentry-config";
 import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
@@ -12,6 +13,7 @@ export const metadata: Metadata = pageMetadata({
 });
 
 const googleAnalytics = Boolean(gaMeasurementId);
+const errorReporting = Boolean(parseSentryDsn(process.env.SENTRY_DSN));
 const logStorage = logStorageName(
   process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
 );
@@ -62,6 +64,11 @@ export default function PrivacyPage() {
             ...(logStorage
               ? [
                   `${logStorage} stores a copy of our server logs so we can search them when investigating errors: which request was made, when, how long it took and how it ended, the IDs of the account, workspace and receipt involved, the AI model used and its token counts, and error types. The logs never contain your receipt files or their contents, your email address, your IP address or your messages.`,
+                ]
+              : []),
+            ...(errorReporting
+              ? [
+                  "Sentry, to tell us when something breaks: for an error on our servers or in your browser, it receives the type of error, where in our code it happened, the page or API route (without query strings, and with IDs and tokens in the address removed), your browser and operating system names, and a request ID. It doesn't receive your email address, cookies, receipt files or their contents, or error messages that could contain them. Your browser connects to Sentry directly to send a report, so Sentry sees your IP address; we set it not to store it.",
                 ]
               : []),
             "Google and GitHub, only if you choose to sign in with them.",

@@ -122,6 +122,13 @@ jobs:
             echo "React Email reached the server bundle (see the files above)." >&2
             exit 1
           fi
+      # CI builds with no SENTRY_DSN, so no Sentry code may ship to the browser.
+      - name: No Sentry in the browser bundle without a DSN
+        run: |
+          if grep -rlE --include='*.js' 'sentry\.io|BrowserClient|__SENTRY' apps/web/.next/static; then
+            echo "Sentry code reached the browser bundle without a DSN (see the files above)." >&2
+            exit 1
+          fi
 
   e2e:
     name: E2E (Playwright)

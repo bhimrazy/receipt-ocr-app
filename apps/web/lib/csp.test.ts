@@ -36,4 +36,13 @@ describe("buildContentSecurityPolicy", () => {
     // GA4 without ads features: no doubleclick or ad-serving origins.
     expect(on).not.toMatch(/doubleclick|googlesyndication|googleadservices/);
   });
+
+  it("allows Sentry's ingest origin only when browser error reporting is built in", () => {
+    expect(directive(buildContentSecurityPolicy(undefined), "connect-src")).not.toMatch(/sentry/);
+    const on = buildContentSecurityPolicy(undefined, {
+      sentryIngest: "https://o1.ingest.us.sentry.io",
+    });
+    expect(directive(on, "connect-src")).toBe("connect-src 'self' https://o1.ingest.us.sentry.io");
+    expect(directive(on, "script-src")).not.toMatch(/sentry/);
+  });
 });

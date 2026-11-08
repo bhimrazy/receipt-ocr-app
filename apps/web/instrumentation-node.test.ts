@@ -6,7 +6,13 @@ vi.mock("@receipt-ocr/core/telemetry/otlp", () => {
   return { startOtlpExport: otlp.start };
 });
 
-const { startTelemetryExport } = await import("./instrumentation-node");
+const sentry = vi.hoisted(() => ({ loaded: false, start: vi.fn() }));
+vi.mock("./lib/telemetry/sentry-server", () => {
+  sentry.loaded = true;
+  return { startSentryServer: sentry.start };
+});
+
+const { startErrorReporting, startTelemetryExport } = await import("./instrumentation-node");
 // Loaded here, not inside the first test's timeout (it is what startTelemetryExport imports first).
 await import("@receipt-ocr/core/telemetry");
 
@@ -37,5 +43,19 @@ describe("startTelemetryExport", () => {
     ).resolves.toBeUndefined();
     expect(String(error.mock.calls[0]?.[0])).toContain("telemetry.start_failed");
     expect(String(error.mock.calls[0]?.[0])).not.toContain("bad header");
+  });
+});
+
+describe("startErrorReporting", () => {
+  it("loads no Sentry code without a valid DSN", async () => {
+    await startErrorReporting({});
+    await startErrorReporting({ SENTRY_DSN: "sntrys_pasted_auth_token" });
+    expect(sentry.loaded).toBe(false);
+  });
+
+  it("starts Sentry with a valid DSN", async () => {
+    const dsn = "https://0123456789abcdef0123456789abcdef@o1.ingest.us.sentry.io/2";
+    await startErrorReporting({ SENTRY_DSN: dsn });
+    expect(sentry.start).toHaveBeenCalledWith(dsn, { SENTRY_DSN: dsn });
   });
 });

@@ -118,6 +118,31 @@ through the same allowlist.
 - [`wide-events.int.test.ts`](../../../apps/web/lib/wide-events.int.test.ts) (CI `test:int`): one real upload writes
   exactly one request event and one `job.attempt`, with no customer data.
 
+## Sentry
+
+Errors only, and only with a valid `SENTRY_DSN` (`parseSentryDsn`; anything else leaves it off).
+
+- **Server** ([`sentry-server.ts`](../../../apps/web/lib/telemetry/sentry-server.ts)): `@sentry/node`, started in
+  `register()` before env validation. No tracing, no OpenTelemetry provider, no module hooks, no default
+  integrations: uncaught exceptions, unhandled rejections and what we report. `failureResponse` reports 5xx and
+  defects (never expected 4xx) and `onRequestError` reports render, route and action failures, through
+  [`reportError`](../../../apps/web/lib/telemetry/errors.ts). A dead `job.attempt` becomes a `job_dead:<kind>:<error>`
+  issue. Reported errors are stand-ins: our `errorFields` as type and message plus the original's stack frames,
+  never its message or cause chain (security plan B1: AI SDK errors carry the receipt). Sending is flushed by the
+  same `after()` as OTLP.
+- **Browser** ([`sentry-client.ts`](../../../apps/web/lib/telemetry/sentry-client.ts)): `@sentry/browser`'s bare
+  `BrowserClient` with global handlers, dedupe and navigation/fetch breadcrumbs, loaded in its own chunk from
+  `instrumentation-client.ts` after hydration starts. `next.config.ts` inlines the DSN only when it is valid; without
+  one the branch is `if ("")` and no Sentry code ships (CI greps `.next/static` to hold that). Error boundaries
+  report browser errors; server render errors (they carry a digest) were already reported by the server.
+- **Scrubbing** ([`sentry-event.ts`](../../../apps/web/lib/telemetry/sentry-event.ts)): every event is rebuilt from
+  an allowlist in `beforeSend`: error types, messages through `scrubMessage` (Drizzle `params:` and AI SDK payloads
+  cut, emails and long numbers masked, AI SDK content errors replaced whole), stack frames without variables or
+  source lines, our tags, release (the short commit SHA, as `/api/health`), environment, runtime/browser/OS names,
+  and the request's method and URL through `scrubUrl` (no query or hash; reset tokens, invitation and receipt ids
+  replaced, security plan B5). `dataCollection` is all off as well. No tunnel: the browser posts to Sentry's ingest
+  host, which joins `connect-src` only when the DSN is set (a tunnel would forward cookies, security plan B2/B3).
+
 ## OTLP export
 
 When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, `register()` in `instrumentation.ts` loads

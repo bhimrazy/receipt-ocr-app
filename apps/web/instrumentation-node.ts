@@ -12,7 +12,12 @@ export async function startTelemetryExport(env: Record<string, string | undefine
     await startOtlpExport({ env });
   } catch (error) {
     // Export is optional: the app runs on with stdout only.
-    logger.error({ event: "telemetry.start_failed", unit: "log", error: errorFields(error) });
+    logger.error({
+      event: "telemetry.start_failed",
+      unit: "log",
+      kind: "otlp",
+      error: errorFields(error),
+    });
     return;
   }
   // Long-lived server (Docker): send what is buffered before the process stops. Next's own
@@ -22,6 +27,28 @@ export async function startTelemetryExport(env: Record<string, string | undefine
       if (process.listenerCount("SIGTERM") === 0) process.exit(143);
     });
   });
+}
+
+/**
+ * Starts Sentry (server errors only) when SENTRY_DSN is a valid DSN. Unset or
+ * malformed, the SDK is never imported.
+ */
+export async function startErrorReporting(env: Record<string, string | undefined> = process.env) {
+  const { parseSentryDsn } = await import("./lib/telemetry/sentry-config");
+  const sentry = parseSentryDsn(env.SENTRY_DSN);
+  if (!sentry) return;
+  try {
+    const { startSentryServer } = await import("./lib/telemetry/sentry-server");
+    startSentryServer(sentry.dsn, env);
+  } catch (error) {
+    const { errorFields, logger } = await import("@receipt-ocr/core/telemetry");
+    logger.error({
+      event: "telemetry.start_failed",
+      unit: "log",
+      kind: "sentry",
+      error: errorFields(error),
+    });
+  }
 }
 
 /**
