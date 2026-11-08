@@ -533,8 +533,9 @@ Feedback or Logs. Each event is rebuilt from an allowlist (see [observability](a
 
 Not yet: source-map upload. Stack frames point at the built files. The planned step is a separate `sentry-cli`
 upload in `production.yml` that runs no repo code, with `SENTRY_AUTH_TOKEN` as a GitHub Actions secret only (never
-in Vercel), maps deleted before deploy (security plan M11). Docker: `SENTRY_DSN` must be a build arg for browser
-reporting; at runtime alone it turns on server reporting only.
+in Vercel), maps deleted before deploy (security plan M11). Docker: pass `--build-arg SENTRY_DSN=...` and
+`--build-arg GIT_COMMIT_SHA=$(git rev-parse HEAD)` to `docker/Dockerfile.prod` for browser reporting and the release;
+`SENTRY_DSN` in the container's environment alone turns on server reporting only.
 
 ### 9d. PostHog
 
