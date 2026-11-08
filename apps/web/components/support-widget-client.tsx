@@ -96,7 +96,7 @@ export function SupportWidgetClient({ email }: { email?: string }) {
         aria-label={open ? "Close support" : "Contact support"}
         aria-expanded={open}
         // The cta tokens keep white text legible over any page background.
-        className="flex size-11 items-center justify-center rounded-full bg-cta text-cta-foreground shadow-lg shadow-black/40 ring-2 ring-cta-foreground/80 transition hover:bg-cta-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring sm:size-12 motion-safe:hover:-translate-y-0.5"
+        className="flex size-11 items-center justify-center rounded-full bg-cta text-cta-foreground shadow-lg shadow-black/40 light:shadow-float ring-2 ring-cta-foreground/80 transition hover:bg-cta-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring sm:size-12 motion-safe:hover:-translate-y-0.5"
       >
         {open ? (
           <X aria-hidden className="size-5" />

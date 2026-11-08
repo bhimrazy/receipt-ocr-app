@@ -51,7 +51,7 @@ export function HeroFloatingReceipts() {
           className={`absolute transition-transform duration-300 ease-out will-change-transform ${card.wrapperClass}`}
         >
           <div
-            className={`floating-receipt flex h-[182px] w-[212px] flex-col rounded-xl border border-hairline bg-card/80 p-4 font-mono text-2xs opacity-90 shadow-2xl shadow-black/40 backdrop-blur-xl ${card.cardClass}`}
+            className={`floating-receipt flex h-[182px] w-[212px] flex-col rounded-xl border border-hairline bg-card/80 p-4 font-mono text-2xs opacity-90 shadow-2xl shadow-black/40 light:shadow-float backdrop-blur-xl ${card.cardClass}`}
           >
             <div className="mb-3 flex items-center justify-between text-xs font-semibold text-foreground">
               <span>{card.merchant}</span>

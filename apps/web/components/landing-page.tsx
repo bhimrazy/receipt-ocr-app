@@ -394,7 +394,7 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
             <div className="grid-mask pointer-events-none absolute inset-0 opacity-30">
               <div className="receipt-grid absolute -inset-1" />
             </div>
-            <div className="glow-orb pointer-events-none absolute left-1/2 top-full size-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[130px]" />
+            <div className="glow-orb pointer-events-none absolute left-1/2 top-full size-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[130px] light:bg-primary/10" />
             <div className="relative">
               <h2 className="text-balance text-3xl font-bold tracking-tight md:text-4xl">
                 Start turning receipts into data

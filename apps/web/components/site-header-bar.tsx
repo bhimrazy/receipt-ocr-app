@@ -71,7 +71,7 @@ export function SiteHeaderBar({
         className={join(
           "mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 rounded-full px-2 pl-4 transition-[background-color,box-shadow] duration-300 sm:pl-5",
           solid
-            ? "bg-background/85 shadow-lg shadow-black/40 ring-1 ring-border backdrop-blur-xl"
+            ? "bg-background/85 shadow-lg shadow-black/40 light:shadow-float ring-1 ring-border backdrop-blur-xl"
             : "bg-transparent",
         )}
       >
@@ -137,7 +137,7 @@ export function SiteHeaderBar({
       {menuOpen && (
         <nav
           aria-label="Main"
-          className="mx-auto mt-2 max-w-6xl rounded-3xl bg-background/95 p-2 shadow-lg shadow-black/40 ring-1 ring-border backdrop-blur-xl lg:hidden"
+          className="mx-auto mt-2 max-w-6xl rounded-3xl bg-background/95 p-2 shadow-lg shadow-black/40 light:shadow-float ring-1 ring-border backdrop-blur-xl lg:hidden"
           id="site-menu"
         >
           <ul className="flex flex-col">

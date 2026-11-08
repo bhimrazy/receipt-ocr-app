@@ -1,19 +1,17 @@
 /**
- * Chart colours, as CSS custom properties set on each chart's root. The app
- * is dark-only, so these are the dark steps of the reference categorical
- * palette, validated on the card surface (#141416): every adjacent pair clears
- * the colour-blind and normal-vision floors, and all reach 3:1 on the surface.
- * Text never uses these; it keeps the foreground tokens.
+ * Chart colours as CSS variables from packages/ui/src/styles.css (`--series-*`), so each theme
+ * uses its own validated steps of the reference categorical palette. Text never uses these; it
+ * keeps the foreground tokens.
  */
 export const SERIES = [
-  "#3987e5", // blue
-  "#d95926", // orange
-  "#199e70", // aqua
-  "#c98500", // yellow
-  "#d55181", // magenta
-  "#008300", // green
-  "#9085e9", // violet
-  "#e66767", // red
+  "var(--series-1)", // blue
+  "var(--series-2)", // orange
+  "var(--series-3)", // aqua
+  "var(--series-4)", // yellow
+  "var(--series-5)", // magenta
+  "var(--series-6)", // green
+  "var(--series-7)", // violet
+  "var(--series-8)", // red
 ] as const;
 
 /**
@@ -21,10 +19,14 @@ export const SERIES = [
  * failed), so the closest pair (aqua and red) never touch. Legend, labels and
  * the table carry identity too.
  */
-export const OUTCOME = { ok: "#199e70", inFlight: "#3987e5", failed: "#e66767" } as const;
+export const OUTCOME = {
+  ok: "var(--series-3)",
+  inFlight: "var(--series-1)",
+  failed: "var(--series-8)",
+} as const;
 
 /** Past eight series a chart folds the rest into "Other" in this neutral. */
-export const OTHER = "#7a7a83";
+export const OTHER = "var(--series-other)";
 
 export const seriesColor = (slot: number) =>
   slot >= 0 && slot < SERIES.length ? SERIES[slot]! : OTHER;
