@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
 import { AuthLayout, AuthNotConfiguredCard } from "@/components/auth/auth-layout";
 import { CredentialsForm, type SocialProvider } from "@/components/auth/credentials-form";
-import { authEnabled, authEnv } from "@/lib/env";
+import { authEnabled, authEnv, newsletterEnabled } from "@/lib/env";
 import { getPlanTable } from "@/lib/plan-limits";
 import { callbackErrorMessage } from "@/lib/auth-errors";
 import { safeRedirect } from "@/lib/redirect";
@@ -53,6 +53,7 @@ export default async function SignUpPage({
                 } as const)
               : undefined
           }
+          productUpdates={newsletterEnabled}
           providers={providers}
           redirectTo={redirectTo}
         />

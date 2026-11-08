@@ -155,6 +155,17 @@ export function contactReplyEmail(
   });
 }
 
+/** Double opt-in mail for product updates; `unsubscribeUrl` lets a wrong recipient opt out for good. */
+export function newsletterConfirmEmail(
+  ctx: EmailContext,
+  input: LinkEmailInput & { unsubscribeUrl: string },
+): EmailContent {
+  return build("newsletterConfirm", `Confirm your ${BRAND} product updates`, ctx, {
+    ...link(input),
+    unsubscribeUrl: input.unsubscribeUrl,
+  });
+}
+
 /** The admin console's delivery check. */
 export function testEmail(ctx: EmailContext): EmailContent {
   return build("test", `[${BRAND}] Test email`, ctx, {});

@@ -344,6 +344,31 @@ export const authEnv = {
 };
 
 /**
+ * Product-updates list. The signup form, its routes and the confirm mail are on only when the
+ * Resend segment (formerly "audience") id and a signing secret are both set. Adding contacts
+ * needs a full-access RESEND_API_KEY; a sending-only key sends the confirmation mail but cannot
+ * add anyone.
+ */
+export const newsletterEnv = {
+  segmentId: optional("RESEND_NEWSLETTER_SEGMENT_ID"),
+};
+
+/**
+ * Newsletter token secrets, current first: the versioned `BETTER_AUTH_SECRETS` list, then the
+ * single `BETTER_AUTH_SECRET`. Unsubscribe links never expire, so every secret still configured
+ * must keep verifying them after a rotation.
+ */
+export const newsletterSecrets = (): string[] => [
+  ...new Set(
+    [...(authEnv.betterAuthSecrets?.map((s) => s.value) ?? []), authEnv.betterAuthSecret].filter(
+      (value): value is string => Boolean(value),
+    ),
+  ),
+];
+
+export const newsletterEnabled = Boolean(newsletterEnv.segmentId && newsletterSecrets().length > 0);
+
+/**
  * Auth requires a database and a signing secret (BETTER_AUTH_SECRET or BETTER_AUTH_SECRETS). When either is missing the
  * app degrades gracefully: auth endpoints return 503 and the sign-in/up pages
  * render a "not configured" card instead of crashing.

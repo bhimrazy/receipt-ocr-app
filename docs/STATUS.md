@@ -164,6 +164,9 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
      and keep the old price id in `PADDLE_PRICE_PRO_LEGACY` ([runbook](architecture/flows/billing.md#runbook)). There is
      no automated email for this yet.
 - Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
+- Product updates signup (in review): built but off until you create a Resend segment (Audiences are now "segments"),
+  set `RESEND_NEWSLETTER_SEGMENT_ID`, and use a **full-access** `RESEND_API_KEY` (a sending-only key cannot add
+  contacts). No migration. Details and limits: [plan](plans/2026-11-08-newsletter.md).
 - Standing decisions and dated reminders: [decisions.md](decisions.md).
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
 - If an admin saved an OCR chain naming `gemini-3.7-flash`, re-save it in Admin → Settings.

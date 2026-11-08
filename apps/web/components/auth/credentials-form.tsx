@@ -68,6 +68,7 @@ export function CredentialsForm({
   notice,
   initialError,
   freeAllowance,
+  productUpdates = false,
 }: {
   mode: "sign-in" | "sign-up";
   /** The free plan's saved daily limit, shown on sign-up. */
@@ -80,6 +81,8 @@ export function CredentialsForm({
   notice?: { message: string; kind: "success" | "info" };
   /** Error carried in the URL from an OAuth or email-confirmation redirect. */
   initialError?: string;
+  /** Sign-up only: offer the unticked product-updates box (the newsletter is configured). */
+  productUpdates?: boolean;
 }) {
   const router = useRouter();
   const turnstile = useTurnstile();
@@ -92,6 +95,7 @@ export function CredentialsForm({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [updates, setUpdates] = useState(false);
   const [error, setError] = useState<FormError | null>(null);
   const [callbackError, setCallbackError] = useState(initialError);
   const [pending, setPending] = useState<"credentials" | "passkey" | SocialProvider | null>(null);
@@ -120,8 +124,10 @@ export function CredentialsForm({
         email: trimmedEmail,
         password,
         callbackURL,
+        // Read by the sign-up hook, which mails a confirmation link; the box alone subscribes nobody.
+        ...(productUpdates && updates ? { newsletter: true } : {}),
         fetchOptions: turnstile.fetchOptions,
-      });
+      } as Parameters<typeof authClient.signUp.email>[0]);
       turnstile.reset();
       if (authError) {
         setError({
@@ -331,6 +337,18 @@ export function CredentialsForm({
           required
           value={password}
         />
+        {isSignUp && productUpdates ? (
+          <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-6 text-muted-foreground">
+            <input
+              checked={updates}
+              className="mt-1.5 size-4 shrink-0 accent-primary"
+              name="product-updates"
+              onChange={(event) => setUpdates(event.target.checked)}
+              type="checkbox"
+            />
+            <span>Send me occasional product updates</span>
+          </label>
+        ) : null}
         <Button
           aria-busy={turnstile.pending}
           className="mt-1 h-11 w-full"

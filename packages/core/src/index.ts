@@ -20,6 +20,7 @@ export * from "./files";
 export * from "./groups";
 export * from "./health";
 export * from "./jobs";
+export * from "./newsletter";
 export * from "./ocr";
 export * from "./pipeline";
 export * from "./quota";
