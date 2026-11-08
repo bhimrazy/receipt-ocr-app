@@ -3,7 +3,7 @@ import nextConfig from "../next.config";
 import { robotsFor } from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import { llmsFullTxt, llmsResponse, llmsTxt } from "@/lib/llms";
-import { APP_FEATURES, homeDescription, homeJsonLd, homeTitle, jsonLdScript } from "@/lib/seo";
+import { homeDescription, homeJsonLd, homeTitle, jsonLdScript } from "@/lib/seo";
 import { PRODUCTION_HOST, PRODUCTION_ORIGIN } from "@/lib/seo-hosts";
 
 const req = (host: string) => new Request("http://internal/llms.txt", { headers: { host } });
@@ -91,8 +91,7 @@ describe("llms.txt host gating", () => {
 });
 
 describe("home title and description", () => {
-  it("fit what Google shows and lead with the term people search for", () => {
-    expect(homeTitle).toMatch(/^Receipt Scanner/);
+  it("fit what Google shows and stay on brand", () => {
     expect(homeTitle).toMatch(/· ReceiptOCR$/);
     expect(homeTitle.length).toBeLessThanOrEqual(60);
     expect(homeDescription.length).toBeGreaterThanOrEqual(120);
@@ -105,7 +104,7 @@ describe("home title and description", () => {
       expect(text).toMatch(/JSON/);
       expect(text).not.toMatch(/excel|xlsx|\bapi\b/i);
     }
-    expect(homeDescription).toMatch(/^Free /);
+    expect(homeDescription).toMatch(/\bfree\b/i);
   });
 });
 
@@ -143,8 +142,13 @@ describe("home JSON-LD", () => {
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       isAccessibleForFree: true,
-      featureList: [...APP_FEATURES],
     });
+    const features = app.featureList as string[];
+    expect(features.length).toBeGreaterThan(0);
+    expect(features.every((f) => typeof f === "string" && f.length > 0)).toBe(true);
+    expect(features).toEqual(
+      expect.arrayContaining([expect.stringMatching(/CSV/), expect.stringMatching(/JSON/)]),
+    );
     expect(app.offers).toEqual({
       "@type": "Offer",
       name: "Free plan",

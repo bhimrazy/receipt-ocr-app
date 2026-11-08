@@ -13,11 +13,14 @@ export const homeDescription =
 
 // The root opengraph-image. A page's own `openGraph` drops the inherited file image, so it is
 // named here; a segment with its own opengraph-image file still overrides this.
+/** Alt text for the root Open Graph image; must describe what `app/opengraph-image.tsx` draws. */
+export const OG_IMAGE_ALT = `${SITE_NAME}: turn receipt photos into structured data, exported as CSV or JSON`;
+
 const DEFAULT_IMAGE = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: `${SITE_NAME}: receipt photos and PDFs to structured data, CSV and JSON`,
+  alt: OG_IMAGE_ALT,
 };
 
 /**
@@ -89,7 +92,7 @@ export function formatLegalDate(isoDate: string): string {
 }
 
 /** What the app does, in the words the site uses; the WebApplication node's featureList. */
-export const APP_FEATURES = [
+const APP_FEATURES = [
   "Receipt photo and PDF upload (JPEG, PNG, WebP, HEIC, PDF)",
   "Merchant, date, line items, tax and total extracted",
   "Confidence score per receipt and per line item",
@@ -97,12 +100,11 @@ export const APP_FEATURES = [
   "Searchable receipt history",
   "CSV export and JSON copy",
   "Shared workspaces",
-  "Installable as a PWA on iOS and Android",
 ] as const;
 
 /**
  * Organization (with its founder), WebSite and WebApplication for the home page. Only claims the
- * product backs today: a free web app, installable as a PWA. No ratings, reviews or prices beyond
+ * product backs today and the page shows: a free web app. No ratings, reviews or prices beyond
  * the free plan; the custom plan has no public price, so it has no Offer. Google's software rich
  * result needs a rating or review, so none is expected; the nodes describe the entity.
  */
