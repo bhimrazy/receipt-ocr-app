@@ -17,6 +17,7 @@ unlocks part of the app, and you can stop after step 3 with a working app.
 | [6. Bot protection (Turnstile)](#6-bot-protection-turnstile) | Spam protection on sign-up and forms | Optional | 5 min  |
 | [7. Deploy and check](#7-deploy-and-check)                   | Everything above goes live           | Yes      | 5 min  |
 | [8. Queue drain (cron)](#8-queue-drain-cron)                 | Failed or cut-off reads retry alone  | Yes      | 10 min |
+| [9. Optional extras](#9-optional-extras)                     | Analytics, logs, error tracking      | Optional | varies |
 
 The database, auth secret and site URL are already set; see [Already set](#already-set).
 
@@ -468,6 +469,62 @@ nothing.
 `runWorkerLoop({ registry: JOB_REGISTRY, worker, budgetMs, stopClaimingBeforeMs, maxJobs, idleMs, signal })` from
 `@receipt-ocr/core` on the shared runtime and aborts `signal` on SIGTERM. Keep the cron on as a fallback: whatever is
 free does the work.
+
+---
+
+## 9. Optional extras
+
+None of these is needed to run the app. Only Google Analytics works today; the other three are planned and need code
+before their keys do anything.
+
+| Service              | What it adds                                        | Status                                                                       |
+| -------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Vercel Web Analytics | Cookie-free page counts on public pages             | **Works.** Vercel → Analytics → Enable; no variable                          |
+| Google Analytics 4   | Visitor analytics on public pages, after consent    | **Works.** Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` (9a)                          |
+| Axiom                | Searchable logs kept longer than Vercel's           | Planned: needs the OTLP exporter ([plan](plans/2026-11-06-observability.md)) |
+| Sentry               | Error grouping, alerts, stack traces with source    | Planned: needs `@sentry/nextjs` wired in                                     |
+| PostHog              | Product analytics (funnels, retention), server-side | Planned: needs the server PostHog client and a consent decision              |
+
+Do them in this order when the time comes: Axiom first (logs are what you need during an incident), then Sentry, then
+PostHog once there are users to learn from.
+
+### 9a. Google Analytics 4
+
+1. [analytics.google.com](https://analytics.google.com) → **Admin → Create → Property**. Name `ReceiptOCR`, your time
+   zone and currency. Skip the business questions.
+2. **Data collection → Data streams → Add stream → Web.** URL `https://receipt-ocr.bhimraj.com.np`, name `Production`.
+   Copy the **Measurement ID** (`G-…`).
+3. In the stream's **Enhanced measurement** settings, turn off **Page changes based on browser history events**. The
+   app sends its own page views without query strings; GA's would send the full URL.
+4. **Admin → Data settings → Data retention:** 2 months. Leave **Google signals** and ads links off.
+5. Vercel: add `NEXT_PUBLIC_GA_MEASUREMENT_ID` (Production, **Config**, not Sensitive). It is read at build time, so
+   redeploy ([step 7](#7-deploy-and-check)).
+6. Check: open the site in a private window. A cookie banner appears; after **Accept**, GA → Reports → Realtime shows
+   you. In `/app` nothing is sent.
+
+### 9b. Axiom (once the exporter ships)
+
+1. [app.axiom.co](https://app.axiom.co) → sign up → **Datasets → New dataset** `receipt-ocr`.
+2. **Settings → API tokens → New token**, with only **Ingest** on that dataset. Copy it (`xaat-…`).
+3. Vercel (Production): `OTEL_EXPORTER_OTLP_ENDPOINT=https://api.axiom.co` (Config) and
+   `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>,X-Axiom-Dataset=receipt-ocr` (Secret).
+4. Redeploy. Events keep going to Vercel's logs too; Axiom gets the same events.
+
+### 9c. Sentry (once wired in)
+
+1. [sentry.io](https://sentry.io) → **Create project → Next.js**, name `receipt-ocr`. Copy the **DSN**.
+2. **Settings → Security & Privacy:** turn on **Data scrubbing** and **Prevent storing IP addresses**.
+3. Vercel (Production): `SENTRY_DSN` (Config). For readable stack traces, also an auth token for source-map upload
+   in CI (Secret, GitHub Actions only).
+4. Set an alert: **Alerts → new issue**, email.
+
+### 9d. PostHog (once wired in)
+
+1. [posthog.com](https://posthog.com) → sign up, region **US** (or EU; it decides the host). Project `ReceiptOCR`.
+2. **Project settings:** turn off session recording and autocapture; the app sends named server-side events only.
+3. Vercel (Production): `POSTHOG_KEY` (the project API key, Config) and `POSTHOG_HOST`
+   (`https://us.i.posthog.com` or `https://eu.i.posthog.com`).
+4. Name PostHog as a processor in the privacy policy before turning it on.
 
 ---
 
