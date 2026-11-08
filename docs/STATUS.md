@@ -291,6 +291,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Storage limit per plan (owner, 2026-11-08): today only each upload is capped (10 MB, 10 PDF pages), so total storage
+  per workspace is unbounded on both Free and Pro, and R2's free tier is 10 GB. Decide a cap per plan (stored bytes or
+  receipts per workspace, and maybe a retention period for Free), enforce it at upload from a per-workspace usage
+  total, show it in Settings → Billing and the plan table, and list it on `/pricing`.
 - The one-time "protect your receipts" card (after the fifth receipt) is dismissed with a per-browser cookie, so it
   shows once more on each new device. A per-user column (`user.security_prompt_dismissed_at`) needs a migration;
   fold it into the next schema change.
