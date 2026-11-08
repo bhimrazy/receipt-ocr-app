@@ -118,7 +118,7 @@ describe("assertBuyerStays (M-A)", () => {
       `Pat pays for Pro on this workspace. ${tail} removing them.`,
     );
     expect(await messageOf("demote")).toBe(
-      `Pat pays for Pro on this workspace. ${tail} changing the role of them.`,
+      `Pat pays for Pro on this workspace. ${tail} changing their role.`,
     );
     expect(await messageOf("leave")).toBe(`You pay for Pro on this workspace. ${tail} leaving.`);
   });

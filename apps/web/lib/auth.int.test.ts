@@ -412,7 +412,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
           body: { organizationId: orgId, memberId, role: "admin" },
         }),
       ),
-    ).toBe(`Pat Payer pays for Pro on this workspace. ${cancelHint} changing the role of them.`);
+    ).toBe(`Pat Payer pays for Pro on this workspace. ${cancelHint} changing their role.`);
     expect(
       await message(
         auth.api.removeMember({

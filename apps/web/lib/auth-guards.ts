@@ -83,8 +83,8 @@ export async function assertBuyerStays(
     action === "leave"
       ? "You pay for Pro on this workspace. Cancel the subscription in Billing, or let it end, before leaving."
       : `${name} pays for Pro on this workspace. Cancel the subscription in Billing, or let it end, before ${
-          action === "remove" ? "removing" : "changing the role of"
-        } them.`;
+          action === "remove" ? "removing them" : "changing their role"
+        }.`;
   throw new APIError("BAD_REQUEST", { message });
 }
 
