@@ -1,6 +1,6 @@
 // OCR accuracy, latency and cost benchmark.
 //   bun run bench:ocr [--models google:gemini-3.8-flash,anthropic:claude-haiku-5-5,...]
-//     [--fixtures bench/fixtures] [--prep none,app,long:1568,short:1000] [--only id,id]
+//     [--fixtures fixtures] [--prep none,app,long:1568,short:1000] [--only id,id]
 //     [--concurrency 2] [--prompt v1|v2] [--effort low,medium] [--dry-run]
 // --effort runs every model once per level it supports (a model without that level is skipped);
 // without it each runs at its default. Rows read `model@level`.

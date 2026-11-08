@@ -6,7 +6,7 @@ import { PASSWORD, signOut, signUp, uniqueEmail } from "./helpers";
 // Runs against `next build && next start`: the service worker registers only in production builds.
 
 const RECEIPT = readFileSync(
-  path.join(import.meta.dirname, "../../../bench/fixtures/npr-lakh.png"),
+  path.join(import.meta.dirname, "../../../packages/bench/fixtures/npr-lakh.png"),
 );
 
 // Sign-up is limited per client IP; give every test its own address.

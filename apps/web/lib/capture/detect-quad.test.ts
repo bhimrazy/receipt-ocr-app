@@ -198,7 +198,7 @@ describe("detectQuad on synthetic scenes", () => {
 });
 
 describe("detectQuad on bench receipts", () => {
-  const fixtures = path.join(import.meta.dirname, "../../../../bench/fixtures");
+  const fixtures = path.join(import.meta.dirname, "../../../../packages/bench/fixtures");
   for (const name of ["npr-lakh", "long-groceries"]) {
     it(`finds ${name} placed at an angle on a dark table`, () => {
       const receipt = decodePng(path.join(fixtures, `${name}.png`));

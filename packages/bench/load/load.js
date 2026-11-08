@@ -1,4 +1,4 @@
-// Receipt OCR load scenarios. Run through scripts/load.sh; see the Load test section of bench/README.md.
+// Receipt OCR load scenarios. Run through scripts/load.sh; see the Load test section of packages/bench/README.md.
 //
 // SCENARIO: smoke | reads | uploads | load | spike | soak
 //   RATE_READS / RATE_UPLOADS   iterations per second at steady state
@@ -130,7 +130,7 @@ const scenarios = {
 }[SCENARIO];
 if (!scenarios) throw new Error(`unknown SCENARIO ${SCENARIO}`);
 
-// SLOs. The numbers come from measured runs on 1 vCPU / 1 GB; see bench/README.md.
+// SLOs. The numbers come from measured runs on 1 vCPU / 1 GB; see packages/bench/README.md.
 const slo = {
   http_req_failed: ["rate<0.01"],
   checks: ["rate>0.99"],

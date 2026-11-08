@@ -24,7 +24,7 @@ test("uploading a receipt image shows the extracted merchant and total", async (
   await page
     .locator('[data-ready] input[type="file"][multiple]')
     .first()
-    .setInputFiles(path.join(import.meta.dirname, "../../../bench/fixtures/npr-lakh.png"));
+    .setInputFiles(path.join(import.meta.dirname, "../../../packages/bench/fixtures/npr-lakh.png"));
   await uploadFromReview(page);
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
   await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("npr-lakh.png");

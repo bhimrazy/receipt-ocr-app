@@ -86,7 +86,7 @@ describe("category scoring", () => {
 });
 
 describe("bench fixtures", () => {
-  // The synthetic set, plus the committed real sets (bench/fixtures-real/<set>/) once they exist.
+  // The synthetic set, plus the committed real sets (packages/bench/fixtures-real/<set>/) once they exist.
   const dirs = ["fixtures", "fixtures-real"]
     .map((name) => path.join(import.meta.dirname, name))
     .filter((dir) => existsSync(dir));
