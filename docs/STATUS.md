@@ -219,7 +219,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 2. Usage surfaces for customers and admins ([usage design](plans/2026-11-06-usage-design.md)).
 3. Observability: wide events (#52), then OTLP export to Axiom (#135), Sentry errors (#139) and server PostHog (#141), all
    off unless their env is set; provider privacy settings done 2026-11-08
-   ([§9e](production-environment.md#9e-provider-privacy-settings)). Next: Sentry source maps (separate `sentry-cli`
+   ([§9e](production-environment.md#9e-provider-privacy-and-alert-settings); its quota, alert and dashboard
+   steps are still to do). Next: Sentry source maps (separate `sentry-cli`
    step); browser PostHog after a consent decision, which needs `instrumentation-client.ts`, an `/ingest` rewrite
    proxy with `skipTrailingSlashRedirect`, cookieless mode or consent, `identify`/`reset`, and
    `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`/`HOST`; PostHog `groupIdentify` for the workspace plan once billing lands

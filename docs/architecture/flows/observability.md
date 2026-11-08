@@ -155,11 +155,14 @@ Server-side product analytics, only with a project key (`POSTHOG_KEY=phc_…`; a
   `fromRecord`): a successful `receipt.upload` becomes `receipt_uploaded`, `receipt.export` becomes `csv_exported`, a
   `QuotaExceeded` 429 for the day or the per-minute burst becomes `plan_limit_hit` (with that `limit`), and a `job.attempt` that succeeded or died becomes `receipt_scanned`
   or `receipt_scan_failed`. They start from the record that already passed the allowlist, so PostHog can't see a
-  field the logs don't. `signed_up` comes from Better Auth's `user.create.after` hook through `track()`.
+  field the logs don't. A `job.attempt` an admin started (`trigger: admin_rerun`) isn't the user's scan and sends
+  nothing. `signed_up` comes from Better Auth's `user.create.after` hook through `track()`, which schedules the
+  sinks' `after()` flush itself (`scheduleFlush`), so it doesn't depend on a wide event in the same request.
 - **One allowlist for both paths** (`checkEvent`): a closed set of event names, each with its own props of a known
   kind (short codes, integers, booleans). Ids must be opaque ids. Unknown props are dropped at runtime, so a cast
   can't add one.
-- **Identity:** `distinctId` is the Better Auth user id and `groups.workspace` the workspace id. No person
+- **Identity:** `distinctId` is the Better Auth user id; the workspace id goes both as the plain prop `workspace_id`
+  (usable on the free plan) and as `groups.workspace` (needs the paid group-analytics add-on). No person
   properties, no GeoIP (`$geoip_disable`), no IP (the server sends the event). Work an admin does while
   impersonating is skipped: the active scope carries `impersonatedBy`, so `annotateCaller` sets `impersonated_by`
   on every scoped request, and a receipt job enqueued then carries it in its payload onto its `job.attempt` events.
