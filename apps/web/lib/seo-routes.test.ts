@@ -84,11 +84,13 @@ describe("llms.txt host gating", () => {
     },
   );
 
-  it("the full file adds Free, Pro at its list price, and the FAQ; no Custom plan", () => {
+  it("the full file adds Free, Pro at its list price, Custom without a price, and the FAQ", () => {
     const full = llmsFullTxt();
     expect(full).toContain("## FAQ");
     expect(full).toContain("- Pro: $9 a month or $90 a year for one workspace");
-    expect(full).not.toMatch(/Custom|contact us|no public price/i);
+    const custom = full.split("\n").find((line) => line.startsWith("- Custom:"));
+    expect(custom).toContain("no public price");
+    expect(custom).not.toMatch(/\$\d/);
     expect(full).not.toContain("## Optional");
   });
 });

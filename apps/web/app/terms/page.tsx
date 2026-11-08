@@ -51,8 +51,8 @@ export default async function TermsPage() {
         {
           heading: "Plans and limits",
           body: [
-            `The free plan currently includes ${allowance(free)} per person, counted across every workspace they use, and ${workspaces} to own, with no card required.`,
-            `Pro is a subscription for one workspace, at ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year, plus any sales tax or VAT. It currently includes ${allowance(pro)} for that workspace, shared by its members, and lets its owner own up to ${owned(pro.workspaces)}. Each workspace needs its own subscription to be on Pro.`,
+            `The free plan currently includes ${allowance(free)} per person, counted across every workspace they use, up to ${free.membersPerWorkspace} members in a workspace, and ${workspaces} to own, with no card required.`,
+            `Pro is a subscription for one workspace, at ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year, plus any sales tax or VAT. It currently includes ${allowance(pro)} for that workspace, shared by its members, up to ${pro.membersPerWorkspace} members, and lets its owner own up to ${owned(pro.workspaces)}. Each workspace needs its own subscription to be on Pro.`,
             "Daily limits reset at 00:00 UTC and monthly limits on the 1st of each month at 00:00 UTC. Unused scans don't carry over.",
             "We may change these limits or prices. A price change applies from your next billing period, and we'll tell you by email before it does.",
           ],

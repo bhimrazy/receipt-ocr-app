@@ -1,6 +1,7 @@
 import "server-only";
 import {
   hitRateLimit,
+  memberLimitCheck,
   parseWorkspaceName,
   WORKSPACE_ROLES,
   workspaceCreationCheck,
@@ -55,6 +56,19 @@ export async function limitInvitations(inviterId: string): Promise<void> {
       { "Retry-After": String(retryAfterSeconds) },
     );
   }
+}
+
+/**
+ * Better Auth organization hooks: refuse an invitation, or its acceptance,
+ * once the workspace is at its plan's member limit (pending invitations
+ * count when inviting). Members already past the limit stay.
+ */
+export async function assertMemberRoom(
+  organizationId: string,
+  when: { kind: "invite"; email: string } | { kind: "accept" },
+): Promise<void> {
+  const check = await runtime.runPromise(memberLimitCheck(organizationId, when));
+  if (!check.allowed) throw new APIError("FORBIDDEN", { message: check.message ?? undefined });
 }
 
 /**

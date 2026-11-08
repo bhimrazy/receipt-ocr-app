@@ -207,8 +207,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 4. Default OCR chain: decided 2026-11-08. Claude Haiku 5.5, then Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; steps
    without an API key are skipped ([ai.md](architecture/ai.md#default-chain)). Groq zero data retention must be on first.
 5. PostHog: server-only first (recommended) or browser too; Sentry tracing off; source-map upload approach.
-6. Members: free seats 3 or 5, single owner + transfer, pending invites count. See
-   [members plan](plans/2026-11-06-members-admin-plan.md).
+6. ~~Members: free seats 3 or 5~~ Decided 2026-11-08: Free 3, Pro 10 members per workspace, pending invites count,
+   admin-editable in the plan limits. Still open: single owner + transfer ([members plan](plans/2026-11-06-members-admin-plan.md)).
 7. Branch protection on `main` requiring CI.
 8. BYOK tables (`user_credentials`, `storage_source`): keep or delete.
 9. Usage ledger: retention period (suggested 13 months, then a purge job and a privacy-page line); whether the
@@ -224,6 +224,10 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
     is built (`feat/install-offer`). Still open: measuring the landing install surfaces needs browser PostHog,
     which needs the consent decision; the landing sheet's defaults (Android only, 7-day snooze, 3 shows) are the
     design review's and the owner may revise them.
+13. Custom plan card ("Let's talk", opens the support form on Plans & limits): its name (Custom or Team), and how a
+    custom deal is delivered. Today there is no per-workspace override, so "more members, workspaces or scans" for one
+    customer can only be done by raising a plan's limits for everyone; a `workspace_overrides` row (sketched in the
+    [BYOK plan](plans/2026-11-07-byok.md)) would need a migration.
 
 ## Roadmap (order)
 

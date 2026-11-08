@@ -8,6 +8,7 @@ import {
   billingEvents,
   billingSubscriptions,
   eq,
+  invitation,
   jobs,
   member,
   ocrCalls,
@@ -30,6 +31,7 @@ import type { AdjustmentSnapshot, BillingEvent, SubscriptionSnapshot } from "./p
 import {
   accountPlan,
   applyBillingEvent,
+  memberLimitCheck,
   recordBillingEvent,
   userPaysForWorkspace,
   workspaceBilling,
@@ -408,6 +410,90 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const comped = await createUser("comped");
       await db((d) => d.update(user).set({ plan: "pro" }).where(eq(user.id, comped.userId)));
       expect(await planOf(comped.organizationId)).toBe("pro");
+    });
+  });
+
+  describe("members per workspace", () => {
+    async function invite(organizationId: string, inviterId: string, email: string, ageDays = 0) {
+      await db((d) =>
+        d.insert(invitation).values({
+          id: crypto.randomUUID(),
+          organizationId,
+          email,
+          role: "member",
+          status: "pending",
+          inviterId,
+          expiresAt: new Date(Date.now() + (7 - ageDays) * 86_400_000),
+        }),
+      );
+    }
+    const check = (organizationId: string, email = `${tag}-next@example.com`) =>
+      run(memberLimitCheck(organizationId, { kind: "invite", email }));
+
+    it("refuses a 4th on Free, counting pending invitations, and names the upgrade", async () => {
+      const boss = await createUser("seats-free");
+      const mate = await createUser("seats-mate");
+      await addMember(boss.organizationId, mate.userId);
+      expect(await check(boss.organizationId)).toMatchObject({ allowed: true, used: 2, limit: 3 });
+
+      await invite(boss.organizationId, boss.userId, `${tag}-third@example.com`);
+      const full = await check(boss.organizationId);
+      expect(full).toMatchObject({ allowed: false, used: 3, limit: 3, plan: "free" });
+      expect(full.message).toContain("Free workspaces have up to 3 members");
+      expect(full.message).toContain(`Pro for up to ${DEFAULT_PLANS.pro.membersPerWorkspace}`);
+
+      // Re-inviting the same address replaces its invitation, so it isn't refused.
+      expect(await check(boss.organizationId, `${tag}-THIRD@example.com`)).toMatchObject({
+        allowed: true,
+      });
+      // Accepting counts members only: the invitation was counted when it was sent.
+      expect(await run(memberLimitCheck(boss.organizationId, { kind: "accept" }))).toMatchObject({
+        allowed: true,
+        used: 2,
+      });
+    });
+
+    it("doesn't count expired or answered invitations", async () => {
+      const boss = await createUser("seats-expired");
+      await invite(boss.organizationId, boss.userId, `${tag}-old@example.com`, 8);
+      await invite(boss.organizationId, boss.userId, `${tag}-no@example.com`);
+      await db((d) =>
+        d
+          .update(invitation)
+          .set({ status: "rejected" })
+          .where(eq(invitation.email, `${tag}-no@example.com`)),
+      );
+      expect(await check(boss.organizationId)).toMatchObject({ allowed: true, used: 1 });
+    });
+
+    it("allows 10 on Pro and keeps members over the limit after a move to Free", async () => {
+      const boss = await createUser("seats-pro");
+      await deliver(
+        event(snapshot({ subscriptionId: `sub_${tag}_seats`, workspaceId: boss.organizationId })),
+      );
+      for (let i = 0; i < 8; i++) {
+        const mate = await createUser(`seats-pro-${i}`);
+        await addMember(boss.organizationId, mate.userId);
+      }
+      await invite(boss.organizationId, boss.userId, `${tag}-ninth@example.com`);
+      const full = await check(boss.organizationId);
+      expect(full).toMatchObject({ allowed: false, used: 10, limit: 10, plan: "pro" });
+      expect(full.message).toContain("Pro workspaces have up to 10 members");
+
+      // Pro revoked (as a chargeback would): the 9 members stay, and no one else can join.
+      await db((d) =>
+        d
+          .update(billingSubscriptions)
+          .set({ revokedAt: new Date() })
+          .where(eq(billingSubscriptions.providerSubscriptionId, `sub_${tag}_seats`)),
+      );
+      const free = await run(memberLimitCheck(boss.organizationId, { kind: "accept" }));
+      expect(free).toMatchObject({ allowed: false, used: 9, limit: 3, plan: "free" });
+      expect(free.message).toContain("Ask its owner to upgrade it to Pro");
+      const members = await db((d) =>
+        d.select().from(member).where(eq(member.organizationId, boss.organizationId)),
+      );
+      expect(members).toHaveLength(9);
     });
   });
 

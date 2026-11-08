@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const hits = new Map<string, number>();
 const buyers = new Set<string>();
+const room = { allowed: true, message: null as string | null };
 vi.mock("./runtime", () => ({
   runtime: { runPromise: async (result: unknown) => result },
 }));
 vi.mock("@receipt-ocr/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@receipt-ocr/core")>()),
+  memberLimitCheck: () => room,
   userPaysForWorkspace: (organizationId: string, userId: string) =>
     buyers.has(`${organizationId}:${userId}`),
   // In-memory stand-in for the rate_limit table.
@@ -21,6 +23,7 @@ vi.mock("@receipt-ocr/core", async (importOriginal) => ({
 const {
   INVITES_PER_HOUR,
   assertBuyerStays,
+  assertMemberRoom,
   assertWorkspaceRole,
   limitInvitations,
   validateWorkspaceName,
@@ -121,5 +124,21 @@ describe("assertBuyerStays (M-A)", () => {
       `Pat pays for Pro on this workspace. ${tail} changing their role.`,
     );
     expect(await messageOf("leave")).toBe(`You pay for Pro on this workspace. ${tail} leaving.`);
+  });
+});
+
+describe("assertMemberRoom", () => {
+  it("lets an invite through while there is room and refuses with the plan's message when full", async () => {
+    room.allowed = true;
+    room.message = null;
+    expect(await status(assertMemberRoom("o1", { kind: "invite", email: "a@example.com" }))).toBe(
+      "ok",
+    );
+    room.allowed = false;
+    room.message = "Free workspaces have up to 3 members.";
+    await expect(assertMemberRoom("o1", { kind: "accept" })).rejects.toMatchObject({
+      status: "FORBIDDEN",
+      body: { message: "Free workspaces have up to 3 members." },
+    });
   });
 });
