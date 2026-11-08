@@ -18,6 +18,7 @@ unlocks part of the app, and you can stop after step 3 with a working app.
 | [7. Deploy and check](#7-deploy-and-check)                   | Everything above goes live           | Yes      | 5 min  |
 | [8. Queue drain (cron)](#8-queue-drain-cron)                 | Failed or cut-off reads retry alone  | Yes      | 10 min |
 | [9. Optional extras](#9-optional-extras)                     | Analytics, logs, error tracking      | Optional | varies |
+| [10. Payments (Paddle)](#10-payments-paddle)                 | Pro subscriptions                    | Optional | 30 min |
 
 The database, auth secret and site URL are already set; see [Already set](#already-set).
 
@@ -525,6 +526,73 @@ PostHog once there are users to learn from.
 3. Vercel (Production): `POSTHOG_KEY` (the project API key, Config) and `POSTHOG_HOST`
    (`https://us.i.posthog.com` or `https://eu.i.posthog.com`).
 4. Name PostHog as a processor in the privacy policy before turning it on.
+
+---
+
+## 10. Payments (Paddle)
+
+Pro subscriptions are sold through Paddle Billing, the merchant of record. Billing is on only when **all six**
+variables below are set; with any missing, the app shows no Upgrade button and the webhook answers `503`. How it works
+is in [Billing](architecture/flows/billing.md).
+
+| Variable                          | Kind   | Value                                                |
+| --------------------------------- | ------ | ---------------------------------------------------- |
+| `PADDLE_ENV`                      | Config | `sandbox` or `production`                            |
+| `PADDLE_API_KEY`                  | Secret | Paddle → Developer tools → Authentication → API keys |
+| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | Config | Same page, client-side tokens. Public by design      |
+| `PADDLE_WEBHOOK_SECRET`           | Secret | The webhook destination's secret key (Notifications) |
+| `PADDLE_PRICE_PRO_MONTHLY`        | Config | Price id (`pri_...`) of the monthly Pro price        |
+| `PADDLE_PRICE_PRO_YEARLY`         | Config | Price id (`pri_...`) of the yearly Pro price         |
+
+`NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` is read at build time (it also adds Paddle's origins to the Content Security Policy),
+so **redeploy after changing it**. Set the sandbox and live values in separate environments (Preview and Production);
+a sandbox key never works on the live API.
+
+Also set `OCR_DAILY_CAP` to about `1000`. It is the emergency fuse across all plans and should sit above the Free pool
+(300 a day) and normal Pro use.
+
+### 10a. Webhook destination
+
+1. Paddle → **Developer tools → Notifications → New destination**.
+2. URL: `https://receipt-ocr.bhimraj.com.np/api/billing/paddle/webhook`. Type: webhook.
+3. Events: `subscription.created`, `subscription.updated`, `subscription.activated`, `subscription.canceled`,
+   `subscription.past_due`, `subscription.paused`, `subscription.resumed` and `transaction.completed`. Other events are
+   answered with 200 and dropped.
+4. Save, then copy the destination's **secret key** into `PADDLE_WEBHOOK_SECRET` (Secret) and redeploy.
+
+The sandbox and the live account each need their own destination.
+
+### 10b. Check it in the sandbox
+
+1. Open **Settings → Billing** in a workspace you own. The Upgrade button should appear.
+2. Pay with a Paddle sandbox test card (see Paddle's "test payment methods" page; for example `4242 4242 4242 4242`,
+   any future expiry, any CVC).
+3. The page shows "Payment received" and refreshes until the workspace is Pro (usually a few seconds).
+4. In the database, `billing_events` should have the new rows with `outcome = 'applied'` and `billing_subscriptions`
+   one row for the workspace. An outcome of `unmatched` means the workspace id was missing or unknown.
+5. In **Admin → Jobs** (`/admin/jobs`), `billing.apply_event` jobs should be `succeeded`. A `dead` job names the problem
+   in the logs (`billing.outcome`, `error`).
+6. In Paddle, **Notifications → the destination → Logs** lists each delivery and its HTTP status. `401` means the
+   secret is wrong or the server clock is far off (the tolerance is 30 seconds).
+7. Cancel from **Billing → Cancel subscription** (the Paddle portal). The page should say Pro stays until the period
+   end.
+
+### 10c. Switch from sandbox to live
+
+1. Finish Paddle's live account verification (business details and payout). This can take days; run it in parallel.
+2. Submit the website review once `/pricing` and `/refunds` are live (Paddle reads them). Wait for approval.
+3. In the live Paddle account, create the Pro product and its monthly and yearly prices (same amounts as the sandbox),
+   and note the two new price ids.
+4. Create the live webhook destination ([10a](#10a-webhook-destination)) and copy its secret.
+5. Create a live API key and a live client-side token.
+6. In Vercel (Production), replace: `PADDLE_ENV=production`, `PADDLE_API_KEY`, `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN`,
+   `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_PRO_MONTHLY` and `PADDLE_PRICE_PRO_YEARLY`. Keep the sandbox values in
+   Preview.
+7. Redeploy (the client token and the CSP are built in).
+8. Make one real purchase with a card you control, check [10b](#10b-check-it-in-the-sandbox) steps 3 to 6, then refund
+   it in Paddle.
+
+Subscriptions made in the sandbox do not exist in live. Do not reuse sandbox ids in production.
 
 ---
 

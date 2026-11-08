@@ -11,6 +11,7 @@ the full reference.
 - [Receipts and the usage ledger](#receipts-and-the-usage-ledger)
 - [Receipt groups](#receipt-groups)
 - [Admin tables](#admin-tables)
+- [Billing](#billing)
 - [What happens on delete](#what-happens-on-delete)
 - [Unique indexes and checks](#unique-indexes-and-checks)
 - [Other indexes](#other-indexes)
@@ -126,7 +127,7 @@ Notes:
   workspace through `member` on every request ([`resolveScope`](../../packages/core/src/workspace.ts)).
 - `account.access_token`, `refresh_token` and `id_token` are encrypted with the auth secret
   (`encryptOAuthTokens` in [`lib/auth.ts`](../../apps/web/lib/auth.ts)).
-- `user.plan` is never accepted from the client (`input: false`); only an admin action changes it.
+- `user.plan` is never accepted from the client (`input: false`); only an admin action changes it. Set to `pro` it is a comp: the workspaces that user owns count as Pro (see [Billing](flows/billing.md#plans-are-per-workspace)).
 
 ## Receipts and the usage ledger
 
@@ -167,6 +168,7 @@ erDiagram
     text organization_id FK "nullable"
     text user_id FK "nullable"
     smallint round "1 = upload, 2+ = retry"
+    text plan "free or pro, CHECK; the allowance it draws from"
     timestamptz created_at
   }
   ocr_calls {
@@ -195,6 +197,9 @@ How the ledger is used:
   any model ran (no stored file, nothing configured). A step skipped before any request (`unsupported-file`, e.g.
   HEIC on Claude) also has a null model, with its provider and step kept: `model is not null` means "a model was
   called" to quota, the global cap, latency and cost rollups, and a skip costs nothing.
+- `ocr_rounds.plan` is the plan of the workspace when the round was accepted (`free` by default). Free usage counts a
+  user's `free` rounds across all workspaces; Pro usage counts a workspace's `pro` rounds. See
+  [Plans and limits](flows/billing.md#plans-and-limits).
 - Quota, the global daily cap and cost rollups read only these two tables. See
   [core: quota ledger semantics](core.md#design-principles-and-invariants).
 - Neither table has free-text columns, so neither can hold receipt contents or provider messages.
@@ -265,8 +270,9 @@ erDiagram
   }
 ```
 
-The `plans` value holds, per plan, `workspaces`, `receiptsPerDay`, `receiptsPerMinute` and `batchMax` (images in one
-upload batch, 1 to 20 on save). A row saved before `batchMax` existed reads as 10; a stored value over 20 reads as 20, so
+The `plans` value holds, per plan, `workspaces`, `receiptsPerDay`, `receiptsPerMonth` (null = none), `poolPerDay` (null
+= none), `receiptsPerMinute` and `batchMax` (images in one
+upload batch, 1 to 20 on save). `scope` (`user` or `workspace`) is also stored per plan but is not editable in the admin form. A row saved before `receiptsPerMonth`, `poolPerDay` or `scope` existed reads with that plan's default; a row saved before `batchMax` existed reads as 10; a stored value over 20 reads as 20, so
 the other limits in the row still apply.
 
 `admin_audit_log` stores the actor's email and the target's label as text, so an entry still reads after either is
@@ -274,6 +280,57 @@ deleted. `target_id` is not a foreign key for the same reason.
 
 `user_credentials` (and `receipts.storage_source`) exist for a bring-your-own-key feature that is not built; nothing
 reads or writes them.
+
+## Billing
+
+Written only by the `billing.apply_event` job (subscriptions) and the webhook route (events). Both tables have row-level
+security on and no policies, like every table. The flow is in [Billing](flows/billing.md).
+
+```mermaid
+erDiagram
+  organization |o--o{ billing_subscriptions : "organization_id, set null"
+  user |o--o{ billing_subscriptions : "user_id (buyer), set null"
+  billing_events }o..o| organization : "organization_id, no FK"
+  billing_events ||..o| jobs : "billing.apply_event, payload.eventId"
+
+  billing_subscriptions {
+    uuid id PK
+    text organization_id FK "nullable"
+    text user_id FK "nullable"
+    text provider "paddle"
+    text provider_subscription_id UK
+    text provider_customer_id
+    text status "CHECK: active, trialing, past_due, paused, canceled"
+    text price_id
+    text billing_interval "CHECK: month or year"
+    timestamptz current_period_start
+    timestamptz current_period_end
+    boolean cancel_at_period_end
+    timestamptz past_due_since "grace counts from here"
+    timestamptz canceled_at
+    timestamptz provider_updated_at "orders events"
+  }
+  billing_events {
+    uuid id PK
+    text provider UK
+    text provider_event_id UK
+    text event_type
+    timestamptz occurred_at
+    text organization_id "no FK"
+    jsonb payload "normalized, not the raw body"
+    text outcome "CHECK: applied, stale, ignored, unmatched"
+    timestamptz processed_at
+    timestamptz received_at
+  }
+```
+
+- `billing_subscriptions` has one row per provider subscription. A workspace is Pro while it has an entitled row (see
+  [entitlement](flows/billing.md#entitlement)). A workspace can have several rows after a cancel and a new subscribe.
+  It holds ids, status and dates only: no card, address or tax data.
+- `billing_events` is the webhook log. The unique index on `(provider, provider_event_id)` makes a redelivery a no-op.
+  `payload` is the provider-neutral event the job applies; the raw body is never stored. `outcome` and `processed_at`
+  are null until the job has run. `organization_id` has no foreign key, so the log outlives a deleted workspace.
+- An admin comp is not a row here: it is `user.plan = 'pro'`.
 
 ## Background jobs
 
@@ -312,11 +369,11 @@ erDiagram
 
 ## What happens on delete
 
-| When this is deleted | Rows that cascade (are deleted)                                                                                                        | Rows that stay with the id set to null                                                                                                                                                              |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `passkey`, `step_up_events`, `step_up_codes` | `receipts.user_id`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by` |
-| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`                                                | `ocr_rounds.organization_id`, `ocr_calls.organization_id`                                                                                                                                           |
-| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                      | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                             |
+| When this is deleted | Rows that cascade (are deleted)                                                                                                        | Rows that stay with the id set to null                                                                                                                                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `passkey`, `step_up_events`, `step_up_codes` | `receipts.user_id`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by`, `billing_subscriptions.user_id` |
+| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`                                                | `ocr_rounds.organization_id`, `ocr_calls.organization_id`, `billing_subscriptions.organization_id`                                                                                                                                   |
+| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                      | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                                                              |
 
 Two rules sit on top of the cascades, in [packages/core](core.md):
 
@@ -337,6 +394,11 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `passkey`               | `passkey_credential_id_idx` on `credential_id`                                                  | A WebAuthn credential belongs to one account                                                                                                                        |
 | `step_up_events`        | `method` and `outcome` checks                                                                   | Only the known methods and `sent` / `verified` / `failed`                                                                                                           |
 | `ocr_rounds`            | `ocr_rounds_receipt_round_idx` on `(receipt_id, round)`                                         | A round is recorded once                                                                                                                                            |
+| `ocr_rounds`            | `ocr_rounds_plan_check`: `plan in ('free', 'pro')`                                              | Only known plans; `plan` defaults to `free` (migration `0001_billing`)                                                                                              |
+| `billing_subscriptions` | `billing_subscriptions_provider_id_idx` on `(provider, provider_subscription_id)`               | One row per provider subscription; the apply job finds it by this key                                                                                               |
+| `billing_subscriptions` | `billing_subscriptions_status_check`, `billing_subscriptions_interval_check`                    | Only the five stored statuses; interval `month` or `year` or null                                                                                                   |
+| `billing_events`        | `billing_events_provider_event_idx` on `(provider, provider_event_id)`                          | A webhook delivered twice is stored once                                                                                                                            |
+| `billing_events`        | `billing_events_outcome_check`                                                                  | Only `applied`, `stale`, `ignored`, `unmatched`, or null before the job runs                                                                                        |
 | `ocr_calls`             | `ocr_calls_receipt_round_attempt_step_idx` on `(receipt_id, round, job_attempt, step)`          | An attempt's calls written twice (a lost commit acknowledgement, then the failure path) are billed once (`onConflictDoNothing`); each automatic retry keeps its own |
 | `jobs`                  | `jobs_idempotency_idx` on `idempotency_key`, where queued or running                            | A replayed upload or double-clicked retry enqueues nothing                                                                                                          |
 | `jobs`                  | `jobs_receipt_live_idx` on `receipt_id`, where queued or running and `kind like 'receipt.%'`    | At most one live job per receipt; also serves every live-job lookup by receipt                                                                                      |
@@ -352,21 +414,23 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 
 ## Other indexes
 
-| Index                                                                         | Serves                                                                   |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `receipts_org_created_at_idx`                                                 | History, newest first, per workspace; the dashboard's scan               |
-| `receipts_org_receipt_date_idx` (`organization_id, receipt_date`)             | History's date filters                                                   |
-| `receipts_user_created_at_idx`                                                | A user's uploads, the set-null on account delete                         |
-| `receipts_created_at_idx`                                                     | Admin upload charts and counts across workspaces                         |
-| `receipt_items_receipt_id_idx`                                                | Loading items, cascade delete                                            |
-| `ocr_rounds_user_created_at_idx`                                              | Per-user quota windows                                                   |
-| `ocr_rounds_created_at_idx`                                                   | Global daily cap                                                         |
-| `ocr_rounds_organization_id_idx`, `ocr_calls_user_id_idx`, `jobs_user_id_idx` | The set-null when a workspace or account is deleted                      |
-| `invitation_inviter_id_idx`, `admin_audit_log_actor_id_idx`                   | The cascade or set-null when a user is deleted                           |
-| `ocr_calls_org_created_at_idx`                                                | Workspace usage rollups                                                  |
-| `ocr_calls_created_at_idx`                                                    | Platform-wide usage rollups, retry attempts for the global cap           |
-| `jobs_runnable_idx` (`priority, run_at` where queued)                         | The claim                                                                |
-| `jobs_running_idx` (`user_id` where running)                                  | Per-user running cap, reaper                                             |
-| `jobs_state_finished_idx`, `jobs_org_created_idx`                             | Admin lists and retention (planned)                                      |
-| `receipt_group_members_receipt_id_idx`                                        | Groups of a receipt, the History group filter, cascade on receipt delete |
-| `admin_audit_log_created_at_idx`, `admin_audit_log_target_idx`                | Audit log, newest first and per target                                   |
+| Index                                                                                      | Serves                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `receipts_org_created_at_idx`                                                              | History, newest first, per workspace; the dashboard's scan                                                                                                  |
+| `receipts_org_receipt_date_idx` (`organization_id, receipt_date`)                          | History's date filters                                                                                                                                      |
+| `receipts_user_created_at_idx`                                                             | A user's uploads, the set-null on account delete                                                                                                            |
+| `receipts_created_at_idx`                                                                  | Admin upload charts and counts across workspaces                                                                                                            |
+| `receipt_items_receipt_id_idx`                                                             | Loading items, cascade delete                                                                                                                               |
+| `ocr_rounds_user_created_at_idx`                                                           | Per-user quota windows                                                                                                                                      |
+| `ocr_rounds_org_created_at_idx` (`organization_id, created_at`)                            | A Pro workspace's day and month counts; also the set-null when a workspace is deleted (replaces `ocr_rounds_organization_id_idx`, migration `0001_billing`) |
+| `ocr_rounds_created_at_idx`                                                                | Global daily cap                                                                                                                                            |
+| `ocr_calls_user_id_idx`, `jobs_user_id_idx`                                                | The set-null when an account is deleted                                                                                                                     |
+| `billing_subscriptions_org_idx`, `billing_events_org_idx` (`organization_id, received_at`) | A workspace's subscriptions and events; the set-null on workspace delete                                                                                    |
+| `invitation_inviter_id_idx`, `admin_audit_log_actor_id_idx`                                | The cascade or set-null when a user is deleted                                                                                                              |
+| `ocr_calls_org_created_at_idx`                                                             | Workspace usage rollups                                                                                                                                     |
+| `ocr_calls_created_at_idx`                                                                 | Platform-wide usage rollups, retry attempts for the global cap                                                                                              |
+| `jobs_runnable_idx` (`priority, run_at` where queued)                                      | The claim                                                                                                                                                   |
+| `jobs_running_idx` (`user_id` where running)                                               | Per-user running cap, reaper                                                                                                                                |
+| `jobs_state_finished_idx`, `jobs_org_created_idx`                                          | Admin lists and retention (planned)                                                                                                                         |
+| `receipt_group_members_receipt_id_idx`                                                     | Groups of a receipt, the History group filter, cascade on receipt delete                                                                                    |
+| `admin_audit_log_created_at_idx`, `admin_audit_log_target_idx`                             | Audit log, newest first and per target                                                                                                                      |

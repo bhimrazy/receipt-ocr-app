@@ -246,7 +246,7 @@ UPDATE "user" SET role = 'admin' WHERE email = 'you@example.com';
 ```
 
 Then open `/admin/settings` and check the plan limits and the OCR model chain. Until something is saved there, the
-app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day) and the chain Claude Haiku 5.5,
+app uses the defaults in `packages/core/src/plans.ts` (Free: 20 receipts a day and 100 a month) and the chain Claude Haiku 5.5,
 Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; a step whose provider has no key is skipped.
 
 ### 7. Check it works

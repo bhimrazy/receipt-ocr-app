@@ -35,6 +35,7 @@ flowchart LR
   cron[pg_cron on Supabase,<br/>daily Vercel cron]
   resend[Resend<br/>transactional email]
   oauth[Google and GitHub<br/>OAuth]
+  paddle[Paddle<br/>subscriptions, merchant of record]
 
   user -- "pages, API calls" --> web
   user -. "loads receipt image<br/>by signed URL" .-> s3
@@ -48,20 +49,24 @@ flowchart LR
   web -- "verify, reset,<br/>invite mail" --> resend
   user -- "OAuth redirect" --> oauth
   oauth -- "callback with code" --> web
+  user -. "checkout overlay<br/>(Paddle.js)" .-> paddle
+  paddle -- "signed webhooks" --> web
+  web -. "portal links" .-> paddle
 ```
 
-| External service      | What the app uses it for                                            | Configured by                                              |
-| --------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Postgres              | Every table: auth, workspaces, receipts, usage ledger, admin        | `DATABASE_URL` (app), `DIRECT_URL` (migrations)            |
-| S3-compatible storage | The uploaded receipt files; the bucket stays private                | `S3_*`                                                     |
-| Google Gemini         | Reading the receipt into the extraction schema                      | `GOOGLE_GENERATIVE_AI_API_KEY`, Admin → Settings           |
-| Anthropic Claude      | First step of the default chain (Sonnet 5.5); other models optional | `ANTHROPIC_API_KEY`, Admin → Settings                      |
-| Groq                  | Optional OCR model (Qwen 3.8 27B, free tier) in the chain           | `GROQ_API_KEY`, Admin → Settings                           |
-| OpenAI                | Optional OCR models (GPT-6 Luna, GPT-6.1 Terra) in the chain        | `OPENAI_API_KEY`, Admin → Settings                         |
-| Resend                | Verification, password reset, invitation and support mail           | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`            |
-| Google, GitHub OAuth  | Optional social sign-in                                             | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET` |
-| Google Analytics 4    | Optional visit counts on public pages, only after consent           | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))        |
-| Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                       | automatic when `VERCEL=1`                                  |
+| External service      | What the app uses it for                                            | Configured by                                                                   |
+| --------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Postgres              | Every table: auth, workspaces, receipts, usage ledger, admin        | `DATABASE_URL` (app), `DIRECT_URL` (migrations)                                 |
+| S3-compatible storage | The uploaded receipt files; the bucket stays private                | `S3_*`                                                                          |
+| Google Gemini         | Reading the receipt into the extraction schema                      | `GOOGLE_GENERATIVE_AI_API_KEY`, Admin → Settings                                |
+| Anthropic Claude      | First step of the default chain (Sonnet 5.5); other models optional | `ANTHROPIC_API_KEY`, Admin → Settings                                           |
+| Groq                  | Optional OCR model (Qwen 3.8 27B, free tier) in the chain           | `GROQ_API_KEY`, Admin → Settings                                                |
+| OpenAI                | Optional OCR models (GPT-6 Luna, GPT-6.1 Terra) in the chain        | `OPENAI_API_KEY`, Admin → Settings                                              |
+| Resend                | Verification, password reset, invitation and support mail           | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`                                 |
+| Google, GitHub OAuth  | Optional social sign-in                                             | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`                      |
+| Paddle Billing        | Subscriptions for Pro: checkout, payment, tax, invoices, portal     | `PADDLE_*`, `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` (see [billing](flows/billing.md)) |
+| Google Analytics 4    | Optional visit counts on public pages, only after consent           | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))                             |
+| Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                       | automatic when `VERCEL=1`                                                       |
 
 Every service except Postgres and auth is optional at runtime: without a Gemini key the app still serves history and
 exports, and without Resend mail is logged instead of sent. The full variable list is in
@@ -97,32 +102,33 @@ flowchart TD
 `packages/db` directly for Better Auth's adapter and a few membership counts. All receipt work goes through
 `packages/core`.
 
-| Path                                         | Role                                                                                                   | Page                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------ |
-| [`apps/web`](../../apps/web)                 | Pages, route handlers, server actions, Better Auth config. Thin adapters over core.                    | [web.md](web.md)         |
-| [`packages/core`](../../packages/core)       | The receipt workflow, receipt groups, quota, usage ledger, settings, admin writes. Effect TS services. | [core.md](core.md)       |
-| [`packages/ai`](../../packages/ai)           | One model call: schema, prompt, error kinds, usage, the model list and its prices.                     | [ai.md](ai.md)           |
-| [`packages/db`](../../packages/db)           | Drizzle schema for every table and the shared connection pool.                                         | [db.md](db.md)           |
-| [`packages/storage`](../../packages/storage) | S3 client, object keys, signed read URLs.                                                              | [storage.md](storage.md) |
-| [`packages/email`](../../packages/email)     | Resend sender and React Email templates (HTML + plain text).                                           | [email.md](email.md)     |
-| [`packages/ui`](../../packages/ui)           | shadcn-style primitives on Base UI, Tailwind v4 theme tokens.                                          | [ui.md](ui.md)           |
-| `bench/`, `scripts/`, `docker/`, `.github/`  | OCR benchmark, load test, dependency checks, images, CI and deploys.                                   | [tooling.md](tooling.md) |
+| Path                                         | Role                                                                                                            | Page                     |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| [`apps/web`](../../apps/web)                 | Pages, route handlers, server actions, Better Auth config. Thin adapters over core.                             | [web.md](web.md)         |
+| [`packages/core`](../../packages/core)       | The receipt workflow, receipt groups, quota, usage ledger, billing, settings, admin writes. Effect TS services. | [core.md](core.md)       |
+| [`packages/ai`](../../packages/ai)           | One model call: schema, prompt, error kinds, usage, the model list and its prices.                              | [ai.md](ai.md)           |
+| [`packages/db`](../../packages/db)           | Drizzle schema for every table and the shared connection pool.                                                  | [db.md](db.md)           |
+| [`packages/storage`](../../packages/storage) | S3 client, object keys, signed read URLs.                                                                       | [storage.md](storage.md) |
+| [`packages/email`](../../packages/email)     | Resend sender and React Email templates (HTML + plain text).                                                    | [email.md](email.md)     |
+| [`packages/ui`](../../packages/ui)           | shadcn-style primitives on Base UI, Tailwind v4 theme tokens.                                                   | [ui.md](ui.md)           |
+| `bench/`, `scripts/`, `docker/`, `.github/`  | OCR benchmark, load test, dependency checks, images, CI and deploys.                                            | [tooling.md](tooling.md) |
 
 ## Terms used in these pages
 
-| Term             | Meaning                                                                                                                                                                                          |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Workspace        | A Better Auth **organization**. Receipts belong to a workspace; every member can read them. Every user gets a personal one.                                                                      |
-| Workspace role   | `member.role`: exactly one of `owner`, `admin` or `member` (enforced by `assertWorkspaceRole`). Decides who may edit or delete receipts and manage members.                                      |
-| Platform admin   | A user with `user.role = 'admin'` (Better Auth admin plugin). Sees `/admin`. Unrelated to the workspace role.                                                                                    |
-| Scope            | `{ organizationId, userId, role }` for one request, resolved through `member` on every request.                                                                                                  |
-| Round            | One upload or one retry of a receipt. `receipts.attempts` counts them; each gets an `ocr_rounds` row.                                                                                            |
-| Call             | One model call inside a round. Each gets an `ocr_calls` row with tokens, latency and cost.                                                                                                       |
-| Chain            | The ordered list of models an admin configured. The first that works reads the receipt; the rest are fallbacks.                                                                                  |
-| Usage ledger     | `ocr_rounds` + `ocr_calls`. Append-only; quota and cost are counted from it, never from `receipts`.                                                                                              |
-| Wide event       | One JSON log line per unit of work (request, page render, job attempt, queue tick) holding everything about it: ids, timings, model, cost, outcome. See [Observability](flows/observability.md). |
-| Advisory lock    | A Postgres lock on a number, not a row (`pg_advisory_xact_lock`). Used per user so one user's quota checks run one at a time; released at commit.                                                |
-| Instant / queued | The two upload modes: read in the request, or respond `202` and read after the response.                                                                                                         |
+| Term             | Meaning                                                                                                                                                                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace        | A Better Auth **organization**. Receipts belong to a workspace; every member can read them. Every user gets a personal one.                                                                                                                                      |
+| Workspace role   | `member.role`: exactly one of `owner`, `admin` or `member` (enforced by `assertWorkspaceRole`). Decides who may edit or delete receipts and manage members.                                                                                                      |
+| Platform admin   | A user with `user.role = 'admin'` (Better Auth admin plugin). Sees `/admin`. Unrelated to the workspace role.                                                                                                                                                    |
+| Scope            | `{ organizationId, userId, role }` for one request, resolved through `member` on every request.                                                                                                                                                                  |
+| Round            | One upload or one retry of a receipt. `receipts.attempts` counts them; each gets an `ocr_rounds` row.                                                                                                                                                            |
+| Call             | One model call inside a round. Each gets an `ocr_calls` row with tokens, latency and cost.                                                                                                                                                                       |
+| Chain            | The ordered list of models an admin configured. The first that works reads the receipt; the rest are fallbacks.                                                                                                                                                  |
+| Plan             | `free` or `pro`. Belongs to a workspace (an entitled subscription, or an admin comp on its owner). See [Billing](flows/billing.md).                                                                                                                              |
+| Usage ledger     | `ocr_rounds` + `ocr_calls`. Append-only; quota and cost are counted from it, never from `receipts`.                                                                                                                                                              |
+| Wide event       | One JSON log line per unit of work (request, page render, job attempt, queue tick) holding everything about it: ids, timings, model, cost, outcome. See [Observability](flows/observability.md).                                                                 |
+| Advisory lock    | A Postgres lock on a number, not a row (`pg_advisory_xact_lock`). Used per user (and per workspace on a workspace-scoped plan) so quota checks run one at a time, per subscription so webhook writes do, and per workspace for group limits; released at commit. |
+| Instant / queued | The two upload modes: read in the request, or respond `202` and read after the response.                                                                                                                                                                         |
 
 ## Reading order
 
@@ -139,6 +145,7 @@ flowchart TD
 - [Sign-up, sign-in and invitations](flows/auth.md)
 - [Retry](flows/retry.md) and the attempt guard
 - [Background jobs](flows/jobs.md): the Postgres queue, leases, retries and cooldowns
+- [Billing](flows/billing.md): Paddle checkout, webhooks, workspace plans and quota rules
 - [Observability](flows/observability.md): wide events, the schema allowlist and sampling
 - [Admin actions and the audit log](flows/admin-actions.md)
 - [Admin operations and jobs](flows/admin-operations.md): charts, their sources, and the job actions
@@ -176,15 +183,16 @@ several of them is in the [security audit](../reviews/2026-11-06-security-audit.
 
 ## What is planned, not built
 
-| Planned                                | Today                                                                                                                                                             | Plan                                                                                                                                                                                        |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/worker` for the job queue        | The [job queue](flows/jobs.md) is drained by `/api/jobs/drain` (pg_cron every 5 minutes, daily Vercel cron) and by the upload, retry and poll routes in `after()` | [Durable background jobs](../plans/2026-11-06-jobs-queue.md), Tracks B to D; also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
-| OTLP export (Axiom), PostHog, Sentry   | One [wide event](flows/observability.md) per unit of work on stdout, through an allowlist                                                                         | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
-| Usage screens for customers and admins | Rollup queries exist in `usage.ts`; only the daily meter is shown                                                                                                 | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                                         |
-| Passkeys and two-factor                | Email/password and OAuth only (PR #95 in review)                                                                                                                  | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
-| More AI providers, per-model options   | Google, Anthropic, Groq and OpenAI (plus the offline fixture); keys come from the environment                                                                     | [AI usage and models](../plans/2026-11-06-ai-usage-models.md), [BYOK](../plans/2026-11-07-byok.md)                                                                                          |
-| Seats and per-workspace quota          | Quota is per user per UTC day                                                                                                                                     | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                                              |
-| Home currency and FX conversion        | Amounts `numeric(12,2)`, currency defaults to USD, no conversion                                                                                                  | [Currencies and FX](../plans/2026-11-06-currencies-fx.md)                                                                                                                                   |
+| Planned                                | Today                                                                                                                                                                                   | Plan                                                                                                                                                                                        |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/worker` for the job queue        | The [job queue](flows/jobs.md) is drained by `/api/jobs/drain` (pg_cron every 5 minutes, daily Vercel cron) and by the upload, retry and poll routes in `after()`                       | [Durable background jobs](../plans/2026-11-06-jobs-queue.md), Tracks B to D; also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
+| OTLP export (Axiom), PostHog, Sentry   | One [wide event](flows/observability.md) per unit of work on stdout, through an allowlist                                                                                               | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
+| Usage screens for customers and admins | Rollup queries exist in `usage.ts`; only the daily meter is shown                                                                                                                       | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                                         |
+| Passkeys and two-factor                | Email/password and OAuth only (PR #95 in review)                                                                                                                                        | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
+| Scan packs                             | Not built; the [billing page](flows/billing.md#how-scan-packs-will-fit) says where they fit                                                                                             | [Payments](../plans/2026-11-07-payments.md)                                                                                                                                                 |
+| More AI providers, per-model options   | Google, Anthropic, Groq and OpenAI (plus the offline fixture); keys come from the environment                                                                                           | [AI usage and models](../plans/2026-11-06-ai-usage-models.md), [BYOK](../plans/2026-11-07-byok.md)                                                                                          |
+| Seats and member limits                | Pro has a per-workspace monthly quota (500 a month, 200 a day, shared by members; [Billing](flows/billing.md)); Free is per user per UTC day. Seat caps and member limits are not built | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                                              |
+| Home currency and FX conversion        | Amounts `numeric(12,2)`, currency defaults to USD, no conversion                                                                                                                        | [Currencies and FX](../plans/2026-11-06-currencies-fx.md)                                                                                                                                   |
 
 ## Keeping this current
 

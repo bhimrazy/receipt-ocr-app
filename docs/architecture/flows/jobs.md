@@ -157,12 +157,18 @@ killed at its time limit. Two things cover that until a worker or cron drain exi
 
 `email.welcome` ([`kinds/welcome-email.ts`](../../../packages/core/src/jobs/kinds/welcome-email.ts)) sends a new user's
 welcome email. The payload is the user id only. At send time the job reads the user's address and plan
-(`userPlan(...).policy.receiptsPerDay`, so the copy follows the plan table) and calls the `WelcomeMailer` service, which
+(`accountPlan(...).policy.receiptsPerDay`, so the copy follows the plan table) and calls the `WelcomeMailer` service, which
 the web app provides (`lib/welcome-mailer.ts`; core has no mail dependency). Once-only: the idempotency key
 `welcome:<userId>` stops two live jobs, and `enqueueWelcomeEmail` also checks for any earlier welcome job of that user,
 so a finished or dead one is never repeated. An undelivered send is retried (up to 5 attempts, 30 s backoff doubling);
 with no mailer configured the job succeeds without sending. It logs `email.welcome_sent` (user id, plan, `delivered`;
 never the address or content).
+
+`billing.apply_event` ([`kinds/billing-apply.ts`](../../../packages/core/src/jobs/kinds/billing-apply.ts)) applies one
+stored Paddle webhook (`billing_events` row) to `billing_subscriptions`. The payload is the event row id only. It is
+enqueued in the same transaction that stores the event, with the idempotency key `billing:event:<id>`, and started with
+`after()` right after the webhook response. Up to 8 attempts (30 s lease, backoff 5 s doubling to 10 min). A database
+error retries; the outcome (`applied`, `stale`, `ignored`, `unmatched`) is logged. See [Billing](billing.md).
 
 ## Tables
 
