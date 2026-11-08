@@ -11,6 +11,7 @@ import {
 import { RotateCw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
+import { reportBoundaryError } from "@/lib/telemetry/client-errors";
 
 /**
  * Shown when a server component in /app throws — most often a database or
@@ -34,6 +35,7 @@ export default function AppError({
         digest: error.digest,
       }),
     );
+    reportBoundaryError(error);
   }, [error]);
 
   return (

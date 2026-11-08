@@ -49,4 +49,13 @@ describe("buildContentSecurityPolicy", () => {
     // The app itself still can't be framed by Paddle or anyone else.
     expect(directive(on, "frame-ancestors")).toBe("frame-ancestors 'none'");
   });
+
+  it("allows Sentry's ingest origin only when browser error reporting is built in", () => {
+    expect(directive(buildContentSecurityPolicy(undefined), "connect-src")).not.toMatch(/sentry/);
+    const on = buildContentSecurityPolicy(undefined, {
+      sentryIngest: "https://o1.ingest.us.sentry.io",
+    });
+    expect(directive(on, "connect-src")).toBe("connect-src 'self' https://o1.ingest.us.sentry.io");
+    expect(directive(on, "script-src")).not.toMatch(/sentry/);
+  });
 });

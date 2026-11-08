@@ -8,6 +8,12 @@ vi.mock("./lib/log", async () => ({
 }));
 
 const { onRequestError } = await import("./instrumentation");
+// What onRequestError imports on first use, loaded here rather than inside a test's timeout.
+await Promise.all([
+  import("./lib/log"),
+  import("./lib/request-id"),
+  import("./lib/telemetry/errors"),
+]);
 
 const fail = (routePath: string, routeType: "render" | "route" = "render") =>
   onRequestError(

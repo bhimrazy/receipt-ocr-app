@@ -3,11 +3,22 @@ import type { NextConfig } from "next";
 import { ANALYTICS_PATH_LIST, parseGaMeasurementId } from "./lib/consent/config";
 import { buildContentSecurityPolicy } from "./lib/csp";
 import { PRODUCTION_HOST, nonProductionRobotsHeader, onProductionHost } from "./lib/seo-hosts";
+import { parseSentryDsn, sentryEnvironment, sentryRelease } from "./lib/telemetry/sentry-config";
+
+// Browser error reporting is built in only with a valid SENTRY_DSN (a DSN is public by design).
+// Always defined, so with none the browser code is `if ("")` and is dropped at build.
+const sentry = parseSentryDsn(process.env.SENTRY_DSN);
+const sentryBrowserEnv = {
+  NEXT_PUBLIC_SENTRY_DSN: sentry?.dsn ?? "",
+  NEXT_PUBLIC_SENTRY_RELEASE: (sentry && sentryRelease(process.env)) || "",
+  NEXT_PUBLIC_SENTRY_ENVIRONMENT: sentry ? sentryEnvironment(process.env) : "",
+};
 
 const contentSecurityPolicy = buildContentSecurityPolicy(
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
   {
     googleAnalytics: Boolean(parseGaMeasurementId(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID)),
+    sentryIngest: sentry?.ingestOrigin,
     paddle: Boolean(process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim()),
   },
 );
@@ -60,6 +71,9 @@ const nextConfig: NextConfig = {
     "@receipt-ocr/ui",
   ],
   poweredByHeader: false,
+  env: sentryBrowserEnv,
+  // Loaded only when SENTRY_DSN is set; kept out of the bundle, as Sentry's Node SDK expects.
+  serverExternalPackages: ["@sentry/node"],
   experimental: {
     // Tab switches within 30 s reuse the page already fetched instead of rendering it again on the
     // server. Mutations call router.refresh() or a Server Action, which drop the whole client
