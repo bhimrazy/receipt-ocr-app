@@ -4,6 +4,7 @@ import {
   billingSubscriptions,
   desc,
   eq,
+  inArray,
   sql,
   user,
   type BillingSubscription,
@@ -36,6 +37,7 @@ import {
 } from "./config";
 import {
   adjustmentRevokesPro,
+  canStillCharge,
   isEntitled,
   PAST_DUE_GRACE_DAYS,
   PAST_DUE_GRACE_MS,
@@ -263,6 +265,22 @@ export async function hasChargingSubscription(
 export const workspaceHasChargingSubscription = (organizationId: string) =>
   Effect.flatMap(Db, ({ use }) => use((db) => hasChargingSubscription(db, organizationId)));
 
+/**
+ * Whether `userId` is the buyer (`billing_subscriptions.user_id`) of a
+ * subscription on this workspace that can still charge. Only the buyer can
+ * cancel in the app, so they can't be removed, demoted or leave meanwhile.
+ */
+export const userPaysForWorkspace = (organizationId: string, userId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const rows = await db.execute<{ pays: boolean }>(sql`
+        select exists (select 1 from billing_subscriptions s
+          where s.organization_id = ${organizationId} and s.user_id = ${userId}
+            and ${chargingSql}) as pays`);
+      return rows[0]?.pays === true;
+    }),
+  );
+
 // ---------- Webhooks ----------
 
 export type WebhookResult =
@@ -330,7 +348,12 @@ export type ApplyResult = {
   planChange?: PlanChange;
   userId?: string;
   unmatched?: UnmatchedReason;
-  /** A chargeback or full refund revoked Pro; the provider subscription still needs cancelling. */
+  /** Its workspace or buyer was deleted but it can still charge: someone is paying for nothing (it is also cancelled). */
+  orphanCharging?: true;
+  /**
+   * The provider subscription still needs cancelling: a chargeback or full
+   * refund revoked Pro, or its workspace or buyer is gone and it could charge again.
+   */
   cancelSubscriptionId?: string;
 };
 
@@ -371,7 +394,11 @@ const storedSubscription = async (tx: Tx, provider: string, subscriptionId: stri
  * checkout's custom data only links a new subscription, and only when the
  * workspace exists, the buyer named in it is an owner of it, and the price is
  * a Pro price. An approved chargeback or full refund revokes Pro on its
- * subscription and asks the caller to cancel it with the provider.
+ * subscription and asks the caller to cancel it with the provider; one that
+ * arrives before its subscription is linked is kept `unmatched` in the event
+ * log and applied when the subscription links. A subscription whose workspace
+ * or buyer was deleted (allowed only once its cancel was scheduled) is
+ * cancelled too if an update makes it able to charge again.
  */
 export const applyBillingEvent = (eventId: string, now = new Date()) =>
   Effect.gen(function* () {
@@ -451,6 +478,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
 
         let organizationId = stored?.organizationId ?? null;
         let buyer = stored?.userId ?? null;
+        let pending: string[] = [];
         if (!stored) {
           const link = await linkNewSubscription(tx, snapshot, prices);
           if ("unmatched" in link) {
@@ -462,6 +490,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           }
           organizationId = link.organizationId;
           buyer = link.userId;
+          pending = await pendingRevocations(tx, event.provider, snapshot.subscriptionId);
         }
         if (stored && stored.providerUpdatedAt > snapshot.updatedAt) {
           return finish({ outcome: "stale", organizationId });
@@ -498,21 +527,73 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
             userId: buyer,
             provider: event.provider,
             providerSubscriptionId: snapshot.subscriptionId,
+            revokedAt: pending.length > 0 ? now : null,
           });
+          if (pending.length > 0) {
+            await tx
+              .update(billingEvents)
+              .set({ outcome: "applied", organizationId })
+              .where(inArray(billingEvents.id, pending));
+          }
         }
         // What this subscription grants, before and after: the product event "plan changed".
-        const revokedAt = stored?.revokedAt ?? null;
+        const revokedAt = stored?.revokedAt ?? (pending.length > 0 ? now : null);
+        const orphan = orphanCanCharge({ organizationId, userId: buyer, ...values });
+        const cancel = (pending.length > 0 && values.status !== "canceled") || orphan;
         const from = stored && isEntitled(entitlementOf(stored), now, prices) ? "pro" : "free";
         const to = isEntitled({ ...values, revokedAt }, now, prices) ? "pro" : "free";
         return finish({
           outcome: "applied",
           organizationId,
+          ...(orphan ? { orphanCharging: true as const } : {}),
           ...(from === to ? {} : { planChange: { from, to } }),
           ...(buyer ? { userId: buyer } : {}),
+          ...(cancel ? { cancelSubscriptionId: snapshot.subscriptionId } : {}),
         });
       }),
     );
   });
+
+type ChargeFields = {
+  organizationId: string | null;
+  userId: string | null;
+  status: string;
+  cancelAtPeriodEnd: boolean;
+};
+
+/**
+ * A subscription whose workspace or buyer was deleted that could charge again,
+ * as when a scheduled cancel is removed in the provider afterwards: nobody is
+ * left to bill (or able to open the portal), so it is cancelled.
+ */
+const orphanCanCharge = (row: ChargeFields) =>
+  (row.organizationId === null || row.userId === null) &&
+  canStillCharge({ status: row.status as BillingStatus, cancelAtPeriodEnd: row.cancelAtPeriodEnd });
+
+/**
+ * Revoking adjustments (approved chargeback or full refund) stored `unmatched`
+ * because they arrived before their subscription was linked: the event log is
+ * the pending record, so one is never lost however late `subscription.created`
+ * comes. Returns their event ids.
+ */
+async function pendingRevocations(tx: Tx, provider: string, subscriptionId: string) {
+  const rows = await tx
+    .select({ id: billingEvents.id, payload: billingEvents.payload })
+    .from(billingEvents)
+    .where(
+      and(
+        eq(billingEvents.provider, provider),
+        eq(billingEvents.outcome, "unmatched"),
+        sql`${billingEvents.payload}->'adjustment'->>'subscriptionId' = ${subscriptionId}`,
+      ),
+    );
+  return rows
+    .filter((row) => {
+      const adjustment = billingEventSchema.safeParse(row.payload).data?.adjustment;
+      return adjustment ? adjustmentRevokesPro(adjustment) : false;
+    })
+    .map((row) => row.id);
+}
 
 /**
  * Checks a new subscription's custom data before linking it: the workspace
@@ -536,14 +617,22 @@ async function linkNewSubscription(
   return { organizationId: snapshot.workspaceId, userId: snapshot.userId };
 }
 
-/** The subscription a revoking adjustment still needs cancelled with the provider, if any. */
+/**
+ * On a retry after the commit, the subscription that may still need cancelling
+ * with the provider: revoked but not yet canceled, or orphaned and able to charge.
+ */
 async function cancelOwed(tx: Tx, event: BillingEvent): Promise<string | null> {
   const adjustment = event.adjustment;
-  if (!adjustment?.subscriptionId || !adjustmentRevokesPro(adjustment)) return null;
-  const stored = await storedSubscription(tx, event.provider, adjustment.subscriptionId);
-  return stored && stored.revokedAt && stored.status !== "canceled"
-    ? stored.providerSubscriptionId
-    : null;
+  const subscriptionId = adjustment
+    ? adjustmentRevokesPro(adjustment)
+      ? adjustment.subscriptionId
+      : null
+    : (event.subscription?.subscriptionId ?? null);
+  if (!subscriptionId) return null;
+  const stored = await storedSubscription(tx, event.provider, subscriptionId);
+  if (!stored || stored.status === "canceled") return null;
+  if (stored.revokedAt || orphanCanCharge(stored)) return stored.providerSubscriptionId;
+  return null;
 }
 
 /** What the billing page shows about a workspace's subscription. */

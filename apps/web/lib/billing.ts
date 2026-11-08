@@ -16,7 +16,13 @@ export const getCheckoutConfig = cache(() => Effect.runPromise(loadCheckoutConfi
  * platform admins see it (marked as a test). Everyone else sees Pro as not open yet.
  */
 export const isTestModeOnProduction = (config: CheckoutConfig) =>
-  config.environment === "sandbox" && process.env.VERCEL_ENV === "production";
+  config.environment === "sandbox" && isProductionDeploy();
+
+/** Vercel production, or (off Vercel, e.g. the Docker image) NODE_ENV=production. */
+const isProductionDeploy = () =>
+  process.env.VERCEL_ENV
+    ? process.env.VERCEL_ENV === "production"
+    : process.env.NODE_ENV === "production";
 
 /** Whether the public pages (pricing, landing) may offer the checkout. */
 export const checkoutOpenToEveryone = (config: CheckoutConfig | null) =>

@@ -1,13 +1,14 @@
 import { ogSize, renderOgImage } from "@/lib/og-image";
+import { OG_IMAGE_ALT } from "@/lib/seo";
 
-export const alt = "ReceiptOCR: Turn receipt photos into spreadsheet rows";
+export const alt = OG_IMAGE_ALT;
 export const size = ogSize;
 export const contentType = "image/png";
 
 export default function OpengraphImage() {
   return renderOgImage({
     headline: "Turn receipt photos into",
-    accent: "spreadsheet rows",
-    caption: "Merchant · Items · Tax · Total, checked and exported to CSV",
+    accent: "structured data",
+    caption: "Merchant · Items · Tax · Total, checked and exported as CSV or JSON",
   });
 }

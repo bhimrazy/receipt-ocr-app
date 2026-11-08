@@ -182,6 +182,8 @@ export const EVENT_SCHEMA = {
       rejection: "token",
       /** Why a new subscription wasn't linked: `workspace`, `owner`, `price`, or `subscription` (an adjustment for one we don't have). */
       unmatched_reason: "token",
+      /** A subscription whose workspace or buyer is gone can still charge, so the job cancels it. Set from the stored row's workspace and buyer links and the event's status; no personal data. */
+      orphan_charging: "bool",
       /** An adjustment's action: `refund`, `chargeback`, `credit` and their reversals. */
       adjustment_action: "token",
       /** Set when an applied event moved its workspace between plans (`free`, `pro`): the `plan_changed` product event. */

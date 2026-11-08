@@ -31,6 +31,7 @@ import {
   accountPlan,
   applyBillingEvent,
   recordBillingEvent,
+  userPaysForWorkspace,
   workspaceBilling,
   workspaceCreationCheck,
   workspaceHasChargingSubscription,
@@ -180,6 +181,17 @@ const outcomeOf = async (eventId: string) =>
         .where(eq(billingEvents.providerEventId, eventId)),
     )
   )[0]?.outcome;
+
+/** Applies an already delivered event again, as a job retry after its commit would. */
+const reapply = async (eventId: string) => {
+  const [row] = await db((d) =>
+    d
+      .select({ id: billingEvents.id })
+      .from(billingEvents)
+      .where(eq(billingEvents.providerEventId, eventId)),
+  );
+  return run(applyBillingEvent(row!.id));
+};
 
 const planOf = async (organizationId: string) => (await run(workspacePlan(organizationId))).plan;
 
@@ -549,6 +561,46 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         lastErrorKind: "billing-off",
       });
     });
+
+    it("keeps a chargeback that arrives before its subscription and applies it on link", async () => {
+      const workspaceId = await createWorkspace(other.userId, "early-chargeback");
+      const id = `sub_${tag}_early_chargeback`;
+      const chargeback = event(null, "adjustment.created", adjustment({ subscriptionId: id }));
+      await deliver(chargeback);
+      expect(await outcomeOf(chargeback.eventId)).toBe("unmatched");
+
+      const created = event(snapshot({ subscriptionId: id, workspaceId }), "subscription.created");
+      await deliver(created);
+      expect(await planOf(workspaceId)).toBe("free");
+      expect((await subscriptionRow(id))?.revokedAt).toBeInstanceOf(Date);
+      expect(await outcomeOf(chargeback.eventId)).toBe("applied");
+      // The cancel was asked for: with no PADDLE_API_KEY here, the job says it couldn't send it.
+      expect(await jobOf(created.eventId)).toMatchObject({
+        state: "dead",
+        lastErrorKind: "billing-off",
+      });
+      expect(await reapply(created.eventId)).toMatchObject({
+        outcome: "already-applied",
+        cancelSubscriptionId: id,
+      });
+    });
+
+    it("applies an early chargeback only to its own subscription", async () => {
+      const workspaceId = await createWorkspace(other.userId, "other-sub-links");
+      const early = event(
+        null,
+        "adjustment.created",
+        adjustment({ subscriptionId: `sub_${tag}_never_linked` }),
+      );
+      await deliver(early);
+      const id = `sub_${tag}_unrelated`;
+      const created = event(snapshot({ subscriptionId: id, workspaceId }), "subscription.created");
+      await deliver(created);
+      expect((await subscriptionRow(id))?.revokedAt).toBeNull();
+      expect(await planOf(workspaceId)).toBe("pro");
+      expect(await outcomeOf(early.eventId)).toBe("unmatched");
+      expect(await jobOf(created.eventId)).toMatchObject({ state: "succeeded" });
+    });
   });
 
   describe("bad payloads", () => {
@@ -629,6 +681,182 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(await run(prepareUserDeletion(buyer.userId))).toMatchObject({ workspacesDeleted: 1 });
       // The subscription row stays as the billing record.
       expect((await subscriptionRow(id))?.organizationId).toBeNull();
+    });
+
+    it("never cancels a linked subscription, whatever its state", async () => {
+      const workspaceId = await createWorkspace(other.userId, "linked-charging");
+      const id = `sub_${tag}_linked_charging`;
+      const steps: Partial<SubscriptionSnapshot>[] = [
+        {},
+        { cancelAtPeriodEnd: true },
+        { status: "past_due", cancelAtPeriodEnd: false },
+      ];
+      for (const [i, fields] of steps.entries()) {
+        const e = event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId,
+            updatedAt: new Date(Date.now() + i * 1_000),
+            ...fields,
+          }),
+          i === 0 ? "subscription.created" : "subscription.updated",
+        );
+        await deliver(e);
+        expect(await jobOf(e.eventId)).toMatchObject({ state: "succeeded" });
+        expect(await reapply(e.eventId)).not.toHaveProperty("cancelSubscriptionId");
+      }
+    });
+
+    it("cancels a subscription whose workspace is gone if its scheduled cancel is removed", async () => {
+      const buyer = await createUser("del-scheduled");
+      const id = `sub_${tag}_delete_scheduled`;
+      const at = (offsetMs: number, fields: Partial<SubscriptionSnapshot>) =>
+        event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId: buyer.organizationId,
+            updatedAt: new Date(Date.now() + offsetMs),
+            ...fields,
+          }),
+        );
+      await deliver(at(0, {}));
+      await deliver(at(1_000, { cancelAtPeriodEnd: true }));
+      const auditor = { actor: { id: other.userId, email: `${other.userId}@example.com` } };
+      await run(deleteWorkspace(buyer.organizationId, auditor));
+      expect((await subscriptionRow(id))?.organizationId).toBeNull();
+
+      const rearmed = at(2_000, { cancelAtPeriodEnd: false });
+      await deliver(rearmed);
+      expect(await jobOf(rearmed.eventId)).toMatchObject({
+        state: "dead",
+        lastErrorKind: "billing-off",
+      });
+      expect(await reapply(rearmed.eventId)).toMatchObject({
+        outcome: "already-applied",
+        cancelSubscriptionId: id,
+      });
+      // Once it's canceled nothing more is asked.
+      const canceled = at(3_000, { status: "canceled" });
+      await deliver(canceled);
+      expect(await jobOf(canceled.eventId)).toMatchObject({ state: "succeeded" });
+    });
+
+    it("cancels a subscription whose buyer deleted their account if it can charge again", async () => {
+      const buyer = await createUser("del-scheduled-buyer");
+      const workspaceId = await createWorkspace(buyer.userId, "kept-after-buyer");
+      // A second owner keeps the workspace when the buyer's account goes.
+      await db((d) =>
+        d.insert(member).values({
+          id: crypto.randomUUID(),
+          organizationId: workspaceId,
+          userId: other.userId,
+          role: "owner",
+          createdAt: new Date(),
+        }),
+      );
+      const id = `sub_${tag}_buyer_gone`;
+      const at = (offsetMs: number, fields: Partial<SubscriptionSnapshot>) =>
+        event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId,
+            userId: buyer.userId,
+            updatedAt: new Date(Date.now() + offsetMs),
+            ...fields,
+          }),
+        );
+      await deliver(at(0, { cancelAtPeriodEnd: true }));
+      await run(prepareUserDeletion(buyer.userId));
+      await db((d) => d.delete(user).where(eq(user.id, buyer.userId)));
+      expect(await subscriptionRow(id)).toMatchObject({
+        organizationId: workspaceId,
+        userId: null,
+      });
+
+      const rearmed = at(1_000, { cancelAtPeriodEnd: false });
+      await deliver(rearmed);
+      expect(await jobOf(rearmed.eventId)).toMatchObject({
+        state: "dead",
+        lastErrorKind: "billing-off",
+      });
+      expect(await reapply(rearmed.eventId)).toMatchObject({ cancelSubscriptionId: id });
+      // A fresh event with the buyer gone is flagged as well as cancelled.
+      const again = event(
+        snapshot({
+          subscriptionId: id,
+          workspaceId,
+          userId: null,
+          updatedAt: new Date(Date.now() + 2_000),
+        }),
+      );
+      await run(recordBillingEvent(again));
+      expect(await reapply(again.eventId)).toMatchObject({
+        orphanCharging: true,
+        cancelSubscriptionId: id,
+      });
+    });
+  });
+
+  describe("the buyer and orphaned subscriptions", () => {
+    const applyAt = async (id: string, fields: Partial<SubscriptionSnapshot>, offsetMs: number) => {
+      const e = event(
+        snapshot({ subscriptionId: id, updatedAt: new Date(Date.now() + offsetMs), ...fields }),
+      );
+      const recorded = await run(recordBillingEvent(e));
+      if (recorded.kind !== "recorded") throw new Error("not recorded");
+      const [row] = await db((d) =>
+        d
+          .select({ id: billingEvents.id })
+          .from(billingEvents)
+          .where(eq(billingEvents.providerEventId, e.eventId)),
+      );
+      return run(applyBillingEvent(row!.id));
+    };
+
+    it("reports the buyer of a charging subscription only, until it can't charge", async () => {
+      const buyer = await createUser("pays-buyer");
+      const mate = await createUser("pays-mate");
+      await addMember(buyer.organizationId, mate.userId);
+      const id = `sub_${tag}_pays`;
+      const pays = (who: { userId: string }) =>
+        run(userPaysForWorkspace(buyer.organizationId, who.userId));
+      expect(await pays(buyer)).toBe(false);
+
+      await applyAt(id, { workspaceId: buyer.organizationId }, 0);
+      expect(await pays(buyer)).toBe(true);
+      expect(await pays(mate)).toBe(false);
+      expect(await run(userPaysForWorkspace("another-workspace", buyer.userId))).toBe(false);
+
+      // A scheduled cancel charges nothing more: the buyer may leave.
+      await applyAt(id, { workspaceId: buyer.organizationId, cancelAtPeriodEnd: true }, 1_000);
+      expect(await pays(buyer)).toBe(false);
+      await applyAt(id, { workspaceId: buyer.organizationId, cancelAtPeriodEnd: false }, 2_000);
+      expect(await pays(buyer)).toBe(true);
+      await applyAt(id, { workspaceId: buyer.organizationId, status: "canceled" }, 3_000);
+      expect(await pays(buyer)).toBe(false);
+    });
+
+    it("flags an event that keeps an orphaned subscription charging", async () => {
+      const buyer = await createUser("orphan-buyer");
+      const id = `sub_${tag}_orphan`;
+      expect(await applyAt(id, { workspaceId: buyer.organizationId }, 0)).not.toHaveProperty(
+        "orphanCharging",
+      );
+      await db((d) =>
+        d
+          .update(billingSubscriptions)
+          .set({ organizationId: null })
+          .where(eq(billingSubscriptions.providerSubscriptionId, id)),
+      );
+      // Flagged, and cancelled with the provider by the job.
+      expect(await applyAt(id, {}, 1_000)).toMatchObject({
+        orphanCharging: true,
+        cancelSubscriptionId: id,
+      });
+      // Once it can't charge any more there is nothing to alert on.
+      expect(await applyAt(id, { cancelAtPeriodEnd: true }, 2_000)).not.toHaveProperty(
+        "orphanCharging",
+      );
     });
   });
 
