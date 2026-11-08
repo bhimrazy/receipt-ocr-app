@@ -17,6 +17,7 @@ import { Ban, KeyRound, LogIn, MailCheck, ShieldCheck, Trash2 } from "lucide-rea
 import { useState } from "react";
 import { ReasonDialog } from "@/components/admin/reason-dialog";
 import { formatDateTime } from "@/lib/format";
+import { allowance, allowanceOwner } from "@/lib/plan-copy";
 import {
   banUserAction,
   deleteUserAction,
@@ -111,7 +112,7 @@ export function AccountControls({
     <>
       <div className="divide-y divide-border">
         <Row
-          hint={`${n(plans[user.plan as "free" | "pro"]?.receiptsPerDay ?? 0)} receipts a day, ${plural(plans[user.plan as "free" | "pro"]?.workspaces ?? 0, "owned workspace")}.`}
+          hint={`A comp, separate from any subscription: Pro here puts every workspace they own on Pro. ${plural(plans[user.plan as "free" | "pro"]?.workspaces ?? 0, "owned workspace")}.`}
           label="Plan"
         >
           <Select
@@ -121,7 +122,10 @@ export function AccountControls({
               const limits = plans[next as "free" | "pro"];
               ask({
                 title: `Move ${who} to the ${next === "pro" ? "Pro" : "Free"} plan?`,
-                description: `Their limits become ${n(limits.receiptsPerDay)} receipts a day, ${n(limits.receiptsPerMinute)} a minute and ${n(limits.workspaces)} owned ${limits.workspaces === 1 ? "workspace" : "workspaces"}. This applies to their next upload. Nobody is charged.`,
+                description:
+                  next === "pro"
+                    ? `Every workspace they own goes on Pro (${allowance(limits)}, ${allowanceOwner(limits)}) and they can own ${n(limits.workspaces)} ${limits.workspaces === 1 ? "workspace" : "workspaces"}. This applies to their next upload. Nobody is charged, and no webhook can undo it.`
+                    : `Their workspaces go back to Free unless they have their own subscription: ${allowance(limits)}, ${allowanceOwner(limits)}, and ${n(limits.workspaces)} owned ${limits.workspaces === 1 ? "workspace" : "workspaces"}. Paid subscriptions aren't touched.`,
                 confirmLabel: "Change plan",
                 onConfirm: () =>
                   settle(() => setPlanAction({ userId: user.id, plan: next }), "Plan changed."),

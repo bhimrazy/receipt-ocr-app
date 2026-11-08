@@ -3,14 +3,11 @@ import { authRateLimitRules } from "./auth-rate-limit";
 import { SITE_NAME } from "./site";
 import {
   countOtherAdmins,
-  DEFAULT_PLANS,
   ensurePersonalWorkspace,
-  policyFor,
   prepareUserDeletion,
   workspacesBlockingDeletion,
   purgeReceiptFiles,
   releaseMemberGroups,
-  userPlan,
 } from "@receipt-ocr/core";
 import { and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
 import {
@@ -53,7 +50,13 @@ import {
 } from "./auth-two-factor";
 // --- end two-factor + step-up ---
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
-import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
+import {
+  assertCanCreateWorkspace,
+  assertNoLiveSubscription,
+  assertWorkspaceRole,
+  limitInvitations,
+  validateWorkspaceName,
+} from "./auth-guards";
 import {
   allowAuthEmail,
   allowPasswordChange,
@@ -556,8 +559,10 @@ export const auth = betterAuth({
         });
       },
       organizationHooks: {
-        beforeCreateOrganization: ({ organization }) =>
-          validateWorkspaceName(organization, { required: true }),
+        beforeCreateOrganization: async ({ organization, user }) => {
+          await assertCanCreateWorkspace(user.id);
+          return validateWorkspaceName(organization, { required: true });
+        },
         beforeUpdateOrganization: ({ organization }) =>
           validateWorkspaceName(organization, { required: false }),
         beforeCreateInvitation: ({ invitation, inviter }) => {
@@ -584,22 +589,14 @@ export const auth = betterAuth({
           }
         },
         beforeDeleteOrganization: async ({ organization }) => {
+          await assertNoLiveSubscription(organization.id);
           await purgeFiles({ organizationId: organization.id });
         },
       },
-      // Returns true when the user has REACHED their plan's org limit. The plan
-      // is read fresh (the session user can be five minutes stale).
-      organizationLimit: async (user) => {
-        const limit = await runtime
-          .runPromise(userPlan(user.id))
-          .then(({ policy }) => policy.workspaces)
-          .catch(() => policyFor(DEFAULT_PLANS, null).workspaces);
-        const owned = await db
-          .select({ id: member.id })
-          .from(member)
-          .where(and(eq(member.userId, user.id), eq(member.role, "owner")));
-        return owned.length >= limit;
-      },
+      // The ownership cap (Free 1, Pro 2) is checked in beforeCreateOrganization,
+      // which can say why; Better Auth's own limit check runs first with a generic
+      // message, so it is left unlimited here.
+      organizationLimit: async () => false,
     }),
     admin({
       defaultRole: "user",

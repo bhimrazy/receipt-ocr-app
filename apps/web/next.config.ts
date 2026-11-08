@@ -6,7 +6,10 @@ import { PRODUCTION_HOST, nonProductionRobotsHeader, onProductionHost } from "./
 
 const contentSecurityPolicy = buildContentSecurityPolicy(
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
-  { googleAnalytics: Boolean(parseGaMeasurementId(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID)) },
+  {
+    googleAnalytics: Boolean(parseGaMeasurementId(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID)),
+    paddle: Boolean(process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim()),
+  },
 );
 
 const securityHeaders = [

@@ -36,4 +36,17 @@ describe("buildContentSecurityPolicy", () => {
     // GA4 without ads features: no doubleclick or ad-serving origins.
     expect(on).not.toMatch(/doubleclick|googlesyndication|googleadservices/);
   });
+
+  it("adds Paddle's script, checkout frame and API origins only when billing is configured", () => {
+    const off = buildContentSecurityPolicy(undefined);
+    expect(off).not.toMatch(/paddle/);
+
+    const on = buildContentSecurityPolicy(undefined, { paddle: true });
+    expect(directive(on, "script-src")).toContain("https://cdn.paddle.com");
+    expect(directive(on, "frame-src")).toContain("https://buy.paddle.com");
+    expect(directive(on, "frame-src")).toContain("https://sandbox-buy.paddle.com");
+    expect(directive(on, "connect-src")).toContain("https://*.paddle.com");
+    // The app itself still can't be framed by Paddle or anyone else.
+    expect(directive(on, "frame-ancestors")).toBe("frame-ancestors 'none'");
+  });
 });

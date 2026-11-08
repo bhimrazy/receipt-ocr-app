@@ -1,6 +1,6 @@
 import { and, asc, count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { authEnv } from "./env";
-import { getCurrentPlan } from "./plan-limits";
+import { getAccountPlan } from "./plan-limits";
 import { getSession } from "./session";
 
 export interface WorkspaceAllowance {
@@ -15,7 +15,7 @@ export interface WorkspaceAllowance {
  * lock "Create workspace" after being invited to a second workspace.
  */
 export async function getWorkspaceAllowance(): Promise<WorkspaceAllowance> {
-  const [session, { policy }] = await Promise.all([getSession(), getCurrentPlan()]);
+  const [session, { policy }] = await Promise.all([getSession(), getAccountPlan()]);
   const limit = policy.workspaces;
   if (!session || !authEnv.databaseUrl) {
     return { owned: 0, limit, canCreate: false };

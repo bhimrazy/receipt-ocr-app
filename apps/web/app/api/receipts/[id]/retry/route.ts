@@ -42,7 +42,7 @@ async function retry(
   event.receipt_id = id;
 
   return runRoute(
-    enforceUploadQuota(session.user.id).pipe(
+    enforceUploadQuota(scope).pipe(
       Effect.tap(({ plan }) => void (event.plan = plan)),
       Effect.tap(() => Effect.flatMap(Ocr, (ocr) => ocr.ready)),
       Effect.flatMap(({ limits }) => claimRetry({ receiptId: id, scope, limits })),
