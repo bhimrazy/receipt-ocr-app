@@ -193,10 +193,20 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       .filter((c) => c?.includes("session_token="))
       .join("; ");
     const headers = new Headers({ cookie });
-    const org = await auth.api.createOrganization({
+    // Comped to Pro above, the user owns their personal workspace and "Acme Books": the
+    // Pro cap of 2. A third is refused on the server, saying why.
+    const third = auth.api.createOrganization({
       headers,
       body: { name: "Roles", slug: `${tag}-roles` },
     });
+    await expect(third).rejects.toMatchObject({
+      status: "FORBIDDEN",
+      body: { message: expect.stringContaining("the most a Pro account can own") },
+    });
+    const [org] = await db
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.slug, `${tag}-c`));
     const invite = (role: string) =>
       auth.api.createInvitation({
         headers,
