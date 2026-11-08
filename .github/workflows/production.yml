@@ -48,6 +48,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
+          PRODUCTION_HEALTH_URL: https://receipt-ocr.bhimraj.com.np/api/health
         run: |
           skip() {
             echo "deploy=false" >> "$GITHUB_OUTPUT"
@@ -78,7 +79,7 @@ jobs:
           fi
           # Newest main run whose deploy-production job succeeded; fails closed.
           if ! last=$(.github/scripts/last-deployed-sha.sh); then
-            skip "Can't find the last production deploy (no run of this workflow on main with a successful deploy-production job, or the lookup failed). Run this workflow by hand from main once migrations are applied."
+            skip "Can't tell which commit production runs (/api/health unreadable, or its commit isn't in this history). Run this workflow by hand from main once migrations are applied."
             exit 0
           fi
           if ! git cat-file -e "$last^{commit}" 2>/dev/null; then
