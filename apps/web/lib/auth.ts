@@ -20,7 +20,6 @@ import {
   passwordChangedEmail,
   passwordResetEmail,
   sendEmail,
-  type EmailLogEvent,
   verificationEmail,
   type SendEmailInput,
 } from "@receipt-ocr/email";
@@ -59,14 +58,14 @@ import {
   authEnabled,
   authEnv,
   emailContext,
-  emailEnv,
   resetPasswordUrl,
   isProduction,
-  logUndeliveredMail,
   requireEmailVerification,
   turnstileEnv,
 } from "./env";
 import { errorFields, logger } from "./log";
+import { mailer } from "./mailer";
+import { queueWelcomeEmail, welcomeAtCreation } from "./welcome";
 import { runtime } from "./runtime";
 import {
   DELETE_TOKEN_SECONDS,
@@ -88,14 +87,6 @@ const PLACEHOLDER_DATABASE_URL = "postgres://placeholder:placeholder@localhost:5
 const PLACEHOLDER_SECRET = "auth-disabled-placeholder-secret-do-not-use-0000";
 
 const db = createDb(authEnv.databaseUrl ?? PLACEHOLDER_DATABASE_URL);
-
-const mailer = {
-  apiKey: emailEnv.resendApiKey,
-  from: emailEnv.from,
-  replyTo: emailEnv.replyTo,
-  logUndelivered: logUndeliveredMail(),
-  log: (event: EmailLogEvent) => logger.emit(event),
-};
 
 /**
  * In production an undelivered reset/verification/invite mail fails the
@@ -302,6 +293,7 @@ export const auth = betterAuth({
     },
     afterEmailVerification: async (user) => {
       await promoteIfBootstrapAdmin({ ...user, emailVerified: true });
+      await queueWelcomeEmail(user.id);
     },
   },
   socialProviders: {
@@ -486,6 +478,9 @@ export const auth = betterAuth({
           await runtime.runPromise(ensurePersonalWorkspace(user));
           // OAuth sign-ups can arrive already verified.
           await promoteIfBootstrapAdmin(user);
+          // Verified at creation (Google, GitHub) or nothing to verify: welcome now. Email sign-ups
+          // that must verify are welcomed from afterEmailVerification.
+          if (welcomeAtCreation(user, requireEmailVerification)) await queueWelcomeEmail(user.id);
         },
       },
       // --- two-factor + step-up (feat/two-factor) ---
