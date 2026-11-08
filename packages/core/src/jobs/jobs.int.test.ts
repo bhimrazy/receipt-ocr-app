@@ -34,6 +34,7 @@ import { checkQuota, quotaGate, usageWindow } from "../quota";
 import { EXTRACTION_FAILED_MESSAGE, ReceiptRepo } from "../repository";
 import { Db, Storage } from "../services";
 import { Settings } from "../settings";
+import { DEFAULT_PLANS } from "../plans";
 import { ensurePersonalWorkspace } from "../workspace";
 import type { JobDefinition } from "./definition";
 import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
@@ -1223,7 +1224,9 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
         waitForRetries: false,
       }).pipe(Effect.provide(mailer)),
     );
-    expect(sent).toEqual([{ to: expect.stringContaining("@"), receiptsPerDay: 20 }]);
+    expect(sent).toEqual([
+      { to: expect.stringContaining("@"), receiptsPerDay: DEFAULT_PLANS.free.receiptsPerDay },
+    ]);
     expect((await welcomeJobs()).map((j) => j.state)).toEqual(["succeeded"]);
     expect(await run(enqueueWelcomeEmail(a.userId))).toBe(false);
     expect(await welcomeJobs()).toHaveLength(1);

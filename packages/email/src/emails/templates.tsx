@@ -448,8 +448,8 @@ const welcome: EmailDefinition = {
     ];
     const plan = `Your plan scans up to ${v.receiptsPerDay} receipts a day. The count resets every day.`;
     const note = shared.supportEmail
-      ? "Need help, or more than the daily limit? Reply to this email and we'll answer."
-      : "Need help, or more than the daily limit? Use the support button in the app.";
+      ? "Need help, or more than your plan includes? Reply to this email and we'll answer."
+      : "Need help, or more than your plan includes? Use the support button in the app.";
     const reason = `You're receiving this because a ${BRAND} account was created with this address.`;
     return {
       html: (

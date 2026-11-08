@@ -499,6 +499,13 @@ describe("welcomeEmail", () => {
     );
   });
 
+  it("renders the steps as an ordered list with hidden numbers", () => {
+    const { html } = welcomeEmail(withSupport, { receiptsPerDay: 20 });
+    expect(html.match(/<ol[\s>]/g)).toHaveLength(1);
+    expect(html.match(/<li[\s>]/g)).toHaveLength(3);
+    expect(html.match(/aria-hidden="true"/g)).toHaveLength(3);
+  });
+
   it("loads no tracking pixel or remote font", () => {
     const { html } = welcomeEmail(withSupport, { receiptsPerDay: 20 });
     expect(html).not.toMatch(/@import|font-face|<link[^>]+stylesheet/);

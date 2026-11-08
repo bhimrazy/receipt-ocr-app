@@ -23,7 +23,7 @@ const run = (
   send: (input: {
     to: string;
     receiptsPerDay: number;
-  }) => "delivered" | "not_configured" | "failed",
+  }) => "delivered" | "not_configured" | "failed" | "rejected",
   sent: unknown[] = [],
 ) =>
   Effect.runPromiseExit(
@@ -77,5 +77,7 @@ describe("welcome email job", () => {
     const failed = await run(rows(), () => "failed");
     expect(Exit.isFailure(failed)).toBe(true);
     expect(JSON.stringify(failed)).toContain("email-send-failed");
+    const rejected = await run(rows(), () => "rejected");
+    expect(JSON.stringify(rejected)).toContain("NonRetryableJobError");
   });
 });

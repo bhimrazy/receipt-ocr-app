@@ -10,7 +10,12 @@ import { annotateEvent } from "../../telemetry/current";
 import { logger } from "../../telemetry/logger";
 import { errorFields } from "../../telemetry/redact";
 import { enqueueJob } from "../queue";
-import { RetryableJobError, type JobDefinition, type NewJob } from "../definition";
+import {
+  NonRetryableJobError,
+  RetryableJobError,
+  type JobDefinition,
+  type NewJob,
+} from "../definition";
 
 export const WELCOME_EMAIL = "email.welcome";
 export const WELCOME_EMAIL_MAX_ATTEMPTS = 5;
@@ -28,7 +33,7 @@ export class WelcomeMailer extends Context.Tag("@receipt-ocr/core/WelcomeMailer"
     readonly send: (input: {
       to: string;
       receiptsPerDay: number;
-    }) => Effect.Effect<"delivered" | "not_configured" | "failed">;
+    }) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected">;
   }
 >() {
   static readonly Disabled = Layer.succeed(WelcomeMailer, {
@@ -89,6 +94,8 @@ export const welcomeEmail: JobDefinition<WelcomeEmailPayload, Db | Settings | We
       const { plan, policy } = yield* userPlan(payload.userId);
       const outcome = yield* mailer.send({ to: row.email, receiptsPerDay: policy.receiptsPerDay });
       yield* annotateEvent({ kind: "welcome", plan, delivered: outcome === "delivered" });
+      if (outcome === "rejected")
+        return yield* new NonRetryableJobError({ kind: "email-render-failed" });
       if (outcome === "failed") return yield* new RetryableJobError({ kind: "email-send-failed" });
       logger.info({
         event: "email.welcome_sent",
@@ -102,7 +109,7 @@ export const welcomeEmail: JobDefinition<WelcomeEmailPayload, Db | Settings | We
     }).pipe(
       // A database or settings failure is worth another attempt; the typed job failures pass through.
       Effect.catchAll((error) =>
-        error instanceof RetryableJobError
+        error instanceof RetryableJobError || error instanceof NonRetryableJobError
           ? Effect.fail(error)
           : Effect.zipRight(
               annotateEvent({ error: errorFields(error) }),

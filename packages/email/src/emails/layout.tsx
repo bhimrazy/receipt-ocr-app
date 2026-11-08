@@ -99,25 +99,32 @@ export function Action(props: {
   );
 }
 
-/** Numbered steps as table rows (mono 01/02/03 like the landing); `lead` is the bold first sentence. */
+/** Numbered steps: a real ordered list, each item a presentation table with the aria-hidden number (mono 01/02/03 like the landing); `lead` is the bold first sentence. */
 export function Steps({ items }: { items: { lead: string; rest: string }[] }) {
   return (
-    <Section className="mb-4">
+    <ol className="m-0 mb-4 list-none p-0">
       {items.map((item, i) => (
-        <Row key={item.lead}>
-          <Column className="w-[40px] pr-2 pb-3 align-top">
-            <Text className="m-0 font-mono text-[14px] leading-[26px] font-semibold text-accent dark:text-d-accent">
-              {String(i + 1).padStart(2, "0")}
-            </Text>
-          </Column>
-          <Column className="pb-3 align-top">
-            <Text className={text}>
-              <Strong>{item.lead}</Strong> {item.rest}
-            </Text>
-          </Column>
-        </Row>
+        <li key={item.lead} className="m-0 p-0">
+          <Section>
+            <Row>
+              <Column className="w-[40px] pr-2 pb-3 align-top">
+                <Text
+                  aria-hidden="true"
+                  className="m-0 font-mono text-[14px] leading-[26px] font-semibold text-accent dark:text-d-accent"
+                >
+                  {String(i + 1).padStart(2, "0")}
+                </Text>
+              </Column>
+              <Column className="pb-3 align-top">
+                <Text className={text}>
+                  <Strong>{item.lead}</Strong> {item.rest}
+                </Text>
+              </Column>
+            </Row>
+          </Section>
+        </li>
       ))}
-    </Section>
+    </ol>
   );
 }
 

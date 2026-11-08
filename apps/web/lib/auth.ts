@@ -65,7 +65,7 @@ import {
 } from "./env";
 import { errorFields, logger } from "./log";
 import { mailer } from "./mailer";
-import { queueWelcomeEmail, welcomeAtCreation } from "./welcome";
+import { isEmailChangeVerification, queueWelcomeEmail, welcomeAtCreation } from "./welcome";
 import { runtime } from "./runtime";
 import {
   DELETE_TOKEN_SECONDS,
@@ -291,9 +291,10 @@ export const auth = betterAuth({
         ...verificationEmail(emailContext, { url, expiresInSeconds: VERIFY_LINK_SECONDS }),
       });
     },
-    afterEmailVerification: async (user) => {
+    afterEmailVerification: async (user, request) => {
       await promoteIfBootstrapAdmin({ ...user, emailVerified: true });
-      await queueWelcomeEmail(user.id);
+      // Verifying a changed address is not a new account.
+      if (!isEmailChangeVerification(request)) await queueWelcomeEmail(user.id);
     },
   },
   socialProviders: {

@@ -40,7 +40,7 @@ export const makeAppLayer = (mailer: Layer.Layer<WelcomeMailer>) =>
     mailer,
   ).pipe(Layer.provideMerge(Settings.Live), Layer.provideMerge(Db.Live));
 
-/** With a welcome mailer that sends nothing; the web app passes the real one to `makeAppLayer`. */
+/** For tests only: a welcome mailer that sends nothing; the web app passes the real one to `makeAppLayer`. */
 export const AppLayer = makeAppLayer(WelcomeMailer.Disabled);
 
 export type AppServices = Layer.Layer.Success<typeof AppLayer>;
