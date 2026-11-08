@@ -261,6 +261,18 @@ html {
   }
 }
 
+/* The root paints the theme colour itself, so the canvas behind a rubber-banded page (macOS
+   trackpad overscroll past the end) is never a different shade from the page. Desktop only:
+   phones keep pull-to-refresh. */
+html {
+  background: var(--background);
+}
+@media (hover: hover) and (pointer: fine) {
+  html {
+    overscroll-behavior-y: none;
+  }
+}
+
 body {
   min-height: 100vh;
   background: var(--background);
