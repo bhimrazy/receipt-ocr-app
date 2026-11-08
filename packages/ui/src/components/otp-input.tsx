@@ -68,7 +68,7 @@ export function OtpInput({
   const range = start !== end;
 
   return (
-    <div className={cn("relative w-full max-w-72", className)} data-slot="otp-input">
+    <div className={cn("relative w-full max-w-80", className)} data-slot="otp-input">
       <div
         className={cn(
           "grid grid-cols-6 gap-1.5 transition-opacity sm:gap-2",
