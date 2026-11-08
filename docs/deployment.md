@@ -348,8 +348,9 @@ value. Without it you can still rotate by setting only the new version. That sig
 reads stored OAuth tokens, so nothing else breaks. Once two-step sign-in ships it also loses every TOTP secret and
 backup code sealed under the old version.
 
-The production secret was last rotated on 2026-11-08 (`BETTER_AUTH_SECRETS=2:<new>`, `BETTER_AUTH_SECRET` set to the
-same value).
+The production secret was last replaced on 2026-11-08, during the pre-launch reset: production has only
+`BETTER_AUTH_SECRET` (no `BETTER_AUTH_SECRETS`). Set `BETTER_AUTH_SECRETS=1:<current secret>` (step 0) before
+two-step sign-in ships or before launch, whichever comes first.
 
 ## Release notes
 

@@ -146,7 +146,7 @@ Steps are in [deployment.md](deployment.md).
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
   no outside collaborators. The full fix is a separate Vercel project for previews, with its own token.
 - Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
-  rotated on 2026-11-08 (`BETTER_AUTH_SECRETS=2:<new>`); keep its copy in a password manager.
+  replaced on 2026-11-08 (only `BETTER_AUTH_SECRET`; keep its copy in a password manager).
 - Set `OCR_DAILY_CAP` in production as a spend guard.
 - Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
 - Standing decisions and dated reminders: [decisions.md](decisions.md).

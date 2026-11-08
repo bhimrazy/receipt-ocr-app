@@ -5,16 +5,16 @@ The owner's standing decisions, and what has to happen later because of them. Op
 
 ## Decided
 
-| Date       | Decision                                                                                                                                                               | Why / where                                                                                                      |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| 2026-11-08 | Until launch, staging and production data are disposable: either database may be reset and the baseline re-applied, more than once if needed.                          | Pre-launch; no customer data yet. A reset still needs the owner's go each time.                                  |
-| 2026-11-08 | The lab landing variants (`app/(lab)`) are deleted; Classic stays the homepage.                                                                                        | Architecture review: ~12.6k unused lines.                                                                        |
-| 2026-11-08 | Production auth secret rotated to 32 random bytes; a current secret under 32 characters now stops the app from starting in production.                                 | Security review M2. [Rotating the auth secret](deployment.md#rotating-the-auth-secret)                           |
-| 2026-11-07 | BYOK: Free 2 / Pro 3 keys per workspace; turning BYOK off routes to the platform chain (counted, with a banner and an email); own-key scans Free 50 / Pro 2,000 a day. | [BYOK plan §11](plans/2026-11-07-byok.md). The admin key store comes first, then workspace BYOK. Not built yet.  |
-| 2026-11-07 | Groq only for workspace keys, never in the platform chain on a free-tier key.                                                                                          | Groq's data terms; benchmark it before offering it.                                                              |
-| 2026-11-07 | Default OCR chain: Claude Sonnet 5.5, then the env Gemini model.                                                                                                       | Owner's choice in #93. Reviews suggest Haiku first (about 10× cheaper, same measured accuracy); open to revisit. |
-| 2026-11-07 | iOS splash: dark, iPhone, portrait only (10 images).                                                                                                                   | A light set follows the Light/System/Dark theme work.                                                            |
-| 2026-11-07 | Brand: Scan line mark, spelled "ReceiptOCR", "scanned" in copy.                                                                                                        | [Brand decisions](STATUS.md#brand-decisions-owner-2026-11-07)                                                    |
+| Date       | Decision                                                                                                                                                                                 | Why / where                                                                                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 2026-11-08 | Until launch, staging and production data are disposable: either database may be reset and the baseline re-applied, more than once if needed.                                            | Pre-launch; no customer data yet. A reset still needs the owner's go each time.                                  |
+| 2026-11-08 | The lab landing variants (`app/(lab)`) are deleted; Classic stays the homepage.                                                                                                          | Architecture review: ~12.6k unused lines.                                                                        |
+| 2026-11-08 | Production auth secret replaced outright with 32 random bytes (pre-launch reset, no versioned list); a current secret under 32 characters now stops the app from starting in production. | Security review M2. [Rotating the auth secret](deployment.md#rotating-the-auth-secret)                           |
+| 2026-11-07 | BYOK: Free 2 / Pro 3 keys per workspace; turning BYOK off routes to the platform chain (counted, with a banner and an email); own-key scans Free 50 / Pro 2,000 a day.                   | [BYOK plan §11](plans/2026-11-07-byok.md). The admin key store comes first, then workspace BYOK. Not built yet.  |
+| 2026-11-07 | Groq only for workspace keys, never in the platform chain on a free-tier key.                                                                                                            | Groq's data terms; benchmark it before offering it.                                                              |
+| 2026-11-07 | Default OCR chain: Claude Sonnet 5.5, then the env Gemini model.                                                                                                                         | Owner's choice in #93. Reviews suggest Haiku first (about 10× cheaper, same measured accuracy); open to revisit. |
+| 2026-11-07 | iOS splash: dark, iPhone, portrait only (10 images).                                                                                                                                     | A light set follows the Light/System/Dark theme work.                                                            |
+| 2026-11-07 | Brand: Scan line mark, spelled "ReceiptOCR", "scanned" in copy.                                                                                                                          | [Brand decisions](STATUS.md#brand-decisions-owner-2026-11-07)                                                    |
 
 ## Things to take care of later
 
@@ -25,7 +25,7 @@ The owner's standing decisions, and what has to happen later because of them. Op
 
 ### When something ships
 
-- **Two-step sign-in (#95):** from then on, TOTP secrets and backup codes are sealed with the auth secret. Never drop a
+- **Two-step sign-in (#95):** first set `BETTER_AUTH_SECRETS=1:<current secret>` so sealed rows carry a version. From then on, TOTP secrets and backup codes are sealed with the auth secret. Never drop a
   secret version while rows sealed under it exist. A rotation then needs the current value, so keep it in a password
   manager: Vercel Sensitive variables can't be read back.
 - **Effort `xhigh`/`max`:** stay hidden until an OCR call may run longer than 50 s (a worker app or a longer function
