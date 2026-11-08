@@ -57,6 +57,7 @@ import {
   assertCanCreateWorkspace,
   assertBuyerStays,
   assertNoLiveSubscription,
+  assertMemberRoom,
   assertWorkspaceRole,
   limitInvitations,
   validateWorkspaceName,
@@ -621,13 +622,21 @@ export const auth = betterAuth({
         },
         beforeUpdateOrganization: ({ organization }) =>
           validateWorkspaceName(organization, { required: false }),
-        beforeCreateInvitation: ({ invitation, inviter }) => {
+        beforeCreateInvitation: async ({ invitation, inviter }) => {
           assertWorkspaceRole(invitation.role);
+          await assertMemberRoom(invitation.organizationId, {
+            kind: "invite",
+            email: invitation.email,
+          });
           return limitInvitations(inviter.id);
         },
         // Accepting copies the stored role to a member row without beforeAddMember,
-        // so invitations stored before this check are re-checked here.
-        beforeAcceptInvitation: async ({ invitation }) => assertWorkspaceRole(invitation.role),
+        // so invitations stored before this check are re-checked here. The member
+        // limit is re-checked too: the plan may have changed since the invite.
+        beforeAcceptInvitation: async ({ invitation }) => {
+          assertWorkspaceRole(invitation.role);
+          await assertMemberRoom(invitation.organizationId, { kind: "accept" });
+        },
         beforeAddMember: async ({ member }) => assertWorkspaceRole(member.role),
         beforeUpdateMemberRole: async ({ newRole, member, user, organization }) => {
           assertWorkspaceRole(newRole);

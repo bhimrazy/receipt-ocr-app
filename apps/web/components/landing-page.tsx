@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { ContactButton } from "@/components/contact-button";
 import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
 import { LandingInstallOffer } from "@/components/landing-install";
 import { PlanCard } from "@/components/plan-card";
@@ -24,7 +25,7 @@ import { newsletterEnabled } from "@/lib/env";
 import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
 import { homeFaqs as faqs } from "@/lib/home-faqs";
-import { freeFeatures, proFeatures } from "@/lib/plan-copy";
+import { CUSTOM_PLAN, freeFeatures, proFeatures } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { homeJsonLd, jsonLdScript } from "@/lib/seo";
 import type { PlanTable } from "@receipt-ocr/core/plans";
@@ -308,7 +309,10 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 a month or {PRO_PRICE_LABEL.year} a year.
               </p>
             </div>
-            <div className="mx-auto grid max-w-3xl items-stretch gap-5 md:grid-cols-2">
+            {/* One filled button per row, on the featured card, as on /pricing. Pro links to
+                /pricing rather than sign-up: that page has the monthly/yearly choice and knows
+                whether the checkout is open. */}
+            <div className="mx-auto grid max-w-md items-stretch gap-5 lg:max-w-none lg:grid-cols-3">
               <PlanCard
                 name="Free"
                 price="$0"
@@ -317,10 +321,8 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 description="Everything you need to start turning receipts into structured data."
                 features={freeFeatures(plans.free)}
                 cta={
-                  <Button asChild className="w-full">
-                    <Link href="/sign-up">
-                      Get started free <ArrowRight className="size-4" />
-                    </Link>
+                  <Button asChild className="w-full" variant="outline">
+                    <Link href="/sign-up">Start free</Link>
                   </Button>
                 }
               />
@@ -332,11 +334,24 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 features={proFeatures(plans.pro)}
                 featured
                 cta={
-                  <Button asChild className="w-full" variant="outline">
+                  <Button asChild className="w-full">
                     <Link href="/pricing">
                       See pricing <ArrowRight className="size-4" />
                     </Link>
                   </Button>
+                }
+              />
+              <PlanCard
+                name={CUSTOM_PLAN.name}
+                price={CUSTOM_PLAN.price}
+                cadence=""
+                description={CUSTOM_PLAN.description}
+                features={[...CUSTOM_PLAN.features]}
+                quiet
+                cta={
+                  <ContactButton className="w-full" topic="use-case" variant="outline">
+                    {CUSTOM_PLAN.cta}
+                  </ContactButton>
                 }
               />
             </div>

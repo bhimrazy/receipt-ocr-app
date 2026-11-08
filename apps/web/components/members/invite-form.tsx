@@ -12,6 +12,7 @@ import {
 import { Field, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Check, Copy, Loader2, Mail } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { withStepUp } from "@/components/step-up/step-up";
@@ -19,7 +20,18 @@ import { authClient } from "@/lib/auth-client";
 import { RoleSelect, inviteUrl, useCopyLink } from "./role-select";
 import type { Role } from "./roles";
 
-export function InviteForm({ organizationId }: { organizationId: string }) {
+/** Members against the plan's limit, pending invitations included. The server enforces it too. */
+export type MemberRoom = {
+  plan: "free" | "pro";
+  used: number;
+  limit: number;
+  /** Only an owner can upgrade the workspace. */
+  canUpgrade: boolean;
+};
+
+export function InviteForm({ organizationId, room }: { organizationId: string; room: MemberRoom }) {
+  const full = room.used >= room.limit;
+  const planName = room.plan === "pro" ? "Pro" : "Free";
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
@@ -62,6 +74,12 @@ export function InviteForm({ organizationId }: { organizationId: string }) {
         <CardDescription>
           We&apos;ll email them an invite. You can also copy the link and send it yourself.
         </CardDescription>
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium tabular-nums text-foreground">
+            {room.used} of {room.limit}
+          </span>{" "}
+          members on {planName}, counting pending invites.
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <form
@@ -86,13 +104,42 @@ export function InviteForm({ organizationId }: { organizationId: string }) {
             <FieldLabel htmlFor="invite-role">Role</FieldLabel>
             <RoleSelect id="invite-role" onChange={setRole} value={role} />
           </Field>
-          <Button disabled={inviting} type="submit">
+          <Button disabled={inviting || full} type="submit">
             {inviting ? (
               <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
             ) : null}
             Send invite
           </Button>
         </form>
+        {full ? (
+          <Alert>
+            <p>
+              {room.plan === "pro" ? (
+                <>
+                  This workspace has reached Pro&apos;s {room.limit} members. Cancel a pending
+                  invite or remove a member to invite someone else.
+                </>
+              ) : room.canUpgrade ? (
+                <>
+                  Free workspaces have up to {room.limit} members. Cancel a pending invite, remove a
+                  member, or{" "}
+                  <Link
+                    className="text-foreground underline underline-offset-4"
+                    href="/app/settings/billing"
+                  >
+                    upgrade to Pro
+                  </Link>{" "}
+                  for more.
+                </>
+              ) : (
+                <>
+                  Free workspaces have up to {room.limit} members. Ask the owner to upgrade this
+                  workspace to Pro, or cancel a pending invite.
+                </>
+              )}
+            </p>
+          </Alert>
+        ) : null}
         {error ? (
           <Alert id="invite-error" variant="destructive">
             {error}

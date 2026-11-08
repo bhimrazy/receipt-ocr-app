@@ -78,6 +78,7 @@ describe("storedPlanTableSchema", () => {
       scope: "user",
       receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
       poolPerDay: DEFAULT_PLANS.free.poolPerDay,
+      membersPerWorkspace: DEFAULT_PLANS.free.membersPerWorkspace,
     });
     expect(read.pro.batchMax).toBe(15);
   });
@@ -86,6 +87,21 @@ describe("storedPlanTableSchema", () => {
     const read = storedPlanTableSchema.parse({ free: policy, pro: policy });
     expect(read.free).toMatchObject({ scope: "user", receiptsPerMonth: 100, poolPerDay: 300 });
     expect(read.pro).toMatchObject({ scope: "workspace", receiptsPerMonth: 500, poolPerDay: null });
+  });
+
+  it("gives a row saved before the member limit each plan's own default, and keeps a saved one", () => {
+    const read = storedPlanTableSchema.parse({ free: policy, pro: policy });
+    expect(read.free.membersPerWorkspace).toBe(3);
+    expect(read.pro.membersPerWorkspace).toBe(10);
+    const saved = storedPlanTableSchema.parse({
+      free: { ...policy, membersPerWorkspace: 5 },
+      pro: policy,
+    });
+    expect(saved.free.membersPerWorkspace).toBe(5);
+    expect(
+      planTableSchema.safeParse({ free: { ...policy, membersPerWorkspace: 0 }, pro: policy })
+        .success,
+    ).toBe(false);
   });
 
   it("keeps a saved null (no limit) and refuses a day above the month", () => {
@@ -374,6 +390,7 @@ describe("Settings", () => {
       scope: "user",
       receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
       poolPerDay: DEFAULT_PLANS.free.poolPerDay,
+      membersPerWorkspace: DEFAULT_PLANS.free.membersPerWorkspace,
     });
   });
 
