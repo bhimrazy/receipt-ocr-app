@@ -308,6 +308,7 @@ erDiagram
     boolean cancel_at_period_end
     timestamptz past_due_since "grace counts from here"
     timestamptz canceled_at
+    timestamptz revoked_at "chargeback or full refund: no Pro"
     timestamptz provider_updated_at "orders events"
   }
   billing_events {
@@ -326,7 +327,8 @@ erDiagram
 
 - `billing_subscriptions` has one row per provider subscription. A workspace is Pro while it has an entitled row (see
   [entitlement](flows/billing.md#entitlement)). A workspace can have several rows after a cancel and a new subscribe.
-  It holds ids, status and dates only: no card, address or tax data.
+  It holds ids, status and dates only: no card, address or tax data. A row grants Pro only for a configured Pro
+  `price_id` and while `revoked_at` is null.
 - `billing_events` is the webhook log. The unique index on `(provider, provider_event_id)` makes a redelivery a no-op.
   `payload` is the provider-neutral event the job applies; the raw body is never stored. `outcome` and `processed_at`
   are null until the job has run. `organization_id` has no foreign key, so the log outlives a deleted workspace.

@@ -152,12 +152,17 @@ Steps are in [deployment.md](deployment.md).
   1. Run **Database Migration** (`staging-db`, then `production-db`) before deploying; the release adds `billing_events`,
      `billing_subscriptions` and `ocr_rounds.plan`, and replaces `ocr_rounds_organization_id_idx` (migration
      `0001_billing`, on top of the squashed baseline).
-  2. Add the six `PADDLE_*` variables (sandbox first) and the webhook destination
-     ([step 10](production-environment.md#10-payments-paddle)); redeploy so the CSP picks up the client token.
+  2. Add the six `PADDLE_*` variables (sandbox first) and the webhook destination, including the `adjustment.*` events
+     ([step 10](production-environment.md#10-payments-paddle)); redeploy so the CSP picks up the client token. Only
+     `PADDLE_API_KEY` and `PADDLE_WEBHOOK_SECRET` are Sensitive: the other four are read at build time, when `vercel
+pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the secrets come from.
   3. Set `OCR_DAILY_CAP` to about 1000 (the all-plans fuse; the Free pool is 300 a day).
   4. Test a sandbox checkout, then submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
      account verification, and switch to live values ([10c](production-environment.md#10c-switch-from-sandbox-to-live)).
   5. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).
+  6. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price,
+     and keep the old price id in `PADDLE_PRICE_PRO_LEGACY` ([runbook](architecture/flows/billing.md#runbook)). There is
+     no automated email for this yet.
 - Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
 - Standing decisions and dated reminders: [decisions.md](decisions.md).
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).

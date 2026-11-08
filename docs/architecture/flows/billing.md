@@ -19,6 +19,7 @@ in [`apps/web/app/api/billing`](../../../apps/web/app/api/billing) and
 - [Failure modes](#failure-modes)
 - [Security notes](#security-notes)
 - [Configuration](#configuration)
+- [Runbook](#runbook)
 - [How scan packs will fit](#how-scan-packs-will-fit)
 
 ## Plans are per workspace
@@ -61,7 +62,10 @@ sequenceDiagram
 
   Owner->>Page: Open Billing (owner only)
   Page-->>Owner: Paddle.js loads, Upgrade button
-  Owner->>Paddle: Overlay checkout<br/>customData {workspaceId, userId}, email prefilled
+  Owner->>Page: Upgrade (startCheckoutAction)
+  Page->>Paddle: POST /transactions: Pro price for the interval,<br/>custom_data {workspaceId, userId}, customer by email
+  Paddle-->>Page: txn_…
+  Owner->>Paddle: Overlay checkout opens the transaction
   Paddle-->>Owner: Payment done (checkout.completed)
   Paddle->>Hook: subscription.created / activated (signed)
   Hook->>Hook: Verify Paddle-Signature over the raw body
@@ -76,8 +80,13 @@ sequenceDiagram
 
 Steps in words:
 
-1. **Checkout.** Only an owner sees the Upgrade button. The browser opens Paddle's overlay with the workspace id and
-   user id as custom data. See [`checkout-button.tsx`](../../../apps/web/components/billing/checkout-button.tsx).
+1. **Checkout.** Only an owner sees the Upgrade button. The server action `startCheckoutAction`
+   ([`actions.ts`](../../../apps/web/app/app/settings/billing/actions.ts)) checks the owner again, finds or creates the
+   Paddle customer by the owner's email, and creates the transaction with the configured price for the chosen interval
+   and `custom_data { workspaceId, userId }`. The browser opens that `txn_…` id in Paddle's overlay; Paddle copies the
+   custom data to the subscription. See [`checkout-button.tsx`](../../../apps/web/components/billing/checkout-button.tsx).
+   If Pro still isn't on after the page has refreshed 20 times (about a minute), the button says the payment was
+   received, to reload in a few minutes and to use the support button if it stays Free.
 2. **Webhook.** [`receiveWebhook`](../../../packages/core/src/billing/service.ts) verifies the signature, parses the body
    into a provider-neutral `BillingEvent`, and calls `recordBillingEvent`. That function inserts the `billing_events`
    row and enqueues the `billing.apply_event` job in one transaction, so there is never an event without its job.
@@ -86,14 +95,18 @@ Steps in words:
 4. **Apply.** [`applyBillingEvent`](../../../packages/core/src/billing/service.ts) writes the normalized fields to
    `billing_subscriptions`. The job kind is in
    [`kinds/billing-apply.ts`](../../../packages/core/src/jobs/kinds/billing-apply.ts) (8 attempts, 30 s lease, backoff
-   5 s up to 10 min). A database error is retried. A payload the schema refuses goes to the dead state and shows in the
-   admin jobs list.
+   5 s up to 10 min). A database error is retried. A stored payload the schema refuses is dead at once (no retries) and
+   shows in the admin jobs list.
 5. **Plan.** The next upload reads `workspacePlan` fresh from the database (not the session cache), so a webhook or an
    admin change applies at once.
 
 Manage and cancel use Paddle's customer portal. The server action
 [`openBillingPortalAction`](../../../apps/web/app/app/settings/billing/actions.ts) calls
-`POST /customers/{id}/portal-sessions` and returns short-lived links. They are made per click and never stored.
+`POST /customers/{id}/portal-sessions` and returns short-lived links. They are made per click and never stored. Only
+the subscription's buyer (`billing_subscriptions.user_id`) may open them; other owners see "Billing for this workspace
+is managed by {buyer's email}". Any owner may once the buyer's account is gone. Cancel and update payment method open
+Paddle's page for that subscription; invoices open the portal overview. Both billing actions allow 10 clicks a minute
+per user.
 
 ### Webhook responses
 
@@ -121,19 +134,23 @@ stored subscription grants Pro. `entitledSql` (in `service.ts`) is the same rule
 | `canceled`           | Only if `cancel_at_period_end` is set and the period end is still ahead                                                                                       |
 | `paused`             | Never                                                                                                                                                         |
 
+Before the status is looked at, a row grants Pro only if its `price_id` is a Pro price (`PADDLE_PRICE_PRO_MONTHLY`,
+`PADDLE_PRICE_PRO_YEARLY` or one of `PADDLE_PRICE_PRO_LEGACY`) and `revoked_at` is null (no chargeback or full refund).
+
 `past_due_since` is set from the event's `updated_at` when the status first becomes `past_due`, and kept while it
 stays `past_due`. Any other status clears it.
 
 ## Ordering and idempotency
 
-| Concern                      | How it is handled                                                                                                                                                                                   |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Same event delivered twice   | `billing_events` has a unique index on `(provider, provider_event_id)`. The second insert does nothing and no second job is enqueued.                                                               |
-| Job runs twice               | The job locks the event row `FOR UPDATE` and skips it if `processed_at` is set (outcome `already-applied`). The job also has an idempotency key `billing:event:<id>`.                               |
-| Events arrive out of order   | Each snapshot carries Paddle's `updated_at`. A snapshot older than the stored one is recorded with outcome `stale` and not applied.                                                                 |
-| Two events, one subscription | A transaction advisory lock per `provider:subscription id` serializes the writes.                                                                                                                   |
-| Which workspace              | The workspace id from `custom_data` links a **new** subscription only, and only if that workspace exists. Otherwise the outcome is `unmatched`. Later events use the stored link and never move it. |
-| `transaction.completed`      | Carries no subscription state, so the outcome is `ignored`. The subscription's own events follow.                                                                                                   |
+| Concern                      | How it is handled                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Same event delivered twice   | `billing_events` has a unique index on `(provider, provider_event_id)`. The second insert does nothing and no second job is enqueued.                                                                                                                                                                                                                                                                                                 |
+| Job runs twice               | The job locks the event row `FOR UPDATE` and skips it if `processed_at` is set (outcome `already-applied`). The job also has an idempotency key `billing:event:<id>`.                                                                                                                                                                                                                                                                 |
+| Events arrive out of order   | Each snapshot carries Paddle's `updated_at`. A snapshot older than the stored one is recorded with outcome `stale` and not applied.                                                                                                                                                                                                                                                                                                   |
+| Two events, one subscription | A transaction advisory lock per `provider:subscription id` serializes the writes.                                                                                                                                                                                                                                                                                                                                                     |
+| Which workspace              | `custom_data` links a **new** subscription only, and only if the workspace exists, its `userId` is an `owner` of it now, and the price is a Pro price. Otherwise the outcome is `unmatched`, with `billing.unmatched_reason` (`workspace`, `owner`, `price`). Later events use the stored link and never move it.                                                                                                                     |
+| Refund or chargeback         | `adjustment.created` / `adjustment.updated`. An approved `chargeback`, or an approved `refund` of type `full`, on a stored subscription sets `revoked_at` (Pro ends at once), and the job cancels the subscription with Paddle (`POST /subscriptions/{id}/cancel`, `effective_from: immediately`). A retry asks for the cancel again until Paddle reports `canceled`. Partial refunds, credits and chargeback warnings are `ignored`. |
+| `transaction.completed`      | Carries no subscription state, so the outcome is `ignored`. The subscription's own events follow.                                                                                                                                                                                                                                                                                                                                     |
 
 Outcomes stored in `billing_events.outcome`: `applied`, `stale`, `ignored`, `unmatched`.
 
@@ -148,10 +165,10 @@ these defaults). A plan's `scope` (Free: `user`, Pro: `workspace`) is kept from 
 
 | Limit                 | Free                          | Pro          | How it is counted                                                                                                                                                                | What the user sees when it is hit                                                                                                                                                                                                                    | Where an admin changes it                |
 | --------------------- | ----------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Scans a day           | 20                            | 200          | Free: per person, across all their workspaces. Pro: per workspace, shared by its members. UTC day. Only rounds of that plan (`ocr_rounds.plan`).                                 | Free: "You've used all 20 receipts for today. You can upload again after 00:00 UTC." Pro: "Daily limit reached. It resets at midnight UTC. N of 500 scans left this month."                                                                          | Plan limits, `receiptsPerDay`            |
+| Scans a day           | 20                            | 200          | Free: per person, across all their workspaces. Pro: per workspace, shared by its members. UTC day. Only rounds of that plan (`ocr_rounds.plan`).                                 | Free: "You've used all 20 scans for today. You can upload again at 00:00 UTC." Pro: "This workspace has used its 200 scans for today. Uploads open at 00:00 UTC; N of 500 scans are left this month."                                                | Plan limits, `receiptsPerDay`            |
 | Scans a month         | 100                           | 500          | Same scope as the day limit. UTC calendar month. Empty = no monthly limit.                                                                                                       | Free: "You've used all 100 scans on the Free plan this month. They reset on 1 December at 00:00 UTC. Upgrade a workspace to Pro for more scans." Pro: "This workspace has used all 500 scans for this month. They reset on 1 December at 00:00 UTC." | Plan limits, `receiptsPerMonth`          |
 | Scope                 | `user`                        | `workspace`  | Whose rounds the day and month limits count. A member's Pro scans never use their Free allowance, and the reverse.                                                               | The usage meter says whose count it shows                                                                                                                                                                                                            | Not editable (kept from the saved table) |
-| Free pool             | 300 a day                     | none         | Every round of that plan today, all users together, failed ones included. A Free pool that is full never blocks Pro.                                                             | "Free scanning is busy today. Try again tomorrow, or upgrade to Pro."                                                                                                                                                                                | Plan limits, `poolPerDay` (empty = none) |
+| Free pool             | 300 a day                     | none         | Every round of that plan today, all users together, failed ones included. A Free pool that is full never blocks Pro.                                                             | "Free scanning is busy today: the Free plan's shared daily capacity is used up. Try again after 00:00 UTC, or upgrade this workspace to Pro."                                                                                                        | Plan limits, `poolPerDay` (empty = none) |
 | Burst a minute        | 10                            | 30           | Each user's rounds in the last 60 seconds, failed ones included, any plan.                                                                                                       | "Too many uploads at once. Wait a minute and try again."                                                                                                                                                                                             | Plan limits, `receiptsPerMinute`         |
 | Images in one batch   | 10                            | 10           | Client-side cap on the camera tray plus picked files (1 to 20). The other limits still apply per upload.                                                                         | The picker stops adding files                                                                                                                                                                                                                        | Plan limits, `batchMax`                  |
 | Workspaces to own     | 1                             | 2            | Workspaces where the user has the `owner` role. A user is on the Pro cap when they own a Pro workspace or are comped. Checked on the server when creating one.                   | "Free accounts can own 1 workspace. Upgrade a workspace you own to Pro to create another. A new workspace starts on Free."                                                                                                                           | Plan limits, `workspaces`                |
@@ -184,19 +201,22 @@ What "used" means is in [core: quota ledger semantics](../core.md#design-princip
 
 ## Failure modes
 
-| What goes wrong                                 | What happens                                                                                                                                     |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A Paddle setting is missing                     | Billing is off: no Upgrade button, no portal link, no Paddle.js, webhook answers 503. Plans still work (Free, and admin comps).                  |
-| Wrong webhook secret                            | Every delivery gets 401 and Paddle retries. Nothing is stored. Fix the secret; Paddle's retries then succeed.                                    |
-| App down or slow when Paddle calls              | Paddle retries. A repeat is stored once. A late event is ordered by `updated_at`.                                                                |
-| `after()` does not run the job                  | The event row and its job exist. The queue drain applies it within the drain interval.                                                           |
-| Database error while applying                   | The job retries up to 8 times with backoff; then it is dead and shows in the admin jobs list. The event row stays unprocessed.                   |
-| Checkout paid but no workspace link             | Custom data was missing or the workspace was deleted: outcome `unmatched`, no Pro. Find it in `billing_events` and fix by hand (comp or refund). |
-| Final `canceled` event lost                     | A scheduled cancel passes its period end, and `isEntitled` stops granting Pro on its own.                                                        |
-| Card fails on renewal                           | `past_due`: Pro stays for 14 days, the billing page shows the end of the grace period and a link to update the payment method.                   |
-| Paddle's API is down when opening the portal    | The action returns "Paddle didn't answer. Try again in a minute." (10 s timeout). Nothing is stored.                                             |
-| Owner tries to delete a workspace with live Pro | Refused with a message to cancel first (`assertNoLiveSubscription`). A subscription that is already cancelling can be deleted.                   |
-| Workspace deleted anyway (admin)                | `billing_subscriptions.organization_id` is set to null. The row stays as the billing record.                                                     |
+| What goes wrong                                 | What happens                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A Paddle setting is missing                     | Billing is off: no Upgrade button, no portal link, no Paddle.js, webhook answers 503. Plans still work (Free, and admin comps).                                                                                                                                                                                                                                              |
+| Wrong webhook secret                            | Every delivery gets 401 and Paddle retries. Nothing is stored. Fix the secret; Paddle's retries then succeed.                                                                                                                                                                                                                                                                |
+| App down or slow when Paddle calls              | Paddle retries. A repeat is stored once. A late event is ordered by `updated_at`.                                                                                                                                                                                                                                                                                            |
+| `after()` does not run the job                  | The event row and its job exist. The queue drain applies it within the drain interval.                                                                                                                                                                                                                                                                                       |
+| Database error while applying                   | The job retries up to 8 times with backoff; then it is dead and shows in the admin jobs list. The event row stays unprocessed.                                                                                                                                                                                                                                               |
+| Checkout paid but no workspace link             | Custom data was missing, the workspace was deleted, the buyer isn't its owner, or the price isn't a Pro price: outcome `unmatched` (with the reason), no Pro. Find it in `billing_events` and fix by hand (comp or refund).                                                                                                                                                  |
+| Paddle.js blocked (content blocker)             | The button says "Checkout couldn't load. Turn off content blockers for this page or try another browser."                                                                                                                                                                                                                                                                    |
+| Cancel after a chargeback fails                 | 5xx or 429 retries. A refused key (401/403), or billing off, is dead at once; another 4xx is logged as `billing.cancel_refused`. Pro is already off; cancel the subscription in Paddle by hand.                                                                                                                                                                              |
+| Final `canceled` event lost                     | A scheduled cancel passes its period end, and `isEntitled` stops granting Pro on its own.                                                                                                                                                                                                                                                                                    |
+| Card fails on renewal                           | `past_due`: Pro stays for 14 days, the billing page shows the end of the grace period and a link to update the payment method.                                                                                                                                                                                                                                               |
+| Paddle's API is down when opening the portal    | The action returns "Paddle didn't answer. Try again in a minute." (10 s timeout). Nothing is stored.                                                                                                                                                                                                                                                                         |
+| Owner tries to delete a workspace with live Pro | Refused with a message to cancel first (`assertNoLiveSubscription`) while its subscription can still charge: any status but `canceled` (so also past due after the grace period, paused and trialing), unless the cancel is already scheduled for the period end. The admin "delete workspace" action refuses the same way.                                                  |
+| User deletes their account with live Pro        | Refused while a subscription that can still charge belongs to a workspace only they are in, or was bought by them (only the buyer opens the portal): "Cancel the Pro subscription for {workspace} first", with a link to Billing. Checked in Settings, on the email request, on the confirm link, and under lock in `prepareUserDeletion` (also the admin delete-user path). |
+| Workspace deleted anyway                        | `billing_subscriptions.organization_id` is set to null. The row stays as the billing record.                                                                                                                                                                                                                                                                                 |
 
 ## Security notes
 
@@ -205,16 +225,22 @@ What "used" means is in [core: quota ledger semantics](../core.md#design-princip
   constant time. The timestamp may differ from our clock by 30 seconds in either direction
   (`SIGNATURE_TOLERANCE_SECONDS`). Paddle's SDKs default to 5 seconds; 30 allows for a cold start, and a replay inside
   the window is a no-op because events are stored once by id. The raw body is read before parsing.
-- **Body size.** Over 256 KB is refused with 413 before any parsing.
+- **Body size.** A `Content-Length` over 256 KB is refused with 413 before the body is read; the body is checked again
+  in bytes after reading.
 - **Owner only.** Checkout and portal links are for workspace owners. Admins and members see the plan read-only. The
   server action checks the role again; the UI is not the control.
 - **Impersonation.** While an admin is signed in as another user, the billing page hides the actions and the server
   action refuses.
-- **Custom data is not trusted.** `workspaceId` and `userId` come from the browser, so a buyer could name any
-  workspace. They are used only to link a **new** subscription, and only to a workspace that exists. The link is never
-  moved by later events. The buyer pays for what they link, so the worst case is paying for someone else's workspace.
-  (`billing_events.organization_id` is null when the event is stored and set only by the apply job, from the resolved
-  workspace.)
+- **Checkout is made on the server.** The transaction (price and custom data) is created by `startCheckoutAction`, not
+  by the browser.
+- **Custom data is still not trusted.** Anyone can open a Paddle checkout with our public client token and any items
+  or custom data. So a **new** subscription links only when its workspace exists, its `userId` is an owner of that
+  workspace now, and its price is a Pro price; every entitlement check also requires a Pro price on the stored row.
+  The link is never moved by later events. (`billing_events.organization_id` is null when the event is stored and set
+  only by the apply job, from the resolved workspace.)
+- **Sandbox on the live site.** With `PADDLE_ENV=sandbox` and `VERCEL_ENV=production`, the pricing page shows "Pro
+  checkout opens soon" and the billing page offers the checkout only to platform admins, with a "Test mode: no real
+  charge" badge. `startCheckoutAction` refuses everyone else.
 - **Data kept.** Ids, status, dates, interval and price id. No card, address or tax data, and no raw webhook body.
 - **No SDK.** The Paddle adapter uses `node:crypto` and `fetch`, so there is no Paddle package to trust or update.
 - **Paddle.js.** It loads only on the billing page, and only when billing is configured. The report-only CSP allows
@@ -237,27 +263,44 @@ can move to a `packages/billing` later without untangling core:
 - [`billing/provider.ts`](../../../packages/core/src/billing/provider.ts): neutral event types and
   `SUBSCRIPTION_STATUSES` (a test checks it equals `BILLING_STATUSES` in packages/db).
 - [`billing/paddle.ts`](../../../packages/core/src/billing/paddle.ts): signature check, event parsing, portal call.
-- [`billing/entitlement.ts`](../../../packages/core/src/billing/entitlement.ts): `isEntitled` and the grace period.
-- [`billing/config.ts`](../../../packages/core/src/billing/config.ts): `parsePaddleConfig`, a plain function.
+- [`billing/entitlement.ts`](../../../packages/core/src/billing/entitlement.ts): `isEntitled`, the grace period,
+  `canStillCharge` (the deletion guard) and `adjustmentRevokesPro`.
+- [`billing/config.ts`](../../../packages/core/src/billing/config.ts): `parsePaddleConfig`, `parsePublicPaddleConfig`
+  and `parseProPriceIds`, plain functions.
 - [`plans.ts`](../../../packages/core/src/plans.ts): plan shape and defaults. Client components import it too.
 
 Everything that touches the database or Effect is in [`billing/service.ts`](../../../packages/core/src/billing/service.ts):
-`entitledSql`, `workspacePlan`, `accountPlan`, `workspaceCreationCheck`, `loadPaddleConfig` (reads the environment with
+`entitledSql`, `workspacePlan`, `accountPlan`, `chargingWorkspacesOf`, `workspaceCreationCheck`, `loadPaddleConfig` (reads the environment with
 Effect `Config`, then calls `parsePaddleConfig`), the webhook receiver and the apply step.
 
 ## Configuration
 
-Billing is on only when **all** of these are set. See [Production environment](../../production-environment.md) for the
-steps.
+Billing is on only when all the required ones are set. See [Production environment](../../production-environment.md)
+for the steps.
 
-| Variable                          | Kind   | Meaning                                                     |
-| --------------------------------- | ------ | ----------------------------------------------------------- |
-| `PADDLE_ENV`                      | Config | `sandbox` or `production` (anything else turns billing off) |
-| `PADDLE_API_KEY`                  | Secret | Server API key, used for portal sessions                    |
-| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | Config | Public client-side token. Needed at build time for the CSP  |
-| `PADDLE_WEBHOOK_SECRET`           | Secret | Secret of the webhook destination                           |
-| `PADDLE_PRICE_PRO_MONTHLY`        | Config | Price id of the monthly Pro price                           |
-| `PADDLE_PRICE_PRO_YEARLY`         | Config | Price id of the yearly Pro price                            |
+| Variable                          | Vercel type | Read              | Meaning                                                                                          |
+| --------------------------------- | ----------- | ----------------- | ------------------------------------------------------------------------------------------------ |
+| `PADDLE_ENV`                      | Plain       | Build and request | `sandbox` or `production` (anything else turns billing off). Must match the destination's secret |
+| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | Plain       | Build and request | Public client-side token. Needed at build time for the CSP                                       |
+| `PADDLE_PRICE_PRO_MONTHLY`        | Plain       | Build and request | Price id of the monthly Pro price                                                                |
+| `PADDLE_PRICE_PRO_YEARLY`         | Plain       | Build and request | Price id of the yearly Pro price                                                                 |
+| `PADDLE_PRICE_PRO_LEGACY`         | Plain       | Request           | Optional. Comma-separated retired Pro price ids that existing subscriptions still pay            |
+| `PADDLE_API_KEY`                  | Sensitive   | Request only      | Server API key: checkout transactions, portal sessions, cancels                                  |
+| `PADDLE_WEBHOOK_SECRET`           | Sensitive   | Request only      | Secret of the webhook destination                                                                |
+
+**Build time sees no secrets.** Production builds in GitHub Actions after `vercel pull`, which returns Sensitive values
+empty. So whatever is decided at build or prerender time (`/pricing` showing the checkout link, the CSP) uses only the
+plain values: `loadCheckoutConfig` reads `PADDLE_PUBLIC_KEYS`. The API key and webhook secret are read only at request
+time (server actions, the webhook route, the dynamic billing page). `config.test.ts` pins that the build-time check
+passes with the secrets empty.
+
+## Runbook
+
+| Situation               | What to do                                                                                                                                                                                                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Refunds and chargebacks | Refund in Paddle (the transaction, Refund). A **full** refund or an approved chargeback ends Pro at once and the app cancels the subscription in Paddle; check the `billing.apply_event` job in Admin, Jobs. After a **partial** refund, also cancel the subscription in Paddle if Pro should end. |
+| Price change            | Create the new price in Paddle, point `PADDLE_PRICE_PRO_*` at it, and add the old id to `PADDLE_PRICE_PRO_LEGACY` so existing subscribers keep Pro. Email subscribers before they renew at a new price (see STATUS).                                                                               |
+| Paid but still Free     | Find the event in `billing_events` (`outcome`, and `billing.unmatched_reason` on the job's log line). Comp the workspace's owner in Admin, or refund.                                                                                                                                              |
 
 Public pages: `/pricing` (Free and Pro, monthly or yearly), `/refunds`, and the terms and privacy pages, which name
 Paddle as reseller and merchant of record.

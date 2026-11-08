@@ -608,21 +608,30 @@ Set once per provider; recheck after creating a new project. Why each one, and t
 ## 10. Payments (Paddle)
 
 Pro subscriptions are sold through Paddle Billing, the merchant of record. Billing is on only when **all six**
-variables below are set; with any missing, the app shows no Upgrade button and the webhook answers `503`. How it works
-is in [Billing](architecture/flows/billing.md).
+required variables below are set; with any missing, the app shows no Upgrade button and the webhook answers `503`. How
+it works is in [Billing](architecture/flows/billing.md).
 
-| Variable                          | Kind   | Value                                                |
-| --------------------------------- | ------ | ---------------------------------------------------- |
-| `PADDLE_ENV`                      | Config | `sandbox` or `production`                            |
-| `PADDLE_API_KEY`                  | Secret | Paddle → Developer tools → Authentication → API keys |
-| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | Config | Same page, client-side tokens. Public by design      |
-| `PADDLE_WEBHOOK_SECRET`           | Secret | The webhook destination's secret key (Notifications) |
-| `PADDLE_PRICE_PRO_MONTHLY`        | Config | Price id (`pri_...`) of the monthly Pro price        |
-| `PADDLE_PRICE_PRO_YEARLY`         | Config | Price id (`pri_...`) of the yearly Pro price         |
+| Variable                          | Kind   | Value                                                                                |
+| --------------------------------- | ------ | ------------------------------------------------------------------------------------ |
+| `PADDLE_ENV`                      | Config | `sandbox` or `production`                                                            |
+| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | Config | Paddle → Developer tools → Authentication, client-side tokens. Public by design      |
+| `PADDLE_PRICE_PRO_MONTHLY`        | Config | Price id (`pri_...`) of the monthly Pro price                                        |
+| `PADDLE_PRICE_PRO_YEARLY`         | Config | Price id (`pri_...`) of the yearly Pro price                                         |
+| `PADDLE_API_KEY`                  | Secret | Same page, API keys. Needs write access to transactions, customers and subscriptions |
+| `PADDLE_WEBHOOK_SECRET`           | Secret | The webhook destination's secret key (Notifications)                                 |
+| `PADDLE_PRICE_PRO_LEGACY`         | Config | Optional. Comma-separated old Pro price ids that existing subscriptions still pay    |
 
-`NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` is read at build time (it also adds Paddle's origins to the Content Security Policy),
-so **redeploy after changing it**. Set the sandbox and live values in separate environments (Preview and Production);
-a sandbox key never works on the live API.
+**Keep the four Config values Config (not Sensitive).** They are read at build time: the pricing page decides whether
+to show the checkout, and the client token adds Paddle's origins to the Content Security Policy. Production builds in
+GitHub Actions after `vercel pull`, which returns Sensitive values empty, so a Sensitive one would turn the checkout
+off on the built pages. The two Secrets are read only when a request runs (checkout, portal, webhook), so they can and
+should be Sensitive. **Redeploy after changing a Config value.**
+
+**`PADDLE_ENV` must match the account the secrets come from.** Set the sandbox and live values in separate
+environments (Preview and Production). A sandbox key never works on the live API, but the webhook check only proves the
+event was signed with `PADDLE_WEBHOOK_SECRET`: with `PADDLE_ENV=production` and a sandbox destination's secret, the
+live site would accept sandbox (test) events as real subscriptions. While Production still has `PADDLE_ENV=sandbox`,
+the pricing page says Pro opens soon and only platform admins see the checkout, marked "Test mode: no real charge".
 
 Also set `OCR_DAILY_CAP` to about `1000`. It is the emergency fuse across all plans and should sit above the Free pool
 (300 a day) and normal Pro use.
@@ -632,8 +641,9 @@ Also set `OCR_DAILY_CAP` to about `1000`. It is the emergency fuse across all pl
 1. Paddle → **Developer tools → Notifications → New destination**.
 2. URL: `https://receipt-ocr.bhimraj.com.np/api/billing/paddle/webhook`. Type: webhook.
 3. Events: `subscription.created`, `subscription.updated`, `subscription.activated`, `subscription.canceled`,
-   `subscription.past_due`, `subscription.paused`, `subscription.resumed` and `transaction.completed`. Other events are
-   answered with 200 and dropped.
+   `subscription.past_due`, `subscription.paused`, `subscription.resumed`, `transaction.completed`,
+   `adjustment.created` and `adjustment.updated` (refunds and chargebacks). Other events are answered with 200 and
+   dropped.
 4. Save, then copy the destination's **secret key** into `PADDLE_WEBHOOK_SECRET` (Secret) and redeploy.
 
 The sandbox and the live account each need their own destination.
@@ -645,13 +655,17 @@ The sandbox and the live account each need their own destination.
    any future expiry, any CVC).
 3. The page shows "Payment received" and refreshes until the workspace is Pro (usually a few seconds).
 4. In the database, `billing_events` should have the new rows with `outcome = 'applied'` and `billing_subscriptions`
-   one row for the workspace. An outcome of `unmatched` means the workspace id was missing or unknown.
+   one row for the workspace. An outcome of `unmatched` means the workspace was missing or unknown, the buyer isn't its
+   owner, or the price isn't one of the `PADDLE_PRICE_PRO_*` ids (`billing.unmatched_reason` on the job's log line).
 5. In **Admin → Jobs** (`/admin/jobs`), `billing.apply_event` jobs should be `succeeded`. A `dead` job names the problem
    in the logs (`billing.outcome`, `error`).
 6. In Paddle, **Notifications → the destination → Logs** lists each delivery and its HTTP status. `401` means the
    secret is wrong or the server clock is far off (the tolerance is 30 seconds).
 7. Cancel from **Billing → Cancel subscription** (the Paddle portal). The page should say Pro stays until the period
    end.
+8. Refunds: refund a test transaction in full in Paddle. The workspace should drop to Free at once and the subscription
+   show as canceled in Paddle shortly after. After a partial refund, cancel the subscription in Paddle yourself if Pro
+   should end ([runbook](architecture/flows/billing.md#runbook)).
 
 ### 10c. Switch from sandbox to live
 
