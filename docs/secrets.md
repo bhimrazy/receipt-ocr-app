@@ -27,9 +27,23 @@ rest; the sync must not mark them Sensitive.
 1. **Account and project.** Sign up at [infisical.com](https://infisical.com) (Infisical Cloud; check that the free plan
    covers one project with three environments). Turn on MFA. Create the project `receipt-ocr`; it comes with Development (`dev`),
    Staging (`staging`) and Production (`prod`). Add the folder `/ops` in Development.
-2. **Import the local files** in the dashboard: open the environment, then drag the `.env` file onto the secrets
-   table. Do `prod` from `~/.receipt-ocr-prod.env`, `staging` from `~/.receipt-ocr-staging.env`, and `dev` from the
-   repo's `.env` (then move the operator tokens into `/ops`).
+2. **Import the local files.** Sources: `prod` from `~/.receipt-ocr-prod.env`, `staging` from
+   `~/.receipt-ocr-staging.env`, `dev` from the repo's `.env` (operator tokens into `/ops`). Two ways:
+   - **By hand:** open the environment, then paste the file into the "Add a secret name or paste a .env" row (or
+     drag the file onto the table).
+   - **By an agent, over the API** (no CLI install). Give it a short-lived machine identity:
+     1. Organization menu (not Settings) → **Access Control → Machine Identities → Create**: name
+        `codespace-import`, organization role **Member**.
+     2. On its page, Universal Auth is on by default: **Add Client Secret** (TTL 1 day), copy the Client ID and
+        Client Secret.
+     3. Project `receipt-ocr` → **Access Control → Machine Identities → Add Machine Identity to Project → Assign
+        Existing**, role **Developer**.
+     4. Put `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET` and `INFISICAL_PROJECT_ID` (project Settings, or the
+        project URL) in the repo's `.env` yourself, so they never pass through a chat.
+     5. The agent logs in with Universal Auth, creates the secrets per environment and path without printing values
+        and without overwriting existing keys, and reports key names and counts.
+     6. Afterwards, revoke the client secret (or delete the identity). Create a separate read-only identity if CI needs
+        one later.
    - Values that exist only in Vercel as Sensitive can't be imported from Vercel; they come from these files or from
      each service's dashboard.
 3. **Check for gaps.** Compare each Infisical environment's key list with Vercel's (Settings → Environment
