@@ -469,24 +469,24 @@ const signInDisconnected = factorNotice({
 const newsletterConfirm: EmailDefinition = {
   slots: ["url", "urlLabel", "expiry", "unsubscribeUrl"],
   render(v, shared) {
-    const heading = "Confirm your product updates";
-    const body = `You asked for occasional ${BRAND} product updates. Confirm this address to join the list. We send a few emails a year, only about the product, and every one has an unsubscribe link.`;
-    const expiry = `This link expires in ${v.expiry}.`;
-    const reason = `You're receiving this because this address was entered in a ${BRAND} product updates form.`;
-    const noteText = `Not you? Ignore this email and you won't be subscribed. To make sure you never get product updates, unsubscribe: ${v.unsubscribeUrl}`;
+    const heading = "Confirm product updates";
+    const body = `Thanks for signing up for ${BRAND} product updates. One click below confirms it, then you'll get a short note a few times a year about what changed.`;
+    const expiry = `This link works for ${v.expiry}.`;
+    const reason = `You're getting this because this address was used to sign up for ${BRAND} product updates.`;
+    const noteText = `Didn't sign up? Just ignore this email and you won't be added. To make sure we never send updates here, unsubscribe: ${v.unsubscribeUrl}`;
     return {
       html: (
         <Layout
           shared={shared}
-          preheader="One click to confirm. Ignore this email if it wasn't you."
+          preheader="One click and you're on the list. A few emails a year, no spam."
           heading={heading}
           reason={reason}
         >
           <P>{body}</P>
           <Action label="Confirm subscription" url={v.url} urlLabel={v.urlLabel} expiry={expiry} />
           <Note>
-            Not you? Ignore this email and you won&apos;t be subscribed. To make sure you never get
-            product updates, <InlineLink href={v.unsubscribeUrl}>unsubscribe</InlineLink>.
+            Didn&apos;t sign up? Just ignore this email and you won&apos;t be added. To make sure we
+            never send updates here, <InlineLink href={v.unsubscribeUrl}>unsubscribe</InlineLink>.
           </Note>
         </Layout>
       ),

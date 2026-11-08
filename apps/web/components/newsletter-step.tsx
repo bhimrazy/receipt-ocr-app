@@ -8,12 +8,12 @@ import { AuthMessage } from "@/components/auth/auth-field";
 
 const COPY = {
   confirm: {
-    title: "Confirm your product updates",
-    body: "Press the button to join the list. We send a few emails a year, only about the product.",
+    title: "Confirm product updates",
+    body: "One click and you're on the list. We'll send a short note a few times a year, never spam.",
     button: "Confirm subscription",
-    done: "You're subscribed",
+    done: "You're on the list",
     doneBody:
-      "Thanks. You'll get occasional product updates, and every email has an unsubscribe link.",
+      "Thanks for subscribing. Expect a short note a few times a year, and you can unsubscribe from any email.",
   },
   unsubscribe: {
     title: "Unsubscribe from product updates",
