@@ -41,6 +41,8 @@ site still gets them. Read at build: every `NEXT_PUBLIC_*`, `SENTRY_DSN`, `POSTH
 `OTEL_EXPORTER_OTLP_ENDPOINT` (they decide what the browser bundle, CSP and privacy page include). None of them is a
 secret.
 
+Keep the master copy of every value in Infisical ([secrets.md](secrets.md)), not only in Vercel.
+
 Nothing changes on the live site until the next deploy ([step 7](#7-deploy-and-check)).
 
 > Only add a variable once you have its real value. A placeholder is worse than nothing: the app thinks the service
