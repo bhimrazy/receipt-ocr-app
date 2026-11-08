@@ -1,3 +1,6 @@
+-- Hand-written: lock_timeout first, as in every hand-edited migration (drizzle-kit runs all pending files in one
+-- transaction, so SET LOCAL covers them all).
+SET LOCAL lock_timeout = '5s';--> statement-breakpoint
 CREATE TYPE "public"."job_state" AS ENUM('queued', 'running', 'succeeded', 'dead', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."receipt_status" AS ENUM('uploaded', 'processing', 'completed', 'failed');--> statement-breakpoint
 CREATE TABLE "admin_audit_log" (
@@ -80,7 +83,7 @@ CREATE TABLE "ocr_calls" (
 	"cost_micro_usd" integer,
 	"price_from" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "ocr_calls_status_check" CHECK (status in ('ok', 'timeout', 'rate-limited', 'provider-error', 'invalid-output', 'bad-image', 'not-configured', 'storage-error'))
+	CONSTRAINT "ocr_calls_status_check" CHECK (status in ('ok', 'timeout', 'rate-limited', 'provider-error', 'invalid-output', 'bad-image', 'not-configured', 'refused', 'unsupported-file', 'storage-error'))
 );
 --> statement-breakpoint
 ALTER TABLE "ocr_calls" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -121,7 +124,8 @@ CREATE TABLE "receipt_items" (
 	"quantity" integer DEFAULT 1 NOT NULL,
 	"unit_price" numeric(12, 2),
 	"total_price" numeric(12, 2),
-	"confidence" numeric(5, 4)
+	"confidence" numeric(5, 4),
+	CONSTRAINT "receipt_items_quantity_check" CHECK (quantity >= 1)
 );
 --> statement-breakpoint
 ALTER TABLE "receipt_items" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -130,7 +134,7 @@ CREATE TABLE "receipts" (
 	"organization_id" text NOT NULL,
 	"user_id" text,
 	"merchant" text,
-	"receipt_date" text,
+	"receipt_date" date,
 	"category" text,
 	"currency" text DEFAULT 'USD',
 	"subtotal" numeric(12, 2),
@@ -148,10 +152,40 @@ CREATE TABLE "receipts" (
 	"last_attempt_at" timestamp with time zone,
 	"model" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "receipts_receipt_date_check" CHECK (receipt_date >= '2000-01-01' and receipt_date <= (created_at at time zone 'UTC')::date + 1),
+	CONSTRAINT "receipts_currency_check" CHECK (currency ~ '^[A-Z]{3}$'),
+	CONSTRAINT "receipts_attempts_check" CHECK (attempts between 1 and 3)
 );
 --> statement-breakpoint
 ALTER TABLE "receipts" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "step_up_codes" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"session_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"code_hash" text NOT NULL,
+	"attempts" smallint DEFAULT 0 NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"consumed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "step_up_codes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "step_up_events" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" text NOT NULL,
+	"session_id" text,
+	"action" text NOT NULL,
+	"method" text NOT NULL,
+	"outcome" text NOT NULL,
+	"totp_counter" bigint,
+	"ip" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "step_up_events_method_check" CHECK (method in ('totp', 'backup_code', 'passkey', 'email')),
+	CONSTRAINT "step_up_events_outcome_check" CHECK (outcome in ('sent', 'verified', 'failed'))
+);
+--> statement-breakpoint
+ALTER TABLE "step_up_events" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "user_credentials" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
@@ -214,6 +248,21 @@ CREATE TABLE "organization" (
 );
 --> statement-breakpoint
 ALTER TABLE "organization" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "passkey" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" text,
+	"public_key" text NOT NULL,
+	"user_id" text NOT NULL,
+	"credential_id" text NOT NULL,
+	"counter" bigint NOT NULL,
+	"device_type" text NOT NULL,
+	"backed_up" boolean NOT NULL,
+	"transports" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"aaguid" text
+);
+--> statement-breakpoint
+ALTER TABLE "passkey" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "rate_limit" (
 	"id" text PRIMARY KEY NOT NULL,
 	"key" text,
@@ -231,11 +280,25 @@ CREATE TABLE "session" (
 	"user_id" text NOT NULL,
 	"active_organization_id" text,
 	"impersonated_by" text,
+	"auth_method" text,
+	"step_up_at" timestamp with time zone,
+	"step_up_method" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "session" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "two_factor" (
+	"id" text PRIMARY KEY NOT NULL,
+	"secret" text NOT NULL,
+	"backup_codes" text NOT NULL,
+	"user_id" text NOT NULL,
+	"verified" boolean DEFAULT true NOT NULL,
+	"failed_verification_count" integer DEFAULT 0 NOT NULL,
+	"locked_until" timestamp with time zone
+);
+--> statement-breakpoint
+ALTER TABLE "two_factor" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "user" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
@@ -247,6 +310,7 @@ CREATE TABLE "user" (
 	"banned" boolean DEFAULT false NOT NULL,
 	"ban_reason" text,
 	"ban_expires" timestamp with time zone,
+	"two_factor_enabled" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -277,17 +341,25 @@ ALTER TABLE "receipt_groups" ADD CONSTRAINT "receipt_groups_created_by_user_id_f
 ALTER TABLE "receipt_items" ADD CONSTRAINT "receipt_items_receipt_id_receipts_id_fk" FOREIGN KEY ("receipt_id") REFERENCES "public"."receipts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "receipts" ADD CONSTRAINT "receipts_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "receipts" ADD CONSTRAINT "receipts_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "step_up_codes" ADD CONSTRAINT "step_up_codes_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "step_up_codes" ADD CONSTRAINT "step_up_codes_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "step_up_events" ADD CONSTRAINT "step_up_events_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "step_up_events" ADD CONSTRAINT "step_up_events_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_credentials" ADD CONSTRAINT "user_credentials_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invitation" ADD CONSTRAINT "invitation_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invitation" ADD CONSTRAINT "invitation_inviter_id_user_id_fk" FOREIGN KEY ("inviter_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "member" ADD CONSTRAINT "member_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "member" ADD CONSTRAINT "member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "passkey" ADD CONSTRAINT "passkey_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "two_factor" ADD CONSTRAINT "two_factor_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "admin_audit_log_created_at_idx" ON "admin_audit_log" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "admin_audit_log_target_idx" ON "admin_audit_log" USING btree ("target_type","target_id","created_at");--> statement-breakpoint
+CREATE INDEX "admin_audit_log_actor_id_idx" ON "admin_audit_log" USING btree ("actor_id");--> statement-breakpoint
 CREATE INDEX "jobs_runnable_idx" ON "jobs" USING btree ("priority","run_at") WHERE state = 'queued';--> statement-breakpoint
 CREATE INDEX "jobs_running_idx" ON "jobs" USING btree ("user_id") WHERE state = 'running';--> statement-breakpoint
+CREATE INDEX "jobs_user_id_idx" ON "jobs" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "jobs_idempotency_idx" ON "jobs" USING btree ("idempotency_key") WHERE state in ('queued', 'running');--> statement-breakpoint
 CREATE UNIQUE INDEX "jobs_receipt_live_idx" ON "jobs" USING btree ("receipt_id") WHERE state in ('queued', 'running') and kind like 'receipt.%';--> statement-breakpoint
 CREATE INDEX "jobs_state_finished_idx" ON "jobs" USING btree ("state","finished_at");--> statement-breakpoint
@@ -295,28 +367,36 @@ CREATE INDEX "jobs_org_created_idx" ON "jobs" USING btree ("organization_id","cr
 CREATE INDEX "jobs_created_at_idx" ON "jobs" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "ocr_calls_org_created_at_idx" ON "ocr_calls" USING btree ("organization_id","created_at");--> statement-breakpoint
 CREATE INDEX "ocr_calls_created_at_idx" ON "ocr_calls" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "ocr_calls_user_id_idx" ON "ocr_calls" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "ocr_calls_receipt_round_attempt_step_idx" ON "ocr_calls" USING btree ("receipt_id","round","job_attempt","step");--> statement-breakpoint
 CREATE UNIQUE INDEX "ocr_rounds_receipt_round_idx" ON "ocr_rounds" USING btree ("receipt_id","round");--> statement-breakpoint
 CREATE INDEX "ocr_rounds_user_created_at_idx" ON "ocr_rounds" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "ocr_rounds_created_at_idx" ON "ocr_rounds" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "ocr_rounds_organization_id_idx" ON "ocr_rounds" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "receipt_group_members_receipt_id_idx" ON "receipt_group_members" USING btree ("receipt_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "receipt_groups_org_name_idx" ON "receipt_groups" USING btree ("organization_id",lower("name"));--> statement-breakpoint
 CREATE INDEX "receipt_items_receipt_id_idx" ON "receipt_items" USING btree ("receipt_id");--> statement-breakpoint
 CREATE INDEX "receipts_user_created_at_idx" ON "receipts" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "receipts_created_at_idx" ON "receipts" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "receipts_org_created_at_idx" ON "receipts" USING btree ("organization_id","created_at");--> statement-breakpoint
-CREATE INDEX "receipts_last_attempt_at_idx" ON "receipts" USING btree ("last_attempt_at");--> statement-breakpoint
+CREATE INDEX "receipts_org_receipt_date_idx" ON "receipts" USING btree ("organization_id","receipt_date");--> statement-breakpoint
+CREATE INDEX "step_up_codes_session_idx" ON "step_up_codes" USING btree ("session_id");--> statement-breakpoint
+CREATE INDEX "step_up_codes_user_created_idx" ON "step_up_codes" USING btree ("user_id","created_at");--> statement-breakpoint
+CREATE INDEX "step_up_events_user_created_idx" ON "step_up_events" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "user_credentials_user_id_idx" ON "user_credentials" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "account_user_id_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "invitation_organization_id_idx" ON "invitation" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "invitation_email_idx" ON "invitation" USING btree ("email");--> statement-breakpoint
-CREATE INDEX "member_organization_id_idx" ON "member" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX "invitation_inviter_id_idx" ON "invitation" USING btree ("inviter_id");--> statement-breakpoint
 CREATE INDEX "member_user_id_idx" ON "member" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "member_org_user_idx" ON "member" USING btree ("organization_id","user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "organization_slug_idx" ON "organization" USING btree ("slug");--> statement-breakpoint
+CREATE INDEX "passkey_user_id_idx" ON "passkey" USING btree ("user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "passkey_credential_id_idx" ON "passkey" USING btree ("credential_id");--> statement-breakpoint
 CREATE INDEX "rate_limit_key_idx" ON "rate_limit" USING btree ("key");--> statement-breakpoint
 CREATE UNIQUE INDEX "session_token_idx" ON "session" USING btree ("token");--> statement-breakpoint
 CREATE INDEX "session_user_id_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "two_factor_user_id_idx" ON "two_factor" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "user_email_idx" ON "user" USING btree ("email");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");
 --> statement-breakpoint

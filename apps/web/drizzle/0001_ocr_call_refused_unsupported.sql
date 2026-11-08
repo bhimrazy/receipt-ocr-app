@@ -1,2 +1,0 @@
-ALTER TABLE "ocr_calls" DROP CONSTRAINT "ocr_calls_status_check";--> statement-breakpoint
-ALTER TABLE "ocr_calls" ADD CONSTRAINT "ocr_calls_status_check" CHECK (status in ('ok', 'timeout', 'rate-limited', 'provider-error', 'invalid-output', 'bad-image', 'not-configured', 'refused', 'unsupported-file', 'storage-error'));
