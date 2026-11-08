@@ -5,7 +5,8 @@ import { Pwa } from "@/components/pwa";
 import { gaMeasurementId } from "@/lib/consent/env";
 import { startupImages } from "@/lib/ios-splash";
 import { buildIsIndexable } from "@/lib/seo-hosts";
-import { SITE_NAME, siteDescription, siteTitle, siteUrl } from "@/lib/site";
+import { homeDescription, homeTitle } from "@/lib/seo";
+import { SITE_NAME, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 // The opsz axis gives large headings the tighter display cut; one font load serves both.
@@ -25,22 +26,22 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: siteTitle,
+    default: homeTitle,
     template: `%s · ${SITE_NAME}`,
   },
-  description: siteDescription,
+  description: homeDescription,
   applicationName: SITE_NAME,
   openGraph: {
     type: "website",
     url: "/",
     siteName: SITE_NAME,
-    title: siteTitle,
-    description: siteDescription,
+    title: homeTitle,
+    description: homeDescription,
   },
   twitter: {
     card: "summary_large_image",
-    title: siteTitle,
-    description: siteDescription,
+    title: homeTitle,
+    description: homeDescription,
   },
   // Preview builds carry noindex in the HTML too. Per-host X-Robots-Tag rules are in next.config.ts.
   robots: buildIsIndexable(process.env)

@@ -181,10 +181,9 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                                                                                                                                        |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #136 | Squash migrations `0000`-`0003` into one baseline; CI integration on Postgres 17 and 18, e2e on 17. Branches adding migrations (`feat/billing-paddle`, `feat/sign-in-methods`) regenerate theirs as `0001` after it merges                  |
-| #143 | Billing v1: Paddle Billing subscription for Pro, plans per workspace, monthly pooled quota for Pro (500 a month, 200 a day), Free pool, `/pricing` and `/refunds`, migration `0001_billing`. Flow: [billing](architecture/flows/billing.md) |
+| PR   | Work                                                                                                                                                                                                                       |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #148 | SEO: home title leads with "receipt scanner" and names CSV and JSON (never Excel; nothing writes .xlsx); one source for the home title/description; WebApplication JSON-LD with featureList and the free Offer, no ratings |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
