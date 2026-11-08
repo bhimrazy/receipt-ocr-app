@@ -32,6 +32,7 @@ test("pricing shows Free and Pro with a monthly/yearly switch, and the FAQ", asy
   const faq = page.getByText("Plans are per workspace. What does that mean?");
   await faq.click();
   await expect(page.getByText(/A Pro subscription covers exactly one workspace/)).toBeVisible();
+  await page.getByText("Can I get a refund?").click();
   await expect(page.getByRole("link", { name: "refund policy" })).toHaveAttribute(
     "href",
     "/refunds",
