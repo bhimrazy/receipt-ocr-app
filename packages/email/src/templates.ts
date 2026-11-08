@@ -188,10 +188,16 @@ export function twoFactorDisabledEmail(
 export const backupCodesRegeneratedEmail: Notice = (ctx, input) =>
   build("backupCodesRegenerated", `New backup codes for your ${BRAND} account`, ctx, input);
 
-export const passkeyAddedEmail: Notice = (ctx, input) =>
+/** `passkeyName` is what the Security page calls it: user-chosen text, so body only, never the subject. */
+type PasskeyNotice = (
+  ctx: EmailContext,
+  input: { resetUrl: string; passkeyName: string },
+) => EmailContent;
+
+export const passkeyAddedEmail: PasskeyNotice = (ctx, input) =>
   build("passkeyAdded", `A passkey was added to your ${BRAND} account`, ctx, input);
 
-export const passkeyRemovedEmail: Notice = (ctx, input) =>
+export const passkeyRemovedEmail: PasskeyNotice = (ctx, input) =>
   build("passkeyRemoved", `A passkey was removed from your ${BRAND} account`, ctx, input);
 
 /** An account that signed in only with Google or GitHub set a password. */

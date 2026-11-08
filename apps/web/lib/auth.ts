@@ -44,6 +44,7 @@ import {
   authMethodOf,
   authMethodSessionField,
   factorChangedAfter,
+  rememberRemovedPasskey,
   replaceSessionOnSignIn,
   trustDeviceIdentifier,
   passkeyPlugin,
@@ -365,6 +366,7 @@ export const auth = betterAuth({
       }
       if (ctx.path === "/passkey/delete-passkey") {
         await guardPasskeyDelete(ctx);
+        await rememberRemovedPasskey(ctx);
         return;
       }
       if (ADMIN_GUARDED.has(ctx.path)) {
