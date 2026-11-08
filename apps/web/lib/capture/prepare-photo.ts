@@ -1,4 +1,4 @@
-import { prepareFile } from "@/lib/upload-prep";
+import { prepareFile, type SizeId } from "@/lib/upload-prep";
 import { isFullFrame, type EditState } from "./edit-state";
 import { loadImage, renderToJpeg } from "./render";
 
@@ -25,14 +25,17 @@ const isUnedited = (edit: EditState) =>
  *   unedited photo still goes as it is.
  *
  * An edited photo that fails either way throws `EditFailedError`: sending the original would
- * silently drop the crop, rotation and filter the user chose.
+ * silently drop the crop, rotation and filter the user chose. `size` is the upload size picked
+ * in review (see `prepareFile`).
  */
 export async function preparePhoto(
   image: { blob: Blob; name: string },
   edit: EditState | undefined,
   startingEdit: (bitmap: ImageBitmap) => EditState,
+  size?: SizeId,
 ): Promise<File> {
-  const original = () => prepareFile(new File([image.blob], image.name, { type: image.blob.type }));
+  const original = () =>
+    prepareFile(new File([image.blob], image.name, { type: image.blob.type }), size);
   let bitmap: ImageBitmap;
   try {
     bitmap = await loadImage(image.blob);
@@ -43,7 +46,7 @@ export async function preparePhoto(
   let chosen = edit;
   try {
     chosen ??= startingEdit(bitmap);
-    return await prepareFile(await renderToJpeg(bitmap, chosen, image.name));
+    return await prepareFile(await renderToJpeg(bitmap, chosen, image.name), size);
   } catch (error) {
     if (!chosen || isUnedited(chosen)) return original();
     throw new EditFailedError(error);

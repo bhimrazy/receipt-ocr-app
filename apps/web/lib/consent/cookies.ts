@@ -175,6 +175,14 @@ export const storageEntries: StorageEntry[] = [
     duration: "Until you close the tab",
   },
   {
+    name: "receipt-ocr.capture.size",
+    kind: "sessionStorage",
+    setBy: "ReceiptOCR",
+    category: "necessary",
+    purpose: "Remembers the upload size you last chose when reviewing photos before upload.",
+    duration: "Until you close the tab",
+  },
+  {
     name: "receiptocr-static-v*",
     kind: "cache",
     setBy: "ReceiptOCR",

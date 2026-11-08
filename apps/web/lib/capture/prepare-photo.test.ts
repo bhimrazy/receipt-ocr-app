@@ -75,6 +75,16 @@ describe("preparePhoto", () => {
     expect(canvases.every((c) => c.width === 0 && c.height === 0)).toBe(true);
   });
 
+  it("passes the chosen upload size on, for the edit and for the original", async () => {
+    stubCanvas({});
+    stubDecode();
+    await preparePhoto(photo, rotated, noStartingEdit, "larger");
+    expect(prepareFile).toHaveBeenLastCalledWith(expect.any(File), "larger");
+    stubDecode(true);
+    await preparePhoto(photo, undefined, noStartingEdit, "smaller");
+    expect(prepareFile).toHaveBeenLastCalledWith(expect.any(File), "smaller");
+  });
+
   it("never sends the original of an edited photo when the encode fails", async () => {
     const canvases = stubCanvas({ blob: false });
     const bitmap = stubDecode();

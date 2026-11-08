@@ -13,7 +13,7 @@ type Kind = "token" | "int" | "bool";
 
 const EVENTS = {
   signed_up: { method: "token", standalone: "bool" },
-  receipt_uploaded: { mode: "token", plan: "token" },
+  receipt_uploaded: { mode: "token", plan: "token", size_choice: "token" },
   receipt_scanned: { trigger: "token", model: "token", fallback: "bool", calls: "int" },
   receipt_scan_failed: { trigger: "token", error_kind: "token" },
   csv_exported: { count: "int" },
@@ -83,7 +83,11 @@ export function fromRecord(record: EventRecord): ProductEvent | null {
         name: "receipt_uploaded",
         userId,
         workspaceId,
-        props: { mode: str(record.mode), plan: str(record.plan) },
+        props: {
+          mode: str(record.mode),
+          plan: str(record.plan),
+          size_choice: str(record.size_choice),
+        },
       };
     }
     if (record.event === "receipt.export" && ok) {

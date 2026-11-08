@@ -72,6 +72,62 @@ export function planSize(
   };
 }
 
+/**
+ * Upload sizes the reviewer can pick instead of the automatic one, by short edge (a receipt's width). Smaller is the
+ * rescue floor, HARD_MIN_SHORT_EDGE. Larger keeps 1,200 px where the automatic loop would shrink below it to reach
+ * TARGET_BYTES, but only up to LARGER_MAX_PIXELS: Gemini 3 downsamples anything past about 2.4 MP, so more is wasted.
+ */
+export const SIZE_IDS = ["smaller", "recommended", "larger"] as const;
+export type SizeId = (typeof SIZE_IDS)[number];
+export const LARGER_SHORT_EDGE = 1200;
+export const LARGER_MAX_PIXELS = 2_400_000;
+
+type Size = { width: number; height: number };
+export const shortEdge = (size: Size) => Math.min(size.width, size.height);
+
+/** Scaled so the short edge is `short`, capped by the long edge; null when that isn't a downscale. */
+function atShortEdge({ width, height }: Size, short: number): Size | null {
+  if (short >= Math.min(width, height)) return null;
+  const scale = Math.min(short / Math.min(width, height), MAX_LONG_EDGE / Math.max(width, height));
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+/** The Smaller plan for a source, or null when its short edge is already at or under HARD_MIN_SHORT_EDGE. */
+export function smallerSize(source: Size): Size | null {
+  const size = atShortEdge(source, HARD_MIN_SHORT_EDGE);
+  return size && shortEdge(size) >= HARD_MIN_SHORT_EDGE ? size : null;
+}
+
+/** The Larger plan for a source, or null when it would upscale or pass LARGER_MAX_PIXELS. */
+export function largerSize(source: Size): Size | null {
+  const size = atShortEdge(source, LARGER_SHORT_EDGE);
+  return size && size.width * size.height <= LARGER_MAX_PIXELS ? size : null;
+}
+
+export type SizeOption = Size & { id: SizeId };
+
+/**
+ * The choices for a source whose automatic upload comes out at `recommended`: Smaller when it is under that, Larger
+ * when it is over it. Empty when that leaves fewer than two, so there is nothing to choose.
+ */
+export function sizeOptions(source: Size, recommended: Size): SizeOption[] {
+  const smaller = smallerSize(source);
+  const larger = largerSize(source);
+  const options: SizeOption[] = [
+    ...(smaller && shortEdge(smaller) < shortEdge(recommended)
+      ? [{ id: "smaller" as const, ...smaller }]
+      : []),
+    { id: "recommended", ...recommended },
+    ...(larger && shortEdge(larger) > shortEdge(recommended)
+      ? [{ id: "larger" as const, ...larger }]
+      : []),
+  ];
+  return options.length < 2 ? [] : options;
+}
+
 export type Encoder = (width: number, height: number, quality: number) => Promise<Blob>;
 export interface EncodeResult<B extends { size: number } = Blob> {
   blob: B;
@@ -139,12 +195,14 @@ export async function encodeToTarget<B extends { size: number } = Blob>(
 export async function predictEncode(
   size: { width: number; height: number },
   bytesPerPixel: number,
+  { minShort }: { minShort?: number } = {},
 ) {
   const { blob, width, height } = await encodeToTarget(
     async (w, h, q) => ({
       size: Math.round((bytesPerPixel * w * h * q) / START_QUALITY),
     }),
     size,
+    { minShort },
   );
   return { width, height, bytes: blob.size };
 }
@@ -214,13 +272,40 @@ export function jpegEncoder(bitmap: ImageBitmap): { encode: Encoder; release: ()
   return { encode, release };
 }
 
+const keep = (encode: Encoder, size: Size) =>
+  encodeToTarget(encode, size, { minShort: shortEdge(size) });
+
+async function encodeChoice(
+  encode: Encoder,
+  source: Size,
+  size: SizeId | undefined,
+): Promise<{ blob: Blob; applied: SizeId }> {
+  const smaller = size === "smaller" ? smallerSize(source) : null;
+  if (smaller) return { blob: (await keep(encode, smaller)).blob, applied: "smaller" };
+  const automatic = await encodeToTarget(encode, planSize(source.width, source.height));
+  const larger = size === "larger" ? largerSize(source) : null;
+  if (larger && shortEdge(larger) > shortEdge(automatic)) {
+    return { blob: (await keep(encode, larger)).blob, applied: "larger" };
+  }
+  return { blob: automatic.blob, applied: "recommended" };
+}
+
+const appliedSizes = new WeakMap<File, SizeId>();
+
+/** The size `prepareFile` gave a file it was asked to size, for upload telemetry. */
+export const appliedSize = (file: File): SizeId | undefined => appliedSizes.get(file);
+
 /**
  * Orients, shrinks to the size budget and re-encodes every image the browser can decode as JPEG, which removes camera
  * metadata (EXIF, including GPS). A successful re-encode always replaces the original, even when it is larger: PNG
  * eXIf and JPEG APP segments can all carry GPS. PDFs, images the browser can't decode (e.g. HEIC outside Safari) and
  * images whose encode fails (e.g. canvas memory limits) come back unchanged with their metadata. Never throws.
+ *
+ * `size` is the reviewer's choice: Smaller and Larger keep their short edge (only quality steps down, unless the file
+ * would pass CEILING_BYTES); Larger applies only where the automatic encode came out under it. Where a choice
+ * doesn't apply, or without one, the image gets the automatic plan. `appliedSize` reports which one it got.
  */
-export async function prepareFile(file: File): Promise<File> {
+export async function prepareFile(file: File, size?: SizeId): Promise<File> {
   const type = acceptedType(file);
   if (!type || !IMAGE_TYPES.has(type) || typeof createImageBitmap === "undefined") return file;
   let bitmap: ImageBitmap | undefined;
@@ -233,10 +318,14 @@ export async function prepareFile(file: File): Promise<File> {
       if (!(error instanceof TypeError)) throw error;
       bitmap = await createImageBitmap(file);
     }
-    const size = planSize(bitmap.width, bitmap.height);
     encoder = jpegEncoder(bitmap);
-    const { blob } = await encodeToTarget(encoder.encode, size);
-    return new File([blob], jpegName(file.name), { type: "image/jpeg", lastModified: Date.now() });
+    const { blob, applied } = await encodeChoice(encoder.encode, bitmap, size);
+    const out = new File([blob], jpegName(file.name), {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+    if (size) appliedSizes.set(out, applied);
+    return out;
   } catch {
     return file;
   } finally {

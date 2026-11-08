@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   ArrowLeft,
+  ChevronDown,
   CircleAlert,
   Loader2,
   Maximize,
@@ -35,29 +36,44 @@ import {
   renderedSize,
   renderPreview,
   renderSmall,
+  renderToJpeg,
   THUMB_RENDER,
   type RenderBudget,
 } from "@/lib/capture/render";
-import { planSize, predictEncode, START_QUALITY } from "@/lib/upload-prep";
+import {
+  planSize,
+  predictEncode,
+  prepareFile,
+  shortEdge,
+  SIZE_IDS,
+  sizeOptions,
+  START_QUALITY,
+  type SizeId,
+} from "@/lib/upload-prep";
 import { CropEditor } from "./crop-editor";
 import { FullScreen } from "./full-screen";
+import { FullSizeView } from "./full-size-view";
 import { ResultPreview } from "./result-preview";
+import { formatSize, SizePicker, type SizedOption } from "./size-picker";
 
 type Step = "adjust" | "preview";
 
 export type ReviewImage = { id: string; blob: Blob; name: string };
 
 const FILTER_KEY = "receipt-ocr.capture.filter";
+const SIZE_KEY = "receipt-ocr.capture.size";
 
-function rememberedFilter(): Filter | null {
+/** A choice saved earlier this session, if it is still one of `allowed`. */
+function remembered<T extends string>(key: string, allowed: readonly T[]): T | null {
   try {
-    const value = sessionStorage.getItem(FILTER_KEY);
-    return (FILTERS as readonly string[]).includes(value ?? "") ? (value as Filter) : null;
+    const value = sessionStorage.getItem(key);
+    return (allowed as readonly string[]).includes(value ?? "") ? (value as T) : null;
   } catch {
     return null;
   }
 }
 
+// One setter per key, so the storage registry test can find each name.
 function rememberFilter(filter: Filter) {
   try {
     sessionStorage.setItem(FILTER_KEY, filter);
@@ -65,6 +81,16 @@ function rememberFilter(filter: Filter) {
     // Private mode or blocked storage: the choice just isn't remembered.
   }
 }
+
+function rememberSize(size: SizeId) {
+  try {
+    sessionStorage.setItem(SIZE_KEY, size);
+  } catch {
+    // As above.
+  }
+}
+
+const rememberedFilter = () => remembered(FILTER_KEY, FILTERS);
 
 /** The starting edit: the detected outline when there is one, and the session's filter. */
 function startingEdit(bitmap: ImageBitmap): EditState {
@@ -76,34 +102,42 @@ function startingEdit(bitmap: ImageBitmap): EditState {
 const ESTIMATE_RENDER: RenderBudget = { source: 1_200_000, output: 300_000 };
 
 /**
- * The upload size, from a small render: its JPEG bytes per pixel at the upload quality, run
- * through the same shrink loop `prepareFile` uses. A small copy packs more detail per pixel, so
- * this leans high.
+ * The upload sizes, from a small render: its JPEG bytes per pixel at the upload quality, run
+ * through the same loops `prepareFile` uses, for the automatic size and each choice the
+ * rendered crop offers. A small copy packs more detail per pixel, so this leans high.
  */
 async function estimateUpload(bitmap: ImageBitmap, edit: EditState) {
   const small = await renderSmall(bitmap, edit, ESTIMATE_RENDER, START_QUALITY);
-  return predictEncode(outputSize(bitmap, edit), small.blob.size / (small.width * small.height));
-}
-
-/** The pixel size the upload will have: the same plan `prepareFile` applies to the rendered crop. */
-function outputSize(bitmap: ImageBitmap, edit: EditState) {
+  const bytesPerPixel = small.blob.size / (small.width * small.height);
+  // The crop as `prepareFile` will decode it.
   const full = renderedSize(bitmap, edit, FULL_RENDER);
-  return planSize(full.width, full.height);
+  const auto = await predictEncode(planSize(full.width, full.height), bytesPerPixel);
+  const options: SizedOption[] = [];
+  for (const option of sizeOptions(full, auto)) {
+    if (option.id === "recommended") {
+      options.push({ ...option, bytes: auto.bytes });
+      continue;
+    }
+    const kept = await predictEncode(option, bytesPerPixel, { minShort: shortEdge(option) });
+    options.push({ ...option, ...kept });
+  }
+  return { auto, options };
 }
 
-/** Number and unit apart, so only the number is set in the mono face (its wide space gaps "500 KB"). */
-function formatSize(bytes: number) {
-  return bytes < 1024 * 1024
-    ? { value: `${Math.max(1, Math.round(bytes / 1024))}`, unit: "KB" }
-    : { value: (bytes / (1024 * 1024)).toFixed(1), unit: "MB" };
-}
+/** The cache key for a prepared upload: the edit and the size it was made at. */
+const preparedKey = (edit: EditState, size: SizeId) => `${editKey(edit)}|${size}`;
 
 const Mono = ({ children }: { children: React.ReactNode }) => (
   <span className="font-mono tabular-nums">{children}</span>
 );
 
 type Loaded = { id: string; bitmap: ImageBitmap };
-type Estimate = { key: string; bytes: number; width: number; height: number };
+type Estimate = {
+  key: string;
+  auto: { bytes: number; width: number; height: number };
+  /** Empty when there is nothing to choose. */
+  options: SizedOption[];
+};
 type Prepared = { key: string; file: File };
 
 /**
@@ -147,6 +181,12 @@ export default function ReviewSheet({
   const [working, setWorking] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // One upload size for the batch, remembered for the session like the filter.
+  const [size, setSize] = useState<SizeId>(() => remembered(SIZE_KEY, SIZE_IDS) ?? "recommended");
+  const [sizeOpen, setSizeOpen] = useState(false);
+  const [fullSize, setFullSize] = useState(false);
+  // The real upload for the full-size view, tagged with the photo, edit and size it shows.
+  const [actual, setActual] = useState<{ key: string; url: string | null } | null>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
 
   const current = images[Math.min(index, images.length - 1)];
@@ -187,9 +227,9 @@ export default function ReviewSheet({
     let cancelled = false;
     const timer = window.setTimeout(() => {
       estimateUpload(bitmap, edit)
-        .then(({ bytes, width, height }) => {
+        .then(({ auto, options }) => {
           if (!cancelled) {
-            setEstimates((all) => ({ ...all, [current.id]: { key, bytes, width, height } }));
+            setEstimates((all) => ({ ...all, [current.id]: { key, auto, options } }));
           }
         })
         // No estimate this time; the upload still encodes for real.
@@ -222,6 +262,47 @@ export default function ReviewSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, bitmap, shapeKey]);
 
+  // The full-size view shows the file that will upload, so it is kept for Upload too.
+  const fullKey = current && edit ? `${current.id}|${editKey(edit)}|${size}` : "";
+  useEffect(() => {
+    if (!fullSize || step !== "preview" || !bitmap || !edit || !current) return;
+    if (actual?.key === fullKey) return;
+    let cancelled = false;
+    let url: string | null = null;
+    const timer = window.setTimeout(() => {
+      renderToJpeg(bitmap, edit, current.name)
+        .then((rendered) => prepareFile(rendered, size))
+        .then((file) => {
+          if (cancelled) return;
+          url = URL.createObjectURL(file);
+          setActual({ key: fullKey, url });
+          setPrepared((all) => ({ ...all, [current.id]: { key: preparedKey(edit, size), file } }));
+        })
+        .catch(() => {
+          if (!cancelled) setActual({ key: fullKey, url: null });
+        });
+    }, 100);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // `actual` is what this effect writes; it only needs to rerun when the view or its key changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullSize, step, bitmap, fullKey]);
+
+  // Frees the shown file's object URL once it is replaced or the sheet closes.
+  useEffect(() => {
+    const url = actual?.url;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [actual]);
+
+  function chooseSize(next: SizeId) {
+    rememberSize(next);
+    setSize(next);
+  }
+
   function update(next: EditState) {
     if (!current) return;
     setEdits((all) => ({ ...all, [current.id]: next }));
@@ -250,7 +331,8 @@ export default function ReviewSheet({
 
   /** Back one step, then close: the header arrow and Escape do the same. */
   function back() {
-    if (step === "preview") setStep("adjust");
+    if (fullSize) setFullSize(false);
+    else if (step === "preview") setStep("adjust");
     else setConfirmClose(true);
   }
 
@@ -267,14 +349,14 @@ export default function ReviewSheet({
       for (const [i, image] of images.entries()) {
         setWorking(`Preparing ${i + 1} of ${images.length}…`);
         const saved = edits[image.id];
-        const key = saved ? editKey(saved) : "";
+        const key = saved ? preparedKey(saved, size) : "";
         const cached = prepared[image.id];
         if (saved && cached?.key === key) {
           files.push(cached.file);
           continue;
         }
         try {
-          const file = await preparePhoto(image, saved, startingEdit);
+          const file = await preparePhoto(image, saved, startingEdit, size);
           files.push(file);
           if (saved) done[image.id] = { key, file };
         } catch (error) {
@@ -307,6 +389,11 @@ export default function ReviewSheet({
     else send();
   }
 
+  function adjust() {
+    setFullSize(false);
+    setStep("adjust");
+  }
+
   const estimate = current && edit ? estimates[current.id] : undefined;
   const fresh = estimate && edit && estimate.key === editKey(edit);
   const count = images.length;
@@ -314,7 +401,15 @@ export default function ReviewSheet({
   const heldBack = (id: string) => editFailed[id] === true;
   const position = Math.min(index, count - 1) + 1;
   const adjusting = step === "adjust";
-  const size = fresh ? formatSize(estimate.bytes) : null;
+  const options = fresh ? estimate.options : [];
+  // The batch's choice where this photo offers it, else the automatic size.
+  const shown = fresh
+    ? (options.find((o) => o.id === size) ??
+      options.find((o) => o.id === "recommended") ??
+      estimate.auto)
+    : null;
+  const shownBytes = shown ? formatSize(shown.bytes) : null;
+  const shownId = options.find((o) => o.id === size) ? size : "recommended";
   const stripThumbs = thumbs?.key === shapeKey ? thumbs.urls : {};
 
   const tool = "min-h-11 flex-1 px-1 text-xs md:justify-start md:px-3 md:text-sm";
@@ -368,8 +463,19 @@ export default function ReviewSheet({
             ) : bitmap && edit ? (
               adjusting ? (
                 <CropEditor bitmap={bitmap} edit={edit} onChange={update} />
+              ) : fullSize ? (
+                <FullSizeView
+                  failed={actual?.key === fullKey && actual.url === null}
+                  label={
+                    shown
+                      ? `Receipt at full size, ${shown.width} × ${shown.height} px`
+                      : "Receipt at full size"
+                  }
+                  onDone={() => setFullSize(false)}
+                  url={actual?.key === fullKey ? actual.url : null}
+                />
               ) : (
-                <ResultPreview bitmap={bitmap} edit={edit} />
+                <ResultPreview bitmap={bitmap} edit={edit} onInspect={() => setFullSize(true)} />
               )
             ) : (
               <p className="m-auto flex items-center gap-2 text-sm text-muted-foreground">
@@ -485,22 +591,60 @@ export default function ReviewSheet({
             </p>
           ) : (
             <div className="text-center text-xs text-muted-foreground md:text-left">
-              <p className="h-4 whitespace-nowrap" data-testid="resolution">
-                {fresh && size ? (
-                  <>
-                    <Mono>{estimate.width}</Mono> × <Mono>{estimate.height}</Mono> px · about{" "}
-                    <Mono>{size.value}</Mono> {size.unit}
-                  </>
-                ) : edit ? (
-                  "sizing…"
-                ) : null}
-              </p>
-              <p className="mt-1 h-12">
-                {edit?.filter === "grey" || edit?.filter === "bw"
-                  ? "Greyscale and B&W make the file smaller."
-                  : null}
+              <div className="flex h-11 items-center justify-center md:h-8 md:justify-start">
+                {shown && shownBytes && options.length > 0 ? (
+                  <button
+                    aria-controls="upload-size"
+                    aria-expanded={sizeOpen}
+                    className="-mx-2 inline-flex h-full items-center gap-1 rounded-md px-2 whitespace-nowrap outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => setSizeOpen((open) => !open)}
+                    type="button"
+                  >
+                    <span data-testid="resolution">
+                      <Mono>{shown.width}</Mono> × <Mono>{shown.height}</Mono> px · ~
+                      <Mono>{shownBytes.value}</Mono> {shownBytes.unit}
+                    </span>
+                    <span className="text-foreground">· Change</span>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={cn(
+                        "size-3.5 text-foreground transition-transform motion-reduce:transition-none",
+                        sizeOpen && "rotate-180",
+                      )}
+                    />
+                  </button>
+                ) : (
+                  <p className="w-full whitespace-nowrap" data-testid="resolution">
+                    {shown && shownBytes ? (
+                      <>
+                        <Mono>{shown.width}</Mono> × <Mono>{shown.height}</Mono> px · ~
+                        <Mono>{shownBytes.value}</Mono> {shownBytes.unit}
+                      </>
+                    ) : edit ? (
+                      "sizing…"
+                    ) : null}
+                  </p>
+                )}
+              </div>
+              {sizeOpen && options.length > 0 ? (
+                <div className="mt-1 mb-2 text-left">
+                  <SizePicker
+                    id="upload-size"
+                    onChange={chooseSize}
+                    options={options}
+                    photos={count}
+                    value={shownId}
+                  />
+                </div>
+              ) : null}
+              <p className="h-12">
+                {fullSize
+                  ? "Drag to look around. Done goes back to the whole receipt."
+                  : "Tap the preview to see it at full size."}
                 {edit?.filter === "bw"
-                  ? " B&W suits faded receipts but can lose light print."
+                  ? shownId === "smaller"
+                    ? " At 800 px, B&W can lose light print."
+                    : " B&W suits faded receipts but can lose light print."
                   : null}
               </p>
             </div>
@@ -583,7 +727,7 @@ export default function ReviewSheet({
             <Button
               className={cn("min-h-11", adjusting && "invisible")}
               disabled={adjusting}
-              onClick={() => setStep("adjust")}
+              onClick={adjust}
               tabIndex={adjusting ? -1 : undefined}
               variant="ghost"
             >

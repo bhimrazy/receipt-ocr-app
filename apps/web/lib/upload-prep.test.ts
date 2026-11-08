@@ -11,6 +11,10 @@ import {
   HARD_MIN_SHORT_EDGE,
   planSize,
   predictEncode,
+  appliedSize,
+  largerSize,
+  sizeOptions,
+  smallerSize,
   TARGET_BYTES,
   type Encoder,
 } from "./upload-prep";
@@ -52,6 +56,59 @@ describe("planSize", () => {
   });
   it("keeps one pixel on a thin strip", () => {
     expect(planSize(1, 20000)).toEqual({ width: 1, height: 6000 });
+  });
+});
+
+describe("sizeOptions", () => {
+  const phone = { width: 3024, height: 4032 };
+  const ids = (options: { id: string }[]) => options.map((o) => o.id);
+
+  it("offers Smaller under the automatic size of a phone photo", () => {
+    expect(sizeOptions(phone, planSize(3024, 4032))).toEqual([
+      { id: "smaller", width: 800, height: 1067 },
+      { id: "recommended", width: 1500, height: 2000 },
+    ]);
+  });
+  it("offers Larger when the automatic encode shrinks under 1,200 px for bytes", () => {
+    const options = sizeOptions(phone, { width: 1084, height: 1445 });
+    expect(ids(options)).toEqual(["smaller", "recommended", "larger"]);
+    expect(options[2]).toMatchObject({ width: 1200, height: 1600 });
+  });
+  it("never offers Larger past the model's pixel budget on a long receipt", () => {
+    const source = { width: 1400, height: 4000 };
+    expect(largerSize(source)).toBeNull(); // 1200 x 3429 is 4.1 MP
+    expect(ids(sizeOptions(source, { width: 1000, height: 2857 }))).toEqual([
+      "smaller",
+      "recommended",
+    ]);
+  });
+  it("never upscales", () => {
+    expect(largerSize({ width: 1200, height: 1500 })).toBeNull();
+    expect(smallerSize({ width: 800, height: 3000 })).toBeNull();
+    for (const source of [phone, { width: 1250, height: 1600 }, { width: 900, height: 2000 }]) {
+      for (const o of sizeOptions(source, planSize(source.width, source.height))) {
+        expect(o.width).toBeLessThanOrEqual(source.width);
+        expect(o.height).toBeLessThanOrEqual(source.height);
+      }
+    }
+  });
+  it("hides an option no different from Recommended", () => {
+    // Already 1,200 px or less: Larger would be the same or smaller than what goes anyway.
+    const source = { width: 1250, height: 1600 };
+    expect(ids(sizeOptions(source, { width: 1250, height: 1600 }))).toEqual([
+      "smaller",
+      "recommended",
+    ]);
+    // The rescue pass already took a long receipt down to 800 px, and Larger is past the budget.
+    expect(sizeOptions({ width: 1400, height: 4000 }, { width: 800, height: 2286 })).toEqual([]);
+  });
+  it("never goes under the hard minimum short edge", () => {
+    // The long-edge cap would take Smaller to 750 x 6000.
+    expect(smallerSize({ width: 1500, height: 12000 })).toBeNull();
+  });
+  it("offers nothing when fewer than two choices are left", () => {
+    expect(sizeOptions({ width: 800, height: 1200 }, { width: 800, height: 1200 })).toEqual([]);
+    expect(sizeOptions({ width: 420, height: 891 }, { width: 420, height: 891 })).toEqual([]);
   });
 });
 
@@ -144,6 +201,80 @@ describe("encodeToTarget rescue", () => {
 
 const size0 = { width: 1000, height: 1000 };
 
+describe("prepareFile size", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  /** A decoded image of `width` x `height` whose encodes cost `bpp` bytes a pixel at 0.85; records each encode. */
+  function stubSized(width: number, height: number, bpp: number) {
+    const encodes: Array<[number, number, number]> = [];
+    vi.stubGlobal("createImageBitmap", async () => ({ width, height, close() {} }));
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        constructor(
+          public width: number,
+          public height: number,
+        ) {}
+        getContext() {
+          return { fillRect() {}, drawImage() {} };
+        }
+        async convertToBlob({ quality }: { quality: number }) {
+          encodes.push([this.width, this.height, quality]);
+          const bytes = Math.round((bpp * this.width * this.height * quality) / 0.85);
+          return new Blob([new Uint8Array(bytes)]);
+        }
+      },
+    );
+    return encodes;
+  }
+  const photo = () => new File(["x"], "a.jpg", { type: "image/jpeg" });
+
+  it("encodes Smaller at 800 px", async () => {
+    const encodes = stubSized(3024, 4032, 0.2);
+    const out = await prepareFile(photo(), "smaller");
+    expect(encodes).toEqual([[800, 1067, 0.85]]);
+    expect(appliedSize(out)).toBe("smaller");
+  });
+  it("keeps a chosen size over the target while under the ceiling, stepping only quality", async () => {
+    // About 645 KB at 0.6: over the 500 KB target, under 1 MB, so it never shrinks.
+    const encodes = stubSized(1400, 4000, 0.5);
+    await prepareFile(photo(), "smaller");
+    expect(encodes).toEqual([
+      [800, 2286, 0.85],
+      [800, 2286, 0.72],
+      [800, 2286, 0.6],
+    ]);
+  });
+  it("keeps 1,200 px for Larger where the automatic encode shrank under it", async () => {
+    // Automatic: 1500 x 2000 shrinks to 1084 x 1445 to reach 500 KB; Larger then keeps 1200 x 1600.
+    const encodes = stubSized(3024, 4032, 0.4);
+    const out = await prepareFile(photo(), "larger");
+    expect(encodes).toContainEqual([1084, 1445, 0.6]);
+    expect(encodes.at(-1)).toEqual([1200, 1600, 0.6]);
+    expect(appliedSize(out)).toBe("larger");
+  });
+  it("sends the automatic encode for Larger when that is already over 1,200 px", async () => {
+    const encodes = stubSized(3024, 4032, 0.1);
+    const out = await prepareFile(photo(), "larger");
+    expect(encodes).toEqual([[1500, 2000, 0.85]]);
+    expect(appliedSize(out)).toBe("recommended");
+  });
+  it("still shrinks a chosen size to get under the ceiling", async () => {
+    stubSized(3024, 4032, 1);
+    const out = await prepareFile(photo(), "larger");
+    expect(out.size).toBeLessThanOrEqual(CEILING_BYTES);
+  });
+  it("uses the automatic plan when the choice doesn't apply, or without one", async () => {
+    let encodes = stubSized(800, 1200, 0.1);
+    let out = await prepareFile(photo(), "smaller");
+    expect(encodes[0]).toEqual([800, 1200, 0.85]);
+    expect(appliedSize(out)).toBe("recommended");
+    encodes = stubSized(3024, 4032, 0.1);
+    out = await prepareFile(photo());
+    expect(encodes[0]).toEqual([1500, 2000, 0.85]);
+    expect(appliedSize(out)).toBeUndefined();
+  });
+});
+
 describe("prepareFile metadata", () => {
   afterEach(() => vi.unstubAllGlobals());
   function stubBrowser() {
@@ -231,5 +362,11 @@ describe("predictEncode", () => {
     const out = await predictEncode({ width: 3000, height: 2000 }, 0.2);
     expect(out).toMatchObject({ width: 2168, height: 1445 });
     expect(out.bytes).toBeLessThanOrEqual(TARGET_BYTES);
+  });
+  it("keeps a chosen short edge as the floor, so only quality drops", async () => {
+    const out = await predictEncode({ width: 1080, height: 3086 }, 0.3, { minShort: 1080 });
+    expect(out).toMatchObject({ width: 1080, height: 3086 });
+    expect(out.bytes).toBeGreaterThan(TARGET_BYTES);
+    expect(out.bytes).toBeLessThanOrEqual(CEILING_BYTES);
   });
 });
