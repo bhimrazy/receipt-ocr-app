@@ -148,7 +148,7 @@ Steps are in [deployment.md](deployment.md).
 - Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
   replaced on 2026-11-08 (only `BETTER_AUTH_SECRET`; keep its copy in a password manager).
 - Set `OCR_DAILY_CAP` in production as a spend guard.
-- Billing v1 (in review, PR pending). Before it can take money, in this order:
+- Billing v1 (in review, #143). Before it can take money, in this order:
   1. Run **Database Migration** (`staging-db`, then `production-db`) before deploying; the release adds `billing_events`,
      `billing_subscriptions` and `ocr_rounds.plan`, and replaces `ocr_rounds_organization_id_idx` (migration
      `0001_billing`, on top of the squashed baseline).
@@ -176,10 +176,10 @@ Steps are in [deployment.md](deployment.md).
 
 Open pull requests only.
 
-| PR         | Work                                                                                                                                                                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #136       | Squash migrations `0000`-`0003` into one baseline; CI integration on Postgres 17 and 18, e2e on 17. Branches adding migrations (`feat/billing-paddle`, `feat/sign-in-methods`) regenerate theirs as `0001` after it merges                  |
-| PR pending | Billing v1: Paddle Billing subscription for Pro, plans per workspace, monthly pooled quota for Pro (500 a month, 200 a day), Free pool, `/pricing` and `/refunds`, migration `0001_billing`. Flow: [billing](architecture/flows/billing.md) |
+| PR   | Work                                                                                                                                                                                                                                        |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #136 | Squash migrations `0000`-`0003` into one baseline; CI integration on Postgres 17 and 18, e2e on 17. Branches adding migrations (`feat/billing-paddle`, `feat/sign-in-methods`) regenerate theirs as `0001` after it merges                  |
+| #143 | Billing v1: Paddle Billing subscription for Pro, plans per workspace, monthly pooled quota for Pro (500 a month, 200 a day), Free pool, `/pricing` and `/refunds`, migration `0001_billing`. Flow: [billing](architecture/flows/billing.md) |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
