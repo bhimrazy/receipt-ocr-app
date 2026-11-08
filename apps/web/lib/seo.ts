@@ -86,7 +86,7 @@ export function formatLegalDate(isoDate: string): string {
 /**
  * Organization (with its founder), WebSite and SoftwareApplication for the home page. Only claims
  * the product backs today: a free web app, installable as a PWA. No ratings, reviews or prices
- * beyond the free plan; the custom plan has no public price, so it has no Offer.
+ * beyond the free plan.
  */
 export function homeJsonLd(): Record<string, unknown> {
   const url = new URL("/", siteUrl).toString();
