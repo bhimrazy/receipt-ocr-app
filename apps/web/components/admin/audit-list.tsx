@@ -48,6 +48,7 @@ const FIELDS: [string, string][] = [
   ["receiptsPerMinute", "a minute"],
   ["batchMax", "a batch"],
   ["workspaces", "workspaces"],
+  ["membersPerWorkspace", "members"],
 ];
 
 function planChanges(from: Record<string, Policy>, to: Record<string, Policy>): string {

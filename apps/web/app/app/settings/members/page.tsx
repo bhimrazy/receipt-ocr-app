@@ -10,6 +10,7 @@ import { PendingInvites } from "@/components/members/pending-invites";
 import { toRole } from "@/components/members/roles";
 import { auth } from "@/lib/auth";
 import { errorFields, logger } from "@/lib/log";
+import { getCurrentPlan } from "@/lib/plan-limits";
 import { requireActiveScope } from "@/lib/session";
 import { Alert } from "@receipt-ocr/ui/components/alert";
 import { headers } from "next/headers";
@@ -50,7 +51,10 @@ async function loadWorkspace(organizationId: string) {
 export default async function MembersPage() {
   logPageRender("/app/settings/members");
   const scope = await requireActiveScope();
-  const workspace = await loadWorkspace(scope.organizationId);
+  const [workspace, { plan, policy }] = await Promise.all([
+    loadWorkspace(scope.organizationId),
+    getCurrentPlan(),
+  ]);
   const canManage = scope.role === "owner" || scope.role === "admin";
 
   return (
@@ -95,7 +99,18 @@ export default async function MembersPage() {
           />
           {canManage ? (
             <>
-              <InviteForm organizationId={scope.organizationId} />
+              <InviteForm
+                organizationId={scope.organizationId}
+                room={{
+                  plan,
+                  limit: policy.membersPerWorkspace,
+                  // Counted like the server check: members plus unexpired pending invitations.
+                  used:
+                    workspace.members.length +
+                    workspace.invitations.filter((i) => new Date(i.expiresAt) > new Date()).length,
+                  canUpgrade: scope.role === "owner",
+                }}
+              />
               <PendingInvites invitations={workspace.invitations} />
             </>
           ) : null}

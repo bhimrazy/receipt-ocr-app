@@ -61,3 +61,27 @@ test("a failed support panel chunk shows a fallback with retry instead of breaki
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByLabel(/email/i).first()).toBeVisible();
 });
+
+test("the landing pricing shows three plans and Custom opens the support form", async ({
+  page,
+}) => {
+  await page.goto("/#pricing");
+  const pricing = page.locator("#pricing");
+  for (const name of ["Free", "Pro", "Custom"]) {
+    await expect(pricing.getByRole("heading", { name, exact: true })).toBeVisible();
+  }
+  await expect(pricing.getByText("1 workspace", { exact: true })).toHaveCount(0);
+  // Free signs up; Pro, the featured card, carries the one filled button and leads to /pricing.
+  await expect(pricing.getByRole("link", { name: "Start free" })).toHaveAttribute(
+    "href",
+    "/sign-up",
+  );
+  await expect(pricing.getByRole("link", { name: /See pricing/ })).toHaveAttribute(
+    "href",
+    "/pricing",
+  );
+  await pricing.getByRole("button", { name: "Contact us" }).click();
+  await expect(
+    page.getByRole("dialog").getByRole("button", { name: "Plans & limits" }),
+  ).toHaveAttribute("aria-pressed", "true");
+});

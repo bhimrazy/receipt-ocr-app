@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { pageMetadata } from "@/lib/seo";
 import { AuthLayout, AuthNotConfiguredCard } from "@/components/auth/auth-layout";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
@@ -11,10 +12,9 @@ export const metadata: Metadata = pageMetadata({
   index: false,
 });
 
-// The layout shows the free plan's limit; an admin save also revalidates (revalidatePlanCopy).
-export const revalidate = 3600;
-
-export default function ForgotPasswordPage() {
+export default async function ForgotPasswordPage() {
+  // Rendered per request: `authEnabled` needs runtime env, which a build-time render doesn't have.
+  await connection();
   return (
     <AuthLayout subtitle="Locked out? Send yourself a reset link and get back to your receipts.">
       {authEnabled ? <ForgotPasswordForm /> : <AuthNotConfiguredCard />}

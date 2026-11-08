@@ -9,7 +9,7 @@ const webRoot = path.resolve(import.meta.dirname, "..");
 const RULES: { name: string; pattern: RegExp }[] = [
   { name: "arbitrary hex colour", pattern: /-\[#[0-9a-fA-F]{3,8}\]/ },
   {
-    name: "white/black colour (use a token; black shadows are fine)",
+    name: "white/black colour (use a token; black shadows need light:shadow-float)",
     pattern:
       /\b(?:bg|text|border|ring|outline|divide|from|via|to|fill|stroke|decoration|caret|placeholder)-(?:white|black)\b/,
   },
@@ -36,12 +36,20 @@ function sourceFiles(dir: string): string[] {
     .map((file) => file.split(path.sep).join("/"));
 }
 
+// A black shadow is heavy on light surfaces, so it must swap to the token there.
+const BLACK_SHADOW = /\bshadow-black(?:\/\d+)?\b/;
+const LIGHT_SHADOW = /\blight:shadow-float\b/;
+
 function violations(source: string) {
   const found: string[] = [];
   source.split("\n").forEach((line, index) => {
     for (const rule of RULES) {
       const match = line.match(rule.pattern);
       if (match) found.push(`${index + 1}: ${rule.name}: ${match[0]}`);
+    }
+    const shadow = line.match(BLACK_SHADOW);
+    if (shadow && !LIGHT_SHADOW.test(line)) {
+      found.push(`${index + 1}: black shadow without light:shadow-float: ${shadow[0]}`);
     }
   });
   return found;
@@ -73,6 +81,11 @@ describe("design tokens", () => {
   it("flags the literals it is meant to catch", () => {
     expect(violations('className="bg-[#047857] ring-white/10 text-[11px]"')).toHaveLength(3);
     expect(violations('className="text-red-300 hover:bg-foreground/[0.06]"')).toHaveLength(2);
-    expect(violations('className="bg-wash text-2xs shadow-black/40 ring-hairline"')).toEqual([]);
+    expect(violations('className="bg-wash text-2xs shadow-black/40 ring-hairline"')).toHaveLength(
+      1,
+    );
+    expect(
+      violations('className="bg-wash text-2xs shadow-black/40 light:shadow-float ring-hairline"'),
+    ).toEqual([]);
   });
 });

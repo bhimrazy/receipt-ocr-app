@@ -8,6 +8,7 @@ import {
   DEFAULT_BATCH_MAX,
   DEFAULT_PLANS,
   MAX_BATCH,
+  MAX_MEMBERS,
   QUOTA_SCOPES,
   type PlanPolicy,
   type PlanTable,
@@ -31,6 +32,7 @@ const policySchema = (batchMax: z.ZodType<number>, defaults: PlanPolicy) =>
   z
     .object({
       workspaces: count(100),
+      membersPerWorkspace: count(MAX_MEMBERS).default(defaults.membersPerWorkspace),
       scope: z.enum(QUOTA_SCOPES).default(defaults.scope),
       receiptsPerDay: count(100_000),
       receiptsPerMonth: count(1_000_000).nullable().default(defaults.receiptsPerMonth),

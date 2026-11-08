@@ -191,12 +191,16 @@ More help: [Domains](https://resend.com/docs/dashboard/domains/introduction),
 
 </details>
 
-| Key              | Example                                           | Kind   |
-| ---------------- | ------------------------------------------------- | ------ |
-| `RESEND_API_KEY` | `re_…`                                            | Secret |
-| `EMAIL_FROM`     | `ReceiptOCR <noreply@receipt-ocr.bhimraj.com.np>` | Config |
-| `SUPPORT_EMAIL`  | `receipt-ocr@bhimraj.com.np`                      | Config |
+| Key                            | Example                                           | Kind   |
+| ------------------------------ | ------------------------------------------------- | ------ |
+| `RESEND_API_KEY`               | `re_…`                                            | Secret |
+| `EMAIL_FROM`                   | `ReceiptOCR <noreply@receipt-ocr.bhimraj.com.np>` | Config |
+| `SUPPORT_EMAIL`                | `receipt-ocr@bhimraj.com.np`                      | Config |
+| `RESEND_NEWSLETTER_SEGMENT_ID` | segment id from Resend (optional)                 | Config |
 
+- `RESEND_NEWSLETTER_SEGMENT_ID` turns on the product-updates signup (home page form, sign-up checkbox). It needs a
+  **full-access** `RESEND_API_KEY`: a sending-only key sends the confirmation mail but cannot add contacts. Unset, the
+  signup is hidden. See [the plan](plans/2026-11-08-newsletter.md).
 - `EMAIL_FROM` must use the domain you verified (`receipt-ocr.bhimraj.com.np`).
 - Roles: **From** is `EMAIL_FROM`, a noreply address on the verified domain, for every automated email.
   **Reply-To** is `SUPPORT_EMAIL` on all of them, so replies reach a human. `SUPPORT_EMAIL` is also where

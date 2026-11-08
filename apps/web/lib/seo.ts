@@ -76,7 +76,7 @@ export const LEGAL_UPDATED = {
   terms: "2026-11-08",
   refunds: "2026-11-08",
   pricing: "2026-11-08",
-  cookies: "2026-11-06",
+  cookies: "2026-11-08",
 } as const;
 
 /** Home page copy last changed; the sitemap's lastModified for "/". */

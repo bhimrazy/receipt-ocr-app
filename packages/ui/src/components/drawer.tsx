@@ -25,7 +25,7 @@ function DrawerContent({ className, children, ...props }: DrawerPrimitive.Popup.
     <DrawerPrimitive.Portal>
       <DrawerPrimitive.Backdrop
         data-slot="drawer-overlay"
-        className="fixed inset-0 z-50 min-h-dvh bg-black/70 opacity-[calc(1-var(--drawer-swipe-progress))] transition-opacity duration-300 ease-out supports-backdrop-filter:backdrop-blur-sm data-ending-style:opacity-0 data-starting-style:opacity-0 data-swiping:duration-0 motion-reduce:transition-none"
+        className="fixed inset-0 z-50 min-h-dvh bg-scrim opacity-[calc(1-var(--drawer-swipe-progress))] transition-opacity duration-300 ease-out supports-backdrop-filter:backdrop-blur-sm data-ending-style:opacity-0 data-starting-style:opacity-0 data-swiping:duration-0 motion-reduce:transition-none"
       />
       <DrawerPrimitive.Viewport className="fixed inset-0 z-50 flex items-end justify-center">
         <DrawerPrimitive.Popup

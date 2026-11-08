@@ -164,6 +164,9 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
      and keep the old price id in `PADDLE_PRICE_PRO_LEGACY` ([runbook](architecture/flows/billing.md#runbook)). There is
      no automated email for this yet.
 - Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
+- Product updates signup (in review): built but off until you create a Resend segment (Audiences are now "segments"),
+  set `RESEND_NEWSLETTER_SEGMENT_ID`, and use a **full-access** `RESEND_API_KEY` (a sending-only key cannot add
+  contacts). No migration. Details and limits: [plan](plans/2026-11-08-newsletter.md).
 - Standing decisions and dated reminders: [decisions.md](decisions.md).
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
 - If an admin saved an OCR chain naming `gemini-3.7-flash`, re-save it in Admin → Settings.
@@ -207,8 +210,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 4. Default OCR chain: decided 2026-11-08. Claude Haiku 5.5, then Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; steps
    without an API key are skipped ([ai.md](architecture/ai.md#default-chain)). Groq zero data retention must be on first.
 5. PostHog: server-only first (recommended) or browser too; Sentry tracing off; source-map upload approach.
-6. Members: free seats 3 or 5, single owner + transfer, pending invites count. See
-   [members plan](plans/2026-11-06-members-admin-plan.md).
+6. ~~Members: free seats 3 or 5~~ Decided 2026-11-08: Free 3, Pro 10 members per workspace, pending invites count,
+   admin-editable in the plan limits. Still open: single owner + transfer ([members plan](plans/2026-11-06-members-admin-plan.md)).
 7. Branch protection on `main` requiring CI.
 8. BYOK tables (`user_credentials`, `storage_source`): keep or delete.
 9. Usage ledger: retention period (suggested 13 months, then a purge job and a privacy-page line); whether the
@@ -224,13 +227,19 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
     is built (`feat/install-offer`). Still open: measuring the landing install surfaces needs browser PostHog,
     which needs the consent decision; the landing sheet's defaults (Android only, 7-day snooze, 3 shows) are the
     design review's and the owner may revise them.
+13. ~~Custom plan card: its name, and how a custom deal is delivered~~ Decided 2026-11-08: the card stays "Custom";
+    per-workspace overrides are deferred (see "Later, once the app is stable").
+14. ~~Light and System themes~~ Decided 2026-11-08 (owner took every recommendation in the [spec](plans/2026-11-08-light-theme.md)): System as the default for everyone,
+    per-device storage (no account sync), toggle in Settings, account menu and footer (not the header), a light iOS
+    splash set, emails out of scope.
 
 ## Roadmap (order)
 
 **Next up (ordered, 2026-11-08):** [plans/2026-11-08-next-up.md](plans/2026-11-08-next-up.md). The list below is the
 longer-term roadmap.
 
-**Planned:** upgrade call-to-action for Free workspaces (Home card, account menu, at-limit banner):
+**Planned:** upgrade call-to-action for Free workspaces (Home card, meter button, account menu, at-limit banner, all
+opening an in-app upgrade modal with Paddle's overlay checkout):
 [plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), with owner decisions to make.
 
 From the [combined plan](plans/2026-11-06-combined-plan.md):
@@ -288,6 +297,11 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   still cheap ([UX decisions](plans/2026-11-07-ux-decisions.md)).
 - **Release-based deploys.** Today every push to `main` deploys after CI (migrations by hand). Move to deploying
   tagged releases (for example `v0.x.y` with release notes), so `main` can take merges without each one going live.
+- **Per-workspace overrides for Custom deals (deferred 2026-11-08).** Nothing is built for Custom deals yet: the
+  card's "Contact us" opens the support form on Plans & limits, and a deal is handled by hand from there. Today a
+  limit can only be raised for a whole plan (Admin → Settings), so a single customer's "more members, workspaces or
+  scans" has no mechanism. The `workspace_overrides` row sketched in the [BYOK plan](plans/2026-11-07-byok.md) is
+  the likely shape, but it may change before it is built; it needs a migration.
 - **Self-hosting.** Vercel's free (Hobby) plan is for non-commercial use and has hard monthly limits; a busy month or
   paying users outgrow it. The exit is already built: the Docker image (`docker/Dockerfile.prod`, Bun runtime), the
   compose stack and the 1 vCPU / 1 GB load test. Decide between Vercel Pro and a small VPS (plus managed Postgres and

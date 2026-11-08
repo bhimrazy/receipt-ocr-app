@@ -34,9 +34,14 @@ export interface PlanPolicy {
   /** Images in one upload batch (camera tray plus picked files). A client-side cap; the limits above still apply per upload. */
   batchMax: number;
 
-  // Account.
+  // Account and workspace.
   /** Workspaces a user on this account plan may own. */
   workspaces: number;
+  /**
+   * Members of a workspace on this plan, counting pending invitations. Checked when someone is
+   * invited and when an invitation is accepted; a workspace already past it keeps its members.
+   */
+  membersPerWorkspace: number;
 }
 
 /**
@@ -59,6 +64,12 @@ export const DEFAULT_BATCH_MAX = 10;
  */
 export const MAX_BATCH = 20;
 
+/**
+ * The most `membersPerWorkspace` may be set to: Better Auth's own membership
+ * limit (100 by default), which still runs when an invitation is accepted.
+ */
+export const MAX_MEMBERS = 100;
+
 export const DEFAULT_PLANS: PlanTable = {
   // Per person across all their workspaces: 20 a day, 100 a month (below Pro's 500), and
   // 300 a day for every Free user together.
@@ -70,6 +81,7 @@ export const DEFAULT_PLANS: PlanTable = {
     receiptsPerMinute: 10,
     batchMax: DEFAULT_BATCH_MAX,
     workspaces: 1,
+    membersPerWorkspace: 3,
   },
   // Per workspace, shared by its members: 500 a month, up to 200 a day.
   pro: {
@@ -80,6 +92,7 @@ export const DEFAULT_PLANS: PlanTable = {
     receiptsPerMinute: 30,
     batchMax: DEFAULT_BATCH_MAX,
     workspaces: 2,
+    membersPerWorkspace: 10,
   },
 };
 

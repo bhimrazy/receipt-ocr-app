@@ -74,6 +74,8 @@ fi
 if [ "$turnstile" = 1 ]; then
   # The site key is inlined at build time, so this needs its own build; the secret is runtime.
   export NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+  # Shows the product-updates form; without a mailer nothing is sent.
+  export RESEND_NEWSLETTER_SEGMENT_ID=e2e-segment
   bun run build
   trap 'stop_server; cleanup' EXIT
   # pass: Cloudflare's always-passing secret; fail: its always-rejecting one.

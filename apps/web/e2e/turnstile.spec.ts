@@ -55,6 +55,17 @@ test.describe("with Turnstile on and a passing secret", () => {
     await expect(dialog.getByRole("alert")).not.toContainText("security check");
   });
 
+  test("the product updates form passes the check and asks the visitor to check their inbox", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const section = page.getByRole("region", { name: "Hear when something new ships" });
+    await section.getByLabel("Email address").fill(uniqueEmail("turnstile-updates"));
+    await expect(section.locator('[data-turnstile="ready"]')).toBeAttached({ timeout: 30_000 });
+    await section.getByRole("button", { name: "Get product updates" }).click();
+    await expect(section.getByRole("status")).toContainText("Check your inbox");
+  });
+
   test("the server refuses requests that carry no token", async ({ request, baseURL }) => {
     const signUp = await request.post("/api/auth/sign-up/email", {
       data: { name: "Bot", email: uniqueEmail("turnstile-bot"), password: PASSWORD },
@@ -67,6 +78,12 @@ test.describe("with Turnstile on and a passing secret", () => {
       data: { name: "Bot", email: uniqueEmail("turnstile-bot"), message: "Hello there, bot" },
     });
     expect(contact.status()).toBe(400);
+
+    const updates = await request.post("/api/newsletter/subscribe", {
+      headers: { origin: baseURL! },
+      data: { email: uniqueEmail("turnstile-bot") },
+    });
+    expect(updates.status()).toBe(400);
   });
 });
 
@@ -86,6 +103,15 @@ test.describe("with Turnstile on and a rejecting secret", () => {
       "The security check failed",
     );
     await expect(page).toHaveURL(/\/sign-up/);
+  });
+
+  test("the product updates form shows the same error", async ({ page }) => {
+    await page.goto("/");
+    const section = page.getByRole("region", { name: "Hear when something new ships" });
+    await section.getByLabel("Email address").fill(uniqueEmail("turnstile-fail-updates"));
+    await expect(section.locator('[data-turnstile="ready"]')).toBeAttached({ timeout: 30_000 });
+    await section.getByRole("button", { name: "Get product updates" }).click();
+    await expect(section.getByRole("alert")).toContainText("The security check failed");
   });
 
   test("the support form shows the same error", async ({ page }) => {

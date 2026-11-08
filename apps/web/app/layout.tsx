@@ -7,6 +7,7 @@ import { startupImages } from "@/lib/ios-splash";
 import { buildIsIndexable } from "@/lib/seo-hosts";
 import { homeDescription, homeTitle } from "@/lib/seo";
 import { SITE_NAME, siteUrl } from "@/lib/site";
+import { THEME_COLORS, THEME_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
 // The opsz axis gives large headings the tighter display cut; one font load serves both.
@@ -61,7 +62,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0a0a0b",
+  // Dark until the theme toggle ships; THEME_SCRIPT sets light's colour and scheme itself.
+  themeColor: THEME_COLORS.dark,
   colorScheme: "dark",
   // Draw under the notch and home indicator; the shell pads itself with env(safe-area-inset-*).
   viewportFit: "cover",
@@ -74,6 +76,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${dmSans.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        {/* A plain blocking script, not next/script: it must run while parsing, before paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       {/* viewport-fit=cover lets pages run under a landscape notch; keep content beside it. */}
       <body className="pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] font-sans antialiased">
         {children}

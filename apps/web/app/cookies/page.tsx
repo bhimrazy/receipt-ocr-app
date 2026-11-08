@@ -45,7 +45,7 @@ export default function CookiesPage() {
             googleAnalytics
               ? "Google Analytics cookies are optional. They are set only after you choose Accept all, or turn on analytics in Cookie settings. Until then Google's script isn't loaded at all."
               : "We don't use any cookies that need your permission at the moment, so we don't show a cookie banner.",
-            "Analytics never runs inside the app or the admin area, where page addresses contain receipt and workspace ids. It runs only on the home page, the sign-in and sign-up pages and these legal pages, and page addresses are sent without anything after the ?.",
+            "Analytics never runs inside the app or the admin area, where page addresses contain receipt and workspace ids. It runs only on the home, pricing and use-case pages, the sign-in and sign-up pages and these legal pages, and page addresses are sent without anything after the ?.",
           ],
         },
         ...(pageCounts

@@ -7,8 +7,10 @@
    generated in consuming apps. Scan the component source explicitly. */
 @source "./components";
 
-/* The app is dark-only, so registry `dark:` variants always apply. */
-@custom-variant dark (&);
+/* Dark is the default (no class on <html>); `.light` on <html> switches the tokens, and `.dark`
+   pins a subtree back to dark (camera, crop). Registry `dark:` variants follow the same rule. */
+@custom-variant dark (&:where(:root:not(.light), :root:not(.light) *, .dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
 
 @theme inline {
   --font-sans: var(--font-dm-sans, "DM Sans"), Inter, ui-sans-serif, system-ui, sans-serif;
@@ -54,6 +56,17 @@
   --color-group-red: var(--group-red);
   --color-group-orange: var(--group-orange);
   --color-group-yellow: var(--group-yellow);
+  --color-scrim: var(--scrim);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
+  --color-series-6: var(--series-6);
+  --color-series-7: var(--series-7);
+  --color-series-8: var(--series-8);
+  --color-series-other: var(--series-other);
+  --shadow-float: var(--shadow-float);
   /* Small mono labels, chips and tab-bar captions. */
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -69,7 +82,8 @@
   --color-ring: var(--ring);
 }
 
-:root {
+:root,
+.dark {
   /* --font-dm-sans / --font-jetbrains-mono are injected by next/font on <html>;
      @theme provides literal fallbacks if they are ever absent. */
   --background: #0a0a0b;
@@ -124,6 +138,78 @@
   --border: #27272a;
   --input: #6b6b74;
   --ring: #34d399;
+  /* Floating cards, headers and panels. */
+  --shadow-float: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+  /* Overlay behind dialogs and drawers. */
+  --scrim: rgb(0 0 0 / 0.7);
+  /* Admin ops charts: the dark steps of the reference categorical palette, validated on --card.
+     Every adjacent pair clears the colour-blind and normal-vision floors. Text never uses these. */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-other: #7a7a83;
+  color-scheme: dark;
+}
+
+/* Light tokens (docs/plans/2026-11-08-light-theme.md). Contrast pairs are checked in
+   theme-contrast.test.ts. Only colours change; --radius and --cta stay shared. */
+:root.light {
+  --background: #f7f7f8;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --primary: #036c4d;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f1f3;
+  --secondary-foreground: #18181b;
+  --muted: #efeff1;
+  --muted-foreground: #5f5f68;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --accent: #e8e8eb;
+  --accent-foreground: #09090b;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --warning: #a14a07;
+  --warning-foreground: #ffffff;
+  --success: #036c4d;
+  --success-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+  --sidebar: #f1f1f3;
+  --hairline: rgb(24 24 27 / 0.1);
+  --brand-teal: #0f766e;
+  --brand-cyan: #0e7490;
+  --group-green: #16a34a;
+  --group-teal: #0d9488;
+  --group-blue: #2563eb;
+  --group-violet: #7c3aed;
+  --group-pink: #db2777;
+  --group-red: #dc2626;
+  --group-orange: #ea580c;
+  --group-yellow: #a16207;
+  --border: #e4e4e7;
+  --input: #8a8a93;
+  --ring: #036c4d;
+  --shadow-float: 0 16px 40px -16px rgb(24 24 27 / 0.18);
+  --scrim: rgb(9 9 11 / 0.4);
+  /* Light steps of the same palette, validated on #ffffff. Aqua, yellow and magenta fall below
+     3:1 on the surface; the ops charts carry a legend, labels and a table. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --series-other: #8a8a93;
+  color-scheme: light;
 }
 
 /* In a layer so Tailwind's border-* utilities can override it. */

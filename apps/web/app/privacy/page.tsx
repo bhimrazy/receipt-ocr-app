@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { gaMeasurementId, turnstileOn } from "@/lib/consent/env";
+import { newsletterEnabled } from "@/lib/env";
 import { logStorageName } from "@/lib/processors";
 import { parsePostHog } from "@/lib/telemetry/posthog-config";
 import { parseSentryDsn } from "@/lib/telemetry/sentry-config";
@@ -38,6 +39,11 @@ export default function PrivacyPage() {
             "Sign-in security: if you turn on two-step sign-in, the secret behind your authenticator app's codes and your backup codes, both encrypted. When you confirm it's you before an important change, a record of when, how (passkey, app code, backup code or emailed code), what it was for and the IP address, kept until you delete your account; an emailed code is stored only as a one-way hash and expires after 10 minutes.",
             "Passkeys: if you add one, its public key, a credential ID, the authenticator model when your device shares it, whether it syncs between your devices, and when you added it. Your fingerprint, face or device PIN never leave your device.",
             "Messages: if you write to us through the support button, your name, email address and message. We send one automatic reply to that address to confirm we got it (at most one a day per address); it contains your first name and topic, never your message, and the name and address used for it are deleted once it is sent.",
+            ...(newsletterEnabled
+              ? [
+                  "Product updates list: only if you ask for it, with the form on the home page or the unticked box at sign-up. Joining takes two steps: we email a link to the address you entered, and it is added to the list only when that link is used (it expires after 48 hours; until then we store nothing). The list holds your email address and whether you are subscribed, kept by our email delivery provider, and is used only to send occasional product updates (a few a year). Every email has an unsubscribe link. Unsubscribing keeps the address on the list marked as unsubscribed, so it isn't mailed again; to have it deleted, write to us through the support button. Having an account doesn't put you on the list.",
+                ]
+              : []),
             "Technical data: a session cookie that keeps you signed in and a few other necessary cookies (all listed in the cookie policy), server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors, and short-lived counters that limit how often we send account emails and contact-form replies to one address or from one IP address (each holds a one-way hash, not the address itself).",
           ],
         },
@@ -67,7 +73,8 @@ export default function PrivacyPage() {
             "Groq (GroqCloud API), only if we or your workspace turn it on: the receipt file is sent to a model Groq hosts, which scans it the same way. Groq doesn't keep the file or the result by default, but may log them for up to 30 days to keep the service reliable and to check for misuse, stored in the United States. On our own Groq account we turn on Groq's zero data retention setting, which stops that logging.",
             "OpenAI (OpenAI API), only if we or your workspace turn it on: the receipt file is sent to a model OpenAI hosts, which scans it the same way. OpenAI doesn't use data sent to its API to train its models unless a customer opts in, and we don't. It may keep requests and responses for up to 30 days to check for abuse, and longer where the law requires it or where that is reasonably necessary to protect its services or others from harm. We ask OpenAI not to store the response for reuse. Zero data retention is available only with OpenAI's prior approval and is not part of this setup.",
             "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
-            "An email delivery provider sends account emails such as password resets and invitations.",
+            "An email delivery provider sends account emails such as password resets and invitations" +
+              (newsletterEnabled ? ", and keeps the product updates list." : "."),
             "Paddle (Paddle.com Market Ltd), only when a workspace owner buys or manages Pro: Paddle is our reseller and the merchant of record for every order. It runs the checkout, takes the payment, charges the right sales tax or VAT, sends receipts and invoices, and handles refunds, under its own privacy policy. Paddle receives your email address, your payment details and your country or address for tax. We never see or store your card details. Paddle sends us the subscription's status, its plan and billing period, and its Paddle ids, which we keep to decide which workspaces are on Pro.",
             ...(logStorage
               ? [
@@ -87,7 +94,7 @@ export default function PrivacyPage() {
             "Google and GitHub, only if you choose to sign in with them.",
             ...(pageCounts
               ? [
-                  "Vercel Web Analytics: counts visits to our public pages (home, sign-in, sign-up and legal pages) without cookies. Vercel receives the page address without its query string, the referring site, and your IP address and browser details, which it uses to tell visits apart with a hash it discards after 24 hours. It never runs inside the app.",
+                  "Vercel Web Analytics: counts visits to our public pages (home, pricing, use-case pages, sign-in, sign-up and legal pages) without cookies. Vercel receives the page address without its query string, the referring site, and your IP address and browser details, which it uses to tell visits apart with a hash it discards after 24 hours. It never runs inside the app.",
                 ]
               : []),
             ...(googleAnalytics
@@ -97,7 +104,7 @@ export default function PrivacyPage() {
               : []),
             ...(turnstileOn
               ? [
-                  "Cloudflare Turnstile: to tell people from bots, the sign-up, sign-in, password reset and contact forms run a Cloudflare Turnstile check. Cloudflare receives your IP address and browser details such as user agent and screen settings, and may set a cookie, under its own terms.",
+                  "Cloudflare Turnstile: to tell people from bots, the sign-up, sign-in, password reset, contact and product updates forms run a Cloudflare Turnstile check. Cloudflare receives your IP address and browser details such as user agent and screen settings, and may set a cookie, under its own terms.",
                 ]
               : []),
             "Only you and the people you invite to your workspace can see its receipts. ReceiptOCR administrators can access an account only to handle a support request. If you lose your authenticator app and backup codes, an administrator can reset two-step sign-in for you after checking it's you; they never see your codes or the secret behind them.",

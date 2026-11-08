@@ -340,6 +340,8 @@ jobs:
       # Cloudflare's test site key is inlined at build time; its test secrets report example.com.
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
       TURNSTILE_ALLOWED_HOSTNAMES: example.com
+      # Shows the product-updates form (no mailer here, so nothing is sent).
+      RESEND_NEWSLETTER_SEGMENT_ID: ci-segment
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

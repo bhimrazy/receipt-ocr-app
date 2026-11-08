@@ -57,6 +57,7 @@ import {
   assertCanCreateWorkspace,
   assertBuyerStays,
   assertNoLiveSubscription,
+  assertMemberRoom,
   assertWorkspaceRole,
   limitInvitations,
   validateWorkspaceName,
@@ -82,6 +83,7 @@ import { errorFields, logger } from "./log";
 import { mailer } from "./mailer";
 import { isEmailChangeVerification, queueWelcomeEmail, welcomeAtCreation } from "./welcome";
 import { runtime } from "./runtime";
+import { wantsProductUpdates, requestProductUpdates } from "./newsletter";
 import { signUpMethod, track } from "./telemetry/analytics";
 import {
   DELETE_TOKEN_SECONDS,
@@ -545,6 +547,9 @@ export const auth = betterAuth({
           // Verified at creation (Google, GitHub) or nothing to verify: welcome now. Email sign-ups
           // that must verify are welcomed from afterEmailVerification.
           if (welcomeAtCreation(user, requireEmailVerification)) await queueWelcomeEmail(user.id);
+          if (ctx?.path === "/sign-up/email" && wantsProductUpdates(ctx.body)) {
+            await requestProductUpdates(user.email);
+          }
           // The method comes from the endpoint Better Auth ran, never from the request body.
           const provider = (ctx?.params as { id?: unknown } | undefined)?.id;
           track({
@@ -617,13 +622,21 @@ export const auth = betterAuth({
         },
         beforeUpdateOrganization: ({ organization }) =>
           validateWorkspaceName(organization, { required: false }),
-        beforeCreateInvitation: ({ invitation, inviter }) => {
+        beforeCreateInvitation: async ({ invitation, inviter }) => {
           assertWorkspaceRole(invitation.role);
+          await assertMemberRoom(invitation.organizationId, {
+            kind: "invite",
+            email: invitation.email,
+          });
           return limitInvitations(inviter.id);
         },
         // Accepting copies the stored role to a member row without beforeAddMember,
-        // so invitations stored before this check are re-checked here.
-        beforeAcceptInvitation: async ({ invitation }) => assertWorkspaceRole(invitation.role),
+        // so invitations stored before this check are re-checked here. The member
+        // limit is re-checked too: the plan may have changed since the invite.
+        beforeAcceptInvitation: async ({ invitation }) => {
+          assertWorkspaceRole(invitation.role);
+          await assertMemberRoom(invitation.organizationId, { kind: "accept" });
+        },
         beforeAddMember: async ({ member }) => assertWorkspaceRole(member.role),
         beforeUpdateMemberRole: async ({ newRole, member, user, organization }) => {
           assertWorkspaceRole(newRole);

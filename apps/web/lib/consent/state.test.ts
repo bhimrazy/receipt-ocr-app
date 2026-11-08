@@ -110,7 +110,18 @@ describe("what may run", () => {
 
 describe("config", () => {
   it("allows analytics on public pages only", () => {
-    for (const path of ["/", "/privacy", "/terms", "/cookies", "/sign-in", "/sign-up"]) {
+    for (const path of [
+      "/",
+      "/pricing",
+      "/refunds",
+      "/privacy",
+      "/terms",
+      "/cookies",
+      "/sign-in",
+      "/sign-up",
+      "/use-cases",
+      "/use-cases/expense-reports",
+    ]) {
       expect(isAnalyticsPath(path)).toBe(true);
     }
     for (const path of [
@@ -120,6 +131,9 @@ describe("config", () => {
       "/reset-password",
       "/accept-invitation/abc",
       "/sign-in/x",
+      "/use-cases/a/b",
+      "/use-cases/",
+      "/use-cases/X?y",
     ]) {
       expect(isAnalyticsPath(path)).toBe(false);
     }

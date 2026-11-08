@@ -1,20 +1,28 @@
 /**
  * Pages where analytics may run. Everything else is left out on purpose: /app and /admin titles
  * and URLs carry receipt and workspace ids, and the reset-password and invitation pages carry
- * tokens. Exact paths only; there is no pricing page yet (pricing is a section of /).
+ * tokens. Exact paths, plus the pages one level under each prefix (content pages, whose slugs are
+ * fixed copy and carry no ids).
  */
 export const ANALYTICS_PATH_LIST = [
   "/",
+  "/pricing",
+  "/refunds",
   "/privacy",
   "/terms",
   "/cookies",
   "/sign-in",
   "/sign-up",
+  "/use-cases",
 ] as const;
+export const ANALYTICS_PREFIX_LIST = ["/use-cases/"] as const;
 const ANALYTICS_PATHS = new Set<string>(ANALYTICS_PATH_LIST);
 
 export function isAnalyticsPath(pathname: string): boolean {
-  return ANALYTICS_PATHS.has(pathname);
+  if (ANALYTICS_PATHS.has(pathname)) return true;
+  return ANALYTICS_PREFIX_LIST.some(
+    (prefix) => pathname.startsWith(prefix) && /^[a-z0-9-]+$/.test(pathname.slice(prefix.length)),
+  );
 }
 
 /** Bump when the optional categories or what they do change; everyone is asked again. */

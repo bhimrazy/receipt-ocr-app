@@ -79,3 +79,24 @@ export function workspaceLimitMessage(plan: "free" | "pro", limit: number): stri
     ? `You own ${workspaces}, the most on Pro. Delete one, or use the support button if you need more.`
     : `Free accounts can own ${workspaces}. Upgrade a workspace you own to Pro to create another. A new workspace starts on Free.`;
 }
+
+/**
+ * Why a workspace can't take another member. `invite` is shown to whoever is
+ * inviting (an owner or admin, who can act on it); `accept` to the invitee.
+ */
+export function memberLimitMessage(
+  plan: "free" | "pro",
+  limit: number,
+  proLimit: number,
+  when: "invite" | "accept",
+): string {
+  const members = `${limit} ${limit === 1 ? "member" : "members"}`;
+  if (when === "accept") {
+    return plan === "pro"
+      ? `This workspace already has ${members}, the most on Pro. Ask its owner to make room.`
+      : `This workspace already has ${members}, the most on Free. Ask its owner to upgrade it to Pro, or to make room.`;
+  }
+  return plan === "pro"
+    ? `Pro workspaces have up to ${members}, counting pending invitations. Cancel an invitation or remove a member, or use the support button if you need more.`
+    : `Free workspaces have up to ${members}, counting pending invitations. Upgrade this workspace to Pro for up to ${proLimit}, or cancel an invitation or remove a member.`;
+}

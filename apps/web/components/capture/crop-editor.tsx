@@ -143,9 +143,10 @@ export function CropEditor({
 
   const polygon = edit.quad.map((p) => `${p.x * box.width},${p.y * box.height}`).join(" ");
 
+  // Pinned dark in either theme, so the handles and dimming match the canvas loupe literals.
   return (
     <div
-      className="relative flex size-full items-center justify-center overflow-hidden"
+      className="dark relative flex size-full items-center justify-center overflow-hidden"
       ref={stageRef}
     >
       <p className="sr-only" id={hintId}>

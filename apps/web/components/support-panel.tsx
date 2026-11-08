@@ -147,7 +147,7 @@ export default function SupportPanel({
     <div
       role="dialog"
       aria-labelledby={`${ids}-title`}
-      className="flex max-h-[calc(100dvh-5.5rem)] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl bg-card/95 shadow-2xl shadow-black/50 ring-1 ring-hairline backdrop-blur-xl motion-safe:animate-fade-up"
+      className="flex max-h-[calc(100dvh-5.5rem)] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl bg-card/95 shadow-2xl shadow-black/50 light:shadow-float ring-1 ring-hairline backdrop-blur-xl motion-safe:animate-fade-up"
     >
       <div className="relative shrink-0 border-b border-border bg-secondary/30 p-4 pr-14">
         <p className="text-sm font-semibold" id={`${ids}-title`}>
