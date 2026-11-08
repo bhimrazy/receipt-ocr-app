@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { ContactButton } from "@/components/contact-button";
 import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
+import { LandingInstallOffer } from "@/components/landing-install";
 import { ProductPreview } from "@/components/product-preview";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -458,6 +459,7 @@ export function LandingPage() {
 
       <SiteFooter />
       <SupportWidget />
+      <LandingInstallOffer />
     </div>
   );
 }

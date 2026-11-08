@@ -3,6 +3,7 @@
 import { MessageCircle, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentType } from "react";
+import { useHoldBottom } from "@/lib/bottom-slot";
 import {
   SUPPORT_OPEN_EVENT,
   type SupportOpenDetail,
@@ -25,6 +26,8 @@ export function SupportWidgetClient({ email }: { email?: string }) {
   const [topic, setTopic] = useState<SupportTopic>("getting-started");
   const launcherRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  // An open panel keeps the install sheet away.
+  useHoldBottom("support", open);
 
   const openWidget = useCallback((nextTopic?: SupportTopic) => {
     if (nextTopic) setTopic(nextTopic);
@@ -59,7 +62,7 @@ export function SupportWidgetClient({ email }: { email?: string }) {
   }, [openWidget]);
 
   return (
-    <div className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] right-[max(0.5rem,env(safe-area-inset-right))] z-40 flex flex-col items-end gap-3 sm:bottom-5 sm:right-5">
+    <div className="fixed right-[max(0.5rem,env(safe-area-inset-right))] bottom-[calc(var(--site-bottom-inset,0px)+max(0.5rem,env(safe-area-inset-bottom)))] z-40 flex flex-col items-end gap-3 sm:right-5 sm:bottom-[calc(var(--site-bottom-inset,0px)+1.25rem)]">
       {opened ? (
         failed ? (
           <div

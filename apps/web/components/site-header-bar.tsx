@@ -4,6 +4,7 @@ import { ArrowRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Brand } from "@/components/brand";
+import { useSiteInstall } from "@/components/landing-install";
 import type { NavLink } from "@/components/site-header";
 import { hasSignedInHint } from "@/lib/signed-in-hint";
 
@@ -32,6 +33,7 @@ export function SiteHeaderBar({
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const install = useSiteInstall();
 
   const closeMenu = useCallback((restoreFocus: boolean) => {
     setMenuOpen(false);
@@ -167,9 +169,27 @@ export function SiteHeaderBar({
                 </Link>
               </li>
             )}
+            {install.available && (
+              <li className="mt-1 border-t border-border pt-1">
+                <button
+                  className={join(
+                    "flex min-h-12 w-full items-center rounded-2xl px-4 text-left text-base text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground",
+                    focusRing,
+                  )}
+                  onClick={() => {
+                    closeMenu(false);
+                    void install.start();
+                  }}
+                  type="button"
+                >
+                  Get the app
+                </button>
+              </li>
+            )}
           </ul>
         </nav>
       )}
+      {install.guide}
     </header>
   );
 }

@@ -4,6 +4,7 @@ import { Brand } from "@/components/brand";
 import { GitHubIcon } from "@/components/github-icon";
 import { authorName, authorUrl, repoUrl } from "@/lib/site";
 import { CookieSettingsButton } from "@/components/consent/cookie-settings-button";
+import { GetTheAppEntry } from "@/components/landing-install";
 
 const columns: Array<{ title: string; links: Array<{ label: string; href: string }> }> = [
   {
@@ -69,6 +70,9 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
                     </Link>
                   </li>
                 ))}
+                {column.title === "Product" && (
+                  <GetTheAppEntry className={cn(linkClass, "cursor-pointer text-left")} />
+                )}
                 {column.title === "Legal" && (
                   <li>
                     <CookieSettingsButton

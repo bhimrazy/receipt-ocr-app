@@ -20,4 +20,8 @@ export const homeFaqs = [
     q: "Can I export what gets extracted?",
     a: "Yes. Any receipt exports as CSV with its line items or copies as JSON, and History exports every receipt that matches your filters as one CSV.",
   },
+  {
+    q: "Is there an iPhone or Android app?",
+    a: "ReceiptOCR is a progressive web app (PWA): install it from your browser and it opens from your home screen like any app, with no app store download. On Android and desktop Chrome use the Install button; on iPhone use Safari's Share → Add to Home Screen.",
+  },
 ];
