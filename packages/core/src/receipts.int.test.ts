@@ -248,10 +248,12 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       flush: async () => {},
       shutdown: async () => {},
     });
+    // Its own user, so the receipt doesn't change other tests' counts.
+    const d = await createUser("dana");
     try {
       const ingested = await run(
         ingestUpload({
-          scope: { ...a, impersonatedBy: `${tag}-admin` },
+          scope: { ...d, impersonatedBy: `${tag}-admin` },
           fileName: "support.jpg",
           body: JPEG,
           limits,
@@ -266,7 +268,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       remove();
     }
     const attempt = records.find((r) => r.event === "job.attempt");
-    expect(attempt).toMatchObject({ user_id: a.userId, impersonated_by: `${tag}-admin` });
+    expect(attempt).toMatchObject({ user_id: d.userId, impersonated_by: `${tag}-admin` });
+    await run(purgeReceiptFiles({ organizationId: d.organizationId }));
   });
 
   it("workspace isolation: org B cannot read, list, export, edit, retry or delete org A's receipt", async () => {
