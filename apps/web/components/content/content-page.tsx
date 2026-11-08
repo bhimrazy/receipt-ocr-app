@@ -2,7 +2,9 @@ import { Button } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { ArrowRight, ChevronRight, Plus } from "lucide-react";
 import Link from "next/link";
+import { HeroArt } from "@/components/content/content-art";
 import { ContentExampleView } from "@/components/content/content-example";
+import { FactTiles, IconTile, SectionBody } from "@/components/content/content-sections";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader, type NavLink } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
@@ -15,7 +17,12 @@ import {
   contentPath,
   pagesIn,
 } from "@/lib/content";
-import type { ContentCollection, ContentPage } from "@/lib/content/types";
+import type {
+  ContentCollection,
+  ContentPage,
+  ContentSection,
+  HeroArtName,
+} from "@/lib/content/types";
 import { jsonLdScript } from "@/lib/seo";
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -96,44 +103,69 @@ function Hero({
   eyebrow,
   h1,
   intro,
+  art,
+  fact,
 }: {
   trail: Array<{ name: string; path: string }>;
   eyebrow: string;
   h1: string;
   intro: string;
+  art: HeroArtName;
+  /** The page's own fact tile; hubs have none. */
+  fact?: string;
 }) {
   return (
     <section className="relative px-5 pb-14 pt-32 md:pt-40">
       <div className="grid-mask pointer-events-none absolute inset-0 opacity-30">
         <div className="receipt-grid absolute -inset-1" />
       </div>
-      <div className="relative mx-auto max-w-3xl">
-        <Breadcrumbs trail={trail} />
-        <p className="mt-6 font-mono text-xs uppercase tracking-[0.22em] text-primary">{eyebrow}</p>
-        <h1 className="mt-3 text-balance text-3xl font-bold tracking-tight md:text-5xl">{h1}</h1>
-        <p className="mt-5 text-pretty text-lg leading-8 text-muted-foreground">{intro}</p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <SignUpButton />
-          <Button asChild variant="outline">
-            <Link href="/#how">See how it works</Link>
-          </Button>
+      <div className="relative mx-auto max-w-5xl">
+        <div className="grid items-center gap-10 lg:grid-cols-[1fr_320px]">
+          <div>
+            <Breadcrumbs trail={trail} />
+            <p className="mt-6 font-mono text-xs uppercase tracking-[0.22em] text-primary">
+              {eyebrow}
+            </p>
+            <h1 className="mt-3 text-balance text-3xl font-bold tracking-tight md:text-5xl">
+              {h1}
+            </h1>
+            <p className="mt-5 max-w-2xl text-pretty text-lg leading-8 text-muted-foreground">
+              {intro}
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <SignUpButton />
+              <Button asChild variant="outline">
+                <Link href="/#how">See how it works</Link>
+              </Button>
+            </div>
+          </div>
+          <div className="hidden justify-center lg:flex">
+            <HeroArt name={art} />
+          </div>
         </div>
+        {fact ? (
+          <div className="mt-12">
+            <FactTiles fact={fact} />
+          </div>
+        ) : null}
       </div>
     </section>
   );
 }
 
-function PageCards({ pages, headingLevel }: { pages: ContentPage[]; headingLevel: "h2" | "h3" }) {
-  const Heading = headingLevel;
+function PageCards({ pages }: { pages: ContentPage[] }) {
   return (
     <ul className="grid gap-4 sm:grid-cols-2">
       {pages.map((page) => (
         <li key={page.slug}>
           <Card className="group relative h-full p-6 transition hover:border-primary/40">
-            <p className="font-mono text-2xs uppercase tracking-[0.18em] text-primary">
-              {page.navLabel}
-            </p>
-            <Heading className="mt-2 font-semibold">
+            <div className="flex items-center gap-3">
+              <IconTile icon={page.icon} />
+              <p className="font-mono text-2xs uppercase tracking-[0.18em] text-primary">
+                {page.navLabel}
+              </p>
+            </div>
+            <h3 className="mt-4 font-semibold">
               {/* The link covers the whole card; one tab stop per card. */}
               <Link
                 className={`rounded-sm after:absolute after:inset-0 after:rounded-lg ${focusRing}`}
@@ -141,7 +173,7 @@ function PageCards({ pages, headingLevel }: { pages: ContentPage[]; headingLevel
               >
                 {page.h1}
               </Link>
-            </Heading>
+            </h3>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{page.description}</p>
             <span className="mt-4 inline-flex items-center gap-1 text-sm text-primary">
               Read more <ArrowRight aria-hidden className="size-4" />
@@ -173,61 +205,62 @@ function Cta({ heading, body }: { heading: string; body: string }) {
   );
 }
 
-/** One content page: hero, sections, sample receipt, FAQ, related pages and a sign-up CTA. */
+const h2Class = "text-2xl font-bold tracking-tight";
+
+/** A section: heading and prose at reading width, then its layout at full width. */
+function Section({ section }: { section: ContentSection }) {
+  return (
+    <section>
+      <div className="max-w-3xl">
+        <h2 className={h2Class}>{section.heading}</h2>
+        {section.paragraphs?.map((paragraph) => (
+          <p className="mt-4 leading-7 text-muted-foreground" key={paragraph}>
+            {paragraph}
+          </p>
+        ))}
+        {section.bullets ? (
+          <ul className="mt-4 list-disc space-y-2 pl-5 leading-7 text-muted-foreground marker:text-primary">
+            {section.bullets.map((bullet) => (
+              <li key={bullet}>{bullet}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      {section.layout && section.layout !== "prose" ? (
+        <div className="mt-6">
+          <SectionBody section={section} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** One content page: hero, sections with the sample receipt early, FAQ, related pages and a CTA. */
 export function ContentPageView({ page }: { page: ContentPage }) {
   const collection = collectionById(page.collection);
   const related = page.related.map(contentPageAt).filter((p): p is ContentPage => Boolean(p));
+  const split = page.exampleAfter ?? 1;
   return (
     <Shell collection={collection} jsonLd={contentJsonLd(page)}>
       <Hero
+        art={page.heroArt}
         eyebrow={collection.label}
+        fact={page.fact}
         h1={page.h1}
         intro={page.intro}
         trail={contentBreadcrumbs(page)}
       />
 
       <div className="px-5">
-        <article className="mx-auto flex max-w-3xl flex-col gap-12 border-t border-border pt-12">
-          {page.sections.map((section) => (
-            <section key={section.heading}>
-              <h2 className="text-2xl font-bold tracking-tight">{section.heading}</h2>
-              {section.paragraphs.map((paragraph) => (
-                <p className="mt-4 leading-7 text-muted-foreground" key={paragraph}>
-                  {paragraph}
-                </p>
-              ))}
-              {section.steps ? (
-                <ol className="mt-6 flex flex-col gap-4">
-                  {section.steps.map((step, index) => (
-                    <li className="flex gap-4" key={step.title}>
-                      <span
-                        aria-hidden
-                        className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 font-mono text-sm font-bold text-primary"
-                      >
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <div>
-                        <h3 className="font-semibold">{step.title}</h3>
-                        <p className="mt-1 leading-7 text-muted-foreground">{step.body}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
-              {section.bullets ? (
-                <ul className="mt-4 list-disc space-y-2 pl-5 leading-7 text-muted-foreground marker:text-primary">
-                  {section.bullets.map((bullet) => (
-                    <li key={bullet}>{bullet}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </section>
+        <article className="mx-auto flex max-w-5xl flex-col gap-16 border-t border-border pt-14">
+          {page.sections.slice(0, split).map((section) => (
+            <Section key={section.heading} section={section} />
           ))}
 
           {page.example ? (
             <section aria-labelledby="example-heading">
               <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">Example</p>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight" id="example-heading">
+              <h2 className={`mt-2 ${h2Class}`} id="example-heading">
                 {page.example.heading}
               </h2>
               <div className="mt-6">
@@ -236,8 +269,12 @@ export function ContentPageView({ page }: { page: ContentPage }) {
             </section>
           ) : null}
 
-          <section aria-labelledby="faq-heading">
-            <h2 className="text-2xl font-bold tracking-tight" id="faq-heading">
+          {page.sections.slice(split).map((section) => (
+            <Section key={section.heading} section={section} />
+          ))}
+
+          <section aria-labelledby="faq-heading" className="max-w-3xl">
+            <h2 className={h2Class} id="faq-heading">
               Questions
             </h2>
             {/* Native disclosure: no client JS, and every answer is in the HTML. */}
@@ -259,11 +296,11 @@ export function ContentPageView({ page }: { page: ContentPage }) {
 
           {related.length > 0 ? (
             <section aria-labelledby="related-heading">
-              <h2 className="text-2xl font-bold tracking-tight" id="related-heading">
+              <h2 className={h2Class} id="related-heading">
                 Related {collection.label.toLowerCase()}
               </h2>
               <div className="mt-6">
-                <PageCards headingLevel="h3" pages={related} />
+                <PageCards pages={related} />
               </div>
               <p className="mt-6 text-sm">
                 <Link
@@ -288,6 +325,7 @@ export function ContentHubView({ collection }: { collection: ContentCollection }
   return (
     <Shell collection={collection} jsonLd={collectionJsonLd(collection)}>
       <Hero
+        art={collection.heroArt}
         eyebrow={collection.label}
         h1={collection.h1}
         intro={collection.intro}
@@ -297,9 +335,9 @@ export function ContentHubView({ collection }: { collection: ContentCollection }
         ]}
       />
       <div className="px-5">
-        <div className="mx-auto max-w-3xl border-t border-border pt-12">
+        <div className="mx-auto max-w-5xl border-t border-border pt-12">
           <h2 className="sr-only">All {collection.label.toLowerCase()}</h2>
-          <PageCards headingLevel="h3" pages={pagesIn(collection.id)} />
+          <PageCards pages={pagesIn(collection.id)} />
         </div>
       </div>
       <Cta

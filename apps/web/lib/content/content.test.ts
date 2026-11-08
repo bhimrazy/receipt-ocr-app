@@ -9,26 +9,29 @@ import {
   contentPageAt,
   contentPages,
   contentPath,
-  fullTitle,
   pagesIn,
 } from "@/lib/content";
 import type { ContentPage } from "@/lib/content/types";
 import { llmsFullTxt, llmsTxt } from "@/lib/llms";
-import { homeTitle, siteNodeIds } from "@/lib/seo";
+import { fullTitle, homeTitle, siteNodeIds } from "@/lib/seo";
 import { PRODUCTION_ORIGIN } from "@/lib/seo-hosts";
 
 const abs = (path: string) => new URL(path, PRODUCTION_ORIGIN).toString();
 
-/** Every word a visitor reads in the page body. */
+/** Every word a visitor reads in the page body, whatever layout carries it. */
 function prose(page: ContentPage): string {
   return [
     page.h1,
     page.intro,
+    page.fact,
     ...page.sections.flatMap((s) => [
       s.heading,
-      ...s.paragraphs,
-      ...(s.steps ?? []).flatMap((step) => [step.title, step.body]),
+      ...(s.paragraphs ?? []),
       ...(s.bullets ?? []),
+      ...(s.steps ?? []).flatMap((step) => [step.title, step.body]),
+      ...(s.tiles ?? []).flatMap((tile) => [tile.title, tile.body, tile.chip ?? ""]),
+      ...(s.does ?? []),
+      ...(s.doesnt ?? []),
     ]),
     page.example?.heading ?? "",
     page.example?.caption ?? "",
@@ -113,6 +116,41 @@ describe("content pages", () => {
     },
   );
 
+  it.each(contentPages.map((p) => [contentPath(p), p] as const))(
+    "%s: layouts carry their content, step bodies stay short",
+    (path, page) => {
+      for (const section of page.sections) {
+        const where = `${path} / ${section.heading}`;
+        for (const step of section.steps ?? []) {
+          expect(words(step.body).length, `${where} / ${step.title}`).toBeLessThanOrEqual(25);
+        }
+        if (section.layout === "steps") expect(section.steps?.length, where).toBeGreaterThan(1);
+        if (section.layout === "tiles") expect(section.tiles?.length, where).toBeGreaterThan(1);
+        if (section.layout === "fieldmap") expect(section.fieldmap, where).toBeDefined();
+        if (section.layout === "does-doesnt") {
+          for (const list of [section.does ?? [], section.doesnt ?? []]) {
+            expect(list.length, where).toBeGreaterThanOrEqual(3);
+            expect(list.length, where).toBeLessThanOrEqual(5);
+          }
+        }
+      }
+      expect(page.exampleAfter ?? 1).toBeLessThanOrEqual(page.sections.length);
+    },
+  );
+
+  it("the field map points each CSV column at a real receipt line", () => {
+    for (const page of contentPages) {
+      for (const section of page.sections) {
+        const map = section.fieldmap;
+        if (!map) continue;
+        for (const field of map.fields) {
+          if (field.from !== undefined) expect(map.lines[field.from], field.name).toBeDefined();
+          else expect(field.note, field.name).toBeTruthy();
+        }
+      }
+    }
+  });
+
   // A keyword-swapped clone shares most of its vocabulary with the original.
   it("pages are distinct, not clones of each other", () => {
     const sets = contentPages.map((p) => new Set(words(prose(p)).filter((w) => w.length > 3)));
@@ -165,7 +203,18 @@ describe("content JSON-LD", () => {
     "%s: breadcrumb, WebPage tied to the site, and an FAQPage matching the visible FAQ",
     (path, page) => {
       const graph = contentJsonLd(page)["@graph"] as Array<Record<string, unknown>>;
-      expect(graph.map((n) => n["@type"])).toEqual(["BreadcrumbList", "WebPage", "FAQPage"]);
+      expect(graph.map((n) => n["@type"])).toEqual([
+        "BreadcrumbList",
+        "WebPage",
+        "FAQPage",
+        "WebSite",
+        "WebApplication",
+      ]);
+      // Every @id the graph points at is defined in the same graph.
+      const ids = new Set(graph.map((n) => n["@id"]));
+      for (const ref of JSON.stringify(graph).matchAll(/\{"@id":"([^"]+)"\}/g)) {
+        expect(ids.has(ref[1]), ref[1]).toBe(true);
+      }
       const [crumbs, webPage, faq] = graph as [
         { itemListElement: Array<{ position: number; item: string; name: string }> },
         Record<string, unknown>,

@@ -268,25 +268,33 @@ page adds `FAQPage` from `lib/home-faqs.ts`; Google no longer shows FAQ rich res
 Search landing pages (use cases now; guides and comparisons next) are typed TypeScript data rendered by one layout:
 no MDX and no new dependency.
 
-| Piece                                                                                             | What it does                                                                                                                                                                   |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`lib/content/types.ts`](../../apps/web/lib/content/types.ts)                                     | `ContentCollection` (a hub such as `/use-cases`) and `ContentPage` (title, description, h1, sections, sample receipt, FAQs, related paths, CTA, `updated`)                     |
-| [`lib/content/use-cases.ts`](../../apps/web/lib/content/use-cases.ts)                             | The use-case collection and its four pages                                                                                                                                     |
-| [`lib/content/index.ts`](../../apps/web/lib/content/index.ts)                                     | The registry (`contentCollections`, `contentPages`) and everything built from it: metadata through `pageMetadata`, JSON-LD, sitemap entries, llms.txt sections, footer columns |
-| [`components/content/content-page.tsx`](../../apps/web/components/content/content-page.tsx)       | `ContentPageView` and `ContentHubView`: the landing page's header, footer and styling, breadcrumbs, native `<details>` FAQ, related cards and a sign-up CTA                    |
-| [`components/content/content-example.tsx`](../../apps/web/components/content/content-example.tsx) | A sample receipt laid out like the receipt page, with Copy JSON or the History CSV from the real `receiptsToCsv`                                                               |
+| Piece                                                                                               | What it does                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`lib/content/types.ts`](../../apps/web/lib/content/types.ts)                                       | `ContentCollectionId` (literal union), `ContentCollection` (a hub such as `/use-cases`) and `ContentPage` (title, description, h1, icon, hero art, fact tile, sections, sample receipt, FAQs, related paths, CTA, `updated`) |
+| [`lib/content/use-cases.ts`](../../apps/web/lib/content/use-cases.ts)                               | The use-case collection and its four pages                                                                                                                                                                                   |
+| [`lib/content/index.ts`](../../apps/web/lib/content/index.ts)                                       | The registry (`contentCollections`, `contentPages`), `contentPageAt(path)`, and everything built from it: metadata through `pageMetadata`, JSON-LD, sitemap entries, llms.txt sections, footer columns                       |
+| [`components/content/content-page.tsx`](../../apps/web/components/content/content-page.tsx)         | `ContentPageView` and `ContentHubView`: the landing page's header, footer and styling, breadcrumbs, native `<details>` FAQ, related cards and a sign-up CTA                                                                  |
+| [`components/content/content-sections.tsx`](../../apps/web/components/content/content-sections.tsx) | Section layouts and the fact tiles under the hero                                                                                                                                                                            |
+| [`components/content/content-art.tsx`](../../apps/web/components/content/content-art.tsx)           | Inline SVG hero art (`pipeline`, `trip`, `client`, `tax-year`, `team`), tile diagrams and field-map connectors; decorative, `aria-hidden`, theme tokens only                                                                 |
+| [`components/content/content-example.tsx`](../../apps/web/components/content/content-example.tsx)   | A sample receipt laid out like the receipt page (its checks, Details, Line items), with Copy JSON or the History CSV from the real `receiptsToCsv`                                                                           |
+
+A section's `paragraphs` render at reading width; its `layout` then adds `steps` (numbered icon cards), `tiles` (icon
+cards with an optional chip and three-node diagram), `does-doesnt` (two lists) or `fieldmap` (printed receipt lines
+joined to CSV columns). The sample receipt comes after the first section, or after `exampleAfter` sections.
 
 Each page emits `BreadcrumbList`, `WebPage` (`isPartOf` the home page's `WebSite`, `about` its `WebApplication`, by
-`@id`) and `FAQPage` built from the same `faqs` array the page renders. A hub emits `CollectionPage` with an
-`ItemList` of its pages.
+`@id`), `FAQPage` built from the same `faqs` array the page renders, and short `WebSite` and `WebApplication` nodes with
+those `@id`s so every reference resolves inside the page's graph. A hub emits `CollectionPage` with an `ItemList` of its
+pages. Titles go through `fullTitle` in `lib/seo.ts`, the same helper `pageMetadata` uses.
 
 To add a collection, such as guides at `/guides/<slug>`:
 
-1. Write `lib/content/guides.ts` with a `ContentCollection` and its `ContentPage[]`, and add both to the registry in
-   `lib/content/index.ts`. The sitemap, llms.txt and a footer column pick them up.
+1. Add the id to `ContentCollectionId`, write `lib/content/guides.ts` with a `ContentCollection` and its
+   `ContentPage[]`, and add both to the registry in `lib/content/index.ts`. The sitemap, llms.txt and a footer column
+   pick them up; bump the footer grid's column count in `components/site-footer.tsx`.
 2. Add `app/guides/page.tsx` (`ContentHubView`, `collectionMetadata`) and `app/guides/[slug]/page.tsx`
-   (`generateStaticParams` from `pagesIn("guides")`, `dynamicParams = false`, `contentMetadata`, `ContentPageView`).
-   Copy the use-case routes.
+   (`generateStaticParams` from `pagesIn("guides")`, `dynamicParams = false`, `contentPageAt`, `contentMetadata`,
+   `ContentPageView`). Copy the use-case routes.
 3. Add the paths to `CONTENT` in `e2e/seo.spec.ts` and to the sitemap list in `lib/seo-routes.test.ts`.
 
 Rules, checked by [`lib/content/content.test.ts`](../../apps/web/lib/content/content.test.ts):
@@ -295,10 +303,12 @@ Rules, checked by [`lib/content/content.test.ts`](../../apps/web/lib/content/con
 - `updated` is the page's own `YYYY-MM-DD` date (no time), used for the sitemap's `lastModified` and the
   `WebPage`'s `dateModified`. It is never the build time or a shared constant; bump it only when that page's visible
   content changes. The test rejects invalid dates and dates in the future.
-- 500 to 900 words of body copy, 3 to 5 FAQs, related links that resolve, and low word overlap between pages, so a
+- 500 to 900 words of visible copy (prose, steps, tiles, lists and FAQs), 3 to 5 FAQs, step bodies of at most 25
+  words, 3 to 5 items in each does / doesn't list, related links that resolve, and low word overlap between pages, so a
   page can't be a keyword-swapped copy of another.
-- Only what the product does: no Excel or .xlsx, no API, no integrations. Sample receipts must add up the way the
-  receipt page checks them.
+- Only what the product does: no Excel or .xlsx, no API, no integrations. "Needs review" means overall confidence
+  below 90% (`NEEDS_REVIEW_BELOW`); line and totals checks are on the receipt page. Sample receipts must add up the way
+  the receipt page checks them.
 
 ## Queue drain route
 

@@ -1,6 +1,6 @@
 import { Card } from "@receipt-ocr/ui/components/card";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { CircleAlert, ReceiptText, TriangleAlert } from "lucide-react";
+import { ReceiptText, TriangleAlert } from "lucide-react";
 import { ConfidenceBadge } from "@/components/receipt-status";
 import { exampleCsv } from "@/lib/content/example-csv";
 import type { ContentExample } from "@/lib/content/types";
@@ -15,12 +15,33 @@ function Field({ label, mono, children }: { label: string; mono?: boolean; child
   );
 }
 
+/** The receipt page's confidence checks (`checksFor` in receipt-result.tsx), one item each. */
+function checksFor(receipt: ContentExample["extraction"], noun: string): string[] {
+  const checks: string[] = [];
+  const level = confidenceLevel(receipt.confidence);
+  if (level === "review" || level === "check") {
+    checks.push(
+      `Overall confidence is ${formatConfidence(receipt.confidence)}. Compare the merchant, date and total with the ${noun}.`,
+    );
+  }
+  const low = receipt.items.filter((item) => confidenceLevel(item.confidence) === "review").length;
+  if (low > 0) {
+    checks.push(
+      low === 1
+        ? "1 line was hard to read. It's marked in Line items."
+        : `${low} lines were hard to read. They're marked in Line items.`,
+    );
+  }
+  return checks;
+}
+
 /** A sample receipt laid out like the receipt page: checks, Details, Line items, then an export. */
 export function ContentExampleView({ example }: { example: ContentExample }) {
   const receipt = example.extraction;
   const money = (n: number | null) =>
     n === null ? "—" : (formatMoney(n, receipt.currency) ?? "—");
-  const lowLines = receipt.items.filter((item) => confidenceLevel(item.confidence) === "review");
+  const noun = example.fileName.toLowerCase().endsWith(".pdf") ? "PDF" : "photo";
+  const checks = checksFor(receipt, noun);
   const exportLabel = example.exportView === "json" ? "Copy JSON" : "History CSV export";
   const exportText =
     example.exportView === "json" ? JSON.stringify(receipt, null, 2) : exampleCsv(example);
@@ -34,16 +55,20 @@ export function ContentExampleView({ example }: { example: ContentExample }) {
         <ConfidenceBadge value={receipt.confidence} />
       </div>
 
-      {lowLines.length > 0 ? (
-        <Card className="flex gap-3 border-warning/30 bg-warning/5 p-4 text-sm">
-          <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
-          <p>
-            Overall confidence is {formatConfidence(receipt.confidence)}.{" "}
-            {lowLines.length === 1
-              ? "1 line was hard to read. It's marked in Line items."
-              : `${lowLines.length} lines were hard to read. They're marked in Line items.`}
-          </p>
-        </Card>
+      {checks.length > 0 ? (
+        <div className="flex gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4">
+          <TriangleAlert aria-hidden className="size-5 shrink-0 text-warning max-sm:hidden" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-warning">
+              Check this receipt before you export it
+            </p>
+            <ul className="mt-2 flex list-disc flex-col gap-1 pl-4 text-sm text-muted-foreground marker:text-warning">
+              {checks.map((check) => (
+                <li key={check}>{check}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -111,7 +136,7 @@ export function ContentExampleView({ example }: { example: ContentExample }) {
                       {low ? (
                         <span className="mt-1 flex items-center gap-1 text-xs text-warning">
                           <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
-                          Check this line against the photo
+                          Check this line against the {noun}
                         </span>
                       ) : null}
                     </td>

@@ -7,9 +7,10 @@ export const useCasesCollection: ContentCollection = {
   title: "Receipt Scanner Use Cases",
   description:
     "How expense claimants, bookkeepers, freelancers and small business teams use ReceiptOCR to turn receipt photos and PDFs into CSV rows they can check.",
-  h1: "Who uses ReceiptOCR, and how",
+  h1: "Receipt scanner use cases: who uses ReceiptOCR, and how",
   intro:
     "The same extraction runs for everyone: merchant, date, category, line items, tax, tip and total, with a confidence score for the receipt and for each line. What changes is what happens next. Pick the workflow closest to yours.",
+  heroArt: "pipeline",
   updated: "2026-11-08",
 };
 
@@ -18,6 +19,9 @@ export const useCasePages: ContentPage[] = [
     collection: "use-cases",
     slug: "expense-reports",
     navLabel: "Expense reports",
+    icon: "briefcase",
+    heroArt: "trip",
+    fact: "Groups per trip",
     title: "Receipt Scanner for Expense Reports",
     description:
       "Scan trip and work receipts as you spend, group them per trip, check the flagged ones, then export one CSV to attach to your company's expense claim.",
@@ -28,39 +32,58 @@ export const useCasePages: ContentPage[] = [
     sections: [
       {
         heading: "From the receipt in your hand to a claim-ready CSV",
+        layout: "steps",
         paragraphs: [
           "The work is spread across the trip instead of saved for the end, and the slow part, reading every line and typing it, is done for you.",
         ],
         steps: [
           {
+            icon: "camera",
             title: "Photograph it before you lose it",
-            body: "Open ReceiptOCR on your phone and take a photo, or upload a PDF from your email. You can install it from the browser as a web app, so it opens from your home screen. Photos your browser can open are re-encoded before upload, which also removes the camera's location data.",
+            body: "Take a photo on your phone, or upload the PDF from your email. ReceiptOCR installs from the browser as a web app.",
           },
           {
-            title: "Put the trip's receipts in one group",
-            body: 'Create a group such as "Client visit, Toronto" and add each receipt to it. A group is a label, so a receipt can also sit in a second group, for example a project code.',
+            icon: "folder-plus",
+            title: "Put the trip in one group",
+            body: 'Create a group such as "Client visit, Toronto" and add each receipt. A receipt can also sit in a second group, like a project code.',
           },
           {
+            icon: "search-check",
             title: "Check what was flagged",
-            body: "The Needs review filter lists receipts with a low confidence score or totals that do not add up. Open one, compare it with the photo, and correct the merchant, date, category, currency or any amount. Your corrections are what gets exported.",
+            body: "The Needs review filter lists receipts below 90% confidence. Compare each with its photo and correct any field; corrections are what gets exported.",
           },
           {
+            icon: "file-spreadsheet",
             title: "Export the trip",
-            body: "In History, filter by the group (and a date range if you like) and export. You get one CSV with a row per receipt: date, merchant, category, currency, subtotal, tax, tip, total and confidence. Attach it, with the receipt files if your company asks for them, to whatever claim form or tool your company uses.",
+            body: "Filter History by the group and export one CSV: date, merchant, category, currency, subtotal, tax, tip, total and confidence per receipt.",
           },
         ],
       },
       {
         heading: "Why tip and tax are separate columns",
         paragraphs: [
-          "Many expense policies treat tips, tax and the meal itself differently, and some refund tax only with an itemised receipt. ReceiptOCR reads the printed tax, tip and total as separate fields, so you do not have to work them out from the total. A service charge is not counted as a tip, and a tip is only recorded when it is printed or written on the receipt.",
-          "When a restaurant receipt has line items, each one is listed with its quantity and price. That helps when a policy excludes some items, such as alcohol, and you need to show what the rest cost.",
+          "Many expense policies treat tips, tax and the meal itself differently, so ReceiptOCR reads the printed tax, tip and total as separate fields, and a service charge is never counted as a tip.",
+          "When a restaurant receipt has line items, each one is listed with its quantity and price, which helps when a policy excludes some items, such as alcohol, and you need to show what the rest cost.",
         ],
       },
       {
-        heading: "What ReceiptOCR does not do for expense reports",
+        heading: "What it does for expense reports, and what it leaves to your company",
+        layout: "does-doesnt",
         paragraphs: [
-          "ReceiptOCR is where receipts are read and checked, not an expense management system. It has no approval steps, no reimbursements, no per-diem or mileage rules and no connection to your company's expense software. It also does not convert currencies: each receipt keeps the currency it was paid in. The export is a plain CSV that any spreadsheet app opens, so it fits whatever process your company already has.",
+          "ReceiptOCR is where receipts are read and checked, not an expense management system. The export is a plain CSV that any spreadsheet app opens, so it fits whatever process your company already has.",
+        ],
+        does: [
+          "Scans receipts on your phone, from a photo or a PDF",
+          "Keeps each trip's receipts together in a group",
+          "Flags receipts below 90% confidence for review",
+          "Exports the trip as one CSV, with each original photo or PDF on its receipt page",
+        ],
+        doesnt: [
+          "Approval steps",
+          "Reimbursements",
+          "Per-diem or mileage rules",
+          "Currency conversion",
+          "A connection to your company's expense software",
         ],
       },
     ],
@@ -132,7 +155,7 @@ export const useCasePages: ContentPage[] = [
       },
       {
         q: "What if a receipt is faded or the photo is blurry?",
-        a: "A receipt that could not be read says so and offers a retry, and a few failed reads do not count towards your scan allowance. Receipts that were read but with low confidence are flagged for review, with the hard-to-read lines marked.",
+        a: "A receipt that could not be read says so and offers a retry, and a few failed reads do not count towards your scan allowance. A receipt that was read with low confidence shows up under Needs review, and its page marks the lines that were hard to read.",
       },
     ],
     related: ["/use-cases/small-businesses", "/use-cases/freelancers-taxes"],
@@ -145,50 +168,101 @@ export const useCasePages: ContentPage[] = [
     collection: "use-cases",
     slug: "bookkeeping",
     navLabel: "Bookkeepers & accountants",
+    icon: "calculator",
+    heroArt: "client",
+    fact: "VAT or sales tax",
     title: "Receipt OCR for Bookkeepers and Accountants",
     description:
       "Client receipts become CSV rows with subtotal, VAT or sales tax, total, category and a confidence score, plus a Needs review list of what to check first.",
     h1: "Receipt data entry for bookkeepers, with the checking built in",
     intro:
-      "Clients send receipts as phone photos, scanned PDFs and crumpled paper. Typing them in is slow, and an OCR tool that reads them without saying how sure it is only moves the work to checking everything. ReceiptOCR gives every receipt and every line a confidence score and flags totals that do not add up, so you check the receipts that need it and sample the rest.",
+      "Clients send receipts as phone photos, scanned PDFs and crumpled paper. Typing them in is slow, and an OCR tool that reads them without saying how sure it is only moves the work to checking everything. ReceiptOCR gives every receipt and every line a confidence score, so you check the receipts that need it and sample the rest.",
     updated: "2026-11-08",
     sections: [
       {
-        heading: "A workflow for client receipts",
+        heading: "Two ways to work with client receipts",
+        layout: "tiles",
         paragraphs: [
-          "Receipts belong to a workspace, and everyone in a workspace sees the same history. That gives two ways to work with clients.",
+          "Receipts belong to a workspace, and everyone in a workspace sees the same history.",
         ],
-        bullets: [
-          "The client creates a workspace and invites you. They upload from their phone, you review and export, and the workspace switcher moves you between clients.",
-          "You keep one workspace and make a group for each client. You upload what clients send you and filter History by the client's group when you export.",
+        tiles: [
+          {
+            icon: "building",
+            title: "Client's workspace invites you",
+            body: "The client uploads from their phone; you review and export, and switch between clients from the menu.",
+            diagram: ["Client", "Workspace", "You"],
+          },
+          {
+            icon: "tags",
+            title: "Your workspace, one group per client",
+            body: "You upload what clients send and filter History by the client's group when you export.",
+            diagram: ["You", "Group", "CSV"],
+          },
         ],
       },
       {
-        heading: "Fields that match how receipts are booked",
+        heading: "From printed lines to CSV columns",
+        layout: "fieldmap",
         paragraphs: [
-          "Each receipt gets a merchant (the trading name, not the legal company name), a transaction date, one of twelve spending categories, an ISO currency code, and the subtotal, tax, tip and total as printed. Tax is the sum of every tax amount printed on the receipt, such as VAT, GST, or state and local sales tax, whether it was added on top or already included in the prices. Service charges, discounts and rounding are not counted as tax.",
-          "Line items keep their printed text, quantity, unit price and line total. A discount printed under an item is subtracted from that item rather than listed as a line of its own.",
+          "Each receipt gets a merchant (the trading name, not the legal company name), a date, one of twelve spending categories, a currency, and the subtotal, tax, tip and total as printed. Tax is every printed VAT, GST or sales tax amount, whether added on top or already included in the prices.",
         ],
+        fieldmap: {
+          lines: [
+            { text: "BÜROWELT" },
+            { text: "21.10.2026  14:32" },
+            { text: "5x Kopierpapier A4", amount: "24,95" },
+            { text: "1x Toner TN-2420", amount: "64,90" },
+            { text: "10x Ordner breit", amount: "14,90" },
+            { text: "Netto", amount: "88,03" },
+            { text: "MwSt 19%", amount: "16,72" },
+            { text: "Summe EUR", amount: "104,75" },
+            { text: "Vielen Dank" },
+          ],
+          fields: [
+            { name: "merchant", value: "Bürowelt", from: 0 },
+            { name: "receipt_date", value: "2026-10-21", from: 1 },
+            { name: "category", value: "Office", note: "from the items" },
+            { name: "currency", value: "EUR", from: 7 },
+            { name: "subtotal", value: "88.03", from: 5 },
+            { name: "tax", value: "16.72", from: 6 },
+            { name: "tip", value: "", note: "none printed" },
+            { name: "total", value: "104.75", from: 7 },
+            { name: "confidence", value: "0.93", note: "how legible" },
+          ],
+        },
       },
       {
         heading: "Checking before it reaches the books",
         paragraphs: [
-          'The History list has a Needs review filter for receipts whose overall confidence is low or whose amounts do not add up to the printed total. On the receipt page, lines that were hard to read are marked, and a note says which amounts disagree, for example "The amounts add up to €104.20, but the total says €104.75". You correct the header fields (merchant, date, category, currency, subtotal, tax, tip and total) and the corrected values are what gets exported. Line items cannot be edited yet.',
+          'The History list has a Needs review filter for receipts whose overall confidence is below 90%. On the receipt page, lines that were hard to read are marked, and a note says when the amounts disagree, for example "The amounts add up to €104.20, but the total says €104.75". You correct the header fields (merchant, date, category, currency, subtotal, tax, tip and total) and the corrected values are what gets exported. Line items cannot be edited yet.',
           "The confidence column is in the export too, so you can sort by it in a spreadsheet and look at the lowest first.",
         ],
       },
       {
-        heading: "The export, and what it is not",
+        heading: "What you get, and what stays with you",
+        layout: "does-doesnt",
         paragraphs: [
-          "History exports every receipt that matches the current filters (search, status, category, receipt date range and groups) as one CSV with a row per receipt. A single receipt also exports its line items as CSV, and Copy JSON gives the full extraction. Cells that start with =, +, - or @ are escaped so a merchant name cannot run as a formula in a spreadsheet.",
-          "ReceiptOCR does not connect to accounting software, does not write spreadsheet files other than CSV, and does not decide how a receipt should be booked or whether it is deductible. It prepares clean, checked data for your own import or review.",
+          "ReceiptOCR prepares clean, checked data for your own import or review. Booking it is still your work.",
+        ],
+        does: [
+          "Reads VAT, GST or sales tax as printed, added on top or included",
+          "Exports any filtered set (search, status, category, dates, groups) as one CSV",
+          "Copies the full extraction of a receipt as JSON",
+          "Escapes cells starting with =, +, - or @ so a merchant name cannot run as a formula",
+        ],
+        doesnt: [
+          "Connect to accounting software",
+          "Write spreadsheet files other than CSV",
+          "Decide how a receipt should be booked",
+          "Decide whether an expense is deductible",
         ],
       },
     ],
+    exampleAfter: 2,
     example: {
       heading: "An office supplies receipt with VAT included",
       caption:
-        "A receipt with VAT included in the prices: the net subtotal and the VAT are printed, so subtotal plus tax equals the total. Below, the client's receipts for the month as a History CSV.",
+        "The receipt above as the receipt page shows it: the net subtotal and the VAT are printed, so subtotal plus tax equals the total. Below, the client's receipts for the month as a History CSV.",
       fileName: "client_buerowelt.pdf",
       extraction: {
         merchant: "Bürowelt",
@@ -274,7 +348,7 @@ export const useCasePages: ContentPage[] = [
       },
       {
         q: "How do I know which receipts to check?",
-        a: "Use the Needs review filter in History, which lists receipts with low confidence or totals that do not add up. Each receipt and each line has its own score, and the confidence column is included in the CSV.",
+        a: "Use the Needs review filter in History, which lists receipts with overall confidence below 90%. Each receipt and each line has its own score, the confidence column is in the CSV, and each receipt's page points out lines that were hard to read and totals that do not add up.",
       },
     ],
     related: ["/use-cases/small-businesses", "/use-cases/freelancers-taxes"],
@@ -287,6 +361,9 @@ export const useCasePages: ContentPage[] = [
     collection: "use-cases",
     slug: "freelancers-taxes",
     navLabel: "Freelancers & taxes",
+    icon: "receipt",
+    heroArt: "tax-year",
+    fact: "Any tax year",
     title: "Receipt Tracker for Freelancers' Tax Records",
     description:
       "Freelancers: scan business receipts through the year, filter by your own tax year's dates and export one CSV of expenses for your tax return or accountant.",
@@ -297,25 +374,30 @@ export const useCasePages: ContentPage[] = [
     sections: [
       {
         heading: "A little every week instead of all at once",
+        layout: "steps",
         paragraphs: [
           "Most of the work in freelance bookkeeping is remembering. A habit of scanning receipts when they arrive replaces a long search through email, bags and drawers later.",
         ],
         steps: [
           {
+            icon: "camera",
             title: "Scan when you pay",
-            body: "Photograph a paper receipt or upload the PDF that came by email. HEIC photos from an iPhone, JPEG, PNG, WebP and PDF all work.",
+            body: "Photograph a paper receipt or upload the PDF that came by email. HEIC, JPEG, PNG, WebP and PDF all work.",
           },
           {
+            icon: "tags",
             title: "Let it sort by category",
-            body: "Each receipt gets one of twelve categories, such as Software, Equipment, Travel or Meals. Change it if it is wrong, and use a group to mark receipts that are personal or that belong to one client.",
+            body: "Each receipt gets one of twelve categories, such as Software or Travel. Change it if it is wrong, or add a group per client.",
           },
           {
+            icon: "calendar-range",
             title: "Filter by your tax year",
-            body: "Tax years start on different dates in different countries. History filters by receipt date, so you choose the first and last day of your own tax year and see only those receipts.",
+            body: "Tax years start on different dates in different countries, so choose the first and last day of yours in History.",
           },
           {
+            icon: "file-spreadsheet",
             title: "Export and hand over",
-            body: "Export the filtered list as one CSV, with the date, merchant, category, currency, subtotal, tax, total and confidence of each receipt. Give it to your accountant or use it to fill in your expenses.",
+            body: "Export the filtered list as one CSV and give it to your accountant, or use it to fill in your expenses.",
           },
         ],
       },
@@ -327,8 +409,21 @@ export const useCasePages: ContentPage[] = [
       },
       {
         heading: "What it is, and what it is not",
+        layout: "does-doesnt",
         paragraphs: [
-          "ReceiptOCR is a record of what you spent, read from your receipts. It does not give tax advice, decide which expenses are deductible, calculate what you owe or file anything. Its categories describe what was bought, not your country's tax categories. Rules on which records to keep, and for how long, differ by country, so check them with your tax office or accountant, including whether you must keep the paper originals.",
+          "ReceiptOCR is a record of what you spent, read from your receipts. Rules on which records to keep, and for how long, differ by country, so check them with your tax office or accountant, including whether you must keep the paper originals.",
+        ],
+        does: [
+          "Keeps the original photo or PDF next to the extracted data",
+          "Totals spending per currency, without mixing currencies",
+          "Exports any date range as one CSV",
+          "Scores every receipt and every line for confidence",
+        ],
+        doesnt: [
+          "Give tax advice",
+          "Decide which expenses are deductible",
+          "Calculate or file your taxes",
+          "Use your country's tax categories",
         ],
       },
     ],
@@ -355,7 +450,13 @@ export const useCasePages: ContentPage[] = [
             totalPrice: 89,
             confidence: 0.96,
           },
-          { name: "SD card 128GB", quantity: 2, unitPrice: 24.5, totalPrice: 49, confidence: 0.94 },
+          {
+            name: "SD card 128GB",
+            quantity: 2,
+            unitPrice: 24.5,
+            totalPrice: 49,
+            confidence: 0.94,
+          },
         ],
       },
       exportView: "json",
@@ -388,6 +489,9 @@ export const useCasePages: ContentPage[] = [
     collection: "use-cases",
     slug: "small-businesses",
     navLabel: "Small businesses",
+    icon: "users",
+    heroArt: "team",
+    fact: "3 roles",
     title: "Receipt Scanner for Small Business Teams",
     description:
       "One shared receipt history for your business: everyone scans from their phone, a manager checks flagged receipts, and the owner exports CSV for the books.",
@@ -398,33 +502,62 @@ export const useCasePages: ContentPage[] = [
     sections: [
       {
         heading: "Everyone scans, one person checks",
+        layout: "tiles",
         paragraphs: [
           "The workspace is the business. Each person signs in with their own account, so you can see who is in the workspace and remove someone who leaves without sharing a password.",
         ],
-        bullets: [
-          "Members upload receipts and see everything in the workspace.",
-          "Managers can also invite and remove people.",
-          "The owner has full control of the workspace and everyone in it.",
+        tiles: [
+          {
+            icon: "user",
+            title: "Member",
+            body: "Uploads receipts and sees everything in the workspace.",
+            chip: "Upload",
+          },
+          {
+            icon: "user-cog",
+            title: "Manager",
+            body: "Everything a member can do, plus invites and removes people.",
+            chip: "Invite and remove",
+          },
+          {
+            icon: "crown",
+            title: "Owner",
+            body: "Full control of the workspace and everyone in it.",
+            chip: "Everything",
+          },
         ],
       },
       {
         heading: "Built for phones on the job",
         paragraphs: [
-          "Staff install ReceiptOCR from their browser as a web app, with no app store download, and it opens from the home screen. On Android they can also share a photo from another app straight to ReceiptOCR. Large photos are made smaller before upload, which helps on a weak mobile connection, and re-encoding them removes the camera's location data.",
+          "Staff install ReceiptOCR from their browser as a web app, with no app store download, and it opens from the home screen. On Android they can also share a photo from another app straight to ReceiptOCR. Large photos are made smaller before upload, which also removes the camera's location data.",
           'Groups label receipts by job, site or project, such as "Job: Elm Street kitchen", so the cost of one job can be exported on its own.',
         ],
       },
       {
         heading: "What the person doing the books gets",
         paragraphs: [
-          "Every receipt arrives with merchant, date, category, line items, tax and total, and a confidence score for the receipt and each line. The Needs review filter collects the receipts that need a person to look: low confidence, lines that were hard to read, or amounts that do not add up to the total. Corrections to the header fields are what gets exported.",
+          "Every receipt arrives with merchant, date, category, line items, tax and total, and a confidence score for the receipt and each line. The Needs review filter collects receipts whose overall confidence is below 90%; each receipt's page also marks lines that were hard to read and amounts that do not add up to the total. Corrections to the header fields are what gets exported.",
           "The app's home screen shows the workspace's spending this month and over time, per currency. When it is time to update the books, History exports any filtered set (a month, a category, a job) as one CSV.",
         ],
       },
       {
-        heading: "Plans and limits",
+        heading: "Plans, limits and what it leaves out",
+        layout: "does-doesnt",
         paragraphs: [
-          "Free scans are counted per person. When the business needs more, Pro is bought for one workspace and its larger monthly allowance is shared by everyone in it. ReceiptOCR does not issue company cards, run approvals or connect to accounting software; it is the step between a receipt and your books.",
+          "Free scans are counted per person. When the business needs more, Pro is bought for one workspace and its larger monthly allowance is shared by everyone in it.",
+        ],
+        does: [
+          "One shared history for everyone in the workspace",
+          "Groups per job, site or project",
+          "Spending per month and per currency on the home screen",
+          "One CSV for any filtered set of receipts",
+        ],
+        doesnt: [
+          "Issue company cards",
+          "Run approvals",
+          "Connect to accounting software",
+          "Hide receipts from others in the same workspace",
         ],
       },
     ],
@@ -451,7 +584,13 @@ export const useCasePages: ContentPage[] = [
             totalPrice: 34.99,
             confidence: 0.95,
           },
-          { name: "ROLLER 9IN", quantity: 3, unitPrice: 6.49, totalPrice: 19.47, confidence: 0.93 },
+          {
+            name: "ROLLER 9IN",
+            quantity: 3,
+            unitPrice: 6.49,
+            totalPrice: 19.47,
+            confidence: 0.93,
+          },
           {
             name: "DROP CLOTH 9X12",
             quantity: 2,
