@@ -72,6 +72,10 @@ sequenceDiagram
   If that hook fails, the next request self-heals it (see below).
 - Admin is granted only after verification, so registering someone else's address first gains nothing.
 - Without verification required (local dev, CI), sign-up returns a session at once.
+- The welcome email is an `email.welcome` job ([jobs](jobs.md#other-job-kinds)), queued by `queueWelcomeEmail` in
+  [`lib/welcome.ts`](../../../apps/web/lib/welcome.ts): from `afterEmailVerification` for email sign-ups, and from the
+  user-create hook when the account is already verified (Google, GitHub) or verification is off. Invited users take
+  the same paths. Signing in again queues nothing, and the queue welcomes a user once.
 
 ## Email sign-in
 

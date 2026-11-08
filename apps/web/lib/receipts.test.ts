@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("server-only", () => ({}));
 vi.mock("./runtime", () => ({ runtime: {} }));
 vi.mock("./session", () => ({}));
 

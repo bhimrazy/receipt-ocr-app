@@ -32,6 +32,7 @@ export const SLOT_KINDS = {
   message: "multiline",
   code: "line",
   provider: "line",
+  receiptsPerDay: "line",
 } as const satisfies Record<string, SlotKind>;
 
 export type SlotName = keyof typeof SLOT_KINDS;

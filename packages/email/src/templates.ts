@@ -219,3 +219,13 @@ export const signInDisconnectedEmail: ProviderNotice = (ctx, input) =>
     ctx,
     input,
   );
+/**
+ * Sent once to a new account. `receiptsPerDay` is the user's plan limit, read when sending, so the
+ * copy follows the plan table instead of a number written here. The link is the upload page.
+ */
+export function welcomeEmail(ctx: EmailContext, input: { receiptsPerDay: number }): EmailContent {
+  return build("welcome", `Welcome to ${BRAND}`, ctx, {
+    url: new URL("/app/upload", ctx.appUrl).toString(),
+    receiptsPerDay: String(input.receiptsPerDay),
+  });
+}

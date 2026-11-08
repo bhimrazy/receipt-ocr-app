@@ -8,7 +8,6 @@ const requireAdmin = vi.fn();
 const after = vi.fn();
 const drainJobs = vi.fn();
 vi.mock("@/lib/session", () => ({ requireAdmin }));
-vi.mock("server-only", () => ({}));
 const requireStepUp = vi.fn();
 vi.mock("@/lib/step-up-check", async () => ({
   ...(await vi.importActual<Record<string, unknown>>("@/lib/step-up-check")),
