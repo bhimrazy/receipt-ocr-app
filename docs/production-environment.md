@@ -519,8 +519,8 @@ PostHog once there are users to learn from.
 ### 9c. Sentry
 
 1. [sentry.io](https://sentry.io) → **Create project → Next.js**, name `receipt-ocr`. Copy the **DSN**.
-2. **Settings → Security & Privacy:** turn on **Data scrubbing** and **Prevent storing IP addresses** (the privacy
-   page says IPs aren't stored).
+2. **Security & Privacy** and **Allowed Domains:** see [9e](#9e-provider-privacy-settings) (the privacy page says IPs
+   aren't stored).
 3. Vercel (Production): `SENTRY_DSN` (Config). It is read at build too: the build inlines it into the browser code
    and adds Sentry's ingest host to the CSP, so redeploy after setting it. No `NEXT_PUBLIC_` copy is needed. A value
    that isn't a DSN (say, an auth token pasted by mistake) leaves Sentry off.
@@ -541,7 +541,8 @@ in Vercel), maps deleted before deploy (security plan M11). Docker: pass `--buil
 
 1. [posthog.com](https://posthog.com) → sign up, region **US** (or EU; it decides the host). Project `ReceiptOCR`.
 2. **Project settings:** turn off session recording and autocapture; the app sends named server-side events only.
-3. Vercel (Production): `POSTHOG_KEY` (the project API key, Config) and `POSTHOG_HOST`
+3. Vercel (Production): `POSTHOG_KEY` (the project API key, stored as **Sensitive**: it is read on the server only,
+   so it has no `NEXT_PUBLIC_` name) and `POSTHOG_HOST`
    (`https://us.i.posthog.com` or `https://eu.i.posthog.com`).
 4. Redeploy: the privacy page names PostHog only when `POSTHOG_KEY` is set at build.
 5. Check: sign up or upload a receipt, then **Activity** in PostHog shows `signed_up` or `receipt_uploaded` with the
@@ -549,9 +550,24 @@ in Vercel), maps deleted before deploy (security plan M11). Docker: pass `--buil
 
 Events (server-side only, `lib/telemetry/analytics.ts`): `signed_up` (`method`), `receipt_uploaded` (`mode`, `plan`),
 `receipt_scanned` (`trigger`, `model`, `fallback`, `calls`), `receipt_scan_failed` (`trigger`, `error_kind`),
-`csv_exported` (`count`), `plan_limit_hit` (`limit`, `plan`). Each carries the user id and the `workspace` group.
-Nothing is sent while an admin impersonates a user. Browser PostHog (page views, landing-page funnels) needs a consent
-decision first and is not built.
+`csv_exported` (`count`), `plan_limit_hit` (`limit`: `day` or `minute`, `plan`; a user's first 3 a minute). Each
+carries the user id and the `workspace` group. Nothing is sent for what an admin does while impersonating a user,
+including the scans of receipts they upload. Browser PostHog (page views, landing-page funnels) needs a consent
+decision first and is not built (see `docs/STATUS.md`).
+
+### 9e. Provider privacy settings
+
+Set once per provider; done for production on 2026-11-08. Recheck after creating a new project.
+
+- [ ] **Sentry → Settings → Projects → receipt-ocr → Security & Privacy:** **Data Scrubber** on, **Use Default
+      Scrubbers** on, **Prevent Storing of IP Addresses** on, **Additional Sensitive Fields** `email`. The same
+      switches exist org-wide under **Settings → receiptocr → Security & Privacy**.
+- [ ] **Sentry → Projects → receipt-ocr → Client Security → Allowed Domains:** `receipt-ocr.bhimraj.com.np` (not
+      `*`); add staging domains as extra lines. Server-side events are unaffected (they send no `Origin` header).
+      Keep **Enable JavaScript source fetching** on until source maps are uploaded.
+- [ ] **PostHog → Settings → Project → Privacy → IP data capture configuration:** **Discard client IP data** on.
+- [ ] **Vercel:** `POSTHOG_KEY` stored as **Sensitive** (server-only; no `NEXT_PUBLIC_` name, since there is no
+      browser PostHog).
 
 ---
 

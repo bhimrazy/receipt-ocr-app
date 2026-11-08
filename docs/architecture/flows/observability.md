@@ -125,7 +125,8 @@ Errors only, and only with a valid `SENTRY_DSN` (`parseSentryDsn`; anything else
 - **Server** ([`sentry-server.ts`](../../../apps/web/lib/telemetry/sentry-server.ts)): `@sentry/node`, started in
   `register()` before env validation. No tracing, no OpenTelemetry provider, no module hooks, no default
   integrations: uncaught exceptions, unhandled rejections and what we report. `failureResponse` reports 5xx and
-  defects (never expected 4xx) and `onRequestError` reports render, route and action failures, through
+  defects (never expected 4xx, nor an `OcrError` the photo caused: `invalid-output`, `bad-image`, `refused`,
+  `unsupported-file`) and `onRequestError` reports render, route and action failures, through
   [`reportError`](../../../apps/web/lib/telemetry/errors.ts). A dead `job.attempt` becomes a `job_dead:<kind>:<error>`
   issue. Reported errors are stand-ins: our `errorFields` as type and message plus the original's stack frames,
   never its message or cause chain (security plan B1: AI SDK errors carry the receipt). Sending is flushed by the
@@ -150,18 +151,23 @@ Server-side product analytics, only with a project key (`POSTHOG_KEY=phc_…`; a
 
 - **Events are projections of wide events** ([`analytics.ts`](../../../apps/web/lib/telemetry/analytics.ts),
   `fromRecord`): a successful `receipt.upload` becomes `receipt_uploaded`, `receipt.export` becomes `csv_exported`, a
-  `QuotaExceeded` 429 becomes `plan_limit_hit`, and a `job.attempt` that succeeded or died becomes `receipt_scanned`
+  `QuotaExceeded` 429 for the day or the per-minute burst becomes `plan_limit_hit` (with that `limit`), and a `job.attempt` that succeeded or died becomes `receipt_scanned`
   or `receipt_scan_failed`. They start from the record that already passed the allowlist, so PostHog can't see a
   field the logs don't. `signed_up` comes from Better Auth's `user.create.after` hook through `track()`.
 - **One allowlist for both paths** (`checkEvent`): a closed set of event names, each with its own props of a known
   kind (short codes, integers, booleans). Ids must be opaque ids. Unknown props are dropped at runtime, so a cast
   can't add one.
 - **Identity:** `distinctId` is the Better Auth user id and `groups.workspace` the workspace id. No person
-  properties, no GeoIP (`$geoip_disable`), no IP (the server sends the event). Impersonated requests are skipped.
+  properties, no GeoIP (`$geoip_disable`), no IP (the server sends the event). Work an admin does while
+  impersonating is skipped: the active scope carries `impersonatedBy`, so `annotateCaller` sets `impersonated_by`
+  on every scoped request, and a receipt job enqueued then carries it in its payload onto its `job.attempt` events.
 - **Off the request path:** captures are queued in memory and sent by the same `after()` flush as OTLP. On Vercel the
   SDK's timer is off (`flushInterval: 0`); Docker keeps a 10 s timer and shuts down on `SIGTERM`. Exception
   autocapture is off (Sentry owns errors).
-- A plan-quota 429 is never sampled away (`isRoutine`), so `plan_limit_hit` counts every rejection.
+- A user's first 3 plan-quota 429s a minute are kept (`keepQuotaRejection`, a `quota429:<user>` counter) and become
+  `plan_limit_hit`; the rest of a burst are routine (sampled), flagged `quota_repeat`, and send nothing.
+- **Failures.** A failed send logs `telemetry.export_failed` (`kind: posthog`) on stdout at most once a minute, never
+  through the sinks.
 - Not built: browser PostHog (page views, landing funnels) waits on a consent decision; `$ai_generation` events.
 
 ## OTLP export
@@ -179,12 +185,18 @@ never imported and nothing leaves the process but stdout.
 - **Off the request path.** Records go into the SDK's batch processor (sent in batches of up to 512; past 2,048 queued,
   new ones are dropped). The first event of a request schedules one `after()` flush (`setFlushScheduler` in `lib/log.ts`), bounded
   at 2 s, so a Vercel function sends its logs before it freezes and the response never waits. Events written outside
-  a request go out on the processor's 1 s timer; the Docker server flushes on `SIGTERM`.
+  a request go out on the processor's 1 s timer; the Docker server flushes on `SIGTERM`, best-effort: Next's own
+  `SIGTERM` handler exits the process without waiting for it, so what can be lost is bounded to events written
+  outside a request in the last second or so (request events already went out in their `after()` flush). The same
+  holds for PostHog and Sentry.
 - **Failures.** A failed export never fails the work it describes. It is reported as `telemetry.export_failed` on
   stderr at most once a minute, never through the sink (so a broken endpoint can't feed itself). A failed start
   logs `telemetry.start_failed` and the app runs on with stdout only.
 - **Transport.** OTLP/HTTP, `http/protobuf` by default or `http/json` (`OTEL_EXPORTER_OTLP_PROTOCOL`); gRPC isn't
-  bundled. Endpoint and headers are the standard OTel variables, so switching from Axiom to another backend is a
+  bundled. The endpoint must be `https`, except plain `http` to `localhost`, `127.0.0.1` or a compose service name
+  (`otel-collector`), so the bearer token in the headers never crosses a network in cleartext; anything else logs
+  `telemetry.start_failed` with `error.kind` `insecure-endpoint` or `invalid-endpoint`. Endpoint and headers are the
+  standard OTel variables, so switching from Axiom to another backend is a
   change of env only. Setup: [production environment §9b](../../production-environment.md#9b-axiom).
 - **Edge.** Only the Node runtime exports. Nothing in the app logs from the edge runtime today.
 - `@effect/opentelemetry` isn't needed for logs: every event, Effect or not, already goes through one `emit`. It
