@@ -114,10 +114,8 @@ async function update(request: Request, { params }: Params, event: WideEvent) {
   const category = rawCategory ? parseCategory(rawCategory) : rawCategory;
   if (category === undefined && rawCategory) return jsonError(400, "Unknown category");
 
-  const receiptDate = text(body.receiptDate, 10);
-  if (receiptDate && !/^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) {
-    return jsonError(400, "Date must be in YYYY-MM-DD format");
-  }
+  // Checked in ReceiptRepo.update: a real day from 2000 to a day past the upload.
+  const receiptDate = text(body.receiptDate, 32);
 
   const currency = text(body.currency, 3);
   if (currency && !/^[A-Za-z]{3}$/.test(currency))

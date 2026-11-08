@@ -8,7 +8,8 @@
     "./plans": "./src/plans.ts",
     "./telemetry": "./src/telemetry/index.ts",
     "./upload-limits": "./src/upload-limits.ts",
-    "./group-rules": "./src/group-rules.ts"
+    "./group-rules": "./src/group-rules.ts",
+    "./receipt-fields": "./src/receipt-fields.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

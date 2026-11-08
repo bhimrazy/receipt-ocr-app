@@ -22,6 +22,13 @@
       "when": 1794060548446,
       "tag": "0002_two_factor_passkey_step_up",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794115171389,
+      "tag": "0003_schema_fixes",
+      "breakpoints": true
     }
   ]
 }
