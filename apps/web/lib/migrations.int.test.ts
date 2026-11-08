@@ -17,6 +17,8 @@ const tables = [
   "account",
   "admin_audit_log",
   "app_settings",
+  "billing_events",
+  "billing_subscriptions",
   "invitation",
   "job_controls",
   "jobs",
@@ -62,9 +64,12 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is one baseline file", () => {
+  it("is the baseline plus billing", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
-    expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual(["0000_baseline"]);
+    expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
+      "0000_baseline",
+      "0001_billing",
+    ]);
   });
 
   it("creates every table with row-level security, and the two enum types", async () => {
