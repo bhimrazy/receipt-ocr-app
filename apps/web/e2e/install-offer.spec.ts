@@ -93,11 +93,14 @@ test.describe("on iPhone Safari", () => {
     await expect(guide).toBeVisible();
     await expect(guide).toContainText("Add to Home Screen");
     await expect(guide).toContainText("Open as Web App");
-    // Modal: Tab past the last control wraps inside the sheet.
+    // Modal: Tab past the last control wraps inside the sheet. Base UI's focus guards move focus
+    // on the next frame, so the check polls.
     await guide.getByRole("button", { name: "Done" }).focus();
     for (let i = 0; i < 3; i++) {
       await page.keyboard.press("Tab");
-      expect(await guide.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+      await expect
+        .poll(() => guide.evaluate((el) => el.contains(document.activeElement)))
+        .toBe(true);
     }
     await guide.getByRole("button", { name: "Done" }).click();
     await expect(guide).toHaveCount(0);
