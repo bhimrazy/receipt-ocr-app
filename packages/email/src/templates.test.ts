@@ -4,11 +4,13 @@ import { TEMPLATES } from "./generated";
 import { escapeHtml, fill } from "./render";
 import {
   backupCodesRegeneratedEmail,
+  contactReplyEmail,
   deleteAccountEmail,
   displayUrl,
   emailChangeEmail,
   emailSlots,
   formatDuration,
+  greetingName,
   invitationEmail,
   passkeyAddedEmail,
   passkeyRemovedEmail,
@@ -73,11 +75,13 @@ const cases: Record<
   supportMessage: {
     make: (ctx) =>
       supportMessageEmail(ctx, {
+        senderName: hostile,
         from: 'x"><img src=x onerror=alert(1)>@example.com',
         topicLabel: "Question",
         message: `Line one\r\n\r\n${hostile}\u0007`,
       }),
     input: {
+      senderName: hostile,
       from: 'x"><img src=x onerror=alert(1)>@example.com',
       topicLabel: "Question",
       message: `Line one\r\n\r\n${hostile}\u0007`,
@@ -112,8 +116,15 @@ const cases: Record<
     make: (ctx) => backupCodesRegeneratedEmail(ctx, { resetUrl }),
     input: { resetUrl },
   },
-  passkeyAdded: { make: (ctx) => passkeyAddedEmail(ctx, { resetUrl }), input: { resetUrl } },
-  passkeyRemoved: { make: (ctx) => passkeyRemovedEmail(ctx, { resetUrl }), input: { resetUrl } },
+  // The name is user-chosen, so the golden renders a hostile one.
+  passkeyAdded: {
+    make: (ctx) => passkeyAddedEmail(ctx, { resetUrl, passkeyName: hostile }),
+    input: { resetUrl, passkeyName: hostile },
+  },
+  passkeyRemoved: {
+    make: (ctx) => passkeyRemovedEmail(ctx, { resetUrl, passkeyName: hostile }),
+    input: { resetUrl, passkeyName: hostile },
+  },
   passwordSet: { make: (ctx) => passwordSetEmail(ctx, { resetUrl }), input: { resetUrl } },
   signInConnected: {
     make: (ctx) => signInConnectedEmail(ctx, { resetUrl, provider: "Google" }),
@@ -122,6 +133,11 @@ const cases: Record<
   signInDisconnected: {
     make: (ctx) => signInDisconnectedEmail(ctx, { resetUrl, provider: "GitHub" }),
     input: { resetUrl, provider: "GitHub" },
+  },
+  contactReply: {
+    // The hostile name is cleaned to "there" before it reaches the template.
+    make: (ctx) => contactReplyEmail(ctx, { name: hostile, topicPhrase: "your question" }),
+    input: { firstName: "there", topicPhrase: "your question" },
   },
   welcome: {
     make: (ctx) => welcomeEmail(ctx, { receiptsPerDay: 20 }),
@@ -347,6 +363,68 @@ describe("supportMessageEmail", () => {
   });
 });
 
+describe("greetingName", () => {
+  it.each([
+    ["Ada Lovelace", "Ada"],
+    ["  Jean-Luc  Picard ", "Jean-Luc"],
+    ["O'Neil", "O'Neil"],
+    ["J.", "J"],
+    ["José", "José"],
+    ["Zoë‮", "Zoë"],
+    ["山田 太郎", "山田"],
+    ["<Bob>", "Bob"],
+    ["{{url}}", "url"],
+    ["Ada\u0007\u0000Smith", "Ada"],
+    ["x".repeat(60), "x".repeat(30)],
+  ])("%j greets as %j", (raw, expected) => {
+    expect(greetingName(raw)).toBe(expected);
+  });
+
+  it.each([
+    "",
+    "   ",
+    "1234",
+    "!!!",
+    "<b>Bob</b>",
+    "https://evil.example",
+    "evil.example/login",
+    "www.evil",
+    "bit.ly",
+    "me@evil.example",
+    "ｅｖｉｌ．ｃｏｍ",
+  ])("%j greets as 'there'", (raw) => {
+    expect(greetingName(raw)).toBe("there");
+  });
+});
+
+describe("contactReplyEmail", () => {
+  it("greets by first name, names the topic and promises a reply by email", () => {
+    for (const ctx of [withSupport, noSupport]) {
+      const mail = contactReplyEmail(ctx, {
+        name: "Ada Lovelace",
+        topicPhrase: "your question about plans and limits",
+      });
+      expect(mail.subject).toBe("Thanks for contacting ReceiptOCR");
+      const line =
+        "Hi Ada, thanks for writing. We've received your question about plans and limits and will reply to this address, usually within 2 business days.";
+      expect(mail.text).toContain(line);
+      expect(mail.html).toContain(line.replaceAll("'", "&#x27;"));
+      expect(mail.text).toContain(
+        "Didn't write to us? Someone may have mistyped their address; you can ignore this email.",
+      );
+    }
+  });
+
+  it("links only to the app itself", () => {
+    const { html, text } = contactReplyEmail(withSupport, { name: "Ada", topicPhrase: "x" });
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+    for (const href of hrefs) expect(href).toMatch(/^(https:\/\/app\.example\/|mailto:help@)/);
+    expect(text.match(/https?:\/\/\S+/g)?.every((u) => u.startsWith("https://app.example"))).toBe(
+      true,
+    );
+  });
+});
+
 describe("security notices", () => {
   it("delete confirmation: red button, single-use link, nothing changes until confirmed on the page", () => {
     const delUrl = "https://app.example/app/settings/delete-account?token=abc";
@@ -426,8 +504,8 @@ describe("security emails", () => {
       twoFactorEnabledEmail(withSupport, { resetUrl }),
       twoFactorDisabledEmail(withSupport, { resetUrl, byAdmin: false }),
       backupCodesRegeneratedEmail(withSupport, { resetUrl }),
-      passkeyAddedEmail(withSupport, { resetUrl }),
-      passkeyRemovedEmail(withSupport, { resetUrl }),
+      passkeyAddedEmail(withSupport, { resetUrl, passkeyName: "Work laptop" }),
+      passkeyRemovedEmail(withSupport, { resetUrl, passkeyName: "Work laptop" }),
       passwordSetEmail(withSupport, { resetUrl }),
       signInConnectedEmail(withSupport, { resetUrl, provider: "Google" }),
       signInDisconnectedEmail(withSupport, { resetUrl, provider: "GitHub" }),
@@ -443,6 +521,15 @@ describe("security emails", () => {
     expect(connected.text).toContain("Google was connected to your account.");
     const disconnected = signInDisconnectedEmail(withSupport, { resetUrl, provider: "GitHub" });
     expect(disconnected.html).toContain("GitHub sign-in was disconnected");
+  });
+
+  it("names the passkey in the body, escaped, and never in the subject", () => {
+    const added = passkeyAddedEmail(withSupport, { resetUrl, passkeyName: "Work laptop" });
+    expect(added.text).toContain("The passkey “Work laptop” was added to your account.");
+    const removed = passkeyRemovedEmail(withSupport, { resetUrl, passkeyName: "<b>Phone</b>" });
+    expect(removed.subject).not.toContain("Phone");
+    expect(removed.text).toContain("The passkey “<b>Phone</b>” was removed");
+    expect(removed.html).toContain("&lt;b&gt;Phone&lt;/b&gt;");
   });
 
   it("says when an administrator made the reset", () => {

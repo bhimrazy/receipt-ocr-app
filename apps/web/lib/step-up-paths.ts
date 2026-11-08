@@ -52,9 +52,38 @@ export function stepUpActionFor(path: string, body: unknown): StepUpAction | nul
 }
 
 /**
- * Factor endpoints, refused for an impersonation session: otherwise an admin
- * could enrol their own authenticator on the customer's account. Sign-in
- * verification has no session yet, so it is never blocked.
+ * Account and workspace writes an admin could otherwise make as the customer: connect their own
+ * Google or GitHub, mint provider tokens, mail a link, edit the profile, end sessions, or change
+ * workspaces and members. Reads and `/organization/set-active` (needed to view the customer's
+ * workspace) stay open.
  */
-export const isFactorEndpoint = (path: string) =>
-  path.startsWith("/two-factor/") || path.startsWith("/passkey/");
+const IMPERSONATION_BLOCKED = new Set([
+  "/link-social",
+  "/send-verification-email",
+  "/get-access-token",
+  "/refresh-token",
+  "/update-user",
+  "/revoke-session",
+  "/revoke-sessions",
+  "/revoke-other-sessions",
+  "/organization/create",
+  "/organization/update",
+  "/organization/delete",
+  "/organization/leave",
+  "/organization/invite-member",
+  "/organization/remove-member",
+  "/organization/update-member-role",
+  "/organization/accept-invitation",
+  "/organization/reject-invitation",
+  "/organization/cancel-invitation",
+]);
+
+/**
+ * Endpoints refused for an impersonation session: factor changes (or an admin could enrol their
+ * own authenticator on the customer's account) and IMPERSONATION_BLOCKED. Sign-in verification
+ * and a signed-out resend have no session, so they are never blocked.
+ */
+export const isImpersonationBlocked = (path: string) =>
+  path.startsWith("/two-factor/") ||
+  path.startsWith("/passkey/") ||
+  IMPERSONATION_BLOCKED.has(path);

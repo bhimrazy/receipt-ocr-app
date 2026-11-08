@@ -28,10 +28,14 @@ export const SLOT_KINDS = {
   newEmail: "line",
   currentEmail: "line",
   from: "line",
+  senderName: "line",
+  firstName: "line",
+  topicPhrase: "line",
   topicLabel: "line",
   message: "multiline",
   code: "line",
   provider: "line",
+  passkeyName: "line",
   receiptsPerDay: "line",
 } as const satisfies Record<string, SlotKind>;
 

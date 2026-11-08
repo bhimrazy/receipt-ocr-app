@@ -251,6 +251,7 @@ export const applyBillingEvent = (eventId: string) =>
           outcome: ApplyOutcome,
           organizationId: string | null,
           planChange?: PlanChange,
+          userId: string | null = null,
         ) => {
           await tx
             .update(billingEvents)
@@ -260,7 +261,12 @@ export const applyBillingEvent = (eventId: string) =>
               processedAt: new Date(),
             })
             .where(eq(billingEvents.id, eventId));
-          return { outcome, organizationId, ...(planChange ? { planChange } : {}) };
+          return {
+            outcome,
+            organizationId,
+            ...(planChange ? { planChange } : {}),
+            ...(userId ? { userId } : {}),
+          };
         };
         const event = billingEventSchema.parse(row.payload);
         const snapshot = event.subscription;
@@ -313,16 +319,18 @@ export const applyBillingEvent = (eventId: string) =>
           providerUpdatedAt: snapshot.updatedAt,
           updatedAt: new Date(),
         };
+        let buyer = stored?.userId ?? null;
         if (stored) {
           await tx
             .update(billingSubscriptions)
             .set(values)
             .where(eq(billingSubscriptions.id, stored.id));
         } else {
+          buyer = snapshot.userId ? await existingUser(tx, snapshot.userId) : null;
           await tx.insert(billingSubscriptions).values({
             ...values,
             organizationId,
-            userId: snapshot.userId ? await existingUser(tx, snapshot.userId) : null,
+            userId: buyer,
             provider: event.provider,
             providerSubscriptionId: snapshot.subscriptionId,
           });
@@ -331,7 +339,7 @@ export const applyBillingEvent = (eventId: string) =>
         const now = new Date();
         const from = stored && isEntitled(entitlementOf(stored), now) ? "pro" : "free";
         const to = isEntitled({ ...values, status: snapshot.status }, now) ? "pro" : "free";
-        return finish("applied", organizationId, from === to ? undefined : { from, to });
+        return finish("applied", organizationId, from === to ? undefined : { from, to }, buyer);
       }),
     ),
   );

@@ -228,7 +228,13 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 1. ~~Usage capture + quota ledger~~ (shipped in #27).
 2. Usage surfaces for customers and admins ([usage design](plans/2026-11-06-usage-design.md)).
-3. Observability: wide events (#52), OTLP export to Axiom (built 2026-11-08), then the optional Sentry and server PostHog extras
+3. Observability: wide events (#52), then OTLP export to Axiom (#135), Sentry errors (#139) and server PostHog (#141), all
+   off unless their env is set; provider privacy settings done 2026-11-08
+   ([§9e](production-environment.md#9e-provider-privacy-and-alert-settings); its quota, alert and dashboard
+   steps are still to do). Next: Sentry source maps (separate `sentry-cli`
+   step); browser PostHog after a consent decision, which needs `instrumentation-client.ts`, an `/ingest` rewrite
+   proxy with `skipTrailingSlashRedirect`, cookieless mode or consent, `identify`/`reset`, and
+   `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`/`HOST`; PostHog `groupIdentify` for the workspace plan once billing lands
    ([observability](plans/2026-11-06-observability.md)) with the [security requirements](reviews/2026-11-06-security-plan.md).
 4. Accuracy: arithmetic checks, low thinking, a real benchmark set, then Flash-Lite-first cascade
    ([extraction cost and accuracy](plans/2026-11-06-extraction-cost-accuracy.md)). No Docling/OCR-first pipeline.
@@ -286,7 +292,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - The last-sign-in-method guard on `/unlink-account` reads, then Better Auth deletes: two disconnects sent at the same
   moment (Google and GitHub, no password or passkey) could both pass. Needs a lock on the user's account rows if it
   matters; the UI sends one at a time. Accepted (user-initiated, recoverable: Forgot password recreates a
-  credential). The same read-then-delete applies to `/passkey/delete-passkey`.
+  credential). The same read-then-delete applies to `/passkey/delete-passkey`. Recoverable because Better Auth
+  1.7.18's `resetCredentialPassword` (`better-auth/dist/utils/password.mjs`, called by `/reset-password`) creates a
+  `credential` account when the user has none; re-check that on every Better Auth upgrade, since the acceptance rests on
+  it.
+- Settings → Security shows a connected Google or GitHub account by its connection date only (the per-view
+  `accountInfo` call to the provider was removed). Showing the address or username would mean storing it at link time.
 
 - `/list-sessions` is an ungated read of the user's own sessions now that `freshAge` is 0 (Better Auth's freshness check
   was its only guard). Low: it shows a session thief the user's other devices; gate it with step-up if that matters.
@@ -324,7 +335,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   schema, admin settings and admin actions).
 - Bot protection: shipped, optional by env (`NEXT_PUBLIC_TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`). Turnstile guards
   sign-up, sign-in, password reset, resend confirmation (Better Auth `captcha` plugin) and `/api/contact`.
-  `scripts/test.sh --turnstile` runs its e2e with Cloudflare test keys; CI does not run that phase yet.
+  `scripts/test.sh --turnstile` and the CI job "E2E (Turnstile test keys)" run its e2e with Cloudflare test keys.
+- Contact-form auto-reply (`email.contact-reply` job, 1 per address and 3 per IP a day): the job's `scrubPayload` empties
+  the address and first name once it succeeds or dies. The reply promises an answer "usually within 2 business
+  days": owner to confirm or change that number.
 - Best-practice reviews ([Next.js](reviews/2026-11-06-nextjs.md), [React](reviews/2026-11-06-react.md),
   [shadcn/UI](reviews/2026-11-06-shadcn-ui.md)): quick wins in progress; later, shared primitives (Spinner, Meter,
   Checkbox, Avatar, Empty, Pagination), Button aligned with base-nova, one form system on `Field`.

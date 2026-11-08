@@ -21,9 +21,11 @@ vi.mock("./log", async () => ({
 
 const {
   AUTH_EMAILS_PER_HOUR,
+  CONTACT_REPLY_LIMITS,
   PASSWORD_CHANGES_PER_WINDOW,
   SIGN_IN_ATTEMPTS_PER_WINDOW,
   allowAuthEmail,
+  allowContactReply,
   allowPasswordChange,
   allowSignInAttempt,
   clearSignInAttempts,
@@ -101,6 +103,66 @@ describe("sign-in attempt limit", () => {
     expect(await allowSignInAttempt("a@example.com")).toBe(true);
     runPromise.mockRejectedValueOnce(new Error("db down"));
     await expect(clearSignInAttempts("a@example.com")).resolves.toBeUndefined();
+  });
+});
+
+describe("allowContactReply", () => {
+  it(`allows ${CONTACT_REPLY_LIMITS.perAddress} reply per address a day, whatever the case or IP`, async () => {
+    expect(await allowContactReply("a@example.com", "1.1.1.1")).toBe(true);
+    expect(await allowContactReply(" A@Example.com", "2.2.2.2")).toBe(false);
+    expect(await allowContactReply("b@example.com", "1.1.1.1")).toBe(true);
+    for (const [, windowMs] of hitRateLimit.mock.calls) expect(windowMs).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it("counts +tag aliases, and Gmail dots and googlemail.com, as one address", async () => {
+    expect(await allowContactReply("jane.doe@gmail.com", "1.1.1.1")).toBe(true);
+    expect(await allowContactReply("janedoe+a@googlemail.com", "2.2.2.2")).toBe(false);
+    expect(await allowContactReply("J.a.n.e.Doe+x@Gmail.com", "3.3.3.3")).toBe(false);
+    expect(await allowContactReply("ann+1@example.com", "4.4.4.4")).toBe(true);
+    expect(await allowContactReply("ann+2@example.com", "5.5.5.5")).toBe(false);
+    // Dots matter outside Gmail.
+    expect(await allowContactReply("a.nn@example.com", "6.6.6.6")).toBe(true);
+  });
+
+  it(`allows at most ${CONTACT_REPLY_LIMITS.perIp} replies a day from one IP`, async () => {
+    const results = [];
+    for (let i = 0; i <= CONTACT_REPLY_LIMITS.perIp; i++) {
+      results.push(await allowContactReply(`user${i}@example.com`, "9.9.9.9"));
+    }
+    expect(results).toEqual([...Array(CONTACT_REPLY_LIMITS.perIp).fill(true), false]);
+  });
+
+  it("doesn't use up an address's reply when the IP is over its cap", async () => {
+    for (let i = 0; i < CONTACT_REPLY_LIMITS.perIp; i++) {
+      await allowContactReply(`user${i}@example.com`, "9.9.9.9");
+    }
+    expect(await allowContactReply("victim@example.com", "9.9.9.9")).toBe(false);
+    expect(await allowContactReply("victim@example.com", "8.8.8.8")).toBe(true);
+  });
+
+  it("caps by address alone without a client IP", async () => {
+    expect(await allowContactReply("a@example.com", null)).toBe(true);
+    expect(await allowContactReply("b@example.com", null)).toBe(true);
+    expect(await allowContactReply("a@example.com", null)).toBe(false);
+  });
+
+  it("keys on hashes, never the address or IP", async () => {
+    await allowContactReply("secret@example.com", "203.0.113.7");
+    const keys = hitRateLimit.mock.calls.map(([key]) => key);
+    expect(keys).toEqual([
+      expect.stringMatching(/^contact-reply:ip:[0-9a-f]{64}$/),
+      expect.stringMatching(/^contact-reply:to:[0-9a-f]{64}$/),
+    ]);
+    expect(keys.join()).not.toMatch(/secret|203\.0/);
+  });
+
+  it("skips the reply and logs when the limiter fails", async () => {
+    runPromise.mockRejectedValueOnce(new Error("db down for a@example.com"));
+    expect(await allowContactReply("a@example.com", "1.1.1.1")).toBe(false);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "contact.reply_rate_limit_failed" }),
+    );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("example.com");
   });
 });
 

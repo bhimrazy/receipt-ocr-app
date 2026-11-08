@@ -1,5 +1,6 @@
 import { Layer } from "effect";
 import { Billing } from "./billing/service";
+import { ContactReplyMailer } from "./jobs/kinds/contact-reply";
 import { WelcomeMailer } from "./jobs/kinds/welcome-email";
 import { JobQueue } from "./jobs/queue";
 import { ReceiptRepo } from "./repository";
@@ -34,7 +35,7 @@ export * from "./workspace";
 export * from "./workspace-name";
 
 /** Everything the web app (and a future worker) needs; build it once into a ManagedRuntime. */
-export const makeAppLayer = (mailer: Layer.Layer<WelcomeMailer>) =>
+export const makeAppLayer = (mailers: Layer.Layer<WelcomeMailer | ContactReplyMailer>) =>
   Layer.mergeAll(
     ReceiptRepo.Live,
     Storage.Live,
@@ -42,11 +43,13 @@ export const makeAppLayer = (mailer: Layer.Layer<WelcomeMailer>) =>
     JobQueue.Live,
     Billing.Live,
     WideEventLoggerLive,
-    mailer,
+    mailers,
   ).pipe(Layer.provideMerge(Settings.Live), Layer.provideMerge(Db.Live));
 
-/** For tests only: a welcome mailer that sends nothing; the web app passes the real one to `makeAppLayer`. */
-export const AppLayer = makeAppLayer(WelcomeMailer.Disabled);
+/** For tests only: mailers that send nothing; the web app passes the real ones to `makeAppLayer`. */
+export const AppLayer = makeAppLayer(
+  Layer.merge(WelcomeMailer.Disabled, ContactReplyMailer.Disabled),
+);
 
 export type AppServices = Layer.Layer.Success<typeof AppLayer>;
 export * from "./admin";

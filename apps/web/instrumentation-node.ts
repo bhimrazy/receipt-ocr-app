@@ -4,9 +4,19 @@
  * process but stdout.
  */
 export async function startTelemetryExport(env: Record<string, string | undefined> = process.env) {
-  const { errorFields, logger, otlpLogsConfigured, shutdownEventSinks } =
+  const { errorFields, logger, otlpEndpointRefusal, otlpLogsConfigured, shutdownEventSinks } =
     await import("@receipt-ocr/core/telemetry");
   if (!otlpLogsConfigured(env)) return;
+  const refusal = otlpEndpointRefusal(env);
+  if (refusal) {
+    logger.error({
+      event: "telemetry.start_failed",
+      unit: "log",
+      kind: "otlp",
+      error: { type: "NotConfigured", kind: refusal },
+    });
+    return;
+  }
   try {
     const { startOtlpExport } = await import("@receipt-ocr/core/telemetry/otlp");
     await startOtlpExport({ env });
@@ -20,13 +30,49 @@ export async function startTelemetryExport(env: Record<string, string | undefine
     });
     return;
   }
-  // Long-lived server (Docker): send what is buffered before the process stops. Next's own
-  // SIGTERM handler exits the process; if none is registered, exit here once flushed.
+  flushOnSigterm(shutdownEventSinks);
+}
+
+let sigtermHooked = false;
+
+/**
+ * Long-lived server (Docker): send what the sinks buffer before the process
+ * stops. Next's own SIGTERM handler exits the process; if none is registered,
+ * exit here once flushed.
+ */
+function flushOnSigterm(shutdown: () => Promise<void>) {
+  if (sigtermHooked) return;
+  sigtermHooked = true;
   process.once("SIGTERM", () => {
-    void shutdownEventSinks().finally(() => {
+    sigtermHooked = false;
+    void shutdown().finally(() => {
       if (process.listenerCount("SIGTERM") === 0) process.exit(143);
     });
   });
+}
+
+/**
+ * Starts server-side PostHog when POSTHOG_KEY is a project key. Unset, the
+ * SDK is never imported and `track()` does nothing.
+ */
+export async function startProductAnalytics(env: Record<string, string | undefined> = process.env) {
+  const { parsePostHog } = await import("./lib/telemetry/posthog-config");
+  const config = parsePostHog(env);
+  if (!config) return;
+  const { errorFields, logger, shutdownEventSinks } = await import("@receipt-ocr/core/telemetry");
+  try {
+    const { startPostHog } = await import("./lib/telemetry/posthog");
+    startPostHog(config, env);
+  } catch (error) {
+    logger.error({
+      event: "telemetry.start_failed",
+      unit: "log",
+      kind: "posthog",
+      error: errorFields(error),
+    });
+    return;
+  }
+  flushOnSigterm(shutdownEventSinks);
 }
 
 /**
@@ -40,6 +86,8 @@ export async function startErrorReporting(env: Record<string, string | undefined
   try {
     const { startSentryServer } = await import("./lib/telemetry/sentry-server");
     startSentryServer(sentry.dsn, env);
+    const { shutdownEventSinks } = await import("@receipt-ocr/core/telemetry");
+    flushOnSigterm(shutdownEventSinks);
   } catch (error) {
     const { errorFields, logger } = await import("@receipt-ocr/core/telemetry");
     logger.error({

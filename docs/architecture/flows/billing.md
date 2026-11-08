@@ -225,8 +225,9 @@ What "used" means is in [core: quota ledger semantics](../core.md#design-princip
   card data.
 - **Product event `plan_changed`.** When an applied event moves its workspace between plans (activated, lapsed past the
   grace period, cancelled), the `billing.apply_event` job's wide event carries `billing.plan_from` and
-  `billing.plan_to` (`free` or `pro`) with `organization_id`. Mapping it to PostHog is a follow-up once the analytics
-  catalogue (PR #141) lands.
+  `billing.plan_to` (`free` or `pro`) with `organization_id` and the buyer's `user_id`. `fromRecord` in
+  [`analytics.ts`](../../../apps/web/lib/telemetry/analytics.ts) sends it to PostHog as `plan_changed { from, to }`.
+  Hitting the month or the Free pool also counts as `plan_limit_hit`.
 
 ## Pure files
 

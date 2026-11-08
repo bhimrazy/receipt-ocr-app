@@ -32,14 +32,15 @@ test("checklist and sign-in methods, and a first password for a provider-only ac
 
   // The e2e build doesn't require a confirmed email, and a password is the only way in.
   await expect(page.getByText("0 of 3 done")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send link" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Resend link" })).toBeVisible();
   const methods = page.getByRole("list", { name: "Ways to sign in" });
   await expect(methods).toContainText("Password set");
   await expect(methods.getByRole("link", { name: "Change password" })).toHaveAttribute(
     "href",
     "/app/settings#password-heading",
   );
-  await expect(methods).toContainText("None added");
+  // Passkeys have their own section, with the count beside its heading.
+  await expect(page.getByRole("region", { name: "Passkeys" })).toContainText("None");
 
   await makeProviderOnly(email);
   await page.reload();
@@ -74,7 +75,7 @@ test("the protect-your-receipts card shows after the fifth receipt and stays dis
     "href",
     "/app/settings/security#passkeys-heading",
   );
-  await card.getByRole("button", { name: "Dismiss for good" }).click();
+  await card.getByRole("button", { name: "Don't show this again" }).click();
   await expect(card).toHaveCount(0);
   // The cookie is set by a server action; wait for it before reloading.
   await expect

@@ -12,7 +12,14 @@ vi.mock("./lib/telemetry/sentry-server", () => {
   return { startSentryServer: sentry.start };
 });
 
-const { startErrorReporting, startTelemetryExport } = await import("./instrumentation-node");
+const posthog = vi.hoisted(() => ({ loaded: false, start: vi.fn() }));
+vi.mock("./lib/telemetry/posthog", () => {
+  posthog.loaded = true;
+  return { startPostHog: posthog.start };
+});
+
+const { startErrorReporting, startProductAnalytics, startTelemetryExport } =
+  await import("./instrumentation-node");
 // Loaded here, not inside the first test's timeout (it is what startTelemetryExport imports first).
 await import("@receipt-ocr/core/telemetry");
 
@@ -33,6 +40,33 @@ describe("startTelemetryExport", () => {
     await startTelemetryExport(env);
     expect(otlp.start).toHaveBeenCalledWith({ env });
     expect(process.listenerCount("SIGTERM")).toBe(1);
+  });
+
+  it("refuses plain http except to a local or compose collector", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    otlp.start.mockClear();
+    for (const endpoint of ["http://api.axiom.co", "http://10.0.0.5:4318", "ftp://x.example"]) {
+      await startTelemetryExport({
+        OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
+        OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Bearer x",
+      });
+    }
+    expect(otlp.start).not.toHaveBeenCalled();
+    const lines = error.mock.calls.map((call) => JSON.parse(String(call[0])));
+    expect(lines.map((line) => [line.event, line.error.kind])).toEqual([
+      ["telemetry.start_failed", "insecure-endpoint"],
+      ["telemetry.start_failed", "insecure-endpoint"],
+      ["telemetry.start_failed", "invalid-endpoint"],
+    ]);
+    for (const endpoint of [
+      "http://localhost:4318",
+      "http://127.0.0.1:4318",
+      "http://otel-collector:4318",
+    ]) {
+      await startTelemetryExport({ OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: endpoint });
+    }
+    expect(otlp.start).toHaveBeenCalledTimes(3);
+    error.mockRestore();
   });
 
   it("keeps booting when the exporter can't start", async () => {
@@ -57,5 +91,25 @@ describe("startErrorReporting", () => {
     const dsn = "https://0123456789abcdef0123456789abcdef@o1.ingest.us.sentry.io/2";
     await startErrorReporting({ SENTRY_DSN: dsn });
     expect(sentry.start).toHaveBeenCalledWith(dsn, { SENTRY_DSN: dsn });
+  });
+});
+
+describe("startProductAnalytics", () => {
+  it("loads no PostHog code without a project key", async () => {
+    await startProductAnalytics({});
+    await startProductAnalytics({ POSTHOG_KEY: "phx_personalkeythatcanreadeverything" });
+    expect(posthog.loaded).toBe(false);
+  });
+
+  it("starts PostHog with a project key", async () => {
+    const env = {
+      POSTHOG_KEY: "phc_0123456789abcdefABCD",
+      POSTHOG_HOST: "https://us.i.posthog.com",
+    };
+    await startProductAnalytics(env);
+    expect(posthog.start).toHaveBeenCalledWith(
+      { key: "phc_0123456789abcdefABCD", host: "https://us.i.posthog.com" },
+      env,
+    );
   });
 });

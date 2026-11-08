@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { gaMeasurementId, turnstileOn } from "@/lib/consent/env";
 import { logStorageName } from "@/lib/processors";
+import { parsePostHog } from "@/lib/telemetry/posthog-config";
 import { parseSentryDsn } from "@/lib/telemetry/sentry-config";
 import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = pageMetadata({
 
 const googleAnalytics = Boolean(gaMeasurementId);
 const errorReporting = Boolean(parseSentryDsn(process.env.SENTRY_DSN));
+const productAnalytics = Boolean(parsePostHog(process.env));
 const logStorage = logStorageName(
   process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
 );
@@ -35,8 +37,8 @@ export default function PrivacyPage() {
             "Workspace details: the workspaces you create or join, their members and the invitations you send.",
             "Sign-in security: if you turn on two-step sign-in, the secret behind your authenticator app's codes and your backup codes, both encrypted. When you confirm it's you before an important change, a record of when, how (passkey, app code, backup code or emailed code), what it was for and the IP address, kept until you delete your account; an emailed code is stored only as a one-way hash and expires after 10 minutes.",
             "Passkeys: if you add one, its public key, a credential ID, the authenticator model when your device shares it, whether it syncs between your devices, and when you added it. Your fingerprint, face or device PIN never leave your device.",
-            "Messages: if you write to us through the support button, your email address and your message.",
-            "Technical data: a session cookie that keeps you signed in and a few other necessary cookies (all listed in the cookie policy), server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors, and short-lived counters that limit how often we send account emails to one address (they hold a one-way hash of the address, not the address).",
+            "Messages: if you write to us through the support button, your name, email address and message. We send one automatic reply to that address to confirm we got it (at most one a day per address); it contains your first name and topic, never your message, and the name and address used for it are deleted once it is sent.",
+            "Technical data: a session cookie that keeps you signed in and a few other necessary cookies (all listed in the cookie policy), server logs (such as which request was made, when, and any errors) that we use to run the service and investigate errors, and short-lived counters that limit how often we send account emails and contact-form replies to one address or from one IP address (each holds a one-way hash, not the address itself).",
           ],
         },
         {
@@ -48,6 +50,11 @@ export default function PrivacyPage() {
             ...(googleAnalytics || pageCounts
               ? [
                   "To count visits to our public pages and see which ones help people, as described under Cookies and analytics.",
+                ]
+              : []),
+            ...(productAnalytics
+              ? [
+                  "To understand which features are used, so we know what to improve, from a few named events and never your receipts (see PostHog below).",
                 ]
               : []),
             "We don't sell your data, and we don't use it for advertising.",
@@ -70,6 +77,11 @@ export default function PrivacyPage() {
             ...(errorReporting
               ? [
                   "Sentry, to tell us when something breaks: for an error on our servers or in your browser, it receives the type of error, where in our code it happened, the page or API route (without query strings, and with IDs and tokens in the address removed), your browser and operating system names, and a request ID. It doesn't receive your email address, cookies, receipt files or their contents, or error messages that could contain them. Your browser connects to Sentry directly to send a report, so Sentry sees your IP address; we set it not to store it.",
+                ]
+              : []),
+            ...(productAnalytics
+              ? [
+                  "PostHog, to see which features people use: our servers (never your browser) send it a few named events, such as signing up, uploading or scanning a receipt, exporting a CSV and reaching a plan limit, each with your account's random ID, your workspace's ID and details like the upload mode, plan and AI model. It never receives your name, email address, IP address, cookies, receipts or what's on them, and nothing is sent while an administrator is signed in as you for support.",
                 ]
               : []),
             "Google and GitHub, only if you choose to sign in with them.",

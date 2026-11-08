@@ -98,6 +98,10 @@ a collector at `http://otel-collector:4318` with no headers.
    keeps tracing and Replay code out of the bundle. No edge config: nothing runs on the edge runtime. Source maps
    wait for the separate `sentry-cli` step (security plan M11).
 4. **PostHog server events** (optional): as in section 2, server side only.
+   **Built (2026-11-08)** ([flow](../architecture/flows/observability.md#posthog)): events are projected from the
+   wide events through an event sink rather than called at each route, with a closed, runtime-checked catalogue:
+   `signed_up`, `receipt_uploaded`, `receipt_scanned`, `receipt_scan_failed`, `csv_exported`, `plan_limit_hit`
+   (uploads only so far). Not yet: `workspace_created`, invites, `receipt_retried`, `$ai_generation`, browser PostHog.
 
 ## Earlier design (vendor-specific, superseded where it conflicts)
 

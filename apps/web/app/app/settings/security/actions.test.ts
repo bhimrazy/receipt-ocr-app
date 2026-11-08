@@ -43,6 +43,12 @@ describe("sendVerificationAction", () => {
     expect(mocks.send).not.toHaveBeenCalled();
   });
 
+  it("sends nothing when the address was confirmed since the page loaded", async () => {
+    mocks.getSession.mockResolvedValue(session({ emailVerified: true }));
+    expect(await sendVerificationAction()).toEqual({ ok: true, alreadyVerified: true });
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
   it("says so when the per-address cap skipped the send", async () => {
     mocks.getSession.mockResolvedValue(session());
     mocks.send.mockImplementation(async () => {

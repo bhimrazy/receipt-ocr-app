@@ -484,7 +484,7 @@ it makes no network calls.
 | Google Analytics 4   | Visitor analytics on public pages, after consent    | **Works.** Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` (9a)              |
 | Axiom                | Searchable logs kept longer than Vercel's           | **Works.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` and `_HEADERS` (9b) |
 | Sentry               | Error grouping and alerts, server and browser       | **Works.** Set `SENTRY_DSN` (9c)                                 |
-| PostHog              | Product analytics (funnels, retention), server-side | Planned: needs the server PostHog client and a consent decision  |
+| PostHog              | Product analytics (funnels, retention), server-side | **Works.** Set `POSTHOG_KEY` and `POSTHOG_HOST` (9d)             |
 
 Do them in this order when the time comes: Axiom first (logs are what you need during an incident), then Sentry, then
 PostHog once there are users to learn from.
@@ -508,24 +508,25 @@ PostHog once there are users to learn from.
 1. [app.axiom.co](https://app.axiom.co) → sign up → **Datasets → New dataset** `receipt-ocr` (kind **Events**, which
    Axiom asks for OpenTelemetry logs).
 2. **Settings → API tokens → New token**, with only **Ingest** on that dataset. Copy it (`xaat-…`).
-3. Vercel (Production): `OTEL_EXPORTER_OTLP_ENDPOINT=https://api.axiom.co` (Config) and
+3. Vercel (**Production only**, not Preview: previews would spend the query allowance):
+   `OTEL_EXPORTER_OTLP_ENDPOINT=https://api.axiom.co` (Config) and
    `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>,X-Axiom-Dataset=receipt-ocr` (Secret).
 4. Redeploy. Events keep going to Vercel's logs too; Axiom gets the same events, already sampled and scrubbed. The
    privacy page then names Axiom as the log store (it reads the endpoint at build time).
 5. Check: sign in and open `/app`, then open the dataset's **Stream** in Axiom: a `page.render` or request event appears within
    a few seconds. Nothing arriving: look in Vercel's logs for `telemetry.export_failed` (a wrong token or dataset) or
-   `telemetry.start_failed`. EU org: use the regional edge URL from Axiom's settings as the endpoint. Optional:
+   `telemetry.start_failed`. The free Personal plan is US-only (the EU edge is paid). Optional:
    `OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production` (Config).
 
 ### 9c. Sentry
 
 1. [sentry.io](https://sentry.io) → **Create project → Next.js**, name `receipt-ocr`. Copy the **DSN**.
-2. **Settings → Security & Privacy:** turn on **Data scrubbing** and **Prevent storing IP addresses** (the privacy
-   page says IPs aren't stored).
+2. **Security & Privacy** and **Allowed Domains:** see [9e](#9e-provider-privacy-and-alert-settings) (the privacy page says IPs
+   aren't stored).
 3. Vercel (Production): `SENTRY_DSN` (Config). It is read at build too: the build inlines it into the browser code
    and adds Sentry's ingest host to the CSP, so redeploy after setting it. No `NEXT_PUBLIC_` copy is needed. A value
    that isn't a DSN (say, an auth token pasted by mistake) leaves Sentry off.
-4. Set an alert: **Alerts → new issue**, email.
+4. Alerts and quota protection: see [9e](#9e-provider-privacy-and-alert-settings).
 5. Check: `curl -s https://<host>/api/health` shows the commit; issues carry the same 7-character release.
 
 What is sent: server 5xx and defects (from `failureResponse` and `onRequestError`), uncaught exceptions, unhandled
@@ -534,16 +535,73 @@ Feedback or Logs. Each event is rebuilt from an allowlist (see [observability](a
 
 Not yet: source-map upload. Stack frames point at the built files. The planned step is a separate `sentry-cli`
 upload in `production.yml` that runs no repo code, with `SENTRY_AUTH_TOKEN` as a GitHub Actions secret only (never
-in Vercel), maps deleted before deploy (security plan M11). Docker: `SENTRY_DSN` must be a build arg for browser
-reporting; at runtime alone it turns on server reporting only.
+in Vercel), maps deleted before deploy (security plan M11). Docker: pass `--build-arg SENTRY_DSN=...` and
+`--build-arg GIT_COMMIT_SHA=$(git rev-parse HEAD)` to `docker/Dockerfile.prod` for browser reporting and the release;
+`SENTRY_DSN` in the container's environment alone turns on server reporting only.
 
-### 9d. PostHog (once wired in)
+### 9d. PostHog
 
 1. [posthog.com](https://posthog.com) → sign up, region **US** (or EU; it decides the host). Project `ReceiptOCR`.
-2. **Project settings:** turn off session recording and autocapture; the app sends named server-side events only.
-3. Vercel (Production): `POSTHOG_KEY` (the project API key, Config) and `POSTHOG_HOST`
+2. **Billing:** stay on Free with no card: usage is hard-capped at the free allotment (1M events a month) and PostHog
+   emails at 80% and 100%. If a card is ever added, set **Product analytics → billing limit $0** the same day.
+3. Vercel (Production): `POSTHOG_KEY` (the project API key, stored as **Sensitive**: it is read on the server only,
+   so it has no `NEXT_PUBLIC_` name) and `POSTHOG_HOST`
    (`https://us.i.posthog.com` or `https://eu.i.posthog.com`).
-4. Name PostHog as a processor in the privacy policy before turning it on.
+4. Redeploy: the privacy page names PostHog only when `POSTHOG_KEY` is set at build.
+5. Check: sign up or upload a receipt, then **Activity** in PostHog shows `signed_up` or `receipt_uploaded` with the
+   user's id as the person and no email or name.
+
+Events (server-side only, `lib/telemetry/analytics.ts`): `signed_up` (`method`), `receipt_uploaded` (`mode`, `plan`),
+`receipt_scanned` (`trigger`, `model`, `fallback`, `calls`), `receipt_scan_failed` (`trigger`, `error_kind`),
+`csv_exported` (`count`), `plan_limit_hit` (`limit`: `day` or `minute`, `plan`; a user's first 3 a minute). Each
+carries the user id, `workspace_id` as a plain prop (PostHog's `groups` need the paid group-analytics add-on) and the
+`workspace` group. Nothing is sent for what an admin does while impersonating a user,
+including the scans of receipts they upload. Browser PostHog (page views, landing-page funnels) needs a consent
+decision first and is not built (see `docs/STATUS.md`).
+
+### 9e. Provider privacy and alert settings
+
+Set once per provider; recheck after creating a new project. Why each one, and the free-plan limits:
+[observability on free plans](reviews/2026-11-08-observability-free-tier.md).
+
+**Privacy** (done for production on 2026-11-08):
+
+- [ ] **Sentry → Settings → Projects → receipt-ocr → Security & Privacy:** **Data Scrubber** on, **Use Default
+      Scrubbers** on, **Prevent Storing of IP Addresses** on, **Additional Sensitive Fields** `email`. The same
+      switches exist org-wide under **Settings → receiptocr → Security & Privacy**.
+- [ ] **Sentry → Projects → receipt-ocr → Client Security → Allowed Domains:** `receipt-ocr.bhimraj.com.np` (not
+      `*`); add staging domains as extra lines. Server-side events are unaffected (they send no `Origin` header).
+      Keep **Enable JavaScript source fetching** on until source maps are uploaded.
+- [ ] **PostHog → Settings → Project → Privacy → IP data capture configuration:** **Discard client IP data** on.
+- [ ] **Vercel:** `POSTHOG_KEY` stored as **Sensitive** (server-only; no `NEXT_PUBLIC_` name, since there is no
+      browser PostHog).
+
+**Quota, alerts and dashboards** (O1 to O10 in the review):
+
+- [ ] **Sentry → Settings → Projects → receipt-ocr → Inbound Filters:** on for browser extension errors, events
+      from localhost, legacy browsers (all), web crawlers, React hydration errors, ChunkLoadErrors and health-check
+      transactions. Filtered events don't count against the 5k a month.
+- [ ] **Sentry → Settings → Spike Protection:** enable for receipt-ocr, add the Sentry Notification action, then
+      **User Settings → Notifications → Spike Protection** on. It needs a month of baseline.
+- [ ] **Sentry → Alerts → Create Alert → Issues:** "A new issue is created" OR "The issue changes state from
+      resolved to unresolved", filter `environment` = `production`, email, every 30 minutes. Delete the default
+      every-new-issue rule.
+- [ ] **Sentry → Projects → receipt-ocr → Client Keys (DSN) → Configure:** Allowed Domains as above; **Rate limits**
+      30 per minute if the field is editable on the free plan.
+- [ ] **Axiom → Monitors → New → Threshold**, notifier Email (the free plan's 3; confirm the attribute path from
+      one event in **Stream** first): server errors (`severity_text == "error"`, not `job.attempt`, ≥ 3 in 10 min,
+      every 5 min); scans retrying (`job.attempt` with `queue.outcome` `retry` or `lost`, ≥ 5 in 15 min); OCR
+      spend (`sum(ocr.cost_micro_usd)` ≥ 2,000,000 in 60 min, every 15 min).
+- [ ] **Axiom:** `OTEL_EXPORTER_OTLP_*` in Vercel for Production only; dataset `receipt-ocr`, ingest-only token.
+- [ ] **Axiom → Dashboards → "Ops"**, default range 24 h: requests by status class per 15 min, p95 `duration_ms`
+      by route, scans by `queue.outcome` per hour, p50/p95 `timings_ms.ai.extract` by `ocr.model`, OCR spend per
+      hour. Check **Settings → Usage** monthly (10 GB-hours of query compute is the binding limit).
+- [ ] **PostHog → Organization → Billing:** no card (see 9d).
+- [ ] **PostHog → Dashboards → "Founder weekly"**, last 30 days: activation funnel `signed_up` → `receipt_uploaded`
+      → `receipt_scanned` → `csv_exported` (7-day window, breakdown by `method`), weekly active uploaders, 8-week
+      `receipt_uploaded` retention, `plan_limit_hit` by `plan`. **⋯ → Subscribe**, weekly, Monday morning.
+- [ ] **Uptime:** a free external check (UptimeRobot, Better Stack or similar) on `GET /api/health/ready` every
+      5 minutes, email after 2 failures. Healthy answers aren't logged, so the pinger costs no log volume.
 
 ---
 

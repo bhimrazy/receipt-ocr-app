@@ -27,6 +27,8 @@ export const billingApply: JobDefinition<BillingApplyPayload, Db> = {
       Effect.tap((result) =>
         annotateEvent({
           ...(result.organizationId ? { organization_id: result.organizationId } : {}),
+          // The buyer, so the product event has a person to attach to.
+          ...("userId" in result && result.userId ? { user_id: result.userId } : {}),
           billing: {
             outcome: result.outcome,
             // The product event `plan_changed { from, to }`, for the upgrade funnel.

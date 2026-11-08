@@ -6,16 +6,33 @@ const TOPIC_LABELS = {
   feature: "Feature request",
 } as const;
 
+/** How the auto-reply names the topic: "We've received {phrase}". */
+const TOPIC_PHRASES: Record<keyof typeof TOPIC_LABELS, string> = {
+  "getting-started": "your question",
+  "use-case": "your question about plans and limits",
+  feature: "your feature request",
+};
+
 export function isTopic(value: string): value is keyof typeof TOPIC_LABELS {
   return value in TOPIC_LABELS;
 }
 
+export const topicPhrase = (topic: string) =>
+  isTopic(topic) ? TOPIC_PHRASES[topic] : TOPIC_PHRASES["getting-started"];
+
 /** Support-inbox message; replies go to the visitor. The subject uses a fixed label, never user text. */
 export function contactEmail(
   ctx: EmailContext,
-  input: { to: string; from: string; topic: keyof typeof TOPIC_LABELS; message: string },
+  input: {
+    to: string;
+    name: string;
+    from: string;
+    topic: keyof typeof TOPIC_LABELS;
+    message: string;
+  },
 ): SendEmailInput {
   const mail = supportMessageEmail(ctx, {
+    senderName: input.name,
     from: input.from,
     topicLabel: TOPIC_LABELS[input.topic],
     message: input.message,

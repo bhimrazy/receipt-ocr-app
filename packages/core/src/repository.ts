@@ -58,6 +58,8 @@ export type ReceiptScope = {
    * or admin can.
    */
   role?: string;
+  /** The admin acting as this user, when impersonating; product analytics skips their work. */
+  impersonatedBy?: string;
 };
 
 /** Owners and admins may edit or delete any receipt in the workspace. Fails closed without a role. */
@@ -441,6 +443,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                   organizationId: scope.organizationId,
                   userId: scope.userId,
                   round: 1,
+                  ...(scope.impersonatedBy ? { impersonatedBy: scope.impersonatedBy } : {}),
                 },
                 priority ?? PRIORITY_INTERACTIVE,
               ),
@@ -572,6 +575,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                     organizationId: scope.organizationId,
                     userId: scope.userId,
                     round,
+                    ...(scope.impersonatedBy ? { impersonatedBy: scope.impersonatedBy } : {}),
                   },
                   PRIORITY_INTERACTIVE,
                 ),

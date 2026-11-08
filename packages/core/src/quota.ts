@@ -160,6 +160,7 @@ export const quotaExceeded = (verdict: QuotaVerdict) =>
   new QuotaExceeded({
     message: quotaMessage(verdict),
     retryAfterSeconds: verdict.retryAfterSeconds ?? 60,
+    kind: verdict.window,
   });
 
 const scans = (n: number) => `${n} ${n === 1 ? "scan" : "scans"}`;

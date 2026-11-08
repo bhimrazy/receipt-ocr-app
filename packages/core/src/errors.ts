@@ -23,6 +23,11 @@ export class Conflict extends Data.TaggedError("Conflict")<{
 export class QuotaExceeded extends Data.TaggedError("QuotaExceeded")<{
   readonly message: string;
   readonly retryAfterSeconds: number;
+  /**
+   * The limit hit (`error.kind` on the wide event): the per-minute burst, the day, the month,
+   * the plan's platform pool, or the service cap.
+   */
+  readonly kind?: "minute" | "day" | "month" | "pool" | "global";
 }> {}
 
 /** A dependency is not configured (missing env), so this feature is off. */
