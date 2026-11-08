@@ -27,9 +27,10 @@ function useThemePreference() {
 
 const groupClass = "inline-flex gap-0.5 rounded-lg border border-border bg-muted p-0.5";
 
-// The selected segment is told apart by its fill and edge, not by colour alone.
+// The selected segment is told apart by its fill and edge, not by colour alone. The edge is an
+// inset ring so it stacks with the focus ring instead of replacing it.
 const segmentClass =
-  "inline-flex items-center justify-center gap-1.5 rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:bg-background aria-checked:text-foreground aria-checked:ring-1 aria-checked:ring-border aria-checked:[&_svg]:text-primary [&_svg]:size-4 [&_svg]:shrink-0";
+  "inline-flex items-center justify-center gap-1.5 rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:bg-background aria-checked:text-foreground aria-checked:inset-ring aria-checked:inset-ring-border aria-checked:[&_svg]:text-primary [&_svg]:size-4 [&_svg]:shrink-0";
 
 /**
  * System · Light · Dark as a radio group: arrow keys move and select, Tab leaves. `labels` shows
@@ -123,7 +124,7 @@ export function ThemeMenuRow() {
         {OPTIONS.map(({ value, label, Icon }) => (
           <DropdownMenuRadioItem
             aria-label={label}
-            className="size-8 min-h-0 justify-center rounded-md p-0 pr-0 text-muted-foreground data-checked:bg-background data-checked:text-foreground data-checked:ring-1 data-checked:ring-border data-checked:[&_svg]:text-primary max-md:min-h-0 [&_[data-slot=dropdown-menu-radio-item-indicator]]:hidden"
+            className="size-8 min-h-0 justify-center rounded-md p-0 pr-0 text-muted-foreground data-checked:bg-background data-checked:text-foreground data-checked:inset-ring data-checked:inset-ring-border data-checked:[&_svg]:text-primary max-md:min-h-0 [&_[data-slot=dropdown-menu-radio-item-indicator]]:hidden"
             key={value}
             title={label}
             value={value}

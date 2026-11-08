@@ -71,6 +71,11 @@ test("on System the page follows the OS as it changes", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
   await expect(html(page)).not.toHaveClass(/\blight\b/);
+  // The toggle shows a choice only once hydrated, when the page starts listening.
+  await expect(footerToggle(page).getByRole("radio", { name: "System" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
   await page.emulateMedia({ colorScheme: "light" });
   await expect(html(page)).toHaveClass(/\blight\b/);
   await page.emulateMedia({ colorScheme: "dark" });
@@ -92,6 +97,10 @@ test("the footer toggle switches, persists, reaches other tabs and returns to Sy
   const other = await context.newPage();
   await other.emulateMedia({ colorScheme: "dark" });
   await other.goto("/pricing");
+  await expect(footerToggle(other).getByRole("radio", { name: "System" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
 
   await toggle.getByRole("radio", { name: "Light" }).click();
   await expect(html(page)).toHaveClass(/\blight\b/);
