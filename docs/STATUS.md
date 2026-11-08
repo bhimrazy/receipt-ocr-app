@@ -169,6 +169,7 @@ Open pull requests only.
 | PR   | Work                                                                                                                                                                                                                       |
 | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | #136 | Squash migrations `0000`-`0003` into one baseline; CI integration on Postgres 17 and 18, e2e on 17. Branches adding migrations (`feat/billing-paddle`, `feat/sign-in-methods`) regenerate theirs as `0001` after it merges |
+| #148 | SEO: home title leads with "receipt scanner" and names CSV and JSON (never Excel; nothing writes .xlsx); one source for the home title/description; WebApplication JSON-LD with featureList and the free Offer, no ratings |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
