@@ -68,7 +68,9 @@ export function pageMetadata({
 /** Dates shown on the legal pages, also used as the sitemap's lastModified. */
 export const LEGAL_UPDATED = {
   privacy: "2026-11-08",
-  terms: "2026-11-07",
+  terms: "2026-11-08",
+  refunds: "2026-11-08",
+  pricing: "2026-11-08",
   cookies: "2026-11-06",
 } as const;
 
@@ -105,8 +107,8 @@ const APP_FEATURES = [
 /**
  * Organization (with its founder), WebSite and WebApplication for the home page. Only claims the
  * product backs today and the page shows: a free web app. No ratings, reviews or prices beyond
- * the free plan; the custom plan has no public price, so it has no Offer. Google's software rich
- * result needs a rating or review, so none is expected; the nodes describe the entity.
+ * the free plan. Google's software rich result needs a rating or review, so none is expected;
+ * the nodes describe the entity.
  */
 export function homeJsonLd(): Record<string, unknown> {
   const url = new URL("/", siteUrl).toString();

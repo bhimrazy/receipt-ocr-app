@@ -1,4 +1,5 @@
 import { Layer } from "effect";
+import { Billing } from "./billing/service";
 import { ContactReplyMailer } from "./jobs/kinds/contact-reply";
 import { WelcomeMailer } from "./jobs/kinds/welcome-email";
 import { JobQueue } from "./jobs/queue";
@@ -11,6 +12,7 @@ import { WideEventLoggerLive } from "./telemetry/logger";
 export { RECEIPT_CATEGORIES, type ReceiptCategory } from "@receipt-ocr/ai/categories";
 export * from "./account-security";
 export * from "./analytics/index";
+export * from "./billing/index";
 export * from "./config";
 export * from "./connections";
 export * from "./errors";
@@ -39,6 +41,7 @@ export const makeAppLayer = (mailers: Layer.Layer<WelcomeMailer | ContactReplyMa
     Storage.Live,
     Ocr.Live,
     JobQueue.Live,
+    Billing.Live,
     WideEventLoggerLive,
     mailers,
   ).pipe(Layer.provideMerge(Settings.Live), Layer.provideMerge(Db.Live));

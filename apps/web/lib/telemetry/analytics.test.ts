@@ -89,11 +89,55 @@ describe("fromRecord", () => {
       props: { limit: "day", plan: "free" },
     });
     expect(quota("minute")?.props).toEqual({ limit: "minute", plan: "free" });
+    expect(quota("month")?.props).toEqual({ limit: "month", plan: "free" });
+    expect(quota("pool")?.props).toEqual({ limit: "pool", plan: "free" });
     // The service-wide cap isn't the user's plan, and a repeat in the same minute isn't news.
     expect(quota("global")).toBeNull();
     expect(quota("day", { quota_repeat: true })).toBeNull();
     expect(fromRecord(record({ ...base, event: "receipt.upload", status_code: 500 }))).toBeNull();
     expect(fromRecord(record({ ...base, event: "receipt.poll", status_code: 200 }))).toBeNull();
+  });
+
+  it("maps a billing event that changed a workspace's plan to plan_changed, and nothing else", () => {
+    const base = {
+      unit: "job_attempt",
+      user_id: "u_1",
+      organization_id: "org_1",
+      trigger: "webhook",
+    };
+    expect(
+      fromRecord(
+        record({
+          ...base,
+          queue: { kind: "billing.apply_event", outcome: "succeeded" },
+          billing: { outcome: "applied", plan_from: "free", plan_to: "pro" },
+        }),
+      ),
+    ).toEqual({
+      name: "plan_changed",
+      userId: "u_1",
+      workspaceId: "org_1",
+      props: { from: "free", to: "pro" },
+    });
+    // Applied without a plan change (a renewal), or a retry: no event.
+    expect(
+      fromRecord(
+        record({
+          ...base,
+          queue: { kind: "billing.apply_event", outcome: "succeeded" },
+          billing: { outcome: "applied" },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      fromRecord(
+        record({
+          ...base,
+          queue: { kind: "billing.apply_event", outcome: "retry" },
+          billing: { plan_from: "pro", plan_to: "free" },
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("maps finished and dead job attempts", () => {

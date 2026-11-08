@@ -24,7 +24,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import type { ReviewImage } from "@/components/capture/review-sheet";
 import { formatTime } from "@/lib/format";
-import { usageNote, type Usage } from "@/components/usage-meter";
+import { usageNote, usageRemaining, type Usage } from "@/components/usage-meter";
 import { fitBatch } from "@/lib/capture/batch-limit";
 import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
 import { browserCameraSupport, wantsCamera, type CameraSupport } from "@/lib/capture/camera";
@@ -68,24 +68,17 @@ function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** Shown instead of the drop zone when the day's limit, or the service-wide cap, is reached. */
+/** Shown instead of the drop zone when a limit, the Free plan's shared pool, or the service-wide cap is reached. */
 function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
-  const reset = formatTime(usage.resetsAt);
-  const global = usage.blocked === "global";
+  const { title, body } = limitCopy(usage, formatTime(usage.opensAt), resetsIn);
   return (
     <Card className="flex flex-col items-center gap-4 border-warning/30 px-6 py-10 text-center sm:py-14">
       <span className="flex size-12 items-center justify-center rounded-full border border-warning/30 bg-warning/10 text-warning">
         <Clock aria-hidden="true" className="size-5" />
       </span>
       <div className="max-w-md">
-        <h2 className="text-lg font-semibold">
-          {global ? "Receipt scanning is paused for today" : "You've reached today's limit"}
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {global
-            ? `The service has scanned as many receipts as it can today, for all accounts. This isn't a limit on your account. Uploads open again at ${reset}, ${resetsIn}.`
-            : `Your plan scans ${plural(usage.limit, "receipt")} a day and you've used all of them. You can upload again at ${reset}, ${resetsIn}. Your first ${FREE_FAILED_ROUNDS} failed scans each day don't count.`}
-        </p>
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{body}</p>
       </div>
       <Link
         className="text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring max-md:inline-flex max-md:min-h-11 max-md:items-center"
@@ -95,6 +88,45 @@ function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
       </Link>
     </Card>
   );
+}
+
+function limitCopy(usage: Usage, opens: string, resetsIn: string) {
+  switch (usage.blocked) {
+    case "global":
+      return {
+        title: "Receipt scanning is paused for today",
+        body: `The service has scanned as many receipts as it can today, for all accounts. This isn't a limit on your account. Uploads open again at ${opens}, ${resetsIn}.`,
+      };
+    case "pool":
+      return {
+        title: "Free scanning is busy today",
+        body: `The Free plan's shared daily capacity is used up for today. Try again after ${opens}, ${resetsIn}, or upgrade this workspace to Pro.`,
+      };
+    case "month":
+      return usage.scope === "workspace"
+        ? {
+            title: "This workspace has reached its monthly limit",
+            body: `Pro includes ${plural(usage.limit, "scan")} a month for each workspace, shared by its members, and they're all used. Uploads open again on the 1st at ${opens}, ${resetsIn}.`,
+          }
+        : {
+            title: "You've used this month's free scans",
+            body: `The Free plan includes ${plural(usage.limit, "scan")} a month per person, across every workspace you use, and you've used all of them. Uploads open again on the 1st at ${opens}, ${resetsIn}. Upgrade a workspace to Pro for more scans.`,
+          };
+    default: {
+      const perDay = usage.day?.limit ?? usage.limit;
+      const monthLeft = usage.period === "month" ? Math.max(0, usage.limit - usage.used) : null;
+      if (usage.scope === "workspace") {
+        return {
+          title: "Daily limit reached",
+          body: `This workspace has used its ${plural(perDay, "scan")} for today. Uploads open at ${opens}, ${resetsIn}; ${monthLeft ?? 0} of ${plural(usage.limit, "scan")} are left this month.`,
+        };
+      }
+      return {
+        title: "You've reached today's limit",
+        body: `You've used all ${plural(perDay, "scan")} your plan includes today. You can upload again at ${opens}, ${resetsIn}.${monthLeft === null ? "" : ` ${monthLeft} of ${usage.limit} left this month.`} Your first ${FREE_FAILED_ROUNDS} failed scans don't count.`,
+      };
+    }
+  }
 }
 
 /** Seconds until `until`, ticking while it's set. */
@@ -263,7 +295,7 @@ export function UploadPanel({
   if (usage?.blocked) return <LimitReached resetsIn={resetsIn} usage={usage} />;
 
   const busy = snapshot.running;
-  const remaining = usage ? Math.max(0, usage.limit - usage.used) : null;
+  const remaining = usage ? usageRemaining(usage) : null;
   const inBatch = items.length + reviewing.length;
   const room = Math.max(0, batchMax - inBatch);
   /** What the batch holds right now, including adds not yet rendered. */

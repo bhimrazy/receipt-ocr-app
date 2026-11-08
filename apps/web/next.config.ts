@@ -19,6 +19,7 @@ const contentSecurityPolicy = buildContentSecurityPolicy(
   {
     googleAnalytics: Boolean(parseGaMeasurementId(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID)),
     sentryIngest: sentry?.ingestOrigin,
+    paddle: Boolean(process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim()),
   },
 );
 

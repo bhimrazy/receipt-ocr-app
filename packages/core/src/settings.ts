@@ -4,7 +4,14 @@ import { Config, Context, Effect, Layer, Option } from "effect";
 import { z } from "zod";
 import { insertAudit, transact, type AuditActor } from "./audit";
 import { InvalidInput, type Conflict, type DbError, type NotFound } from "./errors";
-import { DEFAULT_BATCH_MAX, DEFAULT_PLANS, MAX_BATCH, type PlanTable } from "./plans";
+import {
+  DEFAULT_BATCH_MAX,
+  DEFAULT_PLANS,
+  MAX_BATCH,
+  QUOTA_SCOPES,
+  type PlanPolicy,
+  type PlanTable,
+} from "./plans";
 import { Db } from "./services";
 import { errorFields } from "./telemetry/redact";
 
@@ -16,39 +23,48 @@ import { errorFields } from "./telemetry/redact";
 
 const count = (max: number) => z.number().int().min(1).max(max);
 
-const policySchema = (batchMax: z.ZodType<number>) =>
+/**
+ * `defaults` fills fields a stored row predates (it was saved before they existed), so an older
+ * save keeps its own numbers and gets the code default for the new ones.
+ */
+const policySchema = (batchMax: z.ZodType<number>, defaults: PlanPolicy) =>
   z
     .object({
       workspaces: count(100),
+      scope: z.enum(QUOTA_SCOPES).default(defaults.scope),
       receiptsPerDay: count(100_000),
+      receiptsPerMonth: count(1_000_000).nullable().default(defaults.receiptsPerMonth),
+      poolPerDay: count(10_000_000).nullable().default(defaults.poolPerDay),
       receiptsPerMinute: count(1_000),
-      // Rows saved before this field existed get the default.
       batchMax: batchMax.default(DEFAULT_BATCH_MAX),
     })
     .refine((p) => p.receiptsPerMinute <= p.receiptsPerDay, {
       message: "The per-minute limit can't be higher than the daily limit.",
       path: ["receiptsPerMinute"],
+    })
+    .refine((p) => p.receiptsPerMonth === null || p.receiptsPerDay <= p.receiptsPerMonth, {
+      message: "The daily limit can't be higher than the monthly limit.",
+      path: ["receiptsPerDay"],
     });
 
-const planPolicySchema = policySchema(count(MAX_BATCH));
-
 /** What an admin may save. */
-export const planTableSchema = z.object({ free: planPolicySchema, pro: planPolicySchema });
+export const planTableSchema = z.object({
+  free: policySchema(count(MAX_BATCH), DEFAULT_PLANS.free),
+  pro: policySchema(count(MAX_BATCH), DEFAULT_PLANS.pro),
+});
 
 /**
  * What is read back: a stored `batchMax` over MAX_BATCH (saved before the cap was lowered) is
  * clamped, so that one field doesn't send every customised limit back to the defaults.
  */
-const storedPolicySchema = policySchema(
-  z
-    .number()
-    .int()
-    .min(1)
-    .transform((n) => Math.min(n, MAX_BATCH)),
-);
+const storedBatchMax = z
+  .number()
+  .int()
+  .min(1)
+  .transform((n) => Math.min(n, MAX_BATCH));
 export const storedPlanTableSchema = z.object({
-  free: storedPolicySchema,
-  pro: storedPolicySchema,
+  free: policySchema(storedBatchMax, DEFAULT_PLANS.free),
+  pro: policySchema(storedBatchMax, DEFAULT_PLANS.pro),
 });
 
 /** Per-step budget; the whole chain also shares one deadline (see `Ocr`). */

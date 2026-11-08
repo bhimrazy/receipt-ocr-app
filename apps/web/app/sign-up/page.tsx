@@ -8,6 +8,7 @@ import { callbackErrorMessage } from "@/lib/auth-errors";
 import { safeRedirect } from "@/lib/redirect";
 import { getSession } from "@/lib/session";
 import { redirect as nextRedirect } from "next/navigation";
+import { allowance } from "@/lib/plan-copy";
 
 export const metadata: Metadata = pageMetadata({
   title: "Create account",
@@ -37,7 +38,7 @@ export default async function SignUpPage({
     <AuthLayout subtitle="Create a free account. Photograph a receipt, check what was scanned, export a CSV.">
       {authEnabled ? (
         <CredentialsForm
-          freeReceiptsPerDay={free.receiptsPerDay}
+          freeAllowance={allowance(free)}
           initialError={callbackErrorMessage(error)}
           mode="sign-up"
           notice={

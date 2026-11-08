@@ -17,6 +17,8 @@ const tables = [
   "account",
   "admin_audit_log",
   "app_settings",
+  "billing_events",
+  "billing_subscriptions",
   "invitation",
   "job_controls",
   "jobs",
@@ -62,9 +64,12 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is one baseline file", () => {
+  it("is the baseline plus billing", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
-    expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual(["0000_baseline"]);
+    expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
+      "0000_baseline",
+      "0001_billing",
+    ]);
   });
 
   it("creates every table with row-level security, and the two enum types", async () => {
@@ -89,9 +94,13 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     const rows =
       await db`select conname from pg_constraint where contype = 'c' and connamespace = 'public'::regnamespace`;
     expect(rows.map((r) => r.conname).sort()).toEqual([
+      "billing_events_outcome_check",
+      "billing_subscriptions_interval_check",
+      "billing_subscriptions_status_check",
       "jobs_attempts_check",
       "jobs_last_error_kind_check",
       "ocr_calls_status_check",
+      "ocr_rounds_plan_check",
       "receipt_items_quantity_check",
       "receipts_attempts_check",
       "receipts_currency_check",
@@ -111,6 +120,13 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     expect(def("receipt_groups_org_name_idx")).toMatch(/UNIQUE.*lower/);
     expect(def("ocr_calls_receipt_round_attempt_step_idx")).toMatch(/UNIQUE/);
     expect(def("ocr_calls_receipt_round_step_idx")).toBe("");
+    // One stored row per provider event and per provider subscription.
+    expect(def("billing_events_provider_event_idx")).toMatch(
+      /UNIQUE.*\(provider, provider_event_id\)/,
+    );
+    expect(def("billing_subscriptions_provider_id_idx")).toMatch(
+      /UNIQUE.*\(provider, provider_subscription_id\)/,
+    );
   });
 
   it("types receipt_date as a date with a workspace index, and indexes the foreign keys deletes walk", async () => {
@@ -121,7 +137,6 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     const def = (name: string) => rows.find((r) => r.indexname === name)?.indexdef ?? "";
     expect(def("receipts_org_receipt_date_idx")).toContain("(organization_id, receipt_date)");
     for (const [index, column] of [
-      ["ocr_rounds_organization_id_idx", "organization_id"],
       ["ocr_calls_user_id_idx", "user_id"],
       ["jobs_user_id_idx", "user_id"],
       ["invitation_inviter_id_idx", "inviter_id"],
@@ -129,6 +144,9 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     ]) {
       expect(def(index!)).toMatch(new RegExp(`\\(${column}\\)$`));
     }
+    // The workspace quota index leads with organization_id, so it serves the set-null too.
+    expect(def("ocr_rounds_org_created_at_idx")).toContain("(organization_id, created_at)");
+    expect(def("ocr_rounds_organization_id_idx")).toBe("");
     expect(def("receipts_last_attempt_at_idx")).toBe("");
     expect(def("member_organization_id_idx")).toBe("");
   });

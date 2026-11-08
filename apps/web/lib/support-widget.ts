@@ -1,6 +1,6 @@
 /**
- * Lightweight bridge so any component (e.g. the pricing "Contact us" button)
- * can pop open the support widget without a shared context provider.
+ * Lightweight bridge so any component can pop open the support widget
+ * without a shared context provider.
  */
 export type SupportTopic = "getting-started" | "use-case" | "feature";
 

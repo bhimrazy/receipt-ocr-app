@@ -467,7 +467,7 @@ const signInDisconnected = factorNotice({
 });
 /** Sent once, after the account exists and its address is verified. The limit is the user's plan. */
 const welcome: EmailDefinition = {
-  slots: ["url", "urlLabel", "receiptsPerDay"],
+  slots: ["url", "urlLabel", "planLine"],
   render(v, shared) {
     const heading = "Your account is ready";
     const intro = `Thanks for joining ${BRAND}. It turns receipt photos into spreadsheet rows: merchant, date, line items, tax and total, each with a confidence score.`;
@@ -482,7 +482,7 @@ const welcome: EmailDefinition = {
       },
       { lead: "Export a CSV,", rest: "for one receipt or your whole history." },
     ];
-    const plan = `Your plan scans up to ${v.receiptsPerDay} receipts a day. The count resets every day.`;
+    const plan = v.planLine;
     const note = shared.supportEmail
       ? "Need help, or more than your plan includes? Reply to this email and we'll answer."
       : "Need help, or more than your plan includes? Use the support button in the app.";

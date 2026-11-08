@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { getPlanTable } from "@/lib/plan-limits";
+import { allowance } from "@/lib/plan-copy";
+import { PRO_PRICE_LABEL } from "@/lib/pricing";
+import { authorName } from "@/lib/site";
 import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "Terms of service",
   description:
-    "The terms for using ReceiptOCR: your account, your receipts, the free plan, and checking AI-extracted data before you rely on it.",
+    "The terms for ReceiptOCR: your account and receipts, the Free and Pro plans, payments through Paddle, and checking AI-extracted data before relying on it.",
   path: "/terms",
 });
 
@@ -14,13 +17,14 @@ export const metadata: Metadata = pageMetadata({
 export const revalidate = 3600;
 
 export default async function TermsPage() {
-  const { free } = await getPlanTable();
-  const workspaces = free.workspaces === 1 ? "1 workspace" : `${free.workspaces} workspaces`;
+  const { free, pro } = await getPlanTable();
+  const owned = (n: number) => (n === 1 ? "1 workspace" : `${n} workspaces`);
+  const workspaces = owned(free.workspaces);
   return (
     <LegalPage
       title="Terms of service"
       updated={formatLegalDate(LEGAL_UPDATED.terms)}
-      intro="These terms apply when you use ReceiptOCR. By creating an account or using the service, you agree to them. ReceiptOCR is in early access, so some features may change."
+      intro={`These terms apply when you use ReceiptOCR, a service run by ${authorName}. By creating an account or using the service, you agree to them. ReceiptOCR is in early access, so some features may change.`}
       sections={[
         {
           heading: "The service",
@@ -47,8 +51,25 @@ export default async function TermsPage() {
         {
           heading: "Plans and limits",
           body: [
-            `The free plan currently includes up to ${free.receiptsPerDay} receipts a day and ${workspaces}, with no card required. We may change these limits, and we'll update the site when we do.`,
-            "Paid plans aren't available yet. If we introduce them, we'll show the price and what it includes before you're asked to pay anything.",
+            `The free plan currently includes ${allowance(free)} per person, counted across every workspace they use, and ${workspaces} to own, with no card required.`,
+            `Pro is a subscription for one workspace, at ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year, plus any sales tax or VAT. It currently includes ${allowance(pro)} for that workspace, shared by its members, and lets its owner own up to ${owned(pro.workspaces)}. Each workspace needs its own subscription to be on Pro.`,
+            "Daily limits reset at 00:00 UTC and monthly limits on the 1st of each month at 00:00 UTC. Unused scans don't carry over.",
+            "We may change these limits or prices. A price change applies from your next billing period, and we'll tell you by email before it does.",
+          ],
+        },
+        {
+          heading: "Payments",
+          body: [
+            "Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all our orders. Paddle provides all customer service inquiries and handles returns.",
+            "When you buy Pro, you buy it from Paddle under Paddle's buyer terms, which apply alongside these terms. Paddle charges your payment method, adds sales tax or VAT where it applies, and sends your receipts and invoices.",
+            "A subscription renews automatically at the end of each billing period until you cancel it. You can cancel any time from Settings, Billing; Pro stays on until the end of the period you've paid for. Refunds follow our refund policy.",
+          ],
+          links: [
+            { label: "Refund policy", href: "/refunds" },
+            {
+              label: "Paddle buyer terms",
+              href: "https://www.paddle.com/legal/checkout-buyer-terms",
+            },
           ],
         },
         {

@@ -1,4 +1,5 @@
 import { homeFaqs } from "@/lib/home-faqs";
+import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { OWNER, REPO_URL, homeDescription } from "@/lib/seo";
 import { isProductionHost, requestHost } from "@/lib/seo-hosts";
 import { SITE_NAME, siteUrl } from "@/lib/site";
@@ -9,9 +10,10 @@ const pages = [
   ["Home", abs("/"), "product overview, how it works, pricing and FAQ"],
   [
     "Pricing",
-    abs("/#pricing"),
-    "Free ($0, a daily allowance of receipt scans) and Custom (contact us)",
+    abs("/pricing"),
+    `Free ($0) and Pro (${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year per workspace, plus tax)`,
   ],
+  ["Refund policy", abs("/refunds"), "refunds for Pro subscriptions, handled by Paddle"],
   ["FAQ", abs("/#faq"), "file formats, accuracy, where data is stored, export"],
   ["Privacy policy", abs("/privacy"), "what is collected and how it is used"],
   ["Terms of service", abs("/terms"), "the terms of using ReceiptOCR"],
@@ -37,7 +39,7 @@ export function llmsTxt(): string {
     "",
     `- [Source code](${REPO_URL}): the open-source repository; open an issue there for questions and bugs`,
     `- [Maintainer](${OWNER.url}): ${OWNER.name}`,
-    `- [Contact form](${abs("/#pricing")}): the Contact us button on the home page reaches the team`,
+    "- Support: the support button on every page reaches the team",
     "",
     "## Optional",
     "",
@@ -55,8 +57,8 @@ export function llmsFullTxt(): string {
     "",
     "## Plans",
     "",
-    "- Free: $0, no credit card. A daily allowance of receipt scans; merchant, items, tax and totals extracted; confidence scores and review flags; searchable receipt history; CSV export and JSON copy.",
-    "- Custom: contact us. Everything in Free with higher daily limits, more workspaces and a direct line to the team. There is no public price.",
+    "- Free: $0, no credit card. Daily and monthly scan limits per person, across every Free workspace; merchant, items, tax and totals extracted; confidence scores and review flags; searchable receipt history; CSV export and JSON copy. Own 1 workspace.",
+    `- Pro: ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year for one workspace, plus sales tax or VAT (Paddle is the merchant of record). Everything in Free, with a larger monthly scan allowance shared by everyone in the workspace. Own up to 2 workspaces, each upgraded separately. Cancel any time. Current limits: ${abs("/pricing")}.`,
     "",
     "## FAQ",
     "",

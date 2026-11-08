@@ -42,3 +42,21 @@ export function soleOwnerMessage(workspaces: readonly string[], then: string): s
 }
 
 export const WORKSPACE_NEEDS_OWNER = "WORKSPACE_NEEDS_OWNER";
+
+/**
+ * Why the account can't be deleted yet: a Pro subscription that can still charge would be left
+ * with no one to cancel it. Billing lives in each workspace's own settings.
+ */
+export function cancelSubscriptionFirst(workspaces: readonly string[]): string {
+  const names =
+    workspaces.length <= 1
+      ? (workspaces[0] ?? "a workspace")
+      : `${workspaces.slice(0, -1).join(", ")} and ${workspaces.at(-1)}`;
+  return `Cancel the Pro subscription for ${names} first`;
+}
+
+/** The server's refusal, without the settings link the UI adds. */
+export const subscriptionMessage = (workspaces: readonly string[]) =>
+  `${cancelSubscriptionFirst(workspaces)}, in that workspace's Settings, under Billing.`;
+
+export const WORKSPACE_HAS_SUBSCRIPTION = "WORKSPACE_HAS_SUBSCRIPTION";
