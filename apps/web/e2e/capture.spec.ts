@@ -88,7 +88,7 @@ test("take two photos, edit one, and upload both", async ({ page }) => {
   await expect(review.getByTestId("resolution")).toHaveText(/^\d+ × \d+ px · ~\d+ (KB|MB)$/, {
     timeout: 15_000,
   });
-  await expect(review.getByText(/Greyscale and B&W make the file smaller/)).toBeVisible();
+  await expect(review.getByText("Tap the preview to see it at full size.")).toBeVisible();
   // Escape goes back to the corners, not out of the sheet.
   await page.keyboard.press("Escape");
   await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
@@ -176,7 +176,9 @@ test("a large photo offers upload sizes, shows the choice at full size and sends
   await change.click();
   const sizes = review.getByRole("group", { name: "Upload size" });
   await expect(sizes.getByRole("radio", { name: /^Recommended/ })).toBeChecked();
-  await sizes.getByRole("radio", { name: /^Smaller/ }).check();
+  // The radios are visually hidden inside their labels, so pick by the label like a user does.
+  await sizes.getByText("Smaller").click();
+  await expect(sizes.getByRole("radio", { name: /^Smaller/ })).toBeChecked();
   await expect(review.getByTestId("resolution")).toHaveText(/^800 × 1067 px · ~\d+ KB$/);
 
   await review.getByRole("button", { name: "See it at full size" }).click();

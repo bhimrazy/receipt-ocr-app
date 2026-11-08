@@ -614,7 +614,7 @@ export default function ReviewSheet({
                     />
                   </button>
                 ) : (
-                  <p className="whitespace-nowrap" data-testid="resolution">
+                  <p className="w-full whitespace-nowrap" data-testid="resolution">
                     {shown && shownBytes ? (
                       <>
                         <Mono>{shown.width}</Mono> × <Mono>{shown.height}</Mono> px · ~
