@@ -290,6 +290,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
+- **Email templates cleanup.** One file per template and no committed `generated.ts` (generate at build, or render
+  at runtime if measured cheap): [plan](plans/2026-11-08-email-templates-cleanup.md).
 - **Play Store app (Trusted Web Activity).** Wrap the PWA with Bubblewrap for a Play Store listing; its native
   splash should allow the Android 12+ bottom branding image ("A product by / BHIMRAJ YADAV"), which installed web
   apps can't show. Verify when building. Until then Android shows the icon only, the byline is iOS-only.
