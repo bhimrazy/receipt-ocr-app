@@ -342,6 +342,15 @@ To rotate:
 Changing the current version signs everyone out. Losing every secret makes stored OAuth tokens unreadable, so users
 have to sign in with their provider again.
 
+In production the current secret must be at least 32 characters, or the app refuses to start. Secrets are stored as
+Vercel Sensitive, so nobody can read them back: keep a copy in a password manager, because step 1 needs the current
+value. Without it you can still rotate by setting only the new version. That signs everyone out, and the app never
+reads stored OAuth tokens, so nothing else breaks. Once two-step sign-in ships it also loses every TOTP secret and
+backup code sealed under the old version.
+
+The production secret was last rotated on 2026-11-08 (`BETTER_AUTH_SECRETS=2:<new>`, `BETTER_AUTH_SECRET` set to the
+same value).
+
 ## Release notes
 
 Steps specific to one release, newest first.

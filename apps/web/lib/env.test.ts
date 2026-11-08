@@ -45,6 +45,35 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("auth secret strength", () => {
+  const onVercel = { ...production, VERCEL: "1" };
+
+  it("refuses to start in production with a current secret under 32 characters", async () => {
+    await expect(loadEnv({ ...onVercel, BETTER_AUTH_SECRET: "short" })).rejects.toThrow(
+      /shorter than 32/,
+    );
+    await expect(
+      loadEnv({ ...onVercel, BETTER_AUTH_SECRETS: `2:short,1:${"s".repeat(40)}` }),
+    ).rejects.toThrow(/shorter than 32/);
+  });
+
+  it("checks only the current version, and only warns outside production or at build", async () => {
+    await expect(
+      loadEnv({
+        ...onVercel,
+        BETTER_AUTH_SECRET: "short",
+        BETTER_AUTH_SECRETS: `2:${"s".repeat(40)}`,
+      }),
+    ).resolves.toBeDefined();
+    await expect(
+      loadEnv({ ...onVercel, BETTER_AUTH_SECRET: "short", NEXT_PHASE: "phase-production-build" }),
+    ).resolves.toBeDefined();
+    await expect(
+      loadEnv({ NODE_ENV: "development", BETTER_AUTH_SECRET: "short" }),
+    ).resolves.toBeDefined();
+  });
+});
+
 describe("trusted IP config (P1-2)", () => {
   it("refuses to start in production off Vercel without TRUSTED_IP_HEADERS", async () => {
     await expect(loadEnv(production)).rejects.toThrow(/TRUSTED_IP_HEADERS must be set/);

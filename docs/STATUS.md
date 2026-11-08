@@ -145,11 +145,11 @@ Steps are in [deployment.md](deployment.md).
   to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
   no outside collaborators. The full fix is a separate Vercel project for previews, with its own token.
-- Keep every new production secret Sensitive in Vercel. The build tolerates their placeholders (fix in
-  `ci/db-migrations`); `BETTER_AUTH_SECRETS` was removed from Vercel as a stopgap and can go back once it lands.
+- Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
+  rotated on 2026-11-08 (`BETTER_AUTH_SECRETS=2:<new>`); keep its copy in a password manager.
 - Set `OCR_DAILY_CAP` in production as a spend guard.
-- Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`; recommended
-  `BETTER_AUTH_SECRETS=1:<current BETTER_AUTH_SECRET>`.
+- Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
+- Standing decisions and dated reminders: [decisions.md](decisions.md).
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
 - If an admin saved an OCR chain naming `gemini-3.7-flash`, re-save it in Admin → Settings.
 - Set `EMAIL_FROM` with the display name `ReceiptOCR` (for example `ReceiptOCR <noreply@...>`), matching the brand.
