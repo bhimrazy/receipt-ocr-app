@@ -143,6 +143,27 @@ Errors only, and only with a valid `SENTRY_DSN` (`parseSentryDsn`; anything else
   replaced, security plan B5). `dataCollection` is all off as well. No tunnel: the browser posts to Sentry's ingest
   host, which joins `connect-src` only when the DSN is set (a tunnel would forward cookies, security plan B2/B3).
 
+## PostHog
+
+Server-side product analytics, only with a project key (`POSTHOG_KEY=phc_…`; a personal `phx_` key leaves it off).
+`register()` loads [`posthog.ts`](../../../apps/web/lib/telemetry/posthog.ts) (`posthog-node`) as an event sink.
+
+- **Events are projections of wide events** ([`analytics.ts`](../../../apps/web/lib/telemetry/analytics.ts),
+  `fromRecord`): a successful `receipt.upload` becomes `receipt_uploaded`, `receipt.export` becomes `csv_exported`, a
+  `QuotaExceeded` 429 becomes `plan_limit_hit`, and a `job.attempt` that succeeded or died becomes `receipt_scanned`
+  or `receipt_scan_failed`. They start from the record that already passed the allowlist, so PostHog can't see a
+  field the logs don't. `signed_up` comes from Better Auth's `user.create.after` hook through `track()`.
+- **One allowlist for both paths** (`checkEvent`): a closed set of event names, each with its own props of a known
+  kind (short codes, integers, booleans). Ids must be opaque ids. Unknown props are dropped at runtime, so a cast
+  can't add one.
+- **Identity:** `distinctId` is the Better Auth user id and `groups.workspace` the workspace id. No person
+  properties, no GeoIP (`$geoip_disable`), no IP (the server sends the event). Impersonated requests are skipped.
+- **Off the request path:** captures are queued in memory and sent by the same `after()` flush as OTLP. On Vercel the
+  SDK's timer is off (`flushInterval: 0`); Docker keeps a 10 s timer and shuts down on `SIGTERM`. Exception
+  autocapture is off (Sentry owns errors).
+- A plan-quota 429 is never sampled away (`isRoutine`), so `plan_limit_hit` counts every rejection.
+- Not built: browser PostHog (page views, landing funnels) waits on a consent decision; `$ai_generation` events.
+
 ## OTLP export
 
 When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, `register()` in `instrumentation.ts` loads

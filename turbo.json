@@ -23,6 +23,7 @@
         "OPENAI_*",
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+        "POSTHOG_KEY",
         "RESEND_API_KEY",
         "S3_*",
         "SENTRY_DSN",

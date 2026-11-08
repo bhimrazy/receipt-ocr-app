@@ -12,7 +12,14 @@ vi.mock("./lib/telemetry/sentry-server", () => {
   return { startSentryServer: sentry.start };
 });
 
-const { startErrorReporting, startTelemetryExport } = await import("./instrumentation-node");
+const posthog = vi.hoisted(() => ({ loaded: false, start: vi.fn() }));
+vi.mock("./lib/telemetry/posthog", () => {
+  posthog.loaded = true;
+  return { startPostHog: posthog.start };
+});
+
+const { startErrorReporting, startProductAnalytics, startTelemetryExport } =
+  await import("./instrumentation-node");
 // Loaded here, not inside the first test's timeout (it is what startTelemetryExport imports first).
 await import("@receipt-ocr/core/telemetry");
 
@@ -57,5 +64,25 @@ describe("startErrorReporting", () => {
     const dsn = "https://0123456789abcdef0123456789abcdef@o1.ingest.us.sentry.io/2";
     await startErrorReporting({ SENTRY_DSN: dsn });
     expect(sentry.start).toHaveBeenCalledWith(dsn, { SENTRY_DSN: dsn });
+  });
+});
+
+describe("startProductAnalytics", () => {
+  it("loads no PostHog code without a project key", async () => {
+    await startProductAnalytics({});
+    await startProductAnalytics({ POSTHOG_KEY: "phx_personalkeythatcanreadeverything" });
+    expect(posthog.loaded).toBe(false);
+  });
+
+  it("starts PostHog with a project key", async () => {
+    const env = {
+      POSTHOG_KEY: "phc_0123456789abcdefABCD",
+      POSTHOG_HOST: "https://us.i.posthog.com",
+    };
+    await startProductAnalytics(env);
+    expect(posthog.start).toHaveBeenCalledWith(
+      { key: "phc_0123456789abcdefABCD", host: "https://us.i.posthog.com" },
+      env,
+    );
   });
 });

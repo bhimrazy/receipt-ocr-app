@@ -144,10 +144,13 @@ export function skipEvent(event: WideEvent): void {
 /**
  * Whether a finished request is routine for sampling. A 429 is, so a flood
  * of rejected requests can't flood the logs, unless the route keeps them;
- * anything that logged a notice never is (the same rule as job ticks).
+ * anything that logged a notice never is (the same rule as job ticks). A
+ * plan quota rejection isn't a flood but the upgrade signal (`plan_limit_hit`),
+ * and it is per signed-in user, so it is always kept.
  */
 function isRoutine(spec: RequestEventSpec, request: Request, event: WideEvent): boolean {
   if ((event.notices?.length ?? 0) > 0) return false;
+  if (event.status_code === 429 && event.outcome === "QuotaExceeded") return false;
   if (event.status_code === 429) return spec.keepRateLimited !== true;
   if (typeof spec.routine === "function") {
     try {

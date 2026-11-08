@@ -176,6 +176,15 @@ describe("withRequestEvent", () => {
     ).toEqual({ routine: false });
   });
 
+  it("keeps every plan-quota 429: it is the upgrade signal, not a flood", async () => {
+    expect(
+      await optionsOf({ event: "receipt.upload", route: "/api/receipts" }, (event) => {
+        event.outcome = "QuotaExceeded";
+        return new Response(null, { status: 429 });
+      }),
+    ).toEqual({ routine: false });
+  });
+
   it("writes nothing for an event the handler skipped", async () => {
     vi.mocked(logger.emit).mockClear();
     await withRequestEvent({ event: "x", route: "/api/x" }, (_r, _c, event) => {

@@ -483,7 +483,7 @@ it makes no network calls.
 | Google Analytics 4   | Visitor analytics on public pages, after consent    | **Works.** Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` (9a)              |
 | Axiom                | Searchable logs kept longer than Vercel's           | **Works.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` and `_HEADERS` (9b) |
 | Sentry               | Error grouping and alerts, server and browser       | **Works.** Set `SENTRY_DSN` (9c)                                 |
-| PostHog              | Product analytics (funnels, retention), server-side | Planned: needs the server PostHog client and a consent decision  |
+| PostHog              | Product analytics (funnels, retention), server-side | **Works.** Set `POSTHOG_KEY` and `POSTHOG_HOST` (9d)             |
 
 Do them in this order when the time comes: Axiom first (logs are what you need during an incident), then Sentry, then
 PostHog once there are users to learn from.
@@ -536,13 +536,21 @@ upload in `production.yml` that runs no repo code, with `SENTRY_AUTH_TOKEN` as a
 in Vercel), maps deleted before deploy (security plan M11). Docker: `SENTRY_DSN` must be a build arg for browser
 reporting; at runtime alone it turns on server reporting only.
 
-### 9d. PostHog (once wired in)
+### 9d. PostHog
 
 1. [posthog.com](https://posthog.com) → sign up, region **US** (or EU; it decides the host). Project `ReceiptOCR`.
 2. **Project settings:** turn off session recording and autocapture; the app sends named server-side events only.
 3. Vercel (Production): `POSTHOG_KEY` (the project API key, Config) and `POSTHOG_HOST`
    (`https://us.i.posthog.com` or `https://eu.i.posthog.com`).
-4. Name PostHog as a processor in the privacy policy before turning it on.
+4. Redeploy: the privacy page names PostHog only when `POSTHOG_KEY` is set at build.
+5. Check: sign up or upload a receipt, then **Activity** in PostHog shows `signed_up` or `receipt_uploaded` with the
+   user's id as the person and no email or name.
+
+Events (server-side only, `lib/telemetry/analytics.ts`): `signed_up` (`method`), `receipt_uploaded` (`mode`, `plan`),
+`receipt_scanned` (`trigger`, `model`, `fallback`, `calls`), `receipt_scan_failed` (`trigger`, `error_kind`),
+`csv_exported` (`count`), `plan_limit_hit` (`limit`, `plan`). Each carries the user id and the `workspace` group.
+Nothing is sent while an admin impersonates a user. Browser PostHog (page views, landing-page funnels) needs a consent
+decision first and is not built.
 
 ---
 
