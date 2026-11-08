@@ -110,11 +110,10 @@ describe("job.attempt events", () => {
   });
 
   it("attributes a job enqueued while impersonating to the admin too", async () => {
-    await runTick(
-      () => Effect.succeed({ ok: true }),
-      undefined,
-      [{ ...JOB, payload: { n: 1, impersonatedBy: "admin-1" } }, { ...JOB, payload: null }],
-    );
+    await runTick(() => Effect.succeed({ ok: true }), undefined, [
+      { ...JOB, payload: { n: 1, impersonatedBy: "admin-1" } },
+      { ...JOB, payload: null },
+    ]);
     const attempts = lines.filter((line) => line.event === "job.attempt");
     expect(attempts.map((line) => line.impersonated_by)).toEqual(["admin-1", undefined]);
   });
