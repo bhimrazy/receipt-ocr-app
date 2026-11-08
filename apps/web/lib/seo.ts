@@ -23,6 +23,11 @@ const DEFAULT_IMAGE = {
   alt: OG_IMAGE_ALT,
 };
 
+/** A page's full `<title>`: the root layout's "%s · ReceiptOCR" template applied to `title`. */
+export function fullTitle(title: string): string {
+  return `${title} · ${SITE_NAME}`;
+}
+
 /**
  * Title, description, canonical and social tags for one public page. A child segment's
  * `openGraph`/`twitter` replace the root layout's whole object, so every page sets its own;
@@ -43,7 +48,7 @@ export function pageMetadata({
   /** False for pages that must stay out of search results (auth flows). */
   index?: boolean;
 }): Metadata {
-  const fullTitle = absoluteTitle ? title : `${title} · ${SITE_NAME}`;
+  const shownTitle = absoluteTitle ? title : fullTitle(title);
   return {
     title: absoluteTitle ? { absolute: title } : title,
     description,
@@ -52,13 +57,13 @@ export function pageMetadata({
       type: "website",
       siteName: SITE_NAME,
       url: path,
-      title: fullTitle,
+      title: shownTitle,
       description,
       images: [DEFAULT_IMAGE],
     },
     twitter: {
       card: "summary_large_image",
-      title: fullTitle,
+      title: shownTitle,
       description,
       images: [DEFAULT_IMAGE],
     },

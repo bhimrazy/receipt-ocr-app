@@ -1,7 +1,7 @@
 import type { Metadata, MetadataRoute } from "next";
-import { pageMetadata, siteNodeIds } from "@/lib/seo";
+import { fullTitle, pageMetadata, siteNodeIds } from "@/lib/seo";
 import { SITE_NAME, siteUrl } from "@/lib/site";
-import type { ContentCollection, ContentPage } from "./types";
+import type { ContentCollection, ContentCollectionId, ContentPage } from "./types";
 import { useCasePages, useCasesCollection } from "./use-cases";
 
 /**
@@ -13,35 +13,23 @@ export const contentPages: ContentPage[] = [...useCasePages];
 
 const abs = (path: string) => new URL(path, siteUrl).toString();
 
-export function collectionById(id: ContentCollection["id"]): ContentCollection {
+export function collectionById(id: ContentCollectionId): ContentCollection {
   const collection = contentCollections.find((c) => c.id === id);
   if (!collection) throw new Error(`Unknown content collection: ${id}`);
   return collection;
 }
 
-export function pagesIn(id: ContentCollection["id"]): ContentPage[] {
+export function pagesIn(id: ContentCollectionId): ContentPage[] {
   return contentPages.filter((page) => page.collection === id);
-}
-
-export function findContentPage(
-  id: ContentCollection["id"],
-  slug: string,
-): ContentPage | undefined {
-  return contentPages.find((page) => page.collection === id && page.slug === slug);
 }
 
 export function contentPath(page: ContentPage): string {
   return `${collectionById(page.collection).path}/${page.slug}`;
 }
 
-/** The page found at `path`; for related links. */
+/** The page served at `path`, if any; routes and related links look pages up by path. */
 export function contentPageAt(path: string): ContentPage | undefined {
   return contentPages.find((page) => contentPath(page) === path);
-}
-
-/** Full `<title>`, as `pageMetadata` builds it. */
-export function fullTitle(title: string): string {
-  return `${title} · ${SITE_NAME}`;
 }
 
 export function contentMetadata(page: ContentPage): Metadata {
@@ -73,6 +61,19 @@ function breadcrumb(id: string, trail: Array<{ name: string; path: string }>) {
   };
 }
 
+/**
+ * Short WebSite and WebApplication nodes with the home page's `@id`s, so `isPartOf` and `about`
+ * resolve within this page's graph. The full nodes are on the home page.
+ */
+function siteStubs() {
+  const ids = siteNodeIds();
+  const url = abs("/");
+  return [
+    { "@type": "WebSite", "@id": ids.website, name: SITE_NAME, url },
+    { "@type": "WebApplication", "@id": ids.app, name: SITE_NAME, url },
+  ];
+}
+
 /** Breadcrumbs shown on the page and in its BreadcrumbList, Home first. */
 export function contentBreadcrumbs(page: ContentPage) {
   const collection = collectionById(page.collection);
@@ -84,8 +85,8 @@ export function contentBreadcrumbs(page: ContentPage) {
 }
 
 /**
- * BreadcrumbList, WebPage (about the app, part of the site) and FAQPage. The FAQ entity is built
- * from `page.faqs`, which the page also renders, so the two cannot drift apart.
+ * BreadcrumbList, WebPage (about the app, part of the site) and FAQPage, plus the site stubs.
+ * The FAQ entity is built from `page.faqs`, which the page also renders, so the two cannot drift.
  */
 export function contentJsonLd(page: ContentPage): Record<string, unknown> {
   const url = abs(contentPath(page));
@@ -116,11 +117,12 @@ export function contentJsonLd(page: ContentPage): Record<string, unknown> {
           acceptedAnswer: { "@type": "Answer", text: faq.a },
         })),
       },
+      ...siteStubs(),
     ],
   };
 }
 
-/** BreadcrumbList and CollectionPage listing the collection's pages. */
+/** BreadcrumbList and CollectionPage listing the collection's pages, plus the site stubs. */
 export function collectionJsonLd(collection: ContentCollection): Record<string, unknown> {
   const url = abs(collection.path);
   const ids = siteNodeIds();
@@ -152,6 +154,7 @@ export function collectionJsonLd(collection: ContentCollection): Record<string, 
           })),
         },
       },
+      ...siteStubs(),
     ],
   };
 }
