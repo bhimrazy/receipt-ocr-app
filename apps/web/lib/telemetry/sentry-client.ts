@@ -4,6 +4,7 @@ import {
   captureException,
   dedupeIntegration,
   defaultStackParser,
+  eventFiltersIntegration,
   getCurrentScope,
   globalHandlersIntegration,
   makeFetchTransport,
@@ -13,7 +14,7 @@ import { scrubBreadcrumb, scrubEvent } from "./sentry-event";
 /**
  * Browser Sentry, errors only, as small as the SDK allows: a bare
  * `BrowserClient` (no `init()` defaults) with the global error handlers,
- * dedupe and navigation/fetch breadcrumbs. No tracing, no Replay, no
+ * dedupe, event filters and navigation/fetch breadcrumbs. No tracing, no Replay, no
  * Feedback, no console or click breadcrumbs. Loaded in its own chunk from
  * `instrumentation-client.ts` only when a DSN was set at build.
  */
@@ -30,6 +31,9 @@ export function startSentryClient(dsn: string, release?: string, environment?: s
     transport: makeFetchTransport,
     stackParser: defaultStackParser,
     integrations: [
+      // Sentry's default ignore list ("Script error.", ResizeObserver loops), and only errors
+      // thrown from our own origin's scripts: third-party ones (Turnstile, GA) would burn the quota.
+      eventFiltersIntegration({ allowUrls: [self.location.origin] }),
       globalHandlersIntegration(),
       dedupeIntegration(),
       breadcrumbsIntegration({

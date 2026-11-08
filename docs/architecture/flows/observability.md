@@ -133,7 +133,8 @@ Errors only, and only with a valid `SENTRY_DSN` (`parseSentryDsn`; anything else
   never its message or cause chain (security plan B1: AI SDK errors carry the receipt). Sending is flushed by the
   same `after()` as OTLP.
 - **Browser** ([`sentry-client.ts`](../../../apps/web/lib/telemetry/sentry-client.ts)): `@sentry/browser`'s bare
-  `BrowserClient` with global handlers, dedupe and navigation/fetch breadcrumbs, loaded in its own chunk from
+  `BrowserClient` with global handlers, dedupe, event filters (Sentry's default ignore list, and `allowUrls` set to
+  our own origin so third-party script errors from Turnstile or GA aren't sent) and navigation/fetch breadcrumbs, loaded in its own chunk from
   `instrumentation-client.ts` after hydration starts. `next.config.ts` inlines the DSN only when it is valid; without
   one the branch is `if ("")` and no Sentry code ships (CI greps `.next/static` to hold that). Error boundaries
   report browser errors; server render errors (they carry a digest) were already reported by the server.
