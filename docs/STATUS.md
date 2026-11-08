@@ -217,7 +217,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 1. ~~Usage capture + quota ledger~~ (shipped in #27).
 2. Usage surfaces for customers and admins ([usage design](plans/2026-11-06-usage-design.md)).
-3. Observability: wide events (#52), then OTLP export to Axiom (#135), Sentry errors (#139) and server PostHog (#PR3), all
+3. Observability: wide events (#52), then OTLP export to Axiom (#135), Sentry errors (#139) and server PostHog (#141), all
    off unless their env is set. Next: Sentry source maps (separate `sentry-cli` step), browser PostHog after a consent
    decision
    ([observability](plans/2026-11-06-observability.md)) with the [security requirements](reviews/2026-11-06-security-plan.md).
