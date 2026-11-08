@@ -71,6 +71,13 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Update the relevant page and diagram in [`docs/architecture/`](docs/architecture/README.md) in the same PR as an
   architectural change (new package or service, table or constraint, flow, or external dependency).
 
+## Screenshots in PRs
+
+Drag images into the PR description when you're in the browser. From a terminal or an agent, run
+`scripts/pr-screenshots.sh <pr-number> <image>...`: it pushes the images to `refs/screenshots/pr-<number>` (a ref, not
+a branch, so it stays out of the branch list) and prints `<img>` tags that link them by commit SHA; paste those into
+the description. The repository is public, so use test data only: no real receipts, emails or names.
+
 ## Previews
 
 Until launch, Vercel previews deploy only for PRs labelled `preview` (the free plan's 100 deployments a day are shared

@@ -26,6 +26,8 @@
 <details>
 <summary>Screenshots</summary>
 
+<!-- Drag images in here, or run scripts/pr-screenshots.sh <pr-number> <image>... and paste its tags. Test data only. -->
+
 | Before                     | After                      |
 | -------------------------- | -------------------------- |
 | <img src="" width="300" /> | <img src="" width="300" /> |
