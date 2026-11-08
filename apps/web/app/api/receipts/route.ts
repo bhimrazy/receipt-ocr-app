@@ -23,6 +23,7 @@ import { drainJobs, ROUTE_BUDGET_MS, runJobNow } from "@/lib/jobs";
 import type { WideEvent } from "@/lib/log";
 import { enforceUploadQuota } from "@/lib/quota";
 import { getActiveScope, getSession } from "@/lib/session";
+import { SIZE_IDS } from "@/lib/upload-prep";
 
 /**
  * Long enough for `after()` to run the queue through a receipt's automatic
@@ -58,6 +59,10 @@ async function upload(request: Request, _context: unknown, event: WideEvent) {
   if (!(file instanceof File)) return jsonError(400, "A receipt file is required");
   const mode = form.get("mode") === "queued" ? "queued" : "instant";
   event.mode = mode;
+  const sizeChoice = form.get("size_choice");
+  if (typeof sizeChoice === "string" && (SIZE_IDS as readonly string[]).includes(sizeChoice)) {
+    event.size_choice = sizeChoice;
+  }
   const body = new Uint8Array(await file.arrayBuffer());
   // The type sniffed from the bytes, from the upload allowlist; never the client's `file.type`.
   event.file = { size_bytes: file.size, media_type: sniffMediaType(body) ?? "unsupported" };

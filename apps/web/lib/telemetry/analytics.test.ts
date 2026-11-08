@@ -63,11 +63,12 @@ describe("fromRecord", () => {
           status_code: 202,
           mode: "queued",
           plan: "free",
+          size_choice: "smaller",
         }),
       ),
     ).toMatchObject({
       name: "receipt_uploaded",
-      props: { mode: "queued", plan: "free" },
+      props: { mode: "queued", plan: "free", size_choice: "smaller" },
     });
     expect(
       fromRecord(record({ ...base, event: "receipt.export", status_code: 200, count: 12 }))?.name,

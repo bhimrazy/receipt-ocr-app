@@ -562,7 +562,7 @@ in Vercel), maps deleted before deploy (security plan M11). Docker: pass `--buil
 5. Check: sign up or upload a receipt, then **Activity** in PostHog shows `signed_up` or `receipt_uploaded` with the
    user's id as the person and no email or name.
 
-Events (server-side only, `lib/telemetry/analytics.ts`): `signed_up` (`method`, `standalone`), `receipt_uploaded` (`mode`, `plan`),
+Events (server-side only, `lib/telemetry/analytics.ts`): `signed_up` (`method`, `standalone`), `receipt_uploaded` (`mode`, `plan`, `size_choice`),
 `receipt_scanned` (`trigger`, `model`, `fallback`, `calls`), `receipt_scan_failed` (`trigger`, `error_kind`),
 `csv_exported` (`count`), `plan_limit_hit` (`limit`: `day` or `minute`, `plan`; a user's first 3 a minute),
 `install_offer` (`action`, `surface`, `platform`: the in-app install card, menu rows and Settings). `signed_up` also

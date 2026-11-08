@@ -101,6 +101,8 @@ export const EVENT_SCHEMA = {
   plan: "token",
   /** Upload mode: `instant` or `queued`. */
   mode: "token",
+  /** Upload size picked in photo review: `smaller`, `recommended` or `larger`. Absent for PDFs. */
+  size_choice: "token",
   /** A named action (admin action, auth endpoint). */
   action: "token",
   /** A short qualifier for events that need one (email kind, settings key). */
