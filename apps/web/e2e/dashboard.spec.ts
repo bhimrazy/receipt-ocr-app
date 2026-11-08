@@ -5,7 +5,7 @@ import { signUp, uniqueEmail } from "./helpers";
 const day = (offset: number) =>
   new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
 
-/** Completed receipts in two currencies, one with an unreadable date, plus one still processing. */
+/** Completed receipts in two currencies, one without a date, plus one still processing. */
 async function seed(email: string) {
   const sql = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
   try {
@@ -20,7 +20,7 @@ async function seed(email: string) {
       ["Pret", day(8), "Meals", "GBP", "9.80", "0.00"],
       ["Pret", day(40), "Meals", "GBP", "12.30", "0.00"],
       ["Lawson", day(2), "Meals", "JPY", "1580.00", "143.00"],
-      ["Mystery", "sometime", "Other", "GBP", "5.00", "0.00"],
+      ["Mystery", null, "Other", "GBP", "5.00", "0.00"],
     ];
     for (const [merchant, date, category, currency, total, tax] of rows) {
       await sql`insert into receipts (organization_id, user_id, merchant, receipt_date, category,

@@ -18,6 +18,7 @@ export * from "./jobs";
 export * from "./ocr";
 export * from "./pipeline";
 export * from "./quota";
+export * from "./receipt-fields";
 export * from "./repository";
 export * from "./services";
 export * from "./settings";

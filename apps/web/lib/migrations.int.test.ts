@@ -57,6 +57,10 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "jobs_attempts_check",
       "jobs_last_error_kind_check",
       "ocr_calls_status_check",
+      "receipt_items_quantity_check",
+      "receipts_attempts_check",
+      "receipts_currency_check",
+      "receipts_receipt_date_check",
       "step_up_events_method_check",
       "step_up_events_outcome_check",
     ]);
@@ -72,5 +76,25 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     expect(def("receipt_groups_org_name_idx")).toMatch(/UNIQUE.*lower/);
     expect(def("ocr_calls_receipt_round_attempt_step_idx")).toMatch(/UNIQUE/);
     expect(def("ocr_calls_receipt_round_step_idx")).toBe("");
+  });
+
+  it("types receipt_date as a date with a workspace index, and indexes the foreign keys deletes walk", async () => {
+    const [column] =
+      await db`select data_type from information_schema.columns where table_name = 'receipts' and column_name = 'receipt_date'`;
+    expect(column?.data_type).toBe("date");
+    const rows = await db`select indexname, indexdef from pg_indexes where schemaname = 'public'`;
+    const def = (name: string) => rows.find((r) => r.indexname === name)?.indexdef ?? "";
+    expect(def("receipts_org_receipt_date_idx")).toContain("(organization_id, receipt_date)");
+    for (const [index, column] of [
+      ["ocr_rounds_organization_id_idx", "organization_id"],
+      ["ocr_calls_user_id_idx", "user_id"],
+      ["jobs_user_id_idx", "user_id"],
+      ["invitation_inviter_id_idx", "inviter_id"],
+      ["admin_audit_log_actor_id_idx", "actor_id"],
+    ]) {
+      expect(def(index!)).toMatch(new RegExp(`\\(${column}\\)$`));
+    }
+    expect(def("receipts_last_attempt_at_idx")).toBe("");
+    expect(def("member_organization_id_idx")).toBe("");
   });
 });

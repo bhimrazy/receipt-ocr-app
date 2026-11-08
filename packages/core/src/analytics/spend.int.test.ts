@@ -35,7 +35,7 @@ type Seed = Partial<NewReceipt> & { date: string | null; total: string | null; u
 /** A completed receipt uploaded the day after its date unless `uploaded` says otherwise. */
 function row(ws: { organizationId: string; userId: string }, seed: Seed): NewReceipt {
   const { date, uploaded, ...rest } = seed;
-  const day = /^\d{4}-\d{2}-\d{2}$/.test(date ?? "") ? date! : TODAY;
+  const day = date ?? TODAY;
   return {
     organizationId: ws.organizationId,
     userId: ws.userId,
@@ -72,12 +72,12 @@ describe.skipIf(!enabled)("spending aggregates against Postgres", () => {
       row(main, { date: "2026-11-03", total: "5.25", merchant: "Cafe", category: null }),
       // The day before the range: previous period only.
       row(main, { date: "2026-10-07", total: "100.00", merchant: "Old" }),
-      // Unreadable dates fall back to the UTC upload day.
-      row(main, { date: "2026-02-30", total: "1.00", uploaded: "2026-11-01T10:00:00Z" }),
-      row(main, { date: "06/11/2026", total: "2.00", uploaded: "2026-11-01T10:00:00Z" }),
+      // No date (none read, or an unreal one dropped on write) falls back to the UTC upload day.
+      row(main, { date: null, total: "1.00", uploaded: "2026-11-01T10:00:00Z" }),
+      row(main, { date: null, total: "2.00", uploaded: "2026-11-01T10:00:00Z" }),
       row(main, { date: null, total: "3.00", uploaded: "2026-10-20T10:00:00Z" }),
       // Another currency, never added to USD.
-      row(main, { date: "2026-11-01", total: "1500.00", currency: "jpy", merchant: "Lawson" }),
+      row(main, { date: "2026-11-01", total: "1500.00", currency: "JPY", merchant: "Lawson" }),
       // Left out: not completed, no total, another workspace.
       row(main, { date: "2026-11-01", total: "999.00", status: "failed" }),
       row(main, { date: "2026-11-01", total: "999.00", status: "processing" }),
@@ -217,7 +217,7 @@ describe.skipIf(!enabled)("spending aggregates against Postgres", () => {
           (array['USD','USD','USD','EUR','JPY'])[1 + i % 5],
           (array['Meals','Groceries','Travel','Fuel','Office'])[1 + i % 5],
           'Merchant ' || (i % 300),
-          case when i % 50 = 0 then 'unreadable' else to_char(${TODAY}::date - (i % 730), 'YYYY-MM-DD') end,
+          case when i % 50 = 0 then null else ${TODAY}::date - (i % 730) end,
           (i % 97) + 0.99, (i % 7) + 0.10,
           (${TODAY}::date - (i % 730))::timestamptz + interval '13 hours'
         from generate_series(1, 10000) as i`),
@@ -226,7 +226,7 @@ describe.skipIf(!enabled)("spending aggregates against Postgres", () => {
     const noise = await workspace("noise");
     await db((d) =>
       d.execute(sql`insert into receipts (organization_id, status, currency, receipt_date, total, created_at)
-        select ${noise.organizationId}, 'completed', 'USD', to_char(${TODAY}::date - (i % 730), 'YYYY-MM-DD'),
+        select ${noise.organizationId}, 'completed', 'USD', ${TODAY}::date - (i % 730),
           10, (${TODAY}::date - (i % 730))::timestamptz
         from generate_series(1, 40000) as i`),
     );
@@ -239,7 +239,10 @@ describe.skipIf(!enabled)("spending aggregates against Postgres", () => {
     );
     const text = plan.map((r) => r["QUERY PLAN"]).join("\n");
     console.log(`spend dashboard plan, 10k receipts, 12 months:\n${text}`);
-    expect(text).toContain("receipts_org_created_at_idx");
+    // Either workspace index: when the window covers most of the workspace the
+    // planner may take (organization_id, receipt_date) for its prefix.
+    expect(text).toMatch(/receipts_org_(created_at|receipt_date)_idx/);
+    expect(text).not.toMatch(/Seq Scan on receipts/);
 
     const started = performance.now();
     const result = await run(spendDashboard(big, query({ range: "12m" })));
