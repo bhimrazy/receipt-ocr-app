@@ -145,7 +145,9 @@ erDiagram
     text organization_id FK "not null"
     text user_id FK "nullable"
     receipt_status status "uploaded, processing, completed, failed"
-    int attempts "rounds so far, max 3"
+    int attempts "rounds so far, CHECK 1 to 3"
+    date receipt_date "AD, CHECK 2000 to upload day + 1"
+    text currency "CHECK ISO 4217 shape, null = read as USD"
     text image_object_key
     text model "provider:model that read it"
     numeric total
@@ -156,7 +158,7 @@ erDiagram
     uuid id PK
     uuid receipt_id FK
     text name
-    int quantity
+    int quantity "CHECK >= 1"
     numeric total_price
   }
   ocr_rounds {
@@ -196,6 +198,11 @@ How the ledger is used:
 - Quota, the global daily cap and cost rollups read only these two tables. See
   [core: quota ledger semantics](core.md#design-principles-and-invariants).
 - Neither table has free-text columns, so neither can hold receipt contents or provider messages.
+
+`receipts.receipt_date` is a plain `date` in the AD calendar (`0003`; it was free text before). Core writes only a
+real `YYYY-MM-DD` day from 2000 on and at most one day past the UTC upload day; anything else, including a Bikram
+Sambat year given as AD, is stored as null and shows as "No date found". Bikram Sambat is meant to stay a view of this
+date, never a second column ([dual-calendar plan](../plans/2026-11-07-dual-calendar-dates.md)).
 
 ## Receipt groups
 
@@ -320,38 +327,46 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 
 ## Unique indexes and checks
 
-| Table                   | Constraint                                                                                   | Why                                                                                                                                                                 |
-| ----------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `user`                  | `user_email_idx` on `email`                                                                  | One account per address                                                                                                                                             |
-| `session`               | `session_token_idx` on `token`                                                               | Session lookup                                                                                                                                                      |
-| `organization`          | `organization_slug_idx` on `slug`                                                            | Personal workspaces use the user id as slug, with a random suffix on collision                                                                                      |
-| `member`                | `member_org_user_idx` on `(organization_id, user_id)`                                        | One membership per user per workspace                                                                                                                               |
-| `two_factor`            | `two_factor_user_id_idx` on `user_id`                                                        | One authenticator per user (`0002`)                                                                                                                                 |
-| `passkey`               | `passkey_credential_id_idx` on `credential_id`                                               | A WebAuthn credential belongs to one account                                                                                                                        |
-| `step_up_events`        | `method` and `outcome` checks                                                                | Only the known methods and `sent` / `verified` / `failed`                                                                                                           |
-| `ocr_rounds`            | `ocr_rounds_receipt_round_idx` on `(receipt_id, round)`                                      | A round is recorded once                                                                                                                                            |
-| `ocr_calls`             | `ocr_calls_receipt_round_attempt_step_idx` on `(receipt_id, round, job_attempt, step)`       | An attempt's calls written twice (a lost commit acknowledgement, then the failure path) are billed once (`onConflictDoNothing`); each automatic retry keeps its own |
-| `jobs`                  | `jobs_idempotency_idx` on `idempotency_key`, where queued or running                         | A replayed upload or double-clicked retry enqueues nothing                                                                                                          |
-| `jobs`                  | `jobs_receipt_live_idx` on `receipt_id`, where queued or running and `kind like 'receipt.%'` | At most one live job per receipt; also serves every live-job lookup by receipt                                                                                      |
-| `jobs`                  | `jobs_last_error_kind_check`: `~ '^[a-z0-9.-]{1,40}$'`                                       | Error codes only, never a message that could hold receipt contents                                                                                                  |
-| `ocr_calls`             | `ocr_calls_status_check`: `status in (...)`                                                  | Only `ok`, the eight AI failure kinds and `storage-error` (`0001` added `refused`, `unsupported-file`)                                                              |
-| `receipt_groups`        | `receipt_groups_org_name_idx` on `(organization_id, lower(name))`                            | Group names are unique per workspace, ignoring case                                                                                                                 |
-| `receipt_group_members` | Primary key on `(group_id, receipt_id)`                                                      | A receipt is in a group once                                                                                                                                        |
-| `app_settings`          | Primary key on `key`                                                                         | One row per setting, upserted on save                                                                                                                               |
+| Table                   | Constraint                                                                                      | Why                                                                                                                                                                 |
+| ----------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user`                  | `user_email_idx` on `email`                                                                     | One account per address                                                                                                                                             |
+| `session`               | `session_token_idx` on `token`                                                                  | Session lookup                                                                                                                                                      |
+| `organization`          | `organization_slug_idx` on `slug`                                                               | Personal workspaces use the user id as slug, with a random suffix on collision                                                                                      |
+| `member`                | `member_org_user_idx` on `(organization_id, user_id)`                                           | One membership per user per workspace                                                                                                                               |
+| `two_factor`            | `two_factor_user_id_idx` on `user_id`                                                           | One authenticator per user (`0002`)                                                                                                                                 |
+| `passkey`               | `passkey_credential_id_idx` on `credential_id`                                                  | A WebAuthn credential belongs to one account                                                                                                                        |
+| `step_up_events`        | `method` and `outcome` checks                                                                   | Only the known methods and `sent` / `verified` / `failed`                                                                                                           |
+| `ocr_rounds`            | `ocr_rounds_receipt_round_idx` on `(receipt_id, round)`                                         | A round is recorded once                                                                                                                                            |
+| `ocr_calls`             | `ocr_calls_receipt_round_attempt_step_idx` on `(receipt_id, round, job_attempt, step)`          | An attempt's calls written twice (a lost commit acknowledgement, then the failure path) are billed once (`onConflictDoNothing`); each automatic retry keeps its own |
+| `jobs`                  | `jobs_idempotency_idx` on `idempotency_key`, where queued or running                            | A replayed upload or double-clicked retry enqueues nothing                                                                                                          |
+| `jobs`                  | `jobs_receipt_live_idx` on `receipt_id`, where queued or running and `kind like 'receipt.%'`    | At most one live job per receipt; also serves every live-job lookup by receipt                                                                                      |
+| `jobs`                  | `jobs_last_error_kind_check`: `~ '^[a-z0-9.-]{1,40}$'`                                          | Error codes only, never a message that could hold receipt contents                                                                                                  |
+| `ocr_calls`             | `ocr_calls_status_check`: `status in (...)`                                                     | Only `ok`, the eight AI failure kinds and `storage-error` (`0001` added `refused`, `unsupported-file`)                                                              |
+| `receipts`              | `receipts_receipt_date_check`: from `2000-01-01` to `(created_at at time zone 'UTC')::date + 1` | No misread or Bikram Sambat year stored as AD; the dashboard's `created_at` scan bound relies on the upper limit (`0003`)                                           |
+| `receipts`              | `receipts_currency_check`: `~ '^[A-Z]{3}$'`                                                     | One spelling per currency, so totals group without normalising per row (`0003`)                                                                                     |
+| `receipts`              | `receipts_attempts_check`: `between 1 and 3`                                                    | The retry cap, `MAX_EXTRACTION_ATTEMPTS` in `packages/db` (`0003`)                                                                                                  |
+| `receipt_items`         | `receipt_items_quantity_check`: `>= 1`                                                          | Core rounds a weight or a 0 up to 1 (`0003`)                                                                                                                        |
+| `receipt_groups`        | `receipt_groups_org_name_idx` on `(organization_id, lower(name))`                               | Group names are unique per workspace, ignoring case                                                                                                                 |
+| `receipt_group_members` | Primary key on `(group_id, receipt_id)`                                                         | A receipt is in a group once                                                                                                                                        |
+| `app_settings`          | Primary key on `key`                                                                            | One row per setting, upserted on save                                                                                                                               |
 
 ## Other indexes
 
-| Index                                                                                     | Serves                                                                               |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `receipts_org_created_at_idx`                                                             | History, newest first, per workspace                                                 |
-| `receipts_user_created_at_idx`, `receipts_created_at_idx`, `receipts_last_attempt_at_idx` | Per-user and per-day receipt queries (they served the quota before the usage ledger) |
-| `receipt_items_receipt_id_idx`                                                            | Loading items, cascade delete                                                        |
-| `ocr_rounds_user_created_at_idx`                                                          | Per-user quota windows                                                               |
-| `ocr_rounds_created_at_idx`                                                               | Global daily cap                                                                     |
-| `ocr_calls_org_created_at_idx`                                                            | Workspace usage rollups                                                              |
-| `ocr_calls_created_at_idx`                                                                | Platform-wide usage rollups, retry attempts for the global cap                       |
-| `jobs_runnable_idx` (`priority, run_at` where queued)                                     | The claim                                                                            |
-| `jobs_running_idx` (`user_id` where running)                                              | Per-user running cap, reaper                                                         |
-| `jobs_state_finished_idx`, `jobs_org_created_idx`                                         | Admin lists and retention (planned)                                                  |
-| `receipt_group_members_receipt_id_idx`                                                    | Groups of a receipt, the History group filter, cascade on receipt delete             |
-| `admin_audit_log_created_at_idx`, `admin_audit_log_target_idx`                            | Audit log, newest first and per target                                               |
+| Index                                                                         | Serves                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `receipts_org_created_at_idx`                                                 | History, newest first, per workspace; the dashboard's scan               |
+| `receipts_org_receipt_date_idx` (`organization_id, receipt_date`)             | History's date filters (`0003`)                                          |
+| `receipts_user_created_at_idx`                                                | A user's uploads, the set-null on account delete                         |
+| `receipts_created_at_idx`                                                     | Admin upload charts and counts across workspaces                         |
+| `receipt_items_receipt_id_idx`                                                | Loading items, cascade delete                                            |
+| `ocr_rounds_user_created_at_idx`                                              | Per-user quota windows                                                   |
+| `ocr_rounds_created_at_idx`                                                   | Global daily cap                                                         |
+| `ocr_rounds_organization_id_idx`, `ocr_calls_user_id_idx`, `jobs_user_id_idx` | The set-null when a workspace or account is deleted (`0003`)             |
+| `invitation_inviter_id_idx`, `admin_audit_log_actor_id_idx`                   | The cascade or set-null when a user is deleted (`0003`)                  |
+| `ocr_calls_org_created_at_idx`                                                | Workspace usage rollups                                                  |
+| `ocr_calls_created_at_idx`                                                    | Platform-wide usage rollups, retry attempts for the global cap           |
+| `jobs_runnable_idx` (`priority, run_at` where queued)                         | The claim                                                                |
+| `jobs_running_idx` (`user_id` where running)                                  | Per-user running cap, reaper                                             |
+| `jobs_state_finished_idx`, `jobs_org_created_idx`                             | Admin lists and retention (planned)                                      |
+| `receipt_group_members_receipt_id_idx`                                        | Groups of a receipt, the History group filter, cascade on receipt delete |
+| `admin_audit_log_created_at_idx`, `admin_audit_log_target_idx`                | Audit log, newest first and per target                                   |

@@ -374,6 +374,25 @@ codes sent in the last 10 minutes.
 
 Steps specific to one release, newest first.
 
+### Schema fixes: receipt dates as `date` (`0003_schema_fixes`)
+
+- **Run Database Migration before deploying** (`staging-db`, then `production-db`, then deploy by hand, as in
+  [Every release](#every-release)). Written for the empty databases of the 2026-11-08 reset; nothing to back up or
+  backfill.
+- **Not fully backward compatible:** it changes `receipts.receipt_date` from text to `date`, and the previous
+  release's dashboard query runs text functions on that column. Between the migration and the deploy, Home's spending
+  section fails for anyone with completed receipts, saving an unreal date (`2026-02-30`) in the editor fails, and a
+  receipt whose model date isn't a plausible ISO day fails to complete (it can be retried after the deploy). Deploy
+  right after `production-db` succeeds. Rolling the code back afterwards has the same effect, so roll forward instead.
+- **What it changes:** the `USING` cast keeps a real `YYYY-MM-DD` day from 2000 to the upload day + 1 and nulls
+  anything else; `currency` is upper-cased and anything that isn't three letters becomes null. New checks on
+  `receipt_date`, `currency`, `attempts` (1 to 3) and `receipt_items.quantity` (at least 1); new indexes on
+  `(organization_id, receipt_date)` and on five foreign keys; `receipts_last_attempt_at_idx` and
+  `member_organization_id_idx` dropped; `passkey.created_at` set not null. The file starts with
+  `SET LOCAL lock_timeout = '5s'`, so if it waits on a lock it fails cleanly and can be rerun.
+- **Check after migrating:** `select data_type from information_schema.columns where table_name = 'receipts' and
+column_name = 'receipt_date';` returns `date`.
+
 ### Squashed baseline and row-level security (2026-11-07)
 
 - **Migrations were squashed into one `0000_baseline`**, before launch. Both databases must be reset, not migrated.

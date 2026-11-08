@@ -23,6 +23,7 @@ From `@receipt-ocr/db` ([`src/index.ts`](../../packages/db/src/index.ts)):
 | `user`, `session`, `account`, `verification`, `organization`, `member`, `invitation`, `rateLimit`      | Better Auth tables ([`auth-schema.ts`](../../packages/db/src/auth-schema.ts))     |
 | `schema`                                                                                               | All tables and relations, passed to Drizzle and to Better Auth's adapter          |
 | `OCR_CALL_STATUSES`                                                                                    | Allowed `ocr_calls.status` values, also used to build the `CHECK` constraint      |
+| `MAX_EXTRACTION_ATTEMPTS`                                                                              | The retry cap (3), used by core and by `receipts_attempts_check`                  |
 | `and`, `eq`, `sql`, `desc`, `inArray`, ...                                                             | Drizzle operators, re-exported so every package uses this package's `drizzle-orm` |
 | `Receipt`, `ReceiptItem`, `OcrCall`, `NewOcrCall`, `AdminAuditEntry`, ...                              | Row types inferred from the tables                                                |
 
@@ -37,9 +38,12 @@ From `@receipt-ocr/db` ([`src/index.ts`](../../packages/db/src/index.ts)):
 
 ## Migrations
 
-| File                                                            | What it holds                                                                                                                                     |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`0000_baseline.sql`](../../apps/web/drizzle/0000_baseline.sql) | Every table, index, `CHECK` and foreign key, `ENABLE ROW LEVEL SECURITY` on all 19 tables, and the `jobs` storage parameters (hand-written, last) |
+| File                                                                                                    | What it holds                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`0000_baseline.sql`](../../apps/web/drizzle/0000_baseline.sql)                                         | Every table, index, `CHECK` and foreign key, `ENABLE ROW LEVEL SECURITY` on all 19 tables, and the `jobs` storage parameters (hand-written, last)                                                                                                                                                                                                                                              |
+| [`0001_ocr_call_refused_unsupported.sql`](../../apps/web/drizzle/0001_ocr_call_refused_unsupported.sql) | `refused` and `unsupported-file` in `ocr_calls_status_check`                                                                                                                                                                                                                                                                                                                                   |
+| [`0002_two_factor_passkey_step_up.sql`](../../apps/web/drizzle/0002_two_factor_passkey_step_up.sql)     | `two_factor`, `passkey`, `step_up_events`, `step_up_codes`, and the session step-up columns                                                                                                                                                                                                                                                                                                    |
+| [`0003_schema_fixes.sql`](../../apps/web/drizzle/0003_schema_fixes.sql)                                 | Pre-launch fixes from the [database review](../reviews/2026-11-07-full-database.md): `receipts.receipt_date` text to `date` with its check and `(organization_id, receipt_date)` index; checks on `currency`, `attempts` and `receipt_items.quantity`; indexes on five foreign keys; two unused indexes dropped; `passkey.created_at` not null (hand-edited: `lock_timeout`, the `USING` cast) |
 
 The migrations were **squashed into this one baseline on 2026-11-07, before launch**, when both databases were empty
 and were reset. The earlier data backfills (workspace ownership, canonical categories, job backfill) were dropped
@@ -86,7 +90,15 @@ There are no unit tests in this package (the `.enableRLS()` guard lives in core)
 1. Change the table in [`src/index.ts`](../../packages/db/src/index.ts) (or `auth-schema.ts` for auth tables).
 2. Generate the SQL: `bun run db:generate`. This writes `apps/web/drizzle/NNNN_<name>.sql` and a snapshot.
 3. Read the SQL. Rename the file to describe the change if drizzle-kit picked a random name, and keep the journal tag in
-   step. New tables need `.enableRLS()`.
+   step (or pass `--name`). New tables need `.enableRLS()`. When you edit the SQL by hand:
+   - Make `SET LOCAL lock_timeout = '5s';` the first statement, so the migration gives up instead of queueing behind
+     live traffic and blocking everything behind it. drizzle-kit runs all pending files in one transaction, so it
+     covers them all.
+   - A type change from text needs a `USING` cast; make it safe for every value the column can hold (`0003` is the
+     example).
+   - On a table with rows, add a `CHECK` as `NOT VALID` in one migration and `VALIDATE CONSTRAINT` in the next: in the
+     same transaction the scan still holds `ACCESS EXCLUSIVE`. Build indexes on large tables with
+     `CREATE INDEX CONCURRENTLY` by hand ([runbook](../runbook.md)).
 4. Apply it locally: `bun run db:migrate` (compose Postgres on port 5433).
 5. Make it safe for the old code: the deploy order is migrate first, then deploy, so the running code must keep
    working against the new schema. Add columns as nullable or with a default; drop columns in a later release.
