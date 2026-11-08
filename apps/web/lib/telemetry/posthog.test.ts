@@ -2,11 +2,20 @@ import { flushEventSinks, logger, shutdownEventSinks } from "@receipt-ocr/core/t
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setProductEventSender, track } from "./analytics";
 import { parsePostHog } from "./posthog-config";
-import { startPostHog } from "./posthog";
+import { notePostHogFailure, startPostHog } from "./posthog";
 
 vi.mock("server-only", () => ({}));
 
-const client = { capture: vi.fn(), flush: vi.fn(async () => {}), shutdown: vi.fn(async () => {}) };
+const onError: ((error: unknown) => void)[] = [];
+const client = {
+  capture: vi.fn(),
+  flush: vi.fn(async () => {}),
+  shutdown: vi.fn(async () => {}),
+  on: vi.fn((event: string, cb: (error: unknown) => void) => {
+    if (event === "error") onError.push(cb);
+    return () => {};
+  }),
+};
 
 beforeAll(() => {
   vi.spyOn(console, "info").mockImplementation(() => {});
@@ -42,6 +51,34 @@ describe("PostHog on the server", () => {
     expect(JSON.stringify(client.capture.mock.calls)).not.toContain("Dr Smith");
   });
 
+  it("captures nothing an admin did while impersonating: an export or a scan", async () => {
+    client.capture.mockClear();
+    const who = { user_id: "u_1", organization_id: "org_1", impersonated_by: "admin_1" };
+    logger.emit({
+      ...who,
+      event: "receipt.export",
+      unit: "request",
+      status_code: 200,
+      count: 3,
+    });
+    logger.emit({
+      ...who,
+      event: "job.attempt",
+      unit: "job_attempt",
+      trigger: "upload",
+      queue: { outcome: "succeeded" },
+      ocr: { model: "fixture", calls: 1 },
+    });
+    logger.emit({
+      ...who,
+      event: "job.attempt",
+      unit: "job_attempt",
+      queue: { outcome: "dead", error_kind: "timeout" },
+    });
+    await flushEventSinks();
+    expect(client.capture).not.toHaveBeenCalled();
+  });
+
   it("sends track() events through the same check", () => {
     client.capture.mockClear();
     track({
@@ -54,6 +91,31 @@ describe("PostHog on the server", () => {
       event: "signed_up",
       properties: { method: "email", $geoip_disable: true },
     });
+  });
+});
+
+describe("PostHog send failures", () => {
+  it("log one local notice a minute, never to the sinks", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const emit = vi.spyOn(logger, "emit");
+    client.flush.mockRejectedValueOnce(new TypeError("fetch failed"));
+    await expect(flushEventSinks()).resolves.toBeUndefined();
+    for (const cb of onError) cb(new TypeError("fetch failed"));
+    for (const cb of onError) cb(new TypeError("fetch failed"));
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith(
+      {
+        event: "telemetry.export_failed",
+        unit: "log",
+        kind: "posthog",
+        error: { class: "TypeError" },
+      },
+      { level: "error", localOnly: true },
+    );
+    expect(error).toHaveBeenCalledTimes(1);
+    notePostHogFailure(new Error("later"), Date.now() + 61_000);
+    expect(emit).toHaveBeenCalledTimes(2);
+    emit.mockRestore();
   });
 });
 
