@@ -42,6 +42,33 @@ describe("startTelemetryExport", () => {
     expect(process.listenerCount("SIGTERM")).toBe(1);
   });
 
+  it("refuses plain http except to a local or compose collector", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    otlp.start.mockClear();
+    for (const endpoint of ["http://api.axiom.co", "http://10.0.0.5:4318", "ftp://x.example"]) {
+      await startTelemetryExport({
+        OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
+        OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Bearer x",
+      });
+    }
+    expect(otlp.start).not.toHaveBeenCalled();
+    const lines = error.mock.calls.map((call) => JSON.parse(String(call[0])));
+    expect(lines.map((line) => [line.event, line.error.kind])).toEqual([
+      ["telemetry.start_failed", "insecure-endpoint"],
+      ["telemetry.start_failed", "insecure-endpoint"],
+      ["telemetry.start_failed", "invalid-endpoint"],
+    ]);
+    for (const endpoint of [
+      "http://localhost:4318",
+      "http://127.0.0.1:4318",
+      "http://otel-collector:4318",
+    ]) {
+      await startTelemetryExport({ OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: endpoint });
+    }
+    expect(otlp.start).toHaveBeenCalledTimes(3);
+    error.mockRestore();
+  });
+
   it("keeps booting when the exporter can't start", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     otlp.start.mockRejectedValueOnce(new Error("bad header"));

@@ -4,9 +4,19 @@
  * process but stdout.
  */
 export async function startTelemetryExport(env: Record<string, string | undefined> = process.env) {
-  const { errorFields, logger, otlpLogsConfigured, shutdownEventSinks } =
+  const { errorFields, logger, otlpEndpointRefusal, otlpLogsConfigured, shutdownEventSinks } =
     await import("@receipt-ocr/core/telemetry");
   if (!otlpLogsConfigured(env)) return;
+  const refusal = otlpEndpointRefusal(env);
+  if (refusal) {
+    logger.error({
+      event: "telemetry.start_failed",
+      unit: "log",
+      kind: "otlp",
+      error: { type: "NotConfigured", kind: refusal },
+    });
+    return;
+  }
   try {
     const { startOtlpExport } = await import("@receipt-ocr/core/telemetry/otlp");
     await startOtlpExport({ env });
