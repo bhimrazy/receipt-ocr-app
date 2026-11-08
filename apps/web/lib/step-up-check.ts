@@ -43,7 +43,7 @@ export async function checkStepUp(
   if (row.impersonatedBy) return { ok: false, reason: "impersonating", methods: [] };
   const methods = stepUpMethods(subjectOf(row), action);
   if (methods.length === 0) return { ok: false, reason: "enrol", methods };
-  if (stepUpFresh(row, methods, now, action)) return { ok: true, row };
+  if (stepUpFresh(row, methods, now)) return { ok: true, row };
   return { ok: false, reason: "required", methods };
 }
 

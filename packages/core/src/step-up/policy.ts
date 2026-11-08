@@ -73,41 +73,19 @@ const ENROLMENT = new Set(["two_factor.enable", "passkey.add"]);
 export interface StepUpState {
   stepUpAt: Date | null;
   stepUpMethod: string | null;
-  /** When the session was created: a sign-in. */
-  createdAt: Date;
 }
 
 /**
- * Actions a recent sign-in may confirm for a user with no factor, because each
- * is confirmed again on its own: deletion by an emailed link, a password change
- * by the current password. Not an email change: Better Auth asks the current
- * address to approve only when it is verified, so for an unverified account the
- * link goes to the new (attacker's) address alone. Not adding a factor either:
- * a stolen fresh session could enrol the thief's authenticator.
- */
-const SIGN_IN_CONFIRMS = new Set<string>(["account.delete", "account.change_password"]);
-
-/** Whether "sign in again" passes this check: the user's method is the emailed code. */
-export const signInCounts = (allowed: readonly StepUpMethod[], action?: string) =>
-  allowed.includes("email") && SIGN_IN_CONFIRMS.has(action ?? "");
-
-/**
  * True when the session passed a check within the TTL with a method this user
- * may still use, or (see `signInCounts`) was signed in within the TTL.
+ * may still use. A recent sign-in never counts: a stolen fresh session would
+ * pass, so users without a factor confirm with the emailed code.
  */
-export function stepUpFresh(
-  state: StepUpState,
-  allowed: readonly StepUpMethod[],
-  now: Date,
-  action?: string,
-) {
-  const within = (at: Date) => {
-    const age = now.getTime() - at.getTime();
-    return age >= 0 && age < STEP_UP_TTL_MS;
-  };
-  if (signInCounts(allowed, action) && within(state.createdAt)) return true;
+export function stepUpFresh(state: StepUpState, allowed: readonly StepUpMethod[], now: Date) {
   if (!state.stepUpAt || !state.stepUpMethod) return false;
-  return within(state.stepUpAt) && (allowed as readonly string[]).includes(state.stepUpMethod);
+  const age = now.getTime() - state.stepUpAt.getTime();
+  return (
+    age >= 0 && age < STEP_UP_TTL_MS && (allowed as readonly string[]).includes(state.stepUpMethod)
+  );
 }
 
 export type AdminAccess = "ok" | "enrol" | "verify";

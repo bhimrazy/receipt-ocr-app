@@ -37,7 +37,6 @@ export interface StepUpSessionRow {
   authMethod: string | null;
   stepUpAt: Date | null;
   stepUpMethod: string | null;
-  createdAt: Date;
   impersonatedBy: string | null;
 }
 
@@ -54,7 +53,6 @@ export const loadStepUpSession = (sessionId: string) =>
           authMethod: session.authMethod,
           stepUpAt: session.stepUpAt,
           stepUpMethod: session.stepUpMethod,
-          createdAt: session.createdAt,
           impersonatedBy: session.impersonatedBy,
           passkeys: sql<number>`(select count(*)::int from ${passkey} p where p.user_id = ${session.userId})`,
         })
@@ -267,10 +265,10 @@ export const forgetTrustedDevices = (userId: string) =>
   );
 
 /**
- * After a sign-in from a browser that was already signed in as the same user
- * ("Sign in again", or a second sign-in): the new session keeps the old one's
- * workspace and the old one is deleted, so re-signing in leaves no second live
- * session for a thief who had copied the old cookie.
+ * After a sign-in from a browser that was already signed in as the same user:
+ * the new session keeps the old one's workspace and the old one is deleted, so
+ * re-signing in leaves no second live session for a thief who had copied the
+ * old cookie.
  */
 export const replacePreviousSession = (input: {
   previousToken: string;

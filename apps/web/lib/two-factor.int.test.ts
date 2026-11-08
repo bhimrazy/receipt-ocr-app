@@ -358,12 +358,8 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
     expect(row?.method).toBe("totp");
   });
 
-  it("adds a passkey after a step-up in a session signed in long ago", async () => {
-    const account = await signUp("passkey-old");
-    await db
-      .update(session)
-      .set({ createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) })
-      .where(eq(session.userId, account.userId));
+  it("adds a passkey only after an emailed-code step-up, even right after sign-up", async () => {
+    const account = await signUp("passkey-new");
     expect(
       await failure(auth.api.generatePasskeyRegistrationOptions({ headers: account.headers })),
     ).toMatchObject({ status: 403, code: "STEP_UP_REQUIRED" });

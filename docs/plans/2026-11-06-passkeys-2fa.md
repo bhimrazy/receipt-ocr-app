@@ -20,6 +20,7 @@ audit-logged.
 
 - Users **with** 2FA verify with a passkey or a TOTP code (backup codes allowed).
 - Users **without** 2FA get an emailed one-time code: 6 digits, about 10 minutes, rate-limited, hashed at rest.
+  A recent sign-in never counts instead (owner decision, 2026-11-08, on the security review's advice).
 - **Admins never get the email fallback.**
 - Actions: delete account, change email, change password; disable 2FA, regenerate backup codes, remove a passkey;
   bulk delete or export all receipts, delete a workspace, transfer ownership; **all** admin mutations (impersonate,

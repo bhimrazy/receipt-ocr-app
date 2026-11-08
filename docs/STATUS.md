@@ -166,9 +166,9 @@ Steps are in [deployment.md](deployment.md).
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                                                   |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| #95  | Two-step sign-in (TOTP), passkeys and step-up for important actions. Owner approved 2026-11-08; merging after migration `0002`                        |
+| PR  | Work                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------ |
+| #95 | Two-step sign-in (TOTP), passkeys and step-up for important actions. Owner approved 2026-11-08; merging after migration `0002` |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).

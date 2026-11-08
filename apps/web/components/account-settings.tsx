@@ -8,17 +8,12 @@ import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/settings-section";
 import { withStepUp } from "@/components/step-up/step-up";
 import { soleOwnerMessage } from "@/lib/account-deletion";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
-
-/** Where a Google or GitHub re-sign-in returns, so the interrupted step can continue. */
-export type ResumeStep = "delete-account" | "change-email";
-
-const returnTo = (step: ResumeStep) => `/app/settings?resume=${step}`;
 
 function Status({ ok, error, id }: { ok: string | null; error: string | null; id?: string }) {
   if (error) {
@@ -102,29 +97,11 @@ function ProfileCard({ initialName }: { initialName: string }) {
   );
 }
 
-function EmailCard({
-  email,
-  emailVerified,
-  resumed,
-}: {
-  email: string;
-  emailVerified: boolean;
-  resumed: boolean;
-}) {
+function EmailCard({ email, emailVerified }: { email: string; emailVerified: boolean }) {
   const [next, setNext] = useState("");
   const [pending, setPending] = useState(false);
-  const [ok, setOk] = useState<string | null>(
-    resumed ? "You signed in again. Enter the new address to continue." : null,
-  );
+  const [ok, setOk] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Back from a Google or GitHub re-sign-in: bring the user to the field they were filling in.
-  useEffect(() => {
-    if (!resumed) return;
-    inputRef.current?.scrollIntoView({ block: "center" });
-    inputRef.current?.focus({ preventScroll: true });
-  }, [resumed]);
 
   async function request(newEmail: string) {
     setPending(true);
@@ -133,7 +110,6 @@ function EmailCard({
     const { error: changeError } = await withStepUp(
       () => authClient.changeEmail({ newEmail, callbackURL: "/app/settings" }),
       "account.change_email",
-      { returnTo: returnTo("change-email") },
     );
     setPending(false);
     if (changeError) {
@@ -182,7 +158,6 @@ function EmailCard({
               inputMode="email"
               onChange={(event) => setNext(event.target.value)}
               placeholder="name@example.com"
-              ref={inputRef}
               type="email"
               value={next}
             />
@@ -304,7 +279,7 @@ function DangerCard({
   blockingWorkspaces: string[];
 }) {
   const blocked = blockingWorkspaces.length > 0;
-  // Back from a Google or GitHub re-sign-in: pick up where the user left off.
+  // Sent back from an expired or refused deletion link: reopen the request.
   const [open, setOpen] = useState(resumed && !blocked);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -318,7 +293,6 @@ function DangerCard({
     const { error: requestError } = await withStepUp(
       () => authClient.deleteUser({}),
       "account.delete",
-      { returnTo: returnTo("delete-account") },
     );
     if (requestError) return authErrorMessage(requestError);
     setNotice(sent);
@@ -377,9 +351,10 @@ export function AccountSettings({
   email: string;
   emailVerified: boolean;
   name: string;
-  resume?: ResumeStep;
+  /** `?resume=delete-account` from the deletion confirm page reopens the delete dialog. */
+  resume?: "delete-account";
 }) {
-  // Drop ?resume= so a reload doesn't reopen the step.
+  // Drop ?resume= so a reload doesn't reopen the dialog.
   useEffect(() => {
     if (resume) window.history.replaceState(null, "", "/app/settings");
   }, [resume]);
@@ -398,11 +373,7 @@ export function AccountSettings({
         id="email-heading"
         title="Email"
       >
-        <EmailCard
-          email={email}
-          emailVerified={emailVerified}
-          resumed={resume === "change-email"}
-        />
+        <EmailCard email={email} emailVerified={emailVerified} />
       </SettingsSection>
       <SettingsSection
         description="For email sign-in. If you sign in with Google or GitHub, change your password there."

@@ -1,8 +1,7 @@
 /**
  * Account deletion, email change and password notices against real Postgres, through the shared
- * step-up gate (lib/step-up-check.ts): for an account with no second factor, a sign-in within
- * 10 minutes confirms these three actions. Skipped unless
- * INTEGRATION=1; run with `bun run --filter @receipt-ocr/web test:int` after `bun run db:migrate`,
+ * step-up gate (lib/step-up-check.ts): an account with no second factor confirms each with the
+ * emailed code, and a recent sign-in never counts. Skipped unless INTEGRATION=1; run with `bun run --filter @receipt-ocr/web test:int` after `bun run db:migrate`,
  * with DATABASE_URL, BETTER_AUTH_URL and BETTER_AUTH_SECRET set.
  */
 import { createDb, eq, member, rateLimit, session, sql, user, verification } from "@receipt-ocr/db";
@@ -56,11 +55,11 @@ describe.skipIf(!enabled)(
       return { email, id: res.response.user.id, cookie: sessionCookie(res.headers) };
     }
 
-    /** Makes every session of the user older than the step-up window. */
-    const ageSessions = (userId: string) =>
+    /** Moves every passed check of the user past the step-up window. */
+    const expireStepUps = (userId: string) =>
       db
         .update(session)
-        .set({ createdAt: new Date(Date.now() - 60 * 60 * 1000) })
+        .set({ stepUpAt: new Date(Date.now() - 60 * 60 * 1000) })
         .where(eq(session.userId, userId));
 
     const exists = async (userId: string) =>
@@ -87,7 +86,10 @@ describe.skipIf(!enabled)(
       );
 
     /** Passes the emailed-code step-up for an account with no factor, reading the code from the mail. */
-    async function emailStepUp(account: { cookie: string }, action: "account.change_email") {
+    async function emailStepUp(
+      account: { cookie: string },
+      action: "account.change_email" | "account.change_password" | "account.delete",
+    ) {
       const stepUp = await import("./step-up");
       const headers = new Headers({ cookie: account.cookie });
       const current = await auth.api.getSession({ headers, query: { disableCookieCache: true } });
@@ -100,6 +102,7 @@ describe.skipIf(!enabled)(
     }
 
     const requestDeletion = async (account: { email: string; cookie: string }) => {
+      await emailStepUp(account, "account.delete");
       const res = await auth.api.deleteUser({
         headers: new Headers({ cookie: account.cookie }),
         body: {},
@@ -140,9 +143,8 @@ describe.skipIf(!enabled)(
       );
     });
 
-    it("needs a fresh session to request deletion or change the email or password", async () => {
-      const a = await newUser("stale");
-      await ageSessions(a.id);
+    it("a new sign-in alone confirms neither deletion nor an email or password change", async () => {
+      const a = await newUser("fresh");
       const headers = new Headers({ cookie: a.cookie });
       expect(await errorOf(auth.api.deleteUser({ headers, body: {} }))).toEqual({
         status: 403,
@@ -174,22 +176,37 @@ describe.skipIf(!enabled)(
         "Confirm your ReceiptOCR email",
       ]);
 
-      // Signing in again gives a fresh session that may.
+      // Signing in again doesn't help either.
       const again = await auth.api.signInEmail({
         body: { email: a.email, password },
         returnHeaders: true,
       });
-      const fresh = await auth.api.deleteUser({
-        headers: new Headers({ cookie: sessionCookie(again.headers) }),
+      const signedInAgain = { ...a, cookie: sessionCookie(again.headers) };
+      expect(
+        await errorOf(
+          auth.api.deleteUser({ headers: new Headers({ cookie: signedInAgain.cookie }), body: {} }),
+        ),
+      ).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
+
+      // The emailed code does, and only until it expires.
+      await emailStepUp(signedInAgain, "account.delete");
+      const confirmed = await auth.api.deleteUser({
+        headers: new Headers({ cookie: signedInAgain.cookie }),
         body: {},
       });
-      expect(fresh.message).toBe("Verification email sent");
+      expect(confirmed.message).toBe("Verification email sent");
+      await expireStepUps(a.id);
+      expect(
+        await errorOf(
+          auth.api.deleteUser({ headers: new Headers({ cookie: signedInAgain.cookie }), body: {} }),
+        ),
+      ).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
     });
 
-    it("the emailed link deletes the account once, from a session of any age", async () => {
+    it("the emailed link deletes the account once, without a fresh check", async () => {
       const a = await newUser("confirm");
       const token = await requestDeletion(a);
-      await ageSessions(a.id);
+      await expireStepUps(a.id);
       const res = await post("/delete-user", a.cookie, { token });
       expect(res.status).toBe(200);
       expect(await exists(a.id)).toBe(false);
@@ -267,6 +284,7 @@ describe.skipIf(!enabled)(
 
     it("emails a notice after a password change, and not after a wrong current password", async () => {
       const a = await newUser("change");
+      await emailStepUp(a, "account.change_password");
       const headers = new Headers({ cookie: a.cookie });
       expect(
         await errorOf(

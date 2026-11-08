@@ -13,7 +13,7 @@ import {
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { Effect } from "effect";
 import { AboutSettings } from "@/components/about-settings";
-import { AccountSettings, type ResumeStep } from "@/components/account-settings";
+import { AccountSettings } from "@/components/account-settings";
 import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
@@ -46,8 +46,6 @@ async function loadWorkspace(organizationId: string) {
   return { name: org?.name ?? "This workspace", members: Number(row?.value ?? 0) };
 }
 
-const RESUME_STEPS: readonly ResumeStep[] = ["delete-account", "change-email"];
-
 export default async function SettingsPage({
   searchParams,
 }: {
@@ -59,7 +57,7 @@ export default async function SettingsPage({
     requireSession(),
     searchParams,
   ]);
-  const resumeStep = RESUME_STEPS.find((step) => step === resume);
+  const resumeStep = resume === "delete-account" ? resume : undefined;
   const [{ plan, policy }, usage, workspace, readers, blocking] = await Promise.all([
     getCurrentPlan(),
     getUsageSummary(),

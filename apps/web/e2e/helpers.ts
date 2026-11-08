@@ -95,17 +95,6 @@ export async function markSteppedUp(email: string) {
   }
 }
 
-/** Backdates the user's sessions past the 10-minute step-up window, as if signed in an hour ago. */
-export async function ageSessions(email: string) {
-  const sql = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
-  try {
-    await sql`update session set created_at = now() - interval '1 hour'
-              where user_id = (select id from "user" where email = ${email})`;
-  } finally {
-    await sql.end();
-  }
-}
-
 /**
  * Turns on two-step sign-in from Settings → Security the way a person does: password, read the
  * manual key off the page, enter a code, tick "saved" for the backup codes. Returns the key and
