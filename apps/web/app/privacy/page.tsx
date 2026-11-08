@@ -55,6 +55,7 @@ export default function PrivacyPage() {
             "OpenAI (OpenAI API), only if we or your workspace turn it on: the receipt file is sent to a model OpenAI hosts, which scans it the same way. OpenAI doesn't use data sent to its API to train its models unless a customer opts in, and we don't. It may keep requests and responses for up to 30 days to check for abuse, and longer where the law requires it or where that is reasonably necessary to protect its services or others from harm. We ask OpenAI not to store the response for reuse. Zero data retention is available only with OpenAI's prior approval and is not part of this setup.",
             "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
             "An email delivery provider sends account emails such as password resets and invitations.",
+            "Paddle (Paddle.com Market Ltd), only when a workspace owner buys or manages Pro: Paddle is our reseller and the merchant of record for every order. It runs the checkout, takes the payment, charges the right sales tax or VAT, sends receipts and invoices, and handles refunds, under its own privacy policy. Paddle receives your email address, your payment details and your country or address for tax. We never see or store your card details. Paddle sends us the subscription's status, its plan and billing period, and its Paddle ids, which we keep to decide which workspaces are on Pro.",
             "Google and GitHub, only if you choose to sign in with them.",
             ...(pageCounts
               ? [
@@ -80,6 +81,7 @@ export default function PrivacyPage() {
             "We keep your account and receipts until you delete them.",
             "Deleting a receipt removes it, its extracted data and its original file.",
             "Deleting your account from Settings removes your account and every workspace where you are the only member, with all of its receipts and files. Receipts you uploaded to a workspace shared with other people stay in that workspace, without your name on them, because they belong to the workspace. If you are the only owner of a shared workspace, make another member an owner first.",
+            "We keep a workspace's subscription record (its status, plan, billing period and Paddle ids) and the billing notices Paddle sends us for as long as the workspace exists, and afterwards as a billing record that no longer names the workspace. Paddle keeps its own order and tax records as merchant of record.",
             "For billing and to enforce plan limits, we keep a usage record of each time the AI scanned a receipt: which model, how many tokens, the estimated cost and when. It holds no receipt contents or images. It stays after you delete the receipt, the workspace or your account, but is then no longer linked to them or to you.",
           ],
         },

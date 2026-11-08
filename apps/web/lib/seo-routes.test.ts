@@ -55,7 +55,9 @@ describe("sitemap", () => {
   it("lists only the public prod pages, each with lastModified", () => {
     const entries = sitemap();
     expect(entries.map((e) => e.url)).toEqual(
-      ["/", "/privacy", "/terms", "/cookies"].map((p) => new URL(p, PRODUCTION_ORIGIN).toString()),
+      ["/", "/pricing", "/privacy", "/terms", "/cookies", "/refunds"].map((p) =>
+        new URL(p, PRODUCTION_ORIGIN).toString(),
+      ),
     );
     for (const entry of entries) expect(entry.lastModified, entry.url).toBeTruthy();
     expect(entries.some((e) => /\/(app|admin|api|sign-|landing-|final-)/.test(e.url))).toBe(false);
