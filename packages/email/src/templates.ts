@@ -193,3 +193,29 @@ export const passkeyAddedEmail: Notice = (ctx, input) =>
 
 export const passkeyRemovedEmail: Notice = (ctx, input) =>
   build("passkeyRemoved", `A passkey was removed from your ${BRAND} account`, ctx, input);
+
+/** An account that signed in only with Google or GitHub set a password. */
+export const passwordSetEmail: Notice = (ctx, input) =>
+  build("passwordSet", `A password was added to your ${BRAND} account`, ctx, input);
+
+/** `provider` is the app's fixed label, never user input. */
+type ProviderNotice = (
+  ctx: EmailContext,
+  input: { resetUrl: string; provider: "Google" | "GitHub" },
+) => EmailContent;
+
+export const signInConnectedEmail: ProviderNotice = (ctx, input) =>
+  build(
+    "signInConnected",
+    `${input.provider} sign-in was connected to your ${BRAND} account`,
+    ctx,
+    input,
+  );
+
+export const signInDisconnectedEmail: ProviderNotice = (ctx, input) =>
+  build(
+    "signInDisconnected",
+    `${input.provider} sign-in was disconnected from your ${BRAND} account`,
+    ctx,
+    input,
+  );

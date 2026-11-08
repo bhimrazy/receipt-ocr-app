@@ -14,6 +14,9 @@ import {
   passkeyRemovedEmail,
   passwordChangedEmail,
   passwordResetEmail,
+  passwordSetEmail,
+  signInConnectedEmail,
+  signInDisconnectedEmail,
   stepUpCodeEmail,
   supportMessageEmail,
   testEmail,
@@ -110,6 +113,15 @@ const cases: Record<
   },
   passkeyAdded: { make: (ctx) => passkeyAddedEmail(ctx, { resetUrl }), input: { resetUrl } },
   passkeyRemoved: { make: (ctx) => passkeyRemovedEmail(ctx, { resetUrl }), input: { resetUrl } },
+  passwordSet: { make: (ctx) => passwordSetEmail(ctx, { resetUrl }), input: { resetUrl } },
+  signInConnected: {
+    make: (ctx) => signInConnectedEmail(ctx, { resetUrl, provider: "Google" }),
+    input: { resetUrl, provider: "Google" },
+  },
+  signInDisconnected: {
+    make: (ctx) => signInDisconnectedEmail(ctx, { resetUrl, provider: "GitHub" }),
+    input: { resetUrl, provider: "GitHub" },
+  },
   emailChange: {
     make: (ctx) =>
       emailChangeEmail(ctx, {
@@ -411,10 +423,21 @@ describe("security emails", () => {
       backupCodesRegeneratedEmail(withSupport, { resetUrl }),
       passkeyAddedEmail(withSupport, { resetUrl }),
       passkeyRemovedEmail(withSupport, { resetUrl }),
+      passwordSetEmail(withSupport, { resetUrl }),
+      signInConnectedEmail(withSupport, { resetUrl, provider: "Google" }),
+      signInDisconnectedEmail(withSupport, { resetUrl, provider: "GitHub" }),
     ]) {
       expect(mail.text).toContain("Didn't do this? Reset your password now");
       expect(mail.html).toContain(`href="${resetUrl}"`);
     }
+  });
+
+  it("names the provider that was connected or disconnected", () => {
+    const connected = signInConnectedEmail(withSupport, { resetUrl, provider: "Google" });
+    expect(connected.subject).toBe("Google sign-in was connected to your ReceiptOCR account");
+    expect(connected.text).toContain("Google was connected to your account.");
+    const disconnected = signInDisconnectedEmail(withSupport, { resetUrl, provider: "GitHub" });
+    expect(disconnected.html).toContain("GitHub sign-in was disconnected");
   });
 
   it("says when an administrator made the reset", () => {
