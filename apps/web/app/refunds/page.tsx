@@ -5,7 +5,7 @@ import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "Refund policy",
-  description: `ReceiptOCR refunds: a full refund within ${REFUND_DAYS} days of a subscription's first payment, cancel any time and keep Pro until the period ends. Paddle handles refunds as merchant of record.`,
+  description: `ReceiptOCR refunds: in full within ${REFUND_DAYS} days of a subscription's first payment. Cancel any time and keep Pro until the period ends.`,
   path: "/refunds",
 });
 

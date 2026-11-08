@@ -9,7 +9,7 @@ import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Terms of service",
   description:
-    "The terms for using ReceiptOCR: your account, your receipts, the Free and Pro plans, payments through Paddle, and checking AI-extracted data before you rely on it.",
+    "The terms for ReceiptOCR: your account and receipts, the Free and Pro plans, payments through Paddle, and checking AI-extracted data before relying on it.",
   path: "/terms",
 });
 

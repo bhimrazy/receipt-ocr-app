@@ -8,7 +8,9 @@ test("pricing shows Free and Pro with a monthly/yearly switch, and the FAQ", asy
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Start free");
   await expect(page.getByRole("heading", { name: "Free", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pro", exact: true })).toBeVisible();
-  await expect(page.getByText("500 scans a month, up to 200 a day")).toBeVisible();
+  await expect(
+    page.getByText("500 scans a month, up to 200 a day, for the workspace, shared by its members"),
+  ).toBeVisible();
   await expect(page.getByText("20 scans a day, up to 100 a month, per person")).toBeVisible();
   await expect(page.getByText(/Up to 2 workspaces to own/)).toBeVisible();
 
@@ -47,5 +49,5 @@ test("billing settings show the plan without a checkout while billing is off", a
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Billing");
   await expect(page.getByText(/Paid plans aren.t open yet/)).toBeVisible();
   await expect(page.getByRole("button", { name: /Upgrade to Pro/ })).toHaveCount(0);
-  await expect(page.getByText("/ 100 this month")).toBeVisible();
+  await expect(page.locator("#main-content").getByText("/ 100 this month")).toBeVisible();
 });

@@ -95,22 +95,21 @@ export default async function SettingsPage({
       >
         <div className="flex flex-col gap-3">
           <UsageMeter className="p-5" planLabel={planLabel(plan)} usage={usage} />
-          <dl className="grid grid-cols-2 gap-3">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Card className="p-4">
+              <dt className="text-xs text-muted-foreground">
+                Scans a day{policy.scope === "workspace" ? ", this workspace" : ", you"}
+              </dt>
+              <dd className="mt-1 font-mono text-lg tabular-nums">{policy.receiptsPerDay}</dd>
+            </Card>
             {policy.receiptsPerMonth !== null ? (
               <Card className="p-4">
                 <dt className="text-xs text-muted-foreground">
-                  Scans a month / a day{policy.scope === "workspace" ? ", this workspace" : ", you"}
+                  Scans a month{policy.scope === "workspace" ? ", this workspace" : ", you"}
                 </dt>
-                <dd className="mt-1 font-mono text-lg tabular-nums">
-                  {policy.receiptsPerMonth} / {policy.receiptsPerDay}
-                </dd>
+                <dd className="mt-1 font-mono text-lg tabular-nums">{policy.receiptsPerMonth}</dd>
               </Card>
-            ) : (
-              <Card className="p-4">
-                <dt className="text-xs text-muted-foreground">Receipts a day</dt>
-                <dd className="mt-1 font-mono text-lg tabular-nums">{policy.receiptsPerDay}</dd>
-              </Card>
-            )}
+            ) : null}
             <Card className="p-4">
               <dt className="text-xs text-muted-foreground">Workspaces you can own</dt>
               <dd className="mt-1 font-mono text-lg tabular-nums">{account.policy.workspaces}</dd>
