@@ -1,4 +1,4 @@
-import type { EventRecord } from "@receipt-ocr/core/telemetry";
+import { scheduleFlush, type EventRecord } from "@receipt-ocr/core/telemetry";
 
 /**
  * Product analytics events: a closed set, keyed by an opaque user id, with
@@ -49,6 +49,8 @@ export function checkEvent(event: ProductEvent): ProductEvent | null {
     const kind = Object.hasOwn(spec, key) ? spec[key] : undefined;
     if (kind && valid(kind, value)) props[key] = value as string | number | boolean;
   }
+  // Also a plain prop: PostHog's `groups` needs the paid group-analytics add-on.
+  if (event.workspaceId) props.workspace_id = event.workspaceId;
   return {
     name: event.name,
     userId: event.userId,
@@ -109,7 +111,8 @@ export function fromRecord(record: EventRecord): ProductEvent | null {
     return null;
   }
 
-  if (record.unit === "job_attempt") {
+  // An admin re-running a user's job isn't the user scanning.
+  if (record.unit === "job_attempt" && record.trigger !== "admin_rerun") {
     const queue = group(record.queue);
     const ocr = group(record.ocr);
     const trigger = str(record.trigger);
@@ -153,7 +156,10 @@ export function track(event: ProductEvent): void {
   if (!send) return;
   try {
     const checked = checkEvent(event);
-    if (checked) send(checked);
+    if (!checked) return;
+    send(checked);
+    // Outside a request's wide event nothing else would schedule the send.
+    scheduleFlush();
   } catch {
     // Analytics never fails the work it describes.
   }

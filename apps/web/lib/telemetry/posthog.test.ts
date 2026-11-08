@@ -44,7 +44,7 @@ describe("PostHog on the server", () => {
     expect(client.capture).toHaveBeenCalledWith({
       distinctId: "u_1",
       event: "receipt_uploaded",
-      properties: { mode: "instant", plan: "free", $geoip_disable: true },
+      properties: { mode: "instant", plan: "free", workspace_id: "org_1", $geoip_disable: true },
       groups: { workspace: "org_1" },
     });
     expect(client.flush).toHaveBeenCalled();

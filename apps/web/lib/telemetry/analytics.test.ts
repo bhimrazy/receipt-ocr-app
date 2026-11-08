@@ -1,4 +1,4 @@
-import type { EventRecord } from "@receipt-ocr/core/telemetry";
+import { addEventSink, setFlushScheduler, type EventRecord } from "@receipt-ocr/core/telemetry";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkEvent,
@@ -31,7 +31,8 @@ describe("checkEvent (the allowlist)", () => {
       name: "receipt_uploaded",
       userId: "u_1",
       workspaceId: "org_1",
-      props: { mode: "instant", plan: "free" },
+      // A plain prop as well: `groups` needs PostHog's paid group analytics.
+      props: { mode: "instant", plan: "free", workspace_id: "org_1" },
     });
     expect(
       checkEvent({ name: "csv_exported", userId: "u_1", props: { count: "12" } })?.props,
@@ -121,6 +122,19 @@ describe("fromRecord", () => {
       props: { error_kind: "timeout" },
     });
     expect(fromRecord(record({ ...base, queue: { outcome: "retry" } }))).toBeNull();
+    // An admin re-running the job isn't the user's scan.
+    for (const outcome of ["succeeded", "dead"]) {
+      expect(
+        fromRecord(
+          record({
+            ...base,
+            trigger: "admin_rerun",
+            queue: { outcome },
+            ocr: { model: "fixture" },
+          }),
+        ),
+      ).toBeNull();
+    }
   });
 
   it("never counts an admin impersonating a user, or events without a user", () => {
@@ -157,6 +171,24 @@ describe("track", () => {
       userId: "u_1",
       props: { method: "github" },
     });
+  });
+
+  it("schedules the sinks' flush, so an event outside a request's wide event still goes out", () => {
+    const scheduler = vi.fn();
+    const remove = addEventSink({
+      write: () => {},
+      flush: async () => {},
+      shutdown: async () => {},
+    });
+    setFlushScheduler(scheduler);
+    try {
+      setProductEventSender(vi.fn());
+      track({ name: "signed_up", userId: "u_1", props: { method: "email" } });
+      expect(scheduler).toHaveBeenCalledTimes(1);
+    } finally {
+      setFlushScheduler(undefined);
+      remove();
+    }
   });
 
   it("never throws when the sender does", () => {
