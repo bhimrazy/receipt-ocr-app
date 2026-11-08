@@ -201,6 +201,38 @@ describe.skipIf(!enabled)("sign-in methods", { timeout: 30_000 }, () => {
     expect(await accountsOf(a.id)).toEqual([]);
   });
 
+  it("refuses to delete the last passkey when no password or provider remains", async () => {
+    const a = await newUser("lastpk");
+    await dropPassword(a.id);
+    const values = (n: number) => ({
+      id: `${tag}-lpk${n}`,
+      userId: a.id,
+      publicKey: "pk",
+      credentialID: `${tag}-lcred${n}`,
+      counter: 0,
+      deviceType: "multiDevice",
+      backedUp: true,
+    });
+    await db.insert(passkey).values(values(1));
+    await db
+      .update(session)
+      .set({ stepUpAt: new Date(), stepUpMethod: "passkey" })
+      .where(eq(session.userId, a.id));
+    const remove = (id: string) =>
+      auth.api.deletePasskey({ headers: new Headers({ cookie: a.cookie }), body: { id } });
+    const count = async () =>
+      (await db.select({ id: passkey.id }).from(passkey).where(eq(passkey.userId, a.id))).length;
+    expect(await errorOf(remove(`${tag}-lpk1`))).toEqual({
+      status: 400,
+      code: "LAST_SIGN_IN_METHOD",
+    });
+    expect(await count()).toBe(1);
+    // With a second passkey one of them can go.
+    await db.insert(passkey).values(values(2));
+    await remove(`${tag}-lpk1`);
+    expect(await count()).toBe(1);
+  });
+
   it("the one-time prompt is due after the fifth completed receipt, and not with a passkey", async () => {
     const { securityPromptDue } = await import("@receipt-ocr/core");
     const { runtime } = await import("./runtime");

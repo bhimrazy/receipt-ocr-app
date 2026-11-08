@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import {
   canRemoveAccount,
+  canRemovePasskey,
   loadSignInMethods,
   PROVIDER_LABELS,
   signInMethodCount,
@@ -143,7 +144,10 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
             You&apos;re signed in as this user, so you can&apos;t change their sign-in methods.
           </Alert>
         ) : (
-          <PasskeysCard passkeys={passkeys} />
+          <PasskeysCard
+            lastWayIn={methods ? !canRemovePasskey(methods, configured) : false}
+            passkeys={passkeys}
+          />
         )}
       </SettingsSection>
 

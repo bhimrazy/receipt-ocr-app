@@ -82,7 +82,14 @@ function RenameForm({ row, onDone }: { row: PasskeyRow; onDone: (renamed: boolea
 }
 
 /** Settings → Security: add, rename and remove passkeys. Adding and removing ask "confirm it's you". */
-export function PasskeysCard({ passkeys }: { passkeys: PasskeyRow[] }) {
+export function PasskeysCard({
+  passkeys,
+  lastWayIn = false,
+}: {
+  passkeys: PasskeyRow[];
+  /** No password or provider: the only passkey can't be removed. */
+  lastWayIn?: boolean;
+}) {
   const router = useRouter();
   const id = useId();
   const supported = useSyncExternalStore(subscribeNever, webAuthnAvailable, () => true);
@@ -150,51 +157,61 @@ export function PasskeysCard({ passkeys }: { passkeys: PasskeyRow[] }) {
             aria-label="Your passkeys"
             className="divide-y divide-border rounded-lg border border-border"
           >
-            {passkeys.map((row) => (
-              <li className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center" key={row.id}>
-                {renaming === row.id ? (
-                  <div className="min-w-0 flex-1">
-                    <RenameForm
-                      onDone={(renamed) => {
-                        setRenaming(null);
-                        if (renamed) router.refresh();
-                      }}
-                      row={row}
-                    />
-                  </div>
-                ) : (
-                  <>
+            {passkeys.map((row) => {
+              const locked = lastWayIn && passkeys.length === 1;
+              return (
+                <li className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center" key={row.id}>
+                  {renaming === row.id ? (
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{row.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Added {formatDate(new Date(row.createdAt))}
-                        {row.synced ? " · Synced across your devices" : " · This device only"}
-                      </p>
+                      <RenameForm
+                        onDone={(renamed) => {
+                          setRenaming(null);
+                          if (renamed) router.refresh();
+                        }}
+                        row={row}
+                      />
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        aria-label={`Rename ${row.label}`}
-                        onClick={() => setRenaming(row.id)}
-                        size="sm"
-                        variant="outline"
-                      >
-                        <Pencil aria-hidden="true" />
-                        Rename
-                      </Button>
-                      <Button
-                        aria-label={`Remove ${row.label}`}
-                        onClick={() => setRemoving(row)}
-                        size="sm"
-                        variant="outline"
-                      >
-                        <Trash2 aria-hidden="true" />
-                        Remove
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
+                  ) : (
+                    <>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{row.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Added {formatDate(new Date(row.createdAt))}
+                          {row.synced ? " · Synced across your devices" : " · This device only"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          aria-label={`Rename ${row.label}`}
+                          onClick={() => setRenaming(row.id)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <Pencil aria-hidden="true" />
+                          Rename
+                        </Button>
+                        <Button
+                          aria-label={`Remove ${row.label}`}
+                          aria-describedby={locked ? `${id}-locked` : undefined}
+                          disabled={locked}
+                          onClick={() => setRemoving(row)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <Trash2 aria-hidden="true" />
+                          Remove
+                        </Button>
+                        {locked ? (
+                          <p className="text-xs text-muted-foreground" id={`${id}-locked`}>
+                            Set a password or add a passkey first.
+                          </p>
+                        ) : null}
+                      </div>
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : null}
 

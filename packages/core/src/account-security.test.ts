@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { canRemoveAccount, signInMethodCount, type SignInMethods } from "./account-security";
+import {
+  canRemoveAccount,
+  canRemovePasskey,
+  signInMethodCount,
+  type SignInMethods,
+} from "./account-security";
 
 const at = new Date("2026-11-01T00:00:00Z");
 const password = { id: "a-pw", providerId: "credential", createdAt: at, hasPassword: true };
@@ -50,5 +55,18 @@ describe("canRemoveAccount", () => {
 
   it("lets an id the user doesn't own through, for Better Auth to refuse", () => {
     expect(canRemoveAccount(methods([google]), "someone-else", both)).toBe(true);
+  });
+});
+
+describe("canRemovePasskey", () => {
+  it("refuses the last passkey when no account can sign in", () => {
+    expect(canRemovePasskey(methods([], 1), both)).toBe(false);
+    expect(canRemovePasskey(methods([github], 1), ["google"])).toBe(false);
+  });
+
+  it("allows it with another passkey, a password or a configured provider", () => {
+    expect(canRemovePasskey(methods([], 2), both)).toBe(true);
+    expect(canRemovePasskey(methods([password], 1), both)).toBe(true);
+    expect(canRemovePasskey(methods([google], 1), both)).toBe(true);
   });
 });

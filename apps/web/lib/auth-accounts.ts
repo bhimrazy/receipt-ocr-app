@@ -1,6 +1,7 @@
 import "server-only";
 import {
   canRemoveAccount,
+  canRemovePasskey,
   isSocialProvider,
   loadSignInMethods,
   PROVIDER_LABELS,
@@ -58,6 +59,24 @@ export async function guardUnlink(ctx: HookContext) {
   if (!methods || canRemoveAccount(methods, accountId, configuredProviders())) return;
   logger.info({
     event: "auth.account_unlink_refused",
+    unit: "log",
+    user_id: current.user.id,
+    outcome: "last_method",
+  });
+  throw new APIError("BAD_REQUEST", {
+    code: LAST_SIGN_IN_METHOD,
+    message: LAST_SIGN_IN_METHOD_MESSAGE,
+  });
+}
+
+/** In `hooks.before` for /passkey/delete-passkey, after the step-up gate: keep the last way in. */
+export async function guardPasskeyDelete(ctx: HookContext) {
+  const current = await getSessionFromCtx(ctx);
+  if (!current) return;
+  const methods = await runtime.runPromise(loadSignInMethods(current.user.id));
+  if (!methods || canRemovePasskey(methods, configuredProviders())) return;
+  logger.info({
+    event: "auth.passkey_delete_refused",
     unit: "log",
     user_id: current.user.id,
     outcome: "last_method",

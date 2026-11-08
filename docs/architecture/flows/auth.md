@@ -272,6 +272,9 @@ sequenceDiagram
   refuses with `400 LAST_SIGN_IN_METHOD` if nothing would be left: a password, a configured provider or a passkey.
   Better Auth's own last-account check ignores passkeys, so `allowUnlinkingAll` is on and this guard replaces it.
   `account.delete.after` sends the notice (only for `/unlink-account`, not account deletion).
+  `/passkey/delete-passkey` gets the same refusal (`guardPasskeyDelete`) for a user's only passkey when no password or
+  configured provider remains. Known edge: the check reads, then Better Auth deletes, so two concurrent unlinks could
+  both pass. It needs the user to send them at once, and Forgot password recreates a credential, so it is accepted.
 - **Set a password** (Google/GitHub-only accounts): a server action calls Better Auth's server-only `setPassword`
   after `requireStepUp(account.change_password)`; that endpoint has no path, so the `hooks.before` gate can't see
   it and the action's check is the only one. A notice follows.

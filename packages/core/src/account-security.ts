@@ -94,6 +94,10 @@ export function canRemoveAccount(
   return usableAccounts(rest, configured).length + methods.passkeys > 0;
 }
 
+/** Whether removing a passkey leaves a way in: another passkey, or a usable account. */
+export const canRemovePasskey = (methods: SignInMethods, configured: readonly string[]): boolean =>
+  methods.passkeys > 1 || usableAccounts(methods.accounts, configured).length > 0;
+
 /** Completed receipts this user scanned before the one-time "protect your receipts" prompt. */
 export const SECURITY_PROMPT_AFTER_RECEIPTS = 5;
 
