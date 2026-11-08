@@ -78,6 +78,8 @@ describe("proxy", () => {
     expect(returning.searchParams.get("redirect")).toBe("/app?source=pwa");
 
     expect(new URL(location("http://localhost/app")!).pathname).toBe("/sign-in");
+    // Only the start URL itself: a deep link that happens to carry the query is a normal visit.
+    expect(new URL(location("http://localhost/app/history?source=pwa")!).pathname).toBe("/sign-in");
   });
 
   it("remembers for a year, through sign-out, that this browser has an account", () => {

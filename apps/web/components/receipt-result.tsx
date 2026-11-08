@@ -447,18 +447,22 @@ export function ReceiptResult({
 
   const json = JSON.stringify(receipt.rawJson ?? receipt, null, 2);
   const footer = (
-    <details className="group rounded-lg border border-border bg-card">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          aria-hidden="true"
-          className="size-4 transition-transform group-open:rotate-90"
-        />
-        Raw extraction (JSON)
-      </summary>
-      <pre className="max-h-72 overflow-auto border-t border-border px-5 py-4 font-mono text-xs leading-6 whitespace-pre-wrap text-muted-foreground">
-        {json}
-      </pre>
-    </details>
+    <>
+      {/* Right after a receipt was read: the moment the app has shown what it's for. */}
+      <InstallOfferCard />
+      <details className="group rounded-lg border border-border bg-card">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            aria-hidden="true"
+            className="size-4 transition-transform group-open:rotate-90"
+          />
+          Raw extraction (JSON)
+        </summary>
+        <pre className="max-h-72 overflow-auto border-t border-border px-5 py-4 font-mono text-xs leading-6 whitespace-pre-wrap text-muted-foreground">
+          {json}
+        </pre>
+      </details>
+    </>
   );
 
   return (
@@ -475,8 +479,6 @@ export function ReceiptResult({
           items={items}
           receipt={receipt}
         />
-        {/* Right after a receipt was read: the moment the app has shown what it's for. */}
-        <InstallOfferCard />
       </div>
     </ReceiptEditingProvider>
   );

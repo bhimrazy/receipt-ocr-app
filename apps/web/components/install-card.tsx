@@ -16,7 +16,7 @@ export default function InstallCard({
   onDismiss: () => void;
 }) {
   return (
-    <aside aria-labelledby="install-card-title" className="mt-6">
+    <aside aria-labelledby="install-card-title">
       <Card className="flex items-start gap-3 p-4">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary">
           <Download aria-hidden="true" className="size-4" />

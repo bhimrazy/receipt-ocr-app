@@ -217,9 +217,10 @@ export default async function SettingsPage({
         resume={resumeStep}
       />
 
-      <InstallAppSettings />
-
       <AboutSettings />
+
+      {/* Last: it appears only once the browser offers an install, so nothing below it shifts. */}
+      <InstallAppSettings />
     </div>
   );
 }

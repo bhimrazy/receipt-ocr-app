@@ -30,6 +30,7 @@ export default function proxy(request: NextRequest) {
       // The installed app's first launch on this device: new people need an account, not a
       // sign-in form. Anyone who has signed in here before carries HAS_ACCOUNT_COOKIE.
       const firstLaunch =
+        pathname === "/app" &&
         request.nextUrl.searchParams.get("source") === PWA_SOURCE &&
         !request.cookies.has(HAS_ACCOUNT_COOKIE);
       const signInUrl = new URL(firstLaunch ? "/sign-up" : "/sign-in", request.url);

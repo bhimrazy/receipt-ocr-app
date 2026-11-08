@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@receipt-ocr/ui/components/button";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useHoldBottom } from "@/lib/bottom-slot";
 
 /**
@@ -17,6 +17,16 @@ export default function LandingInstallSheet({
 }) {
   const ref = useRef<HTMLElement>(null);
   useHoldBottom("install-sheet", true, ref);
+  // Escape means Not now, unless it's closing something else (a dialog, the open menu).
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"], [aria-expanded="true"]')) return;
+      onDismiss();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onDismiss]);
   return (
     <aside
       aria-label="Install the app"
@@ -25,8 +35,8 @@ export default function LandingInstallSheet({
     >
       <h2 className="text-sm font-semibold">Install ReceiptOCR on your phone</h2>
       <p className="mt-1 text-sm leading-6 text-muted-foreground">
-        It&apos;s a web app: no app store needed, installs in a second and opens from your home
-        screen like any app. Snap receipts and share photos straight into it.
+        It&apos;s a web app: no app store, and it opens from your home screen like any app.
+        Photograph receipts and share photos straight into it.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <Button onClick={onInstall}>Install app</Button>

@@ -90,7 +90,7 @@ export function InstallAppSettings() {
           <p className="text-xs text-muted-foreground">
             {path.kind === "prompt"
               ? "Your browser asks once to confirm."
-              : "Safari adds it to your Home Screen in three taps."}
+              : "Safari adds it to your Home Screen in a few taps."}
           </p>
         </div>
         <Button onClick={start} size="sm" variant="outline">

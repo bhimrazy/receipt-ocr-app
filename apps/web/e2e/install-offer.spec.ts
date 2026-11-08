@@ -93,7 +93,46 @@ test.describe("on iPhone Safari", () => {
     await expect(guide).toBeVisible();
     await expect(guide).toContainText("Add to Home Screen");
     await expect(guide).toContainText("Open as Web App");
+    // Modal: Tab past the last control wraps inside the sheet.
+    await guide.getByRole("button", { name: "Done" }).focus();
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press("Tab");
+      expect(await guide.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    }
     await guide.getByRole("button", { name: "Done" }).click();
     await expect(guide).toHaveCount(0);
+  });
+});
+
+test.describe("on an Android phone", () => {
+  test.use({
+    userAgent:
+      "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36",
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+  });
+
+  test("the home page sheet waits for a scroll to How it works, and Escape means Not now", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await offerInstall(page);
+    const sheet = page.getByRole("complementary", { name: "Install the app" });
+    await page.waitForTimeout(500);
+    await expect(sheet).toHaveCount(0);
+
+    await page.locator("#how").scrollIntoViewIfNeeded();
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toContainText("Install ReceiptOCR on your phone");
+    // It never takes focus.
+    expect(await sheet.evaluate((el) => el.contains(document.activeElement))).toBe(false);
+
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+    const stored = JSON.parse(
+      (await page.evaluate(() => localStorage.getItem("receiptocr.install")))!,
+    );
+    expect(stored.landing.shows).toBe(1);
+    expect(stored.landing.until).toBeTruthy();
   });
 });

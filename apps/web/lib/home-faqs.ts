@@ -24,6 +24,6 @@ export const homeFaqs = [
   },
   {
     q: "Is there an iPhone or Android app?",
-    a: "ReceiptOCR is a progressive web app (PWA): install it from your browser and it opens from your home screen like any app, with no app store download. On Android and desktop Chrome use the Install button; on iPhone use Safari's Share → Add to Home Screen.",
+    a: "ReceiptOCR is a progressive web app (PWA): install it from your browser and it opens from your home screen like any app, with no app store download. On Android and desktop Chrome, tap Get the app at the bottom of this page (or Install app in the account menu); on iPhone, in Safari tap Share (or ••• then Share), then Add to Home Screen.",
   },
 ];

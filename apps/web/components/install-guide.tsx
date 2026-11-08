@@ -8,7 +8,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@receipt-ocr/ui/components/drawer";
-import { Check, Compass, Copy, Ellipsis, Share, SquarePlus, type LucideIcon } from "lucide-react";
+import { Check, Compass, Copy, Share, SquarePlus, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import type { InstallPath } from "@/lib/use-install-offer";
 
@@ -38,21 +38,15 @@ export function guideSteps(path: GuidePath): Step[] {
   }
   return [
     {
-      icon: Ellipsis,
+      icon: Share,
       text: (
         <>
-          Tap {b("•••")} or {b("Share")} next to the address bar.
+          Tap {b("Share")}. If you don&apos;t see it, tap {b("•••")} next to the address bar, then{" "}
+          {b("Share")}.
         </>
       ),
     },
-    {
-      icon: SquarePlus,
-      text: (
-        <>
-          Tap {b("Share")}, then {b("Add to Home Screen")}.
-        </>
-      ),
-    },
+    { icon: SquarePlus, text: <>Tap {b("Add to Home Screen")}.</> },
     // iOS 26 shows this switch, on by default; off, it saves a plain bookmark.
     { icon: Check, text: <>Tap {b("Add")}.</>, note: "If you see Open as Web App, leave it on." },
   ];
@@ -124,7 +118,7 @@ export default function InstallGuide({
           <DrawerTitle>Add ReceiptOCR to your Home Screen</DrawerTitle>
           <DrawerDescription>
             It&apos;s a web app, so there&apos;s nothing to download from the App Store.
-            {safari ? " Safari adds it in three taps:" : null}
+            {safari ? " Safari adds it in a few taps:" : null}
           </DrawerDescription>
         </DrawerHeader>
         <GuideSteps path={path} />
