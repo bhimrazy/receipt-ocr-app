@@ -140,6 +140,20 @@ export const emailEnv = {
 };
 
 /**
+ * Product-updates list. The signup form, its routes and the confirm mail are on only when the
+ * Resend segment (formerly "audience") id is set. Adding contacts needs a full-access
+ * RESEND_API_KEY; a sending-only key sends the confirmation mail but cannot add anyone.
+ */
+export const newsletterEnv = {
+  segmentId: optional("RESEND_NEWSLETTER_SEGMENT_ID"),
+};
+export const newsletterEnabled = Boolean(newsletterEnv.segmentId);
+
+/** Signs newsletter tokens: the current versioned secret when rotation is on, else the single one. */
+export const newsletterSecret = () =>
+  authEnv.betterAuthSecrets?.[0]?.value ?? authEnv.betterAuthSecret;
+
+/**
  * Bearer secret for the queue drain route (`/api/jobs/drain`), sent by Vercel Cron and pg_net.
  * Read at call time. Optional: without it the route answers 401 and drains nothing.
  */

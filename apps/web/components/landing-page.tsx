@@ -18,7 +18,9 @@ import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
 import { LandingInstallOffer } from "@/components/landing-install";
 import { PlanCard } from "@/components/plan-card";
 import { ProductPreview } from "@/components/product-preview";
+import { NewsletterSignup } from "@/components/newsletter-signup";
 import { SiteFooter } from "@/components/site-footer";
+import { newsletterEnabled } from "@/lib/env";
 import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
 import { homeFaqs as faqs } from "@/lib/home-faqs";
@@ -398,6 +400,31 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
             </div>
           </div>
         </section>
+
+        {/* Product updates */}
+        {newsletterEnabled && (
+          <section
+            aria-labelledby="updates-heading"
+            className="border-t border-border px-5 py-16 md:py-20"
+          >
+            <div className="mx-auto grid max-w-4xl gap-8 md:grid-cols-2 md:items-center md:gap-12">
+              <div>
+                <SectionLabel>Product updates</SectionLabel>
+                <h2
+                  className="mt-3 text-balance text-2xl font-bold tracking-tight md:text-3xl"
+                  id="updates-heading"
+                >
+                  Hear when something new ships
+                </h2>
+                <p className="mt-3 text-pretty text-muted-foreground">
+                  A short note a few times a year about what changed in ReceiptOCR. No spam, and you
+                  can unsubscribe from any email.
+                </p>
+              </div>
+              <NewsletterSignup />
+            </div>
+          </section>
+        )}
       </main>
 
       <SiteFooter />
