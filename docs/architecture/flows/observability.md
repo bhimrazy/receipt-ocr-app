@@ -52,7 +52,8 @@ flowchart LR
 `job.attempt` replaced `job.run`. It carries the queue wait (`queue.wait_ms`, by the database clock), the outcome,
 the OCR model, calls, tokens and cost, and per-step `timings_ms` (`storage.get`, `ai.extract`, `db.complete`). The
 request that triggered the run passes its `request_id` and `trigger` (`upload`, `retry`, `poll`, `drain`), so one id
-finds a request and every job attempt it caused.
+finds a request and every job attempt it caused. Healthy `health.live` and `health.ready` answers aren't written at
+all (`skipEvent`): an uptime pinger would otherwise be the largest line in the logs; a failing check always is.
 
 ## The schema is the allowlist
 
