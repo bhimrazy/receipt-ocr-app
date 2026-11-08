@@ -32,6 +32,10 @@
   background-clip: text;
   color: transparent;
 }
+/* Mixing with white would drop the light stops below 4.5:1 on white. */
+.light .text-gradient {
+  background-image: linear-gradient(to right, var(--primary), var(--brand-teal), var(--brand-cyan));
+}
 
 /* Hairline top-edge highlight used on elevated cards for a glassier read. */
 .card-sheen {
@@ -54,6 +58,10 @@
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
+}
+/* A white edge is invisible on white cards; in light, elevation comes from the shadow. */
+.light .card-sheen::before {
+  content: none;
 }
 
 /* Scanner sweep on the product-preview receipt suggesting live extraction. */
@@ -112,7 +120,14 @@
       transparent 72%
     );
   filter: blur(56px);
-  opacity: 0.9;
+  opacity: calc(0.9 * var(--aurora-strength));
+}
+/* Scales the drift keyframes too; in light the aurora reads as a pale mint haze. */
+:root {
+  --aurora-strength: 1;
+}
+.light .hero-aurora {
+  --aurora-strength: 0.5;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -124,15 +139,15 @@
 @keyframes aurora-drift {
   0% {
     transform: translate3d(-3%, -2%, 0) scale(1);
-    opacity: 0.7;
+    opacity: calc(0.7 * var(--aurora-strength));
   }
   50% {
     transform: translate3d(3%, 2%, 0) scale(1.08);
-    opacity: 1;
+    opacity: var(--aurora-strength);
   }
   100% {
     transform: translate3d(-2%, 3%, 0) scale(1.04);
-    opacity: 0.8;
+    opacity: calc(0.8 * var(--aurora-strength));
   }
 }
 
