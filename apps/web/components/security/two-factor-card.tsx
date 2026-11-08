@@ -1,12 +1,12 @@
 "use client";
 
 import { Alert } from "@receipt-ocr/ui/components/alert";
-import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card, CardContent } from "@receipt-ocr/ui/components/card";
+import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Check, Copy, Download, KeyRound, Loader2 } from "lucide-react";
+import { Check, Copy, Download, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { withStepUp } from "@/components/step-up/step-up";
@@ -17,7 +17,7 @@ import { QrCode } from "./qr-code";
 
 type Step =
   | { kind: "idle" }
-  | { kind: "password"; purpose: "enable" | "regenerate" | "disable" }
+  | { kind: "password"; purpose: Purpose }
   | { kind: "scan"; totpURI: string; backupCodes: string[] }
   | { kind: "codes"; backupCodes: string[] };
 
@@ -133,6 +133,8 @@ function Scan({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const key = totpKeyFromUri(totpURI) ?? "";
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => headingRef.current?.focus(), []);
 
   async function verify(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -153,6 +155,9 @@ function Scan({
 
   return (
     <form className="flex flex-col gap-5" noValidate onSubmit={verify}>
+      <h3 className="text-sm font-semibold outline-none" ref={headingRef} tabIndex={-1}>
+        Set up your authenticator app
+      </h3>
       <ol className="flex list-decimal flex-col gap-4 pl-5 text-sm">
         <li>
           Open an authenticator app (Google Authenticator, 1Password, Authy, your phone&apos;s
@@ -217,14 +222,14 @@ function Scan({
   );
 }
 
+type Purpose = "enable" | "regenerate" | "disable";
+
+/** With a password, each action asks for it first; the sentence says what it is for. */
 const PASSWORD_COPY = {
-  enable: { title: "Confirm your password to set up an authenticator app.", button: "Continue" },
-  regenerate: {
-    title: "Confirm your password to make new backup codes.",
-    button: "Make new codes",
-  },
+  enable: { hint: "Needed to set up an authenticator app.", button: "Continue" },
+  regenerate: { hint: "Needed to make new backup codes.", button: "Make new codes" },
   disable: {
-    title: "Turning this off means your password alone signs you in.",
+    hint: "Turning this off means your password alone signs you in. You can turn it back on at any time.",
     button: "Turn off",
   },
 } as const;
@@ -233,10 +238,13 @@ export function TwoFactorCard({
   enabled,
   hasPassword,
   email,
+  readOnly = false,
 }: {
   enabled: boolean;
   hasPassword: boolean;
   email: string;
+  /** Impersonation: the state alone, no controls. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const id = useId();
@@ -245,6 +253,16 @@ export function TwoFactorCard({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmingOff, setConfirmingOff] = useState(false);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  // Set with a notice whose control went away (the codes view), so focus lands on it.
+  const focusNotice = useRef(false);
+
+  useEffect(() => {
+    if (!focusNotice.current) return;
+    focusNotice.current = false;
+    noticeRef.current?.focus();
+  }, [notice]);
 
   function reset() {
     setStep({ kind: "idle" });
@@ -252,49 +270,77 @@ export function TwoFactorCard({
     setError(null);
   }
 
-  async function run(purpose: "enable" | "regenerate" | "disable") {
+  function showNotice(text: string) {
+    focusNotice.current = true;
+    setNotice(text);
+  }
+
+  /** Runs one action; returns the error message, if any. */
+  async function run(purpose: Purpose): Promise<string | void> {
     const body = hasPassword ? { password } : {};
-    if (hasPassword && !password) return setError("Enter your password.");
+    if (hasPassword && !password) return "Enter your password.";
+    setNotice(null);
+    if (purpose === "enable") {
+      // Enrolling is checked too: otherwise a stolen session could add its own authenticator.
+      const { data, error: enableError } = await withStepUp(
+        () => authClient.twoFactor.enable(body as { password: string }),
+        "two_factor.enable",
+      );
+      if (enableError || !data || !("totpURI" in data) || !data.totpURI) {
+        return authErrorMessage(enableError);
+      }
+      setPassword("");
+      setStep({ kind: "scan", totpURI: data.totpURI, backupCodes: data.backupCodes ?? [] });
+      return;
+    }
+    if (purpose === "regenerate") {
+      const { data, error: codesError } = await withStepUp(
+        () => authClient.twoFactor.generateBackupCodes(body as { password: string }),
+        "two_factor.regenerate_backup_codes",
+      );
+      if (codesError || !data) return authErrorMessage(codesError);
+      setPassword("");
+      setStep({ kind: "codes", backupCodes: data.backupCodes });
+      return;
+    }
+    const { error: disableError } = await withStepUp(
+      () => authClient.twoFactor.disable(body as { password: string }),
+      "two_factor.disable",
+    );
+    if (disableError) return authErrorMessage(disableError);
+    reset();
+    showNotice("Two-step sign-in is off.");
+    router.refresh();
+  }
+
+  async function submit(purpose: Purpose) {
     setPending(true);
     setError(null);
-    setNotice(null);
     try {
-      if (purpose === "enable") {
-        // Enrolling is checked too: otherwise a stolen session could add its own authenticator.
-        const { data, error: enableError } = await withStepUp(
-          () => authClient.twoFactor.enable(body as { password: string }),
-          "two_factor.enable",
-        );
-        if (enableError || !data || !("totpURI" in data) || !data.totpURI) {
-          return setError(authErrorMessage(enableError));
-        }
-        setPassword("");
-        return setStep({
-          kind: "scan",
-          totpURI: data.totpURI,
-          backupCodes: data.backupCodes ?? [],
-        });
-      }
-      if (purpose === "regenerate") {
-        const { data, error: codesError } = await withStepUp(
-          () => authClient.twoFactor.generateBackupCodes(body as { password: string }),
-          "two_factor.regenerate_backup_codes",
-        );
-        if (codesError || !data) return setError(authErrorMessage(codesError));
-        setPassword("");
-        return setStep({ kind: "codes", backupCodes: data.backupCodes });
-      }
-      const { error: disableError } = await withStepUp(
-        () => authClient.twoFactor.disable(body as { password: string }),
-        "two_factor.disable",
-      );
-      if (disableError) return setError(authErrorMessage(disableError));
-      reset();
-      setNotice("Two-step sign-in is off.");
-      router.refresh();
+      const failed = await run(purpose);
+      if (failed) setError(failed);
     } finally {
       setPending(false);
     }
+  }
+
+  /** With a password, ask for it first. Without one, the step-up dialog is the only check. */
+  function begin(purpose: Purpose) {
+    if (hasPassword) return setStep({ kind: "password", purpose });
+    if (purpose === "disable") return setConfirmingOff(true);
+    void submit(purpose);
+  }
+
+  if (readOnly) {
+    return (
+      <Card>
+        <CardContent className="pt-5">
+          <p className="text-sm">
+            {enabled ? "An authenticator app is set up." : "No authenticator app is set up."}
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   if (step.kind === "scan") {
@@ -320,7 +366,7 @@ export function TwoFactorCard({
             email={email}
             onDone={() => {
               reset();
-              setNotice(enabled ? "New backup codes saved." : "Two-step sign-in is on.");
+              showNotice(enabled ? "New backup codes saved." : "Two-step sign-in is on.");
               router.refresh();
             }}
           />
@@ -334,20 +380,13 @@ export function TwoFactorCard({
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <KeyRound aria-hidden="true" className="size-5 text-muted-foreground" />
-          <p className="text-sm font-medium">Authenticator app</p>
-          {enabled ? <Badge variant="success">On</Badge> : <Badge variant="secondary">Off</Badge>}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {enabled
-            ? "Signing in with your password also asks for a code from your app. Important changes ask for one too."
-            : hasPassword
-              ? "Add a second step to signing in: a 6-digit code from an app on your phone. A stolen password alone then isn't enough."
-              : "You sign in with Google or GitHub, which protect that step. An authenticator app adds a code check before important changes, such as deleting your account."}
-        </p>
         {notice ? (
-          <p className="flex items-center gap-1.5 text-sm text-success" role="status">
+          <p
+            className="flex items-center gap-1.5 text-sm text-success outline-none"
+            ref={noticeRef}
+            role="status"
+            tabIndex={-1}
+          >
             <Check aria-hidden="true" className="size-4" />
             {notice}
           </p>
@@ -359,29 +398,23 @@ export function TwoFactorCard({
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
-              void run(asking);
+              void submit(asking);
             }}
           >
-            {hasPassword ? (
-              <Field data-invalid={error ? true : undefined}>
-                <FieldLabel htmlFor={`${id}-password`}>{PASSWORD_COPY[asking].title}</FieldLabel>
-                <Input
-                  aria-describedby={error ? `${id}-error` : undefined}
-                  aria-invalid={error ? true : undefined}
-                  autoComplete="current-password"
-                  autoFocus
-                  id={`${id}-password`}
-                  onChange={(event) => setPassword(event.target.value)}
-                  type="password"
-                  value={password}
-                />
-                {asking === "disable" ? (
-                  <FieldDescription>You can turn it back on at any time.</FieldDescription>
-                ) : null}
-              </Field>
-            ) : (
-              <p className="text-sm text-muted-foreground">{PASSWORD_COPY[asking].title}</p>
-            )}
+            <Field data-invalid={error ? true : undefined}>
+              <FieldLabel htmlFor={`${id}-password`}>Your password</FieldLabel>
+              <Input
+                aria-describedby={error ? `${id}-hint ${id}-error` : `${id}-hint`}
+                aria-invalid={error ? true : undefined}
+                autoComplete="current-password"
+                autoFocus
+                id={`${id}-password`}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                value={password}
+              />
+              <FieldDescription id={`${id}-hint`}>{PASSWORD_COPY[asking].hint}</FieldDescription>
+            </Field>
             {error ? (
               <Alert id={`${id}-error`} variant="destructive">
                 {error}
@@ -401,31 +434,50 @@ export function TwoFactorCard({
               </Button>
             </div>
           </form>
-        ) : enabled ? (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => setStep({ kind: "password", purpose: "regenerate" })}
-              type="button"
-              variant="outline"
-            >
-              New backup codes
-            </Button>
-            <Button
-              onClick={() => setStep({ kind: "password", purpose: "disable" })}
-              type="button"
-              variant="outline"
-            >
-              Turn off
-            </Button>
-          </div>
         ) : (
-          <div>
-            <Button onClick={() => setStep({ kind: "password", purpose: "enable" })} type="button">
-              Set up authenticator app
-            </Button>
-          </div>
+          <>
+            {error ? <Alert variant="destructive">{error}</Alert> : null}
+            {enabled ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  disabled={pending}
+                  onClick={() => begin("regenerate")}
+                  type="button"
+                  variant="outline"
+                >
+                  {pending ? <Spinner /> : null}
+                  New backup codes
+                </Button>
+                <Button
+                  disabled={pending}
+                  onClick={() => begin("disable")}
+                  type="button"
+                  variant="outline"
+                >
+                  Turn off
+                </Button>
+              </div>
+            ) : (
+              <div>
+                <Button disabled={pending} onClick={() => begin("enable")} type="button">
+                  {pending ? <Spinner /> : null}
+                  Set up authenticator app
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
+      <ConfirmDialog
+        confirmLabel="Turn off"
+        description="Important changes will then be confirmed by a code emailed to you instead."
+        destructive
+        focusAfterConfirm={noticeRef}
+        onConfirm={() => run("disable")}
+        onOpenChange={setConfirmingOff}
+        open={confirmingOff}
+        title="Turn off two-step sign-in?"
+      />
     </Card>
   );
 }

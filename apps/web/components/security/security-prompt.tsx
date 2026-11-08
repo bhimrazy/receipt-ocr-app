@@ -29,7 +29,7 @@ export function SecurityPrompt() {
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
         <p className="min-w-0">
-          Protect your receipts: add a passkey (one tap) or an authenticator app.
+          Five receipts in. Add a passkey so a stolen password alone can&apos;t open them.
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2 pl-7 sm:pl-0">
@@ -41,12 +41,12 @@ export function SecurityPrompt() {
         </Link>
         <Link
           className={buttonVariants({ size: "sm", variant: "outline" })}
-          href="/app/settings/security#two-factor-heading"
+          href="/app/settings/security"
         >
-          Use an app
+          Other options
         </Link>
         <Button
-          aria-label="Dismiss for good"
+          aria-label="Don't show this again"
           className="ml-auto sm:ml-0"
           onClick={dismiss}
           size="icon-sm"

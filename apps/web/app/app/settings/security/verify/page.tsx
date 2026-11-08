@@ -28,8 +28,8 @@ export default async function AdminVerifyPage() {
           <SettingsBreadcrumb current="Confirm it's you" />
           <PageHeaderTitle>Confirm it&apos;s you to open Admin</PageHeaderTitle>
           <PageHeaderDescription>
-            Admin needs your second factor once per session. Signing in with Google, GitHub or a
-            trusted device skips that step, so we ask here.
+            Admin asks for one extra check per session. Signing in with Google, GitHub or a
+            remembered device skips that check, so we ask here.
           </PageHeaderDescription>
         </PageHeaderContent>
       </PageHeader>

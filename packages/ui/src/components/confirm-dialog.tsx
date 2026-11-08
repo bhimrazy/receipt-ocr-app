@@ -31,6 +31,11 @@ type ConfirmDialogProps = {
    * check it too. Rejecting (or returning an error string) keeps the dialog open.
    */
   onConfirm: (typed: string) => Promise<string | void> | string | void;
+  /**
+   * Where focus goes after a successful confirm, such as the notice it produced; use it when
+   * the trigger goes away. Cancelling still returns focus to the trigger.
+   */
+  focusAfterConfirm?: React.RefObject<HTMLElement | null>;
 };
 
 /**
@@ -38,20 +43,31 @@ type ConfirmDialogProps = {
  * so Enter never confirms by accident; Escape and focus return come from
  * the Base UI AlertDialog.
  */
-function ConfirmDialog({ open, onOpenChange, confirmText, ...rest }: ConfirmDialogProps) {
+function ConfirmDialog({
+  open,
+  onOpenChange,
+  confirmText,
+  focusAfterConfirm,
+  ...rest
+}: ConfirmDialogProps) {
   const cancelRef = React.useRef<HTMLButtonElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   // Read only by the close guard below, so a ref is enough.
   const pendingRef = React.useRef(false);
+  const confirmedRef = React.useRef(false);
 
   return (
     <AlertDialog open={open} onOpenChange={(next) => !pendingRef.current && onOpenChange(next)}>
-      <AlertDialogContent initialFocus={confirmText !== undefined ? inputRef : cancelRef}>
+      <AlertDialogContent
+        finalFocus={() => (confirmedRef.current && focusAfterConfirm?.current) || true}
+        initialFocus={confirmText !== undefined ? inputRef : cancelRef}
+      >
         {/* Mounts only while open, so typed text, errors and pending reset on every open. */}
         <ConfirmBody
           {...rest}
           cancelRef={cancelRef}
           confirmText={confirmText}
+          confirmedRef={confirmedRef}
           inputRef={inputRef}
           onClose={() => onOpenChange(false)}
           pendingRef={pendingRef}
@@ -61,10 +77,11 @@ function ConfirmDialog({ open, onOpenChange, confirmText, ...rest }: ConfirmDial
   );
 }
 
-type ConfirmBodyProps = Omit<ConfirmDialogProps, "open" | "onOpenChange"> & {
+type ConfirmBodyProps = Omit<ConfirmDialogProps, "open" | "onOpenChange" | "focusAfterConfirm"> & {
   cancelRef: React.RefObject<HTMLButtonElement | null>;
   inputRef: React.RefObject<HTMLInputElement | null>;
   pendingRef: React.RefObject<boolean>;
+  confirmedRef: React.RefObject<boolean>;
   onClose: () => void;
 };
 
@@ -79,6 +96,7 @@ function ConfirmBody({
   cancelRef,
   inputRef,
   pendingRef,
+  confirmedRef,
   onClose,
 }: ConfirmBodyProps) {
   const inputId = React.useId();
@@ -88,10 +106,11 @@ function ConfirmBody({
 
   // Unmounting ends any in-flight confirm, so the close guard must not stay locked.
   React.useEffect(() => {
+    confirmedRef.current = false;
     return () => {
       pendingRef.current = false;
     };
-  }, [pendingRef]);
+  }, [pendingRef, confirmedRef]);
 
   const setPending = (value: boolean) => {
     pendingRef.current = value;
@@ -109,6 +128,7 @@ function ConfirmBody({
         return;
       }
       pendingRef.current = false;
+      confirmedRef.current = true;
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Something went wrong. Try again.");

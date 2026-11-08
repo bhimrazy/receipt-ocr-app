@@ -25,7 +25,7 @@ function dismissedRecently(): boolean {
 }
 
 /**
- * For owners and admins of a shared workspace without two-step sign-in: one
+ * For owners and admins of a shared workspace with neither a passkey nor two-step sign-in: one
  * quiet line, dismissible for 30 days. Hidden on the Security page itself.
  */
 export function SecurityNudge() {
@@ -50,8 +50,8 @@ export function SecurityNudge() {
     >
       <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary sm:mt-0" />
       <p className="min-w-0 flex-1">
-        Other people rely on this workspace. Turn on two-step sign-in so a stolen password
-        isn&apos;t enough to get in.
+        Other people rely on this workspace. Add a passkey or two-step sign-in so a stolen password
+        alone can&apos;t get in.
       </p>
       <Link
         className={buttonVariants({ size: "sm", className: "shrink-0" })}

@@ -5,6 +5,7 @@ import {
   PageHeaderTitle,
 } from "@/components/page-header";
 import {
+  hasStrongFactor,
   providerAvailability,
   receiptReaders,
   Settings,
@@ -58,19 +59,21 @@ export default async function SettingsPage({
     searchParams,
   ]);
   const resumeStep = resume === "delete-account" ? resume : undefined;
-  const [{ plan, policy }, usage, workspace, readers, blocking] = await Promise.all([
-    getCurrentPlan(),
-    getUsageSummary(),
-    loadWorkspace(scope.organizationId),
-    runtime.runPromise(
-      Effect.zipWith(
-        Effect.flatMap(Settings, (settings) => settings.ocr),
-        providerAvailability,
-        receiptReaders,
+  const [{ plan, policy }, usage, workspace, readers, blocking, protectedAccount] =
+    await Promise.all([
+      getCurrentPlan(),
+      getUsageSummary(),
+      loadWorkspace(scope.organizationId),
+      runtime.runPromise(
+        Effect.zipWith(
+          Effect.flatMap(Settings, (settings) => settings.ocr),
+          providerAvailability,
+          receiptReaders,
+        ),
       ),
-    ),
-    runtime.runPromise(workspacesBlockingDeletion(session.user.id)),
-  ]);
+      runtime.runPromise(workspacesBlockingDeletion(session.user.id)),
+      runtime.runPromise(hasStrongFactor(session.user.id)),
+    ]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -136,7 +139,7 @@ export default async function SettingsPage({
       <ReceiptReadingSettings readers={readers} />
 
       <SettingsSection
-        description="Two-step sign-in, and the check before important changes."
+        description="Passkeys, two-step sign-in and the check before important changes."
         id="security-heading"
         title="Security"
       >
@@ -149,19 +152,19 @@ export default async function SettingsPage({
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">
-              Two-step sign-in is {session.user.twoFactorEnabled ? "on" : "off"}
+              {protectedAccount ? "Your account is protected" : "Add a second check to sign-in"}
             </p>
             <p className="text-xs text-muted-foreground">
-              {session.user.twoFactorEnabled
-                ? "Your password alone isn't enough to sign in."
-                : "Protect your account with a code from an app on your phone."}
+              {protectedAccount
+                ? "Signing in needs more than a password."
+                : "A passkey or an app code, so a stolen password alone can't get in."}
             </p>
           </div>
           <Link
             className={buttonVariants({ variant: "outline", size: "sm" })}
             href="/app/settings/security"
           >
-            {session.user.twoFactorEnabled ? "Manage" : "Set up"}
+            {protectedAccount ? "Manage" : "Set up"}
             <ChevronRight aria-hidden="true" />
           </Link>
         </Card>
