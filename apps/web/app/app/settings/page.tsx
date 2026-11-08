@@ -15,6 +15,7 @@ import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { Effect } from "effect";
 import { AboutSettings } from "@/components/about-settings";
 import { AccountSettings } from "@/components/account-settings";
+import { InstallAppSettings } from "@/components/install-offer";
 import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
@@ -217,6 +218,9 @@ export default async function SettingsPage({
       />
 
       <AboutSettings />
+
+      {/* Last: it appears only once the browser offers an install, so nothing below it shifts. */}
+      <InstallAppSettings />
     </div>
   );
 }

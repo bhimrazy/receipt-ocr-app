@@ -9,6 +9,7 @@ import {
   type ConsentChoice,
   type ConsentFeatures,
 } from "@/lib/consent/state";
+import { useHoldBottom } from "@/lib/bottom-slot";
 import { dismissConfirmation, openConsentSettings, saveConsent } from "@/lib/consent/store";
 
 const shell =
@@ -27,13 +28,16 @@ export function CookieBanner({
   features: ConsentFeatures;
 }) {
   const messageRef = useRef<HTMLParagraphElement>(null);
+  const shellRef = useRef<HTMLElement>(null);
+  // Outranks the install sheet and lifts the support launcher above the banner.
+  useHoldBottom("cookie-banner", true, shellRef);
   useEffect(() => {
     if (confirmation) messageRef.current?.focus();
   }, [confirmation]);
 
   if (confirmation) {
     return (
-      <section aria-label="Cookie choice saved" className={shell}>
+      <section aria-label="Cookie choice saved" className={shell} ref={shellRef}>
         <div className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p
             className="text-sm leading-6 outline-none"
@@ -55,7 +59,7 @@ export function CookieBanner({
   }
 
   return (
-    <section aria-labelledby="cookie-banner-title" className={shell}>
+    <section aria-labelledby="cookie-banner-title" className={shell} ref={shellRef}>
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         <div>
           <h2 className="text-sm font-semibold" id="cookie-banner-title">

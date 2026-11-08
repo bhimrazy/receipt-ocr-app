@@ -1,6 +1,7 @@
 # UX decisions: mobile navigation, install prompt, name, push
 
-_Plan · 2026-11-07 · status: proposed, nothing built_
+_Plan · 2026-11-07 · status: §2 (install prompt) built in `feat/install-offer`, with the landing surfaces added by the
+2026-11-08 design review (see §2 "As built"); §1, §3 and §4 as written_
 
 Four open UX questions, each with a recommendation first, then the options, the evidence (sources dated; anything not
 checked against a primary source is marked **unverified**) and the implementation tasks.
@@ -196,6 +197,32 @@ the page flow, not over the tab bar; dismissing hides it for 30 days (test with 
 for good; the menu row is always present when not standalone and absent when installed; on iOS 26 Safari (real
 device or BrowserStack) the guide's steps match the screen in both Compact and Top layouts; Playwright covers the
 Chromium path with a synthetic `beforeinstallprompt`.
+
+### As built (2026-11-08)
+
+Differences from the tasks above, and what the 2026-11-08 design review added:
+
+- **Trigger.** The in-flow card shows under a completed receipt on the result page; the "second signed-in day"
+  trigger and the `receiptocr.first-read` flag were dropped (the result page is where a first read lands).
+- **Storage.** One key, `receiptocr.install`: `{ app: {dismissals, until}, landing: {shows, until},
+lastDismissedAt, installed }`. App card: 30 days, then for good. Landing sheet: 7 days per "Not now", 3 shows
+  ever. Any dismissal (declining Chrome's prompt from any surface included) hides every offer for 7 days.
+  `installed` (from `appinstalled`) or standalone display hides everything, menu rows too. The old
+  `receiptocr.install-dismissed` flag migrates to one app dismissal.
+- **Landing.** "Get the app" in the footer's Product column and the mobile header menu (Chromium prompt or iOS
+  Safari only), and a timed bottom sheet on the home page for Android phones with Chrome's prompt: after scrolling
+  to How it works or 45 s, not with the cookie banner up or within 10 s of a cookie choice, not with support open.
+  The cookie banner and the sheet publish `--site-bottom-inset`, which lifts the support launcher above them.
+  `beforeinstallprompt` is now taken on every path, so Chrome's mini-infobar never doubles our offer.
+- **Start URL.** `start_url` is `/app?source=pwa`; a signed-out launch without the year-long `has_account` cookie
+  goes to sign-up, otherwise sign-in. `page.render` records `launch_source: pwa`; `signed_up` carries
+  `standalone` (from a short `display_mode` cookie the app sets while standalone).
+- **Measurement.** In-app surfaces send `install_offer` (`action`: shown, opened, accepted, dismissed, installed;
+  `surface`: card, menu, settings, browser; `platform`: chromium, ios_safari, ios_chrome, ios_other) through a
+  server action and `track()`; nothing while impersonating. Landing surfaces send nothing: product events need a
+  user id, and browser PostHog waits on a consent decision.
+- **Not verified:** the iOS 26 guide against a real device in Compact and Top layouts; Chrome on iOS and Firefox's
+  own Add to Home Screen (the guide sends them to Safari).
 
 ## 3. App name spelling
 

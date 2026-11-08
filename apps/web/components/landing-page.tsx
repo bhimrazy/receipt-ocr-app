@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { HeroFloatingReceipts } from "@/components/hero-floating-receipts";
+import { LandingInstallOffer } from "@/components/landing-install";
 import { PlanCard } from "@/components/plan-card";
 import { ProductPreview } from "@/components/product-preview";
 import { SiteFooter } from "@/components/site-footer";
@@ -401,6 +402,7 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
 
       <SiteFooter />
       <SupportWidget />
+      <LandingInstallOffer />
     </div>
   );
 }

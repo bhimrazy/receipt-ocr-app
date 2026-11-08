@@ -67,4 +67,38 @@ describe("proxy", () => {
     );
     expect(res.cookies.get("signed_in_hint")).toBeUndefined();
   });
+
+  it("sends a first launch of the installed app to sign-up, and anyone who signed in before to sign-in", () => {
+    const first = new URL(location("http://localhost/app?source=pwa")!);
+    expect(first.pathname).toBe("/sign-up");
+    expect(first.searchParams.get("redirect")).toBe("/app");
+
+    const returning = new URL(location("http://localhost/app?source=pwa", "has_account=1")!);
+    expect(returning.pathname).toBe("/sign-in");
+    expect(returning.searchParams.get("redirect")).toBe("/app?source=pwa");
+
+    expect(new URL(location("http://localhost/app")!).pathname).toBe("/sign-in");
+    // Only the start URL itself: a deep link that happens to carry the query is a normal visit.
+    expect(new URL(location("http://localhost/app/history?source=pwa")!).pathname).toBe("/sign-in");
+  });
+
+  it("remembers for a year, through sign-out, that this browser has an account", () => {
+    const res = proxy(
+      new NextRequest("http://localhost/app", {
+        headers: { cookie: "better-auth.session_token=abc" },
+      }),
+    );
+    expect(res.cookies.get("has_account")).toMatchObject({
+      value: "1",
+      path: "/",
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 365,
+    });
+    const again = proxy(
+      new NextRequest("http://localhost/app", {
+        headers: { cookie: "better-auth.session_token=abc; has_account=1" },
+      }),
+    );
+    expect(again.cookies.get("has_account")).toBeUndefined();
+  });
 });

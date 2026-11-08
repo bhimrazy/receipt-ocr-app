@@ -2,14 +2,16 @@
 
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Loader2, MailCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { Turnstile, useTurnstile } from "@/components/turnstile";
 import { authClient } from "@/lib/auth-client";
+import { isStandaloneDisplay } from "@/lib/display-mode";
 import { AuthError, AuthMessage } from "./auth-field";
 import { FocusHeading } from "./focus-heading";
 
 const RESEND_COOLDOWN_SECONDS = 30;
+const noopSubscribe = () => () => {};
 
 /**
  * Shown when an email/password account must confirm its address: right after sign-up, and when
@@ -32,6 +34,8 @@ export function CheckEmail({
   const [sending, setSending] = useState(false);
   const [resent, setResent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The link opens in the browser, not in the installed app, which stays signed out.
+  const standalone = useSyncExternalStore(noopSubscribe, isStandaloneDisplay, () => false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -100,6 +104,7 @@ export function CheckEmail({
           {reason === "sign-up" ? "finish creating your account" : "sign in"}.
         </p>
         <p>The link expires in 1 hour. If you can&apos;t find the email, check your spam folder.</p>
+        {standalone ? <p>After confirming, come back here and sign in.</p> : null}
         {resent && !error ? (
           <p className="text-primary" role="status">
             We sent another link.

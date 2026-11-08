@@ -79,6 +79,8 @@ export const EVENT_SCHEMA = {
   duration_ms: "number",
   /** Next.js's route type for a failed render (`render`, `route`, `action`). */
   route_type: "token",
+  /** How a page was opened, when we can tell: `pwa` for the installed app's start URL. */
+  launch_source: "token",
 
   // Who and what
   user_id: "id",

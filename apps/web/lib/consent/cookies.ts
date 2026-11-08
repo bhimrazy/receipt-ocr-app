@@ -131,12 +131,31 @@ export const storageEntries: StorageEntry[] = [
     feature: "turnstile",
   },
   {
-    name: "receiptocr.install-dismissed",
+    name: "receiptocr.install",
     kind: "localStorage",
     setBy: "ReceiptOCR",
     category: "necessary",
-    purpose: "Remembers that you closed the install-the-app prompt, so it doesn't show again.",
+    purpose:
+      "Remembers when you closed an offer to install the app, how often the home page showed it, and whether you installed it, so it isn't shown again too soon.",
     duration: "Until you clear site data",
+  },
+  {
+    name: "has_account",
+    kind: "cookie",
+    setBy: "ReceiptOCR",
+    category: "necessary",
+    purpose:
+      "Remembers that someone has signed in on this browser, so opening the installed app signed out shows sign-in rather than sign-up. It holds only the value 1. Not readable by page scripts.",
+    duration: "1 year",
+  },
+  {
+    name: "display_mode",
+    kind: "cookie",
+    setBy: "ReceiptOCR",
+    category: "necessary",
+    purpose:
+      "Set only while you use the installed app: tells us a sign-up came from the app rather than a browser tab. It holds only the word standalone.",
+    duration: "30 minutes",
   },
   {
     name: "receiptocr:security-nudge-dismissed",
