@@ -3,8 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0a0a0b" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f7f8" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0b" />
+    <meta name="color-scheme" content="dark light" />
+    <!-- First, and blocking: sets the theme class before paint. A file, not inline, so it still
+         runs once the CSP is enforced with nonces. -->
+    <script src="/offline.js"></script>
     <meta name="robots" content="noindex" />
     <title>You're offline · ReceiptOCR</title>
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
@@ -20,6 +24,16 @@
         --primary: #34d399;
         --primary-foreground: #07110d;
         color-scheme: dark;
+      }
+      :root.light {
+        --background: #f7f7f8;
+        --foreground: #18181b;
+        --card: #ffffff;
+        --border: #e4e4e7;
+        --muted-foreground: #5f5f68;
+        --primary: #036c4d;
+        --primary-foreground: #ffffff;
+        color-scheme: light;
       }
       * {
         box-sizing: border-box;
@@ -92,7 +106,5 @@
       </p>
       <button id="retry" type="button">Try again</button>
     </main>
-    <!-- A file, not inline, so it still runs once the CSP is enforced with nonces. -->
-    <script src="/offline.js"></script>
   </body>
 </html>
