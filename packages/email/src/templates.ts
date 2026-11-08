@@ -111,9 +111,48 @@ export function invitationEmail(
 /** A contact-form message to the support inbox; `topicLabel` comes from the app's fixed list. */
 export function supportMessageEmail(
   ctx: EmailContext,
-  input: { from: string; topicLabel: string; message: string },
+  input: { senderName: string; from: string; topicLabel: string; message: string },
 ): EmailContent {
   return build("supportMessage", `[${BRAND} support] ${input.topicLabel}`, ctx, input);
+}
+
+const MAX_FIRST_NAME = 30;
+// Link-like: a scheme, "www.", an address, a path, or a dot followed by letters ("x.com").
+const LINK_LIKE = /:\/\/|www\.|@|\/|\\|\.\p{L}{2}/iu;
+// Kept: letters, combining marks, apostrophes, hyphens and dots ("O'Neil", "Jean-Luc", "J.").
+const NOT_NAME_CHAR = /[^\p{L}\p{M}'’.-]/gu;
+
+/**
+ * The first name a contact-form auto-reply greets, from what the visitor typed: letters only, at
+ * most 30 characters, and "there" when nothing usable is left or it looks like a link (an
+ * auto-reply can be aimed at anyone's address, so it must not carry a stranger's URL).
+ */
+export function greetingName(raw: string): string {
+  const first =
+    raw
+      .normalize("NFKC")
+      .trim()
+      .split(/[\s\p{Cc}\p{Cf}]+/u)[0] ?? "";
+  if (LINK_LIKE.test(first)) return "there";
+  const name = first
+    .replace(NOT_NAME_CHAR, "")
+    .replace(/^[.'’-]+|[.'’-]+$/gu, "")
+    .slice(0, MAX_FIRST_NAME);
+  return /\p{L}/u.test(name) ? name : "there";
+}
+
+/**
+ * The automatic "we got your message" to a contact-form sender. `topicPhrase` comes from the
+ * app's fixed list; the name is cleaned here whatever the caller passes.
+ */
+export function contactReplyEmail(
+  ctx: EmailContext,
+  input: { name: string; topicPhrase: string },
+): EmailContent {
+  return build("contactReply", `Thanks for contacting ${BRAND}`, ctx, {
+    firstName: greetingName(input.name),
+    topicPhrase: input.topicPhrase,
+  });
 }
 
 /** The admin console's delivery check. */

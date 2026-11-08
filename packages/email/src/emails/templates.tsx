@@ -151,11 +151,11 @@ const invitation: EmailDefinition = {
 
 /** A contact-form message to the support inbox. The visitor is the Reply-To, so the footer says so. */
 const supportMessage: EmailDefinition = {
-  slots: ["from", "topicLabel", "message"],
+  slots: ["senderName", "from", "topicLabel", "message"],
   render(v, shared) {
     const heading = `${v.topicLabel} from the contact form`;
     const reason = `Sent by the contact form on ${shared.appHost}.`;
-    const replyNote = `Reply to this email to answer ${v.from} directly.`;
+    const replyNote = `Reply to this email to answer ${v.senderName} directly.`;
     return {
       html: (
         <Layout
@@ -166,14 +166,19 @@ const supportMessage: EmailDefinition = {
           replyNote={replyNote}
         >
           <P>
-            From <Strong>{v.from}</Strong>
+            From <Strong>{v.senderName}</Strong> ({v.from})
           </P>
           <Note>
             <span className="whitespace-pre-wrap">{v.message}</span>
           </Note>
         </Layout>
       ),
-      text: plainText(shared, { heading, body: [`From ${v.from}`, v.message], reason, replyNote }),
+      text: plainText(shared, {
+        heading,
+        body: [`From ${v.senderName} (${v.from})`, v.message],
+        reason,
+        replyNote,
+      }),
     };
   },
 };
@@ -504,6 +509,32 @@ const welcome: EmailDefinition = {
   },
 };
 
+/**
+ * The automatic reply to a contact-form sender. It never repeats their message, and the only
+ * visitor text in it is a first name the app has already cleaned (`greetingName`).
+ */
+const contactReply: EmailDefinition = {
+  slots: ["firstName", "topicPhrase"],
+  render(v, shared) {
+    const heading = "We got your message";
+    const body = `Hi ${v.firstName}, thanks for writing. We'll reply about ${v.topicPhrase} to this address, usually within 2 business days.`;
+    const reason = `You're receiving this because this address was entered in the contact form on ${shared.appHost}. Didn't write to us? You can ignore this email.`;
+    return {
+      html: (
+        <Layout
+          shared={shared}
+          preheader="Thanks for writing. Here's when to expect a reply."
+          heading={heading}
+          reason={reason}
+        >
+          <P>{body}</P>
+        </Layout>
+      ),
+      text: plainText(shared, { heading, body: [body], reason }),
+    };
+  },
+};
+
 export const definitions = {
   verification,
   passwordReset,
@@ -524,6 +555,7 @@ export const definitions = {
   signInConnected,
   signInDisconnected,
   welcome,
+  contactReply,
 } satisfies Record<string, EmailDefinition>;
 
 export type TemplateName = keyof typeof definitions;

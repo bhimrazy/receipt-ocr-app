@@ -4,11 +4,13 @@ import { TEMPLATES } from "./generated";
 import { escapeHtml, fill } from "./render";
 import {
   backupCodesRegeneratedEmail,
+  contactReplyEmail,
   deleteAccountEmail,
   displayUrl,
   emailChangeEmail,
   emailSlots,
   formatDuration,
+  greetingName,
   invitationEmail,
   passkeyAddedEmail,
   passkeyRemovedEmail,
@@ -73,11 +75,13 @@ const cases: Record<
   supportMessage: {
     make: (ctx) =>
       supportMessageEmail(ctx, {
+        senderName: hostile,
         from: 'x"><img src=x onerror=alert(1)>@example.com',
         topicLabel: "Question",
         message: `Line one\r\n\r\n${hostile}\u0007`,
       }),
     input: {
+      senderName: hostile,
       from: 'x"><img src=x onerror=alert(1)>@example.com',
       topicLabel: "Question",
       message: `Line one\r\n\r\n${hostile}\u0007`,
@@ -122,6 +126,11 @@ const cases: Record<
   signInDisconnected: {
     make: (ctx) => signInDisconnectedEmail(ctx, { resetUrl, provider: "GitHub" }),
     input: { resetUrl, provider: "GitHub" },
+  },
+  contactReply: {
+    // The hostile name is cleaned to "there" before it reaches the template.
+    make: (ctx) => contactReplyEmail(ctx, { name: hostile, topicPhrase: "your question" }),
+    input: { firstName: "there", topicPhrase: "your question" },
   },
   welcome: {
     make: (ctx) => welcomeEmail(ctx, { receiptsPerDay: 20 }),
@@ -344,6 +353,66 @@ describe("supportMessageEmail", () => {
     expect(text).toContain("Line one\n\nAcme");
     expect(html).toContain("Line one\n\nAcme");
     expect(text).not.toContain("\u0007");
+  });
+});
+
+describe("greetingName", () => {
+  it.each([
+    ["Ada Lovelace", "Ada"],
+    ["  Jean-Luc  Picard ", "Jean-Luc"],
+    ["O'Neil", "O'Neil"],
+    ["J.", "J"],
+    ["José", "José"],
+    ["Zoë‮", "Zoë"],
+    ["山田 太郎", "山田"],
+    ["<Bob>", "Bob"],
+    ["{{url}}", "url"],
+    ["Ada\u0007\u0000Smith", "Ada"],
+    ["x".repeat(60), "x".repeat(30)],
+  ])("%j greets as %j", (raw, expected) => {
+    expect(greetingName(raw)).toBe(expected);
+  });
+
+  it.each([
+    "",
+    "   ",
+    "1234",
+    "!!!",
+    "<b>Bob</b>",
+    "https://evil.example",
+    "evil.example/login",
+    "www.evil",
+    "bit.ly",
+    "me@evil.example",
+    "ｅｖｉｌ．ｃｏｍ",
+  ])("%j greets as 'there'", (raw) => {
+    expect(greetingName(raw)).toBe("there");
+  });
+});
+
+describe("contactReplyEmail", () => {
+  it("greets by first name, names the topic and promises a reply by email", () => {
+    for (const ctx of [withSupport, noSupport]) {
+      const mail = contactReplyEmail(ctx, {
+        name: "Ada Lovelace",
+        topicPhrase: "plans and limits",
+      });
+      expect(mail.subject).toBe("Thanks for contacting ReceiptOCR");
+      const line =
+        "Hi Ada, thanks for writing. We'll reply about plans and limits to this address, usually within 2 business days.";
+      expect(mail.text).toContain(line);
+      expect(mail.html).toContain(line.replace("'", "&#x27;"));
+      expect(mail.text).toContain("Didn't write to us? You can ignore this email.");
+    }
+  });
+
+  it("links only to the app itself", () => {
+    const { html, text } = contactReplyEmail(withSupport, { name: "Ada", topicPhrase: "x" });
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+    for (const href of hrefs) expect(href).toMatch(/^(https:\/\/app\.example\/|mailto:help@)/);
+    expect(text.match(/https?:\/\/\S+/g)?.every((u) => u.startsWith("https://app.example"))).toBe(
+      true,
+    );
   });
 });
 
