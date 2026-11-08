@@ -12,12 +12,13 @@ import { PRO_PRICE } from "@/lib/pricing";
 import { IntervalToggle, type BillingInterval } from "./interval-toggle";
 
 /**
- * Free and Pro side by side with a monthly/yearly switch. "Get Pro" goes to the
- * workspace's billing page (sign-in first), where the checkout opens; nothing
- * here loads Paddle. While billing is off, Pro shows its price without a button.
+ * Free and Pro side by side with a monthly/yearly switch (monthly first).
+ * "Get Pro" goes through sign-up to the workspace's billing page, where the
+ * checkout opens; sign-up sends a signed-in visitor straight on. Nothing here
+ * loads Paddle. While billing is off, Pro shows its price without a button.
  */
 export function PricingPlans({ plans, checkoutOpen }: { plans: PlanTable; checkoutOpen: boolean }) {
-  const [interval, setInterval] = useState<BillingInterval>("year");
+  const [interval, setInterval] = useState<BillingInterval>("month");
   const yearly = interval === "year";
   return (
     <div className="flex flex-col items-center gap-8">
@@ -42,7 +43,7 @@ export function PricingPlans({ plans, checkoutOpen }: { plans: PlanTable; checko
             checkoutOpen ? (
               <Link
                 className={cn(buttonVariants(), "w-full")}
-                href={`/app/settings/billing?interval=${interval}`}
+                href={`/sign-up?redirect=${encodeURIComponent(`/app/settings/billing?interval=${interval}`)}`}
               >
                 Get Pro <ArrowRight aria-hidden="true" className="size-4" />
               </Link>

@@ -201,7 +201,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     });
     await expect(third).rejects.toMatchObject({
       status: "FORBIDDEN",
-      body: { message: expect.stringContaining("the most a Pro account can own") },
+      body: { message: expect.stringContaining("the most on Pro") },
     });
     const [org] = await db
       .select({ id: organization.id })

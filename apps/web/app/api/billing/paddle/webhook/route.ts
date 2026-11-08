@@ -23,10 +23,14 @@ export const POST = withRequestEvent(
 );
 
 async function webhook(request: Request, _context: unknown, event: WideEvent) {
-  const length = Number(request.headers.get("content-length") ?? "0");
-  if (length > MAX_BODY_BYTES) return jsonError(413, "Too large");
+  // Refuse by the declared length before reading anything; the read is checked again
+  // (in bytes) for a body sent without one or longer than it said.
+  const declared = request.headers.get("content-length");
+  if (declared !== null && !(Number(declared) <= MAX_BODY_BYTES)) {
+    return jsonError(413, "Too large");
+  }
   const rawBody = await request.text();
-  if (rawBody.length > MAX_BODY_BYTES) return jsonError(413, "Too large");
+  if (Buffer.byteLength(rawBody) > MAX_BODY_BYTES) return jsonError(413, "Too large");
   const signature = request.headers.get("paddle-signature");
 
   return runRoute(

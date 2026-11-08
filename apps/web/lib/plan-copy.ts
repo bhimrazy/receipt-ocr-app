@@ -31,10 +31,35 @@ export function freeFeatures(free: PlanPolicy): string[] {
 }
 
 export function proFeatures(pro: PlanPolicy): string[] {
+  const perWorkspace =
+    pro.scope === "workspace" && pro.receiptsPerMonth !== null
+      ? [
+          `${n(pro.receiptsPerMonth, "scan")} a month per workspace, up to ${pro.receiptsPerDay} a day`,
+          "Shared by everyone in the workspace",
+        ]
+      : [`${allowance(pro)}, ${allowanceOwner(pro)}`];
   return [
-    `${allowance(pro)}, ${allowanceOwner(pro)}`,
-    `Up to ${n(pro.workspaces, "workspace")} to own; each needs its own Pro`,
     "Everything in Free",
+    "1 workspace",
+    ...perWorkspace,
+    `Own up to ${n(pro.workspaces, "workspace")} (each upgraded separately)`,
     "Cancel any time",
   ];
+}
+
+/** For an owner with a Pro workspace looking at one of their Free ones (billing page, settings). */
+export const SEPARATE_UPGRADE =
+  "This workspace is on Free. Your Pro subscription covers one workspace; each workspace is upgraded separately.";
+
+/** The welcome email's plan line: "Your Free plan includes 20 scans a day, up to 100 a month, per person. …" */
+export function welcomePlanLine(plan: "free" | "pro", policy: PlanPolicy): string {
+  const name = plan === "pro" ? "Pro" : "Free";
+  return `Your ${name} plan includes ${allowance(policy)}, ${allowanceOwner(policy)}. Limits reset at 00:00 UTC.`;
+}
+
+/** Under the workspace switcher when the user can't create another workspace. */
+export function workspaceCapNote(plan: "free" | "pro", limit: number): string {
+  return plan === "pro"
+    ? `You own ${n(limit, "workspace")}, the most on Pro.`
+    : `Free accounts own ${n(limit, "workspace")}. Upgrade a workspace to Pro to create another.`;
 }

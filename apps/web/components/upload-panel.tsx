@@ -100,7 +100,7 @@ function limitCopy(usage: Usage, opens: string, resetsIn: string) {
     case "pool":
       return {
         title: "Free scanning is busy today",
-        body: `Free accounts share a daily scanning capacity, and it's used up for today. Try again after ${opens}, ${resetsIn}, or upgrade this workspace to Pro.`,
+        body: `The Free plan's shared daily capacity is used up for today. Try again after ${opens}, ${resetsIn}, or upgrade this workspace to Pro.`,
       };
     case "month":
       return usage.scope === "workspace"
@@ -118,12 +118,12 @@ function limitCopy(usage: Usage, opens: string, resetsIn: string) {
       if (usage.scope === "workspace") {
         return {
           title: "Daily limit reached",
-          body: `This workspace can scan ${plural(perDay, "receipt")} a day. It resets at midnight UTC, ${resetsIn}. ${monthLeft ?? 0} of ${usage.limit} left this month.`,
+          body: `This workspace has used its ${plural(perDay, "scan")} for today. Uploads open at ${opens}, ${resetsIn}; ${monthLeft ?? 0} of ${plural(usage.limit, "scan")} are left this month.`,
         };
       }
       return {
         title: "You've reached today's limit",
-        body: `Your plan scans ${plural(perDay, "receipt")} a day and you've used all of them. You can upload again at ${opens}, ${resetsIn}.${monthLeft === null ? "" : ` ${monthLeft} of ${usage.limit} left this month.`} Your first ${FREE_FAILED_ROUNDS} failed scans don't count.`,
+        body: `You've used all ${plural(perDay, "scan")} your plan includes today. You can upload again at ${opens}, ${resetsIn}.${monthLeft === null ? "" : ` ${monthLeft} of ${usage.limit} left this month.`} Your first ${FREE_FAILED_ROUNDS} failed scans don't count.`,
       };
     }
   }

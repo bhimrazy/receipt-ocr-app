@@ -36,7 +36,8 @@ export function usageNote(usage: Usage): string {
   const { used, limit, blocked, period } = usage;
   const opens = formatTime(usage.opensAt);
   if (blocked === "global") return `Scanning is paused for everyone until ${opens}.`;
-  if (blocked === "pool") return `Free scanning is busy today. Try again after ${opens}.`;
+  if (blocked === "pool")
+    return `Free scanning is busy today (shared capacity). Try again after ${opens}.`;
   const left = Math.max(0, limit - used);
   if (period === "month") {
     const reset = `${resetDay(usage.resetsAt)}, 00:00 UTC`;
@@ -50,7 +51,7 @@ export function usageNote(usage: Usage): string {
   return `${left} left today. Resets at ${reset}.`;
 }
 
-/** Receipts used against the plan limit. Amber from 80%, with words, not colour alone. */
+/** Scans used against the plan limit. Amber from 80%, with words, not colour alone. */
 export function UsageMeter({
   usage,
   planLabel,
@@ -74,11 +75,11 @@ export function UsageMeter({
         </p>
       </div>
       <div
-        aria-label={`Receipts used ${span}`}
+        aria-label={`Scans used ${span}`}
         aria-valuemax={limit}
         aria-valuemin={0}
         aria-valuenow={Math.min(used, limit)}
-        aria-valuetext={`${used} of ${limit} receipts used ${span}`}
+        aria-valuetext={`${used} of ${limit} scans used ${span}`}
         className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-foreground/15"
         role="meter"
       >

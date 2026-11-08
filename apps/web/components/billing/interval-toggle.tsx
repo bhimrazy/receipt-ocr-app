@@ -28,9 +28,7 @@ export function IntervalToggle({
       <legend className="sr-only">Billing period</legend>
       {OPTIONS.map((option) => (
         <label
-          className={cn(
-            "relative flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-4 font-medium text-muted-foreground transition-colors has-checked:bg-primary has-checked:text-primary-foreground has-focus-visible:ring-2 has-focus-visible:ring-ring sm:min-h-9",
-          )}
+          className="relative flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-4 font-medium text-muted-foreground transition-colors has-checked:bg-primary has-checked:text-primary-foreground has-focus-visible:ring-2 has-focus-visible:ring-ring"
           key={option.value}
         >
           <input
@@ -42,7 +40,7 @@ export function IntervalToggle({
             value={option.value}
           />
           {option.label}
-          {option.note ? <span className="font-mono text-xs opacity-80">{option.note}</span> : null}
+          {option.note ? <span className="font-mono text-xs">{option.note}</span> : null}
         </label>
       ))}
     </fieldset>

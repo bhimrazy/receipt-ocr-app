@@ -20,6 +20,7 @@ import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
 import { authEnv } from "@/lib/env";
 import { getAccountPlan, getCurrentPlan } from "@/lib/plan-limits";
+import { SEPARATE_UPGRADE } from "@/lib/plan-copy";
 import { planLabel } from "@/lib/plans";
 import { runtime } from "@/lib/runtime";
 import { requireActiveScope, requireSession } from "@/lib/session";
@@ -124,7 +125,9 @@ export default async function SettingsPage({
               <p className="text-xs text-muted-foreground">
                 {plan === "pro"
                   ? "This workspace is on Pro."
-                  : "Upgrade this workspace to Pro for more scans, shared by its members."}
+                  : scope.role === "owner" && account.plan === "pro"
+                    ? SEPARATE_UPGRADE
+                    : "Upgrade this workspace to Pro for more scans, shared by its members."}
               </p>
             </div>
             <Link
@@ -205,7 +208,8 @@ export default async function SettingsPage({
       </SettingsSection>
 
       <AccountSettings
-        blockingWorkspaces={blocking.map((w) => w.name)}
+        blockingWorkspaces={blocking.soleOwner.map((w) => w.name)}
+        subscribedWorkspaces={blocking.subscribed.map((w) => w.name)}
         email={session.user.email}
         emailVerified={session.user.emailVerified}
         name={session.user.name ?? ""}

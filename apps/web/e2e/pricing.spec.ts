@@ -9,20 +9,24 @@ test("pricing shows Free and Pro with a monthly/yearly switch, and the FAQ", asy
   await expect(page.getByRole("heading", { name: "Free", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pro", exact: true })).toBeVisible();
   // Numbers come from the saved plan table; admin.spec.ts changes it for a moment, so match the shape.
+  await expect(page.getByText(/^\d+ scans a month per workspace, up to \d+ a day$/)).toBeVisible();
   await expect(
-    page.getByText(
-      /^\d+ scans a month, up to \d+ a day, for the workspace, shared by its members$/,
-    ),
+    page.getByText("Shared by everyone in the workspace", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText(/^\d+ scans a day, up to \d+ a month, per person$/)).toBeVisible();
-  await expect(page.getByText(/Up to 2 workspaces to own/)).toBeVisible();
+  await expect(
+    page.getByText(/^Own up to \d+ workspaces \(each upgraded separately\)$/),
+  ).toBeVisible();
+  // Pro's list starts from Free.
+  await expect(page.getByText("Everything in Free", { exact: true })).toBeVisible();
 
-  // Yearly is the default; the switch is a native radio group.
-  await expect(page.getByText("$90", { exact: true })).toBeVisible();
-  // The radio is visually hidden inside its label, which is what people click.
-  await page.locator("label", { hasText: "Monthly" }).click();
+  // Monthly is the default; the switch is a native radio group.
   await expect(page.getByRole("radio", { name: /Monthly/ })).toBeChecked();
   await expect(page.getByText("$9", { exact: true })).toBeVisible();
+  // The radio is visually hidden inside its label, which is what people click.
+  await page.locator("label", { hasText: "Yearly" }).click();
+  await expect(page.getByRole("radio", { name: /Yearly/ })).toBeChecked();
+  await expect(page.getByText("$90", { exact: true })).toBeVisible();
 
   // Billing is off in this stack: no checkout link, no Paddle script.
   await expect(page.getByRole("link", { name: /Get Pro/ })).toHaveCount(0);

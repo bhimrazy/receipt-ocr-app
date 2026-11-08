@@ -5,7 +5,7 @@ import { PricingPlans } from "@/components/billing/pricing-plans";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
-import { getCheckoutConfig } from "@/lib/billing";
+import { checkoutOpenToEveryone, getCheckoutConfig } from "@/lib/billing";
 import { getPlanTable } from "@/lib/plan-limits";
 import { allowance } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL, REFUND_DAYS } from "@/lib/pricing";
@@ -33,7 +33,26 @@ export default async function PricingPage() {
   const faqs: { q: string; a: React.ReactNode }[] = [
     {
       q: "Plans are per workspace. What does that mean?",
-      a: `A Pro subscription covers exactly one workspace. Its ${allowance(pro)} are shared by everyone in that workspace, and a scan into it never uses anyone's Free allowance. Other workspaces, including new ones you create, stay on Free until they get their own Pro. On Free, the ${allowance(free)} are per person and counted across every Free workspace you use, so extra workspaces don't add scans. You can own ${free.workspaces === 1 ? "1 workspace" : `${free.workspaces} workspaces`} on Free and up to ${pro.workspaces} once you own a Pro workspace.`,
+      a: (
+        <>
+          A Pro subscription covers exactly one workspace.
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>
+              That workspace&apos;s {allowance(pro)} are shared by everyone in it, and scanning
+              there never uses anyone&apos;s Free scans.
+            </li>
+            <li>Your other workspaces, and new ones, stay on Free until each is upgraded.</li>
+            <li>
+              Free scans ({allowance(free)}) are per person, counted across every Free workspace you
+              use.
+            </li>
+            <li>
+              You can own {free.workspaces === 1 ? "1 workspace" : `${free.workspaces} workspaces`}{" "}
+              on Free, and {pro.workspaces} once one of them is on Pro.
+            </li>
+          </ul>
+        </>
+      ),
     },
     {
       q: "Can I cancel any time?",
@@ -62,7 +81,7 @@ export default async function PricingPage() {
     },
     {
       q: "What happens when I reach a limit?",
-      a: `Uploads pause until the limit resets: daily limits at midnight UTC, monthly limits on the 1st of each month at 00:00 UTC. Unused scans don't carry over. Free accounts also share a daily scanning capacity, and on a very busy day Free scanning may pause until midnight UTC. Pro workspaces aren't affected by that.`,
+      a: `Uploads pause until the limit resets: daily limits at 00:00 UTC, monthly limits on the 1st of each month at 00:00 UTC. Unused scans don't carry over. Free accounts also share a daily scanning capacity, and on a very busy day Free scanning may pause until 00:00 UTC. Pro workspaces aren't affected by that.`,
     },
   ];
 
@@ -82,7 +101,7 @@ export default async function PricingPage() {
                 workspace, plus sales tax or VAT where it applies. Cancel any time.
               </p>
             </div>
-            <PricingPlans checkoutOpen={checkout !== null} plans={plans} />
+            <PricingPlans checkoutOpen={checkoutOpenToEveryone(checkout)} plans={plans} />
           </div>
         </section>
 
@@ -108,7 +127,7 @@ export default async function PricingPage() {
                       className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open/faq:rotate-45 group-open/faq:text-primary"
                     />
                   </summary>
-                  <p className="pb-5 text-sm leading-7 text-muted-foreground">{faq.a}</p>
+                  <div className="pb-5 text-sm leading-7 text-muted-foreground">{faq.a}</div>
                 </details>
               ))}
             </div>

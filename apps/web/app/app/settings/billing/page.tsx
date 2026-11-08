@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Card } from "@receipt-ocr/ui/components/card";
+import type { WorkspaceBilling } from "@receipt-ocr/core";
 import { CheckoutButton } from "@/components/billing/checkout-button";
 import { PortalButtons } from "@/components/billing/portal-buttons";
 import {
@@ -14,14 +15,14 @@ import {
 import { SettingsBreadcrumb } from "@/components/settings-breadcrumb";
 import { SettingsSection } from "@/components/settings-section";
 import { UsageMeter } from "@/components/usage-meter";
-import { canManageBilling, getCheckoutConfig, getWorkspaceBilling } from "@/lib/billing";
+import { canManageBilling, getCheckoutFor, getWorkspaceBilling } from "@/lib/billing";
 import { formatDate } from "@/lib/format";
 import { logPageRender } from "@/lib/page-event";
-import { getCurrentPlan, getPlanTable } from "@/lib/plan-limits";
-import { allowance } from "@/lib/plan-copy";
+import { getAccountPlan, getCurrentPlan, getPlanTable } from "@/lib/plan-limits";
+import { allowance, SEPARATE_UPGRADE } from "@/lib/plan-copy";
 import { planLabel } from "@/lib/plans";
 import { getUsageSummary } from "@/lib/receipts";
-import { requireActiveScope, requireSession } from "@/lib/session";
+import { isAdmin, requireActiveScope, requireSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Billing" };
 
@@ -32,6 +33,28 @@ const STATUS_LABEL: Record<string, string> = {
   paused: "Paused",
   canceled: "Canceled",
 };
+
+/** What happened to the subscription, in one sentence, for the state it is in. */
+function subscriptionNote(subscription: WorkspaceBilling): string | null {
+  const until = formatDate(subscription.currentPeriodEnd);
+  const ended = formatDate(subscription.endedAt) ?? "its last day";
+  if (subscription.entitled) {
+    if (subscription.cancelAtPeriodEnd && until) {
+      return `Pro stays on until ${until}, then this workspace moves to Free. Nothing more is charged.`;
+    }
+    if (subscription.status === "past_due") {
+      return `The last payment didn't go through. Paddle will try again; update the payment method to keep Pro after ${formatDate(subscription.graceEndsAt) ?? "the grace period"}.`;
+    }
+    return until ? `Renews on ${until}.` : null;
+  }
+  if (subscription.status === "paused") {
+    return "This subscription is paused in Paddle; resume it from the portal or start a new one.";
+  }
+  if (subscription.status === "past_due" && !subscription.revoked) {
+    return `Pro ended on ${ended} because the payment didn't go through. Update the payment method to turn it back on.`;
+  }
+  return `Ended on ${ended}. Upgrade again any time.`;
+}
 
 export default async function BillingPage({
   searchParams,
@@ -44,17 +67,83 @@ export default async function BillingPage({
     requireSession(),
     searchParams,
   ]);
-  const [{ plan }, usage, plans, subscription, checkout] = await Promise.all([
+  const [{ plan }, account, usage, plans, subscription, checkout] = await Promise.all([
     getCurrentPlan(),
+    getAccountPlan(),
     getUsageSummary(),
     getPlanTable(),
     getWorkspaceBilling(scope.organizationId),
-    getCheckoutConfig(),
+    getCheckoutFor(isAdmin(session)),
   ]);
   const owner = canManageBilling(scope.role);
   const entitled = subscription?.entitled === true;
-  const interval = params.interval === "month" ? "month" : "year";
-  const until = formatDate(subscription?.currentPeriodEnd ?? null);
+  // A comp: Pro without a subscription of its own (an admin set the owner's plan).
+  const comped = plan === "pro" && !entitled;
+  const interval = params.interval === "year" ? "year" : "month";
+  // Only the buyer sees their card and invoices; any owner once the buyer is gone.
+  const buyer = subscription?.buyer ?? null;
+  const isBuyer = buyer === null || buyer.id === session.user.id;
+  const portalOpen =
+    subscription !== null &&
+    (entitled || subscription.status === "past_due" || subscription.status === "paused");
+  const note = subscription ? subscriptionNote(subscription) : null;
+
+  const managedElsewhere = (
+    <Alert>
+      Billing for this workspace is managed by {buyer?.email ?? "the person who subscribed"}.
+    </Alert>
+  );
+  const checkoutButton = checkout ? (
+    <CheckoutButton
+      initialInterval={interval}
+      settings={{
+        environment: checkout.config.environment,
+        clientToken: checkout.config.clientToken,
+      }}
+      testMode={checkout.testMode}
+    />
+  ) : null;
+
+  let actions: React.ReactNode;
+  if (!checkout) {
+    actions = comped ? null : (
+      <p className="text-sm text-muted-foreground">
+        Paid plans aren&apos;t open yet. See{" "}
+        <Link className="text-foreground underline underline-offset-4" href="/pricing">
+          pricing
+        </Link>{" "}
+        for what Pro will include.
+      </p>
+    );
+  } else if (!owner) {
+    actions = (
+      <Alert>
+        {plan === "pro"
+          ? "This workspace is on Pro. Only its owner can see invoices or change the plan."
+          : "Only the workspace owner can upgrade this workspace. Ask them, or use your Free scans here."}
+      </Alert>
+    );
+  } else if (session.session.impersonatedBy) {
+    actions = <Alert>Billing is hidden while you are signed in as another user.</Alert>;
+  } else if (portalOpen) {
+    actions = !isBuyer ? (
+      managedElsewhere
+    ) : (
+      <>
+        <PortalButtons canceling={subscription?.cancelAtPeriodEnd === true} />
+        {subscription?.status === "paused" ? checkoutButton : null}
+      </>
+    );
+  } else if (comped) {
+    actions = null;
+  } else {
+    actions = (
+      <>
+        {checkoutButton}
+        {subscription && isBuyer ? <PortalButtons canceling /> : null}
+      </>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -86,7 +175,7 @@ export default async function BillingPage({
         title="Subscription"
       >
         <Card className="flex flex-col gap-4 p-5">
-          {subscription ? (
+          {subscription && !comped ? (
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-medium">
                 Pro, {subscription.interval === "year" ? "yearly" : "monthly"}
@@ -102,58 +191,23 @@ export default async function BillingPage({
               >
                 {subscription.cancelAtPeriodEnd && entitled
                   ? "Ends at period end"
-                  : (STATUS_LABEL[subscription.status] ?? subscription.status)}
+                  : !entitled && subscription.status !== "paused"
+                    ? "Ended"
+                    : (STATUS_LABEL[subscription.status] ?? subscription.status)}
               </Badge>
             </div>
           ) : (
             <p className="text-sm font-medium">
-              {plan === "pro" ? "Pro, given by an administrator" : "No subscription"}
+              {comped ? "Pro, given by an administrator. No payment is needed." : "No subscription"}
             </p>
           )}
 
-          {subscription && entitled && until ? (
-            <p className="text-sm text-muted-foreground">
-              {subscription.cancelAtPeriodEnd
-                ? `Pro stays on until ${until}, then this workspace moves to Free. Nothing more is charged.`
-                : subscription.status === "past_due"
-                  ? `The last payment didn't go through. Paddle will try again; update the payment method to keep Pro after ${formatDate(subscription.graceEndsAt) ?? "the grace period"}.`
-                  : `Renews on ${until}.`}
-            </p>
+          {note && !comped ? <p className="text-sm text-muted-foreground">{note}</p> : null}
+          {plan === "free" && owner && account.plan === "pro" ? (
+            <p className="text-sm text-muted-foreground">{SEPARATE_UPGRADE}</p>
           ) : null}
 
-          {!checkout ? (
-            <p className="text-sm text-muted-foreground">
-              Paid plans aren&apos;t open yet. See{" "}
-              <Link className="text-foreground underline underline-offset-4" href="/pricing">
-                pricing
-              </Link>{" "}
-              for what Pro will include.
-            </p>
-          ) : !owner ? (
-            <Alert>
-              Only the workspace owner can change its plan or see its invoices. Ask them to upgrade
-              this workspace.
-            </Alert>
-          ) : session.session.impersonatedBy ? (
-            <Alert>Billing is hidden while you are signed in as another user.</Alert>
-          ) : entitled || subscription?.status === "past_due" ? (
-            <PortalButtons canceling={subscription?.cancelAtPeriodEnd === true} />
-          ) : plan === "pro" ? null : (
-            <>
-              <CheckoutButton
-                email={session.user.email}
-                initialInterval={interval}
-                settings={{
-                  environment: checkout.environment,
-                  clientToken: checkout.clientToken,
-                  prices: checkout.prices,
-                }}
-                userId={session.user.id}
-                workspaceId={scope.organizationId}
-              />
-              {subscription ? <PortalButtons canceling /> : null}
-            </>
-          )}
+          {actions}
           <p className="text-xs text-muted-foreground">
             <Link className="underline underline-offset-4" href="/pricing">
               Pricing

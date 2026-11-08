@@ -3,8 +3,8 @@ import {
   hitRateLimit,
   parseWorkspaceName,
   WORKSPACE_ROLES,
-  workspaceBilling,
   workspaceCreationCheck,
+  workspaceHasChargingSubscription,
 } from "@receipt-ocr/core";
 import { APIError } from "better-auth/api";
 import { runtime } from "./runtime";
@@ -67,12 +67,13 @@ export async function assertCanCreateWorkspace(userId: string): Promise<void> {
 }
 
 /**
- * Better Auth organization hook: a workspace with a live Pro subscription
- * can't be deleted, or Paddle would keep charging for a workspace that is gone.
+ * Better Auth organization hook: a workspace whose subscription can still
+ * charge (anything but canceled, unless the cancel is already scheduled; so
+ * also past_due after its grace, paused and trialing) can't be deleted, or
+ * Paddle would keep charging for a workspace that is gone.
  */
 export async function assertNoLiveSubscription(organizationId: string): Promise<void> {
-  const billing = await runtime.runPromise(workspaceBilling(organizationId));
-  if (billing?.entitled && !billing.cancelAtPeriodEnd) {
+  if (await runtime.runPromise(workspaceHasChargingSubscription(organizationId))) {
     throw new APIError("BAD_REQUEST", {
       message: "Cancel this workspace's Pro subscription in Settings, Billing before deleting it.",
     });
