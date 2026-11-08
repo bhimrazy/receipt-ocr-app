@@ -50,18 +50,19 @@ flowchart LR
   oauth -- "callback with code" --> web
 ```
 
-| External service      | What the app uses it for                                            | Configured by                                              |
-| --------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Postgres              | Every table: auth, workspaces, receipts, usage ledger, admin        | `DATABASE_URL` (app), `DIRECT_URL` (migrations)            |
-| S3-compatible storage | The uploaded receipt files; the bucket stays private                | `S3_*`                                                     |
-| Google Gemini         | Reading the receipt into the extraction schema                      | `GOOGLE_GENERATIVE_AI_API_KEY`, Admin → Settings           |
-| Anthropic Claude      | First step of the default chain (Sonnet 5.5); other models optional | `ANTHROPIC_API_KEY`, Admin → Settings                      |
-| Groq                  | Optional OCR model (Qwen 3.8 27B, free tier) in the chain           | `GROQ_API_KEY`, Admin → Settings                           |
-| OpenAI                | Optional OCR models (GPT-6 Luna, GPT-6.1 Terra) in the chain        | `OPENAI_API_KEY`, Admin → Settings                         |
-| Resend                | Verification, password reset, invitation and support mail           | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`            |
-| Google, GitHub OAuth  | Optional social sign-in                                             | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET` |
-| Google Analytics 4    | Optional visit counts on public pages, only after consent           | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))        |
-| Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                       | automatic when `VERCEL=1`                                  |
+| External service      | What the app uses it for                                            | Configured by                                               |
+| --------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Postgres              | Every table: auth, workspaces, receipts, usage ledger, admin        | `DATABASE_URL` (app), `DIRECT_URL` (migrations)             |
+| S3-compatible storage | The uploaded receipt files; the bucket stays private                | `S3_*`                                                      |
+| Google Gemini         | Reading the receipt into the extraction schema                      | `GOOGLE_GENERATIVE_AI_API_KEY`, Admin → Settings            |
+| Anthropic Claude      | First step of the default chain (Sonnet 5.5); other models optional | `ANTHROPIC_API_KEY`, Admin → Settings                       |
+| Groq                  | Optional OCR model (Qwen 3.8 27B, free tier) in the chain           | `GROQ_API_KEY`, Admin → Settings                            |
+| OpenAI                | Optional OCR models (GPT-6 Luna, GPT-6.1 Terra) in the chain        | `OPENAI_API_KEY`, Admin → Settings                          |
+| Resend                | Verification, password reset, invitation and support mail           | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`             |
+| Google, GitHub OAuth  | Optional social sign-in                                             | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`  |
+| Google Analytics 4    | Optional visit counts on public pages, only after consent           | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))         |
+| Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                       | automatic when `VERCEL=1`                                   |
+| Axiom (any OTLP host) | Optional copy of the wide-event logs, as OTLP log records           | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` |
 
 Every service except Postgres and auth is optional at runtime: without a Gemini key the app still serves history and
 exports, and without Resend mail is logged instead of sent. The full variable list is in
@@ -179,7 +180,7 @@ several of them is in the [security audit](../reviews/2026-11-06-security-audit.
 | Planned                                | Today                                                                                                                                                             | Plan                                                                                                                                                                                        |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/worker` for the job queue        | The [job queue](flows/jobs.md) is drained by `/api/jobs/drain` (pg_cron every 5 minutes, daily Vercel cron) and by the upload, retry and poll routes in `after()` | [Durable background jobs](../plans/2026-11-06-jobs-queue.md), Tracks B to D; also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
-| OTLP export (Axiom), PostHog, Sentry   | One [wide event](flows/observability.md) per unit of work on stdout, through an allowlist                                                                         | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
+| PostHog, Sentry                        | One [wide event](flows/observability.md) per unit of work on stdout and, when configured, OTLP (Axiom)                                                            | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
 | Usage screens for customers and admins | Rollup queries exist in `usage.ts`; only the daily meter is shown                                                                                                 | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                                         |
 | Passkeys and two-factor                | Email/password and OAuth only (PR #95 in review)                                                                                                                  | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
 | More AI providers, per-model options   | Google, Anthropic, Groq and OpenAI (plus the offline fixture); keys come from the environment                                                                     | [AI usage and models](../plans/2026-11-06-ai-usage-models.md), [BYOK](../plans/2026-11-07-byok.md)                                                                                          |

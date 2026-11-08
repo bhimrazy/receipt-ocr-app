@@ -43,6 +43,7 @@ export default defineConfig({
       "@receipt-ocr/ai/categories": path.join(root, "packages/ai/src/categories.ts"),
       "@receipt-ocr/ai/models": path.join(root, "packages/ai/src/models.ts"),
       "@receipt-ocr/ai": path.join(root, "packages/ai/src/index.ts"),
+      "@receipt-ocr/core/telemetry/otlp": path.join(root, "packages/core/src/telemetry/otlp.ts"),
       "@receipt-ocr/core/telemetry": path.join(root, "packages/core/src/telemetry/index.ts"),
       "@receipt-ocr/core/group-rules": path.join(root, "packages/core/src/group-rules.ts"),
       "@receipt-ocr/core/plans": path.join(root, "packages/core/src/plans.ts"),

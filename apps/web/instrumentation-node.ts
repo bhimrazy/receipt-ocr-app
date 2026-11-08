@@ -1,4 +1,30 @@
 /**
+ * Starts OTLP export of the wide events when OTEL_EXPORTER_OTLP_ENDPOINT is
+ * set. Unset, the OpenTelemetry SDK is never imported and nothing leaves the
+ * process but stdout.
+ */
+export async function startTelemetryExport(env: Record<string, string | undefined> = process.env) {
+  const { errorFields, logger, otlpLogsConfigured, shutdownEventSinks } =
+    await import("@receipt-ocr/core/telemetry");
+  if (!otlpLogsConfigured(env)) return;
+  try {
+    const { startOtlpExport } = await import("@receipt-ocr/core/telemetry/otlp");
+    await startOtlpExport({ env });
+  } catch (error) {
+    // Export is optional: the app runs on with stdout only.
+    logger.error({ event: "telemetry.start_failed", unit: "log", error: errorFields(error) });
+    return;
+  }
+  // Long-lived server (Docker): send what is buffered before the process stops. Next's own
+  // SIGTERM handler exits the process; if none is registered, exit here once flushed.
+  process.once("SIGTERM", () => {
+    void shutdownEventSinks().finally(() => {
+      if (process.listenerCount("SIGTERM") === 0) process.exit(143);
+    });
+  });
+}
+
+/**
  * Loads env at boot so a production misconfiguration (lib/env.ts throws)
  * stops the server, instead of starting it and failing every auth request.
  */

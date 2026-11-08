@@ -24,7 +24,7 @@ flowchart LR
   email["packages/email<br/>log sink"]
   fmt["formatEvent<br/>sample, then allowlist"]
   out[("stdout / stderr<br/>JSON lines")]
-  otlp[("OTLP exporter<br/>Planned")]
+  otlp[("OTLP/HTTP endpoint<br/>Axiom by default")]
 
   route -- "runRoute: withWideEvent" --> deep
   runner -- "withWideEvent" --> deep
@@ -37,7 +37,7 @@ flowchart LR
   other --> fmt
   email --> fmt
   fmt --> out
-  fmt -.-> otlp
+  fmt -. "only when OTEL_EXPORTER_OTLP_ENDPOINT is set<br/>batched, flushed in after()" .-> otlp
 ```
 
 | Event                              | Unit          | Written by                                                                | Sampled when routine                      |
@@ -111,10 +111,35 @@ through the same allowlist.
   sampling, formatting and the Effect logger.
 - [`runner.test.ts`](../../../packages/core/src/jobs/runner.test.ts): `job.attempt` and `job.tick`.
 - [`http.test.ts`](../../../apps/web/lib/http.test.ts) and the route tests: one request event per request.
+- [`otlp.test.ts`](../../../packages/core/src/telemetry/otlp.test.ts): sinks get what stdout gets, sampling and
+  the allowlist apply first (a raw Drizzle `params:` message never reaches the exporter), flush scheduling, the OTLP
+  mapping, and the throttled failure notice; [`instrumentation-node.test.ts`](../../../apps/web/instrumentation-node.test.ts):
+  no endpoint, no SDK import.
 - [`wide-events.int.test.ts`](../../../apps/web/lib/wide-events.int.test.ts) (CI `test:int`): one real upload writes
   exactly one request event and one `job.attempt`, with no customer data.
 
-## Planned
+## OTLP export
 
-OTLP export through `@effect/opentelemetry` and Next's `register()`, loaded only when `OTEL_EXPORTER_OTLP_ENDPOINT` is
-set, with a flush in `after()`. See the [plan](../../plans/2026-11-06-observability.md#tracks-from-here).
+When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, `register()` in `instrumentation.ts` loads
+[`otlp.ts`](../../../packages/core/src/telemetry/otlp.ts) and adds it as an event sink. Unset, the OpenTelemetry SDK is
+never imported and nothing leaves the process but stdout.
+
+- **Same events in both places.** `formatEvent` samples and runs the allowlist once; stdout gets the JSON line and
+  each sink gets the same object. A sink can't see a field stdout doesn't.
+- **Mapping.** `service`, `version`, `env`, `region` and `instance` become the resource attributes `service.name`,
+  `service.version`, `deployment.environment.name`, `cloud.region` and `service.instance.id`
+  (`OTEL_RESOURCE_ATTRIBUTES` overrides them). `event` becomes `EventName` and the body, `level` the severity (9 info,
+  17 error), and the other fields attributes, groups flattened with dots (`ocr.tokens_in`).
+- **Off the request path.** Records go into the SDK's batch processor (sent in batches of up to 512; past 2,048 queued,
+  new ones are dropped). The first event of a request schedules one `after()` flush (`setFlushScheduler` in `lib/log.ts`), bounded
+  at 2 s, so a Vercel function sends its logs before it freezes and the response never waits. Events written outside
+  a request go out on the processor's 1 s timer; the Docker server flushes on `SIGTERM`.
+- **Failures.** A failed export never fails the work it describes. It is reported as `telemetry.export_failed` on
+  stderr at most once a minute, never through the sink (so a broken endpoint can't feed itself). A failed start
+  logs `telemetry.start_failed` and the app runs on with stdout only.
+- **Transport.** OTLP/HTTP, `http/protobuf` by default or `http/json` (`OTEL_EXPORTER_OTLP_PROTOCOL`); gRPC isn't
+  bundled. Endpoint and headers are the standard OTel variables, so switching from Axiom to another backend is a
+  change of env only. Setup: [production environment §9b](../../production-environment.md#9b-axiom).
+- **Edge.** Only the Node runtime exports. Nothing in the app logs from the edge runtime today.
+- `@effect/opentelemetry` isn't needed for logs: every event, Effect or not, already goes through one `emit`. It
+  comes with traces, if they are ever wanted.

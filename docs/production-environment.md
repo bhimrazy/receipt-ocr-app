@@ -474,16 +474,16 @@ free does the work.
 
 ## 9. Optional extras
 
-None of these is needed to run the app. Only Google Analytics works today; the other three are planned and need code
-before their keys do anything.
+None of these is needed to run the app. Each is off until its variables are set; unset, its code isn't loaded and
+it makes no network calls.
 
-| Service              | What it adds                                        | Status                                                                       |
-| -------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Vercel Web Analytics | Cookie-free page counts on public pages             | **Works.** Vercel → Analytics → Enable; no variable                          |
-| Google Analytics 4   | Visitor analytics on public pages, after consent    | **Works.** Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` (9a)                          |
-| Axiom                | Searchable logs kept longer than Vercel's           | Planned: needs the OTLP exporter ([plan](plans/2026-11-06-observability.md)) |
-| Sentry               | Error grouping, alerts, stack traces with source    | Planned: needs `@sentry/nextjs` wired in                                     |
-| PostHog              | Product analytics (funnels, retention), server-side | Planned: needs the server PostHog client and a consent decision              |
+| Service              | What it adds                                        | Status                                                           |
+| -------------------- | --------------------------------------------------- | ---------------------------------------------------------------- |
+| Vercel Web Analytics | Cookie-free page counts on public pages             | **Works.** Vercel → Analytics → Enable; no variable              |
+| Google Analytics 4   | Visitor analytics on public pages, after consent    | **Works.** Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` (9a)              |
+| Axiom                | Searchable logs kept longer than Vercel's           | **Works.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` and `_HEADERS` (9b) |
+| Sentry               | Error grouping, alerts, stack traces with source    | Planned: needs `@sentry/nextjs` wired in                         |
+| PostHog              | Product analytics (funnels, retention), server-side | Planned: needs the server PostHog client and a consent decision  |
 
 Do them in this order when the time comes: Axiom first (logs are what you need during an incident), then Sentry, then
 PostHog once there are users to learn from.
@@ -502,13 +502,19 @@ PostHog once there are users to learn from.
 6. Check: open the site in a private window. A cookie banner appears; after **Accept**, GA → Reports → Realtime shows
    you. In `/app` nothing is sent.
 
-### 9b. Axiom (once the exporter ships)
+### 9b. Axiom
 
-1. [app.axiom.co](https://app.axiom.co) → sign up → **Datasets → New dataset** `receipt-ocr`.
+1. [app.axiom.co](https://app.axiom.co) → sign up → **Datasets → New dataset** `receipt-ocr` (kind **Events**, which
+   Axiom asks for OpenTelemetry logs).
 2. **Settings → API tokens → New token**, with only **Ingest** on that dataset. Copy it (`xaat-…`).
 3. Vercel (Production): `OTEL_EXPORTER_OTLP_ENDPOINT=https://api.axiom.co` (Config) and
    `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>,X-Axiom-Dataset=receipt-ocr` (Secret).
-4. Redeploy. Events keep going to Vercel's logs too; Axiom gets the same events.
+4. Redeploy. Events keep going to Vercel's logs too; Axiom gets the same events, already sampled and scrubbed. The
+   privacy page then names Axiom as the log store (it reads the endpoint at build time).
+5. Check: sign in and open `/app`, then open the dataset's **Stream** in Axiom: a `page.render` or request event appears within
+   a few seconds. Nothing arriving: look in Vercel's logs for `telemetry.export_failed` (a wrong token or dataset) or
+   `telemetry.start_failed`. EU org: use the regional edge URL from Axiom's settings as the endpoint. Optional:
+   `OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production` (Config).
 
 ### 9c. Sentry (once wired in)
 

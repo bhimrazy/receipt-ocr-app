@@ -3,6 +3,7 @@ import type { Instrumentation } from "next";
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const node = await import("./instrumentation-node");
+    await node.startTelemetryExport();
     await node.loadEnvOrExit();
     await node.logAuthNotConfigured();
   }
