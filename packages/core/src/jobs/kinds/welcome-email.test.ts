@@ -22,7 +22,7 @@ const run = (
   rows: unknown[][],
   send: (input: {
     to: string;
-    receiptsPerDay: number;
+    plan: string;
   }) => "delivered" | "not_configured" | "failed" | "rejected",
   sent: unknown[] = [],
 ) =>
@@ -50,11 +50,8 @@ describe("welcome email job", () => {
     expect(welcomeEmailPayload.safeParse({}).success).toBe(false);
   });
 
-  it("sends the plan's daily limit read at send time, not a fixed number", async () => {
-    for (const [plan, limit] of [
-      ["free", DEFAULT_PLANS.free.receiptsPerDay],
-      ["pro", DEFAULT_PLANS.pro.receiptsPerDay],
-    ] as const) {
+  it("sends the plan and its limits read at send time, not fixed numbers", async () => {
+    for (const plan of ["free", "pro"] as const) {
       const sent: unknown[] = [];
       // The second query is accountPlan: Pro when comped or owning a Pro workspace.
       const exit = await run(
@@ -63,7 +60,7 @@ describe("welcome email job", () => {
         sent,
       );
       expect(Exit.isSuccess(exit)).toBe(true);
-      expect(sent).toEqual([{ to: "a@example.com", receiptsPerDay: limit }]);
+      expect(sent).toEqual([{ to: "a@example.com", plan, policy: DEFAULT_PLANS[plan] }]);
     }
     expect(DEFAULT_PLANS.free.receiptsPerDay).not.toBe(DEFAULT_PLANS.pro.receiptsPerDay);
   });

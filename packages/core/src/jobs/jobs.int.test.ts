@@ -1270,7 +1270,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   });
 
   it("welcomes a user once: a second enqueue is a no-op, before and after the mail is sent", async () => {
-    const sent: { to: string; receiptsPerDay: number }[] = [];
+    const sent: { to: string; plan: string; policy: unknown }[] = [];
     const mailer = Layer.succeed(WelcomeMailer, {
       send: (input) => Effect.sync(() => (sent.push(input), "delivered" as const)),
     });
@@ -1292,7 +1292,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       }).pipe(Effect.provide(mailer)),
     );
     expect(sent).toEqual([
-      { to: expect.stringContaining("@"), receiptsPerDay: DEFAULT_PLANS.free.receiptsPerDay },
+      { to: expect.stringContaining("@"), plan: "free", policy: DEFAULT_PLANS.free },
     ]);
     expect((await welcomeJobs()).map((j) => j.state)).toEqual(["succeeded"]);
     expect(await run(enqueueWelcomeEmail(a.userId))).toBe(false);

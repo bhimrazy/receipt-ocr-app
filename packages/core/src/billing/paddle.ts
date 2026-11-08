@@ -34,6 +34,9 @@ export const PADDLE_EVENT_TYPES = [
   "subscription.paused",
   "subscription.resumed",
   "transaction.completed",
+  // Refunds and chargebacks: an approved chargeback or full refund ends Pro.
+  "adjustment.created",
+  "adjustment.updated",
 ] as const;
 
 /**
@@ -94,6 +97,15 @@ const subscriptionData = z.object({
   updated_at: z.string(),
 });
 
+const adjustmentData = z.object({
+  id: z.string().min(1),
+  action: z.string().min(1),
+  type: z.string().nullish(),
+  status: z.string().min(1),
+  subscription_id: z.string().nullish(),
+  transaction_id: z.string().nullish(),
+});
+
 const envelope = z.object({
   event_id: z.string().min(1),
   event_type: z.string().min(1),
@@ -105,7 +117,8 @@ const envelope = z.object({
  * Parses a verified body into a `BillingEvent`. Null for an event type we
  * don't subscribe to, "bad-body" for a shape we can't read (Paddle retries it,
  * and the failure shows in the logs). `transaction.completed` carries no
- * subscription state: its subscription's own events follow.
+ * subscription state: its subscription's own events follow. An adjustment
+ * (refund, chargeback) keeps only its ids, action, type and status.
  */
 export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-body" {
   let json: unknown;
@@ -125,7 +138,26 @@ export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-bo
     occurredAt: new Date(occurred_at),
   };
   if (Number.isNaN(base.occurredAt.getTime())) return "bad-body";
-  if (!event_type.startsWith("subscription.")) return { ...base, subscription: null };
+  if (event_type.startsWith("adjustment.")) {
+    const adjustment = adjustmentData.safeParse(data);
+    if (!adjustment.success) return "bad-body";
+    const a = adjustment.data;
+    return {
+      ...base,
+      subscription: null,
+      adjustment: {
+        adjustmentId: a.id,
+        action: a.action,
+        type: a.type ?? null,
+        status: a.status,
+        subscriptionId: a.subscription_id ?? null,
+        transactionId: a.transaction_id ?? null,
+      },
+    };
+  }
+  if (!event_type.startsWith("subscription.")) {
+    return { ...base, subscription: null, adjustment: null };
+  }
 
   const parsed = subscriptionData.safeParse(data);
   if (!parsed.success) return "bad-body";
@@ -136,6 +168,7 @@ export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-bo
   if (Number.isNaN(updatedAt.getTime())) return "bad-body";
   return {
     ...base,
+    adjustment: null,
     subscription: {
       subscriptionId: s.id,
       customerId: s.customer_id,
@@ -181,43 +214,130 @@ export class PaddleApiError extends Error {
   }
 }
 
+export type PaddleApiOptions = {
+  environment: PaddleEnvironment;
+  apiKey: string;
+  signal?: AbortSignal;
+};
+
+/** One Paddle API call: JSON in and out, the body read through `schema`. */
+async function paddleRequest<T>(
+  options: PaddleApiOptions,
+  method: "GET" | "POST",
+  path: string,
+  body: unknown,
+  schema: z.ZodType<T>,
+  fetchImpl: typeof fetch,
+): Promise<T> {
+  const response = await fetchImpl(`${paddleApiBase(options.environment)}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${options.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    signal: options.signal,
+  });
+  if (!response.ok) throw new PaddleApiError(response.status);
+  const parsed = schema.safeParse(await response.json().catch(() => null));
+  if (!parsed.success) throw new PaddleApiError(response.status);
+  return parsed.data;
+}
+
 /**
  * Creates a customer portal session (`POST /customers/{id}/portal-sessions`)
  * and returns its links. They carry a temporary token: hand them to the
  * browser once, never store or cache them.
  */
 export async function createPaddlePortalSession(
-  options: {
-    environment: PaddleEnvironment;
-    apiKey: string;
-    customerId: string;
-    subscriptionId: string | null;
-    signal?: AbortSignal;
-  },
+  options: PaddleApiOptions & { customerId: string; subscriptionId: string | null },
   fetchImpl: typeof fetch = fetch,
 ): Promise<PortalLinks> {
-  const response = await fetchImpl(
-    `${paddleApiBase(options.environment)}/customers/${encodeURIComponent(options.customerId)}/portal-sessions`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${options.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(
-        options.subscriptionId ? { subscription_ids: [options.subscriptionId] } : {},
-      ),
-      signal: options.signal,
-    },
+  const parsed = await paddleRequest(
+    options,
+    "POST",
+    `/customers/${encodeURIComponent(options.customerId)}/portal-sessions`,
+    options.subscriptionId ? { subscription_ids: [options.subscriptionId] } : {},
+    portalResponse,
+    fetchImpl,
   );
-  if (!response.ok) throw new PaddleApiError(response.status);
-  const parsed = portalResponse.safeParse(await response.json().catch(() => null));
-  if (!parsed.success) throw new PaddleApiError(response.status);
-  const { general, subscriptions } = parsed.data.data.urls;
+  const { general, subscriptions } = parsed.data.urls;
   const sub = subscriptions.find((s) => s.id === options.subscriptionId);
   return {
     overview: general.overview,
     cancel: sub?.cancel_subscription ?? null,
     updatePaymentMethod: sub?.update_subscription_payment_method ?? null,
   };
+}
+
+const customerList = z.object({ data: z.array(z.object({ id: z.string().min(1) })) });
+const created = z.object({ data: z.object({ id: z.string().min(1) }) });
+
+/**
+ * Creates the checkout's transaction on the server (`POST /transactions`), so
+ * the price and the custom data are ours, not the browser's. The customer is
+ * found by email (`GET /customers?email=`) or created (`POST /customers`), so
+ * the checkout opens with the address filled in. Paddle.js opens the returned
+ * `txn_…` id; the subscription it creates copies `custom_data`.
+ */
+export async function createPaddleCheckoutTransaction(
+  options: PaddleApiOptions & {
+    priceId: string;
+    email: string;
+    customData: { workspaceId: string; userId: string };
+  },
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ transactionId: string }> {
+  const found = await paddleRequest(
+    options,
+    "GET",
+    `/customers?email=${encodeURIComponent(options.email)}`,
+    undefined,
+    customerList,
+    fetchImpl,
+  );
+  const customerId =
+    found.data[0]?.id ??
+    (
+      await paddleRequest(
+        options,
+        "POST",
+        "/customers",
+        { email: options.email },
+        created,
+        fetchImpl,
+      )
+    ).data.id;
+  const transaction = await paddleRequest(
+    options,
+    "POST",
+    "/transactions",
+    {
+      items: [{ price_id: options.priceId, quantity: 1 }],
+      customer_id: customerId,
+      custom_data: options.customData,
+    },
+    created,
+    fetchImpl,
+  );
+  return { transactionId: transaction.data.id };
+}
+
+/**
+ * Cancels a subscription at once (`POST /subscriptions/{id}/cancel`,
+ * `effective_from: immediately`): no further charges, and Paddle sends
+ * `subscription.canceled`. Used after a chargeback or a full refund.
+ */
+export async function cancelPaddleSubscription(
+  options: PaddleApiOptions & { subscriptionId: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  await paddleRequest(
+    options,
+    "POST",
+    `/subscriptions/${encodeURIComponent(options.subscriptionId)}/cancel`,
+    { effective_from: "immediately" },
+    z.unknown(),
+    fetchImpl,
+  );
 }

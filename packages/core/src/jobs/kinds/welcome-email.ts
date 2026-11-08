@@ -4,6 +4,7 @@ import { Context, Effect, Layer } from "effect";
 import { z } from "zod";
 import type { DbError } from "../../errors";
 import { accountPlan } from "../../billing/service";
+import type { PlanId, PlanPolicy } from "../../plans";
 import { Db } from "../../services";
 import type { Settings } from "../../settings";
 import { annotateEvent } from "../../telemetry/current";
@@ -32,7 +33,9 @@ export class WelcomeMailer extends Context.Tag("@receipt-ocr/core/WelcomeMailer"
   {
     readonly send: (input: {
       to: string;
-      receiptsPerDay: number;
+      /** The account's plan when sending; the mail states its limits. */
+      plan: PlanId;
+      policy: PlanPolicy;
     }) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected">;
   }
 >() {
@@ -92,7 +95,7 @@ export const welcomeEmail: JobDefinition<WelcomeEmailPayload, Db | Settings | We
       if (!row) return { kind: "skipped", reason: "user-gone" } satisfies WelcomeEmailResult;
       // Read now, not at enqueue: the plan may have changed since.
       const { plan, policy } = yield* accountPlan(payload.userId);
-      const outcome = yield* mailer.send({ to: row.email, receiptsPerDay: policy.receiptsPerDay });
+      const outcome = yield* mailer.send({ to: row.email, plan, policy });
       yield* annotateEvent({ kind: "welcome", plan, delivered: outcome === "delivered" });
       if (outcome === "rejected")
         return yield* new NonRetryableJobError({ kind: "email-render-failed" });

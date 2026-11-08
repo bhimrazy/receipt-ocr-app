@@ -178,7 +178,7 @@ export function quotaMessage(verdict: QuotaVerdict): string {
     case "global":
       return "Receipt reading is at capacity for today. Try again after 00:00 UTC.";
     case "pool":
-      return "Free scanning is busy today. Try again tomorrow, or upgrade to Pro.";
+      return "Free scanning is busy today: the Free plan's shared daily capacity is used up. Try again after 00:00 UTC, or upgrade this workspace to Pro.";
     case "month":
       return workspace
         ? `This workspace has used all ${scans(verdict.limit)} for this month. ${reset}`
@@ -187,9 +187,9 @@ export function quotaMessage(verdict: QuotaVerdict): string {
       const day = verdict.day?.limit ?? verdict.limit;
       if (workspace) {
         const left = Math.max(0, verdict.limit - verdict.used);
-        return `Daily limit reached. It resets at midnight UTC. ${left} of ${scans(verdict.limit)} left this month.`;
+        return `This workspace has used its ${scans(day)} for today. Uploads open at 00:00 UTC; ${left} of ${scans(verdict.limit)} are left this month.`;
       }
-      return `You've used all ${day} ${day === 1 ? "receipt" : "receipts"} for today. You can upload again after 00:00 UTC.`;
+      return `You've used all ${scans(day)} for today. You can upload again at 00:00 UTC.`;
     }
   }
 }

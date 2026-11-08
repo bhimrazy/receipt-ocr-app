@@ -28,6 +28,7 @@ CREATE TABLE "billing_subscriptions" (
 	"cancel_at_period_end" boolean DEFAULT false NOT NULL,
 	"past_due_since" timestamp with time zone,
 	"canceled_at" timestamp with time zone,
+	"revoked_at" timestamp with time zone,
 	"provider_updated_at" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,

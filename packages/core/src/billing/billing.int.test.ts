@@ -25,17 +25,22 @@ import { DEFAULT_PLANS } from "../plans";
 import { checkQuota, quotaLimits, type QuotaLimits } from "../quota";
 import { Db } from "../services";
 import { ensurePersonalWorkspace } from "../workspace";
-import type { BillingEvent, SubscriptionSnapshot } from "./provider";
+import { deleteWorkspace, prepareUserDeletion, workspacesBlockingDeletion } from "../admin";
+import type { AdjustmentSnapshot, BillingEvent, SubscriptionSnapshot } from "./provider";
 import {
   accountPlan,
   applyBillingEvent,
   recordBillingEvent,
   workspaceBilling,
   workspaceCreationCheck,
+  workspaceHasChargingSubscription,
   workspacePlan,
 } from "./service";
 
 const enabled = process.env.INTEGRATION === "1";
+// The Pro prices this suite's subscriptions pay; anything else must not grant Pro.
+process.env.PADDLE_PRICE_PRO_MONTHLY = "pri_month";
+process.env.PADDLE_PRICE_PRO_YEARLY = "pri_year";
 const runtime = ManagedRuntime.make(AppLayer);
 const run = <A, E>(effect: Effect.Effect<A, E, AppServices>) => runtime.runPromise(effect);
 const runExit = <A, E>(effect: Effect.Effect<A, E, AppServices>) => runtime.runPromiseExit(effect);
@@ -45,6 +50,8 @@ const db = <A>(f: (d: Parameters<Parameters<typeof Db.Service.use>[0]>[0]) => Pr
 const tag = `bill-${Date.now()}`;
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new TextEncoder().encode(tag)]);
 let seq = 0;
+/** Each workspace's owner: a checkout's custom data names them as the buyer. */
+const owners = new Map<string, string>();
 
 async function createUser(name: string) {
   const id = `${tag}-${name}`;
@@ -53,6 +60,7 @@ async function createUser(name: string) {
   );
   const orgId = await run(ensurePersonalWorkspace({ id, name, email: `${id}@example.com` }));
   if (!orgId) throw new Error("no workspace");
+  owners.set(orgId, id);
   return { userId: id, organizationId: orgId, role: "owner" };
 }
 
@@ -71,6 +79,7 @@ async function createWorkspace(ownerId: string, name: string) {
       createdAt: new Date(),
     });
   });
+  owners.set(id, ownerId);
   return id;
 }
 
@@ -87,6 +96,7 @@ async function addMember(organizationId: string, userId: string) {
   return { organizationId, userId, role: "member" };
 }
 
+/** A snapshot whose custom data names the workspace's owner as the buyer, unless `userId` is given. */
 const snapshot = (fields: Partial<SubscriptionSnapshot>): SubscriptionSnapshot => ({
   subscriptionId: `sub_${tag}`,
   customerId: `ctm_${tag}`,
@@ -99,11 +109,15 @@ const snapshot = (fields: Partial<SubscriptionSnapshot>): SubscriptionSnapshot =
   canceledAt: null,
   updatedAt: new Date(),
   workspaceId: null,
-  userId: null,
+  userId: (fields.workspaceId && owners.get(fields.workspaceId)) || null,
   ...fields,
 });
 
-const event = (subscription: SubscriptionSnapshot | null, type = "subscription.updated") => {
+const event = (
+  subscription: SubscriptionSnapshot | null,
+  type = "subscription.updated",
+  adjustment: AdjustmentSnapshot | null = null,
+) => {
   seq += 1;
   return {
     provider: "paddle",
@@ -111,7 +125,34 @@ const event = (subscription: SubscriptionSnapshot | null, type = "subscription.u
     type,
     occurredAt: new Date(),
     subscription,
+    adjustment,
   } satisfies BillingEvent;
+};
+
+const subscriptionRow = async (providerSubscriptionId: string) =>
+  (
+    await db((d) =>
+      d
+        .select()
+        .from(billingSubscriptions)
+        .where(eq(billingSubscriptions.providerSubscriptionId, providerSubscriptionId)),
+    )
+  )[0];
+
+const jobOf = async (eventId: string) => {
+  const [row] = await db((d) =>
+    d
+      .select({ id: billingEvents.id })
+      .from(billingEvents)
+      .where(eq(billingEvents.providerEventId, eventId)),
+  );
+  const [job] = await db((d) =>
+    d
+      .select()
+      .from(jobs)
+      .where(eq(jobs.idempotencyKey, `billing:event:${row!.id}`)),
+  );
+  return job;
 };
 
 /** Records an event and runs its job through the queue, as the webhook route and drain do. */
@@ -355,6 +396,239 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const comped = await createUser("comped");
       await db((d) => d.update(user).set({ plan: "pro" }).where(eq(user.id, comped.userId)));
       expect(await planOf(comped.organizationId)).toBe("pro");
+    });
+  });
+
+  describe("linking needs a Pro price and an owner as buyer", () => {
+    it("leaves a subscription at another price unmatched, and the workspace Free", async () => {
+      const workspaceId = await createWorkspace(other.userId, "cheap");
+      const e = event(
+        snapshot({ subscriptionId: `sub_${tag}_cheap`, workspaceId, priceId: "pri_other" }),
+      );
+      await deliver(e);
+      expect(await outcomeOf(e.eventId)).toBe("unmatched");
+      expect(await subscriptionRow(`sub_${tag}_cheap`)).toBeUndefined();
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
+    it("leaves a subscription bought by a member, or naming no buyer, unmatched", async () => {
+      const boss = await createUser("link-boss");
+      const mate = await createUser("link-mate");
+      await addMember(boss.organizationId, mate.userId);
+      const byMember = event(
+        snapshot({
+          subscriptionId: `sub_${tag}_bymember`,
+          workspaceId: boss.organizationId,
+          userId: mate.userId,
+        }),
+      );
+      const byNobody = event(
+        snapshot({
+          subscriptionId: `sub_${tag}_bynobody`,
+          workspaceId: boss.organizationId,
+          userId: null,
+        }),
+      );
+      await deliver(byMember);
+      await deliver(byNobody);
+      expect(await outcomeOf(byMember.eventId)).toBe("unmatched");
+      expect(await outcomeOf(byNobody.eventId)).toBe("unmatched");
+      expect(await planOf(boss.organizationId)).toBe("free");
+      // The owner's own checkout links as usual.
+      await deliver(
+        event(snapshot({ subscriptionId: `sub_${tag}_byowner`, workspaceId: boss.organizationId })),
+      );
+      expect(await planOf(boss.organizationId)).toBe("pro");
+      expect((await subscriptionRow(`sub_${tag}_byowner`))?.userId).toBe(boss.userId);
+    });
+
+    it("stops granting Pro when a linked subscription moves to a price that isn't Pro", async () => {
+      const workspaceId = await createWorkspace(other.userId, "reprice");
+      const id = `sub_${tag}_reprice`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+      expect(await planOf(workspaceId)).toBe("pro");
+      await deliver(
+        event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId,
+            priceId: "pri_other",
+            updatedAt: new Date(Date.now() + 1000),
+          }),
+        ),
+      );
+      expect(await planOf(workspaceId)).toBe("free");
+      expect((await run(workspaceBilling(workspaceId)))?.entitled).toBe(false);
+    });
+  });
+
+  describe("refunds and chargebacks", () => {
+    const adjustment = (fields: Partial<AdjustmentSnapshot>): AdjustmentSnapshot => ({
+      adjustmentId: `adj_${tag}_${seq}`,
+      action: "chargeback",
+      type: "full",
+      status: "approved",
+      subscriptionId: null,
+      transactionId: `txn_${tag}`,
+      ...fields,
+    });
+
+    it("ends Pro at once on an approved chargeback and asks for the provider cancel", async () => {
+      const workspaceId = await createWorkspace(other.userId, "charged-back");
+      const id = `sub_${tag}_chargeback`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+      expect(await planOf(workspaceId)).toBe("pro");
+
+      const warning = event(
+        null,
+        "adjustment.created",
+        adjustment({ action: "chargeback_warning", subscriptionId: id }),
+      );
+      await deliver(warning);
+      expect(await outcomeOf(warning.eventId)).toBe("ignored");
+      expect(await planOf(workspaceId)).toBe("pro");
+
+      const chargeback = event(null, "adjustment.created", adjustment({ subscriptionId: id }));
+      const recorded = await run(recordBillingEvent(chargeback));
+      if (recorded.kind !== "recorded") throw new Error("not recorded");
+      const [stored] = await db((d) =>
+        d
+          .select({ id: billingEvents.id })
+          .from(billingEvents)
+          .where(eq(billingEvents.providerEventId, chargeback.eventId)),
+      );
+      expect(await run(applyBillingEvent(stored!.id))).toMatchObject({
+        outcome: "applied",
+        organizationId: workspaceId,
+        planChange: { from: "pro", to: "free" },
+        cancelSubscriptionId: id,
+      });
+      // A retry after the commit still owes the cancel until Paddle reports it canceled.
+      expect(await run(applyBillingEvent(stored!.id))).toMatchObject({
+        outcome: "already-applied",
+        cancelSubscriptionId: id,
+      });
+      expect(await planOf(workspaceId)).toBe("free");
+      expect(await run(workspaceBilling(workspaceId))).toMatchObject({
+        entitled: false,
+        revoked: true,
+      });
+      // A later renewal snapshot doesn't bring Pro back.
+      await deliver(
+        event(
+          snapshot({ subscriptionId: id, workspaceId, updatedAt: new Date(Date.now() + 1000) }),
+        ),
+      );
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
+    it("ends Pro on a full refund, not a partial one, and dead-letters the cancel while billing is off", async () => {
+      const workspaceId = await createWorkspace(other.userId, "refunded");
+      const id = `sub_${tag}_refund`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+      const partial = event(
+        null,
+        "adjustment.updated",
+        adjustment({ action: "refund", type: "partial", subscriptionId: id }),
+      );
+      await deliver(partial);
+      expect(await outcomeOf(partial.eventId)).toBe("ignored");
+      expect(await planOf(workspaceId)).toBe("pro");
+
+      const full = event(
+        null,
+        "adjustment.updated",
+        adjustment({ action: "refund", type: "full", subscriptionId: id }),
+      );
+      await deliver(full);
+      expect(await outcomeOf(full.eventId)).toBe("applied");
+      expect(await planOf(workspaceId)).toBe("free");
+      // This suite has no PADDLE_API_KEY: the cancel can't be sent, and the job says so.
+      expect(await jobOf(full.eventId)).toMatchObject({
+        state: "dead",
+        lastErrorKind: "billing-off",
+      });
+    });
+  });
+
+  describe("bad payloads", () => {
+    it("sends a stored event the schema refuses straight to dead", async () => {
+      const e = event(snapshot({ subscriptionId: `sub_${tag}_bad` }));
+      const recorded = await run(recordBillingEvent(e));
+      if (recorded.kind !== "recorded") throw new Error("not recorded");
+      await db((d) =>
+        d
+          .update(billingEvents)
+          .set({ payload: { nonsense: true } })
+          .where(eq(billingEvents.providerEventId, e.eventId)),
+      );
+      await run(
+        tick({
+          worker: `${tag}-worker`,
+          registry: JOB_REGISTRY,
+          budgetMs: 30_000,
+          ids: [recorded.jobId],
+          waitForRetries: false,
+        }),
+      );
+      expect(await jobOf(e.eventId)).toMatchObject({
+        state: "dead",
+        attempts: 1,
+        lastErrorKind: "bad-payload",
+      });
+    });
+  });
+
+  describe("deletion while a subscription can still charge", () => {
+    it("refuses the account and the workspace until the subscription is canceled", async () => {
+      const buyer = await createUser("del-buyer");
+      const id = `sub_${tag}_delete`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId: buyer.organizationId })));
+      const later = (offsetMs: number, fields: Partial<SubscriptionSnapshot>) =>
+        deliver(
+          event(
+            snapshot({
+              subscriptionId: id,
+              workspaceId: buyer.organizationId,
+              updatedAt: new Date(Date.now() + offsetMs),
+              ...fields,
+            }),
+          ),
+        );
+
+      expect(await run(workspacesBlockingDeletion(buyer.userId))).toEqual({
+        soleOwner: [],
+        subscribed: [{ id: buyer.organizationId, name: expect.any(String) }],
+      });
+      expect(await run(workspaceHasChargingSubscription(buyer.organizationId))).toBe(true);
+      const refused = await runExit(prepareUserDeletion(buyer.userId));
+      expect(Exit.isFailure(refused) && JSON.stringify(refused.cause)).toContain("Conflict");
+      const auditor = { actor: { id: other.userId, email: `${other.userId}@example.com` } };
+      expect(Exit.isFailure(await runExit(deleteWorkspace(buyer.organizationId, auditor)))).toBe(
+        true,
+      );
+
+      // Past due after the grace period and paused still charge (or can resume): still refused.
+      await later(1_000, { status: "past_due" });
+      await db((d) =>
+        d
+          .update(billingSubscriptions)
+          .set({ pastDueSince: new Date(Date.now() - 30 * 86_400_000) })
+          .where(eq(billingSubscriptions.providerSubscriptionId, id)),
+      );
+      expect(await planOf(buyer.organizationId)).toBe("free");
+      expect(await run(workspaceHasChargingSubscription(buyer.organizationId))).toBe(true);
+      await later(2_000, { status: "paused" });
+      expect(await run(workspaceHasChargingSubscription(buyer.organizationId))).toBe(true);
+
+      // A cancel scheduled for the period end charges nothing more: allowed.
+      await later(3_000, { status: "active", cancelAtPeriodEnd: true });
+      expect(await run(workspaceHasChargingSubscription(buyer.organizationId))).toBe(false);
+      await later(4_000, { status: "canceled", cancelAtPeriodEnd: false });
+      expect((await run(workspacesBlockingDeletion(buyer.userId))).subscribed).toEqual([]);
+      expect(await run(prepareUserDeletion(buyer.userId))).toMatchObject({ workspacesDeleted: 1 });
+      // The subscription row stays as the billing record.
+      expect((await subscriptionRow(id))?.organizationId).toBeNull();
     });
   });
 

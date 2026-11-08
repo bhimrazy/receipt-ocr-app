@@ -515,6 +515,8 @@ export const billingSubscriptions = pgTable(
     /** When it last became past_due; the grace period counts from here. */
     pastDueSince: timestamp("past_due_since", { withTimezone: true }),
     canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    /** A chargeback or full refund ended Pro at this time; the provider cancel follows. */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
     /** The provider's own `updated_at` for the snapshot stored here. */
     providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

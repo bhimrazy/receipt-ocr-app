@@ -1,5 +1,5 @@
 {
-  "id": "9943fe2c-a1ca-4d6e-a65b-4de7626f2d5a",
+  "id": "6ce28e18-2b69-4ff9-abe8-ba90fd5e2483",
   "prevId": "246804e2-6201-4fcc-85e3-eb30514235f1",
   "version": "7",
   "dialect": "postgresql",
@@ -418,6 +418,12 @@
         },
         "canceled_at": {
           "name": "canceled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

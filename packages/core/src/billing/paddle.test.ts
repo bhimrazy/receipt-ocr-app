@@ -1,6 +1,8 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  cancelPaddleSubscription,
+  createPaddleCheckoutTransaction,
   createPaddlePortalSession,
   PaddleApiError,
   parsePaddleEvent,
@@ -137,6 +139,43 @@ describe("parsePaddleEvent", () => {
     expect(event).toMatchObject({ type: "transaction.completed", subscription: null });
   });
 
+  it("keeps an adjustment's ids, action, type and status, nothing else", () => {
+    const event = parsePaddleEvent(
+      JSON.stringify({
+        event_id: "evt_3",
+        event_type: "adjustment.updated",
+        occurred_at: "2026-11-08T12:00:00Z",
+        data: {
+          id: "adj_1",
+          action: "chargeback",
+          type: "full",
+          status: "approved",
+          transaction_id: "txn_1",
+          subscription_id: "sub_1",
+          customer_id: "ctm_1",
+          reason: "fraud",
+          totals: { total: "900" },
+          updated_at: "2026-11-08T12:00:00Z",
+        },
+      }),
+    );
+    expect(event).toEqual({
+      provider: "paddle",
+      eventId: "evt_3",
+      type: "adjustment.updated",
+      occurredAt: new Date("2026-11-08T12:00:00Z"),
+      subscription: null,
+      adjustment: {
+        adjustmentId: "adj_1",
+        action: "chargeback",
+        type: "full",
+        status: "approved",
+        subscriptionId: "sub_1",
+        transactionId: "txn_1",
+      },
+    });
+  });
+
   it("drops event types we don't subscribe to, and refuses shapes it can't read", () => {
     expect(parsePaddleEvent(subscriptionBody({ event_type: "customer.updated" }))).toBeNull();
     expect(parsePaddleEvent("not json")).toBe("bad-body");
@@ -201,5 +240,95 @@ describe("createPaddlePortalSession", () => {
       createPaddlePortalSession({ ...options, environment: "production" }, fake),
     ).rejects.toBeInstanceOf(PaddleApiError);
     expect(url.startsWith("https://api.paddle.com/")).toBe(true);
+  });
+});
+
+/** A fake fetch that answers each call in turn and records what was asked. */
+const scripted = (...answers: Response[]) => {
+  const calls: { url: string; method: string; body: unknown }[] = [];
+  const fake = (async (url: string, init: RequestInit) => {
+    calls.push({
+      url,
+      method: init.method ?? "GET",
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+    });
+    const answer = answers.shift();
+    if (!answer) throw new Error("unexpected call");
+    return answer;
+  }) as unknown as typeof fetch;
+  return { calls, fake };
+};
+
+describe("createPaddleCheckoutTransaction", () => {
+  const options = {
+    environment: "sandbox" as const,
+    apiKey: "pdl_sdbx_apikey_test",
+    priceId: "pri_month",
+    email: "a+b@example.com",
+    customData: { workspaceId: "org_1", userId: "user_1" },
+  };
+
+  it("reuses the customer with that email and creates the transaction with our price and custom data", async () => {
+    const { calls, fake } = scripted(
+      Response.json({ data: [{ id: "ctm_1" }] }),
+      Response.json({ data: { id: "txn_1", status: "draft" } }, { status: 201 }),
+    );
+    expect(await createPaddleCheckoutTransaction(options, fake)).toEqual({
+      transactionId: "txn_1",
+    });
+    expect(calls).toEqual([
+      {
+        url: "https://sandbox-api.paddle.com/customers?email=a%2Bb%40example.com",
+        method: "GET",
+        body: undefined,
+      },
+      {
+        url: "https://sandbox-api.paddle.com/transactions",
+        method: "POST",
+        body: {
+          items: [{ price_id: "pri_month", quantity: 1 }],
+          customer_id: "ctm_1",
+          custom_data: { workspaceId: "org_1", userId: "user_1" },
+        },
+      },
+    ]);
+  });
+
+  it("creates the customer when none has that email, and throws on an error status", async () => {
+    const first = scripted(
+      Response.json({ data: [] }),
+      Response.json({ data: { id: "ctm_new" } }, { status: 201 }),
+      Response.json({ data: { id: "txn_2" } }, { status: 201 }),
+    );
+    expect(await createPaddleCheckoutTransaction(options, first.fake)).toEqual({
+      transactionId: "txn_2",
+    });
+    expect(first.calls[1]).toMatchObject({
+      url: "https://sandbox-api.paddle.com/customers",
+      body: { email: "a+b@example.com" },
+    });
+    expect(first.calls[2]?.body).toMatchObject({ customer_id: "ctm_new" });
+
+    const failing = scripted(new Response("{}", { status: 500 }));
+    await expect(createPaddleCheckoutTransaction(options, failing.fake)).rejects.toBeInstanceOf(
+      PaddleApiError,
+    );
+  });
+});
+
+describe("cancelPaddleSubscription", () => {
+  it("cancels immediately", async () => {
+    const { calls, fake } = scripted(Response.json({ data: { id: "sub_1", status: "canceled" } }));
+    await cancelPaddleSubscription(
+      { environment: "production", apiKey: "k", subscriptionId: "sub_1" },
+      fake,
+    );
+    expect(calls).toEqual([
+      {
+        url: "https://api.paddle.com/subscriptions/sub_1/cancel",
+        method: "POST",
+        body: { effective_from: "immediately" },
+      },
+    ]);
   });
 });

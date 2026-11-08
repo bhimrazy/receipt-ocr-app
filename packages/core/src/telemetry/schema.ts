@@ -178,6 +178,10 @@ export const EVENT_SCHEMA = {
       outcome: "token",
       /** Why a webhook was refused: `missing-signature`, `bad-signature`, `stale-signature`, `bad-body`. */
       rejection: "token",
+      /** Why a new subscription wasn't linked: `workspace`, `owner`, `price`, or `subscription` (an adjustment for one we don't have). */
+      unmatched_reason: "token",
+      /** An adjustment's action: `refund`, `chargeback`, `credit` and their reversals. */
+      adjustment_action: "token",
       /** Set when an applied event moved its workspace between plans (`free`, `pro`): the `plan_changed` product event. */
       plan_from: "token",
       plan_to: "token",

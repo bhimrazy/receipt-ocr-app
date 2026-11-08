@@ -40,13 +40,30 @@ export const subscriptionSnapshotSchema = z.object({
 
 export type SubscriptionSnapshot = z.output<typeof subscriptionSnapshotSchema>;
 
+/** A refund, credit or chargeback as one event saw it. */
+export const adjustmentSnapshotSchema = z.object({
+  adjustmentId: z.string().min(1).max(100),
+  /** `refund`, `chargeback`, `credit`, and their reversals and warnings. */
+  action: z.string().min(1).max(40),
+  /** `full` or `partial`. */
+  type: z.string().max(20).nullable(),
+  /** `pending_approval`, `approved`, `rejected` or `reversed`. */
+  status: z.string().min(1).max(40),
+  subscriptionId: z.string().max(100).nullable(),
+  transactionId: z.string().max(100).nullable(),
+});
+
+export type AdjustmentSnapshot = z.output<typeof adjustmentSnapshotSchema>;
+
 export const billingEventSchema = z.object({
   provider: z.string().min(1).max(20),
   eventId: z.string().min(1).max(100),
   type: z.string().min(1).max(60),
   occurredAt: isoDate,
-  /** Null for events that carry no subscription state (a completed transaction). */
+  /** Null for events that carry no subscription state (a transaction, an adjustment). */
   subscription: subscriptionSnapshotSchema.nullable(),
+  /** Set on refund and chargeback events. */
+  adjustment: adjustmentSnapshotSchema.nullable().default(null),
 });
 
 export type BillingEvent = z.output<typeof billingEventSchema>;
@@ -65,10 +82,12 @@ export type PortalLinks = {
   updatePaymentMethod: string | null;
 };
 
-/** What the browser needs to open a checkout. Public values only. */
+/**
+ * What the browser needs to open a checkout. Public values only: the price and
+ * the workspace are chosen on the server when it creates the transaction.
+ */
 export type CheckoutConfig = {
   provider: string;
   environment: "sandbox" | "production";
   clientToken: string;
-  prices: { month: string; year: string };
 };

@@ -144,7 +144,9 @@ describe("decideQuota, Free (per user: 20 a day, 100 a month, shared pool)", () 
       window: "day",
       retryAfterSeconds: untilMidnight,
     });
-    expect(quotaMessage(verdict)).toContain("all 20 receipts for today");
+    expect(quotaMessage(verdict)).toBe(
+      "You've used all 20 scans for today. You can upload again at 00:00 UTC.",
+    );
   });
 
   it("closes the Free pool for everyone on Free once it is used up today", () => {
@@ -220,7 +222,7 @@ describe("quotaMessage", () => {
     expect(quotaMessage({ ...base, window: "minute" })).toContain("minute");
     expect(quotaMessage({ ...base, window: "global" })).toContain("capacity");
     expect(quotaMessage({ ...base, window: "pool" })).toBe(
-      "Free scanning is busy today. Try again tomorrow, or upgrade to Pro.",
+      "Free scanning is busy today: the Free plan's shared daily capacity is used up. Try again after 00:00 UTC, or upgrade this workspace to Pro.",
     );
   });
 
@@ -232,8 +234,8 @@ describe("quotaMessage", () => {
       used: 320,
       limit: 500,
     };
-    expect(quotaMessage({ ...month, window: "day" })).toBe(
-      "Daily limit reached. It resets at midnight UTC. 180 of 500 scans left this month.",
+    expect(quotaMessage({ ...month, window: "day", day: { used: 200, limit: 200 } })).toBe(
+      "This workspace has used its 200 scans for today. Uploads open at 00:00 UTC; 180 of 500 scans are left this month.",
     );
     expect(
       quotaMessage({
