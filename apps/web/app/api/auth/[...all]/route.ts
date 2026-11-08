@@ -18,13 +18,7 @@ function annotate(request: Request, event: WideEvent) {
 }
 
 function notConfigured() {
-  return NextResponse.json(
-    {
-      error:
-        "Auth is not configured. Set DATABASE_URL and BETTER_AUTH_SECRET or BETTER_AUTH_SECRETS.",
-    },
-    { status: 503 },
-  );
+  return NextResponse.json({ error: "Sign-in isn't available right now." }, { status: 503 });
 }
 
 export const GET = withRequestEvent(

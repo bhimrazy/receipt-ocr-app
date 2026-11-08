@@ -59,7 +59,7 @@ export function failureResponse(cause: Cause.Cause<AppError>, event?: WideEvent)
   const message = PUBLIC.has(error._tag)
     ? error.message
     : error._tag === "NotConfigured"
-      ? "This feature is not configured on the server"
+      ? "This feature isn't available right now."
       : "Something went wrong. Try again.";
   return jsonError(status, message, headers);
 }

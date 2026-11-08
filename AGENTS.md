@@ -92,5 +92,6 @@ Dependencies are exact pins and at least 7 days old; `bun run check:deps` enforc
 benchmark (`bun run bench:ocr`) and the k6 load test (`scripts/load.sh`).
 
 The signed-in app always needs a real session and database; there is no mock or preview data. Without `DATABASE_URL` and
-`BETTER_AUTH_SECRET`, `/app` sends everyone to `/sign-in`, which says sign-in isn't set up. Local development uses the
+`BETTER_AUTH_SECRET`, `/app` sends everyone to `/sign-in`, which only says sign-in isn't set up (the missing settings are in the boot log
+as `auth.not_configured`, never on screen). Local development uses the
 compose stack (see `scripts/test.sh`). Real OCR requires `apps/web/.env.local`.
