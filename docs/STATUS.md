@@ -275,7 +275,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - The last-sign-in-method guard on `/unlink-account` reads, then Better Auth deletes: two disconnects sent at the same
   moment (Google and GitHub, no password or passkey) could both pass. Needs a lock on the user's account rows if it
   matters; the UI sends one at a time. Accepted (user-initiated, recoverable: Forgot password recreates a
-  credential). The same read-then-delete applies to `/passkey/delete-passkey`.
+  credential). The same read-then-delete applies to `/passkey/delete-passkey`. Recoverable because Better Auth
+  1.7.18's `resetCredentialPassword` (`better-auth/dist/utils/password.mjs`, called by `/reset-password`) creates a
+  `credential` account when the user has none; re-check that on every Better Auth upgrade, since the acceptance rests on
+  it.
+- Settings → Security shows a connected Google or GitHub account by its connection date only (the per-view
+  `accountInfo` call to the provider was removed). Showing the address or username would mean storing it at link time.
 
 - `/list-sessions` is an ungated read of the user's own sessions now that `freshAge` is 0 (Better Auth's freshness check
   was its only guard). Low: it shows a session thief the user's other devices; gate it with step-up if that matters.

@@ -31,12 +31,13 @@ export async function setPasswordAction(input: {
  * per-address hourly cap in auth.ts's sendVerificationEmail still applies.
  */
 export async function sendVerificationAction(): Promise<
-  { ok: true } | { ok: false; error: string }
+  { ok: true; alreadyVerified?: true } | { ok: false; error: string }
 > {
   const session = await getSession();
   if (!session) return SIGNED_OUT;
   if (session.session.impersonatedBy) return IMPERSONATING;
-  if (session.user.emailVerified) return { ok: true };
+  // Confirmed in another tab since the page loaded: nothing to send.
+  if (session.user.emailVerified) return { ok: true, alreadyVerified: true };
   const report = { suppressed: false };
   try {
     await verificationSend.run(report, async () =>
