@@ -224,10 +224,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
     is built (`feat/install-offer`). Still open: measuring the landing install surfaces needs browser PostHog,
     which needs the consent decision; the landing sheet's defaults (Android only, 7-day snooze, 3 shows) are the
     design review's and the owner may revise them.
-13. Custom plan card ("Let's talk", opens the support form on Plans & limits): its name (Custom or Team), and how a
-    custom deal is delivered. Today there is no per-workspace override, so "more members, workspaces or scans" for one
-    customer can only be done by raising a plan's limits for everyone; a `workspace_overrides` row (sketched in the
-    [BYOK plan](plans/2026-11-07-byok.md)) would need a migration.
+13. ~~Custom plan card: its name, and how a custom deal is delivered~~ Decided 2026-11-08: the card stays "Custom";
+    per-workspace overrides are deferred (see "Later, once the app is stable").
 
 ## Roadmap (order)
 
@@ -292,6 +290,11 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   still cheap ([UX decisions](plans/2026-11-07-ux-decisions.md)).
 - **Release-based deploys.** Today every push to `main` deploys after CI (migrations by hand). Move to deploying
   tagged releases (for example `v0.x.y` with release notes), so `main` can take merges without each one going live.
+- **Per-workspace overrides for Custom deals (deferred 2026-11-08).** Nothing is built for Custom deals yet: the
+  card's "Contact us" opens the support form on Plans & limits, and a deal is handled by hand from there. Today a
+  limit can only be raised for a whole plan (Admin → Settings), so a single customer's "more members, workspaces or
+  scans" has no mechanism. The `workspace_overrides` row sketched in the [BYOK plan](plans/2026-11-07-byok.md) is
+  the likely shape, but it may change before it is built; it needs a migration.
 - **Self-hosting.** Vercel's free (Hobby) plan is for non-commercial use and has hard monthly limits; a busy month or
   paying users outgrow it. The exit is already built: the Docker image (`docker/Dockerfile.prod`, Bun runtime), the
   compose stack and the 1 vCPU / 1 GB load test. Decide between Vercel Pro and a small VPS (plus managed Postgres and

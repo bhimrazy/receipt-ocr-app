@@ -307,6 +307,9 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 a month or {PRO_PRICE_LABEL.year} a year.
               </p>
             </div>
+            {/* One filled button per row, on the featured card, as on /pricing. Pro links to
+                /pricing rather than sign-up: that page has the monthly/yearly choice and knows
+                whether the checkout is open. */}
             <div className="mx-auto grid max-w-md items-stretch gap-5 lg:max-w-none lg:grid-cols-3">
               <PlanCard
                 name="Free"
@@ -316,10 +319,8 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 description="Everything you need to start turning receipts into structured data."
                 features={freeFeatures(plans.free)}
                 cta={
-                  <Button asChild className="w-full">
-                    <Link href="/sign-up">
-                      Get started free <ArrowRight className="size-4" />
-                    </Link>
+                  <Button asChild className="w-full" variant="outline">
+                    <Link href="/sign-up">Start free</Link>
                   </Button>
                 }
               />
@@ -331,7 +332,7 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 features={proFeatures(plans.pro)}
                 featured
                 cta={
-                  <Button asChild className="w-full" variant="outline">
+                  <Button asChild className="w-full">
                     <Link href="/pricing">
                       See pricing <ArrowRight className="size-4" />
                     </Link>
