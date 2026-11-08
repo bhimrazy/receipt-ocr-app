@@ -6,7 +6,7 @@ copy in Infisical, synced out to Vercel, and no secret files left in the Codespa
 
 ## Layout
 
-One Infisical project, `receipt-ocr`, with three environments and one folder for operator tokens.
+One Infisical project, `receipt-ocr`, with Infisical's default environments (Development, Staging, Production) and one folder for operator tokens.
 
 | Infisical environment | Source to import from today  | Syncs to              | Notes                                |
 | --------------------- | ---------------------------- | --------------------- | ------------------------------------ |
@@ -25,13 +25,11 @@ rest; the sync must not mark them Sensitive.
 ## One-time setup (about 30 minutes)
 
 1. **Account and project.** Sign up at [infisical.com](https://infisical.com) (Infisical Cloud; check that the free plan
-   covers one project with three environments). Turn on MFA. Create the project `receipt-ocr` with environments `dev`,
-   `staging`, `prod`, and the folder `/ops` in `dev`.
+   covers one project with three environments). Turn on MFA. Create the project `receipt-ocr`; it comes with Development (`dev`),
+   Staging (`staging`) and Production (`prod`). Add the folder `/ops` in Development.
 2. **Import the local files** in the dashboard: open the environment, then drag the `.env` file onto the secrets
    table. Do `prod` from `~/.receipt-ocr-prod.env`, `staging` from `~/.receipt-ocr-staging.env`, and `dev` from the
    repo's `.env` (then move the operator tokens into `/ops`).
-   - Both home files have five lines whose key was cut to `S`. Find out what they are (most likely the storage keys,
-     `S3_*`) and fix the names before or right after import.
    - Values that exist only in Vercel as Sensitive can't be imported from Vercel; they come from these files or from
      each service's dashboard.
 3. **Check for gaps.** Compare each Infisical environment's key list with Vercel's (Settings → Environment
