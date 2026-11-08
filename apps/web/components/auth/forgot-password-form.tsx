@@ -14,6 +14,7 @@ import {
   AuthMessage,
   EmailField,
   authCardClass,
+  authFooterClass,
   authLinkClass,
 } from "./auth-field";
 import { FocusHeading } from "./focus-heading";
@@ -85,7 +86,7 @@ export function ForgotPasswordForm() {
         Enter the email you use for ReceiptOCR and we&apos;ll send you a link to choose a new
         password.
       </AuthHeading>
-      <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit}>
+      <form className="mt-5 flex flex-col gap-3.5" onSubmit={handleSubmit}>
         <EmailField
           id="forgot-email"
           label="Email"
@@ -94,8 +95,6 @@ export function ForgotPasswordForm() {
           required
           value={email}
         />
-        <Turnstile controller={turnstile} />
-        {error ? <AuthError>{error}</AuthError> : null}
         <Button
           aria-busy={turnstile.pending}
           className="mt-1 h-11 w-full"
@@ -112,7 +111,9 @@ export function ForgotPasswordForm() {
           )}
         </Button>
       </form>
-      <p className="mt-6 border-t border-border pt-5 text-center text-sm text-muted-foreground">
+      {error ? <AuthError className="mt-3">{error}</AuthError> : null}
+      <Turnstile className="mt-3" controller={turnstile} />
+      <p className={authFooterClass}>
         Remember your password?{" "}
         <Link
           className={cn(authLinkClass, "inline-flex min-h-11 min-w-11 items-center justify-center")}

@@ -39,8 +39,8 @@ export async function AuthLayout({
 }) {
   const plans = await getPlanTable();
   return (
-    <div className="relative grid min-h-screen overflow-hidden bg-background lg:grid-cols-2">
-      <aside className="relative hidden flex-col justify-between border-r border-border bg-secondary/20 p-12 lg:flex">
+    <div className="relative grid min-h-dvh overflow-x-clip bg-background lg:grid-cols-2">
+      <aside className="relative hidden flex-col justify-between gap-8 border-r border-border bg-secondary/20 p-10 lg:flex xl:p-12">
         <div aria-hidden className="grid-mask pointer-events-none absolute inset-0 opacity-30">
           <div className="receipt-grid absolute -inset-1" />
         </div>
@@ -61,7 +61,7 @@ export async function AuthLayout({
             Turn receipt photos into <span className="text-gradient">spreadsheet rows</span>
           </p>
           <p className="mt-4 text-pretty leading-7 text-muted-foreground">{subtitle}</p>
-          <ul className="mt-10 flex flex-col gap-6">
+          <ul className="mt-8 flex flex-col gap-5">
             {valueProps(plans.free.receiptsPerDay).map(({ icon: Icon, title, desc }) => (
               <li className="flex items-start gap-4" key={title}>
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
@@ -69,7 +69,7 @@ export async function AuthLayout({
                 </span>
                 <div>
                   <p className="font-medium">{title}</p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{desc}</p>
+                  <p className="mt-0.5 text-sm leading-6 text-muted-foreground">{desc}</p>
                 </div>
               </li>
             ))}
@@ -80,21 +80,28 @@ export async function AuthLayout({
         </p>
       </aside>
 
-      <main className="relative flex items-center justify-center px-4 py-12 sm:px-5 sm:py-16">
+      <div className="relative flex min-w-0 flex-col">
         <div
           aria-hidden
           className="absolute left-1/2 top-[35%] size-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-[170px] lg:hidden"
         />
-        <div className="relative z-10 flex w-full max-w-md flex-col items-center">
-          <Link
-            aria-label="ReceiptOCR home"
-            className="mb-8 inline-flex min-h-11 items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
-            href="/"
-          >
-            <Brand />
-          </Link>
-          {children}
-          <nav aria-label="Legal" className="mt-4 flex gap-6 text-sm text-muted-foreground">
+        {/* Top-anchored, not centred: a centred card moves up by half of whatever it grows by (an
+            error, a challenge). The offset puts the sign-in card near the middle and leaves room
+            for an error before the page scrolls; phones add the logo above it. */}
+        <main className="relative z-10 flex flex-1 flex-col items-center px-4 pb-4 pt-[max(1rem,calc(50dvh-24rem))] sm:px-5 lg:pt-[max(1rem,calc(50dvh-21rem))]">
+          <div className="flex w-full max-w-md flex-col items-center">
+            <Link
+              aria-label="ReceiptOCR home"
+              className="mb-6 inline-flex min-h-11 items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+              href="/"
+            >
+              <Brand />
+            </Link>
+            {children}
+          </div>
+        </main>
+        <footer className="relative z-10 flex justify-center px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <nav aria-label="Legal" className="flex gap-6 text-sm text-muted-foreground">
             <Link className={footerLink} href="/">
               Home
             </Link>
@@ -108,8 +115,8 @@ export async function AuthLayout({
               className={cn(footerLink, "h-auto px-0 font-normal hover:bg-transparent")}
             />
           </nav>
-        </div>
-      </main>
+        </footer>
+      </div>
     </div>
   );
 }

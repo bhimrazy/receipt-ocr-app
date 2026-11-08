@@ -79,8 +79,17 @@ export function useTurnstile(): TurnstileController {
  * Cloudflare Turnstile in managed, interaction-only mode: invisible unless Cloudflare needs the
  * visitor to do something. Loads Cloudflare's script only while mounted, so mount it just where a
  * form needs it. Renders nothing when no site key is set.
+ *
+ * The wrapper is a plain block, so while the widget is invisible it has no height and a margin
+ * given in `className` collapses into its neighbours': nothing moves when the script loads.
  */
-export function Turnstile({ controller }: { controller: TurnstileController }) {
+export function Turnstile({
+  controller,
+  className,
+}: {
+  controller: TurnstileController;
+  className?: string;
+}) {
   const container = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const { setToken, setBroken, attach, broken } = controller.widget;
@@ -115,7 +124,7 @@ export function Turnstile({ controller }: { controller: TurnstileController }) {
 
   if (!SITE_KEY) return null;
   return (
-    <>
+    <div className={className}>
       <Script onError={() => setBroken(true)} onReady={() => setReady(true)} src={SCRIPT_SRC} />
       <div
         className="w-full empty:hidden"
@@ -123,10 +132,10 @@ export function Turnstile({ controller }: { controller: TurnstileController }) {
         ref={container}
       />
       {broken ? (
-        <p className="text-sm leading-6 text-destructive" role="alert">
+        <p className="mt-2 text-sm leading-6 text-destructive" role="alert">
           {BROKEN_MESSAGE}
         </p>
       ) : null}
-    </>
+    </div>
   );
 }
