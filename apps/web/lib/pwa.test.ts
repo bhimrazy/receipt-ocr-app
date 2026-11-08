@@ -33,6 +33,5 @@ describe("isAppPath", () => {
     expect(isAppPath("/app")).toBe(true);
     expect(isAppPath("/app/history")).toBe(true);
     expect(isAppPath("/apple")).toBe(false);
-    expect(isAppPath("/landing-a")).toBe(false);
   });
 });

@@ -45,8 +45,8 @@ export default function AppError({
             Something went wrong
           </CardTitle>
           <CardDescription>
-            We couldn&apos;t load this page. This is usually a temporary problem reaching the
-            database or storage, and trying again often works.
+            We couldn&apos;t load this page. This is usually temporary, and trying again often
+            works.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">

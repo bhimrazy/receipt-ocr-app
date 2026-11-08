@@ -354,9 +354,11 @@ export const authEnabled = Boolean(
 
 const currentSecret = authEnv.betterAuthSecrets?.[0]?.value ?? authEnv.betterAuthSecret;
 if (currentSecret && currentSecret.length < 32 && !isBuild) {
-  console.warn(
-    "The current auth secret is shorter than 32 characters; generate a stronger one with `openssl rand -base64 32`.",
-  );
+  const message =
+    "The current auth secret is shorter than 32 characters; generate a stronger one with `openssl rand -base64 32`.";
+  // A short secret makes session cookies forgeable, so production refuses to start.
+  if (isProduction) throw new Error(message);
+  console.warn(message);
 }
 
 // Without a trusted IP header every client shares one rate-limit bucket, so a

@@ -4,8 +4,6 @@
  * and get come from `getPlanTable()` / `getCurrentPlan()` in plan-limits.ts,
  * which apply what an admin saved.
  */
-import { DEFAULT_PLANS } from "@receipt-ocr/core/plans";
-
 export {
   DEFAULT_PLAN,
   DEFAULT_PLANS,
@@ -14,9 +12,6 @@ export {
   type PlanPolicy,
   type PlanTable,
 } from "@receipt-ocr/core/plans";
-
-/** Code defaults, for the (lab) landing directions only; live pages read the saved limits. */
-export const PLANS = DEFAULT_PLANS;
 
 /** "Free plan", "Pro plan". */
 export function planLabel(plan: string): string {

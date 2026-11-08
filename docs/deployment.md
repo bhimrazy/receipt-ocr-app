@@ -343,6 +343,16 @@ To rotate:
 Changing the current version signs everyone out. Losing every secret makes stored OAuth tokens unreadable, so users
 have to sign in with their provider again.
 
+In production the current secret must be at least 32 characters, or the app refuses to start. Secrets are stored as
+Vercel Sensitive, so nobody can read them back: keep a copy in a password manager, because step 1 needs the current
+value. Without it you can still rotate by setting only the new version. That signs everyone out, and the app never
+reads stored OAuth tokens, so nothing else breaks. Since two-step sign-in shipped it also loses every TOTP secret and
+backup code sealed under the old version.
+
+The production secret was last replaced on 2026-11-08, during the pre-launch reset. Step 0 was done the same day,
+before two-step sign-in shipped: production has `BETTER_AUTH_SECRETS=1:<current secret>` and `BETTER_AUTH_SECRET`
+set to the same value.
+
 **Two-step sign-in secrets are sealed with these keys too, and never re-sealed.** Keep every version listed for as long
 as any `two_factor` row was written under it: removing one makes those authenticators unreadable, and their users can
 then only sign in after an admin reset. To check what is still in use:
@@ -424,9 +434,3 @@ Steps specific to one release, newest first.
   `http.client_ip_unresolved`; it should never appear.
 - **After deploy:** the Free plan default drops to 20 receipts a day. Change it in **Admin → Settings** if you want
   something else.
-
-## Lab design pages
-
-The `(lab)` design directions (`/landing-a` to `/landing-h`, `/final-*`) return 404 in production builds. They are
-prerendered, so set `LAB_PAGES=1` for the build, not just the runtime, to show them. The variable is listed in
-`turbo.json` under `tasks.build.env`, so Turbo passes it through.

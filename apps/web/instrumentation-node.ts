@@ -19,3 +19,18 @@ export async function loadEnvOrExit() {
     process.exit(1);
   }
 }
+
+/** Names what auth is missing in the server log; the sign-in pages only say it isn't set up. */
+export async function logAuthNotConfigured() {
+  const { authEnabled, authEnv } = await import("./lib/env");
+  if (authEnabled) return;
+  const { logger } = await import("./lib/log");
+  logger.error({
+    event: "auth.not_configured",
+    unit: "log",
+    checks: {
+      database_url: Boolean(authEnv.databaseUrl),
+      auth_secret: Boolean(authEnv.betterAuthSecret || authEnv.betterAuthSecrets),
+    },
+  });
+}

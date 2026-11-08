@@ -1,8 +1,7 @@
 # Landing page direction (2026-11-04)
 
-Three directions for the public landing page, built as real pages for the owner to compare. They live at
-`/landing-a`, `/landing-b` and `/landing-c` (route group `app/(lab)`, `noindex`) and share their parts in
-`apps/web/components/marketing/`. Copy follows `docs/product-standards.md`: no claim the code can't back up today.
+Historical: three directions for the public landing page, built as real pages for the owner to compare. They lived at
+`/landing-a` to `/landing-c` (route group `app/(lab)`, removed once Classic became the homepage). Copy follows `docs/product-standards.md`: no claim the code can't back up today.
 The persona is freelancers and small businesses first, developers second (product and market reviews of 2026-11-04).
 
 ## Research: patterns worth borrowing

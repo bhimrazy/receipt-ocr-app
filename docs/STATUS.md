@@ -145,11 +145,11 @@ Steps are in [deployment.md](deployment.md).
   to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
   no outside collaborators. The full fix is a separate Vercel project for previews, with its own token.
-- Keep every new production secret Sensitive in Vercel. The build tolerates their placeholders (fix in
-  `ci/db-migrations`); `BETTER_AUTH_SECRETS` was removed from Vercel as a stopgap and can go back once it lands.
+- Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
+  replaced on 2026-11-08 (only `BETTER_AUTH_SECRET`; keep its copy in a password manager).
 - Set `OCR_DAILY_CAP` in production as a spend guard.
-- Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`; recommended
-  `BETTER_AUTH_SECRETS=1:<current BETTER_AUTH_SECRET>`.
+- Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
+- Standing decisions and dated reminders: [decisions.md](decisions.md).
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
 - If an admin saved an OCR chain naming `gemini-3.7-flash`, re-save it in Admin → Settings.
 - Set `EMAIL_FROM` with the display name `ReceiptOCR` (for example `ReceiptOCR <noreply@...>`), matching the brand.
@@ -184,7 +184,7 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 
 ## Decisions waiting on the owner
 
-1. Classic as the homepage (then delete `app/(lab)` and `components/marketing`, ~41% of TS code).
+1. ~~Classic as the homepage (then delete `app/(lab)` and `components/marketing`)~~ Done: the lab landing variants are removed.
 2. Plan limits: daily per user (today) or monthly per workspace; prices; payment provider. See
    [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
 3. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
@@ -304,7 +304,6 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   Checkbox, Avatar, Empty, Pagination), Button aligned with base-nova, one form system on `Field`.
 - Admin Settings shows "Last saved by…" for a saved OCR chain that was discarded as invalid.
 - HEIC conversion untested (no fixture or Safari in CI); add a WebKit e2e project later.
-- Lab marketing copy (`components/marketing/**`) still says PDFs aren't supported; goes away with the lab.
 - Better Auth: verify the OAuth callback turns a banned user into `?error=BANNED_USER`.
 - Better Auth 1.7.18 (#90): `runInBackgroundOrAwait` now logs and drops errors thrown in email callbacks
   (`sendResetPassword`, `sendVerificationEmail`, `sendDeleteAccountVerification`, `sendChangeEmailConfirmation`), so

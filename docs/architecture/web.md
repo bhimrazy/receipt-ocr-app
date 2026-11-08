@@ -28,7 +28,6 @@ HTTP.
 | [`app/app`](../../apps/web/app/app)                                                                                                                                                                | Signed-in app: Home with upload panel (`/app`), History, receipt detail, Groups, Settings (plan, workspace, read-only Receipt reading from `receiptReaders`), Members                                                |
 | [`app/admin`](../../apps/web/app/admin)                                                                                                                                                            | Platform admin panel: overview, users, workspaces, operations, jobs, audit log, settings                                                                                                                             |
 | [`app/api`](../../apps/web/app/api)                                                                                                                                                                | Route handlers (below)                                                                                                                                                                                               |
-| `app/(lab)`, `components/marketing`                                                                                                                                                                | Landing-page design experiments, `noindex`, shown only in development or when the build sets `LAB_PAGES=1` (read at build time, the pages are prerendered). Pending removal (see [STATUS](../STATUS.md))             |
 | [`lib`](../../apps/web/lib)                                                                                                                                                                        | Server helpers: auth, session, HTTP adapter, env, logging                                                                                                                                                            |
 | [`proxy.ts`](../../apps/web/proxy.ts)                                                                                                                                                              | Next.js proxy (formerly middleware): optimistic cookie check for `/app` and `/admin`, and the `signed_in_hint` cookie                                                                                                |
 | `loading.tsx` in [`app/app`](../../apps/web/app/app/loading.tsx), [`app/app/receipts/[id]`](../../apps/web/app/app/receipts/[id]/loading.tsx), [`app/admin`](../../apps/web/app/admin/loading.tsx) | Skeletons streamed while a page's data loads. Data helpers (`getSession`, `getActiveScope`, `getCurrentPlan`, `getUsageSummary`) are wrapped in React `cache()`, so the layout and page share one lookup per request |
@@ -252,8 +251,7 @@ spoof one.
 | [`app/llms.txt`](../../apps/web/app/llms.txt), `llms-full.txt`, [`lib/llms.ts`](../../apps/web/lib/llms.ts) | A plain-text summary of the product for AI assistants, and the long form                                                                                     |
 | `www` redirect in `next.config.ts`                                                                          | `www.receipt-ocr.bhimraj.com.np` answers `308` to the apex host, same path                                                                                   |
 
-Structured data (JSON-LD) on the public pages comes from [`lib/seo.ts`](../../apps/web/lib/seo.ts). The lab pages keep
-their own `noindex`.
+Structured data (JSON-LD) on the public pages comes from [`lib/seo.ts`](../../apps/web/lib/seo.ts).
 
 ## Queue drain route
 
@@ -317,7 +315,7 @@ flowchart TD
   [route handler](../../apps/web/app/share-target/route.ts), which redirects to `/app/upload?shared=unavailable`
   without reading the body; the panel explains it. On Vercel a share larger than 4.5 MB is refused with a 413 in
   that case.
-- **Only the app registers it.** The landing, auth and lab pages never register the worker. Once installed it
+- **Only the app registers it.** The landing and auth pages never register the worker. Once installed it
   controls every same-origin page (scope `/`), which only matters for offline page loads and the share target.
 - **iOS** has no install prompt or share target; the hint covers installing. The status bar style is `black`, so
   pages start below it and need no top safe-area inset; the root `body` pads for side insets

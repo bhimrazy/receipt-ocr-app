@@ -15,15 +15,15 @@ container images and GitHub workflows. Deployment as a flow is on [its own page]
 
 ## Monorepo tooling
 
-| Tool       | Where                                                                  | Notes                                                                                              |
-| ---------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Bun        | [`package.json`](../../package.json) `packageManager`                  | Installs, runs scripts and tests; runs the production Docker image                                 |
-| Turborepo  | [`turbo.json`](../../turbo.json)                                       | `build`, `dev`, `typecheck`, `test` across workspaces. Lists every env variable the build may read |
-| Vitest     | [`vitest.config.mts`](../../vitest.config.mts)                         | One Node config for every `*.test.ts`; aliases point packages at their `src`                       |
-| Playwright | [`apps/web/playwright.config.ts`](../../apps/web/playwright.config.ts) | Starts `next start` on 3004; one Chromium project; a random `x-forwarded-for` per worker           |
-| ESLint     | [`eslint.config.mjs`](../../eslint.config.mjs)                         | `eslint-config-next`                                                                               |
-| Prettier   | [`.prettierrc.json`](../../.prettierrc.json)                           | Also formats Markdown                                                                              |
-| knip       | [`knip.json`](../../knip.json)                                         | Unused files and dependencies                                                                      |
+| Tool       | Where                                                                                    | Notes                                                                                              |
+| ---------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Bun        | [`package.json`](../../package.json) `packageManager`                                    | Installs, runs scripts and tests; runs the production Docker image                                 |
+| Turborepo  | [`turbo.json`](../../turbo.json)                                                         | `build`, `dev`, `typecheck`, `test` across workspaces. Lists every env variable the build may read |
+| Vitest     | [`vitest.config.mts`](../../vitest.config.mts)                                           | One Node config for every `*.test.ts`; aliases point packages at their `src`                       |
+| Playwright | [`apps/web/playwright.config.ts`](../../apps/web/playwright.config.ts)                   | Starts `next start` on 3004; one Chromium project; a random `x-forwarded-for` per worker           |
+| ESLint     | [`eslint.config.mjs`](../../eslint.config.mjs)                                           | `eslint-config-next`                                                                               |
+| bun fmt    | [`.prettierrc.json`](../../.prettierrc.json), [`.prettierignore`](../../.prettierignore) | Bun's built-in formatter, Prettier-compatible output; also formats Markdown                        |
+| knip       | [`knip.json`](../../knip.json)                                                           | Unused files and dependencies                                                                      |
 
 Packages have no build output: each `build` script is `tsc --noEmit`, and Next.js compiles their TypeScript source
 directly (`transpilePackages`).

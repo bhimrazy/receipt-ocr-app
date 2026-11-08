@@ -29,11 +29,6 @@ test("a stale hint without a session lands on sign-in and is cleared", async ({
   expect((await context.cookies()).find((c) => c.name === "signed_in_hint")).toBeUndefined();
 });
 
-test("lab design pages are not served in a normal build", async ({ page }) => {
-  const res = await page.goto("/landing-a");
-  expect(res?.status()).toBe(404);
-});
-
 test("a failed support panel chunk shows a fallback with retry instead of breaking the page", async ({
   page,
 }) => {
