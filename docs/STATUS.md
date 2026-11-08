@@ -123,9 +123,9 @@ Steps are in [deployment.md](deployment.md).
   `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies the squashed baseline with
   row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
   Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
-- Queue drain (#96): `CRON_SECRET` is already in Vercel. Store it in Supabase Vault and run the pg_cron SQL in
-  [production environment, step 8](production-environment.md#8-queue-drain-cron) (pg_cron + pg_net + Vault), then
-  check `cron.job_run_details` and `net._http_response`. Until then only the daily Vercel cron recovers stuck jobs.
+- Queue drain: done 2026-11-08. A new `CRON_SECRET` is in Vercel and in Supabase Vault (`cron_secret`); pg_cron job
+  `drain-jobs` calls `/api/jobs/drain` every 5 minutes ([step 8](production-environment.md#8-queue-drain-cron)). Check
+  `net._http_response` for 200s after the next deploy.
 - Production deploys automatically after CI passes on a push to `main`. Manual runs are allowed only from `main`.
   Once `ci/db-migrations` lands, the automatic deploy skips any release that changes `apps/web/drizzle/` since the
   last successful production deploy run; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
@@ -152,7 +152,7 @@ Steps are in [deployment.md](deployment.md).
 - Standing decisions and dated reminders: [decisions.md](decisions.md).
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
 - If an admin saved an OCR chain naming `gemini-3.7-flash`, re-save it in Admin → Settings.
-- Set `EMAIL_FROM` with the display name `ReceiptOCR` (for example `ReceiptOCR <noreply@...>`), matching the brand.
+- `EMAIL_FROM` is `ReceiptOCR <noreply@receipt-ocr.bhimraj.com.np>` (set 2026-11-08). `GROQ_API_KEY` is set for Production and Preview (2026-11-08).
 - Groq: enable Zero Data Retention in the Groq org's Data Controls before adding `GROQ_API_KEY`; without it Groq may
   keep inputs and outputs for up to 30 days, and the privacy policy says it does not ([deployment.md](deployment.md)).
 - OpenAI: requests are kept up to 30 days for abuse monitoring; zero data retention needs OpenAI's approval. The
