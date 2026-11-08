@@ -34,6 +34,12 @@ The database, auth secret and site URL are already set; see [Already set](#alrea
 - **Config**: a setting that isn't secret (a bucket name, an email address). Leave Sensitive off so you can see it
   later.
 
+**Never mark a variable that is read at build Sensitive.** Production is built in GitHub Actions (`vercel pull`, then
+`vercel build`), and `vercel pull` returns Sensitive values empty, so the build sees them as unset while the running
+site still gets them. Read at build: every `NEXT_PUBLIC_*`, `SENTRY_DSN`, `POSTHOG_KEY` and
+`OTEL_EXPORTER_OTLP_ENDPOINT` (they decide what the browser bundle, CSP and privacy page include). None of them is a
+secret.
+
 Nothing changes on the live site until the next deploy ([step 7](#7-deploy-and-check)).
 
 > Only add a variable once you have its real value. A placeholder is worse than nothing: the app thinks the service
@@ -543,8 +549,9 @@ in Vercel), maps deleted before deploy (security plan M11). Docker: pass `--buil
 1. [posthog.com](https://posthog.com) → sign up, region **US** (or EU; it decides the host). Project `ReceiptOCR`.
 2. **Billing:** stay on Free with no card: usage is hard-capped at the free allotment (1M events a month) and PostHog
    emails at 80% and 100%. If a card is ever added, set **Product analytics → billing limit $0** the same day.
-3. Vercel (Production): `POSTHOG_KEY` (the project API key, stored as **Sensitive**: it is read on the server only,
-   so it has no `NEXT_PUBLIC_` name) and `POSTHOG_HOST`
+3. Vercel (Production): `POSTHOG_KEY` (the `phc_` project key, **Config**, not Sensitive: it is read at build for the
+   privacy page, and PostHog designs it to be public; it has no `NEXT_PUBLIC_` name because only the server sends
+   events) and `POSTHOG_HOST`
    (`https://us.i.posthog.com` or `https://eu.i.posthog.com`).
 4. Redeploy: the privacy page names PostHog only when `POSTHOG_KEY` is set at build.
 5. Check: sign up or upload a receipt, then **Activity** in PostHog shows `signed_up` or `receipt_uploaded` with the
@@ -565,15 +572,15 @@ Set once per provider; recheck after creating a new project. Why each one, and t
 
 **Privacy** (done for production on 2026-11-08):
 
-- [ ] **Sentry → Settings → Projects → receipt-ocr → Security & Privacy:** **Data Scrubber** on, **Use Default
+- [x] **Sentry → Settings → Projects → receipt-ocr → Security & Privacy:** **Data Scrubber** on, **Use Default
       Scrubbers** on, **Prevent Storing of IP Addresses** on, **Additional Sensitive Fields** `email`. The same
       switches exist org-wide under **Settings → receiptocr → Security & Privacy**.
-- [ ] **Sentry → Projects → receipt-ocr → Client Security → Allowed Domains:** `receipt-ocr.bhimraj.com.np` (not
+- [x] **Sentry → Projects → receipt-ocr → Client Security → Allowed Domains:** `receipt-ocr.bhimraj.com.np` (not
       `*`); add staging domains as extra lines. Server-side events are unaffected (they send no `Origin` header).
       Keep **Enable JavaScript source fetching** on until source maps are uploaded.
-- [ ] **PostHog → Settings → Project → Privacy → IP data capture configuration:** **Discard client IP data** on.
-- [ ] **Vercel:** `POSTHOG_KEY` stored as **Sensitive** (server-only; no `NEXT_PUBLIC_` name, since there is no
-      browser PostHog).
+- [x] **PostHog → Settings → Project → Privacy → IP data capture configuration:** **Discard client IP data** on.
+- [x] **Vercel:** `POSTHOG_KEY` stored as Config, not Sensitive (see above: a Sensitive value is empty at build, and the
+      privacy page then omits PostHog).
 
 **Quota, alerts and dashboards** (O1 to O10 in the review):
 
