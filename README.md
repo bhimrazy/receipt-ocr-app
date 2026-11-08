@@ -108,14 +108,14 @@ test are in [`bench/README.md`](bench/README.md).
 
 CI (`.github/workflows/ci.yml`) runs the checks below, which you can run locally too:
 
-| Script                 | Checks                                                  |
-| ---------------------- | ------------------------------------------------------- |
-| `bun run format:check` | Prettier (`bun run format` to fix)                      |
-| `bun run lint`         | ESLint with `eslint-config-next`                        |
-| `bun run check:deps`   | One version per package, exact pins, `bun.lock` in sync |
-| `bun run knip`         | Unused files and dependencies                           |
-| `bun run audit`        | `bun audit`, failing on high or critical                |
-| `bun run typecheck`    | `tsc` in every package and in `bench/`                  |
+| Script                 | Checks                                                   |
+| ---------------------- | -------------------------------------------------------- |
+| `bun run format:check` | `bun fmt`, Prettier-compatible (`bun run format` to fix) |
+| `bun run lint`         | ESLint with `eslint-config-next`                         |
+| `bun run check:deps`   | One version per package, exact pins, `bun.lock` in sync  |
+| `bun run knip`         | Unused files and dependencies                            |
+| `bun run audit`        | `bun audit`, failing on high or critical                 |
+| `bun run typecheck`    | `tsc` in every package and in `bench/`                   |
 
 ## License
 
