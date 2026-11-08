@@ -277,6 +277,27 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(await planOf(workspaceId)).toBe("free");
       await step(0, {});
       expect(await planOf(workspaceId)).toBe("pro");
+      // Each applied event reports a plan change only when it moves the workspace.
+      const applyAgain = async (fields: Partial<SubscriptionSnapshot>, offsetMs: number) => {
+        const e = event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId,
+            updatedAt: new Date(Date.now() + offsetMs),
+            ...fields,
+          }),
+        );
+        const recorded = await run(recordBillingEvent(e));
+        if (recorded.kind !== "recorded") throw new Error("not recorded");
+        const [row] = await db((d) =>
+          d
+            .select({ id: billingEvents.id })
+            .from(billingEvents)
+            .where(eq(billingEvents.providerEventId, e.eventId)),
+        );
+        return run(applyBillingEvent(row!.id));
+      };
+      expect(await applyAgain({}, 500)).not.toHaveProperty("planChange");
       await step(1_000, { status: "past_due" });
       expect(await planOf(workspaceId)).toBe("pro");
       expect((await run(workspaceBilling(workspaceId)))?.graceEndsAt).toBeInstanceOf(Date);
@@ -286,8 +307,16 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         cancelAtPeriodEnd: true,
         entitled: true,
       });
-      await step(3_000, { status: "canceled", cancelAtPeriodEnd: false });
+      expect(
+        await applyAgain({ status: "canceled", cancelAtPeriodEnd: false }, 3_000),
+      ).toMatchObject({
+        outcome: "applied",
+        planChange: { from: "pro", to: "free" },
+      });
       expect(await planOf(workspaceId)).toBe("free");
+      expect(await applyAgain({ status: "active" }, 4_000)).toMatchObject({
+        planChange: { from: "free", to: "pro" },
+      });
     });
 
     it("covers exactly one workspace: the owner's other and new workspaces stay Free", async () => {

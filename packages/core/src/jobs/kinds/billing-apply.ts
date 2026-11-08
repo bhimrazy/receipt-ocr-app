@@ -24,10 +24,16 @@ export const billingApply: JobDefinition<BillingApplyPayload, Db> = {
 
   run: (payload) =>
     applyBillingEvent(payload.eventId).pipe(
-      Effect.tap(({ outcome, organizationId }) =>
+      Effect.tap((result) =>
         annotateEvent({
-          ...(organizationId ? { organization_id: organizationId } : {}),
-          billing: { outcome },
+          ...(result.organizationId ? { organization_id: result.organizationId } : {}),
+          billing: {
+            outcome: result.outcome,
+            // The product event `plan_changed { from, to }`, for the upgrade funnel.
+            ...("planChange" in result && result.planChange
+              ? { plan_from: result.planChange.from, plan_to: result.planChange.to }
+              : {}),
+          },
         }),
       ),
       Effect.tapError((error) => annotateEvent({ error: errorFields(error) })),

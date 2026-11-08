@@ -223,6 +223,10 @@ What "used" means is in [core: quota ledger semantics](../core.md#design-princip
   ([`lib/csp.ts`](../../../apps/web/lib/csp.ts)).
 - **Logs.** The webhook adds provider, event type, event id, subscription id and status to its wide event. No email, no
   card data.
+- **Product event `plan_changed`.** When an applied event moves its workspace between plans (activated, lapsed past the
+  grace period, cancelled), the `billing.apply_event` job's wide event carries `billing.plan_from` and
+  `billing.plan_to` (`free` or `pro`) with `organization_id`. Mapping it to PostHog is a follow-up once the analytics
+  catalogue (PR #141) lands.
 
 ## Pure files
 

@@ -178,6 +178,9 @@ export const EVENT_SCHEMA = {
       outcome: "token",
       /** Why a webhook was refused: `missing-signature`, `bad-signature`, `stale-signature`, `bad-body`. */
       rejection: "token",
+      /** Set when an applied event moved its workspace between plans (`free`, `pro`): the `plan_changed` product event. */
+      plan_from: "token",
+      plan_to: "token",
     },
   },
 

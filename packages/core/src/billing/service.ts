@@ -209,6 +209,9 @@ export const recordBillingEvent = (event: BillingEvent) =>
     ),
   );
 
+/** A subscription moved its workspace between plans (activated, lapsed or ended). */
+export type PlanChange = { from: "free" | "pro"; to: "free" | "pro" };
+
 export type ApplyOutcome =
   /** The event was applied before (a job retried after its commit). */
   | "already-applied"
@@ -244,7 +247,11 @@ export const applyBillingEvent = (eventId: string) =>
         if (row.processedAt) {
           return { outcome: "already-applied" as ApplyOutcome, organizationId: row.organizationId };
         }
-        const finish = async (outcome: ApplyOutcome, organizationId: string | null) => {
+        const finish = async (
+          outcome: ApplyOutcome,
+          organizationId: string | null,
+          planChange?: PlanChange,
+        ) => {
           await tx
             .update(billingEvents)
             .set({
@@ -253,7 +260,7 @@ export const applyBillingEvent = (eventId: string) =>
               processedAt: new Date(),
             })
             .where(eq(billingEvents.id, eventId));
-          return { outcome, organizationId };
+          return { outcome, organizationId, ...(planChange ? { planChange } : {}) };
         };
         const event = billingEventSchema.parse(row.payload);
         const snapshot = event.subscription;
@@ -320,7 +327,11 @@ export const applyBillingEvent = (eventId: string) =>
             providerSubscriptionId: snapshot.subscriptionId,
           });
         }
-        return finish("applied", organizationId);
+        // What this subscription grants, before and after: the product event "plan changed".
+        const now = new Date();
+        const from = stored && isEntitled(entitlementOf(stored), now) ? "pro" : "free";
+        const to = isEntitled({ ...values, status: snapshot.status }, now) ? "pro" : "free";
+        return finish("applied", organizationId, from === to ? undefined : { from, to });
       }),
     ),
   );
