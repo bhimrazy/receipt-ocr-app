@@ -65,6 +65,34 @@ infisical run --env=prod -- bun dbcheck.ts     # scripts read process.env instea
 The CLI is renaming its commands (`infisical secrets-manager …`, alias `sm`); if a command above is rejected, check
 `infisical --help`. Avoid `infisical export` to a file: that recreates the file we're getting rid of.
 
+## Where it stands (2026-11-08)
+
+Imported: Development `/` 15 and `/ops` 5, Staging 13, Production 26 (the local files plus every non-Sensitive value
+read from Vercel's API).
+
+**Pending**: 23 values that are Sensitive in Vercel (unreadable) and were blank locally. Each is a placeholder
+`PENDING` in a `/pending` folder (Production 15, Staging 8), with a comment saying where to get it. `/pending` is
+outside the synced path `/`, so a placeholder can never reach Vercel. To fill one: get the value, set it, move the
+secret to `/`, delete the placeholder.
+
+| Group                   | Keys                                                                               | How                                                                              |
+| ----------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Readable in a dashboard | `GOOGLE_CLIENT_ID`, `S3_ENDPOINT`, `PADDLE_WEBHOOK_SECRET`, `TURNSTILE_SECRET_KEY` | Copy                                                                             |
+| New key, revoke old     | Gemini, Anthropic, Groq, R2 token pair, Paddle API key, Axiom ingest token         | Create, put in Infisical and Vercel, redeploy, then revoke the old one           |
+| New client secret       | `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_SECRET`                                     | Add a second secret in the provider, deploy it, delete the old                   |
+| Generate                | `CRON_SECRET`                                                                      | `openssl rand -hex 32`; set in Vercel and in the Supabase `pg_cron` job together |
+| Auth secret             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_SECRETS`                                        | See below                                                                        |
+
+**Auth secret.** The live value can't be read back, so it can't be kept as an old version in `BETTER_AUTH_SECRETS`.
+A fresh secret signs everyone out and makes anything encrypted with the old one unreadable: authenticator (2FA)
+secrets and encrypted OAuth tokens, so those users re-enrol 2FA and re-link. Acceptable before launch (the data is
+disposable); after launch, rotate only with the old value in hand ([how](deployment.md#rotating-the-auth-secret)).
+Until then, the live value stays in Vercel and nothing is lost by waiting.
+
+**Syncing to Vercel.** Turn it on only when `/pending` is empty, with "Import Secrets (Prioritize Infisical)" and
+**Disable Secret Deletion**. Never "Overwrite Destination Secrets" while anything is missing: it deletes Vercel
+variables that Infisical lacks, which takes production down.
+
 ## Rotating a key
 
 Change it in the service, paste the new value into Infisical, let the sync push it, redeploy
