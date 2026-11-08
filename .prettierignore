@@ -5,6 +5,6 @@ coverage
 apps/web/drizzle
 apps/web/playwright-report
 apps/web/test-results
-bench/results
+packages/bench/results
 docs/reviews
 packages/email/src/generated.ts

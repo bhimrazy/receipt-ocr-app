@@ -44,14 +44,14 @@ jobs:
         run: scripts/load.sh $SCENARIOS
       - name: Job summary
         if: always()
-        run: cat bench/results/latest.md >> "$GITHUB_STEP_SUMMARY" || true
+        run: cat packages/bench/results/latest.md >> "$GITHUB_STEP_SUMMARY" || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: load-results
           path: |
-            bench/results/latest.md
-            bench/results/load-*.json
-            bench/results/load-*/*.k6.log
-            bench/results/load-*/samples.tsv
+            packages/bench/results/latest.md
+            packages/bench/results/load-*.json
+            packages/bench/results/load-*/*.k6.log
+            packages/bench/results/load-*/samples.tsv
           retention-days: 30

@@ -67,6 +67,7 @@ flowchart LR
 | Paddle Billing        | Subscriptions for Pro: checkout, payment, tax, invoices, portal     | `PADDLE_*`, `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` (see [billing](flows/billing.md)) |
 | Google Analytics 4    | Optional visit counts on public pages, only after consent           | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))                             |
 | Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                       | automatic when `VERCEL=1`                                                       |
+| Axiom (any OTLP host) | Optional copy of the wide-event logs, as OTLP log records           | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`                     |
 
 Every service except Postgres and auth is optional at runtime: without a Gemini key the app still serves history and
 exports, and without Resend mail is logged instead of sent. The full variable list is in
@@ -102,16 +103,16 @@ flowchart TD
 `packages/db` directly for Better Auth's adapter and a few membership counts. All receipt work goes through
 `packages/core`.
 
-| Path                                         | Role                                                                                                            | Page                     |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| [`apps/web`](../../apps/web)                 | Pages, route handlers, server actions, Better Auth config. Thin adapters over core.                             | [web.md](web.md)         |
-| [`packages/core`](../../packages/core)       | The receipt workflow, receipt groups, quota, usage ledger, billing, settings, admin writes. Effect TS services. | [core.md](core.md)       |
-| [`packages/ai`](../../packages/ai)           | One model call: schema, prompt, error kinds, usage, the model list and its prices.                              | [ai.md](ai.md)           |
-| [`packages/db`](../../packages/db)           | Drizzle schema for every table and the shared connection pool.                                                  | [db.md](db.md)           |
-| [`packages/storage`](../../packages/storage) | S3 client, object keys, signed read URLs.                                                                       | [storage.md](storage.md) |
-| [`packages/email`](../../packages/email)     | Resend sender and React Email templates (HTML + plain text).                                                    | [email.md](email.md)     |
-| [`packages/ui`](../../packages/ui)           | shadcn-style primitives on Base UI, Tailwind v4 theme tokens.                                                   | [ui.md](ui.md)           |
-| `bench/`, `scripts/`, `docker/`, `.github/`  | OCR benchmark, load test, dependency checks, images, CI and deploys.                                            | [tooling.md](tooling.md) |
+| Path                                                 | Role                                                                                                            | Page                     |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| [`apps/web`](../../apps/web)                         | Pages, route handlers, server actions, Better Auth config. Thin adapters over core.                             | [web.md](web.md)         |
+| [`packages/core`](../../packages/core)               | The receipt workflow, receipt groups, quota, usage ledger, billing, settings, admin writes. Effect TS services. | [core.md](core.md)       |
+| [`packages/ai`](../../packages/ai)                   | One model call: schema, prompt, error kinds, usage, the model list and its prices.                              | [ai.md](ai.md)           |
+| [`packages/db`](../../packages/db)                   | Drizzle schema for every table and the shared connection pool.                                                  | [db.md](db.md)           |
+| [`packages/storage`](../../packages/storage)         | S3 client, object keys, signed read URLs.                                                                       | [storage.md](storage.md) |
+| [`packages/email`](../../packages/email)             | Resend sender and React Email templates (HTML + plain text).                                                    | [email.md](email.md)     |
+| [`packages/ui`](../../packages/ui)                   | shadcn-style primitives on Base UI, Tailwind v4 theme tokens.                                                   | [ui.md](ui.md)           |
+| `packages/bench/`, `scripts/`, `docker/`, `.github/` | OCR benchmark, load test, dependency checks, images, CI and deploys.                                            | [tooling.md](tooling.md) |
 
 ## Terms used in these pages
 
@@ -186,7 +187,7 @@ several of them is in the [security audit](../reviews/2026-11-06-security-audit.
 | Planned                                | Today                                                                                                                                                                                   | Plan                                                                                                                                                                                        |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/worker` for the job queue        | The [job queue](flows/jobs.md) is drained by `/api/jobs/drain` (pg_cron every 5 minutes, daily Vercel cron) and by the upload, retry and poll routes in `after()`                       | [Durable background jobs](../plans/2026-11-06-jobs-queue.md), Tracks B to D; also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
-| OTLP export (Axiom), PostHog, Sentry   | One [wide event](flows/observability.md) per unit of work on stdout, through an allowlist                                                                                               | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
+| PostHog, Sentry                        | One [wide event](flows/observability.md) per unit of work on stdout and, when configured, OTLP (Axiom)                                                                                  | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
 | Usage screens for customers and admins | Rollup queries exist in `usage.ts`; only the daily meter is shown                                                                                                                       | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                                         |
 | Passkeys and two-factor                | Email/password and OAuth only (PR #95 in review)                                                                                                                                        | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
 | Scan packs                             | Not built; the [billing page](flows/billing.md#how-scan-packs-will-fit) says where they fit                                                                                             | [Payments](../plans/2026-11-07-payments.md)                                                                                                                                                 |

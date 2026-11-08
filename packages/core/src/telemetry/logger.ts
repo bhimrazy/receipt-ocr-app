@@ -9,8 +9,8 @@ import type { WideEvent } from "./schema";
  * for errors), which is what Vercel and Docker collect, with stable keys:
  * `timestamp` (ISO 8601), `level` (`info` or `error`), `event`, the
  * deployment fields, then the event's own fields after the allowlist.
- * An OTLP exporter can ship the same object later; see
- * docs/plans/2026-11-06-observability.md.
+ * Registered sinks (the OTLP exporter in `otlp.ts`, when configured) get the
+ * same sampled, sanitised object; see docs/plans/2026-11-06-observability.md.
  */
 
 type Environment = {
@@ -24,7 +24,7 @@ type Environment = {
 let environment: Environment | undefined;
 
 /** Read on first use, so it sees env loaded after import. */
-function deployment(): Environment {
+export function deploymentFields(): Environment {
   const env = process.env;
   environment ??= {
     service: env.OTEL_SERVICE_NAME || "web",
@@ -56,14 +56,100 @@ export type EmitOptions = {
   /** Fast, successful, frequent work (page renders, polls): subject to LOG_SAMPLE_RATE. */
   routine?: boolean;
   level?: "info" | "error";
+  /** Stdout only, never the sinks: for a sink reporting its own failure. */
+  localOnly?: boolean;
 };
+
+/** An event as written: the sanitised fields with timestamp, level, name and deployment. */
+export type EventRecord = {
+  timestamp: string;
+  level: "info" | "error";
+  event: string;
+} & Record<string, unknown>;
+
+/** Somewhere else events go, besides stdout. `write` must not block or throw. */
+export interface EventSink {
+  write(record: EventRecord): void;
+  flush(): Promise<void>;
+  shutdown(): Promise<void>;
+}
+
+type SinkState = {
+  sinks: Set<EventSink>;
+  /** Runs a flush after the current response (Next's `after()`); throws outside a request. */
+  scheduler?: () => void;
+  flushPending: boolean;
+};
+
+/**
+ * On globalThis because instrumentation (which registers sinks) and the app
+ * are bundled separately but share the process.
+ */
+const state: SinkState = ((
+  globalThis as { __receiptOcrEventSinks?: SinkState }
+).__receiptOcrEventSinks ??= { sinks: new Set(), flushPending: false });
+const sinks = state.sinks;
+
+/** Adds a sink; returns its removal. */
+export function addEventSink(sink: EventSink): () => void {
+  sinks.add(sink);
+  return () => sinks.delete(sink);
+}
+
+/**
+ * Sets how a flush is scheduled after the current unit of work: the web app
+ * passes `after(flushEventSinks)`. One flush is pending at a time; an event
+ * written once it has started schedules the next. Where scheduling throws
+ * (outside a request), the sink's own batch timer sends it.
+ */
+export function setFlushScheduler(scheduler: (() => void) | undefined): void {
+  state.scheduler = scheduler;
+}
+
+function requestFlush() {
+  if (state.flushPending || !state.scheduler) return;
+  try {
+    state.scheduler();
+    state.flushPending = true;
+  } catch {
+    // Not in a request: the batch timer covers it.
+  }
+}
+
+const settleWithin = async (work: Promise<unknown>[], timeoutMs: number): Promise<void> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+    timer.unref?.();
+  });
+  await Promise.race([Promise.allSettled(work), timeout]);
+  clearTimeout(timer);
+};
+
+/** Sends what the sinks hold, giving up after `timeoutMs`. Never rejects. */
+export function flushEventSinks(timeoutMs = 2_000): Promise<void> {
+  state.flushPending = false;
+  if (sinks.size === 0) return Promise.resolve();
+  return settleWithin(
+    [...sinks].map((sink) => Promise.resolve().then(() => sink.flush())),
+    timeoutMs,
+  );
+}
+
+/** Flushes and closes every sink (SIGTERM on a long-lived server). Never rejects. */
+export function shutdownEventSinks(timeoutMs = 5_000): Promise<void> {
+  if (sinks.size === 0) return Promise.resolve();
+  const closing = [...sinks].map((sink) => Promise.resolve().then(() => sink.shutdown()));
+  sinks.clear();
+  return settleWithin(closing, timeoutMs);
+}
 
 /** Serialises an event as it will be written, or null when sampling drops it. */
 export function formatEvent(
   event: LogInput,
   options: EmitOptions = {},
   random: () => number = Math.random,
-): { level: "info" | "error"; line: string } | null {
+): { level: "info" | "error"; line: string; record: EventRecord } | null {
   const level = options.level ?? levelOf(event);
   const decision = sampleDecision(
     { ...event, level },
@@ -74,19 +160,19 @@ export function formatEvent(
   if (!decision.keep) return null;
   const { fields, dropped, redacted } = sanitize(event);
   delete fields.level;
-  const name = fields.event ?? "unknown";
+  const name = typeof fields.event === "string" ? fields.event : "unknown";
   delete fields.event;
-  const line = JSON.stringify({
+  const record: EventRecord = {
     timestamp: new Date().toISOString(),
     level,
     event: name,
-    ...deployment(),
+    ...deploymentFields(),
     ...fields,
     ...(decision.rate < 1 ? { sample_rate: decision.rate } : {}),
     ...(dropped.length > 0 ? { dropped_fields: dropped } : {}),
     ...(redacted > 0 ? { redacted_secrets: redacted } : {}),
-  });
-  return { level, line };
+  };
+  return { level, line: JSON.stringify(record), record };
 }
 
 /** Never throws: logging must not break the request or job it describes. */
@@ -96,6 +182,15 @@ function emit(event: LogInput, options?: EmitOptions) {
     if (!formatted) return;
     if (formatted.level === "error") console.error(formatted.line);
     else console.info(formatted.line);
+    if (options?.localOnly) return;
+    for (const sink of sinks) {
+      try {
+        sink.write(formatted.record);
+      } catch {
+        // A sink that throws loses this event; stdout already has it.
+      }
+    }
+    if (sinks.size > 0) requestFlush();
   } catch {
     try {
       console.error(

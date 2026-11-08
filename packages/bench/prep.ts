@@ -1,7 +1,12 @@
 // Image preparation for the OCR benchmark: what gets sent to the model, in memory only.
 // Sources are read, never written.
 import sharp from "sharp";
-import { encodeToTarget, MAX_LONG_EDGE, planSize, type Encoder } from "../apps/web/lib/upload-prep";
+import {
+  encodeToTarget,
+  MAX_LONG_EDGE,
+  planSize,
+  type Encoder,
+} from "../../apps/web/lib/upload-prep";
 
 /**
  * - `none`: the file as is.

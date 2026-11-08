@@ -9,6 +9,7 @@ This repo is a Bun/Turborepo Receipt OCR MVP.
 - `packages/db`: Drizzle/Postgres schema and database client.
 - `packages/storage`: S3-compatible storage helpers. Configure for Cloudflare R2 first, but keep it portable to AWS S3 or RustFS (local).
 - `packages/ai`: AI SDK OCR extraction. Gemini is the first provider, but do not hard-code orchestration to Gemini-only concepts.
+- `packages/bench`: OCR benchmark and k6 load test.
 - `packages/core`: Effect TS services and receipt processing workflow.
 
 ## Status and Plans
@@ -88,7 +89,7 @@ bun run typecheck && bun run test && bun run build
 scripts/test.sh   # unit + Playwright e2e against the compose stack (when UI or API behaviour changed)
 ```
 
-Dependencies are exact pins and at least 7 days old; `bun run check:deps` enforces the pins. `bench/` holds the OCR
+Dependencies are exact pins and at least 7 days old; `bun run check:deps` enforces the pins. `packages/bench` holds the OCR
 benchmark (`bun run bench:ocr`) and the k6 load test (`scripts/load.sh`).
 
 The signed-in app always needs a real session and database; there is no mock or preview data. Without `DATABASE_URL` and

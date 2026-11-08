@@ -30,7 +30,7 @@ How the system is built (every app and package, the main flows and the data mode
 | #36           | UX sweep: honest landing copy, no sideways scroll at 390 px, quota wording that matches the ledger                                                                                                                     |
 | #37           | Postgres job queue: `jobs` table, leases, retries with backoff, per-user fairness, provider cooldowns; uploads and retries run through it in `after()` ([flow](architecture/flows/jobs.md)); migration `0008`          |
 | #38           | Hardening: session check before the upload body, PDF page cap, per-email auth limits, CSP reports, health endpoints, SECURITY.md, [runbook](runbook.md)                                                                |
-| #40           | Load test suite on a 1 vCPU / 1 GB server (`scripts/load.sh`, manual `load.yml`); [results](../bench/results/load-2026-11-06.md)                                                                                       |
+| #40           | Load test suite on a 1 vCPU / 1 GB server (`scripts/load.sh`, manual `load.yml`); [results](../packages/bench/results/load-2026-11-06.md)                                                                              |
 
 ## Shipped to `main` (2026-11-07)
 
@@ -228,7 +228,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 1. ~~Usage capture + quota ledger~~ (shipped in #27).
 2. Usage surfaces for customers and admins ([usage design](plans/2026-11-06-usage-design.md)).
-3. Observability: wide events (#52), then OTLP export to Axiom, then the optional Sentry and server PostHog extras
+3. Observability: wide events (#52), OTLP export to Axiom (built 2026-11-08), then the optional Sentry and server PostHog extras
    ([observability](plans/2026-11-06-observability.md)) with the [security requirements](reviews/2026-11-06-security-plan.md).
 4. Accuracy: arithmetic checks, low thinking, a real benchmark set, then Flash-Lite-first cascade
    ([extraction cost and accuracy](plans/2026-11-06-extraction-cost-accuracy.md)). No Docling/OCR-first pipeline.
@@ -247,7 +247,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
    Payment provider for a Nepal-based seller: Paddle (MoR) first, Dodo fallback, Khalti/eSewa prepaid months for NPR
    later; no Stripe Atlas yet ([payments](plans/2026-11-07-payments.md), [NPR rails](plans/2026-11-07-payments-nepal.md)).
 8. Load test: `scripts/load.sh` (by hand, and from `.github/workflows/load.yml` on demand) runs the production image on
-   1 vCPU / 1 GB against k6; [`bench/README.md`](../bench/README.md#load-test-small-server). Re-run it after changes
+   1 vCPU / 1 GB against k6; [`packages/bench/README.md`](../packages/bench/README.md#load-test-small-server). Re-run it after changes
    to the hot path and commit the new summary. Latest: reads hold 200/s; uploads hold 12/s and fail by 48/s since the job queue (ladder not yet filled in).
 9. Product: landing claims, free no-signup tool, duplicate detection, per-currency totals, accounting exports.
    Currency honesty (no USD default, 3-decimal amounts) and conversion to a home currency:
@@ -345,7 +345,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Email change: the new address gets the sign-up wording ("finish setting up your account") from
   `verificationEmail`; and an unverified account's old address gets no notice (Better Auth skips the approval step).
 - Delete `apps/web/lib/receipt-permissions.ts` in favour of one permission map in core.
-- Benchmark: results are committed for 31 real receipts ([2026-11-07-real](../bench/results/2026-11-07-real.md)); the Nepal set is still small, and the arithmetic-checks cascade (`--cascade`) does not exist yet.
+- Benchmark: results are committed for 31 real receipts ([2026-11-07-real](../packages/bench/results/2026-11-07-real.md)); the Nepal set is still small, and the arithmetic-checks cascade (`--cascade`) does not exist yet.
 - Load test findings (after #37): upload capacity on the small server fell from 64/s to between 12/s (holds) and
   48/s (fails: end-to-end p95 17 s, Postgres CPU 87%). The quota count (`ocr_rounds` per user, per page and twice per
   upload) is still the top Postgres statement, with the job queue queries next. Next: a performance track that fills

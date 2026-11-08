@@ -5,5 +5,5 @@
 set -euo pipefail
 # grep exits 1 when every file is filtered out; that's the "nothing shipped" answer, not an error.
 git diff --name-only --no-renames "$1" "$2" |
-  { grep -vE '^(docs|bench|scripts)/|\.md$|\.test\.tsx?$|^apps/web/e2e/|^\.github/|^(knip\.json|\.prettier[a-z]*|\.gitignore)$' || true; }
+  { grep -vE '^(docs|packages/bench|scripts)/|\.md$|\.test\.tsx?$|^apps/web/e2e/|^\.github/|^(knip\.json|\.prettier[a-z]*|\.gitignore)$' || true; }
 git diff --name-only --no-renames "$1" "$2" -- .github/vercel-cli/

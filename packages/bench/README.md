@@ -24,10 +24,10 @@ test's receipt) are skipped.
 - Fixtures: `<dir>/<id>.{png,jpg,jpeg,webp,pdf}` plus `<id>.json` ground truth (same fields as the extraction; omit
   a field to skip it; `category` and `merchant` may list several acceptable values; `receiptDate` is the AD date, and
   a printed Bikram Sambat date goes only in `_meta` or `_notes`, which scoring ignores). `--fixtures <dir>` picks the
-  set (default `bench/fixtures`); its folder name goes into the result file names, so sets don't overwrite each other.
+  set (default `packages/bench/fixtures`; relative paths resolve from `packages/bench`); its folder name goes into the result file names, so sets don't overwrite each other.
 - **Real receipts are private and never committed.** The owner's set lives outside the repo
   (`~/receipt-ocr-real-receipts/`; some show customer names). Point `--fixtures` at it; don't copy it in.
-  `bench/fixtures-local/` is gitignored as a safety net. Raw results for a private set hold its extracted text and
+  `packages/bench/fixtures-local/` is gitignored as a safety net. Raw results for a private set hold its extracted text and
   stay local (gitignored); summaries hold only scores and sizes. The six starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, KWD three decimals, EUR comma
   decimals, IDR dot thousands, a tip, a 34-line receipt. Add real, PII-free receipts the same way (faded
   thermal, skewed phone shots, handwritten totals).
@@ -95,18 +95,18 @@ scripts/load.sh smoke load      # any combination
 APP_CPUS=2 APP_MEM=2g scripts/load.sh capacity   # try a bigger box
 ```
 
-Output: `bench/results/load-<date>.md` (commit this), `.json` (everything, gitignored) and a `load-<date>/` folder with
+Output: `packages/bench/results/load-<date>.md` (commit this), `.json` (everything, gitignored) and a `load-<date>/` folder with
 the raw k6 summaries and logs, the container samples and the app's logs. The exit status is non-zero when a smoke, load, spike or soak threshold
 is crossed. `capacity` always exits 0 (it is meant to find the failing step) and the report names the highest passing rate. In CI: Actions, "Load test", Run workflow (inputs: scenarios, app CPUs, app memory); by hand only, because a scheduled
 run on a shared 2-vCPU runner fails on noise more often than on regressions. It needs no secrets, writes
-`bench/results/latest.md` (gitignored) and uploads that report as an artifact plus a job summary.
+`packages/bench/results/latest.md` (gitignored) and uploads that report as an artifact plus a job summary.
 
-| Piece                            | What it does                                                                                                          |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `docker-compose.load.yml`        | Overlay with the CPU/memory limits, `pg_stat_statements`, fixture provider and its latency                            |
-| `bench/load/seed.js`, `seed.sql` | Creates `USERS` (50) accounts, raises plan limits so quota doesn't dominate, seeds `RECEIPTS` (200, under 10000) each |
-| `bench/load/load.js`             | The scenarios and thresholds. Signs every user in once (`setup`) and holds the sessions                               |
-| `bench/load/report.mjs`          | Joins k6 summaries, `docker stats` samples, Postgres connections and the app's wide events into the report            |
+| Piece                                     | What it does                                                                                                          |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `docker-compose.load.yml`                 | Overlay with the CPU/memory limits, `pg_stat_statements`, fixture provider and its latency                            |
+| `packages/bench/load/seed.js`, `seed.sql` | Creates `USERS` (50) accounts, raises plan limits so quota doesn't dominate, seeds `RECEIPTS` (200, under 10000) each |
+| `packages/bench/load/load.js`             | The scenarios and thresholds. Signs every user in once (`setup`) and holds the sessions                               |
+| `packages/bench/load/report.mjs`          | Joins k6 summaries, `docker stats` samples, Postgres connections and the app's wide events into the report            |
 
 Each simulated user has its own `x-forwarded-for` (the stack sets `TRUSTED_IP_HEADERS=x-forwarded-for`), so the per-IP
 sign-in and sign-up limits see many clients. Static assets are not requested: on Vercel they come from the CDN.

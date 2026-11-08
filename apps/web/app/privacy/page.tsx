@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { gaMeasurementId, turnstileOn } from "@/lib/consent/env";
+import { logStorageName } from "@/lib/processors";
 import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
@@ -11,6 +12,9 @@ export const metadata: Metadata = pageMetadata({
 });
 
 const googleAnalytics = Boolean(gaMeasurementId);
+const logStorage = logStorageName(
+  process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+);
 // Vercel Web Analytics runs only in Vercel builds.
 const pageCounts = process.env.VERCEL === "1";
 
@@ -56,6 +60,11 @@ export default function PrivacyPage() {
             "Hosting, database and file storage providers store your account details, receipt data and files on our behalf. Photos are re-encoded in your browser before upload, which removes camera metadata such as location. PDFs, and HEIC files your browser can't convert, are stored as uploaded.",
             "An email delivery provider sends account emails such as password resets and invitations.",
             "Paddle (Paddle.com Market Ltd), only when a workspace owner buys or manages Pro: Paddle is our reseller and the merchant of record for every order. It runs the checkout, takes the payment, charges the right sales tax or VAT, sends receipts and invoices, and handles refunds, under its own privacy policy. Paddle receives your email address, your payment details and your country or address for tax. We never see or store your card details. Paddle sends us the subscription's status, its plan and billing period, and its Paddle ids, which we keep to decide which workspaces are on Pro.",
+            ...(logStorage
+              ? [
+                  `${logStorage} stores a copy of our server logs so we can search them when investigating errors: which request was made, when, how long it took and how it ended, the IDs of the account, workspace and receipt involved, the AI model used and its token counts, and error types. The logs never contain your receipt files or their contents, your email address, your IP address or your messages.`,
+                ]
+              : []),
             "Google and GitHub, only if you choose to sign in with them.",
             ...(pageCounts
               ? [

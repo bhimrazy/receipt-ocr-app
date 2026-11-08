@@ -87,6 +87,10 @@ a collector at `http://otel-collector:4318` with no headers.
 2. **OTLP export**: `@effect/opentelemetry` with the OTLP log and trace exporters, wired in `register()` only when
    `OTEL_EXPORTER_OTLP_ENDPOINT` is set; `after()` flush; a test that an unset endpoint loads nothing. Pin versions at
    implementation time (7-day rule), and check that `@effect/opentelemetry` peers match `effect@3.22.4`.
+   **Built (2026-11-08)** as an event sink on the one `emit` ([flow](../architecture/flows/observability.md#otlp-export)):
+   `@opentelemetry/sdk-logs` with the OTLP/HTTP protobuf (default) and JSON log exporters, no trace exporter and no
+   `@effect/opentelemetry`, because every Effect log already goes through `emit`. The `after()` flush is scheduled by
+   the first event of a request instead of at each call site.
 3. **Sentry extras** (optional): errors, releases and source maps, as in sections 3 and 4.
 4. **PostHog server events** (optional): as in section 2, server side only.
 

@@ -19,12 +19,12 @@ coverage
 # Test and bench output
 playwright-report/
 test-results/
-/bench/results/*
-!/bench/results/.gitkeep
-!/bench/results/*.md
-/bench/results/latest.md
+/packages/bench/results/*
+!/packages/bench/results/.gitkeep
+!/packages/bench/results/*.md
+/packages/bench/results/latest.md
 # Private receipts never belong in the repo; this catches an accidental copy.
-/bench/fixtures-local/
+/packages/bench/fixtures-local/
 
 # Rendered email previews (bun run email:preview)
 .email-preview/
