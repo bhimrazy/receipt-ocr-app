@@ -2,6 +2,7 @@ import "server-only";
 import { authRateLimitRules } from "./auth-rate-limit";
 import { SITE_NAME } from "./site";
 import {
+  countOtherAdmins,
   DEFAULT_PLANS,
   ensurePersonalWorkspace,
   policyFor,
@@ -47,7 +48,13 @@ import {
 // --- end two-factor + step-up ---
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
 import { assertWorkspaceRole, limitInvitations, validateWorkspaceName } from "./auth-guards";
-import { allowAuthEmail, type AuthEmailKind } from "./email-limits";
+import {
+  allowAuthEmail,
+  allowPasswordChange,
+  allowSignInAttempt,
+  clearSignInAttempts,
+  type AuthEmailKind,
+} from "./email-limits";
 import {
   authEnabled,
   authEnv,
@@ -108,6 +115,45 @@ export { deliver as deliverEmail };
  * For emails a signed-in user asked for (deletion, email change). Unlike sign-up and reset,
  * refusing says nothing about whether an address has an account, so the user is told.
  */
+const SIGN_IN_LIMITED_MESSAGE = "Too many sign-in attempts. Try again in a few minutes.";
+
+function signInEmail(body: unknown): string | null {
+  const email = (body as { email?: unknown } | undefined)?.email;
+  return typeof email === "string" && email.length > 0 ? email : null;
+}
+
+const ADMIN_GUARDED = new Set(["/admin/set-role", "/admin/ban-user", "/admin/remove-user"]);
+
+/**
+ * The admin plugin's endpoints answer any admin session directly, so the panel's guards (see
+ * app/admin/actions.ts) are repeated here: no self-changes, no banning or removing an admin, and
+ * never demoting the last unbanned admin.
+ */
+async function guardAdminEndpoint(ctx: Parameters<typeof getSessionFromCtx>[0]) {
+  const current = await getSessionFromCtx(ctx);
+  // Not signed in or not an admin: the plugin itself answers 401/403.
+  if (!current || !current.user.role?.split(",").includes("admin")) return;
+  const body = ctx.body as { userId?: unknown; role?: unknown } | undefined;
+  const userId = typeof body?.userId === "string" ? body.userId : null;
+  if (!userId) return;
+  const refuse = (message: string) => new APIError("FORBIDDEN", { message });
+  if (userId === current.user.id) throw refuse("You can't change your own account here.");
+  const [target] = await db
+    .select({ role: userTable.role })
+    .from(userTable)
+    .where(eq(userTable.id, userId))
+    .limit(1);
+  if (!target?.role?.split(",").includes("admin")) return;
+  if (ctx.path !== "/admin/set-role") {
+    throw refuse("Admins can't be banned or removed. Remove their admin role first.");
+  }
+  const roles = Array.isArray(body?.role) ? body.role : [body?.role];
+  if (roles.includes("admin")) return;
+  if ((await runtime.runPromise(countOtherAdmins(userId))) === 0) {
+    throw refuse("This is the last admin. Promote someone else first.");
+  }
+}
+
 async function limitSignedInEmail(kind: AuthEmailKind, email: string) {
   if (!(await allowAuthEmail(kind, email))) {
     throw new APIError("TOO_MANY_REQUESTS", {
@@ -298,7 +344,30 @@ export const auth = betterAuth({
       // Deletes on a single GET; our confirm page posts the token to /delete-user instead.
       if (ctx.path === "/delete-user/callback") throw new APIError("NOT_FOUND");
       // First, so nothing below (a sent email, a counted attempt) happens without a passed check.
+      // New early-return branches go below it.
       const passed = await stepUpGate(ctx);
+      if (ctx.path === "/sign-in/email") {
+        // Counted here, atomically, before the password check; a correct sign-in clears it in `after`.
+        const email = signInEmail(ctx.body);
+        if (email && !(await allowSignInAttempt(email))) {
+          throw new APIError("TOO_MANY_REQUESTS", { message: SIGN_IN_LIMITED_MESSAGE });
+        }
+        return;
+      }
+      if (ADMIN_GUARDED.has(ctx.path)) {
+        await guardAdminEndpoint(ctx);
+        return;
+      }
+      if (ctx.path === "/change-password") {
+        // Per user, on top of the per-IP rule: a stolen session can't grind the current password.
+        const current = await getSessionFromCtx(ctx);
+        if (current && !(await allowPasswordChange(current.user.id))) {
+          throw new APIError("TOO_MANY_REQUESTS", {
+            message: "Too many password changes. Try again later.",
+          });
+        }
+        return;
+      }
       if (ctx.path === "/delete-user" && hasDeleteToken(ctx.body)) {
         // Better Auth spends the token before beforeDelete can refuse; check first so it survives.
         const current = await getSessionFromCtx(ctx);
@@ -325,6 +394,12 @@ export const auth = betterAuth({
     after: createAuthMiddleware(async (ctx) => {
       await factorChangedAfter(ctx, deliver);
       await replaceSessionOnSignIn(ctx);
+      if (ctx.path === "/sign-in/email") {
+        // Only a successful sign-in (the real password) resets the count.
+        const email = signInEmail(ctx.body);
+        if (email && !isAPIError(ctx.context.returned)) await clearSignInAttempts(email);
+        return;
+      }
       const returned = ctx.context.returned as
         { user?: { id: string; email: string }; message?: string } | undefined;
       if (!returned || isAPIError(returned)) return;

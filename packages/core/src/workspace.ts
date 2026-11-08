@@ -110,3 +110,11 @@ export const hitRateLimit = (key: string, windowMs: number, max: number) =>
       };
     }),
   );
+
+/** Deletes a `hitRateLimit` counter, for limits a success resets (a correct sign-in). */
+export const clearRateLimit = (key: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      await db.delete(rateLimit).where(eq(rateLimit.id, key));
+    }),
+  );

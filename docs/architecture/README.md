@@ -19,7 +19,8 @@ When the code and this page disagree, the code wins; fix the page in the same PR
 ## The system at a glance
 
 One Next.js app does everything: it serves the pages, handles sign-in, accepts uploads, calls the model and writes the
-results. There is no separate worker or queue today.
+results. Background work runs through a Postgres [job queue](flows/jobs.md), drained by a cron-called route in the
+same app; there is no separate worker process yet.
 
 ```mermaid
 flowchart LR
@@ -30,6 +31,8 @@ flowchart LR
   gemini[Google Gemini<br/>through the AI SDK]
   claude[Anthropic Claude<br/>optional, through the AI SDK]
   groq[Groq<br/>optional, through the AI SDK]
+  openai[OpenAI<br/>optional, through the AI SDK]
+  cron[pg_cron on Supabase,<br/>daily Vercel cron]
   resend[Resend<br/>transactional email]
   oauth[Google and GitHub<br/>OAuth]
 
@@ -39,22 +42,26 @@ flowchart LR
   web -- "put, get, delete,<br/>sign URLs" --> s3
   web -- "image + prompt,<br/>structured output" --> gemini
   web -. "optional chain step" .-> claude
+  web -. "optional chain step" .-> groq
+  web -. "optional chain step" .-> openai
+  cron -- "POST /api/jobs/drain" --> web
   web -- "verify, reset,<br/>invite mail" --> resend
   user -- "OAuth redirect" --> oauth
   oauth -- "callback with code" --> web
 ```
 
-| External service      | What the app uses it for                                     | Configured by                                                    |
-| --------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------- |
-| Postgres              | Every table: auth, workspaces, receipts, usage ledger, admin | `DATABASE_URL` (app), `DIRECT_URL` (migrations)                  |
-| S3-compatible storage | The uploaded receipt files; the bucket stays private         | `S3_*`                                                           |
-| Google Gemini         | Reading the receipt into the extraction schema               | `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_MODEL`, Admin → Settings |
-| Anthropic Claude      | Optional OCR models an admin can add to the chain            | `ANTHROPIC_API_KEY`, Admin → Settings                            |
-| Groq                  | Optional OCR model (Qwen 3.8 27B, free tier) in the chain    | `GROQ_API_KEY`, Admin → Settings                                 |
-| Resend                | Verification, password reset, invitation and support mail    | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`                  |
-| Google, GitHub OAuth  | Optional social sign-in                                      | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`       |
-| Google Analytics 4    | Optional visit counts on public pages, only after consent    | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))              |
-| Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                | automatic when `VERCEL=1`                                        |
+| External service      | What the app uses it for                                            | Configured by                                                    |
+| --------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Postgres              | Every table: auth, workspaces, receipts, usage ledger, admin        | `DATABASE_URL` (app), `DIRECT_URL` (migrations)                  |
+| S3-compatible storage | The uploaded receipt files; the bucket stays private                | `S3_*`                                                           |
+| Google Gemini         | Reading the receipt into the extraction schema                      | `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_MODEL`, Admin → Settings |
+| Anthropic Claude      | First step of the default chain (Sonnet 5.5); other models optional | `ANTHROPIC_API_KEY`, Admin → Settings                            |
+| Groq                  | Optional OCR model (Qwen 3.8 27B, free tier) in the chain           | `GROQ_API_KEY`, Admin → Settings                                 |
+| OpenAI                | Optional OCR models (GPT-6 Luna, GPT-6.1 Terra) in the chain        | `OPENAI_API_KEY`, Admin → Settings                               |
+| Resend                | Verification, password reset, invitation and support mail           | `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL`                  |
+| Google, GitHub OAuth  | Optional social sign-in                                             | `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`       |
+| Google Analytics 4    | Optional visit counts on public pages, only after consent           | `NEXT_PUBLIC_GA_MEASUREMENT_ID` (see [web](web.md))              |
+| Vercel Web Analytics  | Cookie-free page counts on Vercel builds only                       | automatic when `VERCEL=1`                                        |
 
 Every service except Postgres and auth is optional at runtime: without a Gemini key the app still serves history and
 exports, and without Resend mail is logged instead of sent. The full variable list is in
@@ -169,15 +176,15 @@ several of them is in the [security audit](../reviews/2026-11-06-security-audit.
 
 ## What is planned, not built
 
-| Planned                                     | Today                                                                                     | Plan                                                                                                                                                                                        |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker app and cron drain for the job queue | The [job queue](flows/jobs.md) is run by the upload, retry and poll routes in `after()`   | [Durable background jobs](../plans/2026-11-06-jobs-queue.md), Tracks B to D; also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
-| OTLP export (Axiom), PostHog, Sentry        | One [wide event](flows/observability.md) per unit of work on stdout, through an allowlist | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
-| Usage screens for customers and admins      | Rollup queries exist in `usage.ts`; only the daily meter is shown                         | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                                         |
-| Passkeys and two-factor                     | Email/password and OAuth only                                                             | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
-| Second AI provider                          | Google Gemini and the offline fixture                                                     | [AI usage and models](../plans/2026-11-06-ai-usage-models.md)                                                                                                                               |
-| Seats and per-workspace quota               | Quota is per user per UTC day                                                             | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                                              |
-| Home currency and FX conversion             | Amounts `numeric(12,2)`, currency defaults to USD, no conversion                          | [Currencies and FX](../plans/2026-11-06-currencies-fx.md)                                                                                                                                   |
+| Planned                                | Today                                                                                                                                                          | Plan                                                                                                                                                                                        |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/worker` for the job queue        | The [job queue](flows/jobs.md) is drained by `/api/jobs/drain` (pg_cron every minute, daily Vercel cron) and by the upload, retry and poll routes in `after()` | [Durable background jobs](../plans/2026-11-06-jobs-queue.md), Tracks B to D; also [extraction cost and accuracy, section 5](../plans/2026-11-06-extraction-cost-accuracy.md#5-batch--async) |
+| OTLP export (Axiom), PostHog, Sentry   | One [wide event](flows/observability.md) per unit of work on stdout, through an allowlist                                                                      | [Observability](../plans/2026-11-06-observability.md)                                                                                                                                       |
+| Usage screens for customers and admins | Rollup queries exist in `usage.ts`; only the daily meter is shown                                                                                              | [Usage design](../plans/2026-11-06-usage-design.md)                                                                                                                                         |
+| Passkeys and two-factor                | Email/password and OAuth only (PR #95 in review)                                                                                                               | [Passkeys and 2FA](../plans/2026-11-06-passkeys-2fa.md)                                                                                                                                     |
+| More AI providers, per-model options   | Google, Anthropic, Groq and OpenAI (plus the offline fixture); keys come from the environment                                                                  | [AI usage and models](../plans/2026-11-06-ai-usage-models.md), [BYOK](../plans/2026-11-07-byok.md)                                                                                          |
+| Seats and per-workspace quota          | Quota is per user per UTC day                                                                                                                                  | [Members and admin](../plans/2026-11-06-members-admin-plan.md)                                                                                                                              |
+| Home currency and FX conversion        | Amounts `numeric(12,2)`, currency defaults to USD, no conversion                                                                                               | [Currencies and FX](../plans/2026-11-06-currencies-fx.md)                                                                                                                                   |
 
 ## Keeping this current
 

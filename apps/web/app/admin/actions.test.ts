@@ -122,6 +122,25 @@ describe("admin server actions for an admin", () => {
     for (const fn of Object.values(authApi)) expect(fn).not.toHaveBeenCalled();
   });
 
+  it("refuses to demote the last admin, and demotes when another remains", async () => {
+    runPromiseExit.mockResolvedValueOnce(Exit.succeed(adminTarget));
+    runPromiseExit.mockResolvedValueOnce(Exit.succeed(0));
+    expect(await actions.setRoleAction({ userId: "u", role: "user" })).toEqual({
+      ok: false,
+      error: expect.stringMatching(/last admin/),
+    });
+    expect(runPromiseExit).toHaveBeenCalledTimes(2); // lookup and count, no audit row
+    expect(authApi.setRole).not.toHaveBeenCalled();
+
+    runPromiseExit.mockReset();
+    runPromiseExit
+      .mockResolvedValueOnce(Exit.succeed(adminTarget))
+      .mockResolvedValueOnce(Exit.succeed(1))
+      .mockResolvedValue(Exit.succeed(undefined));
+    expect(await actions.setRoleAction({ userId: "u", role: "user" })).toEqual({ ok: true });
+    expect(authApi.setRole).toHaveBeenCalledTimes(1);
+  });
+
   it("writes the audit row before a Better Auth change, and a failure row when it fails", async () => {
     const order: string[] = [];
     runPromiseExit.mockImplementation(async () => {

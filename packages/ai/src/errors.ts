@@ -94,6 +94,64 @@ function classifyGroq400(error: APICallError): OcrFailureKind | null {
   return IMAGE_COMPLAINT.test(body.message) ? null : "not-configured";
 }
 
+/** OpenAI's error body: `{ error: { message, type, param, code } }`. Only these fields are read. */
+function openaiErrorOf(error: APICallError): { code: string; message: string } | null {
+  if (!error.url.startsWith("https://api.openai.com/")) return null;
+  try {
+    const body = (
+      JSON.parse(error.responseBody ?? "") as { error?: { code?: unknown; message?: unknown } }
+    ).error;
+    return { code: String(body?.code ?? ""), message: String(body?.message ?? "") };
+  } catch {
+    return { code: "", message: "" };
+  }
+}
+
+/** 429 codes for an exhausted balance or spend cap: waiting does not help, an admin must act. */
+const OPENAI_QUOTA_CODES = new Set([
+  "insufficient_quota",
+  "credit_balance_exhausted",
+  "organization_spend_limit_exceeded",
+  "project_spend_limit_exceeded",
+  "organization_usage_limit_exceeded",
+]);
+
+/**
+ * OpenAI's 400s and 429s, by `code` and then message. A spent balance is `not-configured` (the
+ * chain moves on and nothing retries until an admin adds credit); a prompt over the model's
+ * context is `unsupported-file`; a rejected request that doesn't blame the file (a schema
+ * keyword, an effort value the model lacks) is `not-configured`. Other 429s are rate limits.
+ */
+function classifyOpenai(error: APICallError): OcrFailureKind | null {
+  const body = openaiErrorOf(error);
+  if (!body) return null;
+  if (error.statusCode === 429) {
+    return OPENAI_QUOTA_CODES.has(body.code) ? "not-configured" : null;
+  }
+  if (error.statusCode !== 400) return null;
+  if (body.code === "context_length_exceeded") return "unsupported-file";
+  if (body.code === "model_not_found") return "not-configured";
+  return IMAGE_COMPLAINT.test(body.message) ? null : "not-configured";
+}
+
+/**
+ * Anthropic's 400 body: `{ type: "error", error: { type, message } }`. An `invalid_request_error`
+ * that doesn't blame the file (a schema keyword, an effort value, a retired model) is our request,
+ * not the photo, so it is `not-configured` and the chain moves on.
+ */
+function classifyAnthropic400(error: APICallError): OcrFailureKind | null {
+  if (!error.url.startsWith("https://api.anthropic.com/") || error.statusCode !== 400) return null;
+  try {
+    const body = (
+      JSON.parse(error.responseBody ?? "") as { error?: { type?: unknown; message?: unknown } }
+    ).error;
+    if (body?.type !== "invalid_request_error") return null;
+    return IMAGE_COMPLAINT.test(String(body.message ?? "")) ? null : "not-configured";
+  } catch {
+    return null;
+  }
+}
+
 /** The cause of a step skipped before any request: this model can't take the file's type or size. */
 export class UnsupportedFileError extends Error {
   override name = "UnsupportedFileError";
@@ -174,8 +232,17 @@ export function classifyOcrError(error: unknown): OcrFailureKind {
   if (APICallError.isInstance(error)) {
     // Our request is wrong for this model, not the photo: configuration, and the next model may work.
     if (isRequestRejection(error)) return "not-configured";
+    const anthropic = classifyAnthropic400(error);
+    if (anthropic) return anthropic;
     const groq = classifyGroq400(error);
     if (groq) return groq;
+    const openai = classifyOpenai(error);
+    if (openai) return openai;
+    // A 2xx the SDK could not parse (OpenAI's Responses schema has no refusal content part, so a
+    // refusal lands here): the input was accepted, so it is the reply that is unusable.
+    if (error.statusCode !== undefined && error.statusCode >= 200 && error.statusCode < 300) {
+      return "invalid-output";
+    }
     return error.statusCode === undefined ? "provider-error" : fromStatus(error.statusCode);
   }
   // A refusal with prose (or no) text fails parsing before the caller sees the finish reason.

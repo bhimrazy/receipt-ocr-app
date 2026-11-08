@@ -158,3 +158,16 @@ describe("Gemini request shape per model", () => {
     expect(bodies).toHaveLength(1);
   });
 });
+
+describe("a 2xx reply the SDK cannot parse", () => {
+  it("is invalid-output, not bad-image, so the chain moves on", async () => {
+    mockFetch(() => Response.json({ unexpected: true }));
+    const error = await extractReceipt({
+      model: "google:gemini-3.8-flash",
+      keys,
+      file: { data: png, mediaType: "image/png" },
+      maxRetries: 0,
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "invalid-output" });
+  });
+});

@@ -1,4 +1,5 @@
 import { ConfigProvider, Effect, Exit, Layer } from "effect";
+import { OCR_MODELS } from "@receipt-ocr/ai";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PLANS, MAX_BATCH } from "./plans";
 import { Db } from "./services";
@@ -7,6 +8,7 @@ import {
   planTableSchema,
   providerAvailability,
   Settings,
+  storedOcrRoutingSchema,
   storedPlanTableSchema,
 } from "./settings";
 
@@ -81,6 +83,17 @@ describe("storedPlanTableSchema", () => {
   });
 });
 
+describe("storedOcrRoutingSchema", () => {
+  it("keeps a supported effort and still rejects an unknown model", () => {
+    const step = { model: "openai:gpt-6-luna", enabled: true, effort: "low" };
+    const ok = storedOcrRoutingSchema.parse({ chain: [step] });
+    expect((ok.chain[0] as { effort?: string }).effort).toBe("low");
+    expect(
+      storedOcrRoutingSchema.safeParse({ chain: [{ ...step, model: "openai:made-up" }] }).success,
+    ).toBe(false);
+  });
+});
+
 describe("ocrRoutingSchema", () => {
   const step = { model: "google:gemini-3.8-flash", enabled: true };
 
@@ -95,6 +108,53 @@ describe("ocrRoutingSchema", () => {
     ).toBe(false);
     expect(ocrRoutingSchema.safeParse({ chain: [step, step] }).success).toBe(false);
     expect(ocrRoutingSchema.safeParse({ chain: [] }).success).toBe(false);
+  });
+
+  describe("effort", () => {
+    const withEffort = (model: string, effort?: string) =>
+      ocrRoutingSchema.safeParse({ chain: [{ model, enabled: true, effort }] });
+
+    it("is optional: a chain saved before it existed still parses, and unset stays unset", () => {
+      const result = ocrRoutingSchema.parse({ chain: [step] });
+      expect(result.chain[0]).not.toHaveProperty("effort");
+    });
+
+    it.each([
+      ["anthropic:claude-haiku-5-5", "high"],
+      ["anthropic:claude-opus-5-5", "medium"],
+      ["google:gemini-3.8-flash", "high"],
+      ["google:gemini-3.5-flash-lite", "minimal"],
+      ["openai:gpt-6-luna", "none"],
+      ["openai:gpt-6.1-terra", "high"],
+      ["groq:qwen/qwen3.8-27b", "none"],
+    ])("accepts %s at %s", (model, effort) => {
+      const result = withEffort(model, effort);
+      expect(result.success && result.data.chain[0]?.effort).toBe(effort);
+    });
+
+    it.each([
+      ["anthropic:claude-sonnet-5-5", "none"],
+      ["anthropic:claude-sonnet-5-5", "minimal"],
+      ["google:gemini-3.8-flash", "minimal"],
+      ["google:gemini-3.8-flash", "xhigh"],
+      ["anthropic:claude-opus-5-5", "xhigh"],
+      ["anthropic:claude-opus-5-5", "max"],
+      ["openai:gpt-6.1-terra", "xhigh"],
+      ["openai:gpt-6-luna", "max"],
+      ["openai:gpt-6-luna", "minimal"],
+      ["groq:qwen/qwen3.8-27b", "low"],
+      ["google:gemini-3.8-flash", "HIGH"],
+    ])("rejects %s at %s, naming what it takes", (model, effort) => {
+      const result = withEffort(model, effort);
+      expect(result.success).toBe(false);
+      expect(!result.success && result.error.issues[0]?.message).toMatch(/doesn't support effort/);
+    });
+
+    it("rejects an effort on a model with no setting", () => {
+      const result = withEffort("fixture", "low");
+      expect(result.success).toBe(false);
+      expect(!result.success && result.error.issues[0]?.message).toMatch(/no effort setting/);
+    });
   });
 
   it("bounds the step timeout", () => {
@@ -136,18 +196,24 @@ describe("providerAvailability", () => {
       google: false,
       anthropic: true,
       groq: false,
+      openai: false,
       fixture: false,
     });
     expect(
       await availability({ GOOGLE_GENERATIVE_AI_API_KEY: "k", ANTHROPIC_API_KEY: " " }),
-    ).toEqual({ google: true, anthropic: false, groq: false, fixture: false });
+    ).toEqual({ google: true, anthropic: false, groq: false, openai: false, fixture: false });
     expect(await availability({ OCR_PROVIDER: "fixture" })).toEqual({
       google: false,
       anthropic: false,
       groq: false,
+      openai: false,
       fixture: true,
     });
     expect(await availability({ GROQ_API_KEY: "k" })).toMatchObject({ groq: true, google: false });
+    expect(await availability({ OPENAI_API_KEY: "k" })).toMatchObject({
+      openai: true,
+      groq: false,
+    });
   });
 });
 
@@ -183,6 +249,32 @@ describe("Settings", () => {
       "anthropic:claude-sonnet-5-5",
       "google:gemini-3.8-flash",
     ]);
+  });
+
+  it("keeps a saved chain whose effort the model no longer lists, dropping just that effort", async () => {
+    const model = OCR_MODELS.find((m) => m.id === "google:gemini-3.8-flash")!;
+    const original = model.effort!;
+    const step = { model: model.id, enabled: true, timeoutMs: 20_000, effort: "high" };
+    const other = { model: "anthropic:claude-sonnet-5-5", enabled: true, timeoutMs: 30_000 };
+    const row = {
+      key: "ocr",
+      value: { chain: [other, step] },
+      updatedAt: new Date(),
+      updatedBy: "a",
+    };
+    // The save was valid when it was made.
+    expect(ocrRoutingSchema.safeParse(row.value).success).toBe(true);
+    try {
+      (model as { effort: typeof original }).effort = { ...original, values: ["low", "medium"] };
+      expect(ocrRoutingSchema.safeParse(row.value).success).toBe(false);
+      const exit = await settingsWith({}, [row])(Effect.flatMap(Settings, (s) => s.ocr));
+      expect(Exit.isSuccess(exit) && exit.value.chain).toEqual([
+        other,
+        { model: model.id, enabled: true, timeoutMs: 20_000 },
+      ]);
+    } finally {
+      (model as { effort: typeof original }).effort = original;
+    }
   });
 
   it("saves batchMax and records the change in the audit log", async () => {

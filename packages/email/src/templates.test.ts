@@ -251,6 +251,24 @@ describe("link emails", () => {
     expect(cases.invitation.make(withSupport).html).toContain("expires in 7 days");
   });
 
+  it("refuse links off the app's origin, including lookalike hosts and ports", () => {
+    for (const foreign of [
+      "https://evil.example/login",
+      "https://app.example.evil.example/x",
+      "http://app.example/x",
+      "https://app.example:8443/x",
+    ]) {
+      expect(() =>
+        verificationEmail(withSupport, { url: foreign, expiresInSeconds: hour }),
+      ).toThrow(/must be on https:\/\/app\.example/);
+      expect(() => passwordChangedEmail(withSupport, { resetUrl: foreign })).toThrow();
+    }
+    expect(
+      verificationEmail(withSupport, { url: "https://app.example/ok?x=1", expiresInSeconds: hour })
+        .text,
+    ).toContain("https://app.example/ok?x=1");
+  });
+
   it("refuse non-http links and origins", () => {
     for (const bad of ["javascript:alert(1)", "data:text/html,x", "/relative", "mailto:a@b.c"]) {
       expect(() => verificationEmail(withSupport, { url: bad, expiresInSeconds: hour })).toThrow();

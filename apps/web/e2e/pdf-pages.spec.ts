@@ -28,7 +28,7 @@ function pdf(pages: number) {
 test("a PDF over 10 pages is refused with a clear message", async ({ page }) => {
   await signUp(page, uniqueEmail("pdfpages"));
   await page.goto("/app");
-  const input = page.locator('input[type="file"][multiple]').first();
+  const input = page.locator('[data-ready] input[type="file"][multiple]').first();
   await input.setInputFiles({
     name: "statement.pdf",
     mimeType: "application/pdf",

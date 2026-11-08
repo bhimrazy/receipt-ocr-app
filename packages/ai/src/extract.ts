@@ -1,6 +1,7 @@
 import { createAnthropic, type AnthropicLanguageModelOptions } from "@ai-sdk/anthropic";
 import { createGoogle } from "@ai-sdk/google";
 import { createGroq, type GroqLanguageModelOptions } from "@ai-sdk/groq";
+import { createOpenAI, type OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
 import {
   createProviderRegistry,
   generateText,
@@ -14,7 +15,13 @@ import { CLIENT_CACHE_MAX, configKey, LruCache } from "./client-cache";
 import { classifyOcrError, OcrCallError, UnsupportedFileError } from "./errors";
 import { fixtureExtraction, fixtureLatencyMs } from "./fixture";
 import { imageSize } from "./image-size";
-import { ocrModel, type ExtractionUsage, type OcrModel, type OcrProviderId } from "./models";
+import {
+  effortFor,
+  ocrModel,
+  type ExtractionUsage,
+  type OcrModel,
+  type OcrProviderId,
+} from "./models";
 import { PROMPT_VERSION, promptFor, type PromptVersion } from "./prompt";
 import { receiptRequestSchema, type ReceiptExtraction } from "./schema";
 
@@ -39,6 +46,8 @@ export type ExtractReceiptInput = {
   abortSignal?: AbortSignal;
   /** Defaults to `PROMPT_VERSION`; the benchmark passes an older one for an A/B. */
   promptVersion?: PromptVersion;
+  /** Reasoning effort, one of the model's `effort.values`; unset or unsupported: the model's default. */
+  effort?: string;
 };
 
 export type ExtractReceiptResult = {
@@ -62,6 +71,17 @@ const DEFAULT_MAX_RETRIES = 2;
  */
 const MAX_OUTPUT_TOKENS = 16_384;
 
+/**
+ * The cap for a call at `effort`. Reasoning tokens count toward it, so the top levels get more
+ * room or a long receipt can be billed and then cut off. Every model offered documents at least
+ * 65,536 output tokens, except Groq's fixed "none".
+ */
+export function maxOutputTokensFor(effort: string | null): number {
+  if (effort === "xhigh" || effort === "max") return 65_536;
+  if (effort === "high") return 32_768;
+  return MAX_OUTPUT_TOKENS;
+}
+
 const registries = new LruCache<ReturnType<typeof buildRegistry>>(CLIENT_CACHE_MAX);
 
 /** The cache keys, for tests: they must never contain a key. */
@@ -72,6 +92,7 @@ function buildRegistry(keys: ProviderKeys) {
     google: createGoogle({ apiKey: keys.google }),
     anthropic: createAnthropic({ apiKey: keys.anthropic }),
     groq: createGroq({ apiKey: keys.groq }),
+    openai: createOpenAI({ apiKey: keys.openai }),
   } satisfies Record<RegistryProviderId, unknown>);
 }
 
@@ -90,18 +111,19 @@ export function registryFor(keys: ProviderKeys) {
  * Claude request settings, one entry per model so each choice is explicit.
  * - Structured output via `output_config.format` (JSON schema), never the forced
  *   `json` tool: Sonnet 5.5 and Opus 5.5 answer forced `tool_choice` with a 400.
- * - Effort `low`: reading a receipt is transcription, not reasoning. The API
- *   defaults are `medium` (Haiku 5.5, Opus 5.5) and `high` (Sonnet 5.5).
+ * - Effort `low` unless the chain step sets one (see `effortFor`): reading a receipt is
+ *   transcription, not reasoning. The API defaults are `medium` (Haiku 5.5, Opus 5.5) and `high`
+ *   (Sonnet 5.5).
  * - No `thinking` setting: adaptive thinking is the default, and Sonnet 5.5 and
  *   Opus 5.5 reject `disabled` and `budget_tokens`. No temperature/top-p/top-k either.
  */
 const ANTHROPIC_OPTIONS: Record<
   string,
-  Pick<AnthropicLanguageModelOptions, "structuredOutputMode" | "effort">
+  Pick<AnthropicLanguageModelOptions, "structuredOutputMode">
 > = {
-  "claude-haiku-5-5": { structuredOutputMode: "outputFormat", effort: "low" },
-  "claude-sonnet-5-5": { structuredOutputMode: "outputFormat", effort: "low" },
-  "claude-opus-5-5": { structuredOutputMode: "outputFormat", effort: "low" },
+  "claude-haiku-5-5": { structuredOutputMode: "outputFormat" },
+  "claude-sonnet-5-5": { structuredOutputMode: "outputFormat" },
+  "claude-opus-5-5": { structuredOutputMode: "outputFormat" },
 };
 
 /** Image types Claude reads; HEIC/HEIF are not among them. */
@@ -134,17 +156,73 @@ const GROQ_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image
  */
 const GROQ_MAX_IMAGE_BASE64_BYTES = 20_000_000;
 
+/**
+ * OpenAI request settings (Responses API, the provider's default).
+ * - `reasoningEffort` defaults to "none" (`effortFor`): reading a receipt is transcription, so no
+ *   reasoning tokens are billed. Both offered models accept it (Luna and Terra: none, low, medium, high, xhigh, max;
+ *   default medium). Not benchmarked against "low" yet; `bun run bench:ocr` can compare them.
+ * - `store: false`: the Responses API otherwise keeps the response as application state for 30
+ *   days (https://developers.openai.com/api/docs/guides/your-data). Nothing here reads it back.
+ * - Strict JSON schema (the provider's default); the model's `schemaMode` drops keywords it may refuse.
+ */
+const OPENAI_OPTIONS: OpenAILanguageModelResponsesOptions = {
+  store: false,
+  strictJsonSchema: true,
+};
+
+/** Image types OpenAI reads (GIF only when not animated, which is not checked here). */
+const OPENAI_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+/**
+ * OpenAI's vision docs reject an image over 30,000 patches of 32 px
+ * (https://developers.openai.com/api/docs/guides/images-vision, checked 2026-11-07) and give no
+ * per-file byte cap. A rejection is a 400 that would read as bad-image and stop the chain.
+ */
+const OPENAI_MAX_IMAGE_PATCHES = 30_000;
+
+/** PDF input docs: each file under 50 MB, 50 MB combined (checked 2026-11-07). */
+const OPENAI_MAX_PDF_BYTES = 50_000_000;
+
+type AnthropicEffort = NonNullable<AnthropicLanguageModelOptions["effort"]>;
+type GoogleThinkingLevel = "minimal" | "low" | "medium" | "high";
+
 /** The model stopped on a safety refusal; whatever it returned is not an extraction. */
 export class RefusalError extends Error {
   override name = "RefusalError";
 }
 
-function providerOptionsFor(model: Exclude<ModelId, "fixture">): ProviderOptions | undefined {
+/**
+ * Provider options for a model and a chain step's effort. Where we set the effort ourselves
+ * (Claude, OpenAI, Groq) an unset step gets the model's default; Gemini is left at Google's own
+ * default unless the step chooses a thinking level.
+ */
+export function providerOptionsFor(
+  model: Exclude<ModelId, "fixture">,
+  effort?: string,
+): ProviderOptions | undefined {
   const [provider, ...rest] = model.split(":");
+  const chosen = effortFor(model, effort);
   if (provider === "groq") return { groq: GROQ_OPTIONS } satisfies ProviderOptions;
+  if (provider === "openai") {
+    return {
+      openai: { ...OPENAI_OPTIONS, reasoningEffort: chosen ?? "none" },
+    } satisfies ProviderOptions;
+  }
+  if (provider === "google") {
+    const level = effort !== undefined && chosen === effort ? effort : undefined;
+    return level
+      ? ({
+          google: { thinkingConfig: { thinkingLevel: level as GoogleThinkingLevel } },
+        } satisfies ProviderOptions)
+      : undefined;
+  }
   if (provider !== "anthropic") return undefined;
   const options = ANTHROPIC_OPTIONS[rest.join(":")];
-  return options ? ({ anthropic: options } satisfies ProviderOptions) : undefined;
+  return options
+    ? ({
+        anthropic: { ...options, effort: (chosen ?? "low") as AnthropicEffort },
+      } satisfies ProviderOptions)
+    : undefined;
 }
 
 /**
@@ -158,6 +236,21 @@ function checkFile(model: Exclude<ModelId, "fixture">, file: ExtractReceiptInput
     if (!GROQ_IMAGE_TYPES.has(file.mediaType)) throw unsupported(`no ${file.mediaType}`);
     if (Math.ceil(file.data.byteLength / 3) * 4 > GROQ_MAX_IMAGE_BASE64_BYTES) {
       throw unsupported("image over 20 MB");
+    }
+    return;
+  }
+  if (model.startsWith("openai:")) {
+    if (file.mediaType === "application/pdf") {
+      if (file.data.byteLength > OPENAI_MAX_PDF_BYTES) throw unsupported("PDF over 50 MB");
+      return;
+    }
+    if (!OPENAI_IMAGE_TYPES.has(file.mediaType)) throw unsupported(`no ${file.mediaType}`);
+    const size = imageSize(file.data);
+    if (
+      size &&
+      Math.ceil(size.width / 32) * Math.ceil(size.height / 32) > OPENAI_MAX_IMAGE_PATCHES
+    ) {
+      throw unsupported(`image over ${OPENAI_MAX_IMAGE_PATCHES} patches`);
     }
     return;
   }
@@ -221,7 +314,8 @@ export async function extractReceipt(input: ExtractReceiptInput): Promise<Extrac
   checkFile(input.model, input.file);
   const result = await extractWith(registryFor(input.keys ?? {}).languageModel(input.model), {
     ...input,
-    providerOptions: providerOptionsFor(input.model),
+    providerOptions: providerOptionsFor(input.model, input.effort),
+    maxOutputTokens: maxOutputTokensFor(effortFor(input.model, input.effort)),
     schemaMode: ocrModel(input.model)?.schemaMode,
   });
   return { ...result, model: input.model };
@@ -232,6 +326,7 @@ export async function extractWith(
   model: LanguageModel,
   input: Omit<ExtractReceiptInput, "model" | "keys"> & {
     providerOptions?: ProviderOptions;
+    maxOutputTokens?: number;
     schemaMode?: OcrModel["schemaMode"];
     /** For tests: the day v2's no-future-dates rule counts from. */
     now?: Date;
@@ -246,7 +341,7 @@ export async function extractWith(
     const result = await generateText({
       model,
       output: Output.object({ schema: receiptRequestSchema(promptVersion, input.schemaMode) }),
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      maxOutputTokens: input.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
       timeout: { totalMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS },
       maxRetries: input.maxRetries ?? DEFAULT_MAX_RETRIES,
       abortSignal: input.abortSignal,

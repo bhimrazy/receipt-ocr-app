@@ -1,9 +1,24 @@
 #!/usr/bin/env bash
-# Prints the commit of the newest Vercel Production Deployment run on main whose deploy-production
-# job succeeded (a run whose gate skipped the deploy also ends "success", so the job is checked).
-# Looks at the last 50 successful runs. Exits non-zero when there is none or the lookup fails, so
-# callers fail closed. Needs GH_TOKEN with actions: read, and GITHUB_REPOSITORY.
+# Prints the full SHA of the commit production runs. First asks the live site (PRODUCTION_HEALTH_URL,
+# whose `commit` is the deployed build's short SHA) and resolves it in this checkout, which needs
+# full history. A run's own head_sha is not enough: a run started by a CI run (workflow_run) carries
+# main's newest commit at start, while its deploy job checks out the CI run's commit, so a newer
+# merge would be recorded as deployed and then skipped. With PRODUCTION_HEALTH_URL set, a live
+# commit that can't be read or resolved exits non-zero (the gate skips; deploy by hand). Without it
+# (local use), falls back to the newest run of this workflow whose deploy-production job succeeded
+# (last 50 runs), which can name a too-new commit for automatic runs. Needs GH_TOKEN with
+# actions: read, and GITHUB_REPOSITORY.
 set -euo pipefail
+if [ -n "${PRODUCTION_HEALTH_URL:-}" ]; then
+  if short=$(curl -fsS --max-time 10 "$PRODUCTION_HEALTH_URL" |
+    jq -er '.commit | select(type == "string" and test("^[0-9a-f]{7,40}$"))') &&
+    full=$(git rev-parse --verify --quiet "$short^{commit}"); then
+    echo "$full"
+    exit 0
+  fi
+  echo "Couldn't read or resolve the live commit from $PRODUCTION_HEALTH_URL." >&2
+  exit 1
+fi
 runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/production.yml/runs" \
   -f branch=main -f status=success -f per_page=50 \
   --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')

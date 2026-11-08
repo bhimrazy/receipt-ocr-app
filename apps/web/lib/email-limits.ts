@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { hitRateLimit } from "@receipt-ocr/core";
+import { clearRateLimit, hitRateLimit } from "@receipt-ocr/core";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 
@@ -33,6 +33,63 @@ export async function allowAuthEmail(kind: AuthEmailKind, email: string): Promis
       kind,
       error: errorFields(error),
     });
+    return true;
+  }
+}
+
+/** Sign-in attempts one address may make per window; a correct one resets the count. */
+export const SIGN_IN_ATTEMPTS_PER_WINDOW = 10;
+export const SIGN_IN_WINDOW_MS = 15 * 60 * 1000;
+/** Password-change attempts one user may make per window. */
+export const PASSWORD_CHANGES_PER_WINDOW = 10;
+
+const digestOf = (value: string) =>
+  createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
+const signInKey = (email: string) => `signin-fail:${digestOf(email)}`;
+
+/**
+ * Counts a sign-in attempt for this address before the password is checked, and says whether it
+ * may proceed. The increment and the check are one atomic statement, so parallel requests can't
+ * each slip in a guess while the count is still low. Same answer whether or not an account exists.
+ *
+ * The window is fixed from the first attempt and blocked attempts don't extend it, so a lock
+ * ends at most 15 minutes later: no permanent lockout. A correct sign-in clears the counter
+ * (`clearSignInAttempts`), so only the real password resets it. Trade-off: someone who knows an
+ * address can keep it blocked by sending 10 bad passwords per window from many IPs (Better
+ * Auth's per-IP limit still applies). The owner still has password reset and OAuth, and it costs
+ * the attacker steady traffic. A limiter failure lets the attempt through, as `allowAuthEmail` does.
+ */
+export async function allowSignInAttempt(email: string): Promise<boolean> {
+  try {
+    const { allowed } = await runtime.runPromise(
+      hitRateLimit(signInKey(email), SIGN_IN_WINDOW_MS, SIGN_IN_ATTEMPTS_PER_WINDOW),
+    );
+    if (!allowed) logger.info({ event: "auth.sign_in_locked", unit: "log" });
+    return allowed;
+  } catch (error) {
+    logger.error({ event: "auth.sign_in_limit_failed", unit: "log", error: errorFields(error) });
+    return true;
+  }
+}
+
+/** Forgets an address's attempts after a correct sign-in. */
+export async function clearSignInAttempts(email: string): Promise<void> {
+  try {
+    await runtime.runPromise(clearRateLimit(signInKey(email)));
+  } catch (error) {
+    logger.error({ event: "auth.sign_in_limit_failed", unit: "log", error: errorFields(error) });
+  }
+}
+
+/** Counts a password-change attempt; false once the user is over the cap. */
+export async function allowPasswordChange(userId: string): Promise<boolean> {
+  try {
+    const { allowed } = await runtime.runPromise(
+      hitRateLimit(`pwchange:${userId}`, SIGN_IN_WINDOW_MS, PASSWORD_CHANGES_PER_WINDOW),
+    );
+    return allowed;
+  } catch (error) {
+    logger.error({ event: "auth.sign_in_limit_failed", unit: "log", error: errorFields(error) });
     return true;
   }
 }

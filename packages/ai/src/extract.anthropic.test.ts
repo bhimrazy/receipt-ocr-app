@@ -56,8 +56,12 @@ const json =
       headers: { "content-type": "application/json", ...headers },
     });
 
-const apiError = (status: number, type: string, headers: Record<string, string> = {}) =>
-  json({ type: "error", error: { type, message: "test" } }, status, headers);
+const apiError = (
+  status: number,
+  type: string,
+  headers: Record<string, string> = {},
+  message = "test",
+) => json({ type: "error", error: { type, message } }, status, headers);
 
 const run = (model: ModelId, file = jpeg, maxRetries = 0) =>
   extractReceipt({ model, keys, file, maxRetries });
@@ -305,10 +309,19 @@ describe("Anthropic errors", () => {
     expect(error).toMatchObject({ kind: "provider-error" });
   });
 
-  it("400: the input was refused (bad-image), and the SDK does not retry it", async () => {
-    const calls = mockFetch(apiError(400, "invalid_request_error"));
+  it("400 about the image: bad-image, and the SDK does not retry it", async () => {
+    const calls = mockFetch(apiError(400, "invalid_request_error", {}, "Could not process image"));
     const error = await run("anthropic:claude-opus-5-5", jpeg, 2).catch((e: unknown) => e);
     expect(error).toMatchObject({ kind: "bad-image" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("400 about the request, not the image: not-configured, so the chain moves on", async () => {
+    const calls = mockFetch(
+      apiError(400, "invalid_request_error", {}, "output_config.effort: unsupported value"),
+    );
+    const error = await run("anthropic:claude-opus-5-5", jpeg, 2).catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "not-configured" });
     expect(calls).toHaveLength(1);
   });
 
@@ -328,5 +341,13 @@ describe("Anthropic errors", () => {
     mockFetch(apiError(401, "authentication_error"));
     const error = await run("anthropic:claude-haiku-5-5").catch((e: unknown) => e);
     expect(error).toMatchObject({ kind: "not-configured" });
+  });
+});
+
+describe("a 2xx reply the SDK cannot parse", () => {
+  it("is invalid-output, not bad-image, so the chain moves on", async () => {
+    mockFetch(json({ unexpected: true }));
+    const error = await run("anthropic:claude-haiku-5-5").catch((e: unknown) => e);
+    expect(error).toMatchObject({ kind: "invalid-output" });
   });
 });

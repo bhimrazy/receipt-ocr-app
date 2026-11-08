@@ -601,6 +601,24 @@ export const findUser = (id: string) =>
     }),
   );
 
+/** Admins other than `userId` who aren't banned: who could still run the panel after a change. */
+export const countOtherAdmins = (userId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const [row] = await db
+        .select({ n: count() })
+        .from(user)
+        .where(
+          and(
+            sql`${user.id} <> ${userId}`,
+            eq(user.banned, false),
+            sql`'admin' = any(string_to_array(${user.role}, ','))`,
+          ),
+        );
+      return row?.n ?? 0;
+    }),
+  );
+
 export const findWorkspace = (id: string) =>
   Effect.flatMap(Db, ({ use }) =>
     use(async (db) => {
