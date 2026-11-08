@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -61,6 +62,9 @@ export const receiptStatus = pgEnum("receipt_status", [
   "failed",
 ]);
 
+/** Upload plus retries; `receipts_attempts_check` enforces it. */
+export const MAX_EXTRACTION_ATTEMPTS = 3;
+
 export const receipts = pgTable(
   "receipts",
   {
@@ -75,8 +79,13 @@ export const receipts = pgTable(
      */
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     merchant: text("merchant"),
-    receiptDate: text("receipt_date"),
+    /**
+     * The transaction day in AD, a plain calendar date (no time zone), read as
+     * `YYYY-MM-DD`. Null when none was read or it failed the plausibility check.
+     */
+    receiptDate: date("receipt_date", { mode: "string" }),
     category: text("category"),
+    /** ISO 4217, upper case. Null = not read; readers show it as USD. */
     currency: text("currency").default("USD"),
     subtotal: numeric("subtotal", { precision: 12, scale: 2 }),
     tax: numeric("tax", { precision: 12, scale: 2 }),
@@ -93,7 +102,7 @@ export const receipts = pgTable(
     errorMessage: text("error_message"),
     /** Extraction attempts so far (1 = the upload itself); retries are capped on this. */
     attempts: integer("attempts").notNull().default(1),
-    /** When the latest retry started; quota windows count it like a new upload. */
+    /** When the latest retry started. Written, not read: quota counts the ledger. */
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     /** `provider:model` that produced the extraction; null until one has. */
     model: text("model"),
@@ -101,14 +110,23 @@ export const receipts = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // Serves the per-user quota count over a time window.
+    // A user's uploads, and the set-null on account delete.
     index("receipts_user_created_at_idx").on(table.userId, table.createdAt),
-    // Serves the global daily OCR cap.
+    // Admin upload charts and counts across workspaces.
     index("receipts_created_at_idx").on(table.createdAt),
     // History lists a workspace newest-first; this index serves that directly.
     index("receipts_org_created_at_idx").on(table.organizationId, table.createdAt),
-    // Lets the quota query BitmapOr retries in with created_at instead of scanning.
-    index("receipts_last_attempt_at_idx").on(table.lastAttemptAt),
+    // History's date filters and date ranges within a workspace.
+    index("receipts_org_receipt_date_idx").on(table.organizationId, table.receiptDate),
+    // Not before 2000, and at most a day after the UTC upload day (time zones):
+    // a misread or Bikram Sambat year stored as AD fails this. The dashboard's
+    // created_at scan bound relies on the upper limit.
+    check(
+      "receipts_receipt_date_check",
+      sql`receipt_date >= '2000-01-01' and receipt_date <= (created_at at time zone 'UTC')::date + 1`,
+    ),
+    check("receipts_currency_check", sql`currency ~ '^[A-Z]{3}$'`),
+    check("receipts_attempts_check", sql.raw(`attempts between 1 and ${MAX_EXTRACTION_ATTEMPTS}`)),
   ],
 ).enableRLS();
 
@@ -120,13 +138,17 @@ export const receiptItems = pgTable(
       .notNull()
       .references(() => receipts.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** Whole units, at least 1 (core rounds a weight or a 0 up to 1). */
     quantity: integer("quantity").notNull().default(1),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }),
     totalPrice: numeric("total_price", { precision: 12, scale: 2 }),
     confidence: numeric("confidence", { precision: 5, scale: 4 }),
   },
-  // Loading a receipt's items and the cascade delete both look up by receipt.
-  (table) => [index("receipt_items_receipt_id_idx").on(table.receiptId)],
+  (table) => [
+    // Loading a receipt's items and the cascade delete both look up by receipt.
+    index("receipt_items_receipt_id_idx").on(table.receiptId),
+    check("receipt_items_quantity_check", sql`quantity >= 1`),
+  ],
 ).enableRLS();
 
 /**
@@ -158,6 +180,8 @@ export const ocrRounds = pgTable(
     index("ocr_rounds_user_created_at_idx").on(table.userId, table.createdAt),
     // Global cap.
     index("ocr_rounds_created_at_idx").on(table.createdAt),
+    // The set-null when a workspace is deleted.
+    index("ocr_rounds_organization_id_idx").on(table.organizationId),
   ],
 ).enableRLS();
 
@@ -224,6 +248,8 @@ export const ocrCalls = pgTable(
     index("ocr_calls_org_created_at_idx").on(table.organizationId, table.createdAt),
     // Admin windows.
     index("ocr_calls_created_at_idx").on(table.createdAt),
+    // The set-null when an account is deleted.
+    index("ocr_calls_user_id_idx").on(table.userId),
     // A receipt's calls and the quota's "was this round read" lookup. Unique, so
     // an attempt's calls written twice (e.g. a lost COMMIT ack, then the
     // failure path) are billed once, while each automatic retry keeps its own.
@@ -307,6 +333,8 @@ export const jobs = pgTable(
     index("jobs_running_idx")
       .on(table.userId)
       .where(sql`state = 'running'`),
+    // The set-null when an account is deleted (finished jobs included).
+    index("jobs_user_id_idx").on(table.userId),
     // One live job per key; a finished job frees its key.
     uniqueIndex("jobs_idempotency_idx").on(table.idempotencyKey).where(LIVE_JOB),
     // At most one live job per receipt.
@@ -384,6 +412,8 @@ export const adminAuditLog = pgTable(
   (table) => [
     index("admin_audit_log_created_at_idx").on(table.createdAt),
     index("admin_audit_log_target_idx").on(table.targetType, table.targetId, table.createdAt),
+    // The set-null when an admin's account is deleted.
+    index("admin_audit_log_actor_id_idx").on(table.actorId),
   ],
 ).enableRLS();
 

@@ -4,5 +4,5 @@ This repository is published for viewing only. No license is granted to use, cop
 modify, merge, publish, distribute, sublicense or sell any part of it, in whole or in
 part, without prior written permission from the copyright holder.
 
-Third-party files under bench/fixtures-real/ keep their own licences, listed in the README in each
+Third-party files under packages/bench/fixtures-real/ keep their own licences, listed in the README in each
 folder there.

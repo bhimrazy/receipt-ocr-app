@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1794035016259,
+      "when": 1794120998976,
       "tag": "0000_baseline",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1794038936805,
-      "tag": "0001_ocr_call_refused_unsupported",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1794060548446,
-      "tag": "0002_two_factor_passkey_step_up",
       "breakpoints": true
     }
   ]

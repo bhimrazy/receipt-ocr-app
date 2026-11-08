@@ -2,6 +2,7 @@
 
 import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
 import type { ReceiptWithItems } from "@receipt-ocr/core";
+import { EARLIEST_RECEIPT_DATE, latestReceiptDate } from "@receipt-ocr/core/receipt-fields";
 import { Button } from "@receipt-ocr/ui/components/button";
 import {
   Card,
@@ -136,6 +137,8 @@ export function ReceiptEditor({
             </FieldLabel>
             <Input
               id="receiptDate"
+              max={latestReceiptDate(receipt.createdAt)}
+              min={EARLIEST_RECEIPT_DATE}
               onChange={(event) => set("receiptDate", event.target.value)}
               placeholder="YYYY-MM-DD"
               type="date"

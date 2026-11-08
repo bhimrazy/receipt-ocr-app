@@ -175,6 +175,62 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(await run(ensurePersonalWorkspace({ id, email: `${id}@example.com` }))).toBeNull();
   });
 
+  it("stores only plausible dates and ISO currencies; edits outside the date bounds are refused", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    // Its own workspace, so the other tests' counts don't see these receipts.
+    const c = await createUser("carol");
+    const complete = async (receiptDate: string | null, currency: string) => {
+      const id = (await run(ingestUpload({ scope: c, fileName: "d.jpg", body: JPEG, limits })))
+        .receipt.id;
+      await dropJob(id);
+      const extraction = { ...FIXTURE_RECEIPTS[0]!, receiptDate, currency };
+      return repo((r) => r.complete(id, c, 1, extraction, "fixture", []));
+    };
+    expect(await complete(" 2026-01-31 ", "eur")).toMatchObject({
+      receiptDate: "2026-01-31",
+      currency: "EUR",
+    });
+    // Not a real day, day-first, a Bikram Sambat year read as AD, before 2000: no date.
+    for (const date of ["2026-02-30", "31/01/2026", "2080-04-09", "1999-12-31"]) {
+      expect((await complete(date, "USD"))?.receiptDate).toBeNull();
+    }
+    expect((await complete(null, "US$"))?.currency).toBeNull();
+
+    const row = await complete("2026-01-31", "USD");
+    const id = row!.id;
+    const latest = new Date(row!.createdAt.getTime() + 86_400_000).toISOString().slice(0, 10);
+    const update = (receiptDate: string) =>
+      runExit(Effect.flatMap(ReceiptRepo, (r) => r.update(id, c, { receiptDate })));
+    expect(await update(latest)).toMatchObject({ _tag: "Success", value: true });
+    expect((await repo((r) => r.get(id, c)))?.receiptDate).toBe(latest);
+    for (const bad of ["2026-02-30", "1999-12-31", "2099-01-01"]) {
+      const exit = await update(bad);
+      expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("InvalidInput");
+    }
+    expect((await repo((r) => r.get(id, c)))?.receiptDate).toBe(latest);
+
+    // The table refuses what slips past the code.
+    const write = (set: Record<string, unknown>) =>
+      db(async (d) => {
+        try {
+          await d.update(receipts).set(set).where(eq(receipts.id, id));
+          return "ok";
+        } catch (error) {
+          // Drizzle wraps the driver's error; the constraint is on the cause.
+          for (let e = error; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
+            const name = (e as { constraint_name?: string }).constraint_name;
+            if (name) return name;
+          }
+          throw error;
+        }
+      });
+    expect(await write({ receiptDate: "2099-01-01" })).toBe("receipts_receipt_date_check");
+    expect(await write({ currency: "usd" })).toBe("receipts_currency_check");
+    expect(await write({ attempts: 4 })).toBe("receipts_attempts_check");
+    await run(purgeReceiptFiles({ organizationId: c.organizationId }));
+  });
+
   it("completes through the fixture provider with a canonical category", async () => {
     const receipt = await run(Effect.flatMap(ReceiptRepo, (repo) => repo.get(receiptId, a)));
     expect(receipt?.status).toBe("completed");
@@ -283,6 +339,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect((await list({ category: "Software" })).total).toBe(0);
     expect((await list({ from: receipt!.receiptDate, to: receipt!.receiptDate })).total).toBe(1);
     expect((await list({ from: "2099-01-01" })).total).toBe(0);
+    // Not a day: ignored rather than failing the date cast.
+    expect((await list({ from: "2026-02-30" })).total).toBe((await list({})).total);
     const needsReview = Number(receipt!.confidence) < 0.9 ? 1 : 0;
     expect((await list({ status: "needs-review" })).total).toBe(needsReview);
     const counts = await run(Effect.flatMap(ReceiptRepo, (r) => r.counts(a)));
