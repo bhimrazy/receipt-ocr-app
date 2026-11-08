@@ -48,6 +48,11 @@ function report(error: unknown, fields: ErrorFields, status: number, event?: Wid
   });
 }
 
+/** OCR failures the photo caused (unreadable, declined, wrong file): logged, not reported. */
+const PHOTO_FAILURES = new Set(["invalid-output", "bad-image", "refused", "unsupported-file"]);
+const userInputFailure = (error: AppError) =>
+  error._tag === "OcrError" && PHOTO_FAILURES.has(error.kind);
+
 /**
  * Records a failure on the wide event and returns its HTTP response. The
  * event gets the error's tag, kind and cause class, never its message:
@@ -74,7 +79,7 @@ export function failureResponse(cause: Cause.Cause<AppError>, event?: WideEvent)
     event.outcome = status >= 500 ? "error" : error._tag;
     event.error = fields;
   }
-  if (status >= 500) report(error, fields, status, event);
+  if (status >= 500 && !userInputFailure(error)) report(error, fields, status, event);
   const headers =
     error._tag === "QuotaExceeded" ? { "Retry-After": String(error.retryAfterSeconds) } : undefined;
   const message = PUBLIC.has(error._tag)

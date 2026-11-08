@@ -93,6 +93,29 @@ describe("failureResponse (L2)", () => {
   });
 });
 
+describe("failureResponse error reporting", () => {
+  it("reports provider and infra 5xx, never a photo the model couldn't read", async () => {
+    const { Cause } = await import("effect");
+    const { OcrError } = await import("@receipt-ocr/core");
+    const { setErrorReporter } = await import("./telemetry/errors");
+    const reported: string[] = [];
+    setErrorReporter((report) => void reported.push(String(report.fields.kind)));
+    try {
+      for (const kind of ["invalid-output", "bad-image", "refused", "unsupported-file"] as const) {
+        const res = failureResponse(Cause.fail(new OcrError({ message: "x", kind, attempts: [] })));
+        expect(res.status).toBe(502);
+      }
+      expect(reported).toEqual([]);
+      for (const kind of ["timeout", "provider-error"] as const) {
+        failureResponse(Cause.fail(new OcrError({ message: "x", kind, attempts: [] })));
+      }
+      expect(reported).toEqual(["timeout", "provider-error"]);
+    } finally {
+      setErrorReporter(undefined);
+    }
+  });
+});
+
 describe("failureResponse for NotConfigured", () => {
   it("tells the user nothing about the server's configuration", async () => {
     const { Cause } = await import("effect");
