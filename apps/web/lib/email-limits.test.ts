@@ -114,6 +114,16 @@ describe("allowContactReply", () => {
     for (const [, windowMs] of hitRateLimit.mock.calls) expect(windowMs).toBe(24 * 60 * 60 * 1000);
   });
 
+  it("counts +tag aliases, and Gmail dots and googlemail.com, as one address", async () => {
+    expect(await allowContactReply("jane.doe@gmail.com", "1.1.1.1")).toBe(true);
+    expect(await allowContactReply("janedoe+a@googlemail.com", "2.2.2.2")).toBe(false);
+    expect(await allowContactReply("J.a.n.e.Doe+x@Gmail.com", "3.3.3.3")).toBe(false);
+    expect(await allowContactReply("ann+1@example.com", "4.4.4.4")).toBe(true);
+    expect(await allowContactReply("ann+2@example.com", "5.5.5.5")).toBe(false);
+    // Dots matter outside Gmail.
+    expect(await allowContactReply("a.nn@example.com", "6.6.6.6")).toBe(true);
+  });
+
   it(`allows at most ${CONTACT_REPLY_LIMITS.perIp} replies a day from one IP`, async () => {
     const results = [];
     for (let i = 0; i <= CONTACT_REPLY_LIMITS.perIp; i++) {

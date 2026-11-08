@@ -38,6 +38,22 @@ export async function allowAuthEmail(kind: AuthEmailKind, email: string): Promis
   }
 }
 
+/**
+ * One mailbox, one key: lowercase, no `+tag`, and for Gmail no dots, so aliases of an address
+ * share the single reply a day. Only the reply cap uses it; sign-in and auth mail keep exact
+ * addresses so an alias can't lock someone out.
+ */
+export function replyAddressKey(email: string): string {
+  const [rawLocal = "", rawDomain = ""] = email
+    .trim()
+    .toLowerCase()
+    .split(/@(?=[^@]*$)/);
+  const gmail = rawDomain === "gmail.com" || rawDomain === "googlemail.com";
+  let local = rawLocal.split("+")[0] ?? "";
+  if (gmail) local = local.replaceAll(".", "");
+  return `${local}@${gmail ? "gmail.com" : rawDomain}`;
+}
+
 /** Contact-form auto-replies: per recipient address and per sending IP, in one day. */
 export const CONTACT_REPLY_LIMITS = {
   windowMs: 24 * 60 * 60 * 1000,
@@ -62,7 +78,7 @@ export async function allowContactReply(email: string, ip: string | null): Promi
       if (!byIp.allowed) return false;
     }
     const byAddress = await runtime.runPromise(
-      hitRateLimit(`contact-reply:to:${digestOf(email)}`, windowMs, perAddress),
+      hitRateLimit(`contact-reply:to:${digestOf(replyAddressKey(email))}`, windowMs, perAddress),
     );
     return byAddress.allowed;
   } catch (error) {
