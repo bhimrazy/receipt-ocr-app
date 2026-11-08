@@ -6,6 +6,7 @@ import { Brand } from "@/components/brand";
 import { CookieSettingsButton } from "@/components/consent/cookie-settings-button";
 import { supportEmail } from "@/lib/env";
 import { getPlanTable } from "@/lib/plan-limits";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { AuthMessage } from "./auth-field";
 import { allowance } from "@/lib/plan-copy";
 
@@ -113,7 +114,7 @@ export async function AuthLayout({
             {children}
           </div>
         </main>
-        <footer className="relative z-10 flex justify-center px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <footer className="relative z-10 flex flex-wrap items-center justify-center gap-x-6 px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <nav aria-label="Legal" className="flex gap-6 text-sm text-muted-foreground">
             <Link className={footerLink} href="/">
               Home
@@ -128,6 +129,7 @@ export async function AuthLayout({
               className={cn(footerLink, "h-auto px-0 font-normal hover:bg-transparent")}
             />
           </nav>
+          <ThemeToggle />
         </footer>
       </div>
     </div>

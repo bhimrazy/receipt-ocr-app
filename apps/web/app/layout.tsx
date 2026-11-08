@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import { ConsentManager } from "@/components/consent/consent-manager";
 import { Pwa } from "@/components/pwa";
+import { ThemeProvider } from "@/components/theme-provider";
 import { gaMeasurementId } from "@/lib/consent/env";
 import { startupImages } from "@/lib/ios-splash";
 import { buildIsIndexable } from "@/lib/seo-hosts";
@@ -48,11 +49,11 @@ export const metadata: Metadata = {
   robots: buildIsIndexable(process.env)
     ? { index: true, follow: true }
     : { index: false, follow: false },
-  // "black", not "black-translucent": pages start below the status bar, so no layout needs a
-  // top safe-area inset. The bar matches --background closely enough to read as one surface.
+  // "default", not "black-translucent": pages start below the status bar, so no layout needs a
+  // top safe-area inset. "default" lets the bar follow the page's theme rather than staying black.
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black",
+    statusBarStyle: "default",
     title: SITE_NAME,
     startupImage: startupImages,
   },
@@ -62,9 +63,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // Dark until the theme toggle ships; THEME_SCRIPT sets light's colour and scheme itself.
-  themeColor: THEME_COLORS.dark,
-  colorScheme: "dark",
+  // Per OS scheme, for System. THEME_SCRIPT prepends one unconditional colour for an explicit choice.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: THEME_COLORS.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLORS.dark },
+  ],
+  colorScheme: "dark light",
   // Draw under the notch and home indicator; the shell pads itself with env(safe-area-inset-*).
   viewportFit: "cover",
 };
@@ -79,10 +83,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/* A plain blocking script, not next/script: it must run while parsing, before paint. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* Next emits only mobile-web-app-capable; iOS has needed the Apple name for startup images. */}
+        <meta content="yes" name="apple-mobile-web-app-capable" />
       </head>
       {/* viewport-fit=cover lets pages run under a landscape notch; keep content beside it. */}
       <body className="pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] font-sans antialiased">
         {children}
+        <ThemeProvider />
         <Pwa />
         {/* VERCEL is set in Vercel builds only; Docker images run no page counts. */}
         <ConsentManager

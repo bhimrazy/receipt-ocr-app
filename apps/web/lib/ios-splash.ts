@@ -3,15 +3,16 @@
 // `w` x `h` are portrait CSS points (what iOS reports as device-width and device-height).
 
 export type SplashDevice = { w: number; h: number; dpr: 2 | 3 };
-export type SplashTheme = "dark";
+export type SplashTheme = "dark" | "light";
 
-// Only 10 images: iPhone, portrait, dark. The app is dark-only and iPhone PWAs are the common
-// install; iPad and landscape fall back to a plain background. Add a light set with the theme switch.
-export const splashThemes: readonly SplashTheme[] = ["dark"];
+// iPhone, portrait, one set per OS scheme: iPhone PWAs are the common install; iPad and landscape
+// fall back to a plain background. iOS picks by the OS scheme, not the in-app choice.
+export const splashThemes: readonly SplashTheme[] = ["dark", "light"];
 
 const iphones: [number, number, 2 | 3][] = [
-  [440, 956, 3], // 16 Pro Max
-  [402, 874, 3], // 16 Pro
+  [440, 956, 3], // 16 and 17 Pro Max
+  [420, 912, 3], // Air
+  [402, 874, 3], // 16 Pro, 17 and 17 Pro
   [430, 932, 3], // 14 and 15 Pro Max, 15 and 16 Plus
   [393, 852, 3], // 15, 16, 14 and 15 Pro
   [428, 926, 3], // 12 and 13 Pro Max, 14 Plus
@@ -42,8 +43,8 @@ export const startupImages = splashThemes.flatMap((theme) =>
       `(device-width: ${d.w}px)`,
       `(device-height: ${d.h}px)`,
       `(-webkit-device-pixel-ratio: ${d.dpr})`,
-      // No prefers-color-scheme clause: with only a dark set it would leave light-mode phones blank.
       "(orientation: portrait)",
+      `(prefers-color-scheme: ${theme})`,
     ].join(" and "),
   })),
 );
