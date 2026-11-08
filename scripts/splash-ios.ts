@@ -21,6 +21,7 @@ const fontDir = path.join(import.meta.dirname, "splash-fonts");
 
 const palette: Record<SplashTheme, { bg: string; text: string; muted: string; tile: string }> = {
   dark: { bg: "#0a0a0b", text: "#e4e4e7", muted: "#9a9aa3", tile: "#34d399" },
+  light: { bg: "#f7f7f8", text: "#18181b", muted: "#5f5f68", tile: "#036c4d" },
 };
 
 /** The brand master as a data URI, rendered at device pixels so the strokes stay sharp. */
