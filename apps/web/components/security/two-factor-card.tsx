@@ -470,7 +470,7 @@ export function TwoFactorCard({
       </CardContent>
       <ConfirmDialog
         confirmLabel="Turn off"
-        description="Important changes will then be confirmed by a code emailed to you instead."
+        description="Important changes will then be confirmed by a passkey or a code emailed to you."
         destructive
         focusAfterConfirm={noticeRef}
         onConfirm={() => run("disable")}

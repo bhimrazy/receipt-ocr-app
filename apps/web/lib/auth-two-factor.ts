@@ -42,7 +42,11 @@ const ISSUER = SITE_NAME;
 
 type HookContext = Parameters<typeof getSessionFromCtx>[0] & { path: string; body?: unknown };
 /** In `hooks.after`, Better Auth puts the endpoint's result on the context. */
-type AfterContext = HookContext & { context: { returned?: unknown } };
+type AfterContext = HookContext & {
+  context: { returned?: unknown };
+  /** Merged in from the before-hook's returned context. */
+  removedPasskeyLabel?: string;
+};
 
 type Deliver = (input: SendEmailInput) => Promise<void>;
 
@@ -180,29 +184,38 @@ const AFTER_PATHS = new Set([
   "/passkey/delete-passkey",
 ]);
 
-/** Labels of passkeys being removed, kept from hooks.before to hooks.after: the row is gone by then. */
-const removedLabels = new Map<string, string>();
+export const PASSKEY_NAME_MAX = 60;
+export const PASSKEY_NAME_TOO_LONG = `Name it in ${PASSKEY_NAME_MAX} characters or fewer.`;
+
+/**
+ * In `hooks.before` for the endpoints that store a passkey name (a query param when registering,
+ * the body when renaming): the UI caps it at 60, so the server does too.
+ */
+export function guardPasskeyName(ctx: HookContext & { query?: unknown }) {
+  const source = ctx.path === "/passkey/generate-register-options" ? ctx.query : ctx.body;
+  const name = (source as { name?: unknown } | null | undefined)?.name;
+  if (typeof name === "string" && name.length > PASSKEY_NAME_MAX) {
+    throw new APIError("BAD_REQUEST", { message: PASSKEY_NAME_TOO_LONG });
+  }
+}
 
 const passkeyIdOf = (body: unknown) => {
   const id = (body as { id?: unknown } | null | undefined)?.id;
   return typeof id === "string" ? id : null;
 };
 
-/** In `hooks.before` for /passkey/delete-passkey, after its guards: note the name for the notice. */
+/**
+ * In `hooks.before` for /passkey/delete-passkey, after its guards: the name for the notice, as the
+ * hook's return value. Better Auth merges a returned `context` into the context `hooks.after`
+ * sees, which is how the label survives the row's deletion.
+ */
 export async function rememberRemovedPasskey(ctx: HookContext) {
   const id = passkeyIdOf(ctx.body);
   if (!id) return;
   const current = await getSessionFromCtx(ctx);
   if (!current) return;
   const row = await runtime.runPromise(findPasskey(current.user.id, id));
-  if (row) removedLabels.set(id, passkeyLabel(row));
-}
-
-function takeRemovedLabel(body: unknown): string {
-  const id = passkeyIdOf(body);
-  const label = (id && removedLabels.get(id)) || "Passkey";
-  if (id) removedLabels.delete(id);
-  return label;
+  if (row) return { context: { removedPasskeyLabel: passkeyLabel(row) } };
 }
 
 /**
@@ -211,8 +224,7 @@ function takeRemovedLabel(body: unknown): string {
  */
 export async function factorChangedAfter(ctx: AfterContext, deliver: Deliver) {
   if (!AFTER_PATHS.has(ctx.path)) return;
-  // Taken before the error check, so a refused delete doesn't leave its entry behind.
-  const removedLabel = ctx.path === "/passkey/delete-passkey" ? takeRemovedLabel(ctx.body) : null;
+  const removedLabel = ctx.removedPasskeyLabel ?? "Passkey";
   if (isAPIError(ctx.context.returned)) return;
   if (ctx.path === "/passkey/verify-authentication") {
     const created = ctx.context.newSession;
@@ -266,7 +278,7 @@ export async function factorChangedAfter(ctx: AfterContext, deliver: Deliver) {
         to: user.email,
         ...passkeyRemovedEmail(emailContext, {
           resetUrl: resetPasswordUrl(),
-          passkeyName: removedLabel ?? "Passkey",
+          passkeyName: removedLabel,
         }),
       },
       "passkey_removed",

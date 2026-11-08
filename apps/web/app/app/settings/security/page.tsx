@@ -95,14 +95,14 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
 
       {params.required === "admin" && isAdmin(session) && !enabled && passkeys.length === 0 ? (
         <Alert className="mb-6" variant="warning">
-          Admin accounts must use two-step sign-in. Add a passkey or set up an authenticator app
-          below, then open Admin again.
+          Admin accounts must use two-step sign-in. Finish that check below, then open Admin again.
         </Alert>
       ) : null}
 
       <SecurityChecklist
         email={session.user.email}
         emailVerified={session.user.emailVerified}
+        hasProviders={configured.length > 0}
         methods={methods ? signInMethodCount(methods, configured) : 0}
         readOnly={impersonating}
         strongFactor={isStrongFactor({ twoFactorEnabled: enabled, passkeys: passkeyCount })}

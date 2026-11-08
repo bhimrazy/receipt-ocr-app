@@ -40,6 +40,7 @@ export function SecurityChecklist({
   emailVerified,
   strongFactor,
   methods,
+  hasProviders,
   readOnly,
 }: {
   email: string;
@@ -48,6 +49,8 @@ export function SecurityChecklist({
   strongFactor: boolean;
   /** Ways to sign in (password, Google, GitHub, passkeys). */
   methods: number;
+  /** Google or GitHub is set up; if not, a passkey is the only other way in to add. */
+  hasProviders: boolean;
   readOnly: boolean;
 }) {
   const items: Item[] = [
@@ -75,7 +78,10 @@ export function SecurityChecklist({
       title: "Two or more ways to sign in",
       todo: "If you lose one, you can still get in.",
       action: (variant) => (
-        <Action href="#sign-in-methods-heading" variant={variant}>
+        <Action
+          href={hasProviders ? "#sign-in-methods-heading" : "#passkeys-heading"}
+          variant={variant}
+        >
           Add another
         </Action>
       ),

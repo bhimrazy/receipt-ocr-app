@@ -44,6 +44,7 @@ import {
   authMethodOf,
   authMethodSessionField,
   factorChangedAfter,
+  guardPasskeyName,
   rememberRemovedPasskey,
   replaceSessionOnSignIn,
   trustDeviceIdentifier,
@@ -364,10 +365,16 @@ export const auth = betterAuth({
         await guardUnlink(ctx);
         return;
       }
+      if (
+        ctx.path === "/passkey/generate-register-options" ||
+        ctx.path === "/passkey/update-passkey"
+      ) {
+        guardPasskeyName(ctx);
+        return;
+      }
       if (ctx.path === "/passkey/delete-passkey") {
         await guardPasskeyDelete(ctx);
-        await rememberRemovedPasskey(ctx);
-        return;
+        return rememberRemovedPasskey(ctx);
       }
       if (ADMIN_GUARDED.has(ctx.path)) {
         await guardAdminEndpoint(ctx);

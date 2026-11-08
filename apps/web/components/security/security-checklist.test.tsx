@@ -11,6 +11,7 @@ const props = {
   emailVerified: false,
   strongFactor: false,
   methods: 1,
+  hasProviders: true,
   readOnly: false,
 };
 
@@ -38,6 +39,13 @@ describe("SecurityChecklist", () => {
     ]);
     const next = renderToStaticMarkup(<SecurityChecklist {...props} emailVerified />);
     expect(actions(next)[0]).toEqual({ label: "Add a passkey", outline: false });
+  });
+
+  it("points Add another at passkeys when no Google or GitHub is set up", () => {
+    const html = renderToStaticMarkup(<SecurityChecklist {...props} />);
+    expect(html).toContain('href="#sign-in-methods-heading"');
+    const none = renderToStaticMarkup(<SecurityChecklist {...props} hasProviders={false} />);
+    expect(none).not.toContain("#sign-in-methods-heading");
   });
 
   it("collapses to one line when all three are done", () => {

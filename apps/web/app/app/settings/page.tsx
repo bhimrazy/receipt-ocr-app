@@ -152,7 +152,9 @@ export default async function SettingsPage({
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">
-              {protectedAccount ? "Your account is protected" : "Add a second check to sign-in"}
+              {protectedAccount
+                ? "Your account is protected"
+                : "Add a second check when you sign in"}
             </p>
             <p className="text-xs text-muted-foreground">
               {protectedAccount

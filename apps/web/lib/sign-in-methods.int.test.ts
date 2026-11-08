@@ -207,6 +207,7 @@ describe.skipIf(!enabled)("sign-in methods", { timeout: 30_000 }, () => {
     const values = (n: number) => ({
       id: `${tag}-lpk${n}`,
       userId: a.id,
+      name: n === 1 ? "Work laptop" : null,
       publicKey: "pk",
       credentialID: `${tag}-lcred${n}`,
       counter: 0,
@@ -231,6 +232,9 @@ describe.skipIf(!enabled)("sign-in methods", { timeout: 30_000 }, () => {
     await db.insert(passkey).values(values(2));
     await remove(`${tag}-lpk1`);
     expect(await count()).toBe(1);
+    // The notice names the passkey although its row was gone by the time hooks.after ran.
+    const notice = sent.filter((m) => m.to === a.email).at(-1);
+    expect(notice?.text).toContain("Work laptop");
   });
 
   it("the one-time prompt is due after the fifth completed receipt, and not with a passkey", async () => {
