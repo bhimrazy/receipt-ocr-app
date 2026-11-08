@@ -35,6 +35,7 @@ export const SLOT_KINDS = {
   message: "multiline",
   code: "line",
   provider: "line",
+  passkeyName: "line",
   receiptsPerDay: "line",
 } as const satisfies Record<string, SlotKind>;
 

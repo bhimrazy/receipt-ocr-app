@@ -1,4 +1,4 @@
-import { account, asc, eq, passkey, receipts, sql, user } from "@receipt-ocr/db";
+import { account, and, asc, eq, passkey, receipts, sql, user } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { Db } from "./services";
 
@@ -97,6 +97,41 @@ export function canRemoveAccount(
 /** Whether removing a passkey leaves a way in: another passkey, or a usable account. */
 export const canRemovePasskey = (methods: SignInMethods, configured: readonly string[]): boolean =>
   methods.passkeys > 1 || usableAccounts(methods.accounts, configured).length > 0;
+
+/** One of this user's passkeys, for naming it in the removal notice; null when it isn't theirs. */
+export const findPasskey = (userId: string, passkeyId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const [row] = await db
+        .select({ name: passkey.name, aaguid: passkey.aaguid })
+        .from(passkey)
+        .where(and(eq(passkey.id, passkeyId), eq(passkey.userId, userId)))
+        .limit(1);
+      return row ?? null;
+    }),
+  );
+
+/** A second factor beyond the password: an authenticator app or at least one passkey. */
+export const isStrongFactor = (methods: Pick<SignInMethods, "twoFactorEnabled" | "passkeys">) =>
+  methods.twoFactorEnabled || methods.passkeys > 0;
+
+/** isStrongFactor for one user, read fresh. False for an unknown user. */
+export const hasStrongFactor = (userId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const [row] = await db
+        .select({
+          twoFactorEnabled: user.twoFactorEnabled,
+          passkeys: sql<number>`(select count(*)::int from ${passkey} p where p.user_id = ${userId})`,
+        })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1);
+      return row
+        ? isStrongFactor({ ...row, twoFactorEnabled: Boolean(row.twoFactorEnabled) })
+        : false;
+    }),
+  );
 
 /** Completed receipts this user scanned before the one-time "protect your receipts" prompt. */
 export const SECURITY_PROMPT_AFTER_RECEIPTS = 5;

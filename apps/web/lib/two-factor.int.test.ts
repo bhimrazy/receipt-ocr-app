@@ -367,6 +367,30 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
     expect(options.challenge).toBeTruthy();
   });
 
+  it("refuses a passkey name over 60 characters, when adding and when renaming", async () => {
+    const account = await signUp("passkey-name");
+    await emailStepUp(account.headers, "passkey.add");
+    const long = "x".repeat(61);
+    expect(
+      await failure(
+        auth.api.generatePasskeyRegistrationOptions({
+          headers: account.headers,
+          query: { name: long },
+        }),
+      ),
+    ).toMatchObject({ status: 400 });
+    const ok = await auth.api.generatePasskeyRegistrationOptions({
+      headers: account.headers,
+      query: { name: "x".repeat(60) },
+    });
+    expect(ok.challenge).toBeTruthy();
+    expect(
+      await failure(
+        auth.api.updatePasskey({ headers: account.headers, body: { id: "any", name: long } }),
+      ),
+    ).toMatchObject({ status: 400 });
+  });
+
   it("needs a step-up to unlink a sign-in method, even right after sign-in", async () => {
     const account = await signUp("unlink");
     const [credential] = await db.execute<{ id: string }>(
@@ -399,6 +423,11 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
       await failure(auth.api.enableTwoFactor({ body: { password }, headers: account.headers })),
     ).toMatchObject({ status: 403, code: "IMPERSONATING" });
     expect(await stepUp.sendStepUpCode(who, "account.delete")).toMatchObject({ ok: false });
+    expect(
+      await failure(
+        auth.api.getAccessToken({ body: { accountId: "any" }, headers: account.headers }),
+      ),
+    ).toMatchObject({ status: 403, code: "IMPERSONATING" });
   });
 
   it("an admin reset clears the authenticator, trust and sessions, with an audit row", async () => {

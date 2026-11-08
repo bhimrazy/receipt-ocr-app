@@ -2,9 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   canRemoveAccount,
   canRemovePasskey,
+  isStrongFactor,
   signInMethodCount,
   type SignInMethods,
 } from "./account-security";
+
+describe("isStrongFactor", () => {
+  it("counts an authenticator app or any passkey, not a password alone", () => {
+    expect(isStrongFactor({ twoFactorEnabled: false, passkeys: 0 })).toBe(false);
+    expect(isStrongFactor({ twoFactorEnabled: true, passkeys: 0 })).toBe(true);
+    expect(isStrongFactor({ twoFactorEnabled: false, passkeys: 1 })).toBe(true);
+  });
+});
 
 const at = new Date("2026-11-01T00:00:00Z");
 const password = { id: "a-pw", providerId: "credential", createdAt: at, hasPassword: true };

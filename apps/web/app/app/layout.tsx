@@ -20,6 +20,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getUsageSummary } from "@/lib/receipts";
 import { showSecurityPrompt } from "@/lib/security-prompt";
+import { runtime } from "@/lib/runtime";
+import { hasStrongFactor } from "@receipt-ocr/core";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { Suspense } from "react";
 
@@ -53,7 +55,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // First, alone: it may create the personal workspace, which the reads below count.
   const scope = await getActiveScope();
   if (!scope) return <NoWorkspace email={session.user.email} />;
-  // Owners and admins of a shared workspace are nudged towards two-step sign-in.
+  // Owners and admins of a shared workspace without a passkey or app code are nudged to add one.
   const mayNudge =
     !session.user.twoFactorEnabled &&
     !session.session.impersonatedBy &&
@@ -62,7 +64,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [allowance, workspaces, nudge, prompt] = await Promise.all([
     getWorkspaceAllowance(),
     listWorkspaces(),
-    mayNudge ? isSharedWorkspace(scope.organizationId) : false,
+    mayNudge
+      ? Promise.all([
+          isSharedWorkspace(scope.organizationId),
+          runtime.runPromise(hasStrongFactor(session.user.id)),
+        ]).then(([shared, strong]) => shared && !strong)
+      : false,
     showSecurityPrompt(session),
   ]);
   const showAdmin = isAdmin(session);

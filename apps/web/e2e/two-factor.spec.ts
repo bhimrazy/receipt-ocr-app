@@ -51,7 +51,7 @@ test("new backup codes need a fresh 'confirm it's you' check", async ({ page }) 
   const { key } = await enrolAuthenticator(page, email);
 
   await page.getByRole("button", { name: "New backup codes" }).click();
-  await page.getByLabel(/Confirm your password/).fill(PASSWORD);
+  await page.getByLabel("Your password").fill(PASSWORD);
   await page.getByRole("button", { name: "Make new codes" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Confirm it's you" });

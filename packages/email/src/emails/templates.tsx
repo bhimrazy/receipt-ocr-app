@@ -432,14 +432,18 @@ const backupCodesRegenerated = factorNotice({
 
 const passkeyAdded = factorNotice({
   heading: "A passkey was added",
-  body: "A passkey was added to your account. It can now sign you in and confirm important changes.",
+  body: (v) =>
+    `The passkey “${v.passkeyName}” was added to your account. It can now sign you in and confirm important changes.`,
   preheader: "A new passkey can sign in to your account.",
+  slots: ["passkeyName"],
 });
 
 const passkeyRemoved = factorNotice({
   heading: "A passkey was removed",
-  body: "A passkey was removed from your account and can no longer sign you in.",
+  body: (v) =>
+    `The passkey “${v.passkeyName}” was removed from your account and can no longer sign you in.`,
   preheader: "That passkey can no longer sign in to your account.",
+  slots: ["passkeyName"],
 });
 
 const passwordSet = factorNotice({

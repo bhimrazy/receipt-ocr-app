@@ -116,8 +116,15 @@ const cases: Record<
     make: (ctx) => backupCodesRegeneratedEmail(ctx, { resetUrl }),
     input: { resetUrl },
   },
-  passkeyAdded: { make: (ctx) => passkeyAddedEmail(ctx, { resetUrl }), input: { resetUrl } },
-  passkeyRemoved: { make: (ctx) => passkeyRemovedEmail(ctx, { resetUrl }), input: { resetUrl } },
+  // The name is user-chosen, so the golden renders a hostile one.
+  passkeyAdded: {
+    make: (ctx) => passkeyAddedEmail(ctx, { resetUrl, passkeyName: hostile }),
+    input: { resetUrl, passkeyName: hostile },
+  },
+  passkeyRemoved: {
+    make: (ctx) => passkeyRemovedEmail(ctx, { resetUrl, passkeyName: hostile }),
+    input: { resetUrl, passkeyName: hostile },
+  },
   passwordSet: { make: (ctx) => passwordSetEmail(ctx, { resetUrl }), input: { resetUrl } },
   signInConnected: {
     make: (ctx) => signInConnectedEmail(ctx, { resetUrl, provider: "Google" }),
@@ -497,8 +504,8 @@ describe("security emails", () => {
       twoFactorEnabledEmail(withSupport, { resetUrl }),
       twoFactorDisabledEmail(withSupport, { resetUrl, byAdmin: false }),
       backupCodesRegeneratedEmail(withSupport, { resetUrl }),
-      passkeyAddedEmail(withSupport, { resetUrl }),
-      passkeyRemovedEmail(withSupport, { resetUrl }),
+      passkeyAddedEmail(withSupport, { resetUrl, passkeyName: "Work laptop" }),
+      passkeyRemovedEmail(withSupport, { resetUrl, passkeyName: "Work laptop" }),
       passwordSetEmail(withSupport, { resetUrl }),
       signInConnectedEmail(withSupport, { resetUrl, provider: "Google" }),
       signInDisconnectedEmail(withSupport, { resetUrl, provider: "GitHub" }),
@@ -514,6 +521,15 @@ describe("security emails", () => {
     expect(connected.text).toContain("Google was connected to your account.");
     const disconnected = signInDisconnectedEmail(withSupport, { resetUrl, provider: "GitHub" });
     expect(disconnected.html).toContain("GitHub sign-in was disconnected");
+  });
+
+  it("names the passkey in the body, escaped, and never in the subject", () => {
+    const added = passkeyAddedEmail(withSupport, { resetUrl, passkeyName: "Work laptop" });
+    expect(added.text).toContain("The passkey “Work laptop” was added to your account.");
+    const removed = passkeyRemovedEmail(withSupport, { resetUrl, passkeyName: "<b>Phone</b>" });
+    expect(removed.subject).not.toContain("Phone");
+    expect(removed.text).toContain("The passkey “<b>Phone</b>” was removed");
+    expect(removed.html).toContain("&lt;b&gt;Phone&lt;/b&gt;");
   });
 
   it("says when an administrator made the reset", () => {

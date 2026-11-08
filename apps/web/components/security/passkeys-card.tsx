@@ -1,15 +1,14 @@
 "use client";
 
 import { Alert } from "@receipt-ocr/ui/components/alert";
-import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { Card, CardContent } from "@receipt-ocr/ui/components/card";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
-import { Field, FieldLabel } from "@receipt-ocr/ui/components/field";
+import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
 import { Input } from "@receipt-ocr/ui/components/input";
-import { Check, Fingerprint, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useId, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { withStepUp } from "@/components/step-up/step-up";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage, passkeyErrorMessage } from "@/lib/auth-errors";
@@ -28,6 +27,14 @@ const webAuthnAvailable = () => typeof window !== "undefined" && "PublicKeyCrede
 
 function Spinner() {
   return <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />;
+}
+
+function Footnote() {
+  return (
+    <p className="text-xs text-muted-foreground">
+      Your fingerprint or face never leaves your device.
+    </p>
+  );
 }
 
 function RenameForm({ row, onDone }: { row: PasskeyRow; onDone: (renamed: boolean) => void }) {
@@ -51,26 +58,29 @@ function RenameForm({ row, onDone }: { row: PasskeyRow; onDone: (renamed: boolea
   }
 
   return (
-    <form className="flex flex-col gap-2 sm:flex-row sm:items-end" noValidate onSubmit={save}>
-      <Field className="min-w-0 flex-1" data-invalid={error ? true : undefined}>
-        <FieldLabel htmlFor={id}>Passkey name</FieldLabel>
-        <Input
-          aria-describedby={error ? `${id}-error` : undefined}
-          autoFocus
-          id={id}
-          maxLength={60}
-          onChange={(event) => setName(event.target.value)}
-          value={name}
-        />
-      </Field>
-      <div className="flex gap-2">
-        <Button disabled={pending} size="sm" type="submit">
-          {pending ? <Spinner /> : null}
-          Save
-        </Button>
-        <Button onClick={() => onDone(false)} size="sm" type="button" variant="outline">
-          Cancel
-        </Button>
+    <form className="flex flex-col gap-2" noValidate onSubmit={save}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <Field className="min-w-0 flex-1" data-invalid={error ? true : undefined}>
+          <FieldLabel htmlFor={id}>Passkey name</FieldLabel>
+          <Input
+            aria-describedby={error ? `${id}-error` : undefined}
+            aria-invalid={error ? true : undefined}
+            autoFocus
+            id={id}
+            maxLength={60}
+            onChange={(event) => setName(event.target.value)}
+            value={name}
+          />
+        </Field>
+        <div className="flex gap-2">
+          <Button disabled={pending} size="sm" type="submit">
+            {pending ? <Spinner /> : null}
+            Save
+          </Button>
+          <Button onClick={() => onDone(false)} size="sm" type="button" variant="outline">
+            Cancel
+          </Button>
+        </div>
       </div>
       {error ? (
         <p className="text-sm text-destructive" id={`${id}-error`} role="alert">
@@ -81,14 +91,21 @@ function RenameForm({ row, onDone }: { row: PasskeyRow; onDone: (renamed: boolea
   );
 }
 
-/** Settings → Security: add, rename and remove passkeys. Adding and removing ask "confirm it's you". */
+/**
+ * Settings → Security: add, rename and remove passkeys. Adding and removing ask "confirm it's you".
+ * Read-only (impersonation) shows the count alone: the passkey endpoints refuse that session.
+ */
 export function PasskeysCard({
   passkeys,
   lastWayIn = false,
+  readOnly = false,
+  count = passkeys.length,
 }: {
   passkeys: PasskeyRow[];
   /** No password or provider: the only passkey can't be removed. */
   lastWayIn?: boolean;
+  readOnly?: boolean;
+  count?: number;
 }) {
   const router = useRouter();
   const id = useId();
@@ -100,6 +117,30 @@ export function PasskeysCard({
   const [notice, setNotice] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [removing, setRemoving] = useState<PasskeyRow | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  // Set with a notice whose control went away (the add form), so focus lands on it.
+  const focusNotice = useRef(false);
+
+  useEffect(() => {
+    if (!focusNotice.current) return;
+    focusNotice.current = false;
+    noticeRef.current?.focus();
+  }, [notice]);
+
+  if (readOnly) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col gap-2 pt-5">
+          <p className="text-sm">
+            {count === 0
+              ? "No passkeys yet."
+              : `${count} ${count === 1 ? "passkey" : "passkeys"} added.`}
+          </p>
+          <Footnote />
+        </CardContent>
+      </Card>
+    );
+  }
 
   async function add(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -114,6 +155,7 @@ export function PasskeysCard({
     if (addError) return setError(passkeyErrorMessage(addError));
     setAdding(false);
     setName("");
+    focusNotice.current = true;
     setNotice("Passkey added. You can now sign in with it.");
     router.refresh();
   }
@@ -125,6 +167,7 @@ export function PasskeysCard({
       "passkey.remove",
     );
     if (removeError) return authErrorMessage(removeError);
+    // The dialog moves focus here as it closes (focusAfterConfirm).
     setNotice("Passkey removed.");
     router.refresh();
   }
@@ -132,21 +175,13 @@ export function PasskeysCard({
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <Fingerprint aria-hidden="true" className="size-5 text-muted-foreground" />
-          <p className="text-sm font-medium">Passkeys</p>
-          {passkeys.length > 0 ? (
-            <Badge variant="success">{passkeys.length} added</Badge>
-          ) : (
-            <Badge variant="secondary">None</Badge>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Sign in with your fingerprint, face or device PIN instead of a password, and confirm
-          important changes the same way. Your fingerprint or face never leaves your device.
-        </p>
         {notice ? (
-          <p className="flex items-center gap-1.5 text-sm text-success" role="status">
+          <p
+            className="flex items-center gap-1.5 text-sm text-success outline-none"
+            ref={noticeRef}
+            role="status"
+            tabIndex={-1}
+          >
             <Check aria-hidden="true" className="size-4" />
             {notice}
           </p>
@@ -203,7 +238,7 @@ export function PasskeysCard({
                         </Button>
                         {locked ? (
                           <p className="text-xs text-muted-foreground" id={`${id}-locked`}>
-                            Set a password or add a passkey first.
+                            Your only way to sign in. Set a password or add another passkey first.
                           </p>
                         ) : null}
                       </div>
@@ -216,25 +251,30 @@ export function PasskeysCard({
         ) : null}
 
         {!supported ? (
-          <Alert variant="warning">This browser can&apos;t use passkeys. Try another one.</Alert>
+          <Alert variant="warning">
+            This browser can&apos;t create passkeys. Try a current Chrome, Safari, Edge or Firefox.
+          </Alert>
         ) : adding ? (
           <form className="flex flex-col gap-3" noValidate onSubmit={add}>
             <Field>
-              <FieldLabel htmlFor={`${id}-name`}>Name it (optional)</FieldLabel>
+              <FieldLabel htmlFor={`${id}-name`}>Name (optional)</FieldLabel>
               <Input
+                aria-describedby={`${id}-name-hint`}
                 autoFocus
                 id={`${id}-name`}
                 maxLength={60}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Work laptop"
                 value={name}
               />
+              <FieldDescription id={`${id}-name-hint`}>
+                Helps you tell them apart, like “Work laptop”.
+              </FieldDescription>
             </Field>
             {error ? <Alert variant="destructive">{error}</Alert> : null}
             <div className="flex flex-wrap gap-2">
               <Button disabled={pending} type="submit">
                 {pending ? <Spinner /> : null}
-                Create passkey
+                Add passkey
               </Button>
               <Button
                 disabled={pending}
@@ -257,11 +297,13 @@ export function PasskeysCard({
             </Button>
           </div>
         )}
+        <Footnote />
       </CardContent>
       <ConfirmDialog
         confirmLabel="Remove passkey"
-        description="It stops working for this account at once. Remove it from your device or password manager too."
+        description="It stops working right away. Also remove it from your device or password manager."
         destructive
+        focusAfterConfirm={noticeRef}
         onConfirm={remove}
         onOpenChange={(open) => !open && setRemoving(null)}
         open={removing !== null}
