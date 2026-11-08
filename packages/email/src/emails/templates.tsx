@@ -470,7 +470,7 @@ const newsletterConfirm: EmailDefinition = {
   slots: ["url", "urlLabel", "expiry", "unsubscribeUrl"],
   render(v, shared) {
     const heading = "Confirm your product updates";
-    const body = `Someone asked to get occasional ${BRAND} product updates at this address. Confirm to join the list. We send a few emails a year, only about the product, and every one has an unsubscribe link.`;
+    const body = `You asked for occasional ${BRAND} product updates. Confirm this address to join the list. We send a few emails a year, only about the product, and every one has an unsubscribe link.`;
     const expiry = `This link expires in ${v.expiry}.`;
     const reason = `You're receiving this because this address was entered in a ${BRAND} product updates form.`;
     const noteText = `Not you? Ignore this email and you won't be subscribed. To make sure you never get product updates, unsubscribe: ${v.unsubscribeUrl}`;
