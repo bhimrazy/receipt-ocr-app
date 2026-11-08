@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import { z } from "zod";
 import type { DbError } from "../../errors";
-import { userPlan } from "../../quota";
+import { accountPlan } from "../../billing/service";
 import { Db } from "../../services";
 import type { Settings } from "../../settings";
 import { annotateEvent } from "../../telemetry/current";
@@ -91,7 +91,7 @@ export const welcomeEmail: JobDefinition<WelcomeEmailPayload, Db | Settings | We
       const row = rows[0];
       if (!row) return { kind: "skipped", reason: "user-gone" } satisfies WelcomeEmailResult;
       // Read now, not at enqueue: the plan may have changed since.
-      const { plan, policy } = yield* userPlan(payload.userId);
+      const { plan, policy } = yield* accountPlan(payload.userId);
       const outcome = yield* mailer.send({ to: row.email, receiptsPerDay: policy.receiptsPerDay });
       yield* annotateEvent({ kind: "welcome", plan, delivered: outcome === "delivered" });
       if (outcome === "rejected")

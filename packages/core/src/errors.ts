@@ -36,6 +36,12 @@ export class DbError extends Data.TaggedError("DbError")<{
   readonly cause?: unknown;
 }> {}
 
+/** The billing provider's API failed or answered with something we can't read. */
+export class BillingProviderError extends Data.TaggedError("BillingProviderError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export class StorageError extends Data.TaggedError("StorageError")<{
   readonly message: string;
   readonly cause?: unknown;
@@ -82,4 +88,5 @@ export type AppError =
   | NotConfigured
   | DbError
   | StorageError
+  | BillingProviderError
   | OcrError;

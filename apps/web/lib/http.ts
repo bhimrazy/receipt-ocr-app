@@ -17,6 +17,7 @@ const STATUS: Record<AppError["_tag"], number> = {
   NotConfigured: 503,
   DbError: 500,
   StorageError: 502,
+  BillingProviderError: 502,
   OcrError: 502,
 };
 

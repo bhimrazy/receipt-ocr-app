@@ -163,6 +163,24 @@ export const EVENT_SCHEMA = {
     },
   },
 
+  /** A billing webhook or its apply job. Provider ids and states only, never amounts or emails. */
+  billing: {
+    group: {
+      provider: "token",
+      /** The provider's event type, e.g. `subscription.updated`. */
+      event_type: "token",
+      /** The provider's event id (`evt_…`). */
+      event_id: "id",
+      subscription_id: "id",
+      /** The subscription status the event carried. */
+      status: "token",
+      /** `recorded`, `duplicate`, `ignored`, `rejected`, or the apply outcome (`applied`, `stale`, `unmatched`). */
+      outcome: "token",
+      /** Why a webhook was refused: `missing-signature`, `bad-signature`, `stale-signature`, `bad-body`. */
+      rejection: "token",
+    },
+  },
+
   error: { group: ERROR_FIELDS },
   /** Names of problems logged while this unit ran (`receipt.calls_not_recorded`). */
   notices: "tokens",
