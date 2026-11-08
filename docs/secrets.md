@@ -81,21 +81,23 @@ The CLI is renaming its commands (`infisical secrets-manager …`, alias `sm`); 
 
 ## Where it stands (2026-11-08)
 
-Imported: Development `/` 15 and `/ops` 5, Staging 13, Production 26 (the local files plus every non-Sensitive value
-read from Vercel's API).
+Imported: Development `/` 15 and `/ops` 5, Staging 15, Production 32: the local files, every non-Sensitive value read
+from Vercel's API, and production keys found in the repo's `.env` (GitHub client secret, Paddle API key and webhook
+secret, Gemini, Anthropic, Groq; their comments say where they came from). The local production and staging files are
+deleted.
 
-**Pending**: 23 values that are Sensitive in Vercel (unreadable) and were blank locally. Each is a placeholder
-`PENDING` in a `/pending` folder (Production 15, Staging 8), with a comment saying where to get it. `/pending` is
+**Pending**: 15 values that are Sensitive in Vercel (unreadable) and weren't in any local file. Each is a placeholder
+`PENDING` in a `/pending` folder (Production 9, Staging 6), with a comment saying where to get it. `/pending` is
 outside the synced path `/`, so a placeholder can never reach Vercel. To fill one: get the value, set it, move the
 secret to `/`, delete the placeholder.
 
-| Group                   | Keys                                                                               | How                                                                              |
-| ----------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Readable in a dashboard | `GOOGLE_CLIENT_ID`, `S3_ENDPOINT`, `PADDLE_WEBHOOK_SECRET`, `TURNSTILE_SECRET_KEY` | Copy                                                                             |
-| New key, revoke old     | Gemini, Anthropic, Groq, R2 token pair, Paddle API key, Axiom ingest token         | Create, put in Infisical and Vercel, redeploy, then revoke the old one           |
-| New client secret       | `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_SECRET`                                     | Add a second secret in the provider, deploy it, delete the old                   |
-| Generate                | `CRON_SECRET`                                                                      | `openssl rand -hex 32`; set in Vercel and in the Supabase `pg_cron` job together |
-| Auth secret             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_SECRETS`                                        | See below                                                                        |
+| Group                   | Keys                                                      | How                                                                              |
+| ----------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Readable in a dashboard | `GOOGLE_CLIENT_ID`, `S3_ENDPOINT`, `TURNSTILE_SECRET_KEY` | Copy                                                                             |
+| New key, revoke old     | R2 token pair, Axiom ingest token                         | Create, put in Infisical and Vercel, redeploy, then revoke the old one           |
+| New client secret       | `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_SECRET`            | Add a second secret in the provider, deploy it, delete the old                   |
+| Generate                | `CRON_SECRET`                                             | `openssl rand -hex 32`; set in Vercel and in the Supabase `pg_cron` job together |
+| Auth secret             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_SECRETS`               | See below                                                                        |
 
 **Auth secret.** The live value can't be read back, so it can't be kept as an old version in `BETTER_AUTH_SECRETS`.
 A fresh secret signs everyone out and makes anything encrypted with the old one unreadable: authenticator (2FA)
