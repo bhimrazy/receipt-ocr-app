@@ -141,7 +141,7 @@ Steps are in [deployment.md](deployment.md).
 - The Anthropic provider (#59) added migration `0001_ocr_call_refused_unsupported` (widens `ocr_calls_status_check`
   with `refused` and `unsupported-file`; existing rows stay valid). Run **Database Migration** before deploying it:
   without it, a refused or skipped call fails its ledger insert.
-- Schema fixes (migration `0003_schema_fixes`, PR_NUM): `receipts.receipt_date` becomes `date`, plus checks and
+- Schema fixes (migration `0003_schema_fixes`, #127): `receipts.receipt_date` becomes `date`, plus checks and
   foreign-key indexes from the [database review](reviews/2026-11-07-full-database.md). **Run Database Migration**
   (`staging-db`, then `production-db`) before deploying, and deploy right after: the previous release's dashboard
   query fails against the `date` column ([release note](deployment.md#release-notes)).
@@ -170,10 +170,10 @@ Steps are in [deployment.md](deployment.md).
 
 Open pull requests only.
 
-| PR     | Work                                                                                                                           |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| #95    | Two-step sign-in (TOTP), passkeys and step-up for important actions. Owner approved 2026-11-08; merging after migration `0002` |
-| PR_NUM | Schema fixes from the database review: `receipt_date` as `date`, checks, foreign-key indexes (migration `0003`)                |
+| PR   | Work                                                                                                                           |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------ |
+| #95  | Two-step sign-in (TOTP), passkeys and step-up for important actions. Owner approved 2026-11-08; merging after migration `0002` |
+| #127 | Schema fixes from the database review: `receipt_date` as `date`, checks, foreign-key indexes (migration `0003`)                |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -252,7 +252,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
 13. In-app feedback: "Send feedback" in the account menu and Settings, "Your feedback" list, admin inbox with email
     replies; public board later ([feedback and requests](plans/2026-11-07-feedback-and-requests.md)).
-14. Dual-calendar dates: `receipt_date` as a real AD `date` (column, check and index landed in PR_NUM; the
+14. Dual-calendar dates: `receipt_date` as a real AD `date` (column, check and index landed in #127; the
     `receipt_date_check` column comes with the resolver), BS derived from a vendored month table, the model
     transcribes dates and code cross-checks AD against the Miti; BS display, `date_bs` CSV, Nepal fiscal-year
     presets ([dual-calendar dates](plans/2026-11-07-dual-calendar-dates.md)).
@@ -280,7 +280,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   (`lib/auth-two-factor.ts`), so a TOTP user's second sign-in from the same browser doesn't replace the earlier
   session. The password step clears the session cookie first, so the earlier token has to be carried through the
   challenge to find it.
-- Database review items not done in the schema-fixes PR (PR_NUM): backups and a restore drill (H1), the
+- Database review items not done in the schema-fixes PR (#127): backups and a restore drill (H1), the
   `maintenance.purge` retention job and its `step_up_codes (expires_at)` index (H2, M5), revoking `anon` and
   `authenticated` grants and checking the Data API is off (H4), pool on `globalThis` and role-level timeouts (M3), the
   quota statement profile (M4), an `ocr_call_status` lookup table (M1), dropping `user_credentials` and
