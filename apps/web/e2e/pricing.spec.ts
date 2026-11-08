@@ -8,10 +8,13 @@ test("pricing shows Free and Pro with a monthly/yearly switch, and the FAQ", asy
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Start free");
   await expect(page.getByRole("heading", { name: "Free", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pro", exact: true })).toBeVisible();
+  // Numbers come from the saved plan table; admin.spec.ts changes it for a moment, so match the shape.
   await expect(
-    page.getByText("500 scans a month, up to 200 a day, for the workspace, shared by its members"),
+    page.getByText(
+      /^\d+ scans a month, up to \d+ a day, for the workspace, shared by its members$/,
+    ),
   ).toBeVisible();
-  await expect(page.getByText("20 scans a day, up to 100 a month, per person")).toBeVisible();
+  await expect(page.getByText(/^\d+ scans a day, up to \d+ a month, per person$/)).toBeVisible();
   await expect(page.getByText(/Up to 2 workspaces to own/)).toBeVisible();
 
   // Yearly is the default; the switch is a native radio group.
