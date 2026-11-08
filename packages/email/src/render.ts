@@ -20,6 +20,7 @@ export const SLOT_KINDS = {
   supportEmail: "email",
   url: "url",
   urlLabel: "line",
+  unsubscribeUrl: "url",
   resetUrl: "url",
   resetUrlLabel: "line",
   expiry: "line",

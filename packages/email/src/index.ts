@@ -115,3 +115,66 @@ export async function sendEmail(
     };
   }
 }
+
+export type ContactResult = { ok: true } | { ok: false; reason: "not_configured" | "failed" };
+
+export interface ContactListConfig {
+  /** A full-access key: a sending-only key cannot manage contacts. */
+  apiKey?: string;
+  /** The Resend segment (formerly audience) the product-updates contacts belong to. */
+  segmentId?: string;
+  log?: (event: EmailLogEvent) => void;
+}
+
+/**
+ * Adds an address to the product-updates segment as subscribed. An existing contact (including
+ * one who unsubscribed before) is re-subscribed and added to the segment. Never throws, and logs
+ * only the event name and the error's name, never the address.
+ */
+export async function subscribeContact(
+  config: ContactListConfig,
+  email: string,
+): Promise<ContactResult> {
+  const { apiKey, segmentId } = config;
+  if (!apiKey || !segmentId) return { ok: false, reason: "not_configured" };
+  const log = config.log ?? consoleLog;
+  try {
+    const api = resend(apiKey);
+    const created = await api.contacts.create({
+      email,
+      unsubscribed: false,
+      segments: [{ id: segmentId }],
+    });
+    if (created.error) {
+      // Most likely the contact exists already: re-subscribe it and make sure it is in the segment.
+      const updated = await api.contacts.update({ email, unsubscribed: false });
+      if (updated.error) throw updated.error;
+      const added = await api.contacts.segments.add({ email, segmentId });
+      // Already in the segment is fine; anything else surfaces on the next attempt.
+      if (added.error && added.error.statusCode !== 409 && added.error.statusCode !== 422) {
+        throw added.error;
+      }
+    }
+    return { ok: true };
+  } catch (cause) {
+    log({ event: "email.send_failed", unit: "log", level: "error", error: errorOf(cause) });
+    return { ok: false, reason: "failed" };
+  }
+}
+
+/** Marks the contact unsubscribed from all Broadcasts. A contact that is not there counts as done. */
+export async function unsubscribeContact(
+  config: ContactListConfig,
+  email: string,
+): Promise<ContactResult> {
+  if (!config.apiKey || !config.segmentId) return { ok: false, reason: "not_configured" };
+  const log = config.log ?? consoleLog;
+  try {
+    const { error } = await resend(config.apiKey).contacts.update({ email, unsubscribed: true });
+    if (error && error.statusCode !== 404) throw error;
+    return { ok: true };
+  } catch (cause) {
+    log({ event: "email.send_failed", unit: "log", level: "error", error: errorOf(cause) });
+    return { ok: false, reason: "failed" };
+  }
+}

@@ -465,6 +465,42 @@ const signInDisconnected = factorNotice({
   preheader: "A way to sign in was removed from your account.",
   slots: ["provider"],
 });
+/** Double opt-in for product updates; the link works only until it expires and subscribes nobody on its own. */
+const newsletterConfirm: EmailDefinition = {
+  slots: ["url", "urlLabel", "expiry", "unsubscribeUrl"],
+  render(v, shared) {
+    const heading = "Confirm your product updates";
+    const body = `Someone asked to get occasional ${BRAND} product updates at this address. Confirm to join the list. We send a few emails a year, only about the product, and every one has an unsubscribe link.`;
+    const expiry = `This link expires in ${v.expiry}.`;
+    const reason = `You're receiving this because this address was entered in a ${BRAND} product updates form.`;
+    const noteText = `Not you? Ignore this email and you won't be subscribed. To make sure you never get product updates, unsubscribe: ${v.unsubscribeUrl}`;
+    return {
+      html: (
+        <Layout
+          shared={shared}
+          preheader="One click to confirm. Ignore this email if it wasn't you."
+          heading={heading}
+          reason={reason}
+        >
+          <P>{body}</P>
+          <Action label="Confirm subscription" url={v.url} urlLabel={v.urlLabel} expiry={expiry} />
+          <Note>
+            Not you? Ignore this email and you won&apos;t be subscribed. To make sure you never get
+            product updates, <InlineLink href={v.unsubscribeUrl}>unsubscribe</InlineLink>.
+          </Note>
+        </Layout>
+      ),
+      text: plainText(shared, {
+        heading,
+        body: [body],
+        action: { label: "Confirm subscription", url: v.url, expiry },
+        note: noteText,
+        reason,
+      }),
+    };
+  },
+};
+
 /** Sent once, after the account exists and its address is verified. The limit is the user's plan. */
 const welcome: EmailDefinition = {
   slots: ["url", "urlLabel", "planLine"],
@@ -562,6 +598,7 @@ export const definitions = {
   signInDisconnected,
   welcome,
   contactReply,
+  newsletterConfirm,
 } satisfies Record<string, EmailDefinition>;
 
 export type TemplateName = keyof typeof definitions;

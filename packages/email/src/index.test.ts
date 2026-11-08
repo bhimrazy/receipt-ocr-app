@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const send = vi.fn();
+const create = vi.fn();
+const update = vi.fn();
+const add = vi.fn();
 vi.mock("resend", () => ({
   Resend: class {
     emails = { send };
+    contacts = { create, update, segments: { add } };
   },
 }));
 
-const { sendEmail } = await import("./index");
+const { sendEmail, subscribeContact, unsubscribeContact } = await import("./index");
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -83,5 +87,65 @@ describe("sendEmail reply-to", () => {
 
   it("sets no Reply-To without either", async () => {
     expect(await sentWith({}, {})).not.toHaveProperty("replyTo");
+  });
+});
+
+describe("newsletter contacts", () => {
+  const config = { apiKey: "key", segmentId: "seg", log: vi.fn() };
+  afterEach(() => {
+    create.mockReset();
+    update.mockReset();
+    add.mockReset();
+  });
+
+  it("does nothing without a key and a segment", async () => {
+    expect(await subscribeContact({ apiKey: "key" }, "a@b.co")).toEqual({
+      ok: false,
+      reason: "not_configured",
+    });
+    expect(await unsubscribeContact({ segmentId: "seg" }, "a@b.co")).toEqual({
+      ok: false,
+      reason: "not_configured",
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("creates a subscribed contact in the segment", async () => {
+    create.mockResolvedValue({ data: { id: "1" }, error: null });
+    expect(await subscribeContact(config, "a@b.co")).toEqual({ ok: true });
+    expect(create).toHaveBeenCalledWith({
+      email: "a@b.co",
+      unsubscribed: false,
+      segments: [{ id: "seg" }],
+    });
+  });
+
+  it("re-subscribes a contact that already exists", async () => {
+    create.mockResolvedValue({ data: null, error: { name: "validation_error", statusCode: 409 } });
+    update.mockResolvedValue({ data: {}, error: null });
+    add.mockResolvedValue({ data: {}, error: null });
+    expect(await subscribeContact(config, "a@b.co")).toEqual({ ok: true });
+    expect(update).toHaveBeenCalledWith({ email: "a@b.co", unsubscribed: false });
+    expect(add).toHaveBeenCalledWith({ email: "a@b.co", segmentId: "seg" });
+  });
+
+  it("reports a failure without throwing or logging the address", async () => {
+    create.mockRejectedValue(new Error("boom for a@b.co"));
+    const log = vi.fn();
+    expect(await subscribeContact({ ...config, log }, "a@b.co")).toEqual({
+      ok: false,
+      reason: "failed",
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain("b.co");
+  });
+
+  it("unsubscribes by address and treats a missing contact as done", async () => {
+    update.mockResolvedValueOnce({ data: {}, error: null });
+    expect(await unsubscribeContact(config, "a@b.co")).toEqual({ ok: true });
+    expect(update).toHaveBeenCalledWith({ email: "a@b.co", unsubscribed: true });
+    update.mockResolvedValueOnce({ data: null, error: { name: "not_found", statusCode: 404 } });
+    expect(await unsubscribeContact(config, "a@b.co")).toEqual({ ok: true });
+    update.mockResolvedValueOnce({ data: null, error: { name: "x", statusCode: 500 } });
+    expect(await unsubscribeContact(config, "a@b.co")).toEqual({ ok: false, reason: "failed" });
   });
 });

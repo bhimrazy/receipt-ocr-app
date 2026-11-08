@@ -12,6 +12,7 @@ import {
   formatDuration,
   greetingName,
   invitationEmail,
+  newsletterConfirmEmail,
   passkeyAddedEmail,
   passkeyRemovedEmail,
   passwordChangedEmail,
@@ -87,6 +88,19 @@ const cases: Record<
       from: 'x"><img src=x onerror=alert(1)>@example.com',
       topicLabel: "Question",
       message: `Line one\r\n\r\n${hostile}\u0007`,
+    },
+  },
+  newsletterConfirm: {
+    make: (ctx) =>
+      newsletterConfirmEmail(ctx, {
+        url,
+        expiresInSeconds: hour,
+        unsubscribeUrl: "https://app.example/newsletter/unsubscribe?t=abc",
+      }),
+    input: {
+      url,
+      expiry: "1 hour",
+      unsubscribeUrl: "https://app.example/newsletter/unsubscribe?t=abc",
     },
   },
   test: { make: (ctx) => testEmail(ctx), input: {} },
