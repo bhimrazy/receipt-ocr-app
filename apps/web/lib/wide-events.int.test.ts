@@ -16,7 +16,6 @@ const state = vi.hoisted(() => ({
   scope: null as null | { organizationId: string; userId: string; role: string },
 }));
 
-vi.mock("server-only", () => ({}));
 vi.mock("next/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/server")>()),
   after: vi.fn(),

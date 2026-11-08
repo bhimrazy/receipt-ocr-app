@@ -12,7 +12,6 @@ const clearRateLimit = vi.fn((key: string) => {
 const runPromise = vi.fn(async (value: unknown) => value);
 const logger = vi.hoisted(() => ({ info: vi.fn(), error: vi.fn() }));
 
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/core", () => ({ hitRateLimit, clearRateLimit }));
 vi.mock("./runtime", () => ({ runtime: { runPromise } }));
 vi.mock("./log", async () => ({

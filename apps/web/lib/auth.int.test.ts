@@ -21,7 +21,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 const enabled = process.env.INTEGRATION === "1";
 const sent: SendEmailInput[] = [];
 
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
   sendEmail: async (_config: unknown, input: SendEmailInput) => {
