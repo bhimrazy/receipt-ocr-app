@@ -9,7 +9,6 @@ const authApi = new Proxy({} as Record<string, ReturnType<typeof vi.fn>>, {
 
 const requireAdmin = vi.fn();
 vi.mock("@/lib/session", () => ({ requireAdmin }));
-vi.mock("server-only", () => ({}));
 const requireStepUp = vi.fn();
 vi.mock("@/lib/step-up-check", async () => {
   const real = await vi.importActual<Record<string, unknown>>("@/lib/step-up-check");

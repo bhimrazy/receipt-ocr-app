@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const runPromise = vi.hoisted(() => vi.fn());
 const logger = vi.hoisted(() => ({ info: vi.fn(), error: vi.fn() }));
-vi.mock("server-only", () => ({}));
 vi.mock("@receipt-ocr/core", () => ({ checkReadiness: "checkReadiness" }));
 vi.mock("@/lib/runtime", () => ({ runtime: { runPromise } }));
 vi.mock("@/lib/log", () => ({ logger }));

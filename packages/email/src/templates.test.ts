@@ -20,6 +20,7 @@ import {
   twoFactorDisabledEmail,
   twoFactorEnabledEmail,
   verificationEmail,
+  welcomeEmail,
   type EmailContent,
   type EmailContext,
   type TemplateName,
@@ -110,6 +111,10 @@ const cases: Record<
   },
   passkeyAdded: { make: (ctx) => passkeyAddedEmail(ctx, { resetUrl }), input: { resetUrl } },
   passkeyRemoved: { make: (ctx) => passkeyRemovedEmail(ctx, { resetUrl }), input: { resetUrl } },
+  welcome: {
+    make: (ctx) => welcomeEmail(ctx, { receiptsPerDay: 20 }),
+    input: { url: "https://app.example/app/upload", receiptsPerDay: "20" },
+  },
   emailChange: {
     make: (ctx) =>
       emailChangeEmail(ctx, {
@@ -457,5 +462,53 @@ describe("helpers", () => {
     expect(formatDuration(7200)).toBe("2 hours");
     expect(formatDuration(604800)).toBe("7 days");
     expect(formatDuration(900)).toBe("15 minutes");
+  });
+});
+
+describe("welcomeEmail", () => {
+  it("states the plan's daily limit it was given, in both parts", () => {
+    for (const limit of [5, 20, 100]) {
+      const mail = welcomeEmail(withSupport, { receiptsPerDay: limit });
+      expect(mail.text).toContain(
+        `scans up to ${limit} receipts a day. The count resets every day.`,
+      );
+      expect(mail.html).toContain(`scans up to ${limit} receipts a day.`);
+    }
+  });
+
+  it("has the fixed subject, an ordered plain-text list and the upload link without expiry", () => {
+    const mail = welcomeEmail(withSupport, { receiptsPerDay: 20 });
+    expect(mail.subject).toBe("Welcome to ReceiptOCR");
+    expect(mail.text).toContain(
+      "1. Take a photo or upload a file. Photos and PDFs both work, from your phone or computer.\n2. Check the fields.",
+    );
+    expect(mail.text).toMatch(/\n3\. Export a CSV, for one receipt or your whole history\./);
+    expect(mail.text).toContain("Scan a receipt:\nhttps://app.example/app/upload");
+    expect(mail.text).not.toMatch(/expires/);
+    expect(mail.html).toContain(">01<");
+    expect(mail.html).toContain(">03<");
+    expect(mail.html).toContain(">Three steps to your first scan, and what your plan includes.<");
+  });
+
+  it("points help at replies, or at the in-app button without a support inbox", () => {
+    expect(welcomeEmail(withSupport, { receiptsPerDay: 20 }).text).toContain(
+      "Reply to this email and we'll answer.",
+    );
+    expect(welcomeEmail(noSupport, { receiptsPerDay: 20 }).text).toContain(
+      "Use the support button in the app.",
+    );
+  });
+
+  it("renders the steps as an ordered list with hidden numbers", () => {
+    const { html } = welcomeEmail(withSupport, { receiptsPerDay: 20 });
+    expect(html.match(/<ol[\s>]/g)).toHaveLength(1);
+    expect(html.match(/<li[\s>]/g)).toHaveLength(3);
+    expect(html.match(/aria-hidden="true"/g)).toHaveLength(3);
+  });
+
+  it("loads no tracking pixel or remote font", () => {
+    const { html } = welcomeEmail(withSupport, { receiptsPerDay: 20 });
+    expect(html).not.toMatch(/@import|font-face|<link[^>]+stylesheet/);
+    expect(html.match(/<img/g)).toHaveLength(1);
   });
 });

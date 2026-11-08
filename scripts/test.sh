@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Whole test run: compose Postgres + RustFS, a fresh throwaway database, unit tests, then e2e
+# Whole test run: unit tests, then compose Postgres + RustFS, a fresh throwaway database, integration tests, then e2e
 # against `next build && next start`.
 #
-#   scripts/test.sh            unit + e2e
+#   scripts/test.sh            unit + integration + e2e
 #   scripts/test.sh --unit     unit only (no Docker)
 #   scripts/test.sh --keep-db  leave the test database in place
 #   scripts/test.sh --turnstile  also rebuild with Cloudflare's test keys and run e2e/turnstile.spec.ts
@@ -56,6 +56,7 @@ export PORT="$port"
 export E2E_BASE_URL="http://localhost:$port"
 
 bun run db:migrate
+bun run test:int
 bun run build
 bun run test:e2e
 
