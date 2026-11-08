@@ -6,6 +6,7 @@ import { OcrChainForm } from "./ocr-chain-form";
 
 // The server actions import server-only modules; rendering does not call them.
 vi.mock("../actions", () => ({ saveOcrAction: vi.fn(), checkChainProvidersAction: vi.fn() }));
+vi.mock("@/components/step-up/step-up", () => ({ withStepUp: vi.fn() }));
 
 const model = (id: string) => OCR_MODELS.find((m) => m.id === id)!;
 const provider = (id: string) => OCR_PROVIDERS.find((p) => p.id === id);
