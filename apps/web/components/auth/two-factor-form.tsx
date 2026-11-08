@@ -9,7 +9,14 @@ import { useRef, useState, useSyncExternalStore } from "react";
 import { authClient } from "@/lib/auth-client";
 import { DEFAULT_REDIRECT } from "@/lib/redirect";
 import { authErrorMessage, twoFactorRestart } from "@/lib/auth-errors";
-import { AuthError, AuthField, AuthHeading, authCardClass, authLinkClass } from "./auth-field";
+import {
+  AuthError,
+  AuthField,
+  AuthHeading,
+  authCardClass,
+  authFooterClass,
+  authLinkClass,
+} from "./auth-field";
 
 const subscribeNever = () => () => {};
 
@@ -67,7 +74,12 @@ export function TwoFactorForm({
           ? "Enter one of the backup codes you saved when you turned on two-step sign-in."
           : "Open your authenticator app and enter the 6-digit code for ReceiptOCR."}
       </AuthHeading>
-      <form className="mt-6 flex flex-col gap-4" data-ready={hydrated} noValidate onSubmit={submit}>
+      <form
+        className="mt-5 flex flex-col gap-3.5"
+        data-ready={hydrated}
+        noValidate
+        onSubmit={submit}
+      >
         <AuthField
           autoComplete="one-time-code"
           autoFocus
@@ -92,6 +104,13 @@ export function TwoFactorForm({
           />
           Trust this device for 30 days
         </label>
+        <Button className="mt-1 h-11 w-full" disabled={pending} type="submit">
+          {pending ? (
+            <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
+          ) : null}
+          Verify
+        </Button>
+        {/* Under the button, so an error moves only what is below it. */}
         {error ? (
           <AuthError>
             {error.message}{" "}
@@ -102,12 +121,6 @@ export function TwoFactorForm({
             ) : null}
           </AuthError>
         ) : null}
-        <Button className="mt-1 h-11 w-full" disabled={pending} type="submit">
-          {pending ? (
-            <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
-          ) : null}
-          Verify
-        </Button>
         <Button
           className="h-11 w-full"
           disabled={pending}
@@ -123,7 +136,7 @@ export function TwoFactorForm({
         </Button>
       </form>
       {supportEmail ? (
-        <p className="mt-6 border-t border-border pt-5 text-center text-sm text-muted-foreground">
+        <p className={authFooterClass}>
           Lost your phone and your backup codes?{" "}
           <a
             className={cn(authLinkClass, "inline-flex min-h-11 items-center")}

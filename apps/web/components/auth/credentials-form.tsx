@@ -19,6 +19,7 @@ import {
   AuthNotice,
   EmailField,
   authCardClass,
+  authFooterClass,
   authLinkClass,
 } from "./auth-field";
 import { CheckEmail } from "./check-email";
@@ -229,6 +230,9 @@ export function CredentialsForm({
   }
 
   const busy = pending !== null;
+  // One slot under the submit button for every error, so showing or clearing one never moves the
+  // buttons above it. A submit clears the callback error before it can set its own.
+  const shownError: FormError | null = error ?? (callbackError ? { message: callbackError } : null);
   const switchHref = isSignUp ? `/sign-in${redirectQuery}` : `/sign-up${redirectQuery}`;
 
   return (
@@ -243,11 +247,10 @@ export function CredentialsForm({
           {notice.message}
         </AuthNotice>
       ) : null}
-      {callbackError ? <AuthError className="mt-5">{callbackError}</AuthError> : null}
 
       {!isSignUp ? (
         <Button
-          className="mt-6 h-11 w-full"
+          className="mt-5 h-11 w-full"
           disabled={busy}
           onClick={handlePasskey}
           type="button"
@@ -263,7 +266,7 @@ export function CredentialsForm({
       ) : null}
       {providers.length > 0 ? (
         <>
-          <div className={cn("flex flex-col gap-2.5", isSignUp ? "mt-6" : "mt-2.5")}>
+          <div className={cn("flex flex-col gap-2", isSignUp ? "mt-5" : "mt-2")}>
             {providers.map((provider) => {
               const Icon = providerIcons[provider];
               return (
@@ -291,12 +294,12 @@ export function CredentialsForm({
           <AuthDivider>or with email</AuthDivider>
         </>
       ) : isSignUp ? (
-        <div className="mt-6" />
+        <div className="mt-5" />
       ) : (
         <AuthDivider>or with email</AuthDivider>
       )}
 
-      <form className="flex flex-col gap-4" onSubmit={handleSubmit} data-ready={hydrated}>
+      <form className="flex flex-col gap-3.5" onSubmit={handleSubmit} data-ready={hydrated}>
         {isSignUp ? (
           <AuthField
             autoComplete="name"
@@ -328,21 +331,6 @@ export function CredentialsForm({
           required
           value={password}
         />
-        <Turnstile controller={turnstile} />
-        {error ? (
-          <AuthError>
-            {error.signInInstead ? (
-              <>
-                An account with this email already exists.{" "}
-                <Link className={cn(authLinkClass, "text-destructive underline")} href={switchHref}>
-                  Sign in instead
-                </Link>
-              </>
-            ) : (
-              error.message
-            )}
-          </AuthError>
-        ) : null}
         <Button
           aria-busy={turnstile.pending}
           className="mt-1 h-11 w-full"
@@ -360,39 +348,56 @@ export function CredentialsForm({
             "Sign in"
           )}
         </Button>
-        {isSignUp ? null : (
+      </form>
+      {shownError ? (
+        <AuthError className="mt-3">
+          {shownError.signInInstead ? (
+            <>
+              An account with this email already exists.{" "}
+              <Link className={cn(authLinkClass, "text-destructive underline")} href={switchHref}>
+                Sign in instead
+              </Link>
+            </>
+          ) : (
+            shownError.message
+          )}
+        </AuthError>
+      ) : null}
+      {/* Below the button: a challenge Cloudflare shows (rarely) pushes nothing you aim at. */}
+      <Turnstile className="mt-3" controller={turnstile} />
+      {isSignUp ? (
+        <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">
+          By creating an account you agree to the{" "}
+          <Link
+            className={cn(authLinkClass, "font-normal text-foreground underline")}
+            href="/terms"
+          >
+            Terms
+          </Link>{" "}
+          and the{" "}
+          <Link
+            className={cn(authLinkClass, "font-normal text-foreground underline")}
+            href="/privacy"
+          >
+            Privacy Policy
+          </Link>
+          .
+        </p>
+      ) : (
+        <p className="mt-1 flex justify-center">
           <Link
             className={cn(
               authLinkClass,
-              "-mt-2 inline-flex min-h-11 items-center justify-center self-center font-normal text-muted-foreground hover:text-foreground",
+              "inline-flex min-h-11 items-center justify-center text-sm font-normal text-muted-foreground hover:text-foreground",
             )}
             href="/forgot-password"
           >
             Forgot your password?
           </Link>
-        )}
-        {isSignUp ? (
-          <p className="text-center text-xs leading-5 text-muted-foreground">
-            By creating an account you agree to the{" "}
-            <Link
-              className={cn(authLinkClass, "font-normal text-foreground underline")}
-              href="/terms"
-            >
-              Terms
-            </Link>{" "}
-            and the{" "}
-            <Link
-              className={cn(authLinkClass, "font-normal text-foreground underline")}
-              href="/privacy"
-            >
-              Privacy Policy
-            </Link>
-            .
-          </p>
-        ) : null}
-      </form>
+        </p>
+      )}
 
-      <p className="mt-6 border-t border-border pt-5 text-center text-sm text-muted-foreground">
+      <p className={authFooterClass}>
         {isSignUp ? "Already have an account?" : "New to ReceiptOCR?"}{" "}
         <Link
           className={cn(authLinkClass, "inline-flex min-h-11 min-w-11 items-center justify-center")}

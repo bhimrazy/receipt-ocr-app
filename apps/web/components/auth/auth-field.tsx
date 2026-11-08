@@ -5,7 +5,11 @@ import { CircleAlert, CircleCheck, Info } from "lucide-react";
 // Server-safe on purpose: AuthLayout and the server pages import these constants and components.
 
 export const authCardClass =
-  "w-full min-w-0 rounded-2xl bg-card/85 p-6 shadow-2xl shadow-black/40 ring-1 ring-border backdrop-blur-xl sm:p-8";
+  "w-full min-w-0 rounded-2xl bg-card/85 p-6 shadow-2xl shadow-black/40 ring-1 ring-border backdrop-blur-xl sm:px-8 sm:py-7";
+
+/** The "New here? / Already have an account?" row closing a card; its 44px link sets the padding. */
+export const authFooterClass =
+  "mt-5 border-t border-border pt-2 text-center text-sm text-muted-foreground";
 
 export const authLinkClass =
   "rounded-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -91,12 +95,12 @@ export function AuthError({
   return (
     <div
       className={cn(
-        "flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2.5 text-left text-sm leading-6 text-destructive ring-1 ring-inset ring-destructive/30",
+        "flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-left text-sm leading-5 text-destructive ring-1 ring-inset ring-destructive/30",
         className,
       )}
       role="alert"
     >
-      <CircleAlert aria-hidden className="mt-1 size-4 shrink-0" />
+      <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
       <div>{children}</div>
     </div>
   );
@@ -116,7 +120,7 @@ export function AuthNotice({
   return (
     <div
       className={cn(
-        "flex items-start gap-2 rounded-lg px-3 py-2.5 text-left text-sm leading-6 ring-1 ring-inset",
+        "flex items-start gap-2 rounded-lg px-3 py-2 text-left text-sm leading-5 ring-1 ring-inset",
         kind === "success"
           ? "bg-primary/10 text-primary ring-primary/30"
           : "bg-secondary text-foreground ring-border [&>svg]:text-primary",
@@ -124,7 +128,7 @@ export function AuthNotice({
       )}
       role="status"
     >
-      <Icon aria-hidden className="mt-1 size-4 shrink-0" />
+      <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
       <div>{children}</div>
     </div>
   );
@@ -133,7 +137,7 @@ export function AuthNotice({
 /** "or" rule between the provider buttons and the email form. */
 export function AuthDivider({ children }: { children: React.ReactNode }) {
   return (
-    <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+    <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
       <span aria-hidden className="h-px flex-1 bg-border" />
       {children}
       <span aria-hidden className="h-px flex-1 bg-border" />

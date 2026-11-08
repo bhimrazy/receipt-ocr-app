@@ -8,7 +8,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { authClient } from "@/lib/auth-client";
-import { AuthError, AuthHeading, AuthMessage, authCardClass, authLinkClass } from "./auth-field";
+import {
+  AuthError,
+  AuthHeading,
+  AuthMessage,
+  authCardClass,
+  authFooterClass,
+  authLinkClass,
+} from "./auth-field";
 import { FocusHeading } from "./focus-heading";
 import { PasswordField } from "./password-field";
 
@@ -85,7 +92,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
       <AuthHeading title="Choose a new password">
         After you save it, you are signed out on every other device.
       </AuthHeading>
-      <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit}>
+      <form className="mt-5 flex flex-col gap-3.5" onSubmit={handleSubmit}>
         <PasswordField
           autoComplete="new-password"
           id="reset-password"
@@ -109,7 +116,6 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
           required
           value={confirm}
         />
-        {error ? <AuthError>{error}</AuthError> : null}
         <Button className="mt-1 h-11 w-full" disabled={pending} type="submit">
           {pending ? (
             <>
@@ -121,7 +127,8 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
           )}
         </Button>
       </form>
-      <p className="mt-6 border-t border-border pt-5 text-center text-sm">
+      {error ? <AuthError className="mt-3">{error}</AuthError> : null}
+      <p className={authFooterClass}>
         <Link
           className={cn(
             authLinkClass,
