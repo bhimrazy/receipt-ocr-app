@@ -387,7 +387,7 @@ Two triggers call it:
 | Trigger                | Schedule         | Why                                                                                   |
 | ---------------------- | ---------------- | ------------------------------------------------------------------------------------- |
 | Vercel Cron (built in) | daily, 03:00 UTC | Backstop. [`apps/web/vercel.json`](../apps/web/vercel.json). Hobby allows once a day. |
-| Supabase `pg_cron`     | every minute     | The real recovery loop. Set up by hand below.                                         |
+| Supabase `pg_cron`     | every 5 minutes  | The real recovery loop. Live in production since 2026-11-08 (job `drain-jobs`).       |
 
 ### 8a. Vercel
 
@@ -395,7 +395,7 @@ Two triggers call it:
    **Sensitive**, Production. Vercel Cron sends it as the bearer token by itself.
 2. Redeploy. Under **Settings → Cron Jobs** the daily `/api/jobs/drain` job should be listed.
 
-### 8b. Supabase (every minute)
+### 8b. Supabase (every 5 minutes)
 
 Use the **same secret value** as Vercel's. Add it in **Integrations → Vault** (name `cron_secret`) rather than in
 step 2's SQL: the SQL Editor keeps query history, so a pasted secret stays there in plain text. If you do run step 2,
@@ -410,10 +410,10 @@ create extension if not exists pg_net;
 -- 2. The secret, in Vault
 select vault.create_secret('<CRON_SECRET>', 'cron_secret', 'Bearer secret for /api/jobs/drain');
 
--- 3. Every minute
+-- 3. Every 5 minutes (enough for retries; every minute only adds calls)
 select cron.schedule(
   'drain-jobs',
-  '* * * * *',
+  '*/5 * * * *',
   $$
   select net.http_post(
     url := 'https://receipt-ocr.bhimraj.com.np/api/jobs/drain',

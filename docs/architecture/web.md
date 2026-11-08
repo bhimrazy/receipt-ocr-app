@@ -257,7 +257,7 @@ Structured data (JSON-LD) on the public pages comes from [`lib/seo.ts`](../../ap
 
 `GET, POST /api/jobs/drain` ([route](../../apps/web/app/api/jobs/drain/route.ts)) is a thin adapter over `drainOnce` in
 core. It answers only to `Authorization: Bearer $CRON_SECRET` (`401` when wrong or unset) and stays inside a 60 s budget
-to match `pg_net`. Callers: Supabase `pg_cron` every minute, and the daily Vercel cron in `vercel.json` as a recovery
+to match `pg_net`. Callers: Supabase `pg_cron` every 5 minutes, and the daily Vercel cron in `vercel.json` as a recovery
 net. See [Background jobs](flows/jobs.md).
 
 ## Installable app (PWA)
