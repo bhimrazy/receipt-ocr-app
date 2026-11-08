@@ -51,6 +51,7 @@ export default function SupportPanel({
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
   const ids = useId();
   const turnstile = useTurnstile();
 
@@ -67,6 +68,16 @@ export default function SupportPanel({
         const { name: accountName, email: accountEmail } = user;
         if (typeof accountName === "string") setName((v) => v || accountName.slice(0, MAX_NAME));
         if (typeof accountEmail === "string") setEmail((v) => v || accountEmail);
+        // Both filled: skip to the message, unless the visitor has moved on from the name field.
+        if (
+          typeof accountName === "string" &&
+          accountName.trim() &&
+          typeof accountEmail === "string" &&
+          accountEmail &&
+          document.activeElement === nameRef.current
+        ) {
+          messageRef.current?.focus();
+        }
       })
       .catch(() => {});
     return () => {
@@ -120,6 +131,14 @@ export default function SupportPanel({
     }
   };
 
+  const firstName = name.trim().split(/\s+/)[0] ?? "";
+
+  const sendAnother = () => {
+    setStatus("idle");
+    // The form remounts on the next render.
+    requestAnimationFrame(() => messageRef.current?.focus());
+  };
+
   const activeTopic = TOPICS.find((t) => t.id === topic) ?? TOPICS[0];
 
   if (!open) return null;
@@ -128,9 +147,9 @@ export default function SupportPanel({
     <div
       role="dialog"
       aria-labelledby={`${ids}-title`}
-      className="w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-card/95 shadow-2xl shadow-black/50 ring-1 ring-hairline backdrop-blur-xl motion-safe:animate-fade-up"
+      className="flex max-h-[calc(100dvh-5.5rem)] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl bg-card/95 shadow-2xl shadow-black/50 ring-1 ring-hairline backdrop-blur-xl motion-safe:animate-fade-up"
     >
-      <div className="relative border-b border-border bg-secondary/30 p-4 pr-14">
+      <div className="relative shrink-0 border-b border-border bg-secondary/30 p-4 pr-14">
         <p className="text-sm font-semibold" id={`${ids}-title`}>
           Talk to us
         </p>
@@ -145,17 +164,21 @@ export default function SupportPanel({
         </button>
       </div>
 
-      <div className="p-4">
+      <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
         {status === "sent" ? (
           <div className="flex flex-col items-center gap-3 py-6 text-center" role="status">
             <span className="flex size-11 items-center justify-center rounded-full bg-primary/15 text-primary">
               <Check aria-hidden className="size-5" />
             </span>
             <div>
-              <p className="text-sm font-semibold">Message sent</p>
-              <p className="mt-1 text-xs text-muted-foreground">We&apos;ll reply to your email.</p>
+              <p className="text-sm font-semibold">
+                {firstName ? `Thanks, ${firstName}!` : "Message sent"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Your message is on its way. We&apos;ll reply to {email.trim()}.
+              </p>
             </div>
-            <Button onClick={() => setStatus("idle")} size="sm" variant="ghost">
+            <Button onClick={sendAnother} size="sm" variant="ghost">
               Send another
             </Button>
           </div>
@@ -185,7 +208,7 @@ export default function SupportPanel({
 
             <Field>
               <FieldLabel className="text-xs text-muted-foreground" htmlFor={`${ids}-name`}>
-                Your name
+                Name
               </FieldLabel>
               <Input
                 ref={nameRef}
@@ -201,7 +224,7 @@ export default function SupportPanel({
 
             <Field>
               <FieldLabel className="text-xs text-muted-foreground" htmlFor={`${ids}-email`}>
-                Your email
+                Email
               </FieldLabel>
               <Input
                 id={`${ids}-email`}
@@ -220,6 +243,7 @@ export default function SupportPanel({
                 Message
               </FieldLabel>
               <textarea
+                ref={messageRef}
                 id={`${ids}-message`}
                 required
                 rows={3}

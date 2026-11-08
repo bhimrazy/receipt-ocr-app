@@ -37,10 +37,11 @@ test("the support form starts from a signed-in visitor's name and email, both ed
   await page.goto("/");
   await page.getByRole("button", { name: "Contact support" }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByLabel("Your name")).toHaveValue("E2E User");
-  await expect(dialog.getByLabel("Your email")).toHaveValue(email);
-  await dialog.getByLabel("Your name").fill("Someone Else");
-  await expect(dialog.getByLabel("Your name")).toHaveValue("Someone Else");
+  await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("E2E User");
+  await expect(dialog.getByLabel("Email", { exact: true })).toHaveValue(email);
+  await expect(dialog.getByLabel("Message")).toBeFocused();
+  await dialog.getByLabel("Name", { exact: true }).fill("Someone Else");
+  await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("Someone Else");
 });
 
 test("a failed support panel chunk shows a fallback with retry instead of breaking the page", async ({
