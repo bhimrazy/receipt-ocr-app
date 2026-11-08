@@ -9,7 +9,7 @@ import { getPlanTable } from "@/lib/plan-limits";
 import { AuthMessage } from "./auth-field";
 import { allowance } from "@/lib/plan-copy";
 
-const valueProps = (freeAllowance: string) => [
+const valueProps = (freeAllowance: string | null) => [
   {
     icon: ScanLine,
     title: "Scans the whole receipt",
@@ -23,20 +23,27 @@ const valueProps = (freeAllowance: string) => [
   {
     icon: Download,
     title: "Export a CSV",
-    desc: `Free plan: ${freeAllowance}, no card required.`,
+    desc: freeAllowance
+      ? `Free plan: ${freeAllowance}, no card required.`
+      : "Download your receipts as a CSV, or copy the JSON.",
   },
 ];
 
 const footerLink =
   "inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** Shows the free plan's saved daily limit; pages using it revalidate hourly or on save. */
+/**
+ * Shows the free plan's saved limits unless `planInCard` (the page's own card states them); pages using it
+ * revalidate hourly or on save.
+ */
 export async function AuthLayout({
   children,
   subtitle,
+  planInCard = false,
 }: {
   children: React.ReactNode;
   subtitle: string;
+  planInCard?: boolean;
 }) {
   const plans = await getPlanTable();
   return (
@@ -66,17 +73,19 @@ export async function AuthLayout({
           </p>
           <p className="mt-4 text-pretty leading-7 text-muted-foreground">{subtitle}</p>
           <ul className="mt-8 flex flex-col gap-5">
-            {valueProps(allowance(plans.free)).map(({ icon: Icon, title, desc }) => (
-              <li className="flex items-start gap-4" key={title}>
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
-                  <Icon aria-hidden className="size-5" />
-                </span>
-                <div>
-                  <p className="font-medium">{title}</p>
-                  <p className="mt-0.5 text-sm leading-6 text-muted-foreground">{desc}</p>
-                </div>
-              </li>
-            ))}
+            {valueProps(planInCard ? null : allowance(plans.free)).map(
+              ({ icon: Icon, title, desc }) => (
+                <li className="flex items-start gap-4" key={title}>
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
+                    <Icon aria-hidden className="size-5" />
+                  </span>
+                  <div>
+                    <p className="font-medium">{title}</p>
+                    <p className="mt-0.5 text-sm leading-6 text-muted-foreground">{desc}</p>
+                  </div>
+                </li>
+              ),
+            )}
           </ul>
         </div>
         <p className="relative z-10 text-xs text-muted-foreground">

@@ -35,7 +35,10 @@ export default async function SignUpPage({
   ) as SocialProvider[];
 
   return (
-    <AuthLayout subtitle="Create a free account. Photograph a receipt, check what was scanned, export a CSV.">
+    <AuthLayout
+      planInCard
+      subtitle="Create a free account. Photograph a receipt, check what was scanned, export a CSV."
+    >
       {authEnabled ? (
         <CredentialsForm
           freeAllowance={allowance(free)}
