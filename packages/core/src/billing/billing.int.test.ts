@@ -583,6 +583,23 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         cancelSubscriptionId: id,
       });
     });
+
+    it("applies an early chargeback only to its own subscription", async () => {
+      const workspaceId = await createWorkspace(other.userId, "other-sub-links");
+      const early = event(
+        null,
+        "adjustment.created",
+        adjustment({ subscriptionId: `sub_${tag}_never_linked` }),
+      );
+      await deliver(early);
+      const id = `sub_${tag}_unrelated`;
+      const created = event(snapshot({ subscriptionId: id, workspaceId }), "subscription.created");
+      await deliver(created);
+      expect((await subscriptionRow(id))?.revokedAt).toBeNull();
+      expect(await planOf(workspaceId)).toBe("pro");
+      expect(await outcomeOf(early.eventId)).toBe("unmatched");
+      expect(await jobOf(created.eventId)).toMatchObject({ state: "succeeded" });
+    });
   });
 
   describe("bad payloads", () => {
@@ -663,6 +680,30 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(await run(prepareUserDeletion(buyer.userId))).toMatchObject({ workspacesDeleted: 1 });
       // The subscription row stays as the billing record.
       expect((await subscriptionRow(id))?.organizationId).toBeNull();
+    });
+
+    it("never cancels a linked subscription, whatever its state", async () => {
+      const workspaceId = await createWorkspace(other.userId, "linked-charging");
+      const id = `sub_${tag}_linked_charging`;
+      const steps: Partial<SubscriptionSnapshot>[] = [
+        {},
+        { cancelAtPeriodEnd: true },
+        { status: "past_due", cancelAtPeriodEnd: false },
+      ];
+      for (const [i, fields] of steps.entries()) {
+        const e = event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId,
+            updatedAt: new Date(Date.now() + i * 1_000),
+            ...fields,
+          }),
+          i === 0 ? "subscription.created" : "subscription.updated",
+        );
+        await deliver(e);
+        expect(await jobOf(e.eventId)).toMatchObject({ state: "succeeded" });
+        expect(await reapply(e.eventId)).not.toHaveProperty("cancelSubscriptionId");
+      }
     });
 
     it("cancels a subscription whose workspace is gone if its scheduled cancel is removed", async () => {

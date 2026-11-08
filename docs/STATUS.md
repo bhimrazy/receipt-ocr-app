@@ -291,6 +291,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Linking a new subscription looks up early revoking adjustments in `billing_events` with a sequential scan. Add a
+  partial expression index `billing_events (provider, (payload->'adjustment'->>'subscriptionId')) where outcome =
+'unmatched'`; fold it into the next schema change.
 - The one-time "protect your receipts" card (after the fifth receipt) is dismissed with a per-browser cookie, so it
   shows once more on each new device. A per-user column (`user.security_prompt_dismissed_at`) needs a migration;
   fold it into the next schema change.
