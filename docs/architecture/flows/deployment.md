@@ -44,9 +44,9 @@ sequenceDiagram
 ```
 
 - **CI jobs** ([`ci.yml`](../../../.github/workflows/ci.yml)): `static` runs format, lint, dependency pins, knip and
-  audit; `checks` runs typecheck, unit tests and build; `e2e` starts Postgres and RustFS as services, applies every
-  migration to an empty database, runs the core and web integration suites, builds, and runs Playwright with the
-  fixture OCR provider.
+  audit; `checks` runs typecheck, unit tests and build; `integration` applies every migration to an empty Postgres 17 and 18 database
+  and runs the core and web integration suites on each; `e2e` starts Postgres 17 and RustFS as services, migrates,
+  builds, and runs Playwright with the fixture OCR provider.
 - **Previews** ([`preview.yml`](../../../.github/workflows/preview.yml)) are label-only until launch, because the free Vercel plan
   allows 100 deployments a day, shared with production. A PR gets one only when it carries the `preview` label, and the
   deploy runs once, when the label is added; later pushes don't redeploy. To refresh, remove and re-add the label. The
