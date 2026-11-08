@@ -1,0 +1,109 @@
+name: Database Backup
+
+# Nightly encrypted backup of production's app data (schemas public and drizzle) to R2, with a restore drill into
+# a throwaway Postgres: scripts/db-backup.sh. A red run emails whoever last changed the schedule below. Setup,
+# restore and the monthly check with the owner's key: docs/runbook.md, Backups.
+on:
+  schedule:
+    # 21:15 UTC, 03:00 in Kathmandu, when the app is quietest. Off the hour: GitHub delays top-of-hour runs.
+    - cron: "15 21 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+# Never two at once; a run that has started finishes.
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Back up and restore drill
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    # Holds the secrets; its deployment branch rule admits main only.
+    environment: db-backup
+    permissions:
+      contents: read
+    steps:
+      # Fail rather than skip, so a run from another ref never looks like a backup.
+      - name: Require main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Backups run only from main (got $REF)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Bun only, no `bun install`: the backup needs Bun's built-in S3 client and no packages, and nothing from
+      # node_modules runs next to the database secret.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      # age from its GitHub release (FiloSottile/age), checked against the checksum recorded here.
+      - name: Install age
+        env:
+          AGE_VERSION: v1.3.2
+          AGE_SHA256: cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+        run: |
+          dir="$RUNNER_TEMP/age"
+          mkdir -p "$dir"
+          curl -fsSL -o "$dir/age.tar.gz" \
+            "https://github.com/FiloSottile/age/releases/download/$AGE_VERSION/age-$AGE_VERSION-linux-amd64.tar.gz"
+          echo "$AGE_SHA256  $dir/age.tar.gz" | sha256sum -c -
+          tar -xzf "$dir/age.tar.gz" -C "$dir"
+          echo "$dir/age" >> "$GITHUB_PATH"
+
+      # Checks the URL's shape without printing it, and masks its decoded user, password and host: GitHub masks
+      # only the secret as stored, and the pooler's user and host carry the project ref.
+      - name: Check the secrets are set
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: |
+          bun -e '
+            const raw = process.env.BACKUP_DATABASE_URL ?? "";
+            if (!raw) {
+              console.log("::error::BACKUP_DATABASE_URL is not set in the db-backup environment.");
+              process.exit(1);
+            }
+            let url;
+            try {
+              url = new URL(raw);
+            } catch {
+              console.log("::error::BACKUP_DATABASE_URL in the db-backup environment is not a valid URL.");
+              process.exit(1);
+            }
+            for (const part of [url.username, url.password, url.hostname]) {
+              if (!part) continue;
+              let decoded = part;
+              try {
+                decoded = decodeURIComponent(part);
+              } catch {}
+              console.log(`::add-mask::${decoded}`);
+            }
+            if (!["postgres:", "postgresql:"].includes(url.protocol) || !url.hostname) {
+              console.log("::error::BACKUP_DATABASE_URL in the db-backup environment is not a postgres:// URL.");
+              process.exit(1);
+            }
+            if (!process.env.BACKUP_AGE_RECIPIENT) {
+              console.log("::error::The BACKUP_AGE_RECIPIENT variable is not set in the db-backup environment.");
+              process.exit(1);
+            }
+          '
+
+      - name: Back up, upload, restore drill
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+          BACKUP_R2_ENDPOINT: ${{ secrets.BACKUP_R2_ENDPOINT }}
+          BACKUP_R2_BUCKET: ${{ secrets.BACKUP_R2_BUCKET }}
+          BACKUP_R2_ACCESS_KEY_ID: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+          BACKUP_R2_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+        run: scripts/db-backup.sh
