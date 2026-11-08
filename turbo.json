@@ -25,6 +25,7 @@
         "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
         "POSTHOG_KEY",
         "RESEND_API_KEY",
+        "RESEND_NEWSLETTER_SEGMENT_ID",
         "S3_*",
         "SENTRY_DSN",
         "SUPPORT_EMAIL",

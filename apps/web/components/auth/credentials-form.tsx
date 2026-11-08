@@ -346,7 +346,7 @@ export function CredentialsForm({
               onChange={(event) => setUpdates(event.target.checked)}
               type="checkbox"
             />
-            <span>Email me occasional product updates</span>
+            <span>Send me occasional product updates</span>
           </label>
         ) : null}
         <Button
