@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { authMethodFor } from "./auth-method";
-import { isFactorEndpoint, stepUpActionFor } from "./step-up-paths";
+import { isImpersonationBlocked, stepUpActionFor } from "./step-up-paths";
 
 describe("authMethodFor", () => {
   it.each([
@@ -69,9 +69,16 @@ describe("stepUpActionFor", () => {
     expect(stepUpActionFor(path, body)).toBe(expected);
   });
 
-  it("knows the factor endpoints blocked while impersonating", () => {
-    expect(isFactorEndpoint("/two-factor/enable")).toBe(true);
-    expect(isFactorEndpoint("/passkey/generate-register-options")).toBe(true);
-    expect(isFactorEndpoint("/change-password")).toBe(false);
+  it.each([
+    ["/two-factor/enable", true],
+    ["/passkey/generate-register-options", true],
+    // An admin must not connect their own Google/GitHub or mail the customer a link.
+    ["/link-social", true],
+    ["/send-verification-email", true],
+    ["/change-password", false],
+    ["/get-session", false],
+    ["/admin/stop-impersonating", false],
+  ])("blocks %s while impersonating: %s", (path, expected) => {
+    expect(isImpersonationBlocked(path)).toBe(expected);
   });
 });

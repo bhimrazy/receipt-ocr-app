@@ -1,6 +1,7 @@
 import "server-only";
 import {
   adoptPasskeySession,
+  findPasskey,
   forgetTrustedDevices,
   replacePreviousSession,
   TRUST_DEVICE_STORED_PREFIX,
@@ -19,13 +20,14 @@ import { APIError, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { passkey } from "@better-auth/passkey";
 import { authMethodFor } from "./auth-method";
+import { passkeyLabel } from "./passkey-label";
 import { SITE_NAME } from "./site";
 import { emailContext, resetPasswordUrl } from "./env";
 import { errorFields, logger } from "./log";
 import { runtime } from "./runtime";
 import { clientIp } from "./http";
 import { checkStepUp, STEP_UP_MESSAGES, STEP_UP_REQUIRED } from "./step-up-check";
-import { isFactorEndpoint, stepUpActionFor } from "./step-up-paths";
+import { isImpersonationBlocked, stepUpActionFor } from "./step-up-paths";
 
 /**
  * The name authenticator apps and passkey managers show. Each entry keeps the label it was
@@ -137,7 +139,7 @@ async function notify(deliver: Deliver, input: SendEmailInput, kind: string) {
 
 /**
  * Called first in `hooks.before` for every auth endpoint: refuses factor
- * changes from an impersonation session, and requires a fresh step-up for the
+ * changes and account writes from an impersonation session, and requires a fresh step-up for the
  * endpoints listed in step-up-paths (account deletion, email and password
  * change, 2FA disable, admin calls…). Returns the action that passed, if any.
  */
@@ -145,11 +147,11 @@ export async function stepUpGate(ctx: HookContext): Promise<StepUpAction | null>
   // Returns the decrypted TOTP secret; the app never needs it, and a stolen session must not get it.
   if (BLOCKED.has(ctx.path)) throw new APIError("NOT_FOUND");
   const action = stepUpActionFor(ctx.path, ctx.body);
-  const factor = isFactorEndpoint(ctx.path);
-  if (!action && !factor) return null;
+  const blocked = isImpersonationBlocked(ctx.path);
+  if (!action && !blocked) return null;
   const session = await getSessionFromCtx(ctx);
   if (!session) return null; // the endpoint answers 401 (or runs a sign-in step) itself
-  if (factor && session.session.impersonatedBy) {
+  if (blocked && session.session.impersonatedBy) {
     throw new APIError("FORBIDDEN", {
       message: STEP_UP_MESSAGES.impersonating,
       code: "IMPERSONATING",
@@ -178,12 +180,40 @@ const AFTER_PATHS = new Set([
   "/passkey/delete-passkey",
 ]);
 
+/** Labels of passkeys being removed, kept from hooks.before to hooks.after: the row is gone by then. */
+const removedLabels = new Map<string, string>();
+
+const passkeyIdOf = (body: unknown) => {
+  const id = (body as { id?: unknown } | null | undefined)?.id;
+  return typeof id === "string" ? id : null;
+};
+
+/** In `hooks.before` for /passkey/delete-passkey, after its guards: note the name for the notice. */
+export async function rememberRemovedPasskey(ctx: HookContext) {
+  const id = passkeyIdOf(ctx.body);
+  if (!id) return;
+  const current = await getSessionFromCtx(ctx);
+  if (!current) return;
+  const row = await runtime.runPromise(findPasskey(current.user.id, id));
+  if (row) removedLabels.set(id, passkeyLabel(row));
+}
+
+function takeRemovedLabel(body: unknown): string {
+  const id = passkeyIdOf(body);
+  const label = (id && removedLabels.get(id)) || "Passkey";
+  if (id) removedLabels.delete(id);
+  return label;
+}
+
 /**
  * After a successful factor change: tell the user. After a passkey check: the
  * new session counts as a passed step-up and replaces the one it came from.
  */
 export async function factorChangedAfter(ctx: AfterContext, deliver: Deliver) {
-  if (!AFTER_PATHS.has(ctx.path) || isAPIError(ctx.context.returned)) return;
+  if (!AFTER_PATHS.has(ctx.path)) return;
+  // Taken before the error check, so a refused delete doesn't leave its entry behind.
+  const removedLabel = ctx.path === "/passkey/delete-passkey" ? takeRemovedLabel(ctx.body) : null;
+  if (isAPIError(ctx.context.returned)) return;
   if (ctx.path === "/passkey/verify-authentication") {
     const created = ctx.context.newSession;
     if (!created) return;
@@ -216,16 +246,29 @@ export async function factorChangedAfter(ctx: AfterContext, deliver: Deliver) {
     );
   } else if (ctx.path === "/passkey/verify-registration") {
     logger.info({ event: "auth.passkey_added", unit: "log", user_id: user.id });
+    const added = ctx.context.returned as { name?: string | null; aaguid?: string | null };
     await notify(
       deliver,
-      { to: user.email, ...passkeyAddedEmail(emailContext, { resetUrl: resetPasswordUrl() }) },
+      {
+        to: user.email,
+        ...passkeyAddedEmail(emailContext, {
+          resetUrl: resetPasswordUrl(),
+          passkeyName: passkeyLabel(added ?? {}),
+        }),
+      },
       "passkey_added",
     );
   } else {
     logger.info({ event: "auth.passkey_removed", unit: "log", user_id: user.id });
     await notify(
       deliver,
-      { to: user.email, ...passkeyRemovedEmail(emailContext, { resetUrl: resetPasswordUrl() }) },
+      {
+        to: user.email,
+        ...passkeyRemovedEmail(emailContext, {
+          resetUrl: resetPasswordUrl(),
+          passkeyName: removedLabel ?? "Passkey",
+        }),
+      },
       "passkey_removed",
     );
   }

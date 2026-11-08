@@ -51,10 +51,13 @@ export function stepUpActionFor(path: string, body: unknown): StepUpAction | nul
   return null;
 }
 
+/** Account writes an admin could otherwise make as the customer: connect their own Google or GitHub, or mail a link. */
+const ACCOUNT_WRITES = new Set(["/link-social", "/send-verification-email"]);
+
 /**
- * Factor endpoints, refused for an impersonation session: otherwise an admin
- * could enrol their own authenticator on the customer's account. Sign-in
- * verification has no session yet, so it is never blocked.
+ * Endpoints refused for an impersonation session: factor changes (or an admin could enrol their
+ * own authenticator on the customer's account) and ACCOUNT_WRITES. Sign-in verification and a
+ * signed-out resend have no session, so they are never blocked.
  */
-export const isFactorEndpoint = (path: string) =>
-  path.startsWith("/two-factor/") || path.startsWith("/passkey/");
+export const isImpersonationBlocked = (path: string) =>
+  path.startsWith("/two-factor/") || path.startsWith("/passkey/") || ACCOUNT_WRITES.has(path);
