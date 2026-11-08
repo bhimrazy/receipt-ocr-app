@@ -45,9 +45,11 @@ Anything else is Free. The rules:
    day. Pro scans never use a member's personal Free allowance, and Free scans never use the Pro pool.
 4. **Members per workspace: Free 3, Pro 10.** `memberLimitCheck` in
    [`service.ts`](../../../packages/core/src/billing/service.ts) counts members plus pending invitations, so sending
-   many invites can't overshoot. Better Auth's own `membershipLimit` (100) stays as the outer fuse, which is why an
-   admin can't set more than 100. Two invites sent at the same moment aren't serialised; the per-inviter hourly limit
-   bounds that.
+   many invites can't overshoot. Accepting counts members only, so a workspace at the limit takes no one else. No lock
+   is taken (Better Auth inserts after the hook, outside our transaction): invites sent at the same moment can leave
+   extra pending invitations, but those can't become members past the limit; only two accepts in the same instant
+   could overshoot it, by one. Better Auth's own `membershipLimit` (100) stays as the outer fuse, which is why an
+   admin can't set more than 100.
 5. **A Pro owner may own up to 2 workspaces.** `accountPlan(userId)` is Pro when the user is comped or owns at least one
    Pro workspace. It only lifts the ownership cap (Free 1, Pro 2). The extra workspace stays Free until it gets its own
    subscription.

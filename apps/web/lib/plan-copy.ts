@@ -62,32 +62,23 @@ export function proFeatures(pro: PlanPolicy): string[] {
   ];
 }
 
-/** The Custom card's fixed copy, shared by the landing and pricing pages. */
+/**
+ * The Custom card, shared by the landing and pricing pages. No price and no self-serve features:
+ * each line is arranged by hand after someone gets in touch.
+ */
 export const CUSTOM_PLAN = {
   name: "Custom",
   price: "Let's talk",
-  description:
-    "For teams that need more than Pro. Tell us what you need and we'll say honestly what we can do.",
-  featuresLabel: "Talk to us about",
-  cta: "Talk to us",
-} as const;
-
-/**
- * What the Custom card offers to talk about. Nothing here is a self-serve feature: each line is
- * something we can arrange by hand, so the card says "talk to us", not "included".
- */
-export function customTopics(pro: PlanPolicy): string[] {
-  const volume =
-    pro.receiptsPerMonth === null
-      ? `More than ${n(pro.receiptsPerDay, "scan")} a day`
-      : `More than ${n(pro.receiptsPerMonth, "scan")} a month`;
-  return [
+  description: "For higher volume, bigger teams and tailored setups.",
+  features: [
+    "Everything in Pro",
+    "Higher monthly and daily limits",
     "More members and workspaces",
-    volume,
-    "Yearly billing, with invoices from Paddle",
-    "Help bringing in the receipts you already have",
-  ];
-}
+    "A direct line to the team",
+    "Shape the roadmap with your feedback",
+  ],
+  cta: "Contact us",
+} as const;
 
 /** For an owner with a Pro workspace looking at one of their Free ones (billing page, settings). */
 export const SEPARATE_UPGRADE =

@@ -1,6 +1,6 @@
 import { DEFAULT_PLANS, type PlanPolicy } from "@receipt-ocr/core/plans";
 import { describe, expect, it } from "vitest";
-import { customTopics, freeFeatures, proFeatures, scansLine } from "./plan-copy";
+import { CUSTOM_PLAN, freeFeatures, proFeatures, scansLine } from "./plan-copy";
 
 describe("plan card copy", () => {
   it("words Free from its limits", () => {
@@ -38,7 +38,6 @@ describe("plan card copy", () => {
       "Own up to 4 workspaces (each upgraded separately)",
       "Cancel any time",
     ]);
-    expect(customTopics(saved)).toContain("More than 800 scans a month");
   });
 
   it("drops the month when a plan has no monthly limit", () => {
@@ -50,9 +49,10 @@ describe("plan card copy", () => {
     );
   });
 
-  it("offers Custom topics without a price or features we don't have", () => {
-    const topics = customTopics(DEFAULT_PLANS.pro);
-    expect(topics).toContain("More members and workspaces");
-    expect(topics.join(" ")).not.toMatch(/\$|SLA|SSO|API|unlimited/i);
+  it("offers Custom without a price or features we don't have", () => {
+    expect(CUSTOM_PLAN.price).toBe("Let's talk");
+    expect(CUSTOM_PLAN.features).toContain("More members and workspaces");
+    const copy = [CUSTOM_PLAN.description, ...CUSTOM_PLAN.features].join(" ");
+    expect(copy).not.toMatch(/\$|\d|SLA|SSO|\bAPI\b|unlimited|guarantee/i);
   });
 });

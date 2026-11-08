@@ -64,16 +64,15 @@ export default async function PricingPage() {
       q: "What if we need more than Pro?",
       a: (
         <>
-          Tell us with{" "}
+          Higher limits, more members or workspaces, or a tailored setup:{" "}
           <ContactButton
             className="h-auto p-0 align-baseline max-md:h-auto max-md:px-0"
             topic="use-case"
             variant="link"
           >
-            Talk to us
+            contact us
           </ContactButton>{" "}
-          (more members, workspaces or scans, or help bringing in old receipts). We reply by email
-          and say plainly what we can and can&apos;t do.
+          and say what you need. We reply by email and say plainly what we can and can&apos;t do.
         </>
       ),
     },

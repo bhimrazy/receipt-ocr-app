@@ -23,7 +23,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
 import { homeFaqs as faqs } from "@/lib/home-faqs";
-import { CUSTOM_PLAN, customTopics, freeFeatures, proFeatures } from "@/lib/plan-copy";
+import { CUSTOM_PLAN, freeFeatures, proFeatures } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { homeJsonLd, jsonLdScript } from "@/lib/seo";
 import type { PlanTable } from "@receipt-ocr/core/plans";
@@ -343,8 +343,7 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 price={CUSTOM_PLAN.price}
                 cadence=""
                 description={CUSTOM_PLAN.description}
-                features={customTopics(plans.pro)}
-                featuresLabel={CUSTOM_PLAN.featuresLabel}
+                features={[...CUSTOM_PLAN.features]}
                 quiet
                 cta={
                   <ContactButton className="w-full" topic="use-case" variant="outline">

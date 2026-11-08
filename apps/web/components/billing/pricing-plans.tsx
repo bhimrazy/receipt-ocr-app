@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { PlanCard } from "@/components/plan-card";
 import { ContactButton } from "@/components/contact-button";
-import { CUSTOM_PLAN, customTopics, freeFeatures, proFeatures } from "@/lib/plan-copy";
+import { CUSTOM_PLAN, freeFeatures, proFeatures } from "@/lib/plan-copy";
 import { PRO_PRICE } from "@/lib/pricing";
 import { IntervalToggle, type BillingInterval } from "./interval-toggle";
 
@@ -74,8 +74,7 @@ export function PricingPlans({ plans, checkoutOpen }: { plans: PlanTable; checko
             </ContactButton>
           }
           description={CUSTOM_PLAN.description}
-          features={customTopics(plans.pro)}
-          featuresLabel={CUSTOM_PLAN.featuresLabel}
+          features={[...CUSTOM_PLAN.features]}
           name={CUSTOM_PLAN.name}
           price={CUSTOM_PLAN.price}
           quiet

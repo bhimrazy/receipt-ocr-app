@@ -29,7 +29,7 @@ test("pricing shows Free, Pro and Custom with a monthly/yearly switch, and the F
   await expect(page.getByRole("heading", { name: "Custom", exact: true })).toBeVisible();
   await expect(page.getByText("Let's talk", { exact: true })).toBeVisible();
   await expect(page.getByText("More members and workspaces", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Talk to us" }).first().click();
+  await page.getByRole("button", { name: "Contact us" }).first().click();
   const form = page.getByRole("dialog");
   await expect(form).toBeVisible();
   await expect(form.getByRole("button", { name: "Plans & limits" })).toHaveAttribute(

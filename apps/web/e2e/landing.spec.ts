@@ -71,7 +71,7 @@ test("the landing pricing shows three plans and Custom opens the support form", 
     await expect(pricing.getByRole("heading", { name, exact: true })).toBeVisible();
   }
   await expect(pricing.getByText("1 workspace", { exact: true })).toHaveCount(0);
-  await pricing.getByRole("button", { name: "Talk to us" }).click();
+  await pricing.getByRole("button", { name: "Contact us" }).click();
   await expect(
     page.getByRole("dialog").getByRole("button", { name: "Plans & limits" }),
   ).toHaveAttribute("aria-pressed", "true");

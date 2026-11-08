@@ -17,7 +17,15 @@ import { useState } from "react";
 import { savePlansAction } from "../actions";
 
 /** `optional` fields may be left empty for "no limit". */
-const FIELDS: { key: keyof PlanPolicy; label: string; hint: string; optional?: boolean }[] = [
+const FIELDS: {
+  key: keyof PlanPolicy;
+  label: string;
+  hint: string;
+  optional?: boolean;
+  /** Bounds the server also enforces, shown to the browser and assistive tech. */
+  min?: number;
+  max?: number;
+}[] = [
   {
     key: "receiptsPerMonth",
     label: "Receipts a month",
@@ -53,6 +61,8 @@ const FIELDS: { key: keyof PlanPolicy; label: string; hint: string; optional?: b
   {
     key: "membersPerWorkspace",
     label: "Members in a workspace",
+    min: 1,
+    max: MAX_MEMBERS,
     hint: `Pending invitations count. Checked when someone is invited and when they accept; a workspace already over it keeps its members. At most ${MAX_MEMBERS}.`,
   },
 ];
@@ -156,6 +166,8 @@ export function PlanLimitsForm({ current, defaults }: { current: PlanTable; defa
                         className="text-right font-mono tabular-nums"
                         id={id}
                         inputMode="numeric"
+                        max={field.max}
+                        min={field.min}
                         onChange={(event) =>
                           setDraft((d) => ({
                             ...d,

@@ -1,15 +1,14 @@
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { Check, ChevronRight } from "lucide-react";
+import { Check } from "lucide-react";
 
 /**
  * One plan in a pricing grid: name, price, what's included and its call to action. Cards in a
  * grid row share a height, and the list grows so every CTA sits on the same line.
  *
  * `featured` is the plan we point people to. `quiet` is a plan without a public price ("Let's
- * talk"): the price reads as text, not a figure, and `featuresLabel` introduces its list, whose
- * items are topics to discuss rather than inclusions, so they get no check marks.
+ * talk"): no sheen, and the price reads as text, not a figure.
  */
 export function PlanCard({
   name,
@@ -17,7 +16,6 @@ export function PlanCard({
   cadence,
   description,
   features,
-  featuresLabel,
   cta,
   badge,
   featured = false,
@@ -28,13 +26,11 @@ export function PlanCard({
   cadence: string;
   description: string;
   features: string[];
-  featuresLabel?: string;
   cta: React.ReactNode;
   badge?: string;
   featured?: boolean;
   quiet?: boolean;
 }) {
-  const Marker = quiet ? ChevronRight : Check;
   return (
     <Card
       className={cn(
@@ -60,27 +56,14 @@ export function PlanCard({
         {cadence ? <span className="text-sm text-muted-foreground">{cadence}</span> : null}
       </div>
       <p className="mt-2 text-sm text-muted-foreground">{description}</p>
-      <div className="mt-6 flex flex-1 flex-col gap-3">
-        {featuresLabel ? (
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {featuresLabel}
-          </p>
-        ) : null}
-        <ul className="flex flex-col gap-3 text-sm">
-          {features.map((feature) => (
-            <li className="flex items-start gap-2.5" key={feature}>
-              <Marker
-                aria-hidden="true"
-                className={cn(
-                  "mt-0.5 size-4 shrink-0",
-                  quiet ? "text-muted-foreground" : "text-primary",
-                )}
-              />
-              <span>{feature}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <ul className="mt-6 flex flex-1 flex-col gap-3 text-sm">
+        {features.map((feature) => (
+          <li className="flex items-start gap-2.5" key={feature}>
+            <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
       <div className="mt-7">{cta}</div>
     </Card>
   );

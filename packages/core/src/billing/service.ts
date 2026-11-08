@@ -232,8 +232,11 @@ export const workspaceCreationCheck = (userId: string) =>
  * plan's `membersPerWorkspace`. `invite` counts pending invitations (so many
  * invites can't overshoot the cap) except an earlier one to `email`, which a
  * re-invite replaces; `accept` counts members only, since the invitation
- * being accepted was counted when it was sent. Concurrent invites aren't
- * serialised; the inviter's hourly invite limit bounds that race.
+ * being accepted was counted when it was sent. No lock is taken (Better Auth
+ * inserts after the hook, outside our transaction): invites sent at the same
+ * moment can leave extra pending invitations, but the accept check stops
+ * those at the limit, so only two accepts in the same instant can overshoot
+ * it, by one.
  */
 export const memberLimitCheck = (
   organizationId: string,
