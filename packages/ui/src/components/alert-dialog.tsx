@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
 import { cn } from "@receipt-ocr/ui/lib/utils";
+import { useKeyboardInset } from "../lib/keyboard-inset";
 
 import { Button } from "@receipt-ocr/ui/components/button";
 
@@ -41,16 +42,31 @@ function AlertDialogContent({
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
-      <AlertDialogPrimitive.Popup
-        data-slot="alert-dialog-content"
+      <AlertDialogPopup
         data-size={size}
         className={cn(
-          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-popover p-5 text-popover-foreground shadow-2xl ring-1 ring-foreground/10 duration-100 outline-none max-w-[calc(100%-2rem)] data-[size=sm]:sm:max-w-xs data-[size=default]:sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // Centred like iOS alerts, in the part of the screen the keyboard leaves visible.
+          "group/alert-dialog-content fixed top-[calc((100%-var(--keyboard-inset,0px))/2)] left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-popover p-5 text-popover-foreground shadow-2xl ring-1 ring-foreground/10 duration-100 outline-none max-w-[calc(100%-2rem)] data-[size=sm]:sm:max-w-xs data-[size=default]:sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className,
         )}
         {...props}
       />
     </AlertDialogPortal>
+  );
+}
+
+/** Rendered only while open, so the keyboard is watched only then. */
+function AlertDialogPopup({ style, ...props }: AlertDialogPrimitive.Popup.Props) {
+  const inset = useKeyboardInset();
+  return (
+    <AlertDialogPrimitive.Popup
+      data-slot="alert-dialog-content"
+      style={(state) => ({
+        "--keyboard-inset": `${inset}px`,
+        ...(typeof style === "function" ? style(state) : style),
+      })}
+      {...props}
+    />
   );
 }
 

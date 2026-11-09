@@ -54,7 +54,7 @@ export function ResponsivePanel({
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogTrigger render={trigger} />
-      <DialogContent className="top-auto bottom-0 left-0 max-h-[85dvh] max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-b-none pb-[max(1.25rem,env(safe-area-inset-bottom))] data-closed:slide-out-to-bottom data-closed:zoom-out-100 data-open:slide-in-from-bottom data-open:zoom-in-100 sm:max-w-none">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
