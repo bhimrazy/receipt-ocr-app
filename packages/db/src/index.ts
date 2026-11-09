@@ -19,6 +19,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import postgres from "postgres";
+import { gatedPool } from "./pool";
 import {
   account,
   invitation,
@@ -33,6 +34,13 @@ import {
 } from "./auth-schema";
 
 export * from "./auth-schema";
+export {
+  labelQuery,
+  onPoolEvent,
+  QueryTimeoutError,
+  type PoolEvent,
+  type QueryLabel,
+} from "./pool";
 // Re-export query operators so consumers use THIS package's drizzle-orm
 // instance (avoids duplicate-instance type conflicts with isolated installs).
 export {
@@ -672,26 +680,45 @@ export const schema = {
   passkey,
 };
 
+const POOLS_KEY = Symbol.for("@receipt-ocr/db/pools");
+
 /**
  * One pool per connection string, per process, shared by auth, admin and the
- * Effect runtime. A pool per caller would exhaust the Supabase pooler.
+ * Effect runtime. A pool per caller would exhaust the Supabase pooler. On `globalThis` because
+ * Next can load this module more than once per process (instrumentation, route bundles); every
+ * copy must share one pool and one gate, or the cap multiplies.
  */
-const pools = new Map<string, ReturnType<typeof drizzle<typeof schema>>>();
+const pools: Map<string, ReturnType<typeof drizzle<typeof schema>>> = ((
+  globalThis as { [POOLS_KEY]?: Map<string, ReturnType<typeof drizzle<typeof schema>>> }
+)[POOLS_KEY] ??= new Map());
 
-/** Max pooled connections per process. Keep this low on serverless. */
-const MAX_CONNECTIONS = Number.parseInt(process.env.DATABASE_POOL_MAX ?? "", 10) || 5;
+/**
+ * Max pooled connections per process. Each is one Supavisor client connection (200 on this
+ * plan), which shares the pooler's 15 backends, so instances x this must stay under 200.
+ */
+const MAX_CONNECTIONS = Number.parseInt(process.env.DATABASE_POOL_MAX ?? "", 10) || 10;
+
+/**
+ * How long one query may go unanswered before it fails and the pool is replaced (see
+ * `gatedPool`). Well above any query's normal time, well below the function's max duration.
+ */
+const QUERY_TIMEOUT_MS = Number.parseInt(process.env.DATABASE_QUERY_TIMEOUT_MS ?? "", 10) || 15_000;
 
 export function createDb(databaseUrl: string) {
   const cached = pools.get(databaseUrl);
   if (cached) return cached;
 
-  const client = postgres(databaseUrl, {
-    // Supabase's transaction pooler does not support prepared statements.
-    prepare: false,
-    max: MAX_CONNECTIONS,
-    idle_timeout: 20,
-    connect_timeout: 10,
-  });
+  const client = gatedPool(
+    () =>
+      postgres(databaseUrl, {
+        // Supabase's transaction pooler does not support prepared statements.
+        prepare: false,
+        max: MAX_CONNECTIONS,
+        idle_timeout: 20,
+        connect_timeout: 10,
+      }),
+    { max: MAX_CONNECTIONS, timeoutMs: QUERY_TIMEOUT_MS },
+  );
   const db = drizzle(client, { schema });
   pools.set(databaseUrl, db);
   return db;

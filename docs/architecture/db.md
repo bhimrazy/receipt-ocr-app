@@ -66,7 +66,16 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   `postgres:17.10-alpine`; bump 17.10 to 17.11 after 2026-11-13, when it clears the 7-day cooldown.
 - **One pool per connection string per process.** `createDb` caches the client. Better Auth, the admin pages and the
   Effect runtime all share it; a pool per caller would exhaust the Supabase pooler. The pool size is
-  `DATABASE_POOL_MAX` (default 5).
+  `DATABASE_POOL_MAX` (default 10). Each connection is one Supavisor client (200 on Nano/Micro) sharing the pooler's
+  15 backends, so instances × 10 must stay under 200.
+- **No pipelining, and every query has a deadline** ([`src/pool.ts`](../../packages/db/src/pool.ts)). postgres.js
+  pipelines a query onto a busy connection when none is free; through Supavisor's transaction mode the pipelined
+  query's reply can be lost when the query ahead of it ends its transaction, and its promise never settles (the
+  2026-11-09 Home incident, [review](../reviews/2026-11-09-home-stuck-incident.md)). A gate keeps in-flight queries
+  and transactions at the pool size; queries inside a transaction skip it (they run on the transaction's connection).
+  A query unanswered after `DATABASE_QUERY_TIMEOUT_MS` (default 15 s), or a wait that long for the gate, fails with
+  `QueryTimeoutError` and logs `db.query_timeout`; an unanswered query also replaces the pool, since postgres.js can't
+  drop the one stuck connection.
 - **`prepare: false`.** Supabase's transaction pooler (port 6543) doesn't support prepared statements, so the app
   connects through it with them off. Migrations need DDL and use the session pooler (port 5432) through `DIRECT_URL`.
 - **One `drizzle-orm` instance.** Consumers import operators from `@receipt-ocr/db`, not `drizzle-orm`, to avoid

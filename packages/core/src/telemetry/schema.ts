@@ -227,6 +227,28 @@ export const EVENT_SCHEMA = {
     },
   },
 
+  /**
+   * A database query that hit the pool's deadline (`db.query_timeout`). Labels derived from the
+   * statement's placeholder text, never the text itself or its values.
+   */
+  db: {
+    group: {
+      /** `select`, `insert`, `update`, `delete`, `begin` or `other`. */
+      operation: "token",
+      /** The first table the statement names. */
+      table: "token",
+      /** FNV-1a of the statement text, to group repeats of one query. */
+      statement_hash: "token",
+      /** `queue` (no free connection in time) or `query` (no reply in time; the pool is replaced). */
+      phase: "token",
+      timeout_ms: "int",
+      /** Queries and transactions in flight on this instance's pool when it fired. */
+      in_flight: "int",
+      /** Queries waiting for a connection when it fired. */
+      queued: "int",
+    },
+  },
+
   error: { group: ERROR_FIELDS },
   /** Names of problems logged while this unit ran (`receipt.calls_not_recorded`). */
   notices: "tokens",
