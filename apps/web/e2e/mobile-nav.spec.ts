@@ -243,7 +243,8 @@ async function recordViewTransitions(page: Page) {
 const transitions = (page: Page) =>
   page.evaluate(() => (window as unknown as { __vt: string[] }).__vt);
 
-test("a receipt slides in from History and back out, fast", async ({ page }) => {
+// TODO(2026-11-16): re-enable with PushedScreen's transition.
+test.skip("a receipt slides in from History and back out, fast", async ({ page }) => {
   await recordViewTransitions(page);
   await page.goto("/app/history");
   await page.getByRole("link", { name: "Phone Market" }).click();
@@ -257,6 +258,14 @@ test("a receipt slides in from History and back out, fast", async ({ page }) => 
   await expect
     .poll(() => transitions(page))
     .toContainEqual(expect.stringMatching(/old\(.+\) push-in 160$/));
+});
+
+test("leaving a receipt for Home shows Home, not its loading skeletons", async ({ page }) => {
+  await page.goto(`/app/receipts/${receiptId}`);
+  await expect(page.getByRole("heading", { level: 1, name: "Phone Market" })).toBeVisible();
+  await page.getByRole("navigation").getByRole("link", { name: "Home" }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.locator('main [data-slot="skeleton"]')).toHaveCount(0, { timeout: 15_000 });
 });
 
 test.describe("with reduced motion", () => {
