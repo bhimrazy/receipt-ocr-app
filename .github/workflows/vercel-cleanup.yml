@@ -1,0 +1,112 @@
+name: Vercel Cleanup
+
+# Clears a backlog of old deployments; the retention policy does routine pruning.
+# See docs/deployment.md, Old deployments.
+run-name: Vercel cleanup (keep ${{ inputs.keep_production }} production)
+on:
+  workflow_dispatch:
+    inputs:
+      keep_production:
+        description: Newest ready production deployments to keep, the live one included (minimum 1).
+        type: number
+        default: 3
+        required: true
+      preview_min_age_days:
+        description: Delete preview deployments at least this many days old (0 for all).
+        type: number
+        default: 1
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: vercel-cleanup
+  cancel-in-progress: false
+
+jobs:
+  # No approval here, so the approver sees the list first.
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    environment: vercel
+    permissions: {}
+    outputs:
+      ids: ${{ steps.plan.outputs.ids }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - name: List deployments to delete
+        id: plan
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
+          TEAM_ID: ${{ secrets.VERCEL_ORG_ID }}
+          PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          KEEP: ${{ inputs.keep_production }}
+          MIN_AGE_DAYS: ${{ inputs.preview_min_age_days }}
+        run: |
+          set -euo pipefail
+          [ -n "$PRODUCTION_DOMAIN" ] || { echo "::error::Set PRODUCTION_DOMAIN in the vercel and vercel-cleanup environments"; exit 1; }
+          [[ "$KEEP" =~ ^[0-9]+$ && "$KEEP" -ge 1 ]] || { echo "::error::keep_production must be 1 or more"; exit 1; }
+          [[ "$MIN_AGE_DAYS" =~ ^[0-9]+$ ]] || { echo "::error::preview_min_age_days must be 0 or more"; exit 1; }
+          api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
+          live=$(api "/v13/deployments/$PRODUCTION_DOMAIN?teamId=$TEAM_ID" | jq -er .id)
+          url="/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&limit=100"
+          : > all.jsonl
+          while :; do
+            page=$(api "$url")
+            jq -c '.deployments[]' <<< "$page" >> all.jsonl
+            next=$(jq -r '.pagination.next // empty' <<< "$page")
+            [ -z "$next" ] && break
+            url="/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&limit=100&until=$next"
+          done
+          cutoff=$(( ($(date +%s) - MIN_AGE_DAYS * 86400) * 1000 ))
+          jq -s -c --arg live "$live" --argjson keep "$KEEP" --argjson cutoff "$cutoff" '
+            (map(select(.target == "production" and .state == "READY")) | sort_by(-.created) | .[:$keep] | map(.uid)) as $kept
+            | map(select(.uid != $live and (.uid as $u | $kept | index($u) | not)))
+            | map(select(.target == "production" or .created <= $cutoff))
+            | sort_by(.created)' all.jsonl > delete.json
+          count=$(jq length delete.json)
+          {
+            echo "### Vercel cleanup plan"
+            echo
+            echo "Live: \`$live\`. Found $(wc -l < all.jsonl) deployments; deleting **$count**, keeping the newest $KEEP ready production deployments and any preview younger than $MIN_AGE_DAYS days."
+            echo
+            echo "| Deployment | Target | State | Created |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '.[] | "| `\(.uid)` | \(.target // "preview") | \(.state) | \(.created / 1000 | todate) |"' delete.json
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "ids=$(jq -r 'map(.uid) | join(" ")' delete.json)" >> "$GITHUB_OUTPUT"
+
+  delete:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    environment: vercel-cleanup
+    permissions: {}
+    steps:
+      - name: Delete the planned deployments
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
+          TEAM_ID: ${{ secrets.VERCEL_ORG_ID }}
+          IDS: ${{ needs.plan.outputs.ids }}
+        run: |
+          set -euo pipefail
+          api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
+          # Production may have moved during the approval wait.
+          live=$(api "https://api.vercel.com/v13/deployments/$PRODUCTION_DOMAIN?teamId=$TEAM_ID" | jq -er .id)
+          deleted=0 failed=0
+          for id in $IDS; do
+            [[ "$id" =~ ^dpl_[A-Za-z0-9]+$ ]] || { echo "::error::Unexpected id $id"; exit 1; }
+            if [ "$id" = "$live" ]; then echo "Skipping $id: production points at it now."; continue; fi
+            if api -o /dev/null -X DELETE "https://api.vercel.com/v13/deployments/$id?teamId=$TEAM_ID"; then
+              deleted=$((deleted + 1))
+            else
+              failed=$((failed + 1)); echo "::warning::Couldn't delete $id"
+            fi
+          done
+          printf '### Vercel cleanup\n\nDeleted %s, failed %s.\n' "$deleted" "$failed" >> "$GITHUB_STEP_SUMMARY"
+          [ "$failed" -eq 0 ]
