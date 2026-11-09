@@ -4,6 +4,24 @@ import { totpFromBase32 } from "../lib/totp";
 
 export const PASSWORD = "e2e-password-123";
 
+/**
+ * Chromium can't emulate `display-mode: standalone` (Emulation.setEmulatedMedia leaves it false),
+ * so the installed app is faked where the app asks: matchMedia, before any page script runs.
+ * That drives DISPLAY_MODE_SCRIPT and every client check; the `standalone:` CSS variant follows
+ * the attribute that script sets.
+ */
+export async function emulateStandalone(page: Page) {
+  await page.addInitScript(() => {
+    const real = window.matchMedia.bind(window);
+    window.matchMedia = (query: string) => {
+      const list = real(query);
+      if (query.includes("display-mode: standalone"))
+        Object.defineProperty(list, "matches", { get: () => true });
+      return list;
+    };
+  });
+}
+
 export function uniqueEmail(tag: string) {
   return `e2e-${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.com`;
 }

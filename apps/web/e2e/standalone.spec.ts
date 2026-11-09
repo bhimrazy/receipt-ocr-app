@@ -1,23 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { signUp, uniqueEmail } from "./helpers";
-
-/**
- * Chromium can't emulate `display-mode: standalone` (Emulation.setEmulatedMedia leaves it false),
- * so the installed app is faked where the app asks: matchMedia, before any page script runs.
- * That drives DISPLAY_MODE_SCRIPT and every client check; the `standalone:` CSS variant follows
- * the attribute that script sets.
- */
-async function emulateStandalone(page: Page) {
-  await page.addInitScript(() => {
-    const real = window.matchMedia.bind(window);
-    window.matchMedia = (query: string) => {
-      const list = real(query);
-      if (query.includes("display-mode: standalone"))
-        Object.defineProperty(list, "matches", { get: () => true });
-      return list;
-    };
-  });
-}
+import { expect, test } from "@playwright/test";
+import { emulateStandalone, signUp, uniqueEmail } from "./helpers";
 
 test("a browser tab still gets the landing page", async ({ page }) => {
   await page.goto("/");
