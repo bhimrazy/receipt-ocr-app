@@ -3,7 +3,7 @@
 import type { SizeId, SizeOption } from "@/lib/upload-prep";
 
 export const SIZE_LABELS: Record<SizeId, string> = {
-  smaller: "Faster upload",
+  smaller: "Compact",
   recommended: "Standard",
   larger: "Sharpest",
 };
