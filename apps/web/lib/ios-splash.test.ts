@@ -15,15 +15,28 @@ describe("iOS startup images", () => {
     expect(new Set(startupImages.map((i) => i.media)).size).toBe(startupImages.length);
   });
 
-  it("is iPhone and portrait, with one image per device for each OS scheme", () => {
-    expect(startupImages).toHaveLength(22);
+  it("has iPhones in portrait and iPads in both orientations, per OS scheme", () => {
+    expect(startupImages).toHaveLength((11 + 7 * 2) * 2);
     for (const image of startupImages) {
-      expect(image.media).toContain("(orientation: portrait)");
       const theme = image.url.includes("/light-") ? "light" : "dark";
       expect(image.media).toContain(`(prefers-color-scheme: ${theme})`);
+      if (image.media.includes("-webkit-device-pixel-ratio: 3")) {
+        expect(image.media).toContain("(orientation: portrait)");
+      }
     }
     const [first] = splashDevices;
     expect(splashFile("dark", first!)).toBe("dark-1320x2868.png");
+  });
+
+  it("names a landscape iPad file wider than tall", () => {
+    const pro13 = splashDevices.filter((d) => d.w === 1032 && d.h === 1376);
+    expect(pro13.map((d) => splashFile("dark", d))).toEqual([
+      "dark-2064x2752.png",
+      "dark-2752x2064.png",
+    ]);
+    const landscape = startupImages.find((i) => i.url === "/splash/dark-2752x2064.png");
+    expect(landscape?.media).toContain("(device-width: 1032px) and (device-height: 1376px)");
+    expect(landscape?.media).toContain("(orientation: landscape)");
   });
 
   it("covers the iPhone Air (420 x 912 points at 3x)", () => {
