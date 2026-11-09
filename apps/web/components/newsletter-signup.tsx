@@ -65,7 +65,7 @@ export function NewsletterSignup() {
   }
 
   return (
-    <form noValidate onSubmit={submit}>
+    <form className="w-full" noValidate onSubmit={submit}>
       <label className="sr-only" htmlFor={`${ids}-email`}>
         Email address
       </label>
@@ -94,14 +94,18 @@ export function NewsletterSignup() {
           type="text"
         />
         <Button
+          variant="outline"
           aria-busy={status === "sending" || turnstile.pending}
-          className="max-md:h-11"
+          className="h-10 max-md:h-11"
           disabled={status === "sending"}
           type="submit"
         >
-          {status === "sending" ? "Sending…" : "Get product updates"}
+          {status === "sending" ? "Sending…" : "Subscribe"}
         </Button>
       </div>
+      <p className="mt-3 text-sm text-muted-foreground">
+        A few emails a year. No spam. Unsubscribe from any email.
+      </p>
       <Turnstile className="mt-3" controller={turnstile} />
       {error ? (
         <p className="mt-3 text-sm leading-6 text-destructive" id={`${ids}-error`} role="alert">

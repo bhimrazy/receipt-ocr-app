@@ -4,6 +4,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   ArrowRight,
   Briefcase,
+  Check,
   Calculator,
   Code2,
   Download,
@@ -30,6 +31,13 @@ import { CUSTOM_PLAN, freeFeatures, proFeatures } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { homeJsonLd, jsonLdScript } from "@/lib/seo";
 import type { PlanTable } from "@receipt-ocr/core/plans";
+
+// Update by hand when something notable ships.
+const recentlyShipped = [
+  "Light, System and Dark themes",
+  "Choose the upload size",
+  "Paste or auto-fill sign-in codes",
+];
 
 const features = [
   {
@@ -452,7 +460,7 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
             aria-labelledby="updates-heading"
             className="border-t border-border px-5 py-16 md:py-20"
           >
-            <div className="mx-auto grid max-w-4xl gap-8 md:grid-cols-2 md:items-center md:gap-12">
+            <div className="mx-auto grid max-w-4xl items-start gap-8 rounded-xl border border-border bg-card p-6 md:grid-cols-2 md:gap-12 md:p-8">
               <div>
                 <SectionLabel>Product updates</SectionLabel>
                 <h2
@@ -462,9 +470,17 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                   Hear when something new ships
                 </h2>
                 <p className="mt-3 text-pretty text-muted-foreground">
-                  A short note a few times a year about what changed in ReceiptOCR. No spam, and you
-                  can unsubscribe from any email.
+                  A short note about what changed in ReceiptOCR.
                 </p>
+                <h3 className="mt-6 text-sm font-medium">Recently shipped</h3>
+                <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
+                  {recentlyShipped.map((item) => (
+                    <li className="flex items-start gap-2" key={item}>
+                      <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-primary" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
               </div>
               <NewsletterSignup />
             </div>
