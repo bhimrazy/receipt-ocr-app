@@ -314,7 +314,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   the owner accepted all nine recommended decisions on 2026-11-09. All five PRs are built: PR 1 the installed app
   never shows the website (#195, #196), PR 2 touch feedback (#197), PR 3 full-screen auth (#198), PR 4 keyboard,
   offline and refresh (#199), PR 5 polish in two parts: phone landing header and preview, manifest screenshots and
-  iPad splash (#200), then screen transitions and Settings as a grouped list (#PR5B). Left: a pass on a real
+  iPad splash (#200), then screen transitions and Settings as a grouped list (#202). Left: a pass on a real
   installed iPhone and Android phone, which headless Chromium can't stand in for, starting with finding 14 (Google
   and GitHub sign-in in the installed iOS app; if the session doesn't reach the app, put passkey and email first
   there). Owner decisions, 2026-11-09 (#201): the signed-in app keeps its 16 px phone side gutter and only the auth
