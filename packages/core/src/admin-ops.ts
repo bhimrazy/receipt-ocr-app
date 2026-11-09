@@ -79,7 +79,9 @@ const staleInterval = sql.raw(`interval '${STALE_AFTER_MS / 1000} seconds'`);
  * flight (its job is live, or it is young with no calls yet) or failed.
  */
 export async function volumeQuery(db: Queryable, w: OpsWindow): Promise<OpsVolume> {
-  const rows = await db.execute<{ t: string; ok: number; failed: number; in_flight: number }>(sql`
+  const rows = await db
+    .execute<{ t: string; ok: number; failed: number; in_flight: number }>(
+      sql`
     with r as materialized (
       select r.receipt_id, r.round, r.created_at, ${bucketOf(w, sql`r.created_at`)} as t
       from ocr_rounds r where ${inWindow(w, sql`r.created_at`)}
@@ -105,7 +107,9 @@ export async function volumeQuery(db: Queryable, w: OpsWindow): Promise<OpsVolum
       (count(*) filter (where outcome = 'failed'))::int as failed,
       (count(*) filter (where outcome = 'in_flight'))::int as in_flight
     from o
-    group by t`);
+    group by t`,
+    )
+    .then((r) => r.rows);
   const points = fillBuckets(
     w.buckets,
     rows.map((r) => ({
@@ -139,14 +143,16 @@ export type OpsLatency = {
 
 /** Per model call, failures included: a timeout is what an operator needs to see. */
 export async function latencyQuery(db: Queryable, w: OpsWindow): Promise<OpsLatency> {
-  const rows = await db.execute<{
-    t: string | null;
-    model: string | null;
-    p50: number;
-    p95: number;
-    calls: number;
-    g: number;
-  }>(sql`
+  const rows = await db
+    .execute<{
+      t: string | null;
+      model: string | null;
+      p50: number;
+      p95: number;
+      calls: number;
+      g: number;
+    }>(
+      sql`
     select t, model,
       percentile_cont(0.5) within group (order by latency_ms) as p50,
       percentile_cont(0.95) within group (order by latency_ms) as p95,
@@ -154,7 +160,9 @@ export async function latencyQuery(db: Queryable, w: OpsWindow): Promise<OpsLate
       grouping(t, model)::int as g
     from (select ${bucketOf(w, sql`c.created_at`)} as t, c.model, c.latency_ms from ocr_calls c
       where ${inWindow(w, sql`c.created_at`)} and c.model is not null) x
-    group by grouping sets ((t, model), (model), ())`);
+    group by grouping sets ((t, model), (model), ())`,
+    )
+    .then((r) => r.rows);
   const stats = (r: (typeof rows)[number]): LatencyStats => ({
     p50: Math.round(num(r.p50)),
     p95: Math.round(num(r.p95)),
@@ -211,18 +219,20 @@ const ZERO_COST: CostStats = {
 };
 
 export async function costQuery(db: Queryable, w: OpsWindow): Promise<OpsCost> {
-  const rows = await db.execute<{
-    t: string | null;
-    model: string | null;
-    calls: number;
-    input: string | null;
-    cached: string | null;
-    output: string | null;
-    reasoning: string | null;
-    cost: string | null;
-    unpriced: number;
-    g: number;
-  }>(sql`
+  const rows = await db
+    .execute<{
+      t: string | null;
+      model: string | null;
+      calls: number;
+      input: string | null;
+      cached: string | null;
+      output: string | null;
+      reasoning: string | null;
+      cost: string | null;
+      unpriced: number;
+      g: number;
+    }>(
+      sql`
     select t, model,
       count(*)::int as calls,
       sum(input_tokens)::bigint as input,
@@ -235,7 +245,9 @@ export async function costQuery(db: Queryable, w: OpsWindow): Promise<OpsCost> {
     from (select ${bucketOf(w, sql`c.created_at`)} as t, c.model, c.input_tokens,
         c.cached_input_tokens, c.output_tokens, c.reasoning_tokens, c.cost_micro_usd
       from ocr_calls c where ${inWindow(w, sql`c.created_at`)} and c.model is not null) x
-    group by grouping sets ((t, model), (model), ())`);
+    group by grouping sets ((t, model), (model), ())`,
+    )
+    .then((r) => r.rows);
   const stats = (r: (typeof rows)[number]): CostStats => ({
     calls: num(r.calls),
     inputTokens: num(r.input),
@@ -283,15 +295,17 @@ export async function topWorkspacesQuery(
   w: OpsWindow,
   limit = 10,
 ): Promise<WorkspaceCost[]> {
-  const rows = await db.execute<{
-    organization_id: string | null;
-    name: string | null;
-    other: boolean;
-    workspaces: number;
-    calls: number;
-    cost: string | null;
-    reads: number;
-  }>(sql`
+  const rows = await db
+    .execute<{
+      organization_id: string | null;
+      name: string | null;
+      other: boolean;
+      workspaces: number;
+      calls: number;
+      cost: string | null;
+      reads: number;
+    }>(
+      sql`
     with per as (
       select c.organization_id, count(*)::int as calls,
         coalesce(sum(c.cost_micro_usd), 0)::bigint as cost,
@@ -307,7 +321,9 @@ export async function topWorkspacesQuery(
     union all
     select null, null, true, count(*)::int, sum(calls)::int, sum(cost)::bigint, sum(reads)::int
     from ranked where k > ${limit} having count(*) > 0
-    order by other, cost desc, calls desc`);
+    order by other, cost desc, calls desc`,
+    )
+    .then((r) => r.rows);
   return rows.map((r) => ({
     organizationId: r.organization_id,
     name: r.name,
@@ -330,7 +346,9 @@ export type OpsFailures = {
 };
 
 export async function failuresQuery(db: Queryable, w: OpsWindow): Promise<OpsFailures> {
-  const rows = await db.execute<{ source: "call" | "job"; kind: string; n: number }>(sql`
+  const rows = await db
+    .execute<{ source: "call" | "job"; kind: string; n: number }>(
+      sql`
     select 'call' as source, c.status as kind, count(*)::int as n from ocr_calls c
     where ${inWindow(w, sql`c.created_at`)} and c.status <> 'ok'
     group by c.status
@@ -338,7 +356,9 @@ export async function failuresQuery(db: Queryable, w: OpsWindow): Promise<OpsFai
     select 'job', coalesce(j.last_error_kind, 'unknown'), count(*)::int from jobs j
     where j.state = 'dead' and ${inWindow(w, sql`j.finished_at`)}
     group by 2
-    order by 3 desc, 2`);
+    order by 3 desc, 2`,
+    )
+    .then((r) => r.rows);
   const of = (source: "call" | "job") =>
     rows.filter((r) => r.source === source).map((r) => ({ kind: r.kind, count: num(r.n) }));
   return { calls: of("call"), deadJobs: of("job") };
@@ -381,19 +401,21 @@ const inForce = sql`(c.paused or c.until is not null) and (c.until is null or c.
 export const queueSnapshot = Effect.flatMap(Db, ({ use }) => use((db) => queueQuery(db)));
 
 export async function queueQuery(db: Queryable): Promise<OpsQueue> {
-  const [row] = await db.execute<{
-    now: string;
-    queued: number;
-    due: number;
-    retrying: number;
-    running: number;
-    expired: number;
-    oldest_due_s: number | null;
-    dead24h: number;
-    by_kind: { kind: string; queued: number; running: number }[] | null;
-    controls: QueueControl[] | null;
-    ticks: { kind: string; at: string }[] | null;
-  }>(sql`
+  const [row] = await db
+    .execute<{
+      now: string;
+      queued: number;
+      due: number;
+      retrying: number;
+      running: number;
+      expired: number;
+      oldest_due_s: number | null;
+      dead24h: number;
+      by_kind: { kind: string; queued: number; running: number }[] | null;
+      controls: QueueControl[] | null;
+      ticks: { kind: string; at: string }[] | null;
+    }>(
+      sql`
     select now() as now,
       (select count(*) from jobs where state = 'queued')::int as queued,
       (select count(*) from jobs where state = 'queued' and run_at <= now())::int as due,
@@ -412,7 +434,9 @@ export async function queueQuery(db: Queryable): Promise<OpsQueue> {
           'reason', c.reason, 'updatedBy', c.updated_by, 'updatedAt', c.updated_at) order by c.scope)
         from job_controls c where c.scope not like 'tick:%' and ${inForce}) as controls,
       (select json_agg(json_build_object('kind', substr(t.scope, 6), 'at', t.updated_at) order by t.scope)
-        from job_controls t where t.scope like 'tick:%') as ticks`);
+        from job_controls t where t.scope like 'tick:%') as ticks`,
+    )
+    .then((r) => r.rows);
   return {
     now: iso(row!.now),
     queued: num(row?.queued),
@@ -447,7 +471,9 @@ export type OpsPeople = {
  * they end, so older buckets lean on uploads more than recent ones.
  */
 export async function peopleQuery(db: Queryable, w: OpsWindow): Promise<OpsPeople> {
-  const rows = await db.execute<{ t: string | null; signups: number; active: number }>(sql`
+  const rows = await db
+    .execute<{ t: string | null; signups: number; active: number }>(
+      sql`
     with x as (
       select ${bucketOf(w, sql`s.created_at`)} as t, s.user_id, false as signup from session s
         where ${inWindow(w, sql`s.created_at`)} and s.impersonated_by is null
@@ -463,7 +489,9 @@ export async function peopleQuery(db: Queryable, w: OpsWindow): Promise<OpsPeopl
     )
     select t, (count(*) filter (where signup))::int as signups,
       (count(distinct user_id) filter (where not signup))::int as active
-    from x group by grouping sets ((t), ())`);
+    from x group by grouping sets ((t), ())`,
+    )
+    .then((r) => r.rows);
   const total = rows.find((r) => r.t === null);
   return {
     points: fillBuckets(
@@ -498,14 +526,18 @@ export async function monthQuery(db: Queryable, now: Date): Promise<OpsMonth> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
-  const [row] = await db.execute<{ mtd: string | null; week: string | null; unpriced: number }>(sql`
+  const [row] = await db
+    .execute<{ mtd: string | null; week: string | null; unpriced: number }>(
+      sql`
     select
       (sum(cost_micro_usd) filter (where created_at >= ${ts(monthStart)}))::bigint as mtd,
       (sum(cost_micro_usd) filter (where created_at >= ${ts(weekAgo)}))::bigint as week,
       (count(*) filter (where created_at >= ${ts(monthStart)} and cost_micro_usd is null
         and model is not null))::int as unpriced
     from ocr_calls
-    where created_at >= ${ts(monthStart < weekAgo ? monthStart : weekAgo)} and created_at <= ${ts(now)}`);
+    where created_at >= ${ts(monthStart < weekAgo ? monthStart : weekAgo)} and created_at <= ${ts(now)}`,
+    )
+    .then((r) => r.rows);
   const mtd = num(row?.mtd);
   const rate = num(row?.week) / 7;
   const daysLeft = (nextMonth.getTime() - now.getTime()) / DAY_MS;
@@ -543,7 +575,9 @@ const SIZED_TABLES = [
  */
 export async function storageQuery(db: Queryable): Promise<OpsStorage> {
   try {
-    const rows = await db.execute<{ name: string | null; bytes: string }>(sql`
+    const rows = await db
+      .execute<{ name: string | null; bytes: string }>(
+        sql`
       select null as name, pg_database_size(current_database())::bigint as bytes
       union all
       select c.relname, pg_total_relation_size(c.oid)::bigint from pg_class c
@@ -552,7 +586,9 @@ export async function storageQuery(db: Queryable): Promise<OpsStorage> {
         and c.relname in (${sql.join(
           SIZED_TABLES.map((t) => sql`${t}`),
           sql`, `,
-        )})`);
+        )})`,
+      )
+      .then((r) => r.rows);
     return {
       databaseBytes: numOrNull(rows.find((r) => r.name === null)?.bytes),
       tables: rows
@@ -761,12 +797,20 @@ export const listJobs = (filters: JobFilters, page: { page: number; pageSize: nu
     use(async (db) => {
       const where = jobWhere(filters);
       const offset = (Math.max(1, page.page) - 1) * page.pageSize;
-      const rows = await db.execute<RawJobRow>(sql`
+      const rows = await db
+        .execute<RawJobRow>(
+          sql`
         select ${JOB_ROW} ${JOB_JOINS} ${where}
         order by j.created_at desc, j.id desc
-        limit ${page.pageSize} offset ${offset}`);
-      const [count] = await db.execute<{ n: number }>(sql`select count(*)::int as n from (
-          select 1 ${JOB_JOINS} ${where} limit ${JOB_COUNT_CAP + 1}) x`);
+        limit ${page.pageSize} offset ${offset}`,
+        )
+        .then((r) => r.rows);
+      const [count] = await db
+        .execute<{ n: number }>(
+          sql`select count(*)::int as n from (
+          select 1 ${JOB_JOINS} ${where} limit ${JOB_COUNT_CAP + 1}) x`,
+        )
+        .then((r) => r.rows);
       const n = num(count?.n);
       return {
         rows: rows.map(toRow),
@@ -779,10 +823,12 @@ export const listJobs = (filters: JobFilters, page: { page: number; pageSize: nu
 /** Error kinds seen on jobs, for the list filter. */
 export const jobErrorKinds = Effect.flatMap(Db, ({ use }) =>
   use(async (db) => {
-    const rows = await db.execute<{ kind: string }>(
-      sql`select distinct last_error_kind as kind from jobs
+    const rows = await db
+      .execute<{ kind: string }>(
+        sql`select distinct last_error_kind as kind from jobs
         where last_error_kind is not null order by 1 limit 50`,
-    );
+      )
+      .then((r) => r.rows);
     return rows.map((r) => r.kind);
   }),
 );
@@ -821,39 +867,47 @@ export const jobDetail = (id: string) =>
   Effect.flatMap(Db, ({ use }) =>
     use(async (db): Promise<AdminJobDetail | null> => {
       if (!UUID.test(id)) return null;
-      const [row] = await db.execute<
-        RawJobRow & {
-          priority: number;
-          locked_by: string | null;
-          last_error_at: string | Date | null;
-          attempt_log: AttemptLogEntry[];
-          receipt_status: string | null;
-          receipt_attempts: number | null;
-        }
-      >(sql`
+      const [row] = await db
+        .execute<
+          RawJobRow & {
+            priority: number;
+            locked_by: string | null;
+            last_error_at: string | Date | null;
+            attempt_log: AttemptLogEntry[];
+            receipt_status: string | null;
+            receipt_attempts: number | null;
+          }
+        >(
+          sql`
         select ${JOB_ROW}, j.priority, j.locked_by, j.last_error_at, j.attempt_log,
           r.status as receipt_status, r.attempts as receipt_attempts
         ${JOB_JOINS} left join receipts r on r.id = j.receipt_id
-        where j.id = ${id}::uuid`);
+        where j.id = ${id}::uuid`,
+        )
+        .then((r) => r.rows);
       if (!row) return null;
       const base = toRow(row);
       const calls =
         base.receiptId && base.round !== null
-          ? await db.execute<{
-              job_attempt: number;
-              step: number;
-              model: string | null;
-              status: string;
-              latency_ms: number;
-              input_tokens: number | null;
-              output_tokens: number | null;
-              cost_micro_usd: number | null;
-              created_at: string | Date;
-            }>(sql`
+          ? await db
+              .execute<{
+                job_attempt: number;
+                step: number;
+                model: string | null;
+                status: string;
+                latency_ms: number;
+                input_tokens: number | null;
+                output_tokens: number | null;
+                cost_micro_usd: number | null;
+                created_at: string | Date;
+              }>(
+                sql`
               select job_attempt, step, model, status, latency_ms, input_tokens, output_tokens,
                 cost_micro_usd, created_at
               from ocr_calls where receipt_id = ${base.receiptId}::uuid and round = ${base.round}
-              order by job_attempt, step`)
+              order by job_attempt, step`,
+              )
+              .then((r) => r.rows)
           : [];
       return {
         ...base,

@@ -509,9 +509,11 @@ export const spendDashboard = (
   const w = windows(query.range, query.today, tz);
   return Effect.flatMap(Db, ({ use }) =>
     use(async (db) => {
-      const rows = await db.execute<
-        { kind: "agg"; row: AggregateRow } | { kind: "top"; row: LargestRow }
-      >(dashboardSql(scope, w));
+      const rows = await db
+        .execute<{ kind: "agg"; row: AggregateRow } | { kind: "top"; row: LargestRow }>(
+          dashboardSql(scope, w),
+        )
+        .then((r) => r.rows);
       const agg: AggregateRow[] = [];
       const top: LargestRow[] = [];
       for (const r of rows) {

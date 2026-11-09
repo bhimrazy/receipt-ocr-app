@@ -1,33 +1,22 @@
-import { createDb, onPoolEvent, type DbClient, type PoolEvent } from "@receipt-ocr/db";
+import { createDb, type DbClient } from "@receipt-ocr/db";
 import { deleteObjects, getObject, putObject, signedGetUrl } from "@receipt-ocr/storage";
 import { Context, Effect, Layer, Redacted } from "effect";
 import { DatabaseUrl, loadStorageConfig } from "./config";
 import { DbError, NotConfigured, StorageError } from "./errors";
 import { logger } from "./telemetry/logger";
+import { errorFields } from "./telemetry/redact";
 
-/** The `db.query_timeout` wide event for one pool timeout. */
-export function logPoolEvent(event: PoolEvent): void {
-  logger.error({
-    event: "db.query_timeout",
-    unit: "log",
-    db: {
-      operation: event.query.operation,
-      table: event.query.table,
-      statement_hash: event.query.statementHash,
-      phase: event.phase,
-      timeout_ms: event.timeoutMs,
-      in_flight: event.inFlight,
-      queued: event.queued,
-    },
-  });
-}
-
-// Every pool in the process (auth's included) reports here, once even if this module loads twice.
-const SUBSCRIBED = Symbol.for("@receipt-ocr/core/pool-events-logged");
-const subscribed = globalThis as { [SUBSCRIBED]?: true };
-if (!subscribed[SUBSCRIBED]) {
-  subscribed[SUBSCRIBED] = true;
-  onPoolEvent(logPoolEvent);
+/**
+ * Logs `db.pool_error` for an idle client the server dropped (a database restart, a socket that
+ * died while a serverless instance was suspended). The pool has already removed the client.
+ * `createPool` attaches a silent listener, so this is the second one; attached once per pool.
+ */
+function logPoolErrors(client: DbClient) {
+  const pool = client.$client;
+  if (pool.listenerCount("error") > 1) return;
+  pool.on("error", (error) =>
+    logger.error({ event: "db.pool_error", unit: "log", error: errorFields(error) }),
+  );
 }
 
 export class Db extends Context.Tag("@receipt-ocr/core/Db")<
@@ -50,6 +39,7 @@ export class Db extends Context.Tag("@receipt-ocr/core/Db")<
       ),
       Effect.map((url) => {
         const client = createDb(Redacted.value(url));
+        logPoolErrors(client);
         return {
           client,
           use: <A>(query: (db: DbClient) => Promise<A>) =>

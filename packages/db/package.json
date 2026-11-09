@@ -13,10 +13,11 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.4",
-    "postgres": "3.4.9"
+    "pg": "8.23.1"
   },
   "devDependencies": {
     "@types/node": "25.9.1",
+    "@types/pg": "8.23.1",
     "typescript": "6.0.3"
   }
 }

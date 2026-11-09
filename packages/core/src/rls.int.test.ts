@@ -19,12 +19,16 @@ describe.skipIf(!enabled)("row-level security against Postgres", () => {
 
   it("is enabled, not forced, on every public table", async () => {
     const rows = await db((d) =>
-      d.execute<{ name: string; rls: boolean; forced: boolean }>(sql`
+      d
+        .execute<{ name: string; rls: boolean; forced: boolean }>(
+          sql`
         select c.relname as name, c.relrowsecurity as rls, c.relforcerowsecurity as forced
         from pg_class c
         join pg_namespace n on n.oid = c.relnamespace
         where n.nspname = 'public' and c.relkind in ('r', 'p')
-        order by c.relname`),
+        order by c.relname`,
+        )
+        .then((r) => r.rows),
     );
     expect(rows.length).toBeGreaterThanOrEqual(19);
     // Lists offenders, so a new table without RLS is named in the failure.
@@ -35,8 +39,12 @@ describe.skipIf(!enabled)("row-level security against Postgres", () => {
 
   it("is owned by the app role, which is what lets it through RLS", async () => {
     const rows = await db((d) =>
-      d.execute<{ n: number }>(sql`select count(*)::int as n from pg_tables
-        where schemaname = 'public' and tableowner <> current_user`),
+      d
+        .execute<{ n: number }>(
+          sql`select count(*)::int as n from pg_tables
+        where schemaname = 'public' and tableowner <> current_user`,
+        )
+        .then((r) => r.rows),
     );
     expect(rows[0]?.n).toBe(0);
   });

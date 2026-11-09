@@ -220,7 +220,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         } catch (error) {
           // Drizzle wraps the driver's error; the constraint is on the cause.
           for (let e = error; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
-            const name = (e as { constraint_name?: string }).constraint_name;
+            const name = (e as { constraint?: string }).constraint;
             if (name) return name;
           }
           throw error;
@@ -706,7 +706,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect((await run(hitRateLimit(key, 1, 3))).allowed).toBe(true);
     await run(
       Effect.flatMap(Db, ({ use }) =>
-        use((db) => db.execute(sql`delete from rate_limit where id = ${key}`)),
+        use((db) => db.execute(sql`delete from rate_limit where id = ${key}`).then((r) => r.rows)),
       ),
     );
   });

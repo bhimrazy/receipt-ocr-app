@@ -55,7 +55,7 @@ export const ERROR_FIELDS = {
   class: "token",
   /** A short code: the OCR failure kind, the job error kind. */
   kind: "token",
-  /** A driver code, e.g. a Postgres SQLSTATE (`23505`). */
+  /** A driver code: a Postgres SQLSTATE (`23505`), or `query_timeout` / `connect_timeout` for the pg client's own timeouts. */
   code: "token",
   /** Next.js's error digest, which links a server log to the error page a user saw. */
   digest: "token",
@@ -224,28 +224,6 @@ export const EVENT_SCHEMA = {
        * `other`. Our own list, never free text from the provider; no personal data.
        */
       provider_error_code: "token",
-    },
-  },
-
-  /**
-   * A database query that hit the pool's deadline (`db.query_timeout`). Labels derived from the
-   * statement's placeholder text, never the text itself or its values.
-   */
-  db: {
-    group: {
-      /** `select`, `insert`, `update`, `delete`, `begin` or `other`. */
-      operation: "token",
-      /** The first table the statement names. */
-      table: "token",
-      /** FNV-1a of the statement text, to group repeats of one query. */
-      statement_hash: "token",
-      /** `queue` (no free connection in time) or `query` (no reply in time; the pool is replaced). */
-      phase: "token",
-      timeout_ms: "int",
-      /** Queries and transactions in flight on this instance's pool when it fired. */
-      in_flight: "int",
-      /** Queries waiting for a connection when it fired. */
-      queued: "int",
     },
   },
 

@@ -270,6 +270,18 @@ describe("sanitize: ids, prototype keys and failures", () => {
 });
 
 describe("errorFields", () => {
+  it("names pg's client-side timeouts, which carry no SQLSTATE", () => {
+    const drizzle = (cause: Error) => Object.assign(new Error("Failed query: select 1"), { cause });
+    expect(
+      errorFields(new DbError({ message: "x", cause: drizzle(new Error("Query read timeout")) }))
+        .code,
+    ).toBe("query_timeout");
+    expect(errorFields(new Error("timeout exceeded when trying to connect")).code).toBe(
+      "connect_timeout",
+    );
+    expect(errorFields(new Error("some other failure")).code).toBeUndefined();
+  });
+
   it("describes a typed error by tag, kind, cause class and SQLSTATE, never its message", () => {
     const cause = Object.assign(new Error("params: jane@example.com"), { code: "23505" });
     expect(errorFields(new DbError({ message: "insert failed: Jane", cause }))).toEqual({

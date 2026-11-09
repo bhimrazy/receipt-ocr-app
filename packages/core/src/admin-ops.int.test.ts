@@ -90,17 +90,25 @@ async function seedRound(
 ) {
   const receiptId = crypto.randomUUID();
   await db((d) =>
-    d.execute(sql`insert into ocr_rounds (receipt_id, organization_id, user_id, round, created_at)
-      values (${receiptId}, ${owner.organizationId}, ${owner.userId}, 1, ${createdAt.toISOString()}::timestamptz)`),
+    d
+      .execute(
+        sql`insert into ocr_rounds (receipt_id, organization_id, user_id, round, created_at)
+      values (${receiptId}, ${owner.organizationId}, ${owner.userId}, 1, ${createdAt.toISOString()}::timestamptz)`,
+      )
+      .then((r) => r.rows),
   );
   for (const [i, c] of calls.entries()) {
     await db((d) =>
-      d.execute(sql`insert into ocr_calls (receipt_id, organization_id, user_id, round, job_attempt,
+      d
+        .execute(
+          sql`insert into ocr_calls (receipt_id, organization_id, user_id, round, job_attempt,
           step, model, provider, status, latency_ms, input_tokens, output_tokens, cost_micro_usd, created_at)
         values (${receiptId}, ${owner.organizationId}, ${owner.userId}, 1, ${c.jobAttempt ?? 1},
           ${c.step ?? i}, ${c.model === undefined ? "google:model-a" : c.model}, 'google',
           ${c.status ?? "ok"}, ${c.latencyMs ?? 1000}, ${c.input ?? 100}, ${c.output ?? 10},
-          ${c.cost === undefined ? 50 : c.cost}, ${createdAt.toISOString()}::timestamptz)`),
+          ${c.cost === undefined ? 50 : c.cost}, ${createdAt.toISOString()}::timestamptz)`,
+        )
+        .then((r) => r.rows),
     );
   }
   return receiptId;
@@ -187,22 +195,34 @@ beforeAll(async () => {
   await seedRound(a, at("2031-03-10T09:00:00Z"), [{ latencyMs: 400, cost: 7 }]);
   // Sessions: A signs in in hour 11; an impersonated session for B never counts.
   await db((d) =>
-    d.execute(sql`insert into session (id, expires_at, token, user_id, impersonated_by, created_at, updated_at) values
+    d
+      .execute(
+        sql`insert into session (id, expires_at, token, user_id, impersonated_by, created_at, updated_at) values
       (${`${tag}-s1`}, now() + interval '1 day', ${`${tag}-t1`}, ${a.userId}, null,
         '2031-03-15T11:00:00Z', '2031-03-15T11:30:00Z'),
       (${`${tag}-s2`}, now() + interval '1 day', ${`${tag}-t2`}, ${b.userId}, ${a.userId},
-        '2031-03-13T08:00:00Z', '2031-03-13T08:00:00Z')`),
+        '2031-03-13T08:00:00Z', '2031-03-13T08:00:00Z')`,
+      )
+      .then((r) => r.rows),
   );
 });
 
 afterAll(async () => {
   if (!enabled) return;
   await db((d) =>
-    d.execute(sql`delete from ocr_calls where user_id like ${`${tag}-%`};
+    d
+      .execute(
+        sql`delete from ocr_calls where user_id like ${`${tag}-%`};
       delete from ocr_rounds where user_id like ${`${tag}-%`};
-      delete from jobs where user_id like ${`${tag}-%`}`),
+      delete from jobs where user_id like ${`${tag}-%`}`,
+      )
+      .then((r) => r.rows),
   ).catch(() => undefined);
-  await db((d) => d.execute(sql`delete from job_controls where scope = 'kind:receipt.extract'`));
+  await db((d) =>
+    d
+      .execute(sql`delete from job_controls where scope = 'kind:receipt.extract'`)
+      .then((r) => r.rows),
+  );
   await runtime.dispose();
 });
 
@@ -307,10 +327,14 @@ describe.skipIf(!enabled)("queue snapshot and job list", () => {
   it("counts queued, due, retrying and dead jobs and shows pauses in force", async () => {
     const before = await db((d) => queueQuery(d));
     await db((d) =>
-      d.execute(sql`insert into jobs (kind, payload, max_attempts, user_id, organization_id, attempts, run_at, state, finished_at, last_error_kind) values
+      d
+        .execute(
+          sql`insert into jobs (kind, payload, max_attempts, user_id, organization_id, attempts, run_at, state, finished_at, last_error_kind) values
         ('test.ops', '{}', 3, ${a.userId}, ${a.organizationId}, 0, now() - interval '1 minute', 'queued', null, null),
         ('test.ops', '{}', 3, ${a.userId}, ${a.organizationId}, 1, now() + interval '1 hour', 'queued', null, 'timeout'),
-        ('test.ops', '{}', 3, ${b.userId}, ${b.organizationId}, 3, now(), 'dead', now(), 'timeout')`),
+        ('test.ops', '{}', 3, ${b.userId}, ${b.organizationId}, 3, now(), 'dead', now(), 'timeout')`,
+        )
+        .then((r) => r.rows),
     );
     await run(
       setQueueControl(
@@ -414,9 +438,11 @@ describe.skipIf(!enabled)("job admin actions", () => {
     // It runs again with new attempt numbers, so its calls are billed, not dropped.
     await settle(receiptId);
     const calls = await db((d) =>
-      d.execute<{ n: number }>(
-        sql`select count(distinct job_attempt)::int as n from ocr_calls where receipt_id = ${receiptId}`,
-      ),
+      d
+        .execute<{ n: number }>(
+          sql`select count(distinct job_attempt)::int as n from ocr_calls where receipt_id = ${receiptId}`,
+        )
+        .then((r) => r.rows),
     );
     expect(calls[0]!.n).toBeGreaterThan(job.attempts);
     const detail = await run(jobDetail(job.id));

@@ -156,6 +156,22 @@ function sqlState(error: unknown, depth = 0): string | undefined {
   return sqlState((error as { cause?: unknown }).cause, depth + 1);
 }
 
+/** pg's client-side timeouts carry no code, only these fixed messages. */
+const DRIVER_TIMEOUTS: [message: string, code: string][] = [
+  ["Query read timeout", "query_timeout"],
+  ["timeout exceeded when trying to connect", "connect_timeout"],
+];
+
+/** A SQLSTATE, else `query_timeout` / `connect_timeout` for pg's own timeouts. */
+function driverCode(error: unknown, depth = 0): string | undefined {
+  const state = sqlState(error);
+  if (state) return state;
+  if (!error || typeof error !== "object" || depth > 3) return undefined;
+  const message = error instanceof Error ? error.message : undefined;
+  const timeout = DRIVER_TIMEOUTS.find(([text]) => message === text);
+  return timeout ? timeout[1] : driverCode((error as { cause?: unknown }).cause, depth + 1);
+}
+
 const className = (error: unknown) =>
   error instanceof Error
     ? token(error.constructor.name !== "Error" ? error.constructor.name : error.name)
@@ -175,10 +191,10 @@ export function errorFields(error: unknown): ErrorFields {
         type: token(tagged._tag),
         kind: token(tagged.kind),
         class: tagged.cause === undefined ? undefined : className(tagged.cause),
-        code: sqlState(tagged.cause),
+        code: driverCode(tagged.cause),
       };
     }
-    return { class: className(error), code: sqlState(error) };
+    return { class: className(error), code: driverCode(error) };
   } catch {
     // A hostile or broken error (a throwing getter, a revoked proxy) still gets logged as one.
     return { type: "Unreadable" };

@@ -100,7 +100,7 @@ export { authEnabled };
 /**
  * Placeholder used only when auth is disabled (missing DATABASE_URL /
  * BETTER_AUTH_SECRET) so the module can still be imported at build time.
- * postgres-js connects lazily, so no connection is ever made: every caller is
+ * The pg pool connects lazily, so no connection is ever made: every caller is
  * expected to gate on `authEnabled` before hitting an auth endpoint.
  */
 const PLACEHOLDER_DATABASE_URL = "postgres://placeholder:placeholder@localhost:5432/placeholder";

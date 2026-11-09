@@ -33,7 +33,9 @@ describe.skipIf(!enabled)("connections (integration)", () => {
   afterAll(async () => {
     await db((d) => d.delete(adminAuditLog).where(eq(adminAuditLog.actorId, adminId)));
     await db((d) => d.delete(user).where(eq(user.id, adminId)));
-    await db((d) => d.execute(sql`delete from rate_limit where key like ${`%${adminId}%`}`));
+    await db((d) =>
+      d.execute(sql`delete from rate_limit where key like ${`%${adminId}%`}`).then((r) => r.rows),
+    );
     await runtime.dispose();
   });
 

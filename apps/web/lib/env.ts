@@ -311,7 +311,7 @@ function turnstileConfig():
 
 export const turnstileEnv = turnstileConfig();
 
-/** Postgres URL. Malformed means postgres-js would throw on first import of the auth module. */
+/** Postgres URL, checked here so a malformed one fails at boot rather than on the first query. */
 function databaseUrl(): string | undefined {
   return runtimeOnly(
     "DATABASE_URL",
@@ -325,7 +325,7 @@ function databaseUrl(): string | undefined {
 }
 
 export const authEnv = {
-  /** Supabase transaction-pooler (port 6543) URL works here; postgres-js runs with prepare:false. */
+  /** Any Postgres URL: direct, or a transaction pooler (Supavisor 6543, PgBouncer); the driver uses unnamed statements. */
   databaseUrl: databaseUrl(),
   /** Min 32 chars. Generate with `openssl rand -base64 32`. */
   betterAuthSecret: optional("BETTER_AUTH_SECRET"),
