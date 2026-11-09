@@ -4,6 +4,7 @@ import { ConsentManager } from "@/components/consent/consent-manager";
 import { Pwa } from "@/components/pwa";
 import { ThemeProvider } from "@/components/theme-provider";
 import { gaMeasurementId } from "@/lib/consent/env";
+import { DISPLAY_MODE_SCRIPT } from "@/lib/display-mode";
 import { startupImages } from "@/lib/ios-splash";
 import { buildIsIndexable } from "@/lib/seo-hosts";
 import { homeDescription, homeTitle } from "@/lib/seo";
@@ -83,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/* A plain blocking script, not next/script: it must run while parsing, before paint. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: DISPLAY_MODE_SCRIPT }} />
         {/* Next emits only mobile-web-app-capable; iOS has needed the Apple name for startup images. */}
         <meta content="yes" name="apple-mobile-web-app-capable" />
       </head>

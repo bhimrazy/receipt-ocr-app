@@ -1,5 +1,16 @@
 @import "@receipt-ocr/ui/styles.css";
 
+/* The installed app. The attribute comes from DISPLAY_MODE_SCRIPT (lib/display-mode.ts), which
+   also covers older iOS; the media query keeps it working if that script never ran. */
+@custom-variant standalone {
+  @media (display-mode: standalone) {
+    @slot;
+  }
+  &:where([data-display-mode="standalone"], [data-display-mode="standalone"] *) {
+    @slot;
+  }
+}
+
 .grid-mask {
   mask-image: radial-gradient(ellipse 60% 50% at 50% 40%, black 20%, transparent 72%);
 }

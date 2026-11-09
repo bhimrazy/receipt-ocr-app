@@ -31,6 +31,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOutAndClearHint } from "@/lib/auth-client";
+import { signedOutPath } from "@/lib/display-mode";
 import { InstallAppMenuItem, InstallAppSheetAction } from "@/components/install-offer";
 import { useInstallAction } from "@/components/use-install-action";
 import { ThemeMenuRow, ThemeToggle } from "@/components/theme-toggle";
@@ -66,7 +67,7 @@ function useSignOut() {
   const router = useRouter();
   return async () => {
     await signOutAndClearHint();
-    router.push("/");
+    router.push(signedOutPath());
     router.refresh();
   };
 }

@@ -25,6 +25,7 @@ import { NewsletterSignup } from "@/components/newsletter-signup";
 import { SiteFooter } from "@/components/site-footer";
 import { newsletterEnabled } from "@/lib/env";
 import { SiteHeader } from "@/components/site-header";
+import { StandaloneHome } from "@/components/standalone";
 import { SupportWidget } from "@/components/support-widget";
 import { homeFaqs as faqs } from "@/lib/home-faqs";
 import { CUSTOM_PLAN, freeFeatures, proFeatures } from "@/lib/plan-copy";
@@ -139,7 +140,9 @@ function SectionLabel({ children }: { children: string }) {
 
 export function LandingPage({ plans }: { plans: PlanTable }) {
   return (
-    <div className="min-h-screen overflow-hidden bg-background text-foreground">
+    // Hidden in the installed app, which StandaloneHome sends on to /app or /sign-in.
+    <div className="min-h-screen overflow-hidden bg-background text-foreground standalone:invisible">
+      <StandaloneHome />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdScript(siteJsonLd) }}
