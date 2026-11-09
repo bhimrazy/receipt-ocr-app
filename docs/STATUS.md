@@ -239,9 +239,10 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 **Next up (ordered, 2026-11-08):** [plans/2026-11-08-next-up.md](plans/2026-11-08-next-up.md). The list below is the
 longer-term roadmap.
 
-**Planned:** upgrade call-to-action for Free workspaces (Home card, meter button, account menu, at-limit banner, all
+**In review:** upgrade call-to-action for Free workspaces (Home card, meter button, account menu, at-limit banner, all
 opening an in-app upgrade modal with Paddle's overlay checkout):
-[plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), with owner decisions to make.
+[plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), owner took every default. Hidden on production
+for everyone but platform admins until live Paddle keys replace the sandbox ones.
 
 From the [combined plan](plans/2026-11-06-combined-plan.md):
 
