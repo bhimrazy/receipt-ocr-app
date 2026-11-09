@@ -84,10 +84,14 @@ export const CUSTOM_PLAN = {
 export const SEPARATE_UPGRADE =
   "This workspace is on Free. Your Pro subscription covers one workspace; each workspace is upgraded separately.";
 
-/** The welcome email's plan line: "Your Free plan includes 20 scans a day, up to 100 a month, per person. …" */
+/**
+ * The welcome email's plan line: "Your Free plan includes 20 scans a day, up to 100 a month. …".
+ * A shared Pro allowance still says so; a Free one is the reader's own.
+ */
 export function welcomePlanLine(plan: "free" | "pro", policy: PlanPolicy): string {
   const name = plan === "pro" ? "Pro" : "Free";
-  return `Your ${name} plan includes ${allowance(policy)}, ${allowanceOwner(policy)}. Limits reset at 00:00 UTC.`;
+  const owner = policy.scope === "workspace" ? `, ${allowanceOwner(policy)}` : "";
+  return `Your ${name} plan includes ${allowance(policy)}${owner}. Limits reset at 00:00 UTC.`;
 }
 
 /** Under the workspace switcher when the user can't create another workspace. */
