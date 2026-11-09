@@ -30,6 +30,7 @@ import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
 import { browserCameraSupport, wantsCamera, type CameraSupport } from "@/lib/capture/camera";
 import { postReceipt } from "@/lib/capture/upload-request";
 import { useHydrated } from "@/lib/use-hydrated";
+import { useOnline } from "@/lib/use-online";
 import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
 import { SharedFilesNotice } from "@/components/shared-files-notice";
 import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
@@ -269,6 +270,8 @@ export function UploadPanel({
   const pausedFor = useCountdown(snapshot.pausedUntil);
 
   const hydrated = useHydrated();
+  // Offline, photos can still be taken, cropped and listed; only the upload waits.
+  const online = useOnline();
   const support = useSyncExternalStore<CameraSupport>(
     noSubscription,
     browserCameraSupport,
@@ -422,7 +425,7 @@ export function UploadPanel({
     const rejected: string[] = [];
     const added = enqueue(files, rejected);
     setNotice(rejected.length > 0 ? `Not added: ${rejected.join("; ")}.` : null);
-    if (added > 0) read();
+    if (added > 0 && navigator.onLine) read();
   }
 
   function openCamera() {
@@ -691,19 +694,25 @@ export function UploadPanel({
           </ul>
           <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
             <p aria-live="polite" className="text-xs text-muted-foreground">
-              {snapshot.pausedUntil !== null
-                ? `Paused for your plan's per-minute limit. Carrying on in ${pausedFor} s.`
-                : busy
-                  ? single
-                    ? "Uploading and scanning. This takes a few seconds."
-                    : "Uploading two at a time. Keep this page open until every file is uploaded; scanning carries on after that."
-                  : overLimit
-                    ? `You have ${plural(remaining, "receipt")} left today, so only the first ${remaining} will be scanned.`
-                    : usage
-                      ? usageNote(usage)
-                      : null}
+              {!online && !busy
+                ? "You're offline. These stay here; scan them once you're connected."
+                : snapshot.pausedUntil !== null
+                  ? `Paused for your plan's per-minute limit. Carrying on in ${pausedFor} s.`
+                  : busy
+                    ? single
+                      ? "Uploading and scanning. This takes a few seconds."
+                      : "Uploading two at a time. Keep this page open until every file is uploaded; scanning carries on after that."
+                    : overLimit
+                      ? `You have ${plural(remaining, "receipt")} left today, so only the first ${remaining} will be scanned.`
+                      : usage
+                        ? usageNote(usage)
+                        : null}
             </p>
-            <Button className="max-sm:w-full" disabled={busy || count === 0} onClick={read}>
+            <Button
+              className="max-sm:w-full"
+              disabled={busy || count === 0 || !online}
+              onClick={read}
+            >
               {busy ? (
                 <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
               ) : (
