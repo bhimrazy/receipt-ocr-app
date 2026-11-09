@@ -575,7 +575,8 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     );
     script = [{ kind: "provider-error" }, { kind: "timeout" }];
     const { receipt, jobId } = await upload(c);
-    const ended: number[] = [];
+    // When each run started and when the queue said it may run next, from the runner's records.
+    const timing: { started: number; runAt?: number }[] = [];
     const stats = await run(
       tick({
         worker: `${tag}-w`,
@@ -583,7 +584,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
         budgetMs: 20_000,
         stopClaimingBeforeMs: 2_000,
         ids: [jobId],
-        onRun: () => void ended.push(Date.now()),
+        onRun: (r) => void timing.push({ started: Date.now() - r.ms, runAt: r.runAt?.getTime() }),
       }),
     );
 
@@ -592,12 +593,17 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       [2, "retry", "timeout"],
       [3, "succeeded", undefined],
     ]);
-    // Each retry waited out its backoff: at least half of 100 ms, then of 200 ms.
-    // The queue schedules on the database clock and this measures on the runner's,
-    // so allow a few ms of drift between them.
+    // Each retry was scheduled at least half of 100 ms, then of 200 ms, after its attempt
+    // started, and the next attempt didn't start before then. Measured from starts and the
+    // scheduled time, not from when each run was recorded, which a slow runner delays.
+    // The queue schedules on the database clock and this measures on the runner's, so allow
+    // a few ms of drift between them.
     const drift = 10;
-    expect(ended[1]! - ended[0]!).toBeGreaterThanOrEqual(50 - drift);
-    expect(ended[2]! - ended[1]!).toBeGreaterThanOrEqual(100 - drift);
+    const [first, second, third] = timing;
+    expect(first!.runAt! - first!.started).toBeGreaterThanOrEqual(50 - drift);
+    expect(second!.runAt! - second!.started).toBeGreaterThanOrEqual(100 - drift);
+    expect(second!.started).toBeGreaterThanOrEqual(first!.runAt! - drift);
+    expect(third!.started).toBeGreaterThanOrEqual(second!.runAt! - drift);
     expect((await receiptOf(receipt.id, c))?.status).toBe("completed");
     expect(await callsOf(receipt.id)).toEqual([
       { round: 1, jobAttempt: 1, status: "provider-error" },
