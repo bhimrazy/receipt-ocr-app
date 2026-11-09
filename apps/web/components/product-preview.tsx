@@ -1,14 +1,5 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import {
-  Check,
-  ChevronLeft,
-  History,
-  House,
-  ReceiptText,
-  ScanLine,
-  Settings,
-  Tags,
-} from "lucide-react";
+import { Check, ChevronLeft, ReceiptText } from "lucide-react";
 import { previewTotals } from "@/lib/product-preview";
 
 const items: Array<[name: string, qty: string, price: number]> = [
@@ -67,67 +58,43 @@ function Totals({ className }: { className?: string }) {
   );
 }
 
-// The app's five phone tabs, drawn small. Not links: this is a picture of the app.
-const tabs = [
-  { label: "Home", icon: House },
-  { label: "History", icon: History, active: true },
-  { label: "Scan", icon: ScanLine, center: true },
-  { label: "Groups", icon: Tags },
-  { label: "Settings", icon: Settings },
-];
-
-/** The receipt result screen in a phone frame. Narrow enough to stay clear of the support button. */
+/**
+ * The receipt result screen on a phone, cut off below the totals. The right padding keeps it out
+ * of the column of the support button, which is fixed to the bottom-right corner.
+ */
 function PhonePreview() {
   return (
-    <div className="mx-auto w-full max-w-[16.5rem] rounded-[2.5rem] border border-hairline bg-card/70 p-2 shadow-2xl shadow-black/50 light:shadow-float backdrop-blur-xl sm:hidden">
-      <div className="overflow-hidden rounded-[2rem] bg-background">
-        <div
-          aria-hidden
-          className="mx-auto mt-2.5 h-5 w-20 rounded-full bg-border light:bg-foreground/90"
-        />
-        <div className="px-4 pt-3">
-          <span className="inline-flex items-center gap-0.5 text-xs text-primary">
-            <ChevronLeft aria-hidden className="size-4" /> History
-          </span>
-          <p className="mt-2 text-xl font-bold tracking-tight">Whole Foods Market</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">Mar 14, 2026</span>
-            <ConfidencePill />
-          </div>
-          <div className="mt-4 flex flex-col gap-2 text-xs">
-            {items.map(([name, qty, price]) => (
-              <div className="flex items-center justify-between gap-2" key={name}>
-                <span className="truncate">{name}</span>
-                <span className="ml-auto shrink-0 font-mono text-muted-foreground">{qty}</span>
-                <span className="w-12 shrink-0 text-right font-mono">{usd(price)}</span>
-              </div>
-            ))}
-          </div>
-          <Totals className="mt-3 pt-3 pb-4 text-xs [&>div:last-child]:text-sm" />
-        </div>
-        <div
-          aria-hidden
-          className="grid grid-cols-5 border-t border-border bg-background/95 pt-1.5 pb-3"
-        >
-          {tabs.map(({ label, icon: Icon, active, center }) => (
+    <div className="pr-10 sm:hidden" data-preview="phone">
+      <div className="mx-auto w-full max-w-80 [mask-image:linear-gradient(to_bottom,black_80%,transparent)]">
+        <div className="rounded-t-[2.75rem] border border-b-0 border-foreground/15 bg-card p-2 pb-0 shadow-[0_32px_80px_-24px_rgb(0_0_0/0.8)] light:border-foreground/20 light:bg-muted light:shadow-[0_32px_64px_-24px_rgb(24_24_27/0.35)]">
+          <div className="rounded-t-[2.25rem] bg-background">
             <div
-              className={cn(
-                "flex flex-col items-center gap-0.5 text-[0.5625rem] font-medium",
-                active ? "text-primary" : "text-muted-foreground",
-                center && "text-foreground",
-              )}
-              key={label}
-            >
-              {center ? (
-                <span className="-mt-4 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-background">
-                  <Icon className="size-4" />
-                </span>
-              ) : (
-                <Icon className="size-4" />
-              )}
-              {label}
+              aria-hidden
+              className="mx-auto h-4 w-16 translate-y-2.5 rounded-full bg-border light:bg-foreground/90"
+            />
+            <div className="px-5 pt-6 pb-8">
+              <span className="inline-flex items-center gap-0.5 text-sm text-primary">
+                <ChevronLeft aria-hidden className="size-4" /> History
+              </span>
+              <p className="mt-2 text-2xl font-bold tracking-tight">Whole Foods Market</p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground">Mar 14, 2026</span>
+                <ConfidencePill />
+              </div>
+              <div className="mt-5 flex flex-col gap-2.5 text-sm">
+                {items.map(([name, qty, price]) => (
+                  <div className="flex items-center justify-between gap-2" key={name}>
+                    <span className="truncate">{name}</span>
+                    <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
+                      {qty}
+                    </span>
+                    <span className="w-14 shrink-0 text-right font-mono">{usd(price)}</span>
+                  </div>
+                ))}
+              </div>
+              <Totals className="mt-4" />
             </div>
-          ))}
+          </div>
         </div>
       </div>
     </div>

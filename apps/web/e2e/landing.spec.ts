@@ -43,6 +43,22 @@ test.describe("on a phone", () => {
     await expect(page.getByText("Whole Foods Market").first()).toBeVisible();
     await expect(page.getByText(/receiptocr\.app|\.com\//)).toHaveCount(0);
   });
+
+  for (const width of [375, 390, 430]) {
+    test(`at ${width} px the preview is large and clear of the support button`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/");
+      const phone = page.locator("[data-preview='phone'] > div");
+      await phone.scrollIntoViewIfNeeded();
+      const frame = (await phone.boundingBox())!;
+      expect(frame.width).toBeGreaterThanOrEqual(Math.min(320, width * 0.78));
+      // The button is fixed, so it must stay out of the preview's columns at any scroll.
+      const bubble = (await page.getByRole("button", { name: "Contact support" }).boundingBox())!;
+      expect(frame.x + frame.width).toBeLessThanOrEqual(bubble.x);
+    });
+  }
 });
 
 test("a stale hint without a session lands on sign-in and is cleared", async ({
