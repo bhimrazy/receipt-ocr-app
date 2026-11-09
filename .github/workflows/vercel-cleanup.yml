@@ -1,10 +1,7 @@
 name: Vercel Cleanup
 
-# Deletes old Vercel deployments, by hand: Actions → Vercel Cleanup → Run workflow, from main.
-# `plan` lists what would go in the run summary; `delete` waits for the owner's approval (the
-# vercel-cleanup environment) and never deletes the deployment production's domain points at.
-# Deleted deployments can be restored for a while: project Settings → Security → Recently Deleted.
-# The project's retention policy does the routine pruning; this is for clearing a backlog now.
+# Clears a backlog of old deployments; the retention policy does routine pruning.
+# See docs/deployment.md, Old deployments.
 run-name: Vercel cleanup (keep ${{ inputs.keep_production }} production)
 on:
   workflow_dispatch:
@@ -30,7 +27,7 @@ env:
   PRODUCTION_DOMAIN: receipt-ocr.bhimraj.com.np
 
 jobs:
-  # Runs before the approval, so the approver sees the list it will delete.
+  # No approval here, so the approver sees the list first.
   plan:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
@@ -99,7 +96,7 @@ jobs:
         run: |
           set -euo pipefail
           api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
-          # Production may have moved while this run waited for approval.
+          # Production may have moved during the approval wait.
           live=$(api "https://api.vercel.com/v13/deployments/$PRODUCTION_DOMAIN?teamId=$TEAM_ID" | jq -er .id)
           deleted=0 failed=0
           for id in $IDS; do
