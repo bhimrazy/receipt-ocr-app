@@ -224,8 +224,14 @@ test("a large photo offers upload sizes, shows the real file and sends it", asyn
     window.devicePixelRatio,
   ]);
   expect(Math.abs(css[0]! * css[1]! - 866)).toBeLessThanOrEqual(1);
+  await expect(review.getByText(/One pixel of the upload per screen pixel/)).toBeVisible();
   await review.getByRole("button", { name: "Whole receipt" }).click();
   await expect(full).toHaveAttribute("data-mode", "fitted");
+  await expect(review.getByText(/The whole upload, as it will be sent/)).toBeVisible();
+  // The zoom bar has its own row: the fitted image starts below it, never under it.
+  const bar = (await review.getByTestId("full-size-bar").boundingBox())!;
+  const shown = (await img.boundingBox())!;
+  expect(shown.y).toBeGreaterThanOrEqual(bar.y + bar.height - 0.5);
   const caption = review.getByTestId("upload-caption");
   await expect(caption).toHaveText(/^Uploads exactly this: 866 × 1155 px · \d+ KB JPEG$/);
   const captionText = (await caption.textContent()) ?? "";

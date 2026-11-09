@@ -51,7 +51,7 @@ import {
 } from "@/lib/upload-prep";
 import { CropEditor } from "./crop-editor";
 import { FullScreen } from "./full-screen";
-import { FullSizeView } from "./full-size-view";
+import { FullSizeView, type FullSizeMode } from "./full-size-view";
 import { ResultPreview } from "./result-preview";
 import { Bytes, formatSize, SizePicker, Slot } from "./size-picker";
 
@@ -179,6 +179,8 @@ export default function ReviewSheet({
   const [size, setSize] = useState<SizeId>(() => remembered(SIZE_KEY, SIZE_IDS) ?? "recommended");
   const [sizeOpen, setSizeOpen] = useState(false);
   const [fullSize, setFullSize] = useState(false);
+  // Kept while the sheet is open, so reopening the full-size view shows the last zoom.
+  const [fullSizeMode, setFullSizeMode] = useState<FullSizeMode>("actual");
   const primaryRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const job = useRef<{ token: string; cancel: () => void } | null>(null);
@@ -502,7 +504,9 @@ export default function ReviewSheet({
                 <FullSizeView
                   failed={chosenFailure !== undefined}
                   file={chosenFile}
+                  mode={fullSizeMode}
                   onDone={() => setFullSize(false)}
+                  onModeChange={setFullSizeMode}
                   url={uploadUrl}
                 />
               ) : (
@@ -678,9 +682,11 @@ export default function ReviewSheet({
                 ) : null}
                 <p className="h-12">
                   {plan?.long ? "Long receipt: sent at the highest size the model reads. " : null}
-                  {fullSize
-                    ? "Drag to look around. Done goes back to the whole receipt."
-                    : "Tap the preview to see exactly what uploads."}
+                  {!fullSize
+                    ? "Tap the preview to see exactly what uploads."
+                    : fullSizeMode === "actual"
+                      ? "One pixel of the upload per screen pixel. Drag to look around."
+                      : "The whole upload, as it will be sent. Actual pixels shows the detail."}
                   {edit?.filter === "bw"
                     ? chosen?.id === "smaller"
                       ? " At Faster upload, B&W can lose light print."

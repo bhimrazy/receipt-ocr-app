@@ -6,7 +6,8 @@ import { Loader2 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { formatSize } from "./size-picker";
 
-type Mode = "fitted" | "actual";
+/** Whole receipt, or one image pixel per device pixel. */
+export type FullSizeMode = "fitted" | "actual";
 
 /** "JPEG" from "image/jpeg". */
 const formatName = (type: string) => type.replace(/^image\//, "").toUpperCase() || "file";
@@ -22,15 +23,18 @@ export function FullSizeView({
   file,
   url,
   failed,
+  mode,
+  onModeChange,
   onDone,
 }: {
   file: File | null;
   url: string | null;
   failed: boolean;
+  mode: FullSizeMode;
+  onModeChange: (mode: FullSizeMode) => void;
   onDone: () => void;
 }) {
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
-  const [mode, setMode] = useState<Mode>("actual");
   const [natural, setNatural] = useState<{ url: string; width: number; height: number } | null>(
     null,
   );
@@ -50,6 +54,35 @@ export function FullSizeView({
 
   return (
     <div className="absolute inset-0 flex flex-col bg-muted">
+      {/* Its own fixed-height bar, so it never covers the image and nothing shifts. */}
+      <div
+        className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-2"
+        data-testid="full-size-bar"
+      >
+        <div
+          aria-label="Zoom"
+          className="flex rounded-lg border border-border bg-background p-0.5"
+          role="group"
+        >
+          {(["fitted", "actual"] as const).map((m) => (
+            <button
+              aria-pressed={mode === m}
+              className={cn(
+                "min-h-9 rounded-md px-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                mode === m ? "bg-primary/15 text-foreground" : "text-muted-foreground",
+              )}
+              key={m}
+              onClick={() => onModeChange(m)}
+              type="button"
+            >
+              {m === "fitted" ? "Whole receipt" : "Actual pixels"}
+            </button>
+          ))}
+        </div>
+        <Button onClick={onDone} size="sm" variant="secondary">
+          Done
+        </Button>
+      </div>
       {url && file ? (
         <div
           aria-label={
@@ -122,31 +155,6 @@ export function FullSizeView({
           )}
         </p>
       )}
-      <div className="absolute top-2 right-2 left-2 flex items-start justify-between gap-2">
-        <div
-          aria-label="Zoom"
-          className="flex rounded-lg border border-border bg-background/90 p-0.5 shadow-sm"
-          role="group"
-        >
-          {(["fitted", "actual"] as const).map((m) => (
-            <button
-              aria-pressed={mode === m}
-              className={cn(
-                "min-h-9 rounded-md px-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                mode === m ? "bg-primary/15 text-foreground" : "text-muted-foreground",
-              )}
-              key={m}
-              onClick={() => setMode(m)}
-              type="button"
-            >
-              {m === "fitted" ? "Whole receipt" : "Actual pixels"}
-            </button>
-          ))}
-        </div>
-        <Button onClick={onDone} size="sm" variant="secondary">
-          Done
-        </Button>
-      </div>
       <p
         className="h-8 shrink-0 border-t border-border bg-background/90 px-3 text-center text-xs leading-8 whitespace-nowrap text-muted-foreground"
         data-testid="upload-caption"
