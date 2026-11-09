@@ -193,6 +193,7 @@ Open pull requests only.
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | #148 | SEO: home title leads with "receipt scanner" and names CSV and JSON (never Excel; nothing writes .xlsx); one source for the home title/description; WebApplication JSON-LD with featureList and the free Offer, no ratings     |
 | #184 | Upgrade call-to-action for Free workspace owners: meter button, menu item, Home card, limit-state button and blocked banner, all opening one modal that starts Paddle's overlay; admin-only while production runs sandbox keys |
+| #191 | Four upload sizes: Compact (new, 600 px, 350 KB) · Small (800 px) · Standard (default) · Sharpest; `size_choice` adds `compact`; 2 × 2 picker on phones                                                                        |
 | #166 | Light theme, part 2: System by default, a System/Light/Dark toggle in Settings, the account menu and footers, light iOS splash images (plus iPhone Air), light error and offline pages. Part 1 (tokens, #163) is merged        |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
@@ -252,7 +253,8 @@ for everyone but platform admins until live Paddle keys replace the sandbox ones
 
 **In review:** the photo-flow rework, owner decisions recorded 2026-11-09 (all recommended, plus a file-size rule).
 Sizing and preview ([sizing review](reviews/2026-11-09-upload-sizing.md),
-[compression research](reviews/2026-11-09-image-compression.md)): Compact / Standard / Sharpest by shape, a
+[compression research](reviews/2026-11-09-image-compression.md)): Compact / Small / Standard / Sharpest by shape
+(four options from 2026-11-09: Compact is a new 600 px option, Small the earlier 800 px Compact), a
 JPEG quality ladder to land normal photos at 700 KB or less (1.5 MB hard cap), the real encoded file in the preview
 with "Actual pixels", and bytes per pixel in telemetry. Then edge handles in the crop editor and the rest of the
 layout-stability pass ([plan](plans/2026-11-09-crop-edge-handles.md)).

@@ -30,7 +30,10 @@ describe("ENCODING", () => {
     expect(Math.min(...q, ENCODING.rescueQuality)).toBeGreaterThanOrEqual(0.65);
   });
   it("keeps normal photos at 700 KB or less, and 1.5 MB only as the cap", () => {
-    expect(ENCODING.targetBytes.smaller).toBeLessThanOrEqual(ENCODING.targetBytes.recommended);
+    const { compact, smaller, recommended, larger } = ENCODING.targetBytes;
+    expect([compact, smaller, recommended, larger]).toEqual(
+      [350, 500, 700, 1024].map((n) => n * KB),
+    );
     expect(ENCODING.targetBytes.recommended).toBe(700 * KB);
     expect(ENCODING.targetBytes.larger).toBeLessThan(ENCODING.hardCapBytes);
     expect(ENCODING.hardCapBytes).toBe(1.5 * 1024 * KB);

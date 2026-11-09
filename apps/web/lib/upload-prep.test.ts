@@ -26,11 +26,16 @@ describe("planOption", () => {
   const long = { width: 1000, height: 4000 };
 
   it("matches the review's table", () => {
+    expect(dims(planOption(owner, "compact"))).toEqual([600, 1298]);
     expect(dims(planOption(owner, "smaller"))).toEqual([800, 1730]);
     expect(dims(planOption(owner, "recommended"))).toEqual([1000, 2163]);
     expect(dims(planOption(owner, "larger"))).toEqual([1191, 2576]);
+    expect(dims(planOption(normal, "compact"))).toEqual([655, 917]);
     expect(dims(planOption(normal, "recommended"))).toEqual([1195, 1673]);
-    for (const id of SIZE_IDS) expect(dims(planOption(long, id))).toEqual([644, 2576]);
+    for (const id of ["smaller", "recommended", "larger"] as const)
+      expect(dims(planOption(long, id))).toEqual([644, 2576]);
+    // Only Compact differs on a long receipt, and the plan sends that at Sharpest anyway.
+    expect(dims(planOption(long, "compact"))).toEqual([600, 2400]);
   });
   it("keeps Sharpest inside Claude's patch cap near square", () => {
     const out = planOption({ width: 4000, height: 4000 }, "larger");
@@ -50,6 +55,14 @@ describe("planOption", () => {
     for (const ratio of [1.5, 2, 2.4, 2.57]) {
       const out = planOption({ width: 2000, height: Math.round(2000 * ratio) }, "recommended");
       expect(out.width).toBeGreaterThanOrEqual(1000);
+    }
+  });
+  it("keeps each option smaller than the next, and Compact at least 600 px wide", () => {
+    for (const ratio of [1, 1.33, 2, 2.57]) {
+      const source = { width: 3000, height: Math.round(3000 * ratio) };
+      const areas = SIZE_IDS.map((id) => planOption(source, id)).map((s) => s.width * s.height);
+      for (let i = 1; i < areas.length; i++) expect(areas[i]!).toBeGreaterThan(areas[i - 1]!);
+      expect(planOption(source, "compact").width).toBeGreaterThanOrEqual(600);
     }
   });
   it("depends only on the photo's shape", () => {
@@ -84,18 +97,25 @@ describe("planOption", () => {
 });
 
 describe("uploadPlan", () => {
-  it("offers all three on a phone photo", () => {
+  it("offers all four on a phone photo, smallest first", () => {
     const plan = uploadPlan({ width: 3024, height: 4032 });
     expect(plan.long).toBe(false);
-    expect(ids(plan.options)).toEqual(["smaller", "recommended", "larger"]);
+    expect(ids(plan.options)).toEqual(["compact", "smaller", "recommended", "larger"]);
   });
-  it("drops options that come out the same as Standard", () => {
-    expect(ids(uploadPlan({ width: 800, height: 1100 }).options)).toEqual(["recommended"]);
+  it("offers each size once", () => {
+    // Small and Sharpest would send every pixel, like Standard.
+    expect(ids(uploadPlan({ width: 800, height: 1100 }).options)).toEqual([
+      "compact",
+      "recommended",
+    ]);
     // Standard already sends every pixel, so Sharpest would be the same.
     expect(ids(uploadPlan({ width: 950, height: 2400 }).options)).toEqual([
+      "compact",
       "smaller",
       "recommended",
     ]);
+    // Within Compact's budget nothing is scaled, so there is nothing to choose.
+    expect(ids(uploadPlan({ width: 600, height: 900 }).options)).toEqual(["recommended"]);
   });
   it("sends a long receipt at Sharpest with nothing to choose", () => {
     const plan = uploadPlan({ width: 1000, height: Math.ceil(1000 * LONG_RECEIPT_RATIO) + 1 });
@@ -108,8 +128,10 @@ describe("uploadPlan", () => {
   it("falls back to Standard, then the only option, for a choice that isn't offered", () => {
     const small = uploadPlan({ width: 800, height: 1100 });
     expect(chosenOption(small, "smaller").id).toBe("recommended");
+    expect(chosenOption(small, "compact").id).toBe("compact");
     const long = uploadPlan({ width: 1000, height: 4000 });
     expect(chosenOption(long, "smaller").id).toBe("larger");
+    expect(chosenOption(long, "compact").id).toBe("larger");
     expect(chosenOption(uploadPlan({ width: 3024, height: 4032 }), "smaller").id).toBe("smaller");
   });
 });
@@ -154,6 +176,15 @@ describe("prepareFile size", () => {
       attempts: 1,
       rescued: false,
     });
+  });
+  it("encodes Compact at 600 px wide against its own target", async () => {
+    const encodes = stubSized(1400, 3028, 0.5);
+    const out = await prepareFile(photo(), { size: "compact" });
+    expect(encodes[0]!.slice(0, 2)).toEqual([600, 1298]);
+    // 0.5 B/px is about 380 KB at 0.8, over Compact's 350 KB; one step down lands under it.
+    expect(encodes.map((e) => e[2])).toEqual([0.8, 0.72]);
+    expect(out.size).toBeLessThanOrEqual(ENCODING.targetBytes.compact);
+    expect(uploadInfo(out)?.size).toBe("compact");
   });
   it("gives the same size whatever the bytes per pixel", async () => {
     const light = stubSized(1400, 3028, 0.1);

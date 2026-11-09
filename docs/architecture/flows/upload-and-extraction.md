@@ -91,22 +91,24 @@ flowchart LR
   unedited one goes as it is. A photo still over the hard cap is held back too. Photos and frames stay on the device
   until upload.
 - Every image the browser can decode is oriented, sized and re-encoded as JPEG by `encodeUpload`. The size depends only
-  on the photo's shape and the chosen option, never on how well it compresses: **Compact** fits 1 MP with the
-  short edge kept at 800 px, **Standard** (the default) 2 MP with 1,000 px, **Sharpest** the most Claude reads natively.
-  All three stay within 2,576 px on the long edge and 4,784 patches of 28 x 28 px, and nothing is upscaled. A receipt
+  on the photo's shape and the chosen option, never on how well it compresses: **Compact** fits 0.6 MP with the
+  short edge kept at 600 px, **Small** 1 MP with 800 px, **Standard** (the default) 2 MP with 1,000 px, **Sharpest**
+  the most Claude reads natively. Options that come out the same size for a photo are offered once. All four stay within 2,576 px on the long edge and 4,784 patches of 28 x 28 px, and nothing is upscaled. A receipt
   longer than 1:2.6 (`LONG_RECEIPT_RATIO`) can't keep Standard's width inside that long edge, so it goes at Sharpest
   with no choice offered. Encoding follows one config, `ENCODING` in
   [`lib/upload-encoding.ts`](../../../apps/web/lib/upload-encoding.ts): JPEG at 0.80, then 0.72, then 0.65 (the floor
-  for thin print), keeping the first encode under the option's target (500 KB Compact, 700 KB Standard, 1 MB Sharpest).
-  Past the ladder anything up to the 1.5 MB hard cap is sent. Over it, the photo is encoded once more at Compact's size
+  for thin print), keeping the first encode under the option's target (350 KB Compact, 500 KB Small, 700 KB Standard,
+  1 MB Sharpest). Past the ladder anything up to the 1.5 MB hard cap is sent. Over it, the photo is encoded once more at
+  Small's size
   at 0.72, and refused with an error if it is still over. A non-JPEG from the canvas (Safari returns PNG for types it
   can't write) counts as a failed encode. This removes camera metadata (including GPS) and keeps the body far under
   Vercel's 4.5 MB limit. A successful re-encode always replaces the original, so its metadata is gone. PDFs, images
   the browser can't decode (HEIC outside Safari) and images whose encode fails (for example a phone out of canvas
   memory) are sent unchanged, metadata included; stripping those on the server is a known follow-up.
 - In the review sheet's Preview step the size line ("W × H px · N KB · Change", every number in a fixed-width slot)
-  opens a choice for the batch, remembered for the session. The ids sent as `size_choice` are unchanged from the
-  earlier options: `smaller` is Compact, `recommended` Standard, `larger` Sharpest (and every long receipt). The
+  opens a choice for the batch, remembered for the session (a 2 x 2 grid on phones, one row from `sm`, a list on
+  desktop). The ids sent as `size_choice` keep their earlier meaning so history compares: `compact` is Compact (added
+  2026-11-09), `smaller` Small, `recommended` Standard, `larger` Sharpest (and every long receipt). The
   upload also carries its quality step, encode count, filter and whether it was rescued, and the server reads the
   file's pixel size from its header, so the `receipt.upload` wide event has bytes per pixel from real phones.
 - A file still over 4 MB (`DEPLOYMENT_BODY_LIMIT_BYTES` in

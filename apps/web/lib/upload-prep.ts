@@ -34,14 +34,16 @@ export function acceptedType(file: { name: string; type: string }): string | nul
  * (docs/reviews/2026-11-09-upload-sizing.md). Each option fits a pixel budget, raised to keep a
  * minimum short edge (a receipt's width: pixels per millimetre of paper), and every option stays
  * within what Claude reads natively: 2,576 px on the long edge and 4,784 patches of 28 x 28 px.
- * Never upscaled. The ids predate the current labels and are kept so telemetry still compares.
+ * Never upscaled. Labels: Compact, Small, Standard, Sharpest. The ids predate those labels and are
+ * kept so telemetry still compares: `smaller` is Small, `recommended` Standard, `larger` Sharpest.
  */
-export const SIZE_IDS = ["smaller", "recommended", "larger"] as const;
+export const SIZE_IDS = ["compact", "smaller", "recommended", "larger"] as const;
 export type SizeId = (typeof SIZE_IDS)[number];
 export const MODEL_LONG_EDGE = 2576;
 export const MODEL_MAX_PATCHES = 4784;
 const PATCH = 28;
 export const SIZE_RULES: Record<SizeId, { budget: number; minShort: number }> = {
+  compact: { budget: 600_000, minShort: 600 },
   smaller: { budget: 1_000_000, minShort: 800 },
   recommended: { budget: 2_000_000, minShort: 1000 },
   larger: { budget: Number.POSITIVE_INFINITY, minShort: 0 },
@@ -97,15 +99,23 @@ export type UploadPlan = {
 
 const sameSize = (a: Size, b: Size) => a.width === b.width && a.height === b.height;
 
-/** What can be offered for a source. Compact and Sharpest are left out when they equal Standard. */
+/** Which option keeps a size when two come out the same: Standard, then Small, Sharpest, Compact. */
+const KEEP_ORDER: readonly SizeId[] = ["recommended", "smaller", "larger", "compact"];
+
+/**
+ * What can be offered for a source, smallest first. Options that come out the same size are
+ * offered once, under the id earliest in `KEEP_ORDER`; Standard is always offered.
+ */
 export function uploadPlan(source: Size): UploadPlan {
   if (longEdge(source) / shortEdge(source) > LONG_RECEIPT_RATIO) {
     return { long: true, options: [{ id: "larger", ...planOption(source, "larger") }] };
   }
-  const standard: SizeOption = { id: "recommended", ...planOption(source, "recommended") };
-  const options = SIZE_IDS.map((id) =>
-    id === "recommended" ? standard : { id, ...planOption(source, id) },
-  ).filter((option) => option.id === "recommended" || !sameSize(option, standard));
+  const kept: SizeOption[] = [];
+  for (const id of KEEP_ORDER) {
+    const option = { id, ...planOption(source, id) };
+    if (!kept.some((other) => sameSize(other, option))) kept.push(option);
+  }
+  const options = SIZE_IDS.flatMap((id) => kept.filter((option) => option.id === id));
   return { long: false, options };
 }
 
@@ -204,7 +214,7 @@ function jpegName(name: string) {
 
 /**
  * Sizes `source` for the chosen option and runs the encoding ladder (`ENCODING`), with
- * Compact's size as the rescue. Throws `TooLargeError` when nothing gets under the hard cap, and
+ * Small's size as the rescue. Throws `TooLargeError` when nothing gets under the hard cap, and
  * whatever the canvas throws.
  */
 export async function encodeUpload(
