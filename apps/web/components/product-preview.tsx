@@ -65,14 +65,14 @@ function Totals({ className }: { className?: string }) {
 function PhonePreview() {
   return (
     <div className="pr-10 sm:hidden" data-preview="phone">
-      <div className="mx-auto w-full max-w-80 [mask-image:linear-gradient(to_bottom,black_80%,transparent)]">
+      <div className="mx-auto w-full max-w-80 [mask-image:linear-gradient(to_bottom,black_calc(100%-3.5rem),transparent)]">
         <div className="rounded-t-[2.75rem] border border-b-0 border-foreground/15 bg-card p-2 pb-0 shadow-[0_32px_80px_-24px_rgb(0_0_0/0.8)] light:border-foreground/20 light:bg-muted light:shadow-[0_32px_64px_-24px_rgb(24_24_27/0.35)]">
           <div className="rounded-t-[2.25rem] bg-background">
             <div
               aria-hidden
               className="mx-auto h-4 w-16 translate-y-2.5 rounded-full bg-border light:bg-foreground/90"
             />
-            <div className="px-5 pt-6 pb-8">
+            <div className="px-5 pt-6 pb-16">
               <span className="inline-flex items-center gap-0.5 text-sm text-primary">
                 <ChevronLeft aria-hidden className="size-4" /> History
               </span>
