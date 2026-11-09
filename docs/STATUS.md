@@ -264,8 +264,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 3. Observability: wide events (#52), then OTLP export to Axiom (#135), Sentry errors (#139) and server PostHog (#141), all
    off unless their env is set; provider privacy settings done 2026-11-08
    ([§9e](production-environment.md#9e-provider-privacy-and-alert-settings); its quota, alert and dashboard
-   steps are still to do). Next: Sentry source maps (separate `sentry-cli`
-   step); browser PostHog after a consent decision, which needs `instrumentation-client.ts`, an `/ingest` rewrite
+   steps are still to do). Source-map upload is built (`production.yml`), waiting for the `SENTRY_AUTH_TOKEN` secret.
+   Next: browser PostHog after a consent decision, which needs `instrumentation-client.ts`, an `/ingest` rewrite
    proxy with `skipTrailingSlashRedirect`, cookieless mode or consent, `identify`/`reset`, and
    `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`/`HOST`; PostHog `groupIdentify` for the workspace plan once billing lands
    ([observability](plans/2026-11-06-observability.md)) with the [security requirements](reviews/2026-11-06-security-plan.md).
@@ -348,7 +348,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - **From the 2026-11-09 Home incident** ([note](reviews/2026-11-09-home-stuck-incident.md), fixed in #210 by moving to
   node-postgres; server role timeouts applied the same day, see [db.md](architecture/db.md)):
   - Restore the pushed-screen slide transitions turned off in #205 (`TODO(2026-11-16)` in `pushed-screen.tsx`).
-  - Sentry source maps: stack traces still point at minified files.
+  - Sentry source maps: upload built, needs the `SENTRY_AUTH_TOKEN` secret in the GitHub `vercel` environment.
   - `db.pool_error` is only logged once core's Db layer is built; a process that has only built the auth pool logs
     nothing for an idle-client error.
   - A CI job against a real PgBouncer in transaction mode.

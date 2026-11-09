@@ -545,9 +545,16 @@ What is sent: server 5xx and defects (from `failureResponse` and `onRequestError
 rejections, dead jobs, and browser errors outside or inside error boundaries. Errors only: no tracing, Replay,
 Feedback or Logs. Each event is rebuilt from an allowlist (see [observability](architecture/flows/observability.md#sentry)).
 
-Not yet: source-map upload. Stack frames point at the built files. The planned step is a separate `sentry-cli`
-upload in `production.yml` that runs no repo code, with `SENTRY_AUTH_TOKEN` as a GitHub Actions secret only (never
-in Vercel), maps deleted before deploy (security plan M11). Docker: pass `--build-arg SENTRY_DSN=...` and
+Source maps (security plan M11): `production.yml` builds with `UPLOAD_SOURCE_MAPS=1`, which makes Next emit browser
+and server maps. A separate step then runs the pinned `sentry-cli` (`.github/vercel-cli`) on `.vercel/output`:
+`sourcemaps inject` stamps a debug ID into each file and map, and `sourcemaps upload` sends them under release = the
+7-character commit. The next step deletes every `*.map` before `vercel deploy`, so none is public. Only that step
+holds the token: not the build (it runs repository code), and never Vercel. Sentry matches frames by debug ID
+(`scrubEvent` keeps the IDs), so they show original files, lines and function names.
+
+To enable: create an organization token ([secrets.md](secrets.md)) and add it as the secret `SENTRY_AUTH_TOKEN` in
+the GitHub `vercel` environment (Settings, Environments, vercel). Until it is set the production deploy fails at the
+upload step. Previews and Docker builds emit no maps. Docker: pass `--build-arg SENTRY_DSN=...` and
 `--build-arg GIT_COMMIT_SHA=$(git rev-parse HEAD)` to `docker/Dockerfile.prod` for browser reporting and the release;
 `SENTRY_DSN` in the container's environment alone turns on server reporting only.
 
@@ -588,7 +595,7 @@ Set once per provider; recheck after creating a new project. Why each one, and t
       switches exist org-wide under **Settings → receiptocr → Security & Privacy**.
 - [x] **Sentry → Projects → receipt-ocr → Client Security → Allowed Domains:** `receipt-ocr.bhimraj.com.np` (not
       `*`); add staging domains as extra lines. Server-side events are unaffected (they send no `Origin` header).
-      Keep **Enable JavaScript source fetching** on until source maps are uploaded.
+      Turn **Enable JavaScript source fetching** off once uploaded maps resolve frames.
 - [x] **PostHog → Settings → Project → Privacy → IP data capture configuration:** **Discard client IP data** on.
 - [x] **Vercel:** `POSTHOG_KEY` stored as Config, not Sensitive (see above: a Sensitive value is empty at build, and the
       privacy page then omits PostHog).

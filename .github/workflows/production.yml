@@ -113,6 +113,7 @@ jobs:
       contents: read
     env:
       VERCEL_BIN: ${{ github.workspace }}/.github/vercel-cli/node_modules/.bin/vercel
+      SENTRY_BIN: ${{ github.workspace }}/.github/vercel-cli/node_modules/.bin/sentry-cli
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
@@ -123,7 +124,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-bun
 
-      - name: Install Vercel CLI (pinned, own lockfile)
+      - name: Install Vercel and Sentry CLIs (pinned, own lockfile)
         run: |
           bun install --frozen-lockfile --cwd .github/vercel-cli
 
@@ -134,9 +135,41 @@ jobs:
           "$VERCEL_BIN" pull --yes --environment=production
 
       # No token for the build step: it runs repository code, which only needs the pulled settings.
+      # UPLOAD_SOURCE_MAPS makes Next emit browser and server maps (next.config.ts).
       - name: Build project
+        env:
+          UPLOAD_SOURCE_MAPS: "1"
         run: |
           "$VERCEL_BIN" build --prod
+
+      # Runs no repository code: only the pinned Sentry CLI reads the build output while the token
+      # is set. Debug IDs tie each file to its map, so the release only groups the upload; it is the
+      # short commit the SDK reports. Fails, and so blocks the deploy, if the token is missing.
+      - name: Upload source maps to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: receiptocr
+          SENTRY_PROJECT: receipt-ocr
+          SENTRY_URL: https://us.sentry.io
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          # The CLI skips hidden directories below the paths it is given, and the server bundles
+          # sit in `.next`, so each one is named.
+          dirs=(.vercel/output/static)
+          while IFS= read -r dir; do dirs+=("$dir"); done < <(
+            find .vercel/output/functions -type d -name .next -not -path '*/node_modules/*' -prune | sort
+          )
+          [ "${#dirs[@]}" -gt 1 ] || { echo "::error::No server bundle (.next) in the build output"; exit 1; }
+          "$SENTRY_BIN" sourcemaps inject --ignore node_modules "${dirs[@]}"
+          "$SENTRY_BIN" sourcemaps upload --strict --ignore node_modules \
+            --release "${COMMIT_SHA:0:7}" "${dirs[@]}"
+
+      # Maps are served as static files if left in the output.
+      - name: Delete source maps
+        run: |
+          find .vercel/output -name '*.map' -delete
+          test -z "$(find .vercel/output -name '*.map' -print -quit)"
 
       - name: Deploy to production
         env:

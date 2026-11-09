@@ -5,8 +5,8 @@ import { isContentError, scrubMessage, scrubUrl } from "./scrub";
  * `beforeSend` for both runtimes: the event is rebuilt from an allowlist, the
  * way wide events are, instead of deleting what we know to be risky. Kept:
  * error types, scrubbed messages, stack frames (file, function, line), our
- * own tags, release, environment, the runtime and browser names, and the
- * request's method and scrubbed URL. Dropped: user, headers, cookies, bodies,
+ * own tags, release, environment, the runtime and browser names, source-map
+ * debug IDs, and the request's method and scrubbed URL. Dropped: user, headers, cookies, bodies,
  * query strings, extra data, frame variables and source lines, server name,
  * and every breadcrumb but navigation and fetch/xhr (URLs scrubbed).
  */
@@ -44,6 +44,18 @@ const frame = (f: StackFrame): StackFrame => ({
   ...(f.colno !== undefined ? { colno: f.colno } : {}),
   ...(f.in_app !== undefined ? { in_app: f.in_app } : {}),
 });
+
+// Debug IDs are how Sentry finds the uploaded source map for a frame; they carry no personal data.
+const DEBUG_ID = /^[0-9a-f-]{32,36}$/i;
+
+const debugMeta = (input: ErrorEvent["debug_meta"]): ErrorEvent["debug_meta"] => {
+  const images = (input?.images ?? []).flatMap((image) =>
+    image.type === "sourcemap" && DEBUG_ID.test(image.debug_id ?? "")
+      ? [{ type: image.type, code_file: scrubUrl(image.code_file ?? ""), debug_id: image.debug_id }]
+      : [],
+  );
+  return images.length > 0 ? { images } : undefined;
+};
 
 const breadcrumb = (b: Breadcrumb): Breadcrumb | null => {
   const data = b.data ?? {};
@@ -124,6 +136,8 @@ export function scrubEvent(event: ErrorEvent): ErrorEvent {
       ...(event.request.method ? { method: event.request.method } : {}),
     };
   }
+  const debug = debugMeta(event.debug_meta);
+  if (debug) out.debug_meta = debug;
   const crumbs = (event.breadcrumbs ?? []).map(breadcrumb).filter((b) => b !== null);
   if (crumbs.length > 0) out.breadcrumbs = crumbs;
   return out;
