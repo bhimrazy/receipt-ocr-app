@@ -157,10 +157,15 @@ Steps are in [deployment.md](deployment.md).
      `PADDLE_API_KEY` and `PADDLE_WEBHOOK_SECRET` are Sensitive: the other four are read at build time, when `vercel
 pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the secrets come from.
   3. Set `OCR_DAILY_CAP` to about 1000 (the all-plans fuse; the Free pool is 300 a day).
-  4. Test a sandbox checkout, then submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
+  4. In each Paddle account, set the **default payment link** (Checkout → Checkout settings; without it every checkout
+     fails with `transaction_default_checkout_url_not_set`), the sales tax mode (exclusive), the API key's permissions
+     and expiry, and the rest of [account settings](production-environment.md#paddle-account-settings). Before live:
+     the public `_ptxn` payment page and the other follow-ups in the
+     [Paddle docs review](reviews/2026-11-09-paddle-docs-review.md).
+  5. Test a sandbox checkout, then submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
      account verification, and switch to live values ([10c](production-environment.md#10c-switch-from-sandbox-to-live)).
-  5. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).
-  6. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price,
+  6. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).
+  7. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price,
      and keep the old price id in `PADDLE_PRICE_PRO_LEGACY` ([runbook](architecture/flows/billing.md#runbook)). There is
      no automated email for this yet.
 - Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.

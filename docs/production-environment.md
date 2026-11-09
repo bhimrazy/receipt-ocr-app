@@ -628,15 +628,15 @@ Pro subscriptions are sold through Paddle Billing, the merchant of record. Billi
 required variables below are set; with any missing, the app shows no Upgrade button and the webhook answers `503`. How
 it works is in [Billing](architecture/flows/billing.md).
 
-| Variable                          | Kind   | Value                                                                                |
-| --------------------------------- | ------ | ------------------------------------------------------------------------------------ |
-| `PADDLE_ENV`                      | Config | `sandbox` or `production`                                                            |
-| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | Config | Paddle → Developer tools → Authentication, client-side tokens. Public by design      |
-| `PADDLE_PRICE_PRO_MONTHLY`        | Config | Price id (`pri_...`) of the monthly Pro price                                        |
-| `PADDLE_PRICE_PRO_YEARLY`         | Config | Price id (`pri_...`) of the yearly Pro price                                         |
-| `PADDLE_API_KEY`                  | Secret | Same page, API keys. Needs write access to transactions, customers and subscriptions |
-| `PADDLE_WEBHOOK_SECRET`           | Secret | The webhook destination's secret key (Notifications)                                 |
-| `PADDLE_PRICE_PRO_LEGACY`         | Config | Optional. Comma-separated old Pro price ids that existing subscriptions still pay    |
+| Variable                          | Kind   | Value                                                                                     |
+| --------------------------------- | ------ | ----------------------------------------------------------------------------------------- |
+| `PADDLE_ENV`                      | Config | `sandbox` or `production`                                                                 |
+| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | Config | Paddle → My account → Settings → Authentication, client-side tokens. Public by design     |
+| `PADDLE_PRICE_PRO_MONTHLY`        | Config | Price id (`pri_...`) of the monthly Pro price                                             |
+| `PADDLE_PRICE_PRO_YEARLY`         | Config | Price id (`pri_...`) of the yearly Pro price                                              |
+| `PADDLE_API_KEY`                  | Secret | Same page, API keys. Permissions and expiry: [account settings](#paddle-account-settings) |
+| `PADDLE_WEBHOOK_SECRET`           | Secret | The webhook destination's secret key (Notifications)                                      |
+| `PADDLE_PRICE_PRO_LEGACY`         | Config | Optional. Comma-separated old Pro price ids that existing subscriptions still pay         |
 
 **Keep the four Config values Config (not Sensitive).** They are read at build time: the pricing page decides whether
 to show the checkout, and the client token adds Paddle's origins to the Content Security Policy. Production builds in
@@ -653,25 +653,89 @@ the pricing page says Pro opens soon and only platform admins see the checkout, 
 Also set `OCR_DAILY_CAP` to about `1000`. It is the emergency fuse across all plans and should sit above the Free pool
 (300 a day) and normal Pro use.
 
+### Paddle account settings
+
+Do these in the dashboard **before the first checkout, in the sandbox and again in live**: the two accounts share no
+settings, products, keys or destinations. Menu names are the ones in Paddle's
+[go-live checklist](https://developer.paddle.com/build/go-live-checklist); older dashboards call some of them
+"Developer tools". The [Paddle docs review](reviews/2026-11-09-paddle-docs-review.md) has the reasons and sources.
+
+1. **Default payment link (required).** Paddle → **Checkout → Checkout settings** (the docs call it "Checkout
+   configuration") → **Default payment link**; direct links:
+   [sandbox](https://sandbox-vendors.paddle.com/checkout-settings) and
+   [live](https://vendors.paddle.com/checkout-settings). Without it, every `POST /transactions` fails with
+   `transaction_default_checkout_url_not_set` (HTTP 400, "no default payment link has been set for this account") and
+   the Upgrade button says "The checkout couldn't start". Set it to `https://receipt-ocr.bhimraj.com.np/` for now.
+   - Paddle appends `?_ptxn=txn_…` to this link for a transaction's payment link (`checkout.url`), the "update payment
+     method" links in its emails (failed renewals included) and `subscription.management_urls`. The page must load and
+     initialize Paddle.js, which then opens the checkout on its own
+     ([default payment link](https://developer.paddle.com/build/transactions/default-payment-link)). **None of our
+     pages does that yet**: the homepage doesn't load Paddle.js, and Billing needs a sign-in and loads it only for the
+     owner of a Free workspace. So those links open the site without a checkout. A public payment page is a follow-up
+     in the review; point the link at it once it ships, and before live.
+   - In live the link's host must be an **approved domain, matched exactly** (or its `www.` form). Approving
+     `bhimraj.com.np` doesn't cover `receipt-ocr.bhimraj.com.np`; submit the subdomain itself
+     ([10c](#10c-switch-from-sandbox-to-live)). In the sandbox any domain works.
+2. **Sales tax.** **My account → Settings → Sales tax**: prices **exclusive** of tax. `/pricing` and the Upgrade button
+   say "plus sales tax or VAT", which is only true when this is exclusive and the Pro prices' tax mode is "account
+   setting" (or the prices themselves are exclusive). With inclusive or "based on location", buyers in the EU or UK pay
+   $9 including VAT and the copy is wrong.
+3. **Currencies.** **My account → Settings → Currencies**: balance currency **USD** (payouts are USD by SWIFT or
+   Payoneer). On the same page, leave **automatic currency conversion off** unless the owner decides otherwise (review,
+   decision 2): with it on, checkout charges a converted local price while `/pricing` shows USD.
+4. **Payment methods.** **Checkout → Checkout settings → Payment methods**. Card is always on; turn on the others you
+   want (PayPal, Apple Pay, Google Pay). Live doesn't copy the sandbox.
+5. **Product and prices.** **Catalog → Products**: `ReceiptOCR Pro`, tax category **SaaS** (standard digital goods is
+   the other default). Prices: **9.00 USD a month** and **90.00 USD a year**, no trial, quantity 1 to 1, tax mode
+   "account setting". They must match `PRO_PRICE` in `apps/web/lib/pricing.ts` and what `/pricing` prints: the website
+   review checks that the site's prices match the catalog.
+6. **API key.** **My account → Settings → Authentication → API keys**. Permissions, and nothing more:
+   `customer.write` (find the buyer by email and create them; write includes read), `transaction.write` (the checkout),
+   `customer_portal_session.write` (portal links) and `subscription.write` (cancel after a refund or chargeback). Never
+   `notification_setting.write`.
+   - **Expiry.** Paddle's default is **90 days** and the maximum is one year
+     ([authentication](https://developer.paddle.com/api-reference/about/authentication)). An expired key turns
+     checkout, portal links and refund cancels into `http-401` errors. Note the date in the calendar, and add an
+     **email** notification destination (Notifications, type email) for `api_key.expiring` (seven days before) and
+     `api_key.expired`.
+7. **Client-side token.** Same page, client-side tokens: `test_…` in the sandbox, `live_…` in live.
+8. **Retain (live only; the sandbox has only cancellation flows).** **Retain → Payment recovery**: the dunning window
+   and what happens at its end. Paddle's default window is 30 days; our Pro grace is 14 days (`PAST_DUE_GRACE_DAYS`),
+   see review decision 3. End action: **cancel** the subscription. **Retain → Cancellation flows**: offer discounts
+   only. A "switch plan" offer to a price outside `PADDLE_PRICE_PRO_*` would end Pro, and a "pause" offer ends it while
+   paused.
+
 ### 10a. Webhook destination
 
-1. Paddle → **Developer tools → Notifications → New destination**.
-2. URL: `https://receipt-ocr.bhimraj.com.np/api/billing/paddle/webhook`. Type: webhook.
+1. Paddle → **Events → Notifications → New destination** (older dashboards: Developer tools → Notifications).
+2. URL: `https://receipt-ocr.bhimraj.com.np/api/billing/paddle/webhook`. Type: webhook. Usage type: platform events
+   (add simulation events in the sandbox if you use the webhook simulator).
 3. Events: `subscription.created`, `subscription.updated`, `subscription.activated`, `subscription.canceled`,
    `subscription.past_due`, `subscription.paused`, `subscription.resumed`, `transaction.completed`,
    `adjustment.created` and `adjustment.updated` (refunds and chargebacks). Other events are answered with 200 and
    dropped.
 4. Save, then copy the destination's **secret key** into `PADDLE_WEBHOOK_SECRET` (Secret) and redeploy.
 
-The sandbox and the live account each need their own destination.
+The sandbox and the live account each need their own destination. Reuse an existing live destination rather than
+recreating it: a new one has a new secret.
+
+Paddle retries a delivery that doesn't get a 200 within **five seconds**: in the **sandbox only 3 times in about two
+minutes**, in live up to 60 times over about two days
+([handle delivery](https://developer.paddle.com/webhooks/about/respond-to-webhooks)). After that the delivery is
+`failed`; replay it from the destination's logs. If Vercel's firewall or bot protection is ever turned on, exempt
+`/api/billing/paddle/webhook`.
 
 ### 10b. Check it in the sandbox
 
-A shorter walkthrough to follow along is in [testing-payments.md](testing-payments.md).
+A shorter walkthrough to follow along is in [testing-payments.md](testing-payments.md). Check with a **real sandbox
+checkout**, not `POST /transactions/preview`: a preview doesn't need the default payment link, a customer or an
+approved domain, so it passes while real checkouts fail.
 
-1. Open **Settings → Billing** in a workspace you own. The Upgrade button should appear.
-2. Pay with a Paddle sandbox test card (see Paddle's "test payment methods" page; for example `4242 4242 4242 4242`,
-   any future expiry, any CVC).
+1. Open **Settings → Billing** in a workspace you own. The Upgrade button should appear, and clicking it should open
+   Paddle's overlay. "The checkout couldn't start" means Paddle refused the call: find `billing.checkout_failed` in the
+   logs (an `http-400` is usually the missing [default payment link](#paddle-account-settings)).
+2. Pay with a Paddle sandbox test card: `4242 4242 4242 4242`, any name, any future expiry, CVV `100`. The card
+   `4000 0000 0000 0002` is declined ([test cards](https://developer.paddle.com/concepts/payment-methods/card)).
 3. The page shows "Payment received" and refreshes until the workspace is Pro (usually a few seconds).
 4. In the database, `billing_events` should have the new rows with `outcome = 'applied'` and `billing_subscriptions`
    one row for the workspace. An outcome of `unmatched` means the workspace was missing or unknown, the buyer isn't its
@@ -679,27 +743,42 @@ A shorter walkthrough to follow along is in [testing-payments.md](testing-paymen
 5. In **Admin → Jobs** (`/admin/jobs`), `billing.apply_event` jobs should be `succeeded`. A `dead` job names the problem
    in the logs (`billing.outcome`, `error`).
 6. In Paddle, **Notifications → the destination → Logs** lists each delivery and its HTTP status. `401` means the
-   secret is wrong or the server clock is far off (the tolerance is 30 seconds).
+   secret is wrong or the server clock is far off (the tolerance is 30 seconds). Sandbox retries stop after about two
+   minutes, so replay a failed delivery once it's fixed.
 7. Cancel from **Billing → Cancel subscription** (the Paddle portal). The page should say Pro stays until the period
    end.
 8. Refunds: refund a test transaction in full in Paddle. The workspace should drop to Free at once and the subscription
    show as canceled in Paddle shortly after. After a partial refund, cancel the subscription in Paddle yourself if Pro
    should end ([runbook](architecture/flows/billing.md#runbook)).
 
+Sandbox emails go only to addresses on your account's domain (others are forwarded to the account email), and Retain's
+payment recovery doesn't run there, so failed-renewal emails can't be checked in the sandbox.
+
 ### 10c. Switch from sandbox to live
 
-1. Finish Paddle's live account verification (business details and payout). This can take days; run it in parallel.
-2. Submit the website review once `/pricing` and `/refunds` are live (Paddle reads them). Wait for approval.
-3. In the live Paddle account, create the Pro product and its monthly and yearly prices (same amounts as the sandbox),
-   and note the two new price ids.
-4. Create the live webhook destination ([10a](#10a-webhook-destination)) and copy its secret.
-5. Create a live API key and a live client-side token.
-6. In Vercel (Production), replace: `PADDLE_ENV=production`, `PADDLE_API_KEY`, `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN`,
+1. **Verify the account**: Paddle → **Get started** (an account administrator: your date of birth, home address, legal
+   name, the website and what you sell), then **Business account → Payouts → Payout settings**. The automated review
+   waits until at least one domain is approved.
+2. **Website approval**: **My account → Settings → Website approval**, submit `receipt-ocr.bhimraj.com.np` (the exact
+   host the checkout and the default payment link use). Paddle looks for a product description and its features,
+   prices that match the live catalog, Terms (with the seller's legal or brand name), Refund and Privacy policies
+   reachable from the navigation, a contact form or email reachable from the homepage, and HTTPS. Most are approved
+   automatically; a manual review takes about 5 to 7 business days
+   ([domain verification](https://www.paddle.com/help/start/account-verification/what-is-domain-verification)).
+3. In the live account, create the Pro product and its monthly and yearly prices exactly as in the sandbox (amount,
+   currency, tax category, tax mode), and note the two new price ids.
+4. Repeat the [account settings](#paddle-account-settings) in live. Set the default payment link once the domain is
+   approved; until then live transactions fail.
+5. Create the live webhook destination ([10a](#10a-webhook-destination)) and copy its secret.
+6. Create a live API key (the permissions and an expiry date, as in the account settings) and a live client-side
+   token.
+7. In Vercel (Production), replace: `PADDLE_ENV=production`, `PADDLE_API_KEY`, `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN`,
    `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_PRO_MONTHLY` and `PADDLE_PRICE_PRO_YEARLY`. Keep the sandbox values in
    Preview.
-7. Redeploy (the client token and the CSP are built in).
-8. Make one real purchase with a card you control, check [10b](#10b-check-it-in-the-sandbox) steps 3 to 6, then refund
-   it in Paddle.
+8. Redeploy (the client token and the CSP are built in).
+9. Test once for real. Paddle suggests a 100% discount with a code (**Catalog → Discounts**, enabled for checkout):
+   check out with it and a real card, check [10b](#10b-check-it-in-the-sandbox) steps 3 to 6, then cancel the test
+   subscription and archive the discount. Or make one real purchase and refund it in Paddle.
 
 Subscriptions made in the sandbox do not exist in live. Do not reuse sandbox ids in production.
 
