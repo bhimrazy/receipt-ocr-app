@@ -701,6 +701,10 @@ const MAX_CONNECTIONS = Number.parseInt(process.env.DATABASE_POOL_MAX ?? "", 10)
 /**
  * How long one query may go unanswered before it fails and the pool is replaced (see
  * `gatedPool`). Well above any query's normal time, well below the function's max duration.
+ * Risk: a valid statement that runs longer, typically one waiting on a lock (`lockQuota`'s
+ * advisory locks, the billing subscription lock, `FOR UPDATE` in the job admin actions),
+ * fails too and replaces the pool for every request on the instance. A timed-out write may
+ * still commit.
  */
 const QUERY_TIMEOUT_MS = Number.parseInt(process.env.DATABASE_QUERY_TIMEOUT_MS ?? "", 10) || 15_000;
 

@@ -194,6 +194,65 @@ describe.skipIf(!enabled)("gated pool (integration)", () => {
     }
   });
 
+  it("a COMMIT that never answers fails the transaction and replaces the pool", async () => {
+    const events: PoolEvent[] = [];
+    const stop = onPoolEvent((event) => events.push(event));
+    try {
+      const db = drizzle(gatedPool(make(1), { max: 1, timeoutMs: 400 }));
+      const started = Date.now();
+      const error = await db
+        .transaction(async (tx) => {
+          await tx.execute(sql`select 1`);
+          proxy.setMode("freeze");
+        })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(QueryTimeoutError);
+      expect(Date.now() - started).toBeLessThan(1_500);
+      expect(events).toEqual([
+        expect.objectContaining({
+          phase: "query",
+          query: expect.objectContaining({ operation: "commit" }),
+        }),
+      ]);
+      proxy.setMode("pass");
+      await expect(db.execute(sql`select 3 as n`)).resolves.toEqual([{ n: 3 }]);
+      expect(opened).toHaveLength(2);
+    } finally {
+      stop();
+    }
+  });
+
+  it("a ROLLBACK that never answers is timed the same way", async () => {
+    const db = drizzle(gatedPool(make(1), { max: 1, timeoutMs: 400 }));
+    const error = await db
+      .transaction(async (tx) => {
+        await tx.execute(sql`select 1`);
+        proxy.setMode("freeze");
+        throw new Error("body failed");
+      })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(QueryTimeoutError);
+    proxy.setMode("pass");
+    await expect(db.execute(sql`select 4 as n`)).resolves.toEqual([{ n: 4 }]);
+  });
+
+  it("asks the server to stop a statement that outlived the deadline", async () => {
+    const direct = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
+    try {
+      const pool = gatedPool(make(1), { max: 1, timeoutMs: 300 });
+      const error = await pool
+        .unsafe("select pg_sleep(5), 'incident-cancel-probe'")
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(QueryTimeoutError);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const running = await direct`select count(*)::int as n from pg_stat_activity
+        where state = 'active' and query like '%incident-cancel-probe%' and pid <> pg_backend_pid()`;
+      expect(running[0]!.n).toBe(0);
+    } finally {
+      await direct.end({ timeout: 0 });
+    }
+  });
+
   it("keeps drizzle's parsers after the pool is replaced", async () => {
     const db = drizzle(gatedPool(make(1), { max: 1, timeoutMs: 300 }));
     const before = await db.execute<{ t: unknown }>(sql`select now() as t`);

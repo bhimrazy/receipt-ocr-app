@@ -13,8 +13,9 @@ import type { Sql, TransactionSql } from "postgres";
  * The deadline: a query that hasn't settled `timeoutMs` after it was sent rejects with
  * `QueryTimeoutError`, and the whole pool is replaced, because postgres.js can't drop the one
  * connection the query is stuck on. The old pool gets `RESET_GRACE_S` to finish its other
- * queries before it is destroyed. Waiting for the gate has the same limit, but that timeout
- * keeps the pool. A transaction's body is not timed as a whole, only its BEGIN and each query.
+ * queries before it is destroyed. Waiting for the gate has the same limit; that timeout keeps
+ * the pool unless every permit has also been held that long. A transaction's body is not timed
+ * as a whole: its BEGIN, each query, and its COMMIT or ROLLBACK are.
  */
 export type GatedPoolOptions = {
   /** Same as the pool's `max`. */
@@ -35,7 +36,7 @@ export class QueryTimeoutError extends Error {
 
 /** What a query was, without its text or values: safe to log. */
 export type QueryLabel = {
-  /** `select`, `insert`, `update`, `delete`, `begin` or `other`. */
+  /** `select`, `insert`, `update`, `delete`, `begin`, `commit` (COMMIT or ROLLBACK) or `other`. */
   readonly operation: string;
   /** The first table the statement names, or `unknown`. */
   readonly table: string;
@@ -80,7 +81,9 @@ function emit(event: PoolEvent) {
 
 export function labelQuery(statement: string): QueryLabel {
   const text = statement.trim().toLowerCase();
-  const verb = /^(with\b[\s\S]*?\)\s*)?(select|insert|update|delete|begin)\b/.exec(text)?.[2];
+  const verb = /^(with\b[\s\S]*?\)\s*)?(select|insert|update|delete|begin|commit)\b/.exec(
+    text,
+  )?.[2];
   // The outermost table, not one from a subquery: the match at the shallowest parenthesis depth.
   let table = "unknown";
   let shallowest = Infinity;
@@ -110,52 +113,58 @@ function fnv1a(text: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-const BEGIN_LABEL: QueryLabel = {
-  operation: "begin",
-  table: "unknown",
-  statementHash: fnv1a("begin"),
-};
+/** A held permit; `release` is idempotent. */
+type Permit = { release(): void };
 
 class Gate {
-  private active = 0;
-  private readonly waiting: (() => void)[] = [];
+  private readonly held = new Set<Permit>();
+  private readonly waiting: ((permit: Permit) => void)[] = [];
   constructor(private readonly permits: number) {}
 
   get inFlight() {
-    return this.active;
+    return this.held.size;
   }
   get queued() {
     return this.waiting.length;
   }
 
-  /** Resolves with a permit, or with false after `timeoutMs` without one. */
-  acquire(timeoutMs: number): Promise<boolean> {
-    if (this.active < this.permits) {
-      this.active++;
-      return Promise.resolve(true);
-    }
-    return new Promise((resolve) => {
-      const grant = () => {
-        clearTimeout(timer);
-        resolve(true);
-      };
-      const timer = setTimeout(() => {
-        this.waiting.splice(this.waiting.indexOf(grant), 1);
-        resolve(false);
-      }, timeoutMs);
-      this.waiting.push(grant);
-    });
+  private grant(): Permit {
+    let released = false;
+    const permit: Permit = {
+      release: () => {
+        if (released) return;
+        released = true;
+        this.held.delete(permit);
+        const next = this.waiting.shift();
+        if (next) next(this.grant());
+      },
+    };
+    this.held.add(permit);
+    return permit;
   }
 
-  release() {
-    const next = this.waiting.shift();
-    if (next) next();
-    else this.active--;
+  /** Resolves with a permit, or with null after `timeoutMs` without one. */
+  acquire(timeoutMs: number): Promise<Permit | null> {
+    if (this.held.size < this.permits) return Promise.resolve(this.grant());
+    return new Promise((resolve) => {
+      const take = (permit: Permit) => {
+        clearTimeout(timer);
+        resolve(permit);
+      };
+      const timer = setTimeout(() => {
+        this.waiting.splice(this.waiting.indexOf(take), 1);
+        resolve(null);
+      }, timeoutMs);
+      this.waiting.push(take);
+    });
   }
 }
 
 type Unsafe = Sql["unsafe"];
 type Args = Parameters<Unsafe>;
+
+/** postgres.js's own cancel, which returns its promise (`query.cancel()` drops it uncaught). */
+type Cancellable = { canceller?: (query: unknown) => Promise<unknown> };
 
 export function gatedPool(make: () => Sql, options: GatedPoolOptions): Sql {
   let current = make();
@@ -171,23 +180,31 @@ export function gatedPool(make: () => Sql, options: GatedPoolOptions): Sql {
     stuck.end({ timeout: RESET_GRACE_S }).catch(() => {});
   };
 
-  const timeout = (pool: Sql | null, label: QueryLabel) => {
+  /** Logs the timeout and builds its error. `statement` is only parsed here, off the hot path. */
+  const timeout = (phase: "queue" | "query", statement: string) => {
     emit({
       type: "query_timeout",
-      phase: pool ? "query" : "queue",
-      query: label,
+      phase,
+      query: labelQuery(statement),
       timeoutMs: options.timeoutMs,
       inFlight: gate.inFlight,
       queued: gate.queued,
     });
-    if (pool) reset(pool);
     return new QueryTimeoutError(options.timeoutMs);
   };
 
-  /** Settles with `query`, or rejects once the deadline passes. */
-  const withDeadline = <T>(pool: Sql, label: QueryLabel, query: PromiseLike<T>) =>
+  /**
+   * Settles with `query`, or rejects once the deadline passes. On the deadline the query is
+   * cancelled server-side (best effort) and its pool replaced.
+   */
+  const withDeadline = <T>(pool: Sql, statement: string, query: PromiseLike<T>) =>
     new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => reject(timeout(pool, label)), options.timeoutMs);
+      const timer = setTimeout(() => {
+        const { canceller } = query as Cancellable;
+        canceller?.(query).catch(() => {});
+        reject(timeout("query", statement));
+        reset(pool);
+      }, options.timeoutMs);
       query.then(
         (value) => {
           clearTimeout(timer);
@@ -234,7 +251,7 @@ export function gatedPool(make: () => Sql, options: GatedPoolOptions): Sql {
           return (...[query, parameters, queryOptions]: Args) =>
             deferred((values) => {
               const pending = target.unsafe(query, parameters, queryOptions);
-              return withDeadline(pool, labelQuery(query), values ? pending.values() : pending);
+              return withDeadline(pool, query, values ? pending.values() : pending);
             });
         }
         if (key === "savepoint") {
@@ -248,45 +265,68 @@ export function gatedPool(make: () => Sql, options: GatedPoolOptions): Sql {
       },
     });
 
-  /** Waits for a permit; throws `QueryTimeoutError` if none frees up before the deadline. */
-  const enter = async (label: QueryLabel) => {
-    if (!(await gate.acquire(options.timeoutMs))) throw timeout(null, label);
+  /**
+   * Waits for a permit; throws `QueryTimeoutError` without one in time. The pool is kept: every
+   * permit holder is either inside a deadline of its own or in a transaction body running app
+   * code, which a new pool wouldn't free.
+   */
+  const enter = async (statement: string) => {
+    const permit = await gate.acquire(options.timeoutMs);
+    if (permit) return permit;
+    throw timeout("queue", statement);
   };
 
   const unsafe = (...[query, parameters, queryOptions]: Args) =>
     deferred(async (values) => {
-      await enter(labelQuery(query));
+      const permit = await enter(query);
       try {
         const pool = current;
         const pending = pool.unsafe(query, parameters, queryOptions);
-        return await withDeadline(pool, labelQuery(query), values ? pending.values() : pending);
+        return await withDeadline(pool, query, values ? pending.values() : pending);
       } finally {
-        gate.release();
+        permit.release();
       }
     });
+
+  /** Settles once `body` does, with nothing to report: for races that must not reject. */
+  const settledOf = (body: Promise<unknown>) =>
+    body.then(
+      () => {},
+      () => {},
+    );
 
   const begin = async (...args: unknown[]) => {
     const fn = args.at(-1) as (sql: TransactionSql) => unknown;
     const mode = args.length > 1 ? (args[0] as string) : "";
-    await enter(BEGIN_LABEL);
+    const permit = await enter("begin");
     try {
       const pool = current;
-      // BEGIN runs inside postgres.js, out of reach of `unsafe`: time it until the body starts.
       let markOpen!: () => void;
+      let markDone!: () => void;
       const opened = new Promise<void>((resolve) => (markOpen = resolve));
+      const done = new Promise<void>((resolve) => (markDone = resolve));
       const body = pool.begin(mode, (tx) => {
         markOpen();
-        return fn(inTransaction(pool, tx));
+        const result = fn(inTransaction(pool, tx));
+        Promise.resolve(Array.isArray(result) ? Promise.all(result) : result).then(
+          markDone,
+          markDone,
+        );
+        return result;
       });
       body.catch(() => {});
-      await withDeadline(pool, BEGIN_LABEL, Promise.race([opened, body.then(() => {})]));
-      return await body;
+      // BEGIN and COMMIT/ROLLBACK run inside postgres.js, out of reach of `unsafe`: time BEGIN
+      // until the body starts, and COMMIT or ROLLBACK from when the body settles.
+      await withDeadline(pool, "begin", Promise.race([opened, settledOf(body)]));
+      await Promise.race([done, settledOf(body)]);
+      return await withDeadline(pool, "commit", body);
     } finally {
-      gate.release();
+      permit.release();
     }
   };
 
-  return new Proxy({} as Sql, {
+  const target = (() => {}) as unknown as Sql;
+  return new Proxy(target, {
     get(_target, key) {
       if (key === "unsafe") return unsafe;
       if (key === "begin") return begin;
