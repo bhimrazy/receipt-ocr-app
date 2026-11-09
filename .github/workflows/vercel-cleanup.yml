@@ -91,13 +91,14 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
-          TEAM_ID: ${{ secrets.VERCEL_ORG_ID }}
           IDS: ${{ needs.plan.outputs.ids }}
         run: |
           set -euo pipefail
           api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
           # Production may have moved during the approval wait.
-          live=$(api "https://api.vercel.com/v13/deployments/$PRODUCTION_DOMAIN?teamId=$TEAM_ID" | jq -er .id)
+          live_json=$(api "https://api.vercel.com/v13/deployments/$PRODUCTION_DOMAIN")
+          live=$(jq -er .id <<< "$live_json")
+          TEAM_ID=$(jq -er .ownerId <<< "$live_json")
           deleted=0 failed=0
           for id in $IDS; do
             [[ "$id" =~ ^dpl_[A-Za-z0-9]+$ ]] || { echo "::error::Unexpected id $id"; exit 1; }
