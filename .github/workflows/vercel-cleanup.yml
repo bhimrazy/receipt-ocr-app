@@ -49,7 +49,7 @@ jobs:
           [ -n "$PRODUCTION_DOMAIN" ] || { echo "::error::Set PRODUCTION_DOMAIN in the vercel environment"; exit 1; }
           [[ "$KEEP" =~ ^[0-9]+$ && "$KEEP" -ge 1 ]] || { echo "::error::keep_production must be 1 or more"; exit 1; }
           [[ "$MIN_AGE_DAYS" =~ ^[0-9]+$ ]] || { echo "::error::preview_min_age_days must be 0 or more"; exit 1; }
-          api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
+          api() { curl -sS --fail-with-body -H @- "https://api.vercel.com$1" <<< "Authorization: Bearer $VERCEL_TOKEN"; }
           live=$(api "/v13/deployments/$PRODUCTION_DOMAIN?teamId=$TEAM_ID" | jq -er .id)
           url="/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&limit=100"
           : > all.jsonl
@@ -107,7 +107,7 @@ jobs:
           IDS: ${{ needs.plan.outputs.ids }}
         run: |
           set -euo pipefail
-          api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
+          api() { curl -sS --fail-with-body -H @- "$@" <<< "Authorization: Bearer $VERCEL_TOKEN"; }
           # Production may have moved during the approval wait.
           live=$(api "https://api.vercel.com/v13/deployments/$PRODUCTION_DOMAIN?teamId=$TEAM_ID" | jq -er .id)
           deleted=0 failed=0
