@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { SiteFooter } from "@/components/site-footer";
+import { StandaloneBack } from "@/components/standalone";
 import { SupportWidget } from "@/components/support-widget";
 
 export type LegalSection = {
@@ -13,24 +14,33 @@ export type LegalSection = {
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** Slim header shared by legal and error pages, sized to their max-w-3xl column. */
-export function SlimHeader() {
+/**
+ * Slim header shared by legal and error pages, sized to their max-w-3xl column. In the installed
+ * app the logo is not a link and "Back to home" becomes Back, to `backFallback` when there is no
+ * previous screen.
+ */
+export function SlimHeader({ backFallback }: { backFallback?: string } = {}) {
+  const backClass = `min-h-11 items-center gap-1.5 rounded-md px-1 text-sm text-muted-foreground transition-colors hover:text-foreground ${focusRing}`;
   return (
     <header className="border-b border-border px-5">
       <div className="mx-auto flex h-16 max-w-3xl items-center justify-between">
         <Link
           aria-label="ReceiptOCR home"
-          className={`inline-flex min-h-11 items-center rounded-lg ${focusRing}`}
+          className={`inline-flex min-h-11 items-center rounded-lg standalone:hidden ${focusRing}`}
           href="/"
         >
           <Brand />
         </Link>
-        <Link
-          className={`inline-flex min-h-11 items-center gap-1.5 rounded-md px-1 text-sm text-muted-foreground transition-colors hover:text-foreground ${focusRing}`}
-          href="/"
-        >
+        <div className="hidden min-h-11 items-center standalone:flex">
+          <Brand />
+        </div>
+        <Link className={`inline-flex standalone:hidden ${backClass}`} href="/">
           <ArrowLeft aria-hidden className="size-4" /> Back to home
         </Link>
+        <StandaloneBack
+          className={`hidden standalone:inline-flex ${backClass}`}
+          fallback={backFallback}
+        />
       </div>
     </header>
   );

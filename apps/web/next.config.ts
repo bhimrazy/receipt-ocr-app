@@ -53,6 +53,7 @@ const noindexPaths = [
   "/accept-invitation",
   "/accept-invitation/:path*",
   "/account-deleted",
+  "/pay",
   "/offline.html",
 ];
 

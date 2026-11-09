@@ -665,14 +665,22 @@ settings, products, keys or destinations. Menu names are the ones in Paddle's
    [sandbox](https://sandbox-vendors.paddle.com/checkout-settings) and
    [live](https://vendors.paddle.com/checkout-settings). Without it, every `POST /transactions` fails with
    `transaction_default_checkout_url_not_set` (HTTP 400, "no default payment link has been set for this account") and
-   the Upgrade button says "The checkout couldn't start". Set it to `https://receipt-ocr.bhimraj.com.np/` for now.
+   the Upgrade button says "The checkout couldn't start". Set it to **`https://receipt-ocr.bhimraj.com.np/pay`** in
+   both accounts.
    - Paddle appends `?_ptxn=txn_…` to this link for a transaction's payment link (`checkout.url`), the "update payment
-     method" links in its emails (failed renewals included) and `subscription.management_urls`. The page must load and
-     initialize Paddle.js, which then opens the checkout on its own
-     ([default payment link](https://developer.paddle.com/build/transactions/default-payment-link)). **None of our
-     pages does that yet**: the homepage doesn't load Paddle.js, and Billing needs a sign-in and loads it only for the
-     owner of a Free workspace. So those links open the site without a checkout. A public payment page is a follow-up
-     in the review; point the link at it once it ships, and before live.
+     method" links in its emails (failed renewals included) and `subscription.management_urls`, and expects the page
+     to load Paddle.js and open the checkout
+     ([default payment link](https://developer.paddle.com/build/transactions/default-payment-link)). `/pay` does that,
+     without a sign-in ([billing flow](architecture/flows/billing.md#from-checkout-to-plan)).
+   - It can also be set over the API: `PATCH /settings/checkout-url` with `{"default_url": "<url>"}`, using a key with
+     `checkout_settings.write` (not the app's key, which shouldn't have it). In the sandbox the domain needs no
+     approval; in live the host must be approved first, or Paddle answers `checkout_url_domain_not_approved`
+     ([default payment link](https://developer.paddle.com/build/transactions/default-payment-link),
+     [update checkout URL](https://developer.paddle.com/api-reference/settings/update-checkout-url)).
+   - **State on 2026-11-09:** the sandbox default link is `https://receipt-ocr.bhimraj.com.np/` (set over the API). It
+     gets repointed to `/pay` once `/pay` is deployed. Live isn't set yet.
+   - Check it: open `https://receipt-ocr.bhimraj.com.np/pay`. It should say "Payments for ReceiptOCR" and link to
+     pricing. A transaction's `checkout.url` should open Paddle's overlay there.
    - In live the link's host must be an **approved domain, matched exactly** (or its `www.` form). Approving
      `bhimraj.com.np` doesn't cover `receipt-ocr.bhimraj.com.np`; submit the subdomain itself
      ([10c](#10c-switch-from-sandbox-to-live)). In the sandbox any domain works.
@@ -700,8 +708,9 @@ settings, products, keys or destinations. Menu names are the ones in Paddle's
      `api_key.expired`.
 7. **Client-side token.** Same page, client-side tokens: `test_…` in the sandbox, `live_…` in live.
 8. **Retain (live only; the sandbox has only cancellation flows).** **Retain → Payment recovery**: the dunning window
-   and what happens at its end. Paddle's default window is 30 days; our Pro grace is 14 days (`PAST_DUE_GRACE_DAYS`),
-   see review decision 3. End action: **cancel** the subscription. **Retain → Cancellation flows**: offer discounts
+   and what happens at its end. Keep Paddle's default **30-day** window: our Pro grace is 30 days too
+   (`PAST_DUE_GRACE_DAYS`, review decision 3), and a longer window would let Paddle recover a payment after Pro has
+   ended. End action: **cancel** the subscription. **Retain → Cancellation flows**: offer discounts
    only. A "switch plan" offer to a price outside `PADDLE_PRICE_PRO_*` would end Pro, and a "pause" offer ends it while
    paused.
 
@@ -733,7 +742,9 @@ approved domain, so it passes while real checkouts fail.
 
 1. Open **Settings → Billing** in a workspace you own. The Upgrade button should appear, and clicking it should open
    Paddle's overlay. "The checkout couldn't start" means Paddle refused the call: find `billing.checkout_failed` in the
-   logs (an `http-400` is usually the missing [default payment link](#paddle-account-settings)).
+   logs; `billing.provider_error_code` is Paddle's reason (`transaction_default_checkout_url_not_set` is the missing
+   [default payment link](#paddle-account-settings)). Platform admins see the fix on the button for the account-setup
+   codes.
 2. Pay with a Paddle sandbox test card: `4242 4242 4242 4242`, any name, any future expiry, CVV `100`. The card
    `4000 0000 0000 0002` is declined ([test cards](https://developer.paddle.com/concepts/payment-methods/card)).
 3. The page shows "Payment received" and refreshes until the workspace is Pro (usually a few seconds).
@@ -767,8 +778,8 @@ payment recovery doesn't run there, so failed-renewal emails can't be checked in
    ([domain verification](https://www.paddle.com/help/start/account-verification/what-is-domain-verification)).
 3. In the live account, create the Pro product and its monthly and yearly prices exactly as in the sandbox (amount,
    currency, tax category, tax mode), and note the two new price ids.
-4. Repeat the [account settings](#paddle-account-settings) in live. Set the default payment link once the domain is
-   approved; until then live transactions fail.
+4. Repeat the [account settings](#paddle-account-settings) in live. Set the default payment link to
+   `https://receipt-ocr.bhimraj.com.np/pay` once the domain is approved; until then live transactions fail.
 5. Create the live webhook destination ([10a](#10a-webhook-destination)) and copy its secret.
 6. Create a live API key (the permissions and an expiry date, as in the account settings) and a live client-side
    token.

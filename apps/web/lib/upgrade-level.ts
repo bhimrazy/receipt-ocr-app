@@ -1,4 +1,4 @@
-import type { CheckoutSettings } from "@/components/billing/use-pro-checkout";
+import type { CheckoutSettings } from "@/components/billing/paddle-js";
 import type { Usage } from "@/components/usage-meter";
 import type { PlanId, PlanPolicy, PlanTable } from "./plans";
 import type { UpgradeLevel } from "./upgrade-event";

@@ -43,10 +43,10 @@ const linkClass =
 const authorLinkClass =
   "inline-flex min-h-11 items-center rounded-md underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8";
 
-/** `narrow` matches the max-w-3xl column of legal and error pages. */
+/** `narrow` matches the max-w-3xl column of legal and error pages. Hidden in the installed app. */
 export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
   return (
-    <footer className="border-t border-border px-5 pb-10 pt-14">
+    <footer className="border-t border-border px-5 pb-10 pt-14 standalone:hidden">
       <div className={cn("mx-auto", narrow ? "max-w-3xl" : "max-w-6xl")}>
         <div
           className={cn(

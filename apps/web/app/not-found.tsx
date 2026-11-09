@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default function NotFound() {
   return (
     <>
-      <SlimHeader />
+      <SlimHeader backFallback="/app" />
       <main className="relative grid min-h-[calc(100vh-12rem)] place-items-center overflow-hidden bg-background px-5 py-20">
         <div aria-hidden className="grid-mask pointer-events-none absolute inset-0 opacity-40">
           <div className="receipt-grid absolute -inset-1" />

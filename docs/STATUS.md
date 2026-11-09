@@ -160,8 +160,9 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
   4. In each Paddle account, set the **default payment link** (Checkout → Checkout settings; without it every checkout
      fails with `transaction_default_checkout_url_not_set`), the sales tax mode (exclusive), the API key's permissions
      and expiry, and the rest of [account settings](production-environment.md#paddle-account-settings). Before live:
-     the public `_ptxn` payment page and the other follow-ups in the
-     [Paddle docs review](reviews/2026-11-09-paddle-docs-review.md).
+     point the default payment link at `/pay` in both accounts once it is deployed (F1 in the
+     [Paddle docs review](reviews/2026-11-09-paddle-docs-review.md), built with F2 and F3). Its other follow-ups (F4 to
+     F7) don't block live. The owner accepted all the review's decisions on 2026-11-09.
   5. Test a sandbox checkout, then submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
      account verification, and switch to live values ([10c](production-environment.md#10c-switch-from-sandbox-to-live)).
   6. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).
@@ -309,8 +310,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - **App-like mobile screens (owner, 2026-11-09).** A design and layout review of the phone versions of the landing
   page, sign-in and sign-up, so the installed app feels native there too (full-height layouts, thumb-reach actions,
   no website chrome once installed), then fixes in small PRs. Do it after the first friends' test round, using their
-  feedback. Review done 2026-11-09 ([review](reviews/2026-11-09-mobile-pwa-review.md)): 15 findings in five PRs
-  and nine owner decisions.
+  feedback. Review done 2026-11-09 ([review](reviews/2026-11-09-mobile-pwa-review.md)): 15 findings in five PRs;
+  the owner accepted all nine recommended decisions on 2026-11-09. PR 1 (the installed app never shows the website)
+  is in review.
 - **Long receipts in parts (parked 2026-11-09).** Decided 2026-11-07: split, don't stitch; multi-part receipts
   ("Add part") and automatic splitting of very tall photos, sent as several images in one request
   ([plan](plans/2026-11-07-long-receipt-capture.md)). Not built. Until then a very long receipt uploads at the largest

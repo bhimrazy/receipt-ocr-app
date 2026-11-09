@@ -201,6 +201,15 @@ export const storageEntries: StorageEntry[] = [
     duration: "Until you close the tab",
   },
   {
+    name: "receiptocr.navigated",
+    kind: "sessionStorage",
+    setBy: "ReceiptOCR",
+    category: "necessary",
+    purpose:
+      "Notes that you moved between pages in this tab, so Back in the installed app returns to the previous page instead of Settings.",
+    duration: "Until you close the tab",
+  },
+  {
     name: "receiptocr-static-v*",
     kind: "cache",
     setBy: "ReceiptOCR",

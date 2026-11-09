@@ -57,6 +57,7 @@ export const PRODUCTION_DISALLOW = [
   "/reset-password",
   "/accept-invitation",
   "/account-deleted",
+  "/pay",
   "/share-target",
   "/offline.html",
   "/offline.js",

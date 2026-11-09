@@ -310,6 +310,13 @@ before they install.
 
 ## Owner decisions
 
+**Decided 2026-11-09: the owner accepted every recommendation below.** Decisions 8 and 9 are tasks: the iPhone OAuth
+test comes before PR 3, and the screenshots come with PR 5.
+
+PR 1 detects the installed app per window (`display-mode: standalone`, or `navigator.standalone` on older iOS) in a
+blocking `<head>` script, not by the `display_mode` cookie that finding 1 suggests. Android and desktop Chrome share
+cookies between the installed app and browser tabs, so a cookie would also redirect the website for 30 minutes.
+
 1. **Send the installed app from `/` to `/app`.** Recommended: yes, both server-side (by the cookie) and client-side.
    Without it, the installed app can still reach the marketing page.
 2. **Pull-to-refresh.** Recommended: refresh when the app returns to the foreground (finding 7) and no custom gesture

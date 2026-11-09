@@ -1,8 +1,9 @@
 "use server";
 
-import { Billing, hitRateLimit } from "@receipt-ocr/core";
+import { Billing, hitRateLimit, providerErrorCode } from "@receipt-ocr/core";
 import { Cause, Effect, Exit, Option } from "effect";
 import { canManageBilling, getCheckoutFor } from "@/lib/billing";
+import { billingSetupHint } from "@/lib/billing-setup-hint";
 import { errorFields, logger } from "@/lib/log";
 import { getUsageSummary } from "@/lib/receipts";
 import { runtime } from "@/lib/runtime";
@@ -80,6 +81,7 @@ export async function openBillingPortalAction(
       unit: "log",
       organization_id: scope.organizationId,
       user_id: session.user.id,
+      billing: { provider_error_code: providerErrorCode(failure.error) },
       error: errorFields(failure.error),
     });
     return { ok: false, error: "Paddle didn't answer. Try again in a minute." };
@@ -139,14 +141,17 @@ export async function startCheckoutAction(
     if (failure.tag === "Forbidden") {
       return { ok: false, error: "Only the workspace owner can upgrade it." };
     }
+    const code = providerErrorCode(failure.error);
     logger.error({
       event: "billing.checkout_failed",
       unit: "log",
       organization_id: scope.organizationId,
       user_id: session.user.id,
+      billing: { provider_error_code: code },
       error: errorFields(failure.error),
     });
-    return { ok: false, error: "The checkout couldn't start. Try again in a minute." };
+    const hint = isAdmin(session) ? billingSetupHint(code) : null;
+    return { ok: false, error: hint ?? "The checkout couldn't start. Try again in a minute." };
   }
   // Read on the server, not sent by the browser. Billing's own button has no level.
   const usage = via === "billing" ? null : await getUsageSummary().catch(() => null);

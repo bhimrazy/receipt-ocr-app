@@ -43,7 +43,10 @@ function subscriptionNote(subscription: WorkspaceBilling): string | null {
       return `Pro stays on until ${until}, then this workspace moves to Free. Nothing more is charged.`;
     }
     if (subscription.status === "past_due") {
-      return `The last payment didn't go through. Paddle will try again; update the payment method to keep Pro after ${formatDate(subscription.graceEndsAt) ?? "the grace period"}.`;
+      const graceEnds = formatDate(subscription.graceEndsAt);
+      return graceEnds
+        ? `The last payment didn't go through. Paddle will keep trying the card until ${graceEnds}, and Pro stays on until then. Update the payment method so it doesn't end.`
+        : "The last payment didn't go through. Paddle will keep trying the card, and Pro stays on for now. Update the payment method so it doesn't end.";
     }
     return until ? `Renews on ${until}.` : null;
   }

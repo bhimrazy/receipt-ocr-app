@@ -7,7 +7,8 @@ import Script from "next/script";
 import { useState } from "react";
 import { PRO_PRICE } from "@/lib/pricing";
 import { IntervalToggle, type BillingInterval } from "./interval-toggle";
-import { useProCheckout, type CheckoutSettings } from "./use-pro-checkout";
+import { CHECKOUT_BLOCKED, type CheckoutSettings } from "./paddle-js";
+import { useProCheckout } from "./use-pro-checkout";
 
 /**
  * Upgrade to Pro on the billing page: a monthly/yearly switch and Paddle's overlay checkout.
@@ -90,7 +91,3 @@ export function CheckoutButton({
 /** After payment, when Pro still isn't on once the refresh loop has run out. */
 export const SLOW_WEBHOOK =
   "Payment received, but Pro hasn't switched on yet. It usually takes under a minute. Reload in a few minutes; if it's still Free, use the support button and we'll fix it. You won't be charged twice.";
-
-/** Paddle.js didn't load. */
-export const CHECKOUT_BLOCKED =
-  "Checkout couldn't load. Turn off content blockers for this page or try another browser.";
