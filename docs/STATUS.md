@@ -243,9 +243,12 @@ longer-term roadmap.
 opening an in-app upgrade modal with Paddle's overlay checkout):
 [plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), with owner decisions to make.
 
-**Planned:** edge handles in the crop editor (drag the middle of a side to move it) and a layout-stability pass over the
-capture review sheet: [plans/2026-11-09-crop-edge-handles.md](plans/2026-11-09-crop-edge-handles.md), with owner
-decisions to make.
+**In review:** the photo-flow rework, owner decisions recorded 2026-11-09 (all recommended, plus a file-size rule).
+Sizing and preview ([sizing review](reviews/2026-11-09-upload-sizing.md),
+[compression research](reviews/2026-11-09-image-compression.md)): Faster upload / Standard / Sharpest by shape, a
+JPEG quality ladder to land normal photos at 700 KB or less (1.5 MB hard cap), the real encoded file in the preview
+with "Actual pixels", and bytes per pixel in telemetry. Then edge handles in the crop editor and the rest of the
+layout-stability pass ([plan](plans/2026-11-09-crop-edge-handles.md)).
 
 From the [combined plan](plans/2026-11-06-combined-plan.md):
 
@@ -373,6 +376,16 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   cost guard, not a security boundary: uploads are size-capped, the daily quota bounds total cost and the ledger
   records real tokens per call, so an outlier is visible. If abuse shows up, count with a real reader (pdf.js in a
   worker with a timeout) rather than parsing further by hand.
+- Upload encoding numbers (`ENCODING` in `apps/web/lib/upload-encoding.ts`) are from `sharp`, not Safari. Read real
+  iPhone bytes per pixel from `receipt.upload` (`file.bytes_per_pixel`, `encode.quality`) and retune; then run the
+  quality sweep (q85 / 80 / 72 / 65) on the bench set to confirm the 0.65 floor costs no accuracy. A `budget:<MP>/<floor>`
+  prep in `packages/bench/prep.ts` and real long-receipt crops would let the bench measure the size options too.
+- B&W uploads are JPEG. A palette PNG would be smaller where the filter output is pure black and white, but canvas
+  `toBlob` writes only 32-bit PNG; it needs a small PNG writer. Not done.
+- Crop detection, known limits (fixtures in `detect-quad.test.ts`): on a crumpled receipt the sides bow inward and the
+  straight quad takes in a strip of table along them; a lighter band of table beside the paper (bounce light) joins
+  the paper above the threshold and widens the quad. Both need edge-based line fitting rather than a thresholded
+  mask; a mask opening was tried and does not help.
 - Image shrinking (browser, `apps/web/lib/upload-prep.ts`): decode large photos at reduced size
   (`createImageBitmap` `resizeWidth`/`resizeHeight`, after reading the dimensions from the header) to cut peak memory
   on phones; and strip metadata on the server for files the browser couldn't decode or encode (for example HEIC

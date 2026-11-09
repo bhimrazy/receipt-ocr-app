@@ -1,6 +1,6 @@
 # Crop editor edge handles, and a steady review sheet (2026-11-09)
 
-Status: proposed, spec only. Owner decisions are at the end, each with the recommended default first.
+Status: approved 2026-11-09. The owner took the recommended default (a) in all 17 decisions; see the end.
 
 ## Goal
 
@@ -337,3 +337,19 @@ Recommended default first in each.
 16. **Stage height on phones.** (a) `40svh`; (b) keep `40dvh`.
 17. **Canvas draw before paint on Rotate.** (a) Yes, `useLayoutEffect`; (b) keep `useEffect` and accept one stretched
     frame.
+
+### Decided, 2026-11-09
+
+The owner took option (a) in all 17 decisions above. Two notes from the same day apply to Part 2:
+
+- The size options are now Faster upload, Standard and Sharpest ([sizing review](../reviews/2026-11-09-upload-sizing.md)),
+  and the size line shows the real encoded file's bytes, not an estimate. So "while the size estimate recomputes"
+  (decision 13) means while the real encode runs: the last values stay on screen, dimmed, and the picker stays open
+  with its options (their pixel sizes are known at once from the crop's shape).
+- File size: normal photos at about 500–700 KB or less, 1.5 MB only in exceptional cases (decision 3 of the sizing
+  review, as changed by the owner).
+
+Part 2's review-sheet items (fixed number slots, the dimmed recompute, equal picker segments, scrolling the picker
+into view, one loading line, keeping the filter strip for the same photo, the same panel blocks in both steps, `40svh`,
+and the frame-by-frame e2e watcher) ship with the sizing change. Part 1 and the crop-stage items of Part 2 (first
+measurement, drawing before paint on Rotate, the loupe's placement) ship with the edge handles.

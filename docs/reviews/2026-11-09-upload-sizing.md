@@ -200,3 +200,31 @@ Add:
    (recommended), vs. keeping today's CSS-pixel full-size view with the estimate label.
 6. **Gemini `media_resolution`**: **leave the default** (1,120 tokens); revisit only if the benchmark shows Flash-Lite
    losing small print.
+
+## Owner decisions, 2026-11-09
+
+The owner took every recommended default above, with one change to decision 3 and one correction to decision 4.
+
+1. Sizing rule: pixel budget with a width floor and Claude's native limits (2,576 px long edge, 4,784 patches), set by
+   shape alone. **Decided.**
+2. Options: Faster upload 1 MP / 800 px, **Standard** 2 MP / 1,000 px (default), Sharpest at the model's maximum. The
+   `size_choice` ids stay `smaller` / `recommended` / `larger`. **Decided.**
+3. **Changed: file size.** Normal photos should land at about 500–700 KB or less, and 1.5 MB is only for exceptional
+   cases (for example Sharpest on a dense receipt), so there is no fixed 0.85 with a 1.5 MB retry. Tuned with the
+   [compression research](2026-11-09-image-compression.md), the encoder follows one config (`ENCODING` in
+   `apps/web/lib/upload-encoding.ts`): JPEG from the canvas with `blob.type` checked; quality 0.80, then 0.72, then 0.65
+   (the floor); the first result under the option's target is kept (500 KB Faster upload, 700 KB Standard, 1 MB
+   Sharpest); anything up to the 1.5 MB hard cap is sent; over it, one more encode at Faster upload's size at 0.72,
+   and the photo is refused with a clear message if that is still over. The size shown is always the real encoded
+   file's. Revisit the numbers once production bytes per pixel from iPhones are in telemetry.
+4. Long receipts above about 1:2.6: hide the picker. **Corrected:** multi-part capture is not built yet, so nothing
+   links to or promises "add a part". The receipt goes at Sharpest (capped at 2,576 px on the long edge, within the
+   byte ladder) with the note "Long receipt: sent at the highest size the model reads." The threshold is one constant,
+   `LONG_RECEIPT_RATIO` in `upload-prep.ts`, where multi-part capture will hook in.
+5. Preview: the encoded file, whole or at "Actual pixels" (device-pixel scale), with a caption read from the file.
+   **Decided.**
+6. Gemini `media_resolution`: left at the default. **Decided.**
+
+Telemetry added as section 4 asked, plus the compression review's fields: `file.width`, `file.height` and
+`file.bytes_per_pixel` (read on the server from the uploaded bytes' header) and `encode.quality`, `encode.attempts`,
+`encode.filter`, `encode.rescued` (sent by the browser, checked against our own values). None can carry PII.
