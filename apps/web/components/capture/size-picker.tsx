@@ -11,20 +11,27 @@ export const SIZE_LABELS: Record<SizeId, string> = {
 /** An option with the bytes of its real encode, once that is done. */
 export type SizedOption = SizeOption & { bytes?: number };
 
-/** Number and unit apart, so only the number is set in the mono face (its wide space gaps "500 KB"). */
+/**
+ * Number and unit apart, so only the number is set in the mono face (its wide space gaps "500 KB").
+ * MB from 1,000 KB, so the number is never more than three characters ("999", "1.0").
+ */
 export function formatSize(bytes: number) {
-  return bytes < 1024 * 1024
+  return bytes < 999.5 * 1024
     ? { value: `${Math.max(1, Math.round(bytes / 1024))}`, unit: "KB" }
     : { value: (bytes / (1024 * 1024)).toFixed(1), unit: "MB" };
 }
 
 /**
- * A number in a fixed four-character mono slot, right-aligned, so a value changing from "800" to
- * "1200", or "…" to "471", never moves what follows it. Sizes stay under 2,576 px and 9.9 MB.
+ * A number in a fixed-width mono slot, right-aligned, so a value changing from "800" to "1200",
+ * or "…" to "471", never moves what follows it. Pixel sizes stay under 2,576, so four characters.
  */
-export function Slot({ children }: { children: React.ReactNode }) {
+export function Slot({ children, chars = 4 }: { children: React.ReactNode; chars?: 3 | 4 }) {
   return (
-    <span className="inline-block min-w-[4ch] text-right font-mono tabular-nums">{children}</span>
+    <span
+      className={`inline-block text-right font-mono tabular-nums ${chars === 3 ? "min-w-[3ch]" : "min-w-[4ch]"}`}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -36,7 +43,8 @@ export function Bytes({ bytes }: { bytes: number | null | undefined }) {
   const size = typeof bytes === "number" ? formatSize(bytes) : null;
   return (
     <>
-      <Slot>{size ? size.value : bytes === null ? "–" : "…"}</Slot> {size ? size.unit : "KB"}
+      <Slot chars={3}>{size ? size.value : bytes === null ? "–" : "…"}</Slot>{" "}
+      {size ? size.unit : "KB"}
     </>
   );
 }

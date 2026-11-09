@@ -221,9 +221,10 @@ export default function ReviewSheet({
 
   // Encodes the real uploads for this edit (preview step only): the chosen size first, then the
   // other options from the same render, so the picker shows real bytes. A new edit, photo or
-  // choice cancels the run and starts one for what is missing.
+  // choice cancels the run and starts one for what is missing. Upload encodes what it needs
+  // itself, so no run competes with it for the main thread.
   useEffect(() => {
-    if (step !== "preview" || !bitmap || !edit || !current || !chosen) {
+    if (step !== "preview" || !bitmap || !edit || !current || !chosen || working !== null) {
       job.current?.cancel();
       job.current = null;
       return;
@@ -281,7 +282,7 @@ export default function ReviewSheet({
         window.clearTimeout(timer);
       },
     };
-  }, [step, bitmap, edit, current, chosen, plan, encodes]);
+  }, [step, bitmap, edit, current, chosen, plan, encodes, working]);
 
   // Stops a run when the sheet closes.
   useEffect(() => () => job.current?.cancel(), []);
@@ -365,6 +366,8 @@ export default function ReviewSheet({
   async function upload() {
     const files: File[] = [];
     const held: Record<string, HeldBack> = {};
+    job.current?.cancel();
+    job.current = null;
     setUploadError(null);
     try {
       for (const [i, image] of images.entries()) {

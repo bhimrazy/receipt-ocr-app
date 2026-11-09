@@ -170,7 +170,7 @@ async function recordSizes(page: Page) {
 
 /** "241 KB" as the app writes it. */
 const kb = (bytes: number) =>
-  bytes < 1024 * 1024
+  bytes < 999.5 * 1024
     ? `${Math.max(1, Math.round(bytes / 1024))} KB`
     : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
