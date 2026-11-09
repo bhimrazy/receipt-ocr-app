@@ -94,6 +94,19 @@ test("in test mode a visitor who isn't an admin gets no checkout, Paddle.js or t
   expect(paddle.requested()).toBe(0);
 });
 
+test("in test mode a signed-in user who isn't an admin gets no checkout, Paddle.js or token", async ({
+  page,
+}) => {
+  await signUp(page, uniqueEmail("pay-user"));
+  const paddle = await stubPaddle(page);
+  const response = await page.goto(`/pay?_ptxn=${TXN}`);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Payments aren't open yet");
+  // The server's HTML (RSC payload included) and the live DOM.
+  expect(await response?.text()).not.toContain(TOKEN);
+  expect(await page.content()).not.toContain(TOKEN);
+  expect(paddle.requested()).toBe(0);
+});
+
 test("a payment link opens Paddle's overlay for its transaction, and handles close and success", async ({
   page,
 }) => {
