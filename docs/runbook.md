@@ -95,10 +95,17 @@ Symptoms: `/api/health/ready` returns `"database":"down"`, pages fail, `DbError`
 
 1. Open the Supabase project. A Free project is paused after a week without activity: restore it from the
    dashboard. Check <https://status.supabase.com>.
-2. Check the pooler: too many connections shows up as connection errors. The app opens at most 5 per instance
+2. Check the pooler: too many connections shows up as connection errors. The app opens at most 10 per instance
    (`DATABASE_POOL_MAX`).
-3. If the password was changed, update `DATABASE_URL` in Vercel and redeploy.
-4. If data is damaged, restore from backup (see [Rollback](#rollback)).
+
+### Sections stuck or "couldn't load" cards on Home
+
+Symptoms: a Home section shows "… couldn't load" with Try again, or `/admin` shows its error page; `db.query_timeout`
+events in the logs. Each event names the table and operation (`db.table`, `db.operation`), whether the query never got
+a connection (`db.phase = queue`: the instance is overloaded) or never got a reply (`query`: a stuck connection, the
+pool was replaced), and the instance's `in_flight` and `queued` counts. One `query` event is a blip; a stream of them
+means the pooler or database is unhealthy (check Supabase's Postgres and pooler logs for the same minute). See the
+[2026-11-09 incident](reviews/2026-11-09-home-stuck-incident.md). 3. If the password was changed, update `DATABASE_URL` in Vercel and redeploy. 4. If data is damaged, restore from backup (see [Rollback](#rollback)).
 
 ### Storage down
 
