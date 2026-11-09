@@ -114,15 +114,18 @@ export async function AuthLayout({
         {/* Top-anchored, not centred: a centred card moves up by half of whatever it grows by (an
             error, a challenge). The offset puts the sign-in card near the middle and leaves room
             for an error before the page scrolls; phones add the logo above it. */}
-        <main className="relative z-10 flex flex-1 flex-col items-center px-4 pb-4 pt-[max(1rem,calc(50dvh-24rem))] sm:px-5 lg:pt-[max(1rem,calc(50dvh-21rem))]">
+        <main className="relative z-10 flex flex-1 flex-col items-center pb-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1rem+env(safe-area-inset-top),calc(50dvh-24rem))] sm:px-5 lg:pt-[max(1rem,calc(50dvh-21rem))]">
           <div className="flex w-full max-w-md flex-col items-center">
             <HomeLogo className="mb-6 lg:hidden" />
             {children}
           </div>
         </main>
         <footer className="relative z-10 flex flex-wrap items-center justify-center gap-x-6 px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-          <nav aria-label="Legal" className="flex gap-6 text-sm text-muted-foreground">
-            <Link className={cn(footerLink, "standalone:hidden")} href="/">
+          <nav
+            aria-label="Legal"
+            className="flex gap-6 text-sm text-muted-foreground standalone:hidden"
+          >
+            <Link className={footerLink} href="/">
               Home
             </Link>
             <Link className={footerLink} href="/privacy">
@@ -135,7 +138,21 @@ export async function AuthLayout({
               className={cn(footerLink, "h-auto px-0 font-normal hover:bg-transparent")}
             />
           </nav>
-          <ThemeToggle />
+          <ThemeToggle className="standalone:hidden" />
+          {/* The installed app is not the website: no Home, and the theme and cookie choices are
+              in Settings after sign-in. */}
+          <nav
+            aria-label="Legal"
+            className="hidden items-center gap-1 text-xs text-muted-foreground standalone:flex"
+          >
+            <Link className={cn(footerLink, "px-2")} href="/privacy">
+              Privacy
+            </Link>
+            <span aria-hidden>·</span>
+            <Link className={cn(footerLink, "px-2")} href="/terms">
+              Terms
+            </Link>
+          </nav>
         </footer>
       </div>
     </div>
