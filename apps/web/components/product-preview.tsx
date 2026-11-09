@@ -58,7 +58,6 @@ function Totals({ className }: { className?: string }) {
   );
 }
 
-/** The receipt result screen on a phone, cut off below the totals. */
 function PhonePreview() {
   return (
     <div className="sm:hidden" data-preview="phone">
@@ -101,7 +100,6 @@ function PhonePreview() {
 function DesktopPreview() {
   return (
     <div className="card-sheen relative hidden overflow-hidden rounded-2xl border border-hairline bg-card/70 shadow-2xl shadow-black/50 light:shadow-float backdrop-blur-xl sm:block">
-      {/* Window chrome, with the page's title rather than a made-up address. */}
       <div className="flex items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">
         <span className="size-2.5 rounded-full bg-destructive/70" />
         <span className="size-2.5 rounded-full bg-warning/70" />
