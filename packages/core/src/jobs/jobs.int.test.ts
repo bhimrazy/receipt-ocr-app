@@ -55,6 +55,8 @@ type Step = "ok" | { kind: OcrFailureKind; retryAfterMs?: number };
 /** What each successive model call does; past the end, it succeeds. */
 let script: Step[] = [];
 let calls = 0;
+/** When each model call began, on the runner's clock: inside the attempt, so a slow write-up after it can't shift it. */
+let callTimes: number[] = [];
 const MODEL = "google:gemini-3.8-flash" as const;
 const ZERO = {
   inputTokens: 0,
@@ -73,6 +75,7 @@ const ScriptedOcr = Layer.succeed(Ocr, {
         options?.cooling ?? new Map(),
         Date.now(),
       );
+      callTimes.push(Date.now());
       const step = script[calls++] ?? "ok";
       if (step === "ok") {
         return {
@@ -272,6 +275,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
   afterEach(async () => {
     script = [];
     calls = 0;
+    callTimes = [];
     await db((d) => d.delete(jobControls).where(sql`${jobControls.scope} not like 'tick:%'`));
     await setLastTick(0);
   });
@@ -575,8 +579,6 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     );
     script = [{ kind: "provider-error" }, { kind: "timeout" }];
     const { receipt, jobId } = await upload(c);
-    // When each run started and when the queue said it may run next, from the runner's records.
-    const timing: { started: number; runAt?: number }[] = [];
     const stats = await run(
       tick({
         worker: `${tag}-w`,
@@ -584,7 +586,6 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
         budgetMs: 20_000,
         stopClaimingBeforeMs: 2_000,
         ids: [jobId],
-        onRun: (r) => void timing.push({ started: Date.now() - r.ms, runAt: r.runAt?.getTime() }),
       }),
     );
 
@@ -593,17 +594,15 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       [2, "retry", "timeout"],
       [3, "succeeded", undefined],
     ]);
-    // Each retry was scheduled at least half of 100 ms, then of 200 ms, after its attempt
-    // started, and the next attempt didn't start before then. Measured from starts and the
-    // scheduled time, not from when each run was recorded, which a slow runner delays.
-    // The queue schedules on the database clock and this measures on the runner's, so allow
-    // a few ms of drift between them.
+    // Each retry waited out its backoff: at least half of 100 ms, then of 200 ms, between
+    // model calls. A call happens before its attempt's result is written, and the next attempt
+    // can only be claimed once that write's time plus the backoff has passed, so the gap is at
+    // least the backoff however slow the runner is. The queue schedules on the database clock
+    // and this measures on the runner's, so allow a few ms of drift between them.
     const drift = 10;
-    const [first, second, third] = timing;
-    expect(first!.runAt! - first!.started).toBeGreaterThanOrEqual(50 - drift);
-    expect(second!.runAt! - second!.started).toBeGreaterThanOrEqual(100 - drift);
-    expect(second!.started).toBeGreaterThanOrEqual(first!.runAt! - drift);
-    expect(third!.started).toBeGreaterThanOrEqual(second!.runAt! - drift);
+    expect(callTimes).toHaveLength(3);
+    expect(callTimes[1]! - callTimes[0]!).toBeGreaterThanOrEqual(50 - drift);
+    expect(callTimes[2]! - callTimes[1]!).toBeGreaterThanOrEqual(100 - drift);
     expect((await receiptOf(receipt.id, c))?.status).toBe("completed");
     expect(await callsOf(receipt.id)).toEqual([
       { round: 1, jobAttempt: 1, status: "provider-error" },

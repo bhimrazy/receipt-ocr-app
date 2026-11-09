@@ -53,7 +53,7 @@ import { CropEditor } from "./crop-editor";
 import { FullScreen } from "./full-screen";
 import { FullSizeView, type FullSizeMode } from "./full-size-view";
 import { ResultPreview } from "./result-preview";
-import { Bytes, formatSize, SizePicker, Slot } from "./size-picker";
+import { Bytes, formatSize, SIZE_LABELS, SizePicker, Slot } from "./size-picker";
 
 type Step = "adjust" | "preview";
 
@@ -688,8 +688,8 @@ export default function ReviewSheet({
                       ? "One pixel of the upload per screen pixel. Drag to look around."
                       : "The whole upload, as it will be sent. Actual pixels shows the detail."}
                   {edit?.filter === "bw"
-                    ? chosen?.id === "smaller"
-                      ? " At Compact, B&W can lose light print."
+                    ? chosen?.id === "compact" || chosen?.id === "smaller"
+                      ? ` At ${SIZE_LABELS[chosen.id]}, B&W can lose light print.`
                       : " B&W suits faded receipts but can lose light print."
                     : null}
                 </p>

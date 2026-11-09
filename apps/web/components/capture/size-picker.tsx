@@ -1,9 +1,11 @@
 "use client";
 
+import { cn } from "@receipt-ocr/ui/lib/utils";
 import type { SizeId, SizeOption } from "@/lib/upload-prep";
 
 export const SIZE_LABELS: Record<SizeId, string> = {
-  smaller: "Compact",
+  compact: "Compact",
+  smaller: "Small",
   recommended: "Standard",
   larger: "Sharpest",
 };
@@ -51,7 +53,9 @@ export function Bytes({ bytes }: { bytes: number | null | undefined }) {
 
 /**
  * The upload size choice: a native radio group, so arrow keys and screen readers work as usual.
- * Equal segments on a phone (the numbers wrap under the label), a list in the desktop side panel.
+ * On a phone, up to three options sit in one row of equal segments (numbers under the label) and
+ * four in a 2 x 2 grid (numbers on one line); from `sm` they share one row, and the desktop side
+ * panel lists them.
  */
 export function SizePicker({
   id,
@@ -67,13 +71,19 @@ export function SizePicker({
   /** Photos in the batch; the choice applies to all of them. */
   photos: number;
 }) {
+  const grid = options.length > 3;
   return (
     <div className="flex flex-col gap-2" id={id}>
-      <fieldset className="flex gap-1 rounded-lg border border-border bg-card p-1 md:flex-col">
+      <fieldset
+        className={cn(
+          "grid gap-1 rounded-lg border border-border bg-card p-1 md:flex md:flex-col",
+          grid ? "grid-cols-2 sm:grid-cols-4" : "auto-cols-fr grid-flow-col",
+        )}
+      >
         <legend className="sr-only">Upload size</legend>
         {options.map((option) => (
           <label
-            className="relative flex min-h-11 min-w-0 flex-1 basis-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-xs text-muted-foreground transition-colors has-checked:bg-primary/10 has-checked:text-foreground has-focus-visible:ring-2 has-focus-visible:ring-ring md:flex-row md:justify-start md:gap-2 md:px-2 md:py-0"
+            className="relative flex min-h-11 min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-xs text-muted-foreground transition-colors has-checked:bg-primary/10 has-checked:text-foreground has-focus-visible:ring-2 has-focus-visible:ring-ring md:flex-row md:justify-start md:gap-2 md:px-2 md:py-0"
             key={option.id}
           >
             <input
@@ -90,13 +100,20 @@ export function SizePicker({
             />
             {/* The spaces between flex items don't render; they keep the radio's name readable. */}
             <span className="font-medium whitespace-nowrap">{SIZE_LABELS[option.id]}</span>{" "}
-            <span className="flex flex-col items-center whitespace-nowrap md:ml-auto md:flex-row md:gap-1">
+            <span
+              className={cn(
+                "flex items-center whitespace-nowrap md:ml-auto md:flex-row md:gap-1",
+                grid ? "flex-row gap-1 sm:flex-col sm:gap-0" : "flex-col",
+              )}
+            >
               <span>
-                <span className="font-mono tabular-nums">{option.width}</span> ×{" "}
-                <span className="font-mono tabular-nums">{option.height}</span>
+                <Slot>{option.width}</Slot> × <Slot>{option.height}</Slot>
               </span>{" "}
               <span>
-                <span aria-hidden="true" className="hidden md:inline">
+                <span
+                  aria-hidden="true"
+                  className={cn("md:inline", grid ? "inline sm:hidden" : "hidden")}
+                >
                   ·{" "}
                 </span>
                 <Bytes bytes={option.bytes} />
