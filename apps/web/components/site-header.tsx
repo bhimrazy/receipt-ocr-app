@@ -15,9 +15,9 @@ const defaultLinks: NavLink[] = [
 export function SiteHeader({ links = defaultLinks }: { links?: NavLink[] }) {
   return (
     <SiteHeaderBar
-      ghostClass={cn(buttonVariants({ variant: "ghost" }), "hidden h-11 sm:inline-flex lg:h-10")}
+      ghostClass={cn(buttonVariants({ variant: "ghost" }), "h-11 px-2.5 sm:px-4 lg:h-10")}
       links={links}
-      primaryClass={cn(buttonVariants(), "h-11 lg:h-10")}
+      primaryClass={cn(buttonVariants(), "h-11 px-3.5 sm:px-4 lg:h-10")}
     />
   );
 }

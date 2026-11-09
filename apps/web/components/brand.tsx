@@ -34,14 +34,20 @@ export function BrandMark({ small = false, className }: { small?: boolean; class
   );
 }
 
-export function Brand({ compact = false }: { compact?: boolean }) {
+export function Brand({
+  compact = false,
+  wordmarkClassName,
+}: {
+  compact?: boolean;
+  wordmarkClassName?: string;
+}) {
   return (
     <div className="flex items-center gap-2.5">
       <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_0_24px_color-mix(in_oklab,var(--primary)_30%,transparent)]">
         <BrandMark small className="size-[22px]" />
       </div>
       {!compact && (
-        <span className="font-mono text-sm font-semibold tracking-tight">
+        <span className={cn("font-mono text-sm font-semibold tracking-tight", wordmarkClassName)}>
           Receipt<span className="text-primary">OCR</span>
         </span>
       )}

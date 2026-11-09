@@ -15,6 +15,36 @@ test("the landing header offers the app to signed-in visitors and sign-in to oth
   await expect(header(page).getByRole("link", { name: /Open the app/ })).toBeVisible();
 });
 
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("the header shows Sign in and Start free without opening the menu", async ({ page }) => {
+    await page.goto("/");
+    const signIn = header(page).getByRole("link", { name: "Sign in", exact: true });
+    await expect(signIn).toBeVisible();
+    await expect(header(page).getByRole("link", { name: "Start free" })).toBeVisible();
+    await expect(header(page).getByRole("link", { name: "Get started free" })).toHaveCount(0);
+    expect((await signIn.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    // The header is fixed, so an overflow wouldn't scroll the page: check the last control instead.
+    const bar = (await header(page).locator("> div").boundingBox())!;
+    const menu = (await page.getByRole("button", { name: "Open menu" }).boundingBox())!;
+    expect(menu.x + menu.width).toBeLessThanOrEqual(bar.x + bar.width);
+
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await expect(page.locator("#site-menu").getByRole("link", { name: "Sign in" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Close menu" }).click();
+
+    await signIn.click();
+    await expect(page).toHaveURL(/\/sign-in/);
+  });
+
+  test("the product preview is a phone screen with no web address", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByText("Whole Foods Market").first()).toBeVisible();
+    await expect(page.getByText(/receiptocr\.app|\.com\//)).toHaveCount(0);
+  });
+});
+
 test("a stale hint without a session lands on sign-in and is cleared", async ({
   context,
   page,
