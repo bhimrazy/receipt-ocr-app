@@ -64,20 +64,60 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   CI's integration job runs on both majors and the e2e jobs on 17, so a migration or query that only works on one
   major fails the PR. Supabase reported `show server_version` = 17.11 on both projects (2026-11-08). CI pins
   `postgres:17.10-alpine`; bump 17.10 to 17.11 after 2026-11-13, when it clears the 7-day cooldown.
-- **One pool per connection string per process.** `createDb` caches the client. Better Auth, the admin pages and the
-  Effect runtime all share it; a pool per caller would exhaust the Supabase pooler. The pool size is
-  `DATABASE_POOL_MAX` (default 10). Each connection is one Supavisor client (200 on Nano/Micro) sharing the pooler's
-  15 backends, so instances × 10 must stay under 200.
-- **No pipelining, and every query has a deadline** ([`src/pool.ts`](../../packages/db/src/pool.ts)). postgres.js
-  pipelines a query onto a busy connection when none is free; through Supavisor's transaction mode the pipelined
-  query's reply can be lost when the query ahead of it ends its transaction, and its promise never settles (the
-  2026-11-09 Home incident, [review](../reviews/2026-11-09-home-stuck-incident.md)). A gate keeps in-flight queries
-  and transactions at the pool size; queries inside a transaction skip it (they run on the transaction's connection).
-  A query unanswered after `DATABASE_QUERY_TIMEOUT_MS` (default 15 s), or a wait that long for the gate, fails with
-  `QueryTimeoutError` and logs `db.query_timeout`; an unanswered query also replaces the pool, since postgres.js can't
-  drop the one stuck connection.
-- **`prepare: false`.** Supabase's transaction pooler (port 6543) doesn't support prepared statements, so the app
-  connects through it with them off. Migrations need DDL and use the session pooler (port 5432) through `DIRECT_URL`.
+- **Driver: node-postgres (`pg`) with `drizzle-orm/node-postgres`.** The same code runs against direct Postgres
+  (Docker, RDS), PgBouncer, Supabase's Supavisor and Neon's pooler. pg-pool checks out one connection per query and
+  never pipelines onto a busy one, which is what a transaction-mode pooler needs (postgres.js did pipeline, which
+  caused the [2026-11-09 Home incident](../reviews/2026-11-09-home-stuck-incident.md)). Drizzle sends unnamed
+  statements, so no prepared-statement setting is needed for poolers. Nothing in the app is provider-specific;
+  migrations need DDL and use a session connection through `DIRECT_URL`.
+- **One pool per connection string per process.** `createDb` caches it on `globalThis` (Next can load the module more
+  than once). Better Auth, the admin pages and the Effect runtime share it. `DATABASE_POOL_MAX` (default 10). Behind a
+  pooler each connection is one of its clients: Supavisor on Nano/Micro allows 200, so instances × 10 must stay under 200. Direct Postgres counts them against `max_connections` instead.
+- **Timeouts are pg's own, set in `createPool`.**
+  - `query_timeout` (`DATABASE_QUERY_TIMEOUT_MS`, 15 s): the client stops waiting for a reply. This catches what the
+    server can't, a dead socket or a lost reply. The query rejects with `Query read timeout`, logged as
+    `error.code = query_timeout`. A valid statement slower than this (a lock wait) fails too, and a timed-out write may
+    still have committed.
+  - `connectionTimeoutMillis` (10 s): bounds connecting and the wait for a free client (`connect_timeout`).
+  - `idleTimeoutMillis` (20 s), `keepAlive`, `allowExitOnIdle`.
+  - A timed-out client is never reused. `pool.query` releases it with the error, so the pool drops it. drizzle's
+    `transaction()` releases without the error, so `TimeoutClosingClient` closes a client whose query timed out.
+    Otherwise it could go back to the pool with its statement, and maybe its transaction, still open.
+  - `pool.on("error")` keeps an idle client that dies (a database restart, a socket lost while a serverless instance
+    was suspended) from crashing the process; core logs it as `db.pool_error`.
+- **Server-side timeouts are role settings, not client options** (applied on staging and production 2026-11-09). pg
+  would send `statement_timeout` as a startup parameter: PgBouncer rejects unknown startup parameters and Supavisor
+  ignores them. Role settings are plain Postgres and work the same everywhere: `statement_timeout = '10s'` (below the
+  client's 15 s, so the server ends a long statement and its transaction rolls back cleanly before the client gives
+  up) and `idle_in_transaction_session_timeout = '15s'` (ends a transaction its client abandoned).
+  - Set:
+
+    ```sql
+    ALTER ROLE postgres SET statement_timeout = '10s';
+    ALTER ROLE postgres SET idle_in_transaction_session_timeout = '15s';
+    ```
+
+    A new deployment runs the same on its app role as a setup step ([deployment](../deployment.md#1-database)), not
+    in a migration: on a self-hosted setup migrations may run as a different role than the app. New sessions pick it
+    up; behind Supavisor, its backends recycle within minutes.
+
+  - Check: `select rolconfig from pg_roles where rolname = 'postgres'`.
+  - Undo:
+
+    ```sql
+    ALTER ROLE postgres RESET statement_timeout;
+    ALTER ROLE postgres RESET idle_in_transaction_session_timeout;
+    ```
+
+  - Effects: a query run by hand as that role, including in Supabase's SQL editor, is capped at 10 s unless it runs
+    `SET statement_timeout = 0` first. Migrations run as `postgres` too: a statement that may take longer (an index
+    build, a backfill) starts with `SET LOCAL statement_timeout = '…'` next to its `SET LOCAL lock_timeout`.
+  - In the logs, SQLSTATE `57014` is the statement timeout and `25P03` the idle-in-transaction one.
+- **Optional on Vercel:** `@vercel/functions`' `attachDatabasePool(pool)` keeps a Fluid instance alive until idle
+  clients close. It isn't used; the timeouts above bound what a suspended socket can cost.
+- **Tests:** `src/pg.int.test.ts` runs the pool through a TCP proxy that models a transaction-mode pooler's backend
+  release and a dead socket (CI's integration job runs it). A CI job against a real PgBouncer in transaction mode is
+  a possible follow-up.
 - **One `drizzle-orm` instance.** Consumers import operators from `@receipt-ocr/db`, not `drizzle-orm`, to avoid
   duplicate-instance type errors.
 - **The ledger has no foreign key to receipts.** `ocr_rounds.receipt_id` and `ocr_calls.receipt_id` outlive the

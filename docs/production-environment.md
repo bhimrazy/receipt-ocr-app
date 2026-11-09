@@ -861,6 +861,15 @@ Two-step sign-in and "confirm it's you" need nothing new: they use `BETTER_AUTH_
 `ADMIN_MFA_ENFORCE` exists only as an emergency off switch for the admin requirement (see
 [deployment.md](deployment.md#admin-locked-out-of-two-step-sign-in)); leave it unset. Passkeys take their relying-party id from `BETTER_AUTH_URL`'s host (`receipt-ocr.bhimraj.com.np`), so nothing new there either.
 
+### Database role settings
+
+On the `postgres` role in staging and production since 2026-11-09: `statement_timeout = '10s'` and
+`idle_in_transaction_session_timeout = '15s'`. The server ends a long statement before the app's 15 s client timeout
+(`DATABASE_QUERY_TIMEOUT_MS`) gives up. Check with `select rolconfig from pg_roles where rolname = 'postgres'`; undo
+with `ALTER ROLE postgres RESET statement_timeout; ALTER ROLE postgres RESET idle_in_transaction_session_timeout;`.
+A long query in the SQL editor needs `SET statement_timeout = 0` first, and a long migration statement
+`SET LOCAL statement_timeout`. Details: [db.md](architecture/db.md#design-principles-and-invariants).
+
 `DIRECT_URL` (for database migrations) never goes to Vercel. It lives in the `staging-db` and `production-db`
 GitHub environments, used only by the **Database Migration** workflow.
 

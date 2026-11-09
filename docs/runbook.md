@@ -97,15 +97,21 @@ Symptoms: `/api/health/ready` returns `"database":"down"`, pages fail, `DbError`
    dashboard. Check <https://status.supabase.com>.
 2. Check the pooler: too many connections shows up as connection errors. The app opens at most 10 per instance
    (`DATABASE_POOL_MAX`).
+3. If the password was changed, update `DATABASE_URL` in Vercel and redeploy.
+4. If data is damaged, restore from backup (see [Rollback](#rollback)).
 
 ### Sections stuck or "couldn't load" cards on Home
 
-Symptoms: a Home section shows "… couldn't load" with Try again, or `/admin` shows its error page; `db.query_timeout`
-events in the logs. Each event names the table and operation (`db.table`, `db.operation`), whether the query never got
-a connection (`db.phase = queue`: the instance is overloaded) or never got a reply (`query`: a stuck connection, the
-pool was replaced), and the instance's `in_flight` and `queued` counts. One `query` event is a blip; a stream of them
-means the pooler or database is unhealthy (check Supabase's Postgres and pooler logs for the same minute). See the
-[2026-11-09 incident](reviews/2026-11-09-home-stuck-incident.md). 3. If the password was changed, update `DATABASE_URL` in Vercel and redeploy. 4. If data is damaged, restore from backup (see [Rollback](#rollback)).
+Symptoms: a Home section shows "… couldn't load" with Try again, or `/admin` shows its error page. In the logs, a
+`DbError` with `error.code = query_timeout` means no reply came within `DATABASE_QUERY_TIMEOUT_MS` (15 s);
+`connect_timeout` means no free connection within 10 s (the instance is overloaded or the pooler is refusing
+clients); `db.pool_error` is an idle connection the server dropped. One is a blip; a stream of them means the
+pooler or database is unhealthy (check the provider's Postgres and pooler logs for the same minute). See the
+[2026-11-09 incident](reviews/2026-11-09-home-stuck-incident.md).
+
+`DbError` with `error.code = 57014` is the server's 10 s `statement_timeout` and `25P03` its 15 s
+`idle_in_transaction_session_timeout`, both role settings on `postgres`. How to check or undo them:
+[db.md](architecture/db.md#design-principles-and-invariants).
 
 ### Storage down
 

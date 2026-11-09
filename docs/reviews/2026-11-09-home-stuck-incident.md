@@ -39,11 +39,11 @@ more streamed sections on their skeletons until the function timed out. No data 
    The pipelined query's reply then goes nowhere, and its promise never settles. This is [porsager/postgres#970][970]
    (hung pools through Supavisor and PgBouncer in transaction mode, traced to pipelining). The maintainer reports that
    v4 rewrote the pool.
-5. **It reproduces locally.** `packages/db/src/pool.int.test.ts` puts a TCP proxy between postgres.js and compose
-   Postgres. The proxy drops the server's bytes after each ReadyForQuery(idle) until the client writes again, which is
-   how a transaction-mode pooler releases a backend. With the app's settings (`prepare: false`, one connection), a
-   parameter-less query followed by a parameterised one leaves the second **pending indefinitely**. The test asserts
-   it is still pending after 2 s, and the backend sits in PARSE. With the fix, both answer.
+5. **It reproduces locally.** A TCP proxy between postgres.js and compose Postgres dropped the server's bytes after
+   each ReadyForQuery(idle) until the client wrote again, which is how a transaction-mode pooler releases a backend.
+   With the app's settings then (`prepare: false`, one connection), a parameter-less query followed by a
+   parameterised one left the second **pending indefinitely**, with the backend sitting in PARSE. The same proxy is
+   now in `packages/db/src/pg.int.test.ts`, where the new driver answers every query.
 
 [970]: https://github.com/porsager/postgres/issues/970
 
@@ -54,141 +54,120 @@ most renders. A client navigation back to Home re-renders only the page segment,
 **What it wasn't:** a database or Supavisor outage (healthy, no errors besides the one above); #202's
 `<ViewTransition>` or other client code (wrong shape of failure; #205 turned transitions off on a guess and didn't
 address this); RECEIPT-OCR-1 (a browser DOM error on a public-page navigation, unrelated to data loading). A dead socket
-on a resumed Fluid instance would also hang a query, but nothing in the evidence points to one; the fix covers that
-case too.
+on a resumed Fluid instance would also hang a query, but nothing in the evidence points to one; the driver's
+`query_timeout` covers that case too.
 
 ## Root cause
 
-postgres.js pipelines queries onto busy connections. Through Supabase's transaction-mode pooler, a pipelined query
-can lose its reply. Nothing put a time limit on a query (postgres.js 3.4 has no query timeout), and Home's sections
-had no error boundary. A lost reply therefore left every section that shared the read on its skeleton until Vercel's
+postgres.js pipelines queries onto busy connections. Through a transaction-mode pooler (here Supabase's Supavisor),
+a pipelined query can lose its reply. Nothing put a time limit on a query (postgres.js 3.4 has no query timeout),
+and Home's sections had no error boundary. A lost reply therefore left every section that shared the read on its skeleton until Vercel's
 maximum duration ended the response. #184 raised the per-render fan-out past the pool size, which made it frequent.
 
-## Fix (this PR)
+## Fix (this PR): a standard driver with its built-in timeouts
 
-1. **No pipelining.** `gatedPool` (`packages/db/src/pool.ts`) lets at most `max` queries or transactions be in flight
-   per process, so postgres.js always finds a free connection and never pipelines. Queries inside a transaction skip
-   the gate: they run on the connection the transaction holds, and the pooler keeps that backend until COMMIT. So
-   `lockQuota`'s advisory lock and the job claim can't deadlock on the gate their transaction holds. Code inside a
-   transaction that queries through the outer `db` needs a second permit, as it needed a second connection before.
-   If every permit is held that way, the queue deadline below ends the wait.
-2. **A deadline on every query.** A query unanswered after `DATABASE_QUERY_TIMEOUT_MS` (default 15 s) rejects with
-   `QueryTimeoutError`. postgres.js can't drop the one connection the query is stuck on, so the pool is replaced: new
-   queries go to a fresh pool, and the old one gets 5 s to finish its other queries before it is closed. A query that
-   waits 15 s for the gate also fails, but keeps the pool. A transaction's BEGIN, each of its queries, and its COMMIT
-   or ROLLBACK (timed from when the body settles) are timed; its body as a whole is not. Without the COMMIT deadline,
-   a COMMIT whose reply never came held its permit forever. With `max` 1 that wedged the instance: every later query
-   failed with a queue timeout and the pool was never replaced (`pool.int.test.ts` reproduces it, and it now ends in
-   `QueryTimeoutError` and a fresh pool). On timeout the statement also gets a best-effort cancel request.
+1. **Driver: node-postgres (`pg` 8.23.1) with `drizzle-orm/node-postgres`, replacing postgres.js.** pg-pool checks
+   out one client per query and never writes a query onto a busy connection, so the failure above can't occur through
+   any transaction pooler. Nothing is provider-specific: the same configuration runs against direct Postgres (Docker,
+   RDS), PgBouncer, Supavisor and Neon. Drizzle sends unnamed statements, so no prepared-statement setting is needed.
+   Changes that came with the switch:
+   - Raw `db.execute()` returns a `QueryResult`, so about 70 call sites read `.rows`, and one test reads the
+     constraint name from `constraint` instead of `constraint_name`.
+   - Types are unchanged: drizzle's node-postgres session keeps timestamps as strings in raw results, as the
+     postgres-js one did, and bigint and numeric stay strings.
+   - The e2e helpers and the migrations test still use postgres.js directly, as test-only clients.
+2. **Built-in timeouts, set in `createPool`:**
+   - `query_timeout` 15 s (`DATABASE_QUERY_TIMEOUT_MS`) is the client-side deadline for a lost reply or a dead
+     socket. It sits above the role's 10 s `statement_timeout` (D4, applied 2026-11-09).
+   - `connectionTimeoutMillis` 10 s bounds connecting and the wait for a free client.
+   - Also `idleTimeoutMillis` 20 s, `keepAlive`, `allowExitOnIdle` and `max` 10.
 
-   **Risk, by design:** a valid statement slower than the deadline also fails and replaces the pool for everyone on
-   the instance. The likely ones wait on a lock: `lockQuota`'s advisory locks (`usage.ts`), the billing subscription
-   lock (`billing/service.ts`), and `FOR UPDATE` in the job admin actions (`jobs/admin.ts`). At 15 s against
-   millisecond queries that takes a lock held for over 15 s, which is itself a fault, but it's a trade-off. The env
-   var's comment says so, and the fix is to raise it, not lower it.
-
-   I considered also replacing the pool when a queue timeout fires while every permit has been held longer than the
-   deadline, and decided against it. With BEGIN, queries and COMMIT/ROLLBACK all timed, a permit held that long is a
-   transaction body running app code, and a new pool wouldn't free it. It would also kill a legitimately long
-   transaction.
+   pg's source shows a timed-out query stays the client's active query and absorbs its late reply. Replies are
+   matched in order, so a late reply can never reach the next query. `pool.query` releases the client with the error,
+   so the pool drops it. One gap: drizzle's `transaction()` releases its client without the error. If a statement
+   inside a transaction outlasts the timeout, and so does the ROLLBACK queued behind it, the client would go back to
+   the pool with the transaction still open, and the next borrower's queries would run inside it.
+   `TimeoutClosingClient`, about 10 lines in `createDb`, closes a client whose query timed out. `pg.int.test.ts`
+   reproduces the gap with the helper removed: the stale client is reused and the next query times out. With the
+   helper, the client is closed and never reused.
 3. **A visible error instead of an endless skeleton.** Each Home section (Upload, To check, Spending, Recent) and the
    sidebar usage meter sit in a `catchError` boundary (`components/section-error.tsx`). A failed or timed-out read
-   shows "<Section> couldn't load." with **Try again**, which re-fetches only that section through `router.refresh()`.
-   The title falls back to "Home". `/admin` already has `admin/error.tsx`, which the deadline now reaches.
-4. **A wide event.** Every timeout logs `db.query_timeout` with `db.operation`, `db.table`, `db.statement_hash`
-   (FNV-1a of the placeholder text), `db.phase` (`queue` or `query`), `db.timeout_ms`, `db.in_flight` and
-   `db.queued`. The error itself reaches Sentry through the section boundary or `onRequestError` as before.
-5. **Pool max 5 → 10** (owner's request; see below). This doesn't fix a stalled query. It only makes the gate queue
-   less.
+   shows "<Section> couldn't load." with **Try again**, which re-fetches through `router.refresh()`. The title falls
+   back to "Home", and still lets Next's redirect signals through (`unstable_rethrow`). `/admin` uses its existing
+   `admin/error.tsx`.
+4. **Observability from pg's own errors.**
+   - `errorFields` reports pg's two client-side timeouts, which carry no SQLSTATE, as `error.code = query_timeout` or
+     `connect_timeout`. These are fixed driver strings, not user data.
+   - `pool.on("error")` logs `db.pool_error` with `errorFields` when an idle client dies (a database restart, or a
+     socket lost while a serverless instance was suspended). Without a listener that event would crash the process.
+   - No new schema fields.
+5. **Pool max 5 → 10** (owner's request; see below). This doesn't fix a stalled query.
 
-### Field audit (`db` group)
+### Why the first version's gate was dropped
 
-| Field               | Source                                                        | PII |
-| ------------------- | ------------------------------------------------------------- | --- |
-| `db.operation`      | First keyword of the statement, from a fixed list               | No  |
-| `db.table`          | First table name after `from`/`into`/`update`/`join`            | No  |
-| `db.statement_hash` | FNV-1a of the statement's placeholder text, never its values    | No  |
-| `db.phase`          | Ours: `queue` or `query`                                        | No  |
-| `db.timeout_ms`     | Config                                                          | No  |
-| `db.in_flight`      | Gate counter                                                    | No  |
-| `db.queued`         | Gate counter                                                    | No  |
+The first commits on this PR kept postgres.js and wrapped it in a 300-line `gatedPool`: a semaphore to stop
+pipelining, a deadline that replaced the whole pool (postgres.js 3.4 can't drop one stuck connection), timing for
+BEGIN and COMMIT, and a TCP-level label and event system. A review found a hole in it: a COMMIT whose reply never came
+wedged the instance. It worked, but it was custom machinery around a driver behaviour that a standard driver doesn't
+have. Every pooler and provider would have had to be re-verified against it. node-postgres removes the cause and
+brings the timeouts, so the gate, the pool reset and the `db.query_timeout` event were deleted.
 
-### Reproduced before and after (compose, `next dev`)
+### Reproduced before and after (compose, `next dev`, during the first version)
 
 A logging proxy in front of compose Postgres dropped the reply to `getReceiptCounts()`'s statement, which is the
 owner's first report.
 
-- **Deadline off** (`DATABASE_QUERY_TIMEOUT_MS=600000`, the same as production today): the `/app` response was still
-  open when curl gave up at 60 s. The HTML never closed, and To check, Spending and Recent stayed skeletons.
+- **Deadline off** (as production ran before this PR): the `/app` response was still open when curl gave up at 60 s. The
+  HTML never closed, and To check, Spending and Recent stayed skeletons.
 - **Deadline 4 s:** the response closed after 4.27 s. React's stream marked exactly those three boundaries "switched
-  to client rendering because the server rendering errored", which renders their "couldn't load" cards. One
-  `db.query_timeout` event was logged.
+  to client rendering because the server rendering errored", which renders their "couldn't load" cards.
 
-Screenshots of the card at 390 and 1440 are in PR #210.
+The section boundaries are unchanged by the driver switch. `pg.int.test.ts` shows the same bounded failure at the
+driver level. Screenshots of the card at 390 and 1440 are in PR #210.
 
-### What the gate counts, and module copies (DB review #208)
+### Tests (`packages/db/src/pg.int.test.ts`, run in CI by the db package's `test:int`)
 
-- **The gate counts connections in use, not statements.** A plain query holds a permit while it runs. A transaction
-  holds one from BEGIN to COMMIT, for the connection it reserves, and its inner queries take none. So permits in use
-  never exceed connections in use, and a transaction plus concurrent plain queries can't deadlock on the gate. The
-  plain queries wait for a permit, then run on a free connection. The only way to wait on yourself is a transaction
-  body that queries through the outer `db` while every other permit is taken. That was already a pool-exhaustion
-  hazard; the queue deadline now ends it with a `phase: queue` timeout. `pool.int.test.ts` covers a transaction
-  taking an advisory lock while an outer query waits, and the queue timeout.
-- **One pool and one gate per process.** The pool map and the event listeners live on `globalThis` under
-  `Symbol.for` keys, so every copy of `@receipt-ocr/db` that Next loads shares them. The `db.query_timeout`
-  subscription is guarded the same way, so it isn't doubled.
+- 30 queries at once on a 2-connection pool, through the proxy modelling a transaction pooler's backend release, all
+  answer.
+- A frozen socket fails within `query_timeout`, and the pool answers afterwards.
+- A transaction whose statement outlasts `query_timeout` while the server stays alive has its client closed. That
+  client's backend never serves another query, and its session is gone from `pg_stat_activity`.
+- The wait for a free client is bounded by `connectionTimeoutMillis`.
 
-### Abandoned work on the server
-
-When the client deadline gives up, the server may still be working:
-
-- **A lost reply** (this incident): the server has already finished the statement, or, as at 14:14, it sits waiting
-  for the rest of the protocol. Production's 120 s `statement_timeout` ends that wait.
-- **A slow statement:** on timeout the gate sends postgres.js's cancel request before replacing the pool. It calls the
-  query's `canceller` directly because `query.cancel()` drops the returned promise, and a failed cancel would be an
-  unhandled rejection. On compose, `pg_sleep(5)` is gone from `pg_stat_activity` within 0.5 s of a 300 ms deadline
-  (`pool.int.test.ts`). Without the cancel it stays active. The cancel is best effort: a lost reply has nothing to
-  cancel, and whether Supavisor forwards cancel requests wasn't verified. The 120 s `statement_timeout` remains the
-  backstop.
-- **A timed-out write may still have committed.** The deadline only means the reply didn't arrive in time: an
-  `insert` or `update` that timed out, or a transaction whose COMMIT reply was lost, may have taken effect. Callers
-  that retry a timed-out write must be idempotent.
-- **An abandoned transaction** (for example one holding `lockQuota`'s advisory lock): the pool reset closes the old
-  pool's sockets 5 s later. Directly against Postgres, a closed socket aborts the session and releases its locks
-  (Postgres behaviour; not asserted by a test here). Through Supavisor, the pooler owns the backend. When the
-  client disconnects mid-transaction, the backend should be rolled back before reuse, but that wasn't verified
-  against Supavisor. `idle_in_transaction_session_timeout` is 0 in production, so nothing else bounds an orphaned
-  transaction.
-- **Owner decision D4 (not applied here):** role-level `statement_timeout` and `idle_in_transaction_session_timeout`
-  for `postgres`. Both close these gaps server-side.
+The full integration suite (212 tests) passes on pg. A CI job against a real PgBouncer in transaction mode is a
+possible follow-up.
 
 ## Timeouts and dead connections
 
-Each layer, and why it is or isn't used:
-
 | Layer | What it catches | Decision |
 | ----- | --------------- | -------- |
-| Postgres `statement_timeout` | A query the server received and is still working on, or waiting on mid-protocol (the 14:14 case). Not a reply lost on the way back, and not a dead socket. | Already 120 s on production (`postgresql.conf`), and it fired at 14:14. On compose, both the startup parameter (`connection: { statement_timeout }`) and `SET LOCAL` inside a transaction take effect. Through Supavisor's transaction mode a startup parameter can't apply per client, since backends are shared, and it wasn't tested there. `SET LOCAL` would cost a round trip per transaction. **Proposal, not applied:** `ALTER ROLE postgres SET statement_timeout = '30s'` would bound runaway queries tighter. It also applies to migrations and admin SQL run as `postgres` (a migration can `SET` its own). Owner decision; this incident doesn't need it. |
-| Client deadline (this PR) | Everything else: a lost reply, a half-open socket, a pooler stall. | `gatedPool`, 15 s by default: well above any query's normal time (Home's reads take milliseconds) and well below the function's maximum duration. postgres.js 3.4 has no query or queue timeout option (v4 adds `queue_timeout`). A timed-out connection is never reused, because the whole pool is replaced. |
-| postgres.js lifecycle on Fluid | Sockets that sat idle while an instance was suspended can come back half-open. `idle_timeout: 20` can't fire while suspended, and `keep_alive` (60 s TCP keepalive, the default) only probes a socket the kernel is running. | Kept as they are: `idle_timeout: 20`, the default `max_lifetime` (30–60 min, randomised), the default `keep_alive`. A half-open socket now ends at the deadline with a fresh pool instead of hanging. `@vercel/functions`' `attachDatabasePool` would keep an instance alive until idle connections close. It's an option but not a dependency today, and adding it needs the owner's OK. |
+| Client `query_timeout` (pg) | A lost reply, a half-open socket, a pooler stall: anything where no reply comes. | 15 s, above the server's 10 s, so it only fires when no reply comes at all. A timed-out write may still have committed, so a caller that retries one must be idempotent. |
+| Server `statement_timeout` | A statement the server is still running, including a lock wait (`usage.ts`, `billing/service.ts`, `jobs/admin.ts`). | **D4, applied 2026-11-09** on staging and production: `ALTER ROLE postgres SET statement_timeout = '10s'` (was 120 s from `postgresql.conf`, which fired at 14:14). The server ends a long statement first, and its transaction rolls back cleanly. Not a client option: pg would send it as a startup parameter, which PgBouncer rejects and Supavisor ignores. Migrations run as `postgres` too: a statement that may exceed 10 s sets `SET LOCAL statement_timeout` next to its `SET LOCAL lock_timeout`. The Supabase SQL editor is capped too unless a query runs `SET` first. |
+| Server `idle_in_transaction_session_timeout` | A transaction whose client went away mid-way, still holding locks (for example `lockQuota`'s advisory lock). | **D4, applied 2026-11-09:** 15 s on the role (was 0). When the app's client closes a timed-out connection, direct Postgres ends that session; through a pooler, the pooler owns the backend, and this setting is what bounds it. |
+| Pool `connectionTimeoutMillis` | Connecting, and waiting for a free client. | 10 s. |
+| Idle sockets on serverless | A socket that sat idle while a Fluid instance was suspended can come back half-open. | `idleTimeoutMillis` 20 s and `keepAlive`. A half-open socket now ends at `query_timeout`, and its client is dropped. `pool.on("error")` stops a dying idle client from crashing the process. `@vercel/functions`' `attachDatabasePool` is an optional Vercel-only add-on, not used. |
 | What the user sees | Any failed read. | Section boundaries with **Try again** on Home and the meter; the segment error pages elsewhere. |
-| Observability | — | `db.query_timeout` wide event (above). |
+
+**Portability.** Nothing changes between deployments. Direct Postgres (self-hosted Docker, RDS) and a transaction
+pooler (PgBouncer, Supavisor, Neon) use the same driver settings. Only the connection-count arithmetic differs: behind
+a pooler `DATABASE_POOL_MAX` counts against the pooler's client limit, and direct it counts against
+`max_connections`. The D4 role settings are plain Postgres and apply the same way everywhere: a self-hosted deployment runs them on
+its app role (`docs/deployment.md`, Database).
+
+How to check or undo D4, and what it affects: [db.md](../architecture/db.md#design-principles-and-invariants). The
+long-lived pg_net worker keeps the settings it started with, which is harmless.
 
 ## Pool max 10
 
 Supabase limits for this project (Nano/Micro compute; the Management API reports pool mode `transaction` and no
 overrides, so the defaults apply): Postgres `max_connections` 60, Supavisor **200 client connections** and a **pool
 size of 15** server connections for the app's user. With `DATABASE_POOL_MAX` 10, each Vercel instance opens up to 10
-client connections. The worst case is instances × 10 ≤ 200, so **up to 20 concurrent instances**. Fluid compute
-serves many requests per instance, and at today's traffic the pooler showed 4 backends. Server-side, Supavisor still
+client connections. The worst case is instances × 10 ≤ 200, so **up to 20 concurrent instances**. Fluid compute serves
+many requests per instance, and at today's traffic the pooler showed 4 backends. Server-side, Supavisor still
 multiplexes onto its 15 backends whatever the client count, so `max_connections` (60; about 20 in use) isn't at risk.
-Past 20 instances, new connections would be refused with a pooler error rather than hang. If traffic grows toward that,
-set `DATABASE_POOL_MAX` lower in Vercel or raise the pooler limits. The production env var isn't set, so the code
-default applies.
-
-**The gate stays necessary after the efficiency pass.** Concurrent requests on one Fluid instance share its pool, so
-even a lean Home goes past `max` in flight under load. Without the gate, postgres.js would pipeline again.
+Past 20 instances, new connections would be refused rather than hang (and fail within `connectionTimeoutMillis`). If
+traffic grows toward that, set `DATABASE_POOL_MAX` lower or raise the pooler limits. The production env var isn't set,
+so the code default applies.
 
 ## Query counts
 
@@ -201,7 +180,9 @@ per-process caches (settings, Better Auth) fill.
 | `/app` (Home, layout included) | 15 | 13 | 8 → 5 |
 | `/admin` (Overview) | 9 | 9 | — |
 
-Before the fix, 8 statements starting together on a 5-connection pool meant 3 were pipelined on every Home render.
+With postgres.js, 8 statements starting together on a 5-connection pool meant 3 were pipelined on every Home
+render. With pg they wait for a free client instead. Concurrent requests on one instance share the pool, so even a
+lean Home can exceed `max` under load; the driver must not pipeline either way.
 The DB review (#208) counted 17 with different data. The same repeats show up in both counts.
 
 Folded into this PR (cheap, no behaviour change):
@@ -225,11 +206,9 @@ Left as follow-ups, because each is more than a cheap merge:
 
 ## Follow-ups
 
-- **postgres.js v4** (maintainer: pool rewritten, tested through PgBouncer transaction mode, adds `queue_timeout`): a
-  major upgrade, owner decision. With it the gate may become unnecessary, which would need a re-test through the proxy
-  test here.
+- **D4: done 2026-11-09** (owner approved; staging and production, verified in `pg_roles.rolconfig`).
+- **A CI job against a real PgBouncer in transaction mode**, in addition to the proxy model.
 - **Source maps in Sentry**, so frames like RECEIPT-OCR-2's `oR` are readable.
 - **Vercel logs:** the token can't read request logs (403) and the runtime-log stream only shows live traffic. A log
   drain to Axiom (planned) would have shown the `page.render` durations hitting the max.
-- **Optional:** `ALTER ROLE postgres SET statement_timeout = '30s'` (see above).
 - #205 (transitions off) was a guess; the coordinator restores transitions separately once Home is confirmed stable.

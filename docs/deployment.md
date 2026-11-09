@@ -35,6 +35,10 @@ DIRECT_URL='<session pooler URL>' bun run db:migrate
 
 `drizzle-kit` records what it applied in `drizzle.__drizzle_migrations`, so running it again only applies new files.
 
+Then, as a one-time setup step, run the two `ALTER ROLE` statements (10 s `statement_timeout`, 15 s
+`idle_in_transaction_session_timeout`) on the role the app connects as; the SQL, how to check and undo it, and what it
+affects are in [db.md](architecture/db.md#design-principles-and-invariants).
+
 ### 2. Storage
 
 Create a private bucket (for example `receipt-ocr`) and an API token with read and write access to it. Receipt
@@ -168,6 +172,9 @@ push to main → CI → production.yml: no migration changes → deploy, move th
 
 How the migration job behaves:
 
+- Migrations run as `postgres`, whose role has a 10 s `statement_timeout`. A statement that may take longer (an index
+  build or a backfill on a big table) must start with `SET LOCAL statement_timeout = '…'` next to the existing
+  `SET LOCAL lock_timeout` ([db.md](architecture/db.md#design-principles-and-invariants)).
 - `drizzle-kit migrate` applies all pending files in **one transaction**, so a failed run leaves that database exactly
   as it was.
 - A `preflight` job runs before the environment's approval. It fails, rather than skips, when started from any ref
