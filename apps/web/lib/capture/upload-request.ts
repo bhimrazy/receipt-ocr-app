@@ -1,4 +1,5 @@
-import { appliedSize } from "@/lib/upload-prep";
+import { uploadInfo } from "@/lib/upload-prep";
+import { setUploadInfo } from "@/lib/upload-telemetry";
 import type { UploadOutcome } from "./batch-queue";
 
 /**
@@ -13,8 +14,7 @@ export function postReceipt(
   const form = new FormData();
   form.set("file", file);
   form.set("mode", mode);
-  const size = appliedSize(file);
-  if (size) form.set("size_choice", size);
+  setUploadInfo(form, uploadInfo(file));
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/receipts");

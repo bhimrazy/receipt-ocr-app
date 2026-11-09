@@ -1,19 +1,16 @@
 // Image preparation for the OCR benchmark: what gets sent to the model, in memory only.
 // Sources are read, never written.
 import sharp from "sharp";
-import {
-  encodeToTarget,
-  MAX_LONG_EDGE,
-  planSize,
-  type Encoder,
-} from "../../apps/web/lib/upload-prep";
+import { encodeLadder, ENCODING, type Encoder } from "../../apps/web/lib/upload-encoding";
+import { planOption } from "../../apps/web/lib/upload-prep";
 
 /**
  * - `none`: the file as is.
- * - `app`: the app's own upload shrinking (pixel budget, short-edge floor, size target), with
- *   sharp standing in for the browser canvas.
+ * - `app`: the app's own upload at its default option, Standard (pixel budget, short-edge floor,
+ *   model long-edge cap, quality ladder), with sharp standing in for the browser canvas.
  * - `long:<px>`: longest edge at most px.
- * - `short:<px>[/<maxLong>]`: shortest edge down to px, longest edge capped (default 6000, the app's cap).
+ * - `short:<px>[/<maxLong>]`: shortest edge down to px, longest edge capped (default 6000, kept from
+ *   earlier runs so their labels still compare).
  * The resizing modes never upscale and re-encode as JPEG quality 85, as the app does.
  */
 export type PrepSpec =
@@ -33,6 +30,7 @@ export type Prepared = {
 };
 
 const JPEG_QUALITY = 85;
+const MAX_LONG_EDGE = 6000;
 const RESIZABLE = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const px = (value: string, spec: string) => {
@@ -96,8 +94,14 @@ export async function prepare(
 
   if (spec.kind === "app") {
     const encode: Encoder = async (w, h, quality) =>
-      new Blob([await jpeg(data, w, h, quality * 100)]);
-    const result = await encodeToTarget(encode, planSize(width, height));
+      new Blob([await jpeg(data, w, h, quality * 100)], { type: ENCODING.type });
+    const source = { width, height };
+    const result = await encodeLadder(
+      encode,
+      planOption(source, "recommended"),
+      "recommended",
+      planOption(source, "smaller"),
+    );
     return {
       data: new Uint8Array(await result.blob.arrayBuffer()),
       mediaType: "image/jpeg",

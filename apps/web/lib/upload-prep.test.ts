@@ -1,209 +1,122 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ENCODING, TooLargeError } from "./upload-encoding";
 import {
-  MAX_ATTEMPTS,
-  MAX_LONG_EDGE,
-  PIXEL_BUDGET,
+  LONG_RECEIPT_RATIO,
+  MODEL_LONG_EDGE,
+  MODEL_MAX_PATCHES,
+  SIZE_IDS,
   UPLOAD_LIMIT_BYTES,
   acceptedType,
-  encodeToTarget,
+  chosenOption,
+  modelPatches,
+  planOption,
   prepareFile,
-  CEILING_BYTES,
-  HARD_MIN_SHORT_EDGE,
-  planSize,
-  predictEncode,
-  appliedSize,
-  largerSize,
-  sizeOptions,
-  smallerSize,
-  TARGET_BYTES,
-  type Encoder,
+  uploadInfo,
+  uploadPlan,
 } from "./upload-prep";
 
-const area = (s: { width: number; height: number }) => s.width * s.height;
+type Size = { width: number; height: number };
+const ids = (options: { id: string }[]) => options.map((o) => o.id);
+const dims = (s: Size) => [s.width, s.height];
 
-describe("planSize", () => {
-  it("fits a phone photo to the pixel budget and keeps the aspect ratio", () => {
-    const out = planSize(3024, 4032);
-    expect(area(out)).toBeLessThanOrEqual(PIXEL_BUDGET);
-    expect(area(out)).toBeGreaterThan(PIXEL_BUDGET * 0.99);
-    expect(out.width / out.height).toBeCloseTo(3024 / 4032, 2);
+describe("planOption", () => {
+  // The shapes from the sizing review: a 1:1.4 photo, the owner's 1:2.16 receipt, a 1:4 receipt.
+  const normal = { width: 3024, height: 4234 };
+  const owner = { width: 1400, height: 3028 };
+  const long = { width: 1000, height: 4000 };
+
+  it("matches the review's table", () => {
+    expect(dims(planOption(owner, "smaller"))).toEqual([800, 1730]);
+    expect(dims(planOption(owner, "recommended"))).toEqual([1000, 2163]);
+    expect(dims(planOption(owner, "larger"))).toEqual([1191, 2576]);
+    expect(dims(planOption(normal, "recommended"))).toEqual([1195, 1673]);
+    for (const id of SIZE_IDS) expect(dims(planOption(long, id))).toEqual([644, 2576]);
+  });
+  it("keeps Sharpest inside Claude's patch cap near square", () => {
+    const out = planOption({ width: 4000, height: 4000 }, "larger");
+    expect(modelPatches(out)).toBeLessThanOrEqual(MODEL_MAX_PATCHES);
+    expect(modelPatches({ width: out.width + 28, height: out.height + 28 })).toBeGreaterThan(
+      MODEL_MAX_PATCHES,
+    );
   });
   it("never upscales", () => {
-    expect(planSize(800, 1200)).toEqual({ width: 800, height: 1200 });
-    expect(planSize(1500, 1500)).toEqual({ width: 1500, height: 1500 });
+    expect(planOption({ width: 600, height: 900 }, "larger")).toEqual({ width: 600, height: 900 });
+    expect(planOption({ width: 700, height: 1200 }, "recommended")).toEqual({
+      width: 700,
+      height: 1200,
+    });
   });
-  it("keeps the short edge at the floor on a tall receipt, past the budget", () => {
-    const out = planSize(1200, 5400); // 1:4.5, 6.5 MP
-    expect(out.width).toBe(1000);
-    expect(out.height).toBe(4500);
-    expect(area(out)).toBeGreaterThan(PIXEL_BUDGET);
+  it("keeps Standard at least 1,000 px wide up to the long-receipt ratio", () => {
+    for (const ratio of [1.5, 2, 2.4, 2.57]) {
+      const out = planOption({ width: 2000, height: Math.round(2000 * ratio) }, "recommended");
+      expect(out.width).toBeGreaterThanOrEqual(1000);
+    }
   });
-  it("caps the long edge even if that goes under the floor", () => {
-    const out = planSize(1500, 12000);
-    expect(out.height).toBe(MAX_LONG_EDGE);
-    expect(out.width).toBe(750);
+  it("depends only on the photo's shape", () => {
+    // Same shape at two source sizes gives the same output.
+    expect(planOption({ width: 3000, height: 6000 }, "recommended")).toEqual(
+      planOption({ width: 1500, height: 3000 }, "recommended"),
+    );
   });
-  it("leaves a source with a short edge under the floor at its own width", () => {
-    expect(planSize(600, 3000)).toEqual({ width: 600, height: 3000 });
-  });
-  it("fits a square to the budget", () => {
-    expect(planSize(2000, 2000)).toEqual({ width: 1732, height: 1732 });
-  });
-  it("fits a very large square without passing the long-edge cap", () => {
-    const out = planSize(12000, 12000);
-    expect(out).toEqual({ width: 1732, height: 1732 });
-    expect(area(out)).toBeLessThanOrEqual(PIXEL_BUDGET);
-  });
-  it("keeps one pixel on a thin strip", () => {
-    expect(planSize(1, 20000)).toEqual({ width: 1, height: 6000 });
-  });
-});
 
-describe("sizeOptions", () => {
-  const phone = { width: 3024, height: 4032 };
-  const ids = (options: { id: string }[]) => options.map((o) => o.id);
-
-  it("offers Smaller under the automatic size of a phone photo", () => {
-    expect(sizeOptions(phone, planSize(3024, 4032))).toEqual([
-      { id: "smaller", width: 800, height: 1067 },
-      { id: "recommended", width: 1500, height: 2000 },
-    ]);
-  });
-  it("offers Larger when the automatic encode shrinks under 1,200 px for bytes", () => {
-    const options = sizeOptions(phone, { width: 1084, height: 1445 });
-    expect(ids(options)).toEqual(["smaller", "recommended", "larger"]);
-    expect(options[2]).toMatchObject({ width: 1200, height: 1600 });
-  });
-  it("never offers Larger past the model's pixel budget on a long receipt", () => {
-    const source = { width: 1400, height: 4000 };
-    expect(largerSize(source)).toBeNull(); // 1200 x 3429 is 4.1 MP
-    expect(ids(sizeOptions(source, { width: 1000, height: 2857 }))).toEqual([
-      "smaller",
-      "recommended",
-    ]);
-  });
-  it("never upscales", () => {
-    expect(largerSize({ width: 1200, height: 1500 })).toBeNull();
-    expect(smallerSize({ width: 800, height: 3000 })).toBeNull();
-    for (const source of [phone, { width: 1250, height: 1600 }, { width: 900, height: 2000 }]) {
-      for (const o of sizeOptions(source, planSize(source.width, source.height))) {
-        expect(o.width).toBeLessThanOrEqual(source.width);
-        expect(o.height).toBeLessThanOrEqual(source.height);
+  it("holds the invariants on random shapes", () => {
+    let seed = 42;
+    const rand = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let n = 0; n < 500; n++) {
+      const source = {
+        width: 100 + Math.floor(rand() * 6000),
+        height: 100 + Math.floor(rand() * 9000),
+      };
+      for (const id of SIZE_IDS) {
+        const out = planOption(source, id);
+        expect(out.width).toBeLessThanOrEqual(source.width);
+        expect(out.height).toBeLessThanOrEqual(source.height);
+        expect(Math.max(out.width, out.height)).toBeLessThanOrEqual(MODEL_LONG_EDGE);
+        expect(modelPatches(out)).toBeLessThanOrEqual(MODEL_MAX_PATCHES);
+        // Aspect kept: the short edge is within a pixel of the long edge times the source's ratio.
+        const expected =
+          (Math.max(out.width, out.height) * Math.min(source.width, source.height)) /
+          Math.max(source.width, source.height);
+        expect(Math.abs(Math.min(out.width, out.height) - expected)).toBeLessThanOrEqual(1);
       }
     }
   });
-  it("hides an option no different from Recommended", () => {
-    // Already 1,200 px or less: Larger would be the same or smaller than what goes anyway.
-    const source = { width: 1250, height: 1600 };
-    expect(ids(sizeOptions(source, { width: 1250, height: 1600 }))).toEqual([
+});
+
+describe("uploadPlan", () => {
+  it("offers all three on a phone photo", () => {
+    const plan = uploadPlan({ width: 3024, height: 4032 });
+    expect(plan.long).toBe(false);
+    expect(ids(plan.options)).toEqual(["smaller", "recommended", "larger"]);
+  });
+  it("drops options that come out the same as Standard", () => {
+    expect(ids(uploadPlan({ width: 800, height: 1100 }).options)).toEqual(["recommended"]);
+    // Standard already sends every pixel, so Sharpest would be the same.
+    expect(ids(uploadPlan({ width: 950, height: 2400 }).options)).toEqual([
       "smaller",
       "recommended",
     ]);
-    // The rescue pass already took a long receipt down to 800 px, and Larger is past the budget.
-    expect(sizeOptions({ width: 1400, height: 4000 }, { width: 800, height: 2286 })).toEqual([]);
   });
-  it("never goes under the hard minimum short edge", () => {
-    // The long-edge cap would take Smaller to 750 x 6000.
-    expect(smallerSize({ width: 1500, height: 12000 })).toBeNull();
+  it("sends a long receipt at Sharpest with nothing to choose", () => {
+    const plan = uploadPlan({ width: 1000, height: Math.ceil(1000 * LONG_RECEIPT_RATIO) + 1 });
+    expect(plan.long).toBe(true);
+    expect(ids(plan.options)).toEqual(["larger"]);
+    expect(plan.options[0]!.height).toBe(MODEL_LONG_EDGE);
+    // Turned on its side, it is still long.
+    expect(uploadPlan({ width: 4000, height: 1000 }).long).toBe(true);
   });
-  it("offers nothing when fewer than two choices are left", () => {
-    expect(sizeOptions({ width: 800, height: 1200 }, { width: 800, height: 1200 })).toEqual([]);
-    expect(sizeOptions({ width: 420, height: 891 }, { width: 420, height: 891 })).toEqual([]);
-  });
-});
-
-const fakeBlob = (size: number) => ({ size }) as Blob;
-
-/** An encoder whose output size is `bytesAt(width, height, quality)`, recording each call. */
-function mockEncoder(bytesAt: (w: number, h: number, q: number) => number) {
-  const calls: Array<[number, number, number]> = [];
-  const encode: Encoder = async (w, h, q) => {
-    calls.push([w, h, q]);
-    return fakeBlob(bytesAt(w, h, q));
-  };
-  return { encode, calls };
-}
-
-describe("encodeToTarget", () => {
-  const size = { width: 2000, height: 3000 };
-  it("stops at the first encode under the target", async () => {
-    const { encode, calls } = mockEncoder(() => 100_000);
-    const out = await encodeToTarget(encode, size);
-    expect(calls).toEqual([[2000, 3000, 0.85]]);
-    expect(out.attempts).toBe(1);
-  });
-  it("steps quality down before scaling", async () => {
-    const { encode, calls } = mockEncoder((_w, _h, q) => (q < 0.7 ? 400_000 : 900_000));
-    const out = await encodeToTarget(encode, size);
-    expect(calls.map((c) => c[2])).toEqual([0.85, 0.72, 0.6]);
-    expect(calls.every(([w, h]) => w === 2000 && h === 3000)).toBe(true);
-    expect(out.quality).toBe(0.6);
-  });
-  it("scales down 15% once quality is at the floor", async () => {
-    const { encode, calls } = mockEncoder((w) => (w < 1800 ? 300_000 : 900_000));
-    const out = await encodeToTarget(encode, size);
-    expect(calls[3]).toEqual([1700, 2550, 0.6]);
-    expect(out).toMatchObject({ width: 1700, height: 2550, attempts: 4 });
-  });
-  it("bounds the attempts and returns the smallest encode", async () => {
-    const { encode, calls } = mockEncoder((w) => 5_000_000 + w);
-    const out = await encodeToTarget(encode, size);
-    expect(calls).toHaveLength(MAX_ATTEMPTS);
-    expect(out.attempts).toBe(MAX_ATTEMPTS);
-    expect(out.blob.size).toBe(Math.min(...calls.map(([w]) => 5_000_000 + w)));
-  });
-  it("does not scale below the short-edge floor", async () => {
-    const { encode, calls } = mockEncoder(() => 800_000);
-    const out = await encodeToTarget(encode, { width: 1100, height: 4000 });
-    // 1100 -> 935 would break the 1,000 px floor, so it stops after the quality steps.
-    expect(calls).toHaveLength(3);
-    expect(out.attempts).toBe(3);
-  });
-  it("accepts a source already smaller than the floor without shrinking it", async () => {
-    const { encode, calls } = mockEncoder(() => 800_000);
-    await encodeToTarget(encode, { width: 600, height: 900 });
-    expect(calls).toHaveLength(3);
-    expect(calls.every(([w]) => w === 600)).toBe(true);
+  it("falls back to Standard, then the only option, for a choice that isn't offered", () => {
+    const small = uploadPlan({ width: 800, height: 1100 });
+    expect(chosenOption(small, "smaller").id).toBe("recommended");
+    const long = uploadPlan({ width: 1000, height: 4000 });
+    expect(chosenOption(long, "smaller").id).toBe("larger");
+    expect(chosenOption(uploadPlan({ width: 3024, height: 4032 }), "smaller").id).toBe("smaller");
   });
 });
-
-describe("encodeToTarget rescue", () => {
-  it("drops to quality 0.5 and scales below the floor when still over the ceiling", async () => {
-    // Over the ceiling until the short edge is at most ~900.
-    const { encode, calls } = mockEncoder((w, h, q) =>
-      Math.min(w, h) <= 900 && q === 0.5 ? 800_000 : 2_000_000,
-    );
-    const out = await encodeToTarget(encode, { width: 1000, height: 4000 });
-    expect(calls.map((c) => c[2])).toEqual([0.85, 0.72, 0.6, 0.5, 0.5]);
-    expect(calls[3]![0]).toBe(1000);
-    expect(out.width).toBe(850);
-    expect(out.blob.size).toBe(800_000);
-    expect(out.attempts).toBe(5);
-  });
-  it("never goes under the hard minimum short edge", async () => {
-    const { encode, calls } = mockEncoder(() => 5_000_000);
-    await encodeToTarget(encode, { width: 1000, height: 4000 }, { maxAttempts: 20 });
-    expect(Math.min(...calls.map(([w, h]) => Math.min(w, h)))).toBeGreaterThanOrEqual(
-      HARD_MIN_SHORT_EDGE,
-    );
-  });
-  it("does not rescue a result between the target and the ceiling", async () => {
-    const { encode, calls } = mockEncoder(() => CEILING_BYTES - 1);
-    await encodeToTarget(encode, { width: 1000, height: 4000 });
-    expect(calls).toHaveLength(3);
-  });
-  it("always makes at least one attempt", async () => {
-    const { encode, calls } = mockEncoder(() => 5_000_000);
-    await encodeToTarget(encode, size0, { maxAttempts: 0 });
-    expect(calls).toHaveLength(1);
-  });
-});
-
-const size0 = { width: 1000, height: 1000 };
 
 describe("prepareFile size", () => {
   afterEach(() => vi.unstubAllGlobals());
-  /** A decoded image of `width` x `height` whose encodes cost `bpp` bytes a pixel at 0.85; records each encode. */
+  /** A decoded image whose encodes cost `bpp` bytes a pixel at quality 0.8; records each encode. */
   function stubSized(width: number, height: number, bpp: number) {
     const encodes: Array<[number, number, number]> = [];
     vi.stubGlobal("createImageBitmap", async () => ({ width, height, close() {} }));
@@ -219,8 +132,8 @@ describe("prepareFile size", () => {
         }
         async convertToBlob({ quality }: { quality: number }) {
           encodes.push([this.width, this.height, quality]);
-          const bytes = Math.round((bpp * this.width * this.height * quality) / 0.85);
-          return new Blob([new Uint8Array(bytes)]);
+          const bytes = Math.round((bpp * this.width * this.height * quality) / 0.8);
+          return new Blob([new Uint8Array(bytes)], { type: "image/jpeg" });
         }
       },
     );
@@ -228,50 +141,59 @@ describe("prepareFile size", () => {
   }
   const photo = () => new File(["x"], "a.jpg", { type: "image/jpeg" });
 
-  it("encodes Smaller at 800 px", async () => {
-    const encodes = stubSized(3024, 4032, 0.2);
-    const out = await prepareFile(photo(), "smaller");
-    expect(encodes).toEqual([[800, 1067, 0.85]]);
-    expect(appliedSize(out)).toBe("smaller");
+  it("encodes the chosen option once when it lands under the target", async () => {
+    const encodes = stubSized(3024, 4032, 0.15);
+    const out = await prepareFile(photo(), { size: "smaller", filter: "grey" });
+    expect(encodes).toEqual([[866, 1155, 0.8]]);
+    expect(uploadInfo(out)).toEqual({
+      size: "smaller",
+      filter: "grey",
+      width: 866,
+      height: 1155,
+      quality: 0.8,
+      attempts: 1,
+      rescued: false,
+    });
   });
-  it("keeps a chosen size over the target while under the ceiling, stepping only quality", async () => {
-    // About 645 KB at 0.6: over the 500 KB target, under 1 MB, so it never shrinks.
-    const encodes = stubSized(1400, 4000, 0.5);
-    await prepareFile(photo(), "smaller");
-    expect(encodes).toEqual([
-      [800, 2286, 0.85],
-      [800, 2286, 0.72],
-      [800, 2286, 0.6],
-    ]);
+  it("gives the same size whatever the bytes per pixel", async () => {
+    const light = stubSized(1400, 3028, 0.1);
+    await prepareFile(photo(), { size: "recommended" });
+    const dense = stubSized(1400, 3028, 0.5);
+    await prepareFile(photo(), { size: "recommended" });
+    expect(light[0]!.slice(0, 2)).toEqual([1000, 2163]);
+    expect(new Set(dense.map((e) => `${e[0]}x${e[1]}`))).toEqual(new Set(["1000x2163"]));
   });
-  it("keeps 1,200 px for Larger where the automatic encode shrank under it", async () => {
-    // Automatic: 1500 x 2000 shrinks to 1084 x 1445 to reach 500 KB; Larger then keeps 1200 x 1600.
-    const encodes = stubSized(3024, 4032, 0.4);
-    const out = await prepareFile(photo(), "larger");
-    expect(encodes).toContainEqual([1084, 1445, 0.6]);
-    expect(encodes.at(-1)).toEqual([1200, 1600, 0.6]);
-    expect(appliedSize(out)).toBe("larger");
+  it("steps quality down on a Safari-like 0.49 B/px photo to stay near the target", async () => {
+    const encodes = stubSized(1400, 3028, 0.49);
+    const out = await prepareFile(photo(), { size: "recommended" });
+    expect(encodes.map((e) => e[2])).toEqual([0.8, 0.72, 0.65]);
+    expect(out.size).toBeLessThanOrEqual(ENCODING.hardCapBytes);
   });
-  it("sends the automatic encode for Larger when that is already over 1,200 px", async () => {
+  it("refuses a photo it can't get under the hard cap", async () => {
+    stubSized(3024, 4032, 4);
+    await expect(prepareFile(photo(), { size: "larger" })).rejects.toBeInstanceOf(TooLargeError);
+  });
+  it("uses Standard without a choice, and records no size", async () => {
     const encodes = stubSized(3024, 4032, 0.1);
-    const out = await prepareFile(photo(), "larger");
-    expect(encodes).toEqual([[1500, 2000, 0.85]]);
-    expect(appliedSize(out)).toBe("recommended");
+    const out = await prepareFile(photo());
+    expect(encodes[0]!.slice(0, 2)).toEqual([1225, 1633]);
+    expect(uploadInfo(out)?.size).toBeUndefined();
   });
-  it("still shrinks a chosen size to get under the ceiling", async () => {
-    stubSized(3024, 4032, 1);
-    const out = await prepareFile(photo(), "larger");
-    expect(out.size).toBeLessThanOrEqual(CEILING_BYTES);
-  });
-  it("uses the automatic plan when the choice doesn't apply, or without one", async () => {
-    let encodes = stubSized(800, 1200, 0.1);
-    let out = await prepareFile(photo(), "smaller");
-    expect(encodes[0]).toEqual([800, 1200, 0.85]);
-    expect(appliedSize(out)).toBe("recommended");
-    encodes = stubSized(3024, 4032, 0.1);
-    out = await prepareFile(photo());
-    expect(encodes[0]).toEqual([1500, 2000, 0.85]);
-    expect(appliedSize(out)).toBeUndefined();
+  it("returns the original when the canvas hands back another format", async () => {
+    vi.stubGlobal("createImageBitmap", async () => ({ width: 100, height: 100, close() {} }));
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        getContext() {
+          return { fillRect() {}, drawImage() {} };
+        }
+        async convertToBlob() {
+          return new Blob(["png"], { type: "image/png" });
+        }
+      },
+    );
+    const file = photo();
+    expect(await prepareFile(file)).toBe(file);
   });
 });
 
@@ -313,9 +235,7 @@ describe("prepareFile metadata", () => {
     const jpeg = new File(
       [bytes([0xff, 0xd8, 0xff, 0xe1, 0, 8], "Exif", [0xff, 0xe2, 0, 4])],
       "a.jpg",
-      {
-        type: "image/jpeg",
-      },
+      { type: "image/jpeg" },
     );
     const out = await prepareFile(jpeg);
     expect(out.type).toBe("image/jpeg");
@@ -349,24 +269,5 @@ describe("acceptedType", () => {
 describe("UPLOAD_LIMIT_BYTES", () => {
   it("is the deployment body limit, below the app limit", () => {
     expect(UPLOAD_LIMIT_BYTES).toBe(4 * 1024 * 1024);
-  });
-});
-
-describe("predictEncode", () => {
-  it("keeps the planned size when the estimate is under the target", async () => {
-    const out = await predictEncode({ width: 1000, height: 2000 }, 0.1);
-    expect(out).toEqual({ width: 1000, height: 2000, bytes: 200_000 });
-  });
-  it("shrinks in SCALE_STEP steps like the encoder when over the target", async () => {
-    // 0.2 B/px on 3000 x 2000 is 1.2 MB: quality steps alone don't reach 500 KB, two scale steps do.
-    const out = await predictEncode({ width: 3000, height: 2000 }, 0.2);
-    expect(out).toMatchObject({ width: 2168, height: 1445 });
-    expect(out.bytes).toBeLessThanOrEqual(TARGET_BYTES);
-  });
-  it("keeps a chosen short edge as the floor, so only quality drops", async () => {
-    const out = await predictEncode({ width: 1080, height: 3086 }, 0.3, { minShort: 1080 });
-    expect(out).toMatchObject({ width: 1080, height: 3086 });
-    expect(out.bytes).toBeGreaterThan(TARGET_BYTES);
-    expect(out.bytes).toBeLessThanOrEqual(CEILING_BYTES);
   });
 });

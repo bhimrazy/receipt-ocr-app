@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./categories": "./src/categories.ts",
+    "./image-size": "./src/image-size.ts",
     "./models": "./src/models.ts"
   },
   "scripts": {

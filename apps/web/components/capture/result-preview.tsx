@@ -6,49 +6,62 @@ import type { EditState } from "@/lib/capture/edit-state";
 import { FILTER_LABELS, type Filter } from "@/lib/capture/filters";
 import { PREVIEW_RENDER, renderPreview } from "@/lib/capture/render";
 
+type Frame = { url: string; filter: Filter; source: "render" | "upload" };
+
 /**
- * The receipt as it will upload: rotated, cropped to the corners, with the chosen filter.
- * A new frame is rendered and decoded off screen, then swapped in, so the shown image never
- * blanks or flashes between filters. Data URLs mean there is no object URL to revoke early.
+ * The receipt as it will upload: rotated, cropped to the corners, with the chosen filter. Once
+ * the real upload for this edit is encoded (`upload`), that file is shown; until then, a quick
+ * render of the edit. Each new frame is decoded off screen and then swapped in, so the image
+ * never blanks or flashes between filters.
  */
 export function ResultPreview({
   bitmap,
   edit,
+  upload,
   onInspect,
 }: {
   bitmap: ImageBitmap;
   edit: EditState;
+  /** Object URL of the encoded upload for exactly this edit and size, once it exists. */
+  upload: string | null;
   /** Opens the full-size view. */
   onInspect: () => void;
 }) {
-  const [frame, setFrame] = useState<{ url: string; filter: Filter } | null>(null);
+  const [frame, setFrame] = useState<Frame | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    // Let the pressed filter paint as selected before the render blocks the main thread.
-    const timer = window.setTimeout(() => {
-      const filter = edit.filter;
-      let url: string;
-      try {
-        url = renderPreview(bitmap, edit, PREVIEW_RENDER, 0.85);
-      } catch {
-        // Out of canvas memory: keep the last frame.
-        return;
-      }
+    const filter = edit.filter;
+    const show = (url: string, source: Frame["source"]) => {
       const img = new Image();
       img.src = url;
       img
         .decode()
         .catch(() => {})
         .then(() => {
-          if (!cancelled) setFrame({ url, filter });
+          if (!cancelled) setFrame({ url, filter, source });
         });
+    };
+    if (upload) {
+      show(upload, "upload");
+      return () => {
+        cancelled = true;
+      };
+    }
+    // Let the pressed filter paint as selected before the render blocks the main thread.
+    const timer = window.setTimeout(() => {
+      try {
+        // A data URL, so there is no object URL to revoke early.
+        show(renderPreview(bitmap, edit, PREVIEW_RENDER, 0.85), "render");
+      } catch {
+        // Out of canvas memory: keep the last frame.
+      }
     }, 0);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [bitmap, edit]);
+  }, [bitmap, edit, upload]);
 
   if (!frame) {
     return (
@@ -65,6 +78,7 @@ export function ResultPreview({
         alt={`Receipt preview, ${FILTER_LABELS[frame.filter]}`}
         className="absolute inset-0 size-full object-contain p-3"
         data-filter={frame.filter}
+        data-source={frame.source}
         src={frame.url}
       />
       <button

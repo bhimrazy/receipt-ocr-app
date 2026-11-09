@@ -1,6 +1,7 @@
-import { prepareFile, type SizeId } from "@/lib/upload-prep";
+import { TooLargeError } from "@/lib/upload-encoding";
+import { encodeUpload, prepareFile, type SizeId } from "@/lib/upload-prep";
 import { isFullFrame, type EditState } from "./edit-state";
-import { loadImage, renderToJpeg } from "./render";
+import { FULL_RENDER, loadImage, releaseCanvas, renderEdit } from "./render";
 
 /** A reviewed photo that could not be turned into an upload; it is held back, not sent. */
 export class EditFailedError extends Error {
@@ -16,7 +17,8 @@ const isUnedited = (edit: EditState) =>
 
 /**
  * The file to upload for one reviewed photo. `edit` is what the user saw, or `startingEdit`
- * builds it for a photo they never opened.
+ * builds it for a photo they never opened. The rendered edit is encoded directly, at the upload
+ * size picked in review (`size`, see `encodeUpload`).
  *
  * - The browser can't decode it (HEIC outside Safari): the original goes, and the server judges
  *   it like any upload, unless the user edited it (it decoded in review, then failed here, e.g.
@@ -25,8 +27,8 @@ const isUnedited = (edit: EditState) =>
  *   unedited photo still goes as it is.
  *
  * An edited photo that fails either way throws `EditFailedError`: sending the original would
- * silently drop the crop, rotation and filter the user chose. `size` is the upload size picked
- * in review (see `prepareFile`).
+ * silently drop the crop, rotation and filter the user chose. A photo that can't be brought under
+ * the hard cap throws `TooLargeError`.
  */
 export async function preparePhoto(
   image: { blob: Blob; name: string },
@@ -35,7 +37,7 @@ export async function preparePhoto(
   size?: SizeId,
 ): Promise<File> {
   const original = () =>
-    prepareFile(new File([image.blob], image.name, { type: image.blob.type }), size);
+    prepareFile(new File([image.blob], image.name, { type: image.blob.type }), { size });
   let bitmap: ImageBitmap;
   try {
     bitmap = await loadImage(image.blob);
@@ -44,13 +46,17 @@ export async function preparePhoto(
     return original();
   }
   let chosen = edit;
+  let canvas: HTMLCanvasElement | undefined;
   try {
     chosen ??= startingEdit(bitmap);
-    return await prepareFile(await renderToJpeg(bitmap, chosen, image.name), size);
+    canvas = renderEdit(bitmap, chosen, FULL_RENDER);
+    return await encodeUpload(canvas, image.name, { size, filter: chosen.filter });
   } catch (error) {
+    if (error instanceof TooLargeError) throw error;
     if (!chosen || isUnedited(chosen)) return original();
     throw new EditFailedError(error);
   } finally {
+    if (canvas) releaseCanvas(canvas);
     bitmap.close();
   }
 }
