@@ -225,3 +225,97 @@ describe("detectQuad on bench receipts", () => {
     expect(detectQuad(receipt).quad).toBeNull();
   });
 });
+
+/**
+ * A crumpled light receipt on a dark table, the shape the owner hit: the crop spilled past the
+ * paper in a strip on the left and bottom. Two causes reproduce it, and both are known limits of
+ * a four-corner detector on a thresholded mask (see docs/STATUS.md):
+ *
+ * - Crumpled sides bow inward between the corners. The detector keeps the true corners, so the
+ *   straight sides of the quad cut across the bow and take in a strip of table. No quad can
+ *   follow a curved side; moving the side in would cut paper off at the corners instead.
+ * - Light bouncing off the table makes a lighter band beside the paper. Above the threshold it
+ *   joins the paper's component, and the quad grows by the band's width.
+ *
+ * The `fails` cases state the outcome a better detector (edge-based line fitting) should reach;
+ * they start passing, and so fail here, when it does.
+ */
+describe("detectQuad on a crumpled receipt (known limits)", () => {
+  const corners: Quad = [
+    { x: 170, y: 110 },
+    { x: 450, y: 120 },
+    { x: 440, y: 700 },
+    { x: 160, y: 690 },
+  ];
+  const [tl, tr, br, bl] = corners;
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+  /** Inside the paper, whose left and bottom sides bow inward by `bow` px at their middle. */
+  const onPaper = (x: number, y: number, bow: number) => {
+    const ty = clamp01((y - tl.y) / (bl.y - tl.y));
+    const tx = clamp01((x - bl.x) / (br.x - bl.x));
+    const left = lerp(tl.x, bl.x, ty) + bow * Math.sin(Math.PI * ty);
+    const bottom = lerp(bl.y, br.y, tx) - bow * Math.sin(Math.PI * tx);
+    const right = lerp(tr.x, br.x, (y - tr.y) / (br.y - tr.y));
+    const top = lerp(tl.y, tr.y, (x - tl.x) / (tr.x - tl.x));
+    return x > left && x < right && y > top && y < bottom;
+  };
+  /** The paper with soft crease shading, on a dark table, plus a lighter `band` px beside it. */
+  function crumpled(bow: number, band = 0, bandLevel = 140): Pixels {
+    const data = new Uint8ClampedArray(W * H * 4);
+    let seed = 3;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5) * 12;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let v = 38;
+        if (onPaper(x, y, bow)) {
+          const crease =
+            Math.abs(Math.sin((x * 0.9 + y * 0.6) / 37)) * Math.abs(Math.cos((x * 0.4 - y) / 53));
+          v = 232 - 70 * crease ** 3;
+        } else if (
+          band > 0 &&
+          ((x > bl.x - band && x <= tl.x + 2 && y > tl.y && y < br.y) ||
+            (y < br.y + band && y >= bl.y - 2 && x > bl.x - band && x < br.x + 5))
+        ) {
+          v = bandLevel;
+        }
+        const n = rand();
+        data.set([v + n, v + n, v + n, 255], (y * W + x) * 4);
+      }
+    }
+    return { data, width: W, height: H };
+  }
+  /** Where the found left side crosses the paper's middle row, and the bottom its middle column. */
+  function middles(quad: Quad) {
+    const [qtl, , qbr, qbl] = quad.map((p) => ({ x: p.x * W, y: p.y * H }));
+    const midY = (tl.y + bl.y) / 2;
+    const midX = (bl.x + br.x) / 2;
+    return {
+      left: lerp(qtl!.x, qbl!.x, (midY - qtl!.y) / (qbl!.y - qtl!.y)),
+      bottom: lerp(qbl!.y, qbr!.y, (midX - qbl!.x) / (qbr!.x - qbl!.x)),
+    };
+  }
+  const BOW = 24;
+
+  it("still finds the corners, and never cuts into the paper", () => {
+    const result = detectQuad(crumpled(BOW));
+    expect(result.quad).not.toBeNull();
+    expect(cornerError(result.quad!, norm(corners, W, H))).toBeLessThan(0.02);
+    // The paper's bowed sides lie inside the found sides, so no print is cropped off.
+    const { left, bottom } = middles(result.quad!);
+    expect(left).toBeLessThan(lerp(tl.x, bl.x, 0.5) + BOW);
+    expect(bottom).toBeGreaterThan(lerp(bl.y, br.y, 0.5) - BOW);
+  });
+
+  it.fails("follows bowed sides instead of spilling a strip of table inside the crop", () => {
+    const { left, bottom } = middles(detectQuad(crumpled(BOW)).quad!);
+    // The paper's edge in the middle of each bowed side, within 1% of the frame.
+    expect(Math.abs(left - (lerp(tl.x, bl.x, 0.5) + BOW))).toBeLessThan(W * 0.01);
+    expect(Math.abs(bottom - (lerp(bl.y, br.y, 0.5) - BOW))).toBeLessThan(H * 0.01);
+  });
+
+  it.fails("leaves out a lighter band of table beside the paper", () => {
+    const result = detectQuad(crumpled(0, 16));
+    expect(cornerError(result.quad!, norm(corners, W, H))).toBeLessThan(0.01);
+  });
+});
