@@ -17,6 +17,7 @@ import { AboutSettings } from "@/components/about-settings";
 import { AccountSettings } from "@/components/account-settings";
 import { InstallAppSettings } from "@/components/install-offer";
 import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
+import { SettingsList } from "@/components/settings-list";
 import { SettingsSection } from "@/components/settings-section";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UsageMeter } from "@/components/usage-meter";
@@ -24,6 +25,7 @@ import { authEnv } from "@/lib/env";
 import { getAccountPlan, getCurrentPlan } from "@/lib/plan-limits";
 import { SEPARATE_UPGRADE } from "@/lib/plan-copy";
 import { planLabel } from "@/lib/plans";
+import { settingsRows } from "@/lib/settings-rows";
 import { runtime } from "@/lib/runtime";
 import { requireActiveScope, requireSession } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
@@ -90,7 +92,18 @@ export default async function SettingsPage({
         </PageHeaderContent>
       </PageHeader>
 
+      {/* Phones: these four sections become rows that open their sub-page or a sheet. */}
+      <SettingsList
+        className="mb-8"
+        rows={settingsRows({
+          planLabel: planLabel(plan),
+          workspaceName: workspace.name,
+          protectedAccount,
+        })}
+      />
+
       <SettingsSection
+        className="max-md:hidden"
         description={
           policy.scope === "workspace"
             ? `This workspace's scans are shared by its members. Limits reset at 00:00 UTC: daily, and on the 1st of each month. The first ${FREE_FAILED_ROUNDS} failed scans don't count.`
@@ -144,6 +157,7 @@ export default async function SettingsPage({
       </SettingsSection>
 
       <SettingsSection
+        className="max-md:hidden"
         description="Everyone in a workspace shares its receipts."
         id="workspace-heading"
         title="Workspace"
@@ -174,6 +188,7 @@ export default async function SettingsPage({
       </SettingsSection>
 
       <SettingsSection
+        className="max-md:hidden"
         description="Match your device, or choose one. Saved on this device."
         id="appearance-heading"
         title="Appearance"
@@ -184,6 +199,7 @@ export default async function SettingsPage({
       <ReceiptReadingSettings readers={readers} />
 
       <SettingsSection
+        className="max-md:hidden"
         description="Passkeys, two-step sign-in and the check before important changes."
         id="security-heading"
         title="Security"
