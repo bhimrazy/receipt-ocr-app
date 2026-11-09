@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { getReceiptCounts, getUsageSummary, listRecentReceipts } from "@/lib/receipts";
@@ -181,7 +182,10 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
 
 async function HomeTitle() {
   // The sections below report a failed read; the title just stays generic.
-  const counts = await getReceiptCounts().catch(() => null);
+  const counts = await getReceiptCounts().catch((error: unknown) => {
+    unstable_rethrow(error);
+    return null;
+  });
   return counts?.total === 0 ? "Scan your first receipt" : "Home";
 }
 

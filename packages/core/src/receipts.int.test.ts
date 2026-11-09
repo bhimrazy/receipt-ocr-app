@@ -278,6 +278,9 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const g = await gate();
     expect(await repo((r) => r.get(receiptId, b))).toBeNull();
     expect((await repo((r) => r.list(b, {}, { limit: 50, offset: 0 }))).total).toBe(0);
+    const recent = await repo((r) => r.list(a, {}, { limit: 50, offset: 0, total: false }));
+    expect(recent.total).toBeNull();
+    expect(recent.rows.map((row) => row.id)).toContain(receiptId);
     expect(await repo((r) => r.exportRows(b, {}, 50))).toEqual([]);
     expect(await repo((r) => r.update(receiptId, b, { merchant: "pwned" }))).toBe(false);
     expect(await repo((r) => r.claimRetry(receiptId, b, g))).toEqual({ kind: "not-found" });
