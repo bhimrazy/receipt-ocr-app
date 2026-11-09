@@ -105,7 +105,16 @@ export async function listReceiptSummaries(
       repo.list(scope, clean, { limit: pageSize, offset: (page - 1) * pageSize }),
     ),
   );
-  return { rows, total, page, pageSize };
+  return { rows, total: total ?? 0, page, pageSize };
+}
+
+/** The newest `limit` receipts of the active workspace, without counting all of them. */
+export async function listRecentReceipts(limit: number): Promise<ReceiptSummary[]> {
+  const scope = await requireActiveScope();
+  const { rows } = await runtime.runPromise(
+    Effect.flatMap(ReceiptRepo, (repo) => repo.list(scope, {}, { limit, offset: 0, total: false })),
+  );
+  return rows;
 }
 
 export const MAX_EXPORT_ROWS = 5000;

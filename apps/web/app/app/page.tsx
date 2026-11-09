@@ -5,6 +5,7 @@ import {
   PageHeaderTitle,
 } from "@/components/page-header";
 import { PanelSkeleton, RowsSkeleton } from "@/components/app-skeletons";
+import { SectionBoundary } from "@/components/section-error";
 import { ListPoller } from "@/components/processing-poller";
 import { ReceiptList } from "@/components/receipt-list";
 import { NoReadReceipts } from "@/components/dashboard/empty-states";
@@ -33,7 +34,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { getCurrentPlan } from "@/lib/plan-limits";
-import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "@/lib/receipts";
+import { getReceiptCounts, getUsageSummary, listRecentReceipts } from "@/lib/receipts";
 import { logPageRender } from "@/lib/page-event";
 import { getUpgradeOffer } from "@/lib/upgrade-offer";
 import { usageRatio, WARM_RATIO } from "@/lib/upgrade-level";
@@ -179,8 +180,9 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
 }
 
 async function HomeTitle() {
-  const counts = await getReceiptCounts();
-  return counts.total === 0 ? "Scan your first receipt" : "Home";
+  // The sections below report a failed read; the title just stays generic.
+  const counts = await getReceiptCounts().catch(() => null);
+  return counts?.total === 0 ? "Scan your first receipt" : "Home";
 }
 
 async function UploadSection() {
@@ -224,10 +226,7 @@ async function CheckSection() {
 }
 
 async function RecentSection() {
-  const [counts, recent] = await Promise.all([
-    getReceiptCounts(),
-    listReceiptSummaries({ pageSize: RECENT }),
-  ]);
+  const [counts, recent] = await Promise.all([getReceiptCounts(), listRecentReceipts(RECENT)]);
   if (counts.total === 0) return null;
 
   return (
@@ -245,7 +244,7 @@ async function RecentSection() {
         </Link>
       </div>
       <Card className="overflow-hidden">
-        <ReceiptList receipts={recent.rows} />
+        <ReceiptList receipts={recent} />
       </Card>
     </section>
   );
@@ -330,28 +329,36 @@ export default function HomePage({ searchParams }: { searchParams: SearchParams 
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section aria-label="Upload">
-          <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-            <UploadSection />
-          </Suspense>
+          <SectionBoundary label="Upload">
+            <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+              <UploadSection />
+            </Suspense>
+          </SectionBoundary>
         </section>
-        <Suspense fallback={<PanelSkeleton />}>
-          <CheckSection />
-        </Suspense>
+        <SectionBoundary label="To check">
+          <Suspense fallback={<PanelSkeleton />}>
+            <CheckSection />
+          </Suspense>
+        </SectionBoundary>
       </div>
 
-      <Suspense fallback={<SpendSkeleton />}>
-        <SpendSection searchParams={searchParams} />
-      </Suspense>
+      <SectionBoundary className="mt-10" label="Spending">
+        <Suspense fallback={<SpendSkeleton />}>
+          <SpendSection searchParams={searchParams} />
+        </Suspense>
+      </SectionBoundary>
 
-      <Suspense
-        fallback={
-          <div className="mt-10">
-            <RowsSkeleton rows={RECENT} />
-          </div>
-        }
-      >
-        <RecentSection />
-      </Suspense>
+      <SectionBoundary className="mt-10" label="Recent receipts">
+        <Suspense
+          fallback={
+            <div className="mt-10">
+              <RowsSkeleton rows={RECENT} />
+            </div>
+          }
+        >
+          <RecentSection />
+        </Suspense>
+      </SectionBoundary>
     </div>
   );
 }

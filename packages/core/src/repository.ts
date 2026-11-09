@@ -371,11 +371,12 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       id: string,
       scope: ReceiptScope,
     ) => Effect.Effect<ReceiptWithItems | null, DbError>;
+    /** One page, newest first. `total` (all matches) is null when the page asks for none. */
     readonly list: (
       scope: ReceiptScope,
       filters: ReceiptFilters,
-      page: { limit: number; offset: number },
-    ) => Effect.Effect<{ rows: ReceiptSummary[]; total: number }, DbError>;
+      page: { limit: number; offset: number; total?: boolean },
+    ) => Effect.Effect<{ rows: ReceiptSummary[]; total: number | null }, DbError>;
     readonly counts: (scope: ReceiptScope) => Effect.Effect<ReceiptCounts, DbError>;
     readonly exportRows: (
       scope: ReceiptScope,
@@ -621,14 +622,14 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               .orderBy(desc(receipts.createdAt), desc(receipts.id))
               .limit(page.limit)
               .offset(page.offset),
-            db.select({ value: count() }).from(receipts).where(where),
+            page.total === false ? null : db.select({ value: count() }).from(receipts).where(where),
           ]);
           return {
             rows: rows.map((row) => ({
               ...toSummary(row),
               retryAt: row.retryAt ? new Date(row.retryAt) : null,
             })),
-            total: totals[0]?.value ?? 0,
+            total: totals ? (totals[0]?.value ?? 0) : null,
           };
         }),
 
