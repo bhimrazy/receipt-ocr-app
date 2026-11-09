@@ -66,6 +66,32 @@ test.describe("with Turnstile on and a passing secret", () => {
     await expect(section.getByRole("status")).toContainText("Check your inbox");
   });
 
+  test("the widget takes the page's theme and follows a theme switch", async ({ page }) => {
+    // A stand-in for Cloudflare's script that records what each widget is rendered with.
+    await page.route("**/challenges.cloudflare.com/turnstile/v0/api.js*", (route) =>
+      route.fulfill({
+        contentType: "text/javascript",
+        body: `window.__themes = [];
+          window.turnstile = {
+            render(node, options) { window.__themes.push(options.theme); return String(window.__themes.length); },
+            reset() {},
+            remove() {},
+          };`,
+      }),
+    );
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/sign-in");
+    const themes = () =>
+      page.evaluate(() => (window as unknown as { __themes?: string[] }).__themes);
+    await expect.poll(themes).toEqual(["light"]);
+    await page
+      .getByRole("contentinfo")
+      .getByRole("radiogroup", { name: "Theme" })
+      .getByRole("radio", { name: "Dark" })
+      .click();
+    await expect.poll(themes).toEqual(["light", "dark"]);
+  });
+
   test("the server refuses requests that carry no token", async ({ request, baseURL }) => {
     const signUp = await request.post("/api/auth/sign-up/email", {
       data: { name: "Bot", email: uniqueEmail("turnstile-bot"), password: PASSWORD },
