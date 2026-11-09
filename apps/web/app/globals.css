@@ -227,9 +227,23 @@
   pointer-events: none;
 }
 
+/* Named so they are drawn above a sliding screen instead of under it. */
+[data-slot="app-bar"] {
+  view-transition-name: app-bar;
+}
+[data-slot="tab-bar"] {
+  view-transition-name: tab-bar;
+}
+::view-transition-group(app-bar),
+::view-transition-group(tab-bar) {
+  z-index: 1;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-new(root),
+  ::view-transition-old(app-bar),
+  ::view-transition-new(app-bar) {
     animation-duration: 150ms;
   }
   ::view-transition-new(.push-in) {

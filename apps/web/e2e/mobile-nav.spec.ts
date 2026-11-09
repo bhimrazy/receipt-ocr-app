@@ -268,7 +268,7 @@ test.describe("with reduced motion", () => {
     await page.getByRole("link", { name: "Phone Market" }).click();
     await expect(page).toHaveURL(new RegExp(`/app/receipts/${receiptId}`));
     await expect(page.getByRole("heading", { level: 1, name: "Phone Market" })).toBeVisible();
-    // A transition may still run (React starts one), but with no animation at all.
-    expect(await transitions(page)).toEqual([]);
+    // React still starts a transition; nothing in it may take time.
+    expect((await transitions(page)).filter((t) => !t.endsWith(" 0"))).toEqual([]);
   });
 });
