@@ -311,8 +311,15 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   page, sign-in and sign-up, so the installed app feels native there too (full-height layouts, thumb-reach actions,
   no website chrome once installed), then fixes in small PRs. Do it after the first friends' test round, using their
   feedback. Review done 2026-11-09 ([review](reviews/2026-11-09-mobile-pwa-review.md)): 15 findings in five PRs;
-  the owner accepted all nine recommended decisions on 2026-11-09. PR 1 (the installed app never shows the website)
-  is in review.
+  the owner accepted all nine recommended decisions on 2026-11-09. All five PRs are built: PR 1 the installed app
+  never shows the website (#195, #196), PR 2 touch feedback (#197), PR 3 full-screen auth (#198), PR 4 keyboard,
+  offline and refresh (#199), PR 5 polish in two parts: phone landing header and preview, manifest screenshots and
+  iPad splash (#200), then screen transitions and Settings as a grouped list (#PR5B). Left: a pass on a real
+  installed iPhone and Android phone, which headless Chromium can't stand in for, starting with finding 14 (Google
+  and GitHub sign-in in the installed iOS app; if the session doesn't reach the app, put passkey and email first
+  there). Owner decisions, 2026-11-09 (#201): the signed-in app keeps its 16 px phone side gutter and only the auth
+  screens use 24 px, because forms need more air than lists; on the iPhone SE, sign-up's "Already have an account?
+  Sign in" line stays below the fold rather than hiding the logo on short screens.
 - **Long receipts in parts (parked 2026-11-09).** Decided 2026-11-07: split, don't stitch; multi-part receipts
   ("Add part") and automatic splitting of very tall photos, sent as several images in one request
   ([plan](plans/2026-11-07-long-receipt-capture.md)). Not built. Until then a very long receipt uploads at the largest
