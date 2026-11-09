@@ -85,10 +85,10 @@ test("take two photos, edit one, and upload both", async ({ page }) => {
     "aria-pressed",
     "true",
   );
-  await expect(review.getByTestId("resolution")).toHaveText(/^\d+ × \d+ px · ~\d+ (KB|MB)$/, {
+  await expect(review.getByTestId("resolution")).toHaveText(/^\d+ × \d+ px · \d+ (KB|MB)$/, {
     timeout: 15_000,
   });
-  await expect(review.getByText("Tap the preview to see it at full size.")).toBeVisible();
+  await expect(review.getByText("Tap the preview to see exactly what uploads.")).toBeVisible();
   // Escape goes back to the corners, not out of the sheet.
   await page.keyboard.press("Escape");
   await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
@@ -145,19 +145,38 @@ async function largePhoto(page: Page) {
   };
 }
 
-test("a large photo offers upload sizes, shows the choice at full size and sends it", async ({
-  page,
-}) => {
-  await signUp(page, uniqueEmail("upload-size"));
+type Sent = { size: unknown; quality: unknown; bytes: number };
+
+/** Records each upload's size choice, encode quality and file bytes in the page. */
+async function recordSizes(page: Page) {
   await page.addInitScript(() => {
-    const sizes: unknown[] = [];
-    (window as unknown as { sizes: unknown[] }).sizes = sizes;
+    const sent: { size: unknown; quality: unknown; bytes: number }[] = [];
+    (window as unknown as { sent: typeof sent }).sent = sent;
     const send = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function (body) {
-      if (body instanceof FormData) sizes.push(body.get("size_choice"));
+      if (body instanceof FormData) {
+        const file = body.get("file");
+        sent.push({
+          size: body.get("size_choice"),
+          quality: body.get("encode_quality"),
+          bytes: file instanceof Blob ? file.size : -1,
+        });
+      }
       return send.call(this, body);
     };
   });
+  return () => page.evaluate(() => (window as unknown as { sent: Sent[] }).sent);
+}
+
+/** "241 KB" as the app writes it. */
+const kb = (bytes: number) =>
+  bytes < 999.5 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+test("a large photo offers upload sizes, shows the real file and sends it", async ({ page }) => {
+  await signUp(page, uniqueEmail("upload-size"));
+  const sent = await recordSizes(page);
   await page.goto("/app");
   await expect(page.locator("[data-ready]")).toBeAttached();
   await page.locator('input[type="file"][multiple]').setInputFiles(await largePhoto(page));
@@ -169,33 +188,164 @@ test("a large photo offers upload sizes, shows the choice at full size and sends
   if (await fullImage.isEnabled()) await fullImage.click();
   await review.getByRole("button", { name: "Next" }).click();
 
-  const change = review.getByRole("button", { name: /Change/ });
+  const change = review.getByTestId("size-change");
   await expect(change).toBeVisible({ timeout: 15_000 });
   await expect(change).toHaveAttribute("aria-expanded", "false");
-  await expect(review.getByTestId("resolution")).toHaveText(/^\d+ × \d+ px · ~\d+ (KB|MB)$/);
+  // Standard: 2 MP at the photo's shape, with the real file's bytes.
+  await expect(review.getByTestId("resolution")).toHaveText(/^1225 × 1633 px · \d+ (KB|MB)$/, {
+    timeout: 15_000,
+  });
   await change.click();
   const sizes = review.getByRole("group", { name: "Upload size" });
-  await expect(sizes.getByRole("radio", { name: /^Recommended/ })).toBeChecked();
+  await expect(sizes.getByRole("radio", { name: /^Standard/ })).toBeChecked();
+  // Every option shows its real bytes once encoded in the background.
+  for (const name of ["Compact", "Standard", "Sharpest"]) {
+    await expect(sizes.getByRole("radio", { name: new RegExp(`^${name}`) })).toHaveAccessibleName(
+      /\d+ (KB|MB)$/,
+      { timeout: 20_000 },
+    );
+  }
   // The radios are visually hidden inside their labels, so pick by the label like a user does.
-  await sizes.getByText("Smaller").click();
-  await expect(sizes.getByRole("radio", { name: /^Smaller/ })).toBeChecked();
-  await expect(review.getByTestId("resolution")).toHaveText(/^800 × 1067 px · ~\d+ KB$/);
+  await sizes.getByText("Compact").click();
+  await expect(sizes.getByRole("radio", { name: /^Compact/ })).toBeChecked();
+  await expect(review.getByTestId("resolution")).toHaveText(/^ *866 × 1155 px · +\d+ KB$/);
 
   await review.getByRole("button", { name: "See it at full size" }).click();
-  const full = review.getByTestId("full-size").locator("img");
-  await expect(full).toBeVisible({ timeout: 15_000 });
-  expect(
-    await full.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight]),
-  ).toEqual([800, 1067]);
+  const full = review.getByTestId("full-size");
+  const img = full.locator("img");
+  await expect(img).toBeVisible({ timeout: 15_000 });
+  await expect(full).toHaveAttribute("data-mode", "actual");
+  expect(await img.evaluate((el: HTMLImageElement) => [el.naturalWidth, el.naturalHeight])).toEqual(
+    [866, 1155],
+  );
+  // Actual pixels: one image pixel per device pixel.
+  const css = await img.evaluate((el: HTMLImageElement) => [
+    el.getBoundingClientRect().width,
+    window.devicePixelRatio,
+  ]);
+  expect(Math.abs(css[0]! * css[1]! - 866)).toBeLessThanOrEqual(1);
+  await expect(review.getByText(/One pixel of the upload per screen pixel/)).toBeVisible();
+  await review.getByRole("button", { name: "Whole receipt" }).click();
+  await expect(full).toHaveAttribute("data-mode", "fitted");
+  await expect(review.getByText(/The whole upload, as it will be sent/)).toBeVisible();
+  // The zoom bar has its own row: the fitted image starts below it, never under it.
+  const bar = (await review.getByTestId("full-size-bar").boundingBox())!;
+  const shown = (await img.boundingBox())!;
+  expect(shown.y).toBeGreaterThanOrEqual(bar.y + bar.height - 0.5);
+  const caption = review.getByTestId("upload-caption");
+  await expect(caption).toHaveText(/^Uploads exactly this: 866 × 1155 px · \d+ KB JPEG$/);
+  const captionText = (await caption.textContent()) ?? "";
   await review.getByRole("button", { name: "Done" }).click();
-  await expect(review.getByRole("img", { name: /^Receipt preview/ })).toBeVisible();
+  await expect(review.getByRole("img", { name: /^Receipt preview/ })).toHaveAttribute(
+    "data-source",
+    "upload",
+  );
 
   await review.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
-  expect(await page.evaluate(() => (window as unknown as { sizes: unknown[] }).sizes)).toEqual([
-    "smaller",
-  ]);
+  const [upload] = await sent();
+  expect(upload).toMatchObject({ size: "smaller" });
+  expect(["0.8", "0.72", "0.65"]).toContain(upload!.quality);
+  // The caption is the file that was sent.
+  expect(captionText).toContain(`· ${kb(upload!.bytes)} JPEG`);
 });
+
+/** A synthetic long, narrow receipt (no real data), 1:4. */
+async function longPhoto(page: Page) {
+  const data = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 800;
+    c.height = 3200;
+    const x = c.getContext("2d")!;
+    x.fillStyle = "#f7f5ef";
+    x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = "#222";
+    x.font = "32px monospace";
+    for (let y = 80, i = 1; y < c.height - 80; y += 48, i++)
+      x.fillText(`Item ${i}  ${i}.50`, 60, y);
+    return c.toDataURL("image/jpeg", 0.9);
+  });
+  return {
+    name: "long.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.from(data.split(",")[1]!, "base64"),
+  };
+}
+
+test("a long receipt goes at the model's full size, with no picker", async ({ page }) => {
+  await signUp(page, uniqueEmail("long-receipt"));
+  const sent = await recordSizes(page);
+  await page.goto("/app");
+  await expect(page.locator("[data-ready]")).toBeAttached();
+  await page.locator('input[type="file"][multiple]').setInputFiles(await longPhoto(page));
+  const review = page.getByRole("dialog", { name: "Review photos" });
+  await expect(review.getByRole("button", { name: /^Top-left corner/ })).toBeVisible({
+    timeout: 15_000,
+  });
+  const fullImage = review.getByRole("button", { name: "Use full image" });
+  if (await fullImage.isEnabled()) await fullImage.click();
+  await review.getByRole("button", { name: "Next" }).click();
+  await expect(review.getByTestId("resolution")).toHaveText(/^ *644 × 2576 px · +\d+ KB$/, {
+    timeout: 15_000,
+  });
+  await expect(review.getByTestId("size-change")).toHaveCount(0);
+  await expect(
+    review.getByText(/Long receipt: sent at the highest size the model reads\./),
+  ).toBeVisible();
+  await review.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
+  expect((await sent())[0]).toMatchObject({ size: "larger" });
+});
+
+/**
+ * Runs `action` while an in-page requestAnimationFrame loop records each element's box every
+ * frame, and returns the largest change per element over `ms` (Infinity if it disappeared). This
+ * catches one-frame jumps that a settle-then-measure check misses.
+ */
+async function watchBoxes(
+  page: Page,
+  selectors: Record<string, string>,
+  action: () => Promise<void>,
+  ms = 600,
+) {
+  await page.evaluate((sel) => {
+    type W = { boxes: Record<string, (number[] | null)[]>; watching: boolean };
+    const w = window as unknown as W;
+    w.boxes = {};
+    w.watching = true;
+    const read = () => {
+      for (const [name, s] of Object.entries(sel)) {
+        const el = document.querySelector(s);
+        const r = el?.getBoundingClientRect();
+        (w.boxes[name] ??= []).push(r ? [r.x, r.y, r.width, r.height] : null);
+      }
+      if (w.watching) requestAnimationFrame(read);
+    };
+    read();
+  }, selectors);
+  await action();
+  await page.waitForTimeout(ms);
+  return page.evaluate(() => {
+    const w = window as unknown as {
+      boxes: Record<string, (number[] | null)[]>;
+      watching: boolean;
+    };
+    w.watching = false;
+    const out: Record<string, number> = {};
+    for (const [name, list] of Object.entries(w.boxes)) {
+      const first = list[0];
+      out[name] = list.reduce<number>((worst, box) => {
+        if (!first || !box) return first === box ? worst : Infinity;
+        return Math.max(worst, ...box.map((v, i) => Math.abs(v - first[i]!)));
+      }, 0);
+    }
+    return out;
+  });
+}
+
+const steady = (moved: Record<string, number>) => {
+  for (const [name, px] of Object.entries(moved)) expect(px, name).toBeLessThanOrEqual(1);
+};
 
 /** Two copies of the receipt fixture, opened in the review sheet on its corners step. */
 async function pickTwo(page: Page) {
@@ -293,7 +443,10 @@ for (const viewport of [
       }
     };
     const settle = () => page.waitForTimeout(400);
-    const controls = { controls: review.getByTestId("controls") };
+    const controls = {
+      controls: review.getByTestId("controls"),
+      hint: review.getByTestId("hint"),
+    };
 
     // Step 1.
     const base = await rects(controls);
@@ -322,15 +475,50 @@ for (const viewport of [
     await expect(review.getByRole("img", { name: /^Receipt preview/ })).toBeVisible({
       timeout: 15_000,
     });
+    // Across the step switch, the panel's blocks and the footer stay where they were.
+    same(base, await rects(controls));
     const filters = {
-      controls: review.getByTestId("controls"),
-      hint: review.getByTestId("resolution"),
+      ...controls,
+      resolution: review.getByTestId("resolution"),
     };
+    await expect(review.getByTestId("resolution")).toHaveText(/\d+ (KB|MB)$/, { timeout: 15_000 });
     const preview = await rects(filters);
+    const watched = {
+      stage: "[data-testid=stage]",
+      primary: "[data-testid=primary]",
+      controls: "[data-testid=controls]",
+      resolution: "[data-testid=resolution]",
+    };
     for (const name of ["Original", "Enhance", "Greyscale", "B&W", "Original"]) {
-      await review.getByRole("button", { name, exact: true }).click();
-      await settle();
+      steady(
+        await watchBoxes(page, watched, () =>
+          review.getByRole("button", { name, exact: true }).click(),
+        ),
+      );
       same(preview, await rects(filters));
+    }
+
+    // The size line and the open picker: choosing a size or a filter moves nothing.
+    const change = review.getByTestId("size-change");
+    if ((await change.count()) > 0) {
+      await change.click();
+      const picker = review.getByRole("group", { name: "Upload size" });
+      await expect(picker).toBeVisible();
+      const open = { ...watched, change: "[data-testid=size-change]", picker: "#upload-size" };
+      for (const label of ["Compact", "Sharpest", "Standard"]) {
+        const option = picker.getByText(label, { exact: true });
+        if ((await option.count()) === 0) continue;
+        steady(await watchBoxes(page, open, () => option.click()));
+      }
+      for (const name of ["Greyscale", "Original"]) {
+        steady(
+          await watchBoxes(page, open, () =>
+            review.getByRole("button", { name, exact: true }).click(),
+          ),
+        );
+      }
+      await change.click();
+      await expect(picker).toHaveCount(0);
     }
     await review.getByRole("button", { name: "Photo 1" }).click();
     await expect(review.getByText("Photo 1 of 2").filter({ visible: true })).toBeVisible();

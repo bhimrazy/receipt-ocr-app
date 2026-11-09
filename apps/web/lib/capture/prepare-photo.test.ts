@@ -1,9 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FULL_QUAD, initialEdit, type EditState } from "./edit-state";
+import { TooLargeError } from "@/lib/upload-encoding";
 import { EditFailedError, preparePhoto } from "./prepare-photo";
 
-const prepareFile = vi.hoisted(() => vi.fn(async (file: File) => file));
-vi.mock("@/lib/upload-prep", () => ({ prepareFile }));
+const prepareFile = vi.hoisted(() =>
+  vi.fn<(file: File, options?: unknown) => Promise<File>>(async (file) => file),
+);
+/** Encodes the canvas it is handed, like the real one, so a failing `toBlob` fails it. */
+const encodeUpload = vi.hoisted(() =>
+  vi.fn<(canvas: FakeCanvas, name: string, options?: unknown) => Promise<File>>(
+    (canvas, name) =>
+      new Promise<File>((resolve, reject) =>
+        canvas.toBlob((blob) =>
+          blob
+            ? resolve(new File([blob], name, { type: "image/jpeg" }))
+            : reject(new Error("encode failed")),
+        ),
+      ),
+  ),
+);
+vi.mock("@/lib/upload-prep", () => ({ prepareFile, encodeUpload }));
 
 type FakeCanvas = {
   width: number;
@@ -61,7 +77,10 @@ const sentOriginal = () =>
     ([file]) => file.size === photo.blob.size && file.name === photo.name,
   );
 
-beforeEach(() => prepareFile.mockClear());
+beforeEach(() => {
+  prepareFile.mockClear();
+  encodeUpload.mockClear();
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("preparePhoto", () => {
@@ -79,10 +98,24 @@ describe("preparePhoto", () => {
     stubCanvas({});
     stubDecode();
     await preparePhoto(photo, rotated, noStartingEdit, "larger");
-    expect(prepareFile).toHaveBeenLastCalledWith(expect.any(File), "larger");
+    expect(encodeUpload).toHaveBeenLastCalledWith(expect.anything(), "receipt.jpg", {
+      size: "larger",
+      filter: "original",
+    });
     stubDecode(true);
     await preparePhoto(photo, undefined, noStartingEdit, "smaller");
-    expect(prepareFile).toHaveBeenLastCalledWith(expect.any(File), "smaller");
+    expect(prepareFile).toHaveBeenLastCalledWith(expect.any(File), { size: "smaller" });
+  });
+
+  it("refuses a photo that stays over the hard cap instead of sending the original", async () => {
+    const canvases = stubCanvas({});
+    stubDecode();
+    encodeUpload.mockRejectedValueOnce(new TooLargeError(2_000_000));
+    await expect(preparePhoto(photo, unedited, noStartingEdit)).rejects.toBeInstanceOf(
+      TooLargeError,
+    );
+    expect(sentOriginal()).toBe(false);
+    expect(canvases.every((c) => c.width === 0 && c.height === 0)).toBe(true);
   });
 
   it("never sends the original of an edited photo when the encode fails", async () => {

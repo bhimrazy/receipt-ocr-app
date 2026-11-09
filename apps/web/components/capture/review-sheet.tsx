@@ -15,7 +15,7 @@ import {
   ScanText,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   editKey,
   initialEdit,
@@ -33,28 +33,27 @@ import {
   dropRenderCache,
   FULL_RENDER,
   loadImage,
+  releaseCanvas,
   renderedSize,
+  renderEdit,
   renderPreview,
-  renderSmall,
-  renderToJpeg,
   THUMB_RENDER,
-  type RenderBudget,
 } from "@/lib/capture/render";
+import { ENCODING, TooLargeError } from "@/lib/upload-encoding";
 import {
-  planSize,
-  predictEncode,
-  prepareFile,
-  shortEdge,
+  chosenOption,
+  encodeUpload,
   SIZE_IDS,
-  sizeOptions,
-  START_QUALITY,
+  uploadInfo,
+  uploadPlan,
   type SizeId,
+  type UploadPlan,
 } from "@/lib/upload-prep";
 import { CropEditor } from "./crop-editor";
 import { FullScreen } from "./full-screen";
-import { FullSizeView } from "./full-size-view";
+import { FullSizeView, type FullSizeMode } from "./full-size-view";
 import { ResultPreview } from "./result-preview";
-import { formatSize, SizePicker, type SizedOption } from "./size-picker";
+import { Bytes, formatSize, SizePicker, Slot } from "./size-picker";
 
 type Step = "adjust" | "preview";
 
@@ -98,53 +97,49 @@ function startingEdit(bitmap: ImageBitmap): EditState {
   return initialEdit(quad, defaultFilter(rememberedFilter(), quad !== null));
 }
 
-/** About 0.3 MP: a few milliseconds to render, where the full 16 MP render takes seconds. */
-const ESTIMATE_RENDER: RenderBudget = { source: 1_200_000, output: 300_000 };
+/** Wait after the last edit before the full-size render, which blocks the main thread. */
+const ENCODE_DELAY_MS = 400;
+const CAP_LABEL = (() => {
+  const { value, unit } = formatSize(ENCODING.hardCapBytes);
+  return `${value} ${unit}`;
+})();
 
+type EncodeFailure = "too-large" | "failed";
 /**
- * The upload sizes, from a small render: its JPEG bytes per pixel at the upload quality, run
- * through the same loops `prepareFile` uses, for the automatic size and each choice the
- * rendered crop offers. A small copy packs more detail per pixel, so this leans high.
+ * The real uploads of one photo's edit, one per size option, made from a single full-size
+ * render. They are what the preview, the size line and the full-size view show, and what
+ * Upload sends.
  */
-async function estimateUpload(bitmap: ImageBitmap, edit: EditState) {
-  const small = await renderSmall(bitmap, edit, ESTIMATE_RENDER, START_QUALITY);
-  const bytesPerPixel = small.blob.size / (small.width * small.height);
-  // The crop as `prepareFile` will decode it.
-  const full = renderedSize(bitmap, edit, FULL_RENDER);
-  const auto = await predictEncode(planSize(full.width, full.height), bytesPerPixel);
-  const options: SizedOption[] = [];
-  for (const option of sizeOptions(full, auto)) {
-    if (option.id === "recommended") {
-      options.push({ ...option, bytes: auto.bytes });
-      continue;
-    }
-    const kept = await predictEncode(option, bytesPerPixel, { minShort: shortEdge(option) });
-    options.push({ ...option, ...kept });
-  }
-  return { auto, options };
+type Encodes = {
+  key: string;
+  plan: UploadPlan;
+  files: Partial<Record<SizeId, File>>;
+  failed: Partial<Record<SizeId, EncodeFailure>>;
+};
+
+/** An object URL for `blob` while it is shown, revoked once it is replaced or unmounted. */
+function useObjectUrl(blob: Blob | null) {
+  const [made, setMade] = useState<{ blob: Blob; url: string } | null>(null);
+  useEffect(() => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    // A URL needs revoking, so it is made here rather than during render (Strict Mode safe).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMade({ blob, url });
+    return () => URL.revokeObjectURL(url);
+  }, [blob]);
+  return made && made.blob === blob ? made.url : null;
 }
 
-/** The cache key for a prepared upload: the edit and the size it was made at. */
-const preparedKey = (edit: EditState, size: SizeId) => `${editKey(edit)}|${size}`;
-
-const Mono = ({ children }: { children: React.ReactNode }) => (
-  <span className="font-mono tabular-nums">{children}</span>
-);
-
 type Loaded = { id: string; bitmap: ImageBitmap };
-type Estimate = {
-  key: string;
-  auto: { bytes: number; width: number; height: number };
-  /** Empty when there is nothing to choose. */
-  options: SizedOption[];
-};
-type Prepared = { key: string; file: File };
+type HeldBack = "edit" | "too-large";
 
 /**
  * Every photo is checked here before upload, in two steps like a document scanner: adjust the
- * corners (and turn), then preview the flattened page with a filter. The result goes through
- * the same `prepareFile` as any picked file. The layout never changes size between actions:
- * the stage is a fixed box, and every row around it reserves its space.
+ * corners (and turn), then preview the flattened page with a filter. The preview step encodes the
+ * real upload, so the picture, the size and the full-size view all show the file that will be
+ * sent. The layout never changes size between actions: the stage is a fixed box, and every row
+ * around it reserves its space.
  */
 export default function ReviewSheet({
   images: initial,
@@ -167,11 +162,10 @@ export default function ReviewSheet({
   const [edits, setEdits] = useState<Record<string, EditState>>({});
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState<Record<string, boolean>>({});
-  const [estimates, setEstimates] = useState<Record<string, Estimate>>({});
-  // Files made by an earlier Upload that stopped on a failed photo, reused when nothing changed.
-  const [prepared, setPrepared] = useState<Record<string, Prepared>>({});
-  // Photos whose edit couldn't be encoded; held back until the edit changes or Upload succeeds.
-  const [editFailed, setEditFailed] = useState<Record<string, true>>({});
+  // Kept after an edit until the new encode lands, so the size line shows the last values dimmed.
+  const [encodes, setEncodes] = useState<Record<string, Encodes>>({});
+  // Photos that couldn't be sent; held back until the edit changes or Upload succeeds.
+  const [heldBack, setHeldBack] = useState<Record<string, HeldBack>>({});
   const [uploadError, setUploadError] = useState<string | null>(null);
   // Tagged with the photo and crop they show, so another photo's strip is never reused.
   const [thumbs, setThumbs] = useState<{
@@ -185,13 +179,21 @@ export default function ReviewSheet({
   const [size, setSize] = useState<SizeId>(() => remembered(SIZE_KEY, SIZE_IDS) ?? "recommended");
   const [sizeOpen, setSizeOpen] = useState(false);
   const [fullSize, setFullSize] = useState(false);
-  // The real upload for the full-size view, tagged with the photo, edit and size it shows.
-  const [actual, setActual] = useState<{ key: string; url: string | null } | null>(null);
+  // Kept while the sheet is open, so reopening the full-size view shows the last zoom.
+  const [fullSizeMode, setFullSizeMode] = useState<FullSizeMode>("actual");
   const primaryRef = useRef<HTMLButtonElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const job = useRef<{ token: string; cancel: () => void } | null>(null);
 
   const current = images[Math.min(index, images.length - 1)];
   const edit = current ? edits[current.id] : undefined;
   const bitmap = loaded && current && loaded.id === current.id ? loaded.bitmap : null;
+  // The upload sizes, from the shape of the crop alone: known at once, before any encode.
+  const plan = useMemo(
+    () => (bitmap && edit ? uploadPlan(renderedSize(bitmap, edit, FULL_RENDER)) : null),
+    [bitmap, edit],
+  );
+  const chosen = plan ? chosenOption(plan, size) : null;
 
   // Decode the current image (one at a time: ten 12 MP bitmaps would not fit on a phone).
   useEffect(() => {
@@ -219,27 +221,73 @@ export default function ReviewSheet({
     };
   }, [current]);
 
-  // The upload size for this edit, estimated from a small render (preview step only).
+  // Encodes the real uploads for this edit (preview step only): the chosen size first, then the
+  // other options from the same render, so the picker shows real bytes. A new edit, photo or
+  // choice cancels the run and starts one for what is missing. Upload encodes what it needs
+  // itself, so no run competes with it for the main thread.
   useEffect(() => {
-    if (step !== "preview" || !bitmap || !edit || !current) return;
+    if (step !== "preview" || !bitmap || !edit || !current || !chosen || working !== null) {
+      job.current?.cancel();
+      job.current = null;
+      return;
+    }
     const key = editKey(edit);
-    if (estimates[current.id]?.key === key) return;
+    const token = `${current.id}|${key}|${chosen.id}`;
+    if (job.current?.token === token) return;
+    const entry = encodes[current.id]?.key === key ? encodes[current.id] : undefined;
+    const missing = [chosen.id, ...plan!.options.map((o) => o.id)].filter(
+      (id, i, all) => all.indexOf(id) === i && !entry?.files[id] && !entry?.failed[id],
+    );
+    job.current?.cancel();
+    job.current = null;
+    if (missing.length === 0) return;
+    const id = current.id;
+    const name = current.name;
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      estimateUpload(bitmap, edit)
-        .then(({ auto, options }) => {
-          if (!cancelled) {
-            setEstimates((all) => ({ ...all, [current.id]: { key, auto, options } }));
+    const record = (sizeId: SizeId, result: File | EncodeFailure, made: UploadPlan) =>
+      setEncodes((all) => {
+        const prev = all[id]?.key === key ? all[id]! : { key, plan: made, files: {}, failed: {} };
+        return {
+          ...all,
+          [id]:
+            typeof result === "string"
+              ? { ...prev, failed: { ...prev.failed, [sizeId]: result } }
+              : { ...prev, files: { ...prev.files, [sizeId]: result } },
+        };
+      });
+    const timer = window.setTimeout(async () => {
+      let canvas: HTMLCanvasElement | undefined;
+      try {
+        canvas = renderEdit(bitmap, edit, FULL_RENDER);
+        const made = uploadPlan(canvas);
+        for (const sizeId of missing) {
+          if (cancelled) return;
+          try {
+            const file = await encodeUpload(canvas, name, { size: sizeId, filter: edit.filter });
+            if (!cancelled) record(sizeId, file, made);
+          } catch (error) {
+            if (!cancelled)
+              record(sizeId, error instanceof TooLargeError ? "too-large" : "failed", made);
           }
-        })
-        // No estimate this time; the upload still encodes for real.
-        .catch(() => {});
-    }, 100);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
+        }
+      } catch {
+        // Out of canvas memory: Upload tries again, one photo at a time.
+        if (!cancelled && plan) for (const sizeId of missing) record(sizeId, "failed", plan);
+      } finally {
+        if (canvas) releaseCanvas(canvas);
+      }
+    }, ENCODE_DELAY_MS);
+    job.current = {
+      token,
+      cancel: () => {
+        cancelled = true;
+        window.clearTimeout(timer);
+      },
     };
-  }, [step, bitmap, edit, current, estimates]);
+  }, [step, bitmap, edit, current, chosen, plan, encodes, working]);
+
+  // Stops a run when the sheet closes.
+  useEffect(() => () => job.current?.cancel(), []);
 
   // Small previews of each filter on the flattened crop (preview step only).
   const shapeKey =
@@ -262,41 +310,16 @@ export default function ReviewSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, bitmap, shapeKey]);
 
-  // The full-size view shows the file that will upload, so it is kept for Upload too.
-  const fullKey = current && edit ? `${current.id}|${editKey(edit)}|${size}` : "";
-  useEffect(() => {
-    if (!fullSize || step !== "preview" || !bitmap || !edit || !current) return;
-    if (actual?.key === fullKey) return;
-    let cancelled = false;
-    let url: string | null = null;
-    const timer = window.setTimeout(() => {
-      renderToJpeg(bitmap, edit, current.name)
-        .then((rendered) => prepareFile(rendered, size))
-        .then((file) => {
-          if (cancelled) return;
-          url = URL.createObjectURL(file);
-          setActual({ key: fullKey, url });
-          setPrepared((all) => ({ ...all, [current.id]: { key: preparedKey(edit, size), file } }));
-        })
-        .catch(() => {
-          if (!cancelled) setActual({ key: fullKey, url: null });
-        });
-    }, 100);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-    // `actual` is what this effect writes; it only needs to rerun when the view or its key changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullSize, step, bitmap, fullKey]);
+  const entry = current ? encodes[current.id] : undefined;
+  const fresh = entry && edit && entry.key === editKey(edit) ? entry : undefined;
+  const chosenFile = fresh && chosen ? (fresh.files[chosen.id] ?? null) : null;
+  const chosenFailure = fresh && chosen ? fresh.failed[chosen.id] : undefined;
+  const uploadUrl = useObjectUrl(chosenFile);
 
-  // Frees the shown file's object URL once it is replaced or the sheet closes.
+  // Brings the picker into view on a short phone, where it would open below the fold.
   useEffect(() => {
-    const url = actual?.url;
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [actual]);
+    if (sizeOpen) pickerRef.current?.scrollIntoView({ block: "nearest" });
+  }, [sizeOpen]);
 
   function chooseSize(next: SizeId) {
     rememberSize(next);
@@ -307,7 +330,7 @@ export default function ReviewSheet({
     if (!current) return;
     setEdits((all) => ({ ...all, [current.id]: next }));
     const id = current.id;
-    setEditFailed((all) => {
+    setHeldBack((all) => {
       if (!all[id]) return all;
       const rest = { ...all };
       delete rest[id];
@@ -337,41 +360,44 @@ export default function ReviewSheet({
   }
 
   /**
-   * Encodes every photo. One whose edit can't be encoded is never swapped for the original:
-   * the sheet stays open on it with an error, and nothing is sent until it is fixed or deleted.
+   * Encodes every photo, reusing the preview's encode where nothing changed. A photo whose edit
+   * can't be encoded is never swapped for the original, and one still over the hard cap is never
+   * sent: the sheet stays open on it with an error, and nothing is sent until it is fixed or
+   * deleted.
    */
   async function upload() {
     const files: File[] = [];
-    const done: Record<string, Prepared> = {};
-    const failedNow: Record<string, true> = {};
+    const held: Record<string, HeldBack> = {};
+    job.current?.cancel();
+    job.current = null;
     setUploadError(null);
     try {
       for (const [i, image] of images.entries()) {
         setWorking(`Preparing ${i + 1} of ${images.length}…`);
         const saved = edits[image.id];
-        const key = saved ? preparedKey(saved, size) : "";
-        const cached = prepared[image.id];
-        if (saved && cached?.key === key) {
-          files.push(cached.file);
-          continue;
+        const ready = encodes[image.id];
+        if (saved && ready?.key === editKey(saved)) {
+          const file = ready.files[chosenOption(ready.plan, size).id];
+          if (file) {
+            files.push(file);
+            continue;
+          }
         }
         try {
-          const file = await preparePhoto(image, saved, startingEdit, size);
-          files.push(file);
-          if (saved) done[image.id] = { key, file };
+          files.push(await preparePhoto(image, saved, startingEdit, size));
         } catch (error) {
-          if (!(error instanceof EditFailedError)) throw error;
-          failedNow[image.id] = true;
+          if (error instanceof TooLargeError) held[image.id] = "too-large";
+          else if (error instanceof EditFailedError) held[image.id] = "edit";
+          else throw error;
         }
       }
     } finally {
       setWorking(null);
     }
-    const failedIds = images.filter((image) => image.id in failedNow).map((image) => image.id);
-    if (failedIds.length > 0) {
-      setPrepared((all) => ({ ...all, ...done }));
-      setEditFailed(failedNow);
-      setIndex(images.findIndex((image) => image.id === failedIds[0]));
+    const heldIds = images.filter((image) => image.id in held).map((image) => image.id);
+    if (heldIds.length > 0) {
+      setHeldBack(held);
+      setIndex(images.findIndex((image) => image.id === heldIds[0]));
       return;
     }
     onUpload(files);
@@ -394,25 +420,36 @@ export default function ReviewSheet({
     setStep("adjust");
   }
 
-  const estimate = current && edit ? estimates[current.id] : undefined;
-  const fresh = estimate && edit && estimate.key === editKey(edit);
   const count = images.length;
   const total = count + alsoReading.length;
-  const heldBack = (id: string) => editFailed[id] === true;
   const position = Math.min(index, count - 1) + 1;
   const adjusting = step === "adjust";
-  const options = fresh ? estimate.options : [];
-  // The batch's choice where this photo offers it, else the automatic size.
-  const shown = fresh
-    ? (options.find((o) => o.id === size) ??
-      options.find((o) => o.id === "recommended") ??
-      estimate.auto)
-    : null;
-  const shownBytes = shown ? formatSize(shown.bytes) : null;
-  const shownId = options.find((o) => o.id === size) ? size : "recommended";
-  const stripThumbs = thumbs?.key === shapeKey ? thumbs.urls : {};
+  const held = current ? heldBack[current.id] : undefined;
+  // Same photo, new crop: the old strip stays until the new one is drawn.
+  const stripThumbs = current && thumbs?.key.startsWith(`${current.id}:`) ? thumbs.urls : {};
+  const choosable = plan !== null && plan.options.length > 1;
+  // The last real file for this photo at this choice, shown dimmed while a new one is encoded.
+  const staleFile = !fresh && entry && chosen ? entry.files[chosen.id] : undefined;
+  const shownFile = chosenFile ?? staleFile ?? null;
+  const info = chosenFile ? uploadInfo(chosenFile) : undefined;
+  const shownSize = info ?? chosen;
+  const busy = plan !== null && !chosenFile && !chosenFailure;
+  const pickerOptions = plan
+    ? plan.options.map((option) => ({ ...option, bytes: fresh?.files[option.id]?.size }))
+    : [];
 
   const tool = "min-h-11 flex-1 px-1 text-xs md:justify-start md:px-3 md:text-sm";
+
+  const sizeText = shownSize ? (
+    <span data-testid="resolution">
+      <Slot>{shownSize.width}</Slot> × <Slot>{shownSize.height}</Slot> px ·{" "}
+      {chosenFailure === "too-large" ? (
+        `over ${CAP_LABEL}`
+      ) : (
+        <Bytes bytes={chosenFailure ? null : shownFile?.size} />
+      )}
+    </span>
+  ) : null;
 
   return (
     <FullScreen
@@ -452,7 +489,7 @@ export default function ReviewSheet({
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div
-          className="relative h-[clamp(12rem,40dvh,34rem)] shrink-0 bg-muted/40 md:h-auto md:min-w-0 md:flex-1"
+          className="relative h-[clamp(12rem,40svh,34rem)] shrink-0 bg-muted/40 md:h-auto md:min-w-0 md:flex-1"
           data-testid="stage"
         >
           <div className="absolute inset-0 flex flex-col">
@@ -465,17 +502,20 @@ export default function ReviewSheet({
                 <CropEditor bitmap={bitmap} edit={edit} onChange={update} />
               ) : fullSize ? (
                 <FullSizeView
-                  failed={actual?.key === fullKey && actual.url === null}
-                  label={
-                    shown
-                      ? `Receipt at full size, ${shown.width} × ${shown.height} px`
-                      : "Receipt at full size"
-                  }
+                  failed={chosenFailure !== undefined}
+                  file={chosenFile}
+                  mode={fullSizeMode}
                   onDone={() => setFullSize(false)}
-                  url={actual?.key === fullKey ? actual.url : null}
+                  onModeChange={setFullSizeMode}
+                  url={uploadUrl}
                 />
               ) : (
-                <ResultPreview bitmap={bitmap} edit={edit} onInspect={() => setFullSize(true)} />
+                <ResultPreview
+                  bitmap={bitmap}
+                  edit={edit}
+                  onInspect={() => setFullSize(true)}
+                  upload={uploadUrl}
+                />
               )
             ) : (
               <p className="m-auto flex items-center gap-2 text-sm text-muted-foreground">
@@ -483,7 +523,8 @@ export default function ReviewSheet({
                   aria-hidden="true"
                   className="size-4 animate-spin motion-reduce:animate-none"
                 />
-                Finding the receipt…
+                {/* One line per step, so switching photos doesn't show two in a row. */}
+                {adjusting ? "Finding the receipt…" : "Preparing the preview…"}
               </p>
             )}
           </div>
@@ -516,40 +557,41 @@ export default function ReviewSheet({
             </Button>
           </div>
 
-          {adjusting ? (
-            <div className="grid grid-cols-3 gap-1 md:grid-cols-1" data-testid="controls">
-              <Button
-                className={tool}
-                disabled={!edit}
-                onClick={() => edit && update(rotateClockwise(edit))}
-                variant="ghost"
-              >
-                <RotateCw aria-hidden="true" />
-                Rotate
-              </Button>
-              <Button
-                aria-label="Reset to detected"
-                className={tool}
-                disabled={!edit?.detected || isDetected(edit)}
-                onClick={() => edit && update(resetToDetected(edit))}
-                variant="ghost"
-              >
-                <ScanLine aria-hidden="true" />
-                Reset
-              </Button>
-              <Button
-                aria-label="Use full image"
-                className={tool}
-                disabled={!edit || isFullFrame(edit.quad)}
-                onClick={() => edit && update(fullImage(edit))}
-                variant="ghost"
-              >
-                <Maximize aria-hidden="true" />
-                Full image
-              </Button>
-            </div>
-          ) : (
-            <div data-testid="controls">
+          {/* The same height in both steps, so nothing below it moves when the step changes. */}
+          <div className="h-[5.5rem] shrink-0 md:h-64" data-testid="controls">
+            {adjusting ? (
+              <div className="grid grid-cols-3 gap-1 md:grid-cols-1">
+                <Button
+                  className={tool}
+                  disabled={!edit}
+                  onClick={() => edit && update(rotateClockwise(edit))}
+                  variant="ghost"
+                >
+                  <RotateCw aria-hidden="true" />
+                  Rotate
+                </Button>
+                <Button
+                  aria-label="Reset to detected"
+                  className={tool}
+                  disabled={!edit?.detected || isDetected(edit)}
+                  onClick={() => edit && update(resetToDetected(edit))}
+                  variant="ghost"
+                >
+                  <ScanLine aria-hidden="true" />
+                  Reset
+                </Button>
+                <Button
+                  aria-label="Use full image"
+                  className={tool}
+                  disabled={!edit || isFullFrame(edit.quad)}
+                  onClick={() => edit && update(fullImage(edit))}
+                  variant="ghost"
+                >
+                  <Maximize aria-hidden="true" />
+                  Full image
+                </Button>
+              </div>
+            ) : (
               <div
                 aria-label="Filter"
                 className="grid grid-cols-4 gap-2 md:grid-cols-2"
@@ -582,80 +624,92 @@ export default function ReviewSheet({
                   </button>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {adjusting ? (
-            <p className="min-h-8 text-center text-xs text-muted-foreground md:text-left">
-              Drag a corner to the edge of the receipt, or select one and use the arrow keys.
-            </p>
-          ) : (
-            <div className="text-center text-xs text-muted-foreground md:text-left">
-              <div className="flex h-11 items-center justify-center md:h-8 md:justify-start">
-                {shown && shownBytes && options.length > 0 ? (
-                  <button
-                    aria-controls="upload-size"
-                    aria-expanded={sizeOpen}
-                    className="-mx-2 inline-flex h-full items-center gap-1 rounded-md px-2 whitespace-nowrap outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => setSizeOpen((open) => !open)}
-                    type="button"
-                  >
-                    <span data-testid="resolution">
-                      <Mono>{shown.width}</Mono> × <Mono>{shown.height}</Mono> px · ~
-                      <Mono>{shownBytes.value}</Mono> {shownBytes.unit}
-                    </span>
-                    <span className="text-foreground">· Change</span>
-                    <ChevronDown
-                      aria-hidden="true"
-                      className={cn(
-                        "size-3.5 text-foreground transition-transform motion-reduce:transition-none",
-                        sizeOpen && "rotate-180",
-                      )}
-                    />
-                  </button>
-                ) : (
-                  <p className="w-full whitespace-nowrap" data-testid="resolution">
-                    {shown && shownBytes ? (
-                      <>
-                        <Mono>{shown.width}</Mono> × <Mono>{shown.height}</Mono> px · ~
-                        <Mono>{shownBytes.value}</Mono> {shownBytes.unit}
-                      </>
-                    ) : edit ? (
-                      "sizing…"
-                    ) : null}
-                  </p>
-                )}
-              </div>
-              {sizeOpen && options.length > 0 ? (
-                <div className="mt-1 mb-2 text-left">
-                  <SizePicker
-                    id="upload-size"
-                    onChange={chooseSize}
-                    options={options}
-                    photos={count}
-                    value={shownId}
-                  />
-                </div>
-              ) : null}
-              <p className="h-12">
-                {fullSize
-                  ? "Drag to look around. Done goes back to the whole receipt."
-                  : "Tap the preview to see it at full size."}
-                {edit?.filter === "bw"
-                  ? shownId === "smaller"
-                    ? " At 800 px, B&W can lose light print."
-                    : " B&W suits faded receipts but can lose light print."
-                  : null}
+          {/* The size line and hint: a fixed block in both steps; only the open picker adds to it. */}
+          <div
+            className="min-h-[5.75rem] shrink-0 text-center text-xs text-muted-foreground md:min-h-20 md:text-left"
+            data-testid="hint"
+          >
+            {adjusting ? (
+              <p className="pt-1">
+                Drag a corner to the edge of the receipt, or select one and use the arrow keys.
               </p>
-            </div>
-          )}
+            ) : (
+              <>
+                <div
+                  aria-busy={busy}
+                  className={cn(
+                    "flex h-11 items-center justify-center whitespace-nowrap transition-opacity motion-reduce:transition-none md:h-8 md:justify-start",
+                    busy && shownFile && "opacity-60",
+                  )}
+                >
+                  {choosable ? (
+                    <button
+                      aria-controls="upload-size"
+                      aria-expanded={sizeOpen}
+                      className="-mx-2 inline-flex h-full items-center gap-1 rounded-md px-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      data-testid="size-change"
+                      onClick={() => setSizeOpen((open) => !open)}
+                      type="button"
+                    >
+                      {sizeText}
+                      <span className="text-foreground">· Change</span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={cn(
+                          "size-3.5 text-foreground transition-transform motion-reduce:transition-none",
+                          sizeOpen && "rotate-180",
+                        )}
+                      />
+                    </button>
+                  ) : (
+                    <p>{sizeText}</p>
+                  )}
+                </div>
+                {sizeOpen && choosable ? (
+                  <div className="mt-1 mb-2 text-left" ref={pickerRef}>
+                    <SizePicker
+                      id="upload-size"
+                      onChange={chooseSize}
+                      options={pickerOptions}
+                      photos={count}
+                      value={chosen!.id}
+                    />
+                  </div>
+                ) : null}
+                <p className="h-12">
+                  {plan?.long ? "Long receipt: sent at the highest size the model reads. " : null}
+                  {!fullSize
+                    ? "Tap the preview to see exactly what uploads."
+                    : fullSizeMode === "actual"
+                      ? "One pixel of the upload per screen pixel. Drag to look around."
+                      : "The whole upload, as it will be sent. Actual pixels shows the detail."}
+                  {edit?.filter === "bw"
+                    ? chosen?.id === "smaller"
+                      ? " At Compact, B&W can lose light print."
+                      : " B&W suits faded receipts but can lose light print."
+                    : null}
+                </p>
+              </>
+            )}
+          </div>
 
-          {current && heldBack(current.id) ? (
+          {held === "edit" ? (
             <Alert className="px-3 py-2 text-sm" variant="destructive">
               <CircleAlert aria-hidden="true" />
               <p>
                 This photo&apos;s crop, turn or filter couldn&apos;t be saved on this device, so it
                 wasn&apos;t sent. Try Upload again, change the edit, or delete the photo.
+              </p>
+            </Alert>
+          ) : held === "too-large" ? (
+            <Alert className="px-3 py-2 text-sm" variant="destructive">
+              <CircleAlert aria-hidden="true" />
+              <p>
+                This photo is still over {CAP_LABEL} after compressing, so it wasn&apos;t sent. Crop
+                closer to the receipt, or delete the photo.
               </p>
             </Alert>
           ) : null}
@@ -677,13 +731,13 @@ export default function ReviewSheet({
                     <button
                       aria-current={i === index ? "true" : undefined}
                       aria-label={
-                        heldBack(image.id) ? `Photo ${i + 1}, not sent` : `Photo ${i + 1}`
+                        heldBack[image.id] ? `Photo ${i + 1}, not sent` : `Photo ${i + 1}`
                       }
                       className={cn(
                         "flex size-11 items-center justify-center rounded-md border-2 font-mono text-xs tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         i === index
                           ? "border-primary text-foreground"
-                          : heldBack(image.id)
+                          : heldBack[image.id]
                             ? "border-destructive text-destructive"
                             : "border-border text-muted-foreground",
                       )}
@@ -705,6 +759,7 @@ export default function ReviewSheet({
             ) : null}
 
             <Button
+              data-testid="primary"
               disabled={working !== null || (!adjusting && preparing)}
               onClick={primary}
               ref={primaryRef}

@@ -47,7 +47,7 @@ flowchart LR
   pick["File picker,<br/>drop, share"] -->|photos| review
   pick -->|PDFs| prep
   tray -->|Done| review["Review: 1 corners (auto-detected), rotate;<br/>2 preview, filter, size; delete"]
-  review -->|"canvas, JPEG 0.92"| prep["prepareFile<br/>(size target)"]
+  review -->|"rendered canvas"| prep["encodeUpload<br/>(size by shape, quality ladder)"]
   prep --> queue["Batch queue<br/>2 at a time"]
   queue -->|"POST /api/receipts"| server[(Server)]
 ```
@@ -70,32 +70,42 @@ flowchart LR
   - _Step 2, Preview_: the crop warped straight (`geometry.ts` solves the homography and warps on a canvas) at up to
     1.5 MP, with the four filters (Original, Enhance, Greyscale, B&W; Enhance is the default when a receipt was found,
     and the last choice is remembered for the session) applied after the warp. The filter thumbnails are of the same
-    flattened page. It shows the upload's pixel size, from `planSize` (the plan `prepareFile` applies), and the
-    expected file size, estimated from a ~0.3 MP render (its JPEG bytes per pixel times the pixels `prepareFile`
-    keeps, capped at the 500 KB target). "Upload" sends the batch.
+    flattened page. About 400 ms after the last change, the edit is rendered once at full size and the real upload
+    is encoded from it: the chosen size first, then the other options, so the picker shows real bytes. The preview
+    then shows that file, and tapping it opens it whole ("Whole receipt") or at "Actual pixels" (one image pixel per
+    device pixel, so a 1,000 px image is 333 CSS px wide on a 3x phone), captioned from the file itself ("Uploads
+    exactly this: 1000 × 2163 px · 241 KB JPEG"). While a new encode runs, the size line keeps the last values,
+    dimmed. "Upload" sends the files already made and encodes any photo that wasn't previewed.
   - State (corners, rotation, filter) is kept per photo across steps; the photo is decoded once and kept while it is
     shown. Escape or the back arrow goes step 2, step 1, then asks to discard. The stage is a fixed box, so no action
     moves the controls around it (the e2e suite measures this).
 - Photos over 16 MP are decoded straight to 16 MP (`createImageBitmap` resize, size read from the header first), and
   every canvas is released (`width = height = 0`) as soon as its pixels are used, to stay within iOS canvas memory.
-- On Upload, each edited photo becomes a JPEG at quality 0.92 from the canvas, so it carries no EXIF, then goes through
-  `prepareFile` like any picked image. If the browser can't decode a photo, the original goes. If it decodes but the
-  edit can't be rendered or encoded, an edited photo is held back with an error on it (sending the original would drop
-  the crop, rotation and filter); an unedited one goes as it is. Photos and frames stay on the device until upload.
-- Every image the browser can decode is oriented, sized to a pixel budget (about 3 MP, the short edge kept at 1,000 px
-  or more where the source has it, long edge capped at 6,000 px, never upscaled) and re-encoded as JPEG. Quality starts
-  at 0.85 and steps down to 0.6, then the image shrinks 15% at a time (never under the short-edge floor), up to 6
-  encodes, aiming for 500 KB. If the short-edge floor leaves it over 1 MB, a last pass drops quality to 0.5 and shrinks
-  down to an 800 px short edge. This removes camera metadata (including GPS) and keeps the body under Vercel's 4.5 MB
-  limit. A successful re-encode always replaces the original, so its metadata is gone. PDFs, images the browser can't
-  decode (HEIC outside Safari) and images whose encode fails (for example a phone out of canvas memory) are sent
-  unchanged, metadata included; stripping those on the server is a known follow-up.
-- In the review sheet's Preview step the size line ("W × H px · ~N KB · Change") opens a choice for the batch,
-  remembered for the session: **Recommended** (the automatic size above, the default), **Smaller** (800 px short
-  edge) and **Larger** (1,200 px short edge, offered only where the automatic encode shrinks under it for bytes and
-  1,200 px stays within about 2.4 MP, past which Gemini downsamples). Smaller and Larger keep their size and step only
-  quality, unless the file would pass 1 MB. Tapping the preview shows the real upload at one pixel per CSS pixel. The
-  applied choice is sent as `size_choice` and lands on the `receipt.upload` wide event and `receipt_uploaded`.
+- Each photo's edit is rendered to a canvas (straightened at up to 6 MP, so the downscale to the upload size averages
+  pixels instead of aliasing thin print) and encoded from it directly, with no intermediate JPEG. If the browser can't
+  decode a photo, the original goes through `prepareFile`. If it decodes but the edit can't be rendered or encoded, an
+  edited photo is held back with an error on it (sending the original would drop the crop, rotation and filter); an
+  unedited one goes as it is. A photo still over the hard cap is held back too. Photos and frames stay on the device
+  until upload.
+- Every image the browser can decode is oriented, sized and re-encoded as JPEG by `encodeUpload`. The size depends only
+  on the photo's shape and the chosen option, never on how well it compresses: **Compact** fits 1 MP with the
+  short edge kept at 800 px, **Standard** (the default) 2 MP with 1,000 px, **Sharpest** the most Claude reads natively.
+  All three stay within 2,576 px on the long edge and 4,784 patches of 28 x 28 px, and nothing is upscaled. A receipt
+  longer than 1:2.6 (`LONG_RECEIPT_RATIO`) can't keep Standard's width inside that long edge, so it goes at Sharpest
+  with no choice offered. Encoding follows one config, `ENCODING` in
+  [`lib/upload-encoding.ts`](../../../apps/web/lib/upload-encoding.ts): JPEG at 0.80, then 0.72, then 0.65 (the floor
+  for thin print), keeping the first encode under the option's target (500 KB Compact, 700 KB Standard, 1 MB Sharpest).
+  Past the ladder anything up to the 1.5 MB hard cap is sent. Over it, the photo is encoded once more at Compact's size
+  at 0.72, and refused with an error if it is still over. A non-JPEG from the canvas (Safari returns PNG for types it
+  can't write) counts as a failed encode. This removes camera metadata (including GPS) and keeps the body far under
+  Vercel's 4.5 MB limit. A successful re-encode always replaces the original, so its metadata is gone. PDFs, images
+  the browser can't decode (HEIC outside Safari) and images whose encode fails (for example a phone out of canvas
+  memory) are sent unchanged, metadata included; stripping those on the server is a known follow-up.
+- In the review sheet's Preview step the size line ("W × H px · N KB · Change", every number in a fixed-width slot)
+  opens a choice for the batch, remembered for the session. The ids sent as `size_choice` are unchanged from the
+  earlier options: `smaller` is Compact, `recommended` Standard, `larger` Sharpest (and every long receipt). The
+  upload also carries its quality step, encode count, filter and whether it was rescued, and the server reads the
+  file's pixel size from its header, so the `receipt.upload` wide event has bytes per pixel from real phones.
 - A file still over 4 MB (`DEPLOYMENT_BODY_LIMIT_BYTES` in
   [`upload-limits.ts`](../../../packages/core/src/upload-limits.ts)) is refused before upload.
 - **Upload.** One file uses instant mode and opens its receipt. Several upload two at a time in queued mode, each with

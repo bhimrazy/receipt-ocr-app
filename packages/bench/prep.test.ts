@@ -59,11 +59,11 @@ describe("prepare", () => {
     expect(await sizeOf(out.data)).toEqual({ width: 1000, height: 500, format: "jpeg" });
   });
 
-  it("applies the app's pixel budget for app", async () => {
-    // 4000 x 3000 = 12 MP; the app's 3 MP budget gives 2000 x 1500.
+  it("applies the app's Standard size for app", async () => {
+    // 4000 x 3000 = 12 MP; Standard's 2 MP budget gives 1633 x 1225.
     const out = await prepare(await image(4000, 3000), "image/png", parsePrep("app"));
-    expect(out).toMatchObject({ mediaType: "image/jpeg", width: 2000, height: 1500 });
-    expect(await sizeOf(out.data)).toMatchObject({ width: 2000, height: 1500, format: "jpeg" });
+    expect(out).toMatchObject({ mediaType: "image/jpeg", width: 1633, height: 1225 });
+    expect(await sizeOf(out.data)).toMatchObject({ width: 1633, height: 1225, format: "jpeg" });
   });
 
   it("sends a PDF as is under every mode, marking the mode as not applied", async () => {

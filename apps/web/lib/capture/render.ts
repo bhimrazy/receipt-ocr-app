@@ -12,10 +12,12 @@ import { straightenedSize, warpQuad, type Pixels, type Quad } from "./geometry";
 
 /** Canvas rendering of an edit. Browser only; the maths lives in the pure modules beside it. */
 
-export const OUTPUT_JPEG_QUALITY = 0.92;
 /** Source pixels read for the final image; bounds memory on 48 MP phone sensors. */
 const SOURCE_BUDGET = 16_000_000;
-/** The straightened output; `prepareFile` then sizes it for upload, well below this. */
+/**
+ * The straightened output, which the upload encoder then draws at its own size (well below this).
+ * Warping straight to the upload size would sample a 12 MP photo without averaging and alias thin print.
+ */
 const OUTPUT_BUDGET = 6_000_000;
 
 export type RenderBudget = { source: number; output: number };
@@ -224,27 +226,6 @@ export function renderEdit(bitmap: ImageBitmap, edit: EditState, budget: RenderB
   }
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
-  return new Promise((resolve, reject) =>
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("encode failed"))),
-      "image/jpeg",
-      quality,
-    ),
-  );
-}
-
-/** Renders and encodes an edit at full size, releasing the canvas whether or not it encodes. */
-export async function renderToJpeg(bitmap: ImageBitmap, edit: EditState, name: string) {
-  const canvas = renderEdit(bitmap, edit, FULL_RENDER);
-  try {
-    const blob = await canvasToBlob(canvas, OUTPUT_JPEG_QUALITY);
-    return new File([blob], jpegName(name), { type: "image/jpeg", lastModified: Date.now() });
-  } finally {
-    releaseCanvas(canvas);
-  }
-}
-
 /** A small preview as a data URL; the canvas is released straight after. */
 export function renderPreview(
   bitmap: ImageBitmap,
@@ -258,27 +239,4 @@ export function renderPreview(
   } finally {
     releaseCanvas(canvas);
   }
-}
-
-/** A small render for the size estimate; released after encoding. */
-export async function renderSmall(
-  bitmap: ImageBitmap,
-  edit: EditState,
-  budget: RenderBudget,
-  quality: number,
-) {
-  const canvas = renderEdit(bitmap, edit, budget);
-  try {
-    return {
-      blob: await canvasToBlob(canvas, quality),
-      width: canvas.width,
-      height: canvas.height,
-    };
-  } finally {
-    releaseCanvas(canvas);
-  }
-}
-
-export function jpegName(name: string) {
-  return `${name.replace(/\.[^./]+$/, "") || "receipt"}.jpg`;
 }

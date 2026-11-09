@@ -101,8 +101,24 @@ export const EVENT_SCHEMA = {
   plan: "token",
   /** Upload mode: `instant` or `queued`. */
   mode: "token",
-  /** Upload size picked in photo review: `smaller`, `recommended` or `larger`. Absent for PDFs. */
+  /**
+   * Upload size a reviewed photo was sent at: `smaller` (labelled Compact), `recommended`
+   * (Standard) or `larger` (Sharpest; also every long receipt). Absent for PDFs.
+   */
   size_choice: "token",
+  /** How the browser encoded a reviewed photo; client-reported, checked against our own values. */
+  encode: {
+    group: {
+      /** JPEG quality of the step that was sent (0.8, 0.72 or 0.65). */
+      quality: "number",
+      /** Encodes made, rescue included. */
+      attempts: "int",
+      /** Filter id: `original`, `enhance`, `grey` or `bw`. */
+      filter: "token",
+      /** Re-encoded at Compact's size because every step was over the hard cap. */
+      rescued: "bool",
+    },
+  },
   /** A named action (admin action, auth endpoint). */
   action: "token",
   /** A short qualifier for events that need one (email kind, settings key). */
@@ -111,7 +127,17 @@ export const EVENT_SCHEMA = {
   /** Feature flags and settings that shaped this unit of work. */
   flags: "token_map",
 
-  file: { group: { size_bytes: "int", media_type: "token" } },
+  file: {
+    group: {
+      size_bytes: "int",
+      media_type: "token",
+      /** Pixel size read from the uploaded bytes' header, before EXIF rotation. */
+      width: "int",
+      height: "int",
+      /** `size_bytes` over `width` x `height`, to three decimals. */
+      bytes_per_pixel: "number",
+    },
+  },
 
   /** OCR for this unit of work. Cost is summed over `job.attempt` events only. */
   ocr: {
