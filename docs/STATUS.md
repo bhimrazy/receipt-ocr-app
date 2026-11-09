@@ -188,6 +188,7 @@ Open pull requests only.
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | #148 | SEO: home title leads with "receipt scanner" and names CSV and JSON (never Excel; nothing writes .xlsx); one source for the home title/description; WebApplication JSON-LD with featureList and the free Offer, no ratings     |
 | #184 | Upgrade call-to-action for Free workspace owners: meter button, menu item, Home card, limit-state button and blocked banner, all opening one modal that starts Paddle's overlay; admin-only while production runs sandbox keys |
+| #191 | Four upload sizes: Compact (new, 600 px, 350 KB) · Small (800 px) · Standard (default) · Sharpest; `size_choice` adds `compact`; 2 × 2 picker on phones                                                                        |
 | #166 | Light theme, part 2: System by default, a System/Light/Dark toggle in Settings, the account menu and footers, light iOS splash images (plus iPhone Air), light error and offline pages. Part 1 (tokens, #163) is merged        |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
