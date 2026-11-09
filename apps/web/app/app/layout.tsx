@@ -3,6 +3,8 @@ import { MOBILE_TABS } from "@/components/mobile-tabs";
 import { SkipLink } from "@/components/skip-link";
 import { Brand } from "@/components/brand";
 import { NoWorkspace } from "@/components/no-workspace";
+import { OfflineBar } from "@/components/offline-bar";
+import { RefreshOnReturn } from "@/components/refresh-on-return";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { UsageMeter, type Usage } from "@/components/usage-meter";
 import { AccountSheet, UserMenu, WorkspaceNameButton, type MenuUser } from "@/components/user-menu";
@@ -177,6 +179,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 />
               }
             />
+            <OfflineBar />
             <main
               id="main-content"
               tabIndex={-1}
@@ -196,6 +199,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <AppTabBar />
       </div>
       <StepUpProvider />
+      <RefreshOnReturn />
       <UpgradeModal offer={ownerOffer} plan={plan} />
     </Toaster>
   );
