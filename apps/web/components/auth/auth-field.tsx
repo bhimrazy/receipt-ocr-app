@@ -4,8 +4,9 @@ import { CircleAlert, CircleCheck, Info } from "lucide-react";
 
 // Server-safe on purpose: AuthLayout and the server pages import these constants and components.
 
+/** A card from `sm` up; below it the form fills the screen like a native sign-in screen. */
 export const authCardClass =
-  "w-full min-w-0 rounded-2xl bg-card/85 p-6 shadow-2xl shadow-black/40 light:shadow-float ring-1 ring-border backdrop-blur-xl sm:px-8 sm:py-7";
+  "w-full min-w-0 sm:rounded-2xl sm:bg-card/85 sm:px-8 sm:py-7 sm:shadow-2xl sm:shadow-black/40 sm:light:shadow-float sm:ring-1 sm:ring-border sm:backdrop-blur-xl";
 
 /** The "New here? / Already have an account?" row closing a card; its 44px link sets the padding. */
 export const authFooterClass =

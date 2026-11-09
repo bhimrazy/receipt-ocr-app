@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || undefined;
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -47,6 +47,17 @@ export interface TurnstileController {
   };
 }
 
+/** The theme on screen, from the `light` class THEME_SCRIPT and applyTheme set on <html>. */
+function pageTheme(): "light" | "dark" {
+  return document.documentElement.classList.contains("light") ? "light" : "dark";
+}
+
+function subscribePageTheme(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  return () => observer.disconnect();
+}
+
 export function useTurnstile(): TurnstileController {
   const [token, setToken] = useState<string | null>(null);
   const [broken, setBroken] = useState(false);
@@ -80,6 +91,10 @@ export function useTurnstile(): TurnstileController {
  * visitor to do something. Loads Cloudflare's script only while mounted, so mount it just where a
  * form needs it. Renders nothing when no site key is set.
  *
+ * The widget takes the page's theme, not Cloudflare's "auto" (the OS setting), so it matches a
+ * light or dark choice made here. A widget can't change theme, so a theme switch renders a new
+ * one, which fetches a fresh token.
+ *
  * The wrapper is a plain block, so while the widget is invisible it has no height and a margin
  * given in `className` collapses into its neighbours': nothing moves when the script loads.
  */
@@ -93,6 +108,7 @@ export function Turnstile({
   const container = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const { setToken, setBroken, attach, broken } = controller.widget;
+  const theme = useSyncExternalStore(subscribePageTheme, pageTheme, () => "dark" as const);
 
   useEffect(() => {
     const node = container.current;
@@ -100,7 +116,7 @@ export function Turnstile({
     const turnstile = window.turnstile;
     const id = turnstile.render(node, {
       sitekey: SITE_KEY,
-      theme: "dark",
+      theme,
       size: "flexible",
       appearance: "interaction-only",
       callback: (token: string) => {
@@ -120,7 +136,7 @@ export function Turnstile({
       attach(null);
       setToken(null);
     };
-  }, [ready, setToken, setBroken, attach]);
+  }, [ready, theme, setToken, setBroken, attach]);
 
   if (!SITE_KEY) return null;
   return (

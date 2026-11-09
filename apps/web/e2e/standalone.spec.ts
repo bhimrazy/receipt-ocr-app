@@ -36,7 +36,12 @@ test.describe("installed app", () => {
     await expect(page).toHaveURL(/\/sign-in$/);
     await expect(page.getByRole("link", { name: "ReceiptOCR home" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Home", exact: true })).toBeHidden();
-    await expect(page.getByRole("link", { name: "Privacy", exact: true })).toBeVisible();
+    // Only a slim Privacy · Terms line: theme and cookie choices are in Settings after sign-in.
+    const footer = page.getByRole("contentinfo");
+    await expect(footer.getByRole("link", { name: "Privacy", exact: true })).toBeVisible();
+    await expect(footer.getByRole("link", { name: "Terms", exact: true })).toBeVisible();
+    await expect(footer.getByRole("radiogroup", { name: "Theme" })).toBeHidden();
+    await expect(footer.getByRole("button", { name: "Cookie settings" })).toBeHidden();
   });
 
   test("a client-side link to / goes to sign-in, not the landing page", async ({ page }) => {
