@@ -102,7 +102,7 @@ export const EVENT_SCHEMA = {
   /** Upload mode: `instant` or `queued`. */
   mode: "token",
   /**
-   * Upload size a reviewed photo was sent at: `smaller` (labelled Faster upload), `recommended`
+   * Upload size a reviewed photo was sent at: `smaller` (labelled Compact), `recommended`
    * (Standard) or `larger` (Sharpest; also every long receipt). Absent for PDFs.
    */
   size_choice: "token",
@@ -115,7 +115,7 @@ export const EVENT_SCHEMA = {
       attempts: "int",
       /** Filter id: `original`, `enhance`, `grey` or `bw`. */
       filter: "token",
-      /** Re-encoded at Faster upload's size because every step was over the hard cap. */
+      /** Re-encoded at Compact's size because every step was over the hard cap. */
       rescued: "bool",
     },
   },

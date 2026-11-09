@@ -6,7 +6,7 @@
  * The ladder tries each quality in turn and keeps the first encode at or under the option's
  * target. Below the last step JPEG ringing starts to touch thin printed strokes, so it never goes
  * lower. Past the ladder, anything up to the hard cap is sent; over it, the photo is encoded once
- * more at Faster upload's size, and refused if that is still over.
+ * more at Compact's size, and refused if that is still over.
  */
 export const ENCODING = {
   type: "image/jpeg",

@@ -342,7 +342,7 @@ Recommended default first in each.
 
 The owner took option (a) in all 17 decisions above. Two notes from the same day apply to Part 2:
 
-- The size options are now Faster upload, Standard and Sharpest ([sizing review](../reviews/2026-11-09-upload-sizing.md)),
+- The size options are now Compact, Standard and Sharpest ([sizing review](../reviews/2026-11-09-upload-sizing.md)),
   and the size line shows the real encoded file's bytes, not an estimate. So "while the size estimate recomputes"
   (decision 13) means while the real encode runs: the last values stay on screen, dimmed, and the picker stays open
   with its options (their pixel sizes are known at once from the crop's shape).

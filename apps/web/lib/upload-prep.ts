@@ -97,7 +97,7 @@ export type UploadPlan = {
 
 const sameSize = (a: Size, b: Size) => a.width === b.width && a.height === b.height;
 
-/** What can be offered for a source. Faster upload and Sharpest are left out when they equal Standard. */
+/** What can be offered for a source. Compact and Sharpest are left out when they equal Standard. */
 export function uploadPlan(source: Size): UploadPlan {
   if (longEdge(source) / shortEdge(source) > LONG_RECEIPT_RATIO) {
     return { long: true, options: [{ id: "larger", ...planOption(source, "larger") }] };
@@ -203,8 +203,8 @@ function jpegName(name: string) {
 }
 
 /**
- * Sizes `source` for the chosen option and runs the encoding ladder (`ENCODING`), with Faster
- * upload's size as the rescue. Throws `TooLargeError` when nothing gets under the hard cap, and
+ * Sizes `source` for the chosen option and runs the encoding ladder (`ENCODING`), with
+ * Compact's size as the rescue. Throws `TooLargeError` when nothing gets under the hard cap, and
  * whatever the canvas throws.
  */
 export async function encodeUpload(

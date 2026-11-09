@@ -688,7 +688,7 @@ export default function ReviewSheet({
                       : "The whole upload, as it will be sent. Actual pixels shows the detail."}
                   {edit?.filter === "bw"
                     ? chosen?.id === "smaller"
-                      ? " At Faster upload, B&W can lose light print."
+                      ? " At Compact, B&W can lose light print."
                       : " B&W suits faded receipts but can lose light print."
                     : null}
                 </p>

@@ -199,15 +199,15 @@ test("a large photo offers upload sizes, shows the real file and sends it", asyn
   const sizes = review.getByRole("group", { name: "Upload size" });
   await expect(sizes.getByRole("radio", { name: /^Standard/ })).toBeChecked();
   // Every option shows its real bytes once encoded in the background.
-  for (const name of ["Faster upload", "Standard", "Sharpest"]) {
+  for (const name of ["Compact", "Standard", "Sharpest"]) {
     await expect(sizes.getByRole("radio", { name: new RegExp(`^${name}`) })).toHaveAccessibleName(
       /\d+ (KB|MB)$/,
       { timeout: 20_000 },
     );
   }
   // The radios are visually hidden inside their labels, so pick by the label like a user does.
-  await sizes.getByText("Faster upload").click();
-  await expect(sizes.getByRole("radio", { name: /^Faster upload/ })).toBeChecked();
+  await sizes.getByText("Compact").click();
+  await expect(sizes.getByRole("radio", { name: /^Compact/ })).toBeChecked();
   await expect(review.getByTestId("resolution")).toHaveText(/^ *866 × 1155 px · +\d+ KB$/);
 
   await review.getByRole("button", { name: "See it at full size" }).click();
@@ -505,7 +505,7 @@ for (const viewport of [
       const picker = review.getByRole("group", { name: "Upload size" });
       await expect(picker).toBeVisible();
       const open = { ...watched, change: "[data-testid=size-change]", picker: "#upload-size" };
-      for (const label of ["Faster upload", "Sharpest", "Standard"]) {
+      for (const label of ["Compact", "Sharpest", "Standard"]) {
         const option = picker.getByText(label, { exact: true });
         if ((await option.count()) === 0) continue;
         steady(await watchBoxes(page, open, () => option.click()));

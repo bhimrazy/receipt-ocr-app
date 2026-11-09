@@ -57,7 +57,7 @@ describe("encodeLadder", () => {
   });
 
   it("uses each option's own target", async () => {
-    // 600 KB is under Standard's target but over Faster's.
+    // 600 KB is under Standard's target but over Compact's.
     const fast = fake(() => 600 * KB);
     await encodeLadder(fast.encode, faster, "smaller");
     expect(fast.calls).toHaveLength(3);
