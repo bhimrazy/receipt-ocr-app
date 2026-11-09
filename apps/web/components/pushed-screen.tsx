@@ -1,17 +1,11 @@
-import { ViewTransition } from "react";
-
 /**
- * A screen pushed on top of a tab (a receipt, a Settings page) slides in from the right when it
- * opens and out again when the user leaves by a link. Used as the route's own layout, so it mounts
- * and unmounts with the route and also covers its loading.tsx. A history step (the app bar's Back)
- * commits without a view transition, so `backWithTransition` slides out the element marked here.
- * The animations are in globals.css and are off under prefers-reduced-motion. To switch screen
- * transitions off, return `children` alone.
+ * A screen pushed on top of a tab (a receipt, a Settings page), used as the route's own layout.
+ * Its slide transition is off: with React's <ViewTransition> here, leaving the screen could leave
+ * the next page on its loading skeletons. Without the `data-pushed-screen` element,
+ * `backWithTransition` falls back to a plain Back. TODO(2026-11-16): find the cause, then restore
+ * `<ViewTransition default="none" enter="push-in" exit="push-out">` around a
+ * `<div data-pushed-screen>`.
  */
 export function PushedScreen({ children }: { children: React.ReactNode }) {
-  return (
-    <ViewTransition default="none" enter="push-in" exit="push-out">
-      <div data-pushed-screen="">{children}</div>
-    </ViewTransition>
-  );
+  return children;
 }
