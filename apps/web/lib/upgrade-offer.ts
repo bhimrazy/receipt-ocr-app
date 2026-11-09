@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
 import { cache } from "react";
 import {
   canManageBilling,
@@ -18,7 +19,7 @@ import { listWorkspaces } from "./workspaces";
 /**
  * The upgrade offer for the active workspace, or null (see `decideUpgradeOffer`). Every
  * surface reads this one value. Deduplicated per request; the plan and usage reads are shared
- * with the meter and Home. Never throws: a failed read means no offer.
+ * with the meter and Home. A failed read means no offer; only Next's own errors propagate.
  */
 export const getUpgradeOffer = cache(async (): Promise<UpgradeOffer | null> => {
   try {
@@ -55,6 +56,8 @@ export const getUpgradeOffer = cache(async (): Promise<UpgradeOffer | null> => {
       now: Date.now(),
     });
   } catch (error) {
+    // Next's own signals (a prerender bailing out on cookies(), redirects) must pass through.
+    unstable_rethrow(error);
     logger.error({ event: "app.upgrade_offer_failed", unit: "log", error: errorFields(error) });
     return null;
   }

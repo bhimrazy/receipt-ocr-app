@@ -107,8 +107,8 @@ export function comparisonRows({ free, pro }: PlanTable): ComparisonRow[] {
     { label: "Workspaces you can own", free: String(free.workspaces), pro: String(pro.workspaces) },
     {
       label: "Busy-day pauses",
-      free: free.poolPerDay === null ? "Never" : "Can pause on busy days",
-      pro: pro.poolPerDay === null ? "Never" : "Can pause on busy days",
+      free: free.poolPerDay === null ? "Never" : "Can pause",
+      pro: pro.poolPerDay === null ? "Never" : "Can pause",
     },
   ];
 }

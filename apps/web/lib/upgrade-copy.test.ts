@@ -40,7 +40,7 @@ describe("upgrade copy", () => {
       { label: "Scans a day", free: "15", pro: "150" },
       { label: "Members per workspace", free: "2", pro: "12" },
       { label: "Workspaces you can own", free: "1", pro: "3" },
-      { label: "Busy-day pauses", free: "Can pause on busy days", pro: "Never" },
+      { label: "Busy-day pauses", free: "Can pause", pro: "Never" },
     ]);
   });
 

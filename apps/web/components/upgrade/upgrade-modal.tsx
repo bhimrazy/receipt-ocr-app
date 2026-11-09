@@ -56,6 +56,8 @@ export function UpgradeModal({ offer, plan }: { offer: UpgradeOffer | null; plan
   const trigger = useRef<HTMLElement | null>(null);
   const pending = useRef<string | null>(null);
   const toastId = useRef<string | null>(null);
+  /** Paddle's overlay is showing. */
+  const overlay = useRef(false);
   // Kept after the offer goes away (Pro arrived) for the closing toast and Paddle's settings.
   const [last, setLast] = useState(offer);
   if (offer && offer !== last) setLast(offer);
@@ -65,7 +67,10 @@ export function UpgradeModal({ offer, plan }: { offer: UpgradeOffer | null; plan
     settings: last?.checkout?.settings ?? null,
     load: loadScript,
     done: plan === "pro",
-    onClosed: () => focusTarget(trigger.current)?.focus(),
+    onClosed: () => {
+      overlay.current = false;
+      focusTarget(trigger.current)?.focus();
+    },
   });
 
   const latest = useRef({ owned, liveDesktop, reset: checkout.reset });
@@ -139,11 +144,11 @@ export function UpgradeModal({ offer, plan }: { offer: UpgradeOffer | null; plan
     }
   }, [state, name, router]);
 
-  // Paddle reported a problem while its overlay was open (ours is closed by then).
+  // Paddle reported a problem in its overlay (ours is closed then; server errors show inside it).
   useEffect(() => {
-    if (state === "error" && !open && checkout.error)
+    if (state === "error" && overlay.current && checkout.error)
       toast.add({ title: checkout.error, type: "error" });
-  }, [state, open, checkout.error]);
+  }, [state, checkout.error]);
 
   async function startCheckout() {
     const transactionId = await checkout.create(interval, surface);
@@ -157,6 +162,7 @@ export function UpgradeModal({ offer, plan }: { offer: UpgradeOffer | null; plan
     if (isOpen || !pending.current) return;
     const transactionId = pending.current;
     pending.current = null;
+    overlay.current = true;
     checkout.open(transactionId);
   }
 
@@ -293,10 +299,10 @@ function ModalBody({
               <th className="py-2 pr-3 text-left font-normal text-muted-foreground" scope="row">
                 {row.label}
               </th>
-              <td className="py-2 text-right font-mono text-xs text-muted-foreground tabular-nums">
+              <td className="py-2 text-right font-mono text-xs whitespace-nowrap text-muted-foreground tabular-nums">
                 {row.free}
               </td>
-              <td className="py-2 pl-3 text-right font-mono text-xs text-foreground tabular-nums">
+              <td className="py-2 pl-3 text-right font-mono text-xs whitespace-nowrap text-foreground tabular-nums">
                 {row.pro}
               </td>
             </tr>
