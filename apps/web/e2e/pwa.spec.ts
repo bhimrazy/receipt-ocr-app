@@ -75,9 +75,24 @@ test("the manifest is installable and every icon resolves at its declared size",
     display: "standalone",
     theme_color: "#0a0a0b",
     background_color: "#0a0a0b",
-    shortcuts: [{ name: "Add receipt", url: "/app/upload?capture=1" }],
+    shortcuts: [
+      { name: "Add receipt", url: "/app/upload?capture=1" },
+      { name: "History", url: "/app/history" },
+    ],
+    launch_handler: { client_mode: ["navigate-existing", "auto"] },
     share_target: { action: "/share-target", method: "POST", enctype: "multipart/form-data" },
   });
+  // Chrome's richer install dialog needs a narrow screenshot; desktop shows a wide one.
+  const factors = manifest.screenshots.map((s: { form_factor: string }) => s.form_factor);
+  expect(factors).toContain("narrow");
+  expect(factors).toContain("wide");
+  for (const shot of manifest.screenshots as { src: string; sizes: string; label: string }[]) {
+    expect(shot.label).toBeTruthy();
+    const response = await request.get(shot.src);
+    expect(response.status(), shot.src).toBe(200);
+    const body = await response.body();
+    expect(`${body.readUInt32BE(16)}x${body.readUInt32BE(20)}`, shot.src).toBe(shot.sizes);
+  }
   expect(manifest.icons.some((icon: { purpose: string }) => icon.purpose === "maskable")).toBe(
     true,
   );
