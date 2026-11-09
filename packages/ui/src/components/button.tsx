@@ -3,6 +3,7 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 
+// Tailwind v4 applies hover: only where the device can hover, so active: is the touch feedback.
 // Below md every size grows to 44px so touch targets meet WCAG 2.5.5.
 const buttonCva = cva(
   "group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -10,16 +11,16 @@ const buttonCva = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-[0_0_30px_color-mix(in_oklab,var(--primary)_26%,transparent)] hover:-translate-y-0.5 hover:shadow-[0_0_42px_color-mix(in_oklab,var(--primary)_38%,transparent)] motion-reduce:hover:translate-y-0",
+          "bg-primary text-primary-foreground shadow-[0_0_30px_color-mix(in_oklab,var(--primary)_26%,transparent)] hover:-translate-y-0.5 hover:shadow-[0_0_42px_color-mix(in_oklab,var(--primary)_38%,transparent)] motion-reduce:hover:translate-y-0 active:scale-[0.98] active:brightness-95 motion-reduce:active:scale-100",
         secondary:
-          "border-border bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-muted",
+          "border-border bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-wash aria-expanded:bg-muted",
         ghost:
-          "text-muted-foreground hover:bg-wash hover:text-foreground aria-expanded:bg-wash aria-expanded:text-foreground",
+          "text-muted-foreground hover:bg-wash hover:text-foreground active:bg-wash aria-expanded:bg-wash aria-expanded:text-foreground",
         outline:
-          "border-border bg-background/40 text-foreground hover:bg-wash aria-expanded:bg-wash",
+          "border-border bg-background/40 text-foreground hover:bg-wash active:bg-wash aria-expanded:bg-wash",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:scale-[0.98] active:brightness-95 focus-visible:ring-destructive motion-reduce:active:scale-100",
+        link: "text-primary underline-offset-4 hover:underline active:opacity-70",
       },
       size: {
         sm: "h-8 px-3 text-xs max-md:h-11 max-md:px-4",

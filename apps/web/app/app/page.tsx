@@ -124,7 +124,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
   return (
     <Card className="overflow-hidden">
       <div className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-medium">To check</h2>
+        <h2 className="text-sm font-medium select-none">To check</h2>
         <span className="font-mono text-xs text-muted-foreground tabular-nums">
           {counts.total} {counts.total === 1 ? "receipt" : "receipts"} in total
         </span>
@@ -139,7 +139,8 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
           {open.map((item) => (
             <li className="relative" key={item.href}>
               <Link
-                className="group flex items-start gap-3 px-4 py-3.5 outline-none hover:bg-wash-subtle focus-visible:bg-wash-subtle focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                data-touch-row=""
+                className="group flex items-start gap-3 px-4 py-3.5 outline-none select-none hover:bg-wash-subtle active:bg-wash focus-visible:bg-wash-subtle focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 href={item.href}
               >
                 <span
@@ -236,7 +237,7 @@ async function RecentSection() {
           Recent receipts
         </h2>
         <Link
-          className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
+          className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary outline-none select-none hover:underline active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
           href="/app/history"
         >
           All receipts

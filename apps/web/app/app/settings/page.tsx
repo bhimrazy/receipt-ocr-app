@@ -123,7 +123,7 @@ export default async function SettingsPage({
           </dl>
           <Card className="flex flex-wrap items-center gap-3 p-4">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">Billing</p>
+              <p className="text-sm font-medium select-none">Billing</p>
               <p className="text-xs text-muted-foreground">
                 {plan === "pro"
                   ? "This workspace is on Pro."
@@ -156,7 +156,7 @@ export default async function SettingsPage({
             {(workspace.name.trim() || "?").charAt(0).toUpperCase()}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{workspace.name}</p>
+            <p className="truncate text-sm font-medium select-none">{workspace.name}</p>
             <p className="text-xs text-muted-foreground">
               {workspace.members} {workspace.members === 1 ? "member" : "members"} · Your role:{" "}
               {scope.role.charAt(0).toUpperCase()}
@@ -196,7 +196,7 @@ export default async function SettingsPage({
             <ShieldCheck className="size-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">
+            <p className="text-sm font-medium select-none">
               {protectedAccount
                 ? "Your account is protected"
                 : "Add a second check when you sign in"}

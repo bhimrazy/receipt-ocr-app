@@ -87,7 +87,7 @@ export function SidebarNav({ items, label = "Main" }: { items: NavItem[]; label?
           <Link
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition outline-none select-none active:bg-wash focus-visible:ring-2 focus-visible:ring-ring",
               active
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-wash hover:text-foreground",
@@ -382,7 +382,7 @@ export function MobileTopBar({
         ) : (
           <Link
             aria-label="Home"
-            className="ml-2 flex min-h-11 min-w-11 shrink-0 items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="ml-2 flex min-h-11 min-w-11 shrink-0 items-center rounded-md outline-none select-none focus-visible:ring-2 focus-visible:ring-ring"
             href={home}
           >
             {leading}

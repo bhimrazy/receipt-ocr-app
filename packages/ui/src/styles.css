@@ -233,6 +233,15 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Long-press on app chrome must not open iOS's link preview or callout menu. Data (amounts,
+   line items, merchant names) is never matched here, so it stays selectable. */
+[data-slot="tab-bar"] a,
+[data-slot="app-bar"] a,
+[data-slot="button"],
+[data-touch-row] {
+  -webkit-touch-callout: none;
+}
+
 /* Installed, there's no browser chrome to pull: no rubber band, no pull-to-refresh. */
 @media (display-mode: standalone) {
   html,
