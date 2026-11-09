@@ -42,6 +42,11 @@ for (const colorScheme of ["dark", "light"] as const) {
           expect(box).toEqual({ shadow: "none", border: "0px", background: "rgba(0, 0, 0, 0)" });
         }
         expect(await hasHorizontalScroll(page)).toBe(false);
+        const gutter = await page
+          .locator("main input:visible")
+          .first()
+          .evaluate((input) => input.getBoundingClientRect().left);
+        expect(gutter).toBeGreaterThanOrEqual(24);
         // 16 px or more, or iOS zooms the page when a field takes focus.
         const sizes = await page
           .locator("main input:visible")
@@ -57,6 +62,29 @@ for (const colorScheme of ["dark", "light"] as const) {
     }
   });
 }
+
+// iPhone SE: the main button (and on sign-in, the link to sign-up) fit without scrolling.
+test.describe("at 375 x 667", () => {
+  test.use({ viewport: { width: 375, height: 667 } });
+
+  test("sign-in shows its button and the sign-up link", async ({ page }) => {
+    await page.goto("/sign-in");
+    const main = page.getByRole("main");
+    await expect(main.getByRole("button", { name: "Sign in", exact: true })).toBeInViewport({
+      ratio: 1,
+    });
+    await expect(main.getByRole("link", { name: "Create an account" })).toBeInViewport({
+      ratio: 1,
+    });
+  });
+
+  test("sign-up shows its button", async ({ page }) => {
+    await page.goto("/sign-up");
+    await expect(
+      page.getByRole("main").getByRole("button", { name: "Create account", exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+  });
+});
 
 test("at 1440 px sign-in keeps its card", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

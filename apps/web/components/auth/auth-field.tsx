@@ -10,18 +10,19 @@ export const authCardClass =
 
 /** The "New here? / Already have an account?" row closing a card; its 44px link sets the padding. */
 export const authFooterClass =
-  "mt-5 border-t border-border pt-2 text-center text-sm text-muted-foreground";
+  "mt-3 border-t border-border pt-2 text-center text-sm text-muted-foreground sm:mt-5";
 
 export const authLinkClass =
   "rounded-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function AuthHeading({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    // Centred on phones, where the card is gone and the logo and buttons above are centred.
     <div className="text-center sm:text-left">
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       {children ? (
-        <p className="mt-2 text-pretty text-sm leading-6 text-muted-foreground">{children}</p>
+        <p className="mt-2 text-balance text-sm leading-6 text-muted-foreground sm:text-pretty">
+          {children}
+        </p>
       ) : null}
     </div>
   );
@@ -142,7 +143,7 @@ export function AuthNotice({
 /** "or" rule between the provider buttons and the email form. */
 export function AuthDivider({ children }: { children: React.ReactNode }) {
   return (
-    <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
+    <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground short:my-3">
       <span aria-hidden className="h-px flex-1 bg-border" />
       {children}
       <span aria-hidden className="h-px flex-1 bg-border" />

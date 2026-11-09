@@ -114,9 +114,9 @@ export async function AuthLayout({
         {/* Top-anchored, not centred: a centred card moves up by half of whatever it grows by (an
             error, a challenge). The offset puts the sign-in card near the middle and leaves room
             for an error before the page scrolls; phones add the logo above it. */}
-        <main className="relative z-10 flex flex-1 flex-col items-center pb-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1rem+env(safe-area-inset-top),calc(50dvh-24rem))] sm:px-5 lg:pt-[max(1rem,calc(50dvh-21rem))]">
+        <main className="relative z-10 flex flex-1 flex-col items-center pb-4 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(1rem+env(safe-area-inset-top),calc(50dvh-24rem))] short:pt-[calc(0.5rem+env(safe-area-inset-top))] sm:px-5 lg:pt-[max(1rem,calc(50dvh-21rem))]">
           <div className="flex w-full max-w-md flex-col items-center">
-            <HomeLogo className="mb-6 lg:hidden" />
+            <HomeLogo className="mb-6 short:mb-3 lg:hidden" />
             {children}
           </div>
         </main>
