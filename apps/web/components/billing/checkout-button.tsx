@@ -16,16 +16,18 @@ import { useProCheckout, type CheckoutSettings } from "./use-pro-checkout";
  */
 export function CheckoutButton({
   settings,
+  workspaceId,
   initialInterval,
   testMode,
 }: {
   settings: CheckoutSettings;
+  workspaceId: string;
   initialInterval: BillingInterval;
   /** Sandbox keys on the live site, shown to platform admins only. */
   testMode: boolean;
 }) {
   const [interval, setInterval] = useState<BillingInterval>(initialInterval);
-  const checkout = useProCheckout({ settings });
+  const checkout = useProCheckout({ settings, workspaceId });
 
   async function open() {
     const transactionId = await checkout.create(interval, "billing");

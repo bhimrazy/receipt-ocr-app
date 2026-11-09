@@ -101,6 +101,7 @@ export default async function BillingPage({
         clientToken: checkout.config.clientToken,
       }}
       testMode={checkout.testMode}
+      workspaceId={scope.organizationId}
     />
   ) : null;
 

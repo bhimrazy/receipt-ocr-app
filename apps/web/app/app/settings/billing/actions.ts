@@ -100,10 +100,13 @@ export async function openBillingPortalAction(
  * workspace and buyer in its custom data, and the browser opens that
  * transaction. Owners only, at most a few a minute. `via` says which button started it, for
  * the `checkout_started` product event; anything outside the closed set is refused.
+ * `workspaceId` is the workspace the page named: a tab left open after switching workspace
+ * is refused rather than checking out a different one.
  */
 export async function startCheckoutAction(
   interval: "month" | "year",
   via: CheckoutVia,
+  workspaceId: string,
 ): Promise<ActionResult<{ transactionId: string }>> {
   if (interval !== "month" && interval !== "year") {
     return { ok: false, error: "Choose monthly or yearly." };
@@ -112,6 +115,9 @@ export async function startCheckoutAction(
   const caller = await billingCaller("checkout");
   if (!caller.ok) return caller;
   const { session, scope } = caller;
+  if (workspaceId !== scope.organizationId) {
+    return { ok: false, error: "Your active workspace changed. Reload and try again." };
+  }
   if (!(await getCheckoutFor(isAdmin(session)))) {
     return { ok: false, error: "Paid plans aren't open yet." };
   }

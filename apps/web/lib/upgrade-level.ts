@@ -35,6 +35,8 @@ export type UpgradeOffer = {
   usage: Usage;
   free: PlanPolicy;
   pro: PlanPolicy;
+  /** The workspace this offer is for; checkout is refused if the active one changes. */
+  workspaceId: string;
   workspaceName: string;
   dismissed: { home: boolean; banner: boolean };
   /** Paddle's public settings; owners only. `testMode`: sandbox keys on the live site (admins). */
@@ -51,6 +53,7 @@ export type OfferInput = {
   /** Whether anyone may buy Pro now (`checkoutOpenToEveryone`); decides whether members hear about it. */
   openToEveryone: boolean;
   plans: PlanTable;
+  workspaceId: string;
   workspaceName: string;
   dismissals: Dismissals;
   now: number;
@@ -72,6 +75,7 @@ export function decideUpgradeOffer(input: OfferInput): UpgradeOffer | null {
     usage: input.usage,
     free: input.plans.free,
     pro: input.plans.pro,
+    workspaceId: input.workspaceId,
     workspaceName: input.workspaceName,
     dismissed: {
       home: homeDismissed(input.dismissals, level, input.now),

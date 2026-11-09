@@ -65,6 +65,7 @@ export function UpgradeModal({ offer, plan }: { offer: UpgradeOffer | null; plan
 
   const checkout = useProCheckout({
     settings: last?.checkout?.settings ?? null,
+    workspaceId: last?.workspaceId ?? "",
     load: loadScript,
     done: plan === "pro",
     onClosed: () => {

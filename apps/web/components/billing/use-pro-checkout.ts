@@ -62,11 +62,14 @@ const paddleTheme = () => (document.documentElement.classList.contains("light") 
  */
 export function useProCheckout({
   settings,
+  workspaceId,
   load = true,
   done = false,
   onClosed,
 }: {
   settings: CheckoutSettings | null;
+  /** The workspace the page names; the server refuses if the active one has changed since. */
+  workspaceId: string;
   load?: boolean;
   /** True once the plan the page shows is Pro: stops the refresh loop. */
   done?: boolean;
@@ -138,7 +141,7 @@ export function useProCheckout({
   async function create(interval: BillingInterval, via: CheckoutVia): Promise<string | null> {
     setError(null);
     setState("starting");
-    const result = await startCheckoutAction(interval, via);
+    const result = await startCheckoutAction(interval, via, workspaceId);
     if (!result.ok) {
       setError(result.error);
       setState("error");

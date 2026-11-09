@@ -50,6 +50,7 @@ export const getUpgradeOffer = cache(async (): Promise<UpgradeOffer | null> => {
         : null,
       openToEveryone: checkoutOpenToEveryone(config),
       plans,
+      workspaceId: scope.organizationId,
       workspaceName:
         workspaces.find((w) => w.id === scope.organizationId)?.name ?? "this workspace",
       dismissals: parseDismissals(jar.get(UPGRADE_COOKIE)?.value),
