@@ -243,6 +243,10 @@ longer-term roadmap.
 opening an in-app upgrade modal with Paddle's overlay checkout):
 [plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), with owner decisions to make.
 
+**Planned:** edge handles in the crop editor (drag the middle of a side to move it) and a layout-stability pass over the
+capture review sheet: [plans/2026-11-09-crop-edge-handles.md](plans/2026-11-09-crop-edge-handles.md), with owner
+decisions to make.
+
 From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 1. ~~Usage capture + quota ledger~~ (shipped in #27).
