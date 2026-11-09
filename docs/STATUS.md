@@ -294,6 +294,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
+- **App-like mobile screens (owner, 2026-11-09).** A design and layout review of the phone versions of the landing
+  page, sign-in and sign-up, so the installed app feels native there too (full-height layouts, thumb-reach actions,
+  no website chrome once installed), then fixes in small PRs. Do it after the first friends' test round, using their
+  feedback.
 - **Long receipts in parts (parked 2026-11-09).** Decided 2026-11-07: split, don't stitch; multi-part receipts
   ("Add part") and automatic splitting of very tall photos, sent as several images in one request
   ([plan](plans/2026-11-07-long-receipt-capture.md)). Not built. Until then a very long receipt uploads at the largest
