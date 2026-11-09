@@ -81,10 +81,16 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   - `connectionTimeoutMillis` (10 s): bounds connecting and the wait for a free client (`connect_timeout`).
   - `idleTimeoutMillis` (20 s), `keepAlive`, `allowExitOnIdle`.
   - A timed-out client is never reused. `pool.query` releases it with the error, so the pool drops it. drizzle's
-    `transaction()` releases without the error, so `TimeoutClosingClient` closes a client whose query timed out.
-    Otherwise it could go back to the pool with its statement, and maybe its transaction, still open.
-  - `pool.on("error")` keeps an idle client that dies (a database restart, a socket lost while a serverless instance
-    was suspended) from crashing the process; core logs it as `db.pool_error`.
+    `transaction()` releases without the error, so `TimeoutClosingClient` (in `createPool`) closes a client whose
+    query timed out. Otherwise it could go back to the pool with its statement, and maybe its transaction, still
+    open. It also fails the statements after that (drizzle's ROLLBACK) with the same timeout, so a transaction reports
+    `query_timeout` too, not "Client was closed".
+  - Connection errors never crash the process. `TimeoutClosingClient` keeps an `error` listener on every client for its
+    whole life: pg-pool removes its own while a client is checked out, and drizzle's `transaction()` adds none, so a
+    session the server ends mid-transaction (`idle_in_transaction_session_timeout`, a restart) would otherwise be an
+    uncaught exception. The transaction's next statement fails instead (`connection_lost`). An idle client that dies
+    reaches `pool.on("error")`, which core logs as `db.pool_error` once its Db layer is built. A process that has only
+    built the auth pool logs nothing for it (follow-up).
 - **Server-side timeouts are role settings, not client options** (applied on staging and production 2026-11-09). pg
   would send `statement_timeout` as a startup parameter: PgBouncer rejects unknown startup parameters and Supavisor
   ignores them. Role settings are plain Postgres and work the same everywhere: `statement_timeout = '10s'` (below the

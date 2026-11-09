@@ -87,19 +87,29 @@ maximum duration ended the response. #184 raised the per-render fan-out past the
    so the pool drops it. One gap: drizzle's `transaction()` releases its client without the error. If a statement
    inside a transaction outlasts the timeout, and so does the ROLLBACK queued behind it, the client would go back to
    the pool with the transaction still open, and the next borrower's queries would run inside it.
-   `TimeoutClosingClient`, about 10 lines in `createDb`, closes a client whose query timed out. `pg.int.test.ts`
-   reproduces the gap with the helper removed: the stale client is reused and the next query times out. With the
-   helper, the client is closed and never reused.
+   `TimeoutClosingClient`, a small `pg.Client` subclass used by `createPool`, closes a client whose query timed out,
+   and fails drizzle's ROLLBACK after it with that same timeout. Without the second part the transaction would
+   report "Client was closed" and hide the cause. `pg.int.test.ts` reproduces the gap with the helper removed: the
+   stale client is reused and the next query times out. With the helper, the client is closed, never reused, and
+   the error says `Query read timeout`.
+
+   The same class keeps an `error` listener on every client. pg-pool removes its own while a client is checked out,
+   and drizzle's `transaction()` adds none. A review reproduced an uncaught exception, which would crash the process,
+   when the server ended a session mid-transaction: the 15 s `idle_in_transaction_session_timeout`, a restart, or a
+   dropped socket would all do it. Now that transaction's next statement fails, and the pool carries on.
 3. **A visible error instead of an endless skeleton.** Each Home section (Upload, To check, Spending, Recent) and the
    sidebar usage meter sit in a `catchError` boundary (`components/section-error.tsx`). A failed or timed-out read
    shows "<Section> couldn't load." with **Try again**, which re-fetches through `router.refresh()`. The title falls
    back to "Home", and still lets Next's redirect signals through (`unstable_rethrow`). `/admin` uses its existing
    `admin/error.tsx`.
 4. **Observability from pg's own errors.**
-   - `errorFields` reports pg's two client-side timeouts, which carry no SQLSTATE, as `error.code = query_timeout` or
-     `connect_timeout`. These are fixed driver strings, not user data.
+   - `errorFields` reports pg's own failures, which carry no SQLSTATE, as `error.code = query_timeout`,
+     `connect_timeout`, `connection_lost` or `connection_closed`, also inside transactions. These are fixed driver
+     strings, not user data.
    - `pool.on("error")` logs `db.pool_error` with `errorFields` when an idle client dies (a database restart, or a
      socket lost while a serverless instance was suspended). Without a listener that event would crash the process.
+     It is attached when core's Db layer is built. A process that has only used the auth pool has no logger on it
+     yet (follow-up), but it can't crash either.
    - No new schema fields.
 5. **Pool max 5 → 10** (owner's request; see below). This doesn't fix a stalled query.
 
@@ -131,7 +141,10 @@ driver level. Screenshots of the card at 390 and 1440 are in PR #210.
   answer.
 - A frozen socket fails within `query_timeout`, and the pool answers afterwards.
 - A transaction whose statement outlasts `query_timeout` while the server stays alive has its client closed. That
-  client's backend never serves another query, and its session is gone from `pg_stat_activity`.
+  client's backend never serves another query, its session is gone from `pg_stat_activity`, and the error is
+  `Query read timeout`, not "Client was closed".
+- A session the server ends mid-transaction (`idle_in_transaction_session_timeout` set to 300 ms, then a 1.2 s wait)
+  fails that transaction, raises no uncaught exception, and leaves the pool working.
 - The wait for a free client is bounded by `connectionTimeoutMillis`.
 
 The full integration suite (212 tests) passes on pg. A CI job against a real PgBouncer in transaction mode is a
@@ -208,6 +221,8 @@ Left as follow-ups, because each is more than a cheap merge:
 
 - **D4: done 2026-11-09** (owner approved; staging and production, verified in `pg_roles.rolconfig`).
 - **A CI job against a real PgBouncer in transaction mode**, in addition to the proxy model.
+- **`db.pool_error` from the auth-only path:** the pool's logging listener is attached when core's Db layer is built.
+  Attaching it in `createPool` would mean passing a logger into `packages/db`.
 - **Source maps in Sentry**, so frames like RECEIPT-OCR-2's `oR` are readable.
 - **Vercel logs:** the token can't read request logs (403) and the runtime-log stream only shows live traffic. A log
   drain to Axiom (planned) would have shown the `page.render` durations hitting the max.

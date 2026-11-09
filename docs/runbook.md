@@ -105,7 +105,9 @@ Symptoms: `/api/health/ready` returns `"database":"down"`, pages fail, `DbError`
 Symptoms: a Home section shows "… couldn't load" with Try again, or `/admin` shows its error page. In the logs, a
 `DbError` with `error.code = query_timeout` means no reply came within `DATABASE_QUERY_TIMEOUT_MS` (15 s);
 `connect_timeout` means no free connection within 10 s (the instance is overloaded or the pooler is refusing
-clients); `db.pool_error` is an idle connection the server dropped. One is a blip; a stream of them means the
+clients); `connection_lost` / `connection_closed` mean the connection ended under a query (a restart, the server's
+idle-in-transaction timeout); `db.pool_error` is an idle connection the server dropped. These hold inside
+transactions too. One is a blip; a stream of them means the
 pooler or database is unhealthy (check the provider's Postgres and pooler logs for the same minute). See the
 [2026-11-09 incident](reviews/2026-11-09-home-stuck-incident.md).
 
