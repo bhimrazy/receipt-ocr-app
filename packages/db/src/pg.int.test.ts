@@ -64,6 +64,13 @@ function faultProxy(target: URL) {
 
 /** Drizzle wraps driver errors; pg's own error is the cause. */
 const cause = (error: unknown) => (error as { cause?: unknown }).cause;
+
+/** Every message along an error's cause chain. */
+const messages = (error: unknown): string[] => {
+  const out: string[] = [];
+  for (let e = error; e instanceof Error; e = (e as { cause?: unknown }).cause) out.push(e.message);
+  return out;
+};
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe.skipIf(!enabled)("pg pool (integration)", () => {
@@ -129,7 +136,9 @@ describe.skipIf(!enabled)("pg pool (integration)", () => {
         await tx.execute(sql`select pg_sleep(1)`);
       })
       .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(Error);
+    // drizzle reports its failed ROLLBACK; the client makes that fail with the timeout itself.
+    expect(messages(error)).toContain("Query read timeout");
+    expect(messages(error)).not.toContain("Client was closed and is not queryable");
     expect(pid).toBeGreaterThan(0);
 
     // With max 1, any reuse of that client would show its pid (and its open transaction).
@@ -149,6 +158,36 @@ describe.skipIf(!enabled)("pg pool (integration)", () => {
       sql`select count(*)::int as n from pg_stat_activity where pid = ${pid}`,
     );
     expect(left.rows[0]!.n).toBe(0);
+  });
+
+  it("a session the server ends mid-transaction fails that transaction, not the process", async () => {
+    const uncaught: unknown[] = [];
+    const record = (error: unknown) => uncaught.push(error);
+    process.on("uncaughtException", record);
+    try {
+      const db = drizzle(open(direct, { max: 1, queryTimeoutMs: 5_000 }));
+      const error = await db
+        .transaction(async (tx) => {
+          await tx.execute(sql`set local idle_in_transaction_session_timeout = '300ms'`);
+          await pause(1_200);
+          await tx.execute(sql`select 1`);
+        })
+        .catch((e: unknown) => e);
+      expect(messages(error)).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(
+            /^(Connection terminated unexpectedly|Client has encountered a connection error and is not queryable)$/,
+          ),
+        ]),
+      );
+      await pause(100);
+      expect(uncaught).toEqual([]);
+      await expect(db.execute<{ n: number }>(sql`select ${9}::int as n`)).resolves.toMatchObject({
+        rows: [{ n: 9 }],
+      });
+    } finally {
+      process.off("uncaughtException", record);
+    }
   });
 
   it("bounds the wait for a free client too", async () => {

@@ -55,7 +55,7 @@ export const ERROR_FIELDS = {
   class: "token",
   /** A short code: the OCR failure kind, the job error kind. */
   kind: "token",
-  /** A driver code: a Postgres SQLSTATE (`23505`), or `query_timeout` / `connect_timeout` for the pg client's own timeouts. */
+  /** A driver code: a Postgres SQLSTATE (`23505`), or `query_timeout`, `connect_timeout`, `connection_lost` or `connection_closed` for the pg client's own failures. */
   code: "token",
   /** Next.js's error digest, which links a server log to the error page a user saw. */
   digest: "token",

@@ -279,6 +279,9 @@ describe("errorFields", () => {
     expect(errorFields(new Error("timeout exceeded when trying to connect")).code).toBe(
       "connect_timeout",
     );
+    expect(errorFields(new Error("Connection terminated unexpectedly")).code).toBe(
+      "connection_lost",
+    );
     expect(errorFields(new Error("some other failure")).code).toBeUndefined();
   });
 

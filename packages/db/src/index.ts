@@ -707,14 +707,34 @@ const isQueryTimeout = (error: unknown) =>
  * Closes the connection when a query on it times out. `pool.query` already drops such a client,
  * but drizzle's `transaction()` releases its client without the error, which would put a
  * connection with an unfinished statement (and maybe an open transaction) back in the pool.
+ * Statements sent after that (drizzle's ROLLBACK) fail with the timeout itself, not "Client was
+ * closed", so the caller sees why.
  */
 class TimeoutClosingClient extends pg.Client {
+  private timedOut: Error | undefined;
+
+  constructor(...args: ConstructorParameters<typeof pg.Client>) {
+    super(...args);
+    // pg-pool removes its own listener while a client is checked out and drizzle's transaction()
+    // adds none, so a session the server ends mid-transaction (idle_in_transaction_session_timeout,
+    // a restart) would otherwise be an uncaught exception. The next query on it fails instead.
+    this.on("error", () => {});
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- one override for all of pg's overloads
   override query(...args: unknown[]): any {
+    const callback = args.at(-1);
+    if (this.timedOut) {
+      if (typeof callback !== "function") return Promise.reject(this.timedOut);
+      process.nextTick(callback as (error: Error) => void, this.timedOut);
+      return undefined;
+    }
     const result = (super.query as (...a: unknown[]) => unknown)(...args);
-    if (typeof args.at(-1) !== "function" && result instanceof Promise) {
+    if (typeof callback !== "function" && result instanceof Promise) {
       result.catch((error: unknown) => {
-        if (isQueryTimeout(error)) void this.end();
+        if (!isQueryTimeout(error)) return;
+        this.timedOut = error as Error;
+        void this.end();
       });
     }
     return result;

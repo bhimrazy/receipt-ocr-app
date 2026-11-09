@@ -156,20 +156,23 @@ function sqlState(error: unknown, depth = 0): string | undefined {
   return sqlState((error as { cause?: unknown }).cause, depth + 1);
 }
 
-/** pg's client-side timeouts carry no code, only these fixed messages. */
-const DRIVER_TIMEOUTS: [message: string, code: string][] = [
+/** pg's own failures (timeouts, a lost connection) carry no code, only these fixed messages. */
+const DRIVER_CODES: [message: string, code: string][] = [
   ["Query read timeout", "query_timeout"],
   ["timeout exceeded when trying to connect", "connect_timeout"],
+  ["Connection terminated unexpectedly", "connection_lost"],
+  ["Client has encountered a connection error and is not queryable", "connection_lost"],
+  ["Client was closed and is not queryable", "connection_closed"],
 ];
 
-/** A SQLSTATE, else `query_timeout` / `connect_timeout` for pg's own timeouts. */
+/** A SQLSTATE, else a short code for one of pg's own failures (`DRIVER_CODES`). */
 function driverCode(error: unknown, depth = 0): string | undefined {
   const state = sqlState(error);
   if (state) return state;
   if (!error || typeof error !== "object" || depth > 3) return undefined;
   const message = error instanceof Error ? error.message : undefined;
-  const timeout = DRIVER_TIMEOUTS.find(([text]) => message === text);
-  return timeout ? timeout[1] : driverCode((error as { cause?: unknown }).cause, depth + 1);
+  const known = DRIVER_CODES.find(([text]) => message === text);
+  return known ? known[1] : driverCode((error as { cause?: unknown }).cause, depth + 1);
 }
 
 const className = (error: unknown) =>
