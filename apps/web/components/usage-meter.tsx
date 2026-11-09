@@ -1,6 +1,7 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { CircleAlert } from "lucide-react";
 import { formatTime } from "@/lib/format";
+import { NEAR_RATIO, usageRatio } from "@/lib/upgrade-level";
 
 export type Usage = {
   /** The month when the plan has a monthly limit, else the day. */
@@ -51,19 +52,27 @@ export function usageNote(usage: Usage): string {
   return `${left} left today. Resets at ${reset}.`;
 }
 
-/** Scans used against the plan limit. Amber from 80%, with words, not colour alone. */
+/**
+ * Scans used against the plan limit. Amber from NEAR_RATIO (the upgrade offer's `near` too),
+ * with words, not colour alone. `action` goes under the note (the upgrade button); `ownerNote`
+ * is added to an amber note (a member's "ask the owner").
+ */
 export function UsageMeter({
   usage,
   planLabel,
   className,
+  action,
+  ownerNote,
 }: {
   usage: Usage;
   planLabel: string;
   className?: string;
+  action?: React.ReactNode;
+  ownerNote?: string;
 }) {
   const { used, limit, blocked } = usage;
-  const ratio = limit > 0 ? Math.min(1, used / limit) : 0;
-  const warn = blocked !== null || ratio >= 0.8;
+  const ratio = usageRatio(usage);
+  const warn = blocked !== null || ratio >= NEAR_RATIO;
   const span = usage.period === "month" ? "this month" : "today";
 
   return (
@@ -95,8 +104,12 @@ export function UsageMeter({
         )}
       >
         {warn ? <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" /> : null}
-        {usageNote(usage)}
+        <span>
+          {usageNote(usage)}
+          {warn && ownerNote ? ` ${ownerNote}` : null}
+        </span>
       </p>
+      {action ? <div className="mt-3 flex flex-col">{action}</div> : null}
     </div>
   );
 }

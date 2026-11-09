@@ -1,7 +1,9 @@
 # Upgrade call-to-action for Free workspaces (2026-11-08)
 
-Status: proposed, revised 2026-11-08 after the owner's review (an upgrade button on Home, and a modal instead of a
-redirect). Owner decisions are at the end, each with a recommended default.
+Status: built 2026-11-09 (`feat/upgrade-cta`). The owner accepted every recommended default below; for decision 2
+that means the `soon` branch ("Email me when Pro opens") is not built, and while checkout is admin-only on production
+every surface stays hidden for everyone else. Revised 2026-11-08 after the owner's review (an upgrade button on Home,
+and a modal instead of a redirect).
 
 ## Goal
 

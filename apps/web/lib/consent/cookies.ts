@@ -103,6 +103,15 @@ export const storageEntries: StorageEntry[] = [
     duration: "400 days",
   },
   {
+    name: "receiptocr.upgrade",
+    kind: "cookie",
+    setBy: "ReceiptOCR",
+    category: "necessary",
+    purpose:
+      "Only for workspace owners on the Free plan: remembers when you chose Not now on an offer to upgrade to Pro, and until when to keep it hidden. It holds only those dates, never who you are. Not readable by page scripts.",
+    duration: "400 days",
+  },
+  {
     name: "tz",
     kind: "cookie",
     setBy: "ReceiptOCR",

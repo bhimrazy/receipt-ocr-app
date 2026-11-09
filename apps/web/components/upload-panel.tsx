@@ -32,6 +32,9 @@ import { postReceipt } from "@/lib/capture/upload-request";
 import { useHydrated } from "@/lib/use-hydrated";
 import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
 import { SharedFilesNotice } from "@/components/shared-files-notice";
+import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
+import type { PlanPolicy } from "@/lib/plans";
+import { ASK_OWNER, limitUpgradeLine } from "@/lib/upgrade-copy";
 
 // Loaded on first use, so the camera and editor don't weigh on the upload page.
 const loadCamera = () => import("@/components/capture/camera-sheet");
@@ -68,9 +71,23 @@ function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
+/**
+ * Who may be offered Pro at the limit: the owner gets the upgrade button, anyone else the
+ * line asking the owner. Absent while Pro can't be bought (or for a Pro workspace).
+ */
+export type LimitUpgrade = { audience: "owner" | "member"; pro: PlanPolicy };
+
 /** Shown instead of the drop zone when a limit, the Free plan's shared pool, or the service-wide cap is reached. */
-function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
-  const { title, body } = limitCopy(usage, formatTime(usage.opensAt), resetsIn);
+function LimitReached({
+  usage,
+  resetsIn,
+  upgrade,
+}: {
+  usage: Usage;
+  resetsIn: string;
+  upgrade: LimitUpgrade | null;
+}) {
+  const { title, body } = limitCopy(usage, formatTime(usage.opensAt), resetsIn, upgrade);
   return (
     <Card className="flex flex-col items-center gap-4 border-warning/30 px-6 py-10 text-center sm:py-14">
       <span className="flex size-12 items-center justify-center rounded-full border border-warning/30 bg-warning/10 text-warning">
@@ -80,6 +97,9 @@ function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">{body}</p>
       </div>
+      {upgrade?.audience === "owner" && usage.blocked !== "global" ? (
+        <UpgradeTrigger surface="limit">Upgrade to Pro</UpgradeTrigger>
+      ) : null}
       <Link
         className="text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring max-md:inline-flex max-md:min-h-11 max-md:items-center"
         href="/app/history"
@@ -90,7 +110,20 @@ function LimitReached({ usage, resetsIn }: { usage: Usage; resetsIn: string }) {
   );
 }
 
-function limitCopy(usage: Usage, opens: string, resetsIn: string) {
+function limitCopy(usage: Usage, opens: string, resetsIn: string, upgrade: LimitUpgrade | null) {
+  const copy = baseLimitCopy(usage, opens, resetsIn, upgrade?.audience ?? null);
+  if (!upgrade || usage.blocked === "global") return copy;
+  const extra = upgrade.audience === "member" ? ASK_OWNER : limitUpgradeLine(usage, upgrade.pro);
+  return extra ? { ...copy, body: `${copy.body} ${extra}` } : copy;
+}
+
+/** The limit state's words. `offered`: who limitCopy adds an upgrade sentence for, if anyone. */
+function baseLimitCopy(
+  usage: Usage,
+  opens: string,
+  resetsIn: string,
+  offered: LimitUpgrade["audience"] | null,
+) {
   switch (usage.blocked) {
     case "global":
       return {
@@ -100,7 +133,7 @@ function limitCopy(usage: Usage, opens: string, resetsIn: string) {
     case "pool":
       return {
         title: "Free scanning is busy today",
-        body: `The Free plan's shared daily capacity is used up for today. Try again after ${opens}, ${resetsIn}, or upgrade this workspace to Pro.`,
+        body: `The Free plan's shared daily capacity is used up for today. Try again after ${opens}, ${resetsIn}${offered === "member" ? "" : ", or upgrade this workspace to Pro"}.`,
       };
     case "month":
       return usage.scope === "workspace"
@@ -110,7 +143,7 @@ function limitCopy(usage: Usage, opens: string, resetsIn: string) {
           }
         : {
             title: "You've used this month's free scans",
-            body: `The Free plan includes ${plural(usage.limit, "scan")} a month per person, across every workspace you use, and you've used all of them. Uploads open again on the 1st at ${opens}, ${resetsIn}. Upgrade a workspace to Pro for more scans.`,
+            body: `The Free plan includes ${plural(usage.limit, "scan")} a month per person, across every workspace you use, and you've used all of them. Uploads open again on the 1st at ${opens}, ${resetsIn}.${offered ? "" : " Upgrade a workspace to Pro for more scans."}`,
           };
     default: {
       const perDay = usage.day?.limit ?? usage.limit;
@@ -202,8 +235,10 @@ export function UploadPanel({
   usage,
   resetsIn,
   batchMax,
+  upgrade = null,
 }: {
   usage: Usage | null;
+  upgrade?: LimitUpgrade | null;
   /** "in 6 hours", computed on the server so it matches what was rendered. */
   resetsIn: string;
   /** Images in one batch (camera plus picked files), from the plan. */
@@ -292,7 +327,7 @@ export function UploadPanel({
     [queue, router, release],
   );
 
-  if (usage?.blocked) return <LimitReached resetsIn={resetsIn} usage={usage} />;
+  if (usage?.blocked) return <LimitReached resetsIn={resetsIn} upgrade={upgrade} usage={usage} />;
 
   const busy = snapshot.running;
   const remaining = usage ? usageRemaining(usage) : null;

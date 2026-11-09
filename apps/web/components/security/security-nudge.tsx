@@ -1,5 +1,6 @@
 "use client";
 
+import { Banner } from "@receipt-ocr/ui/components/banner";
 import { Button, buttonVariants } from "@receipt-ocr/ui/components/button";
 import { ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
@@ -44,30 +45,32 @@ export function SecurityNudge() {
   }
 
   return (
-    <aside
+    <Banner
+      actions={
+        <>
+          <Link
+            className={buttonVariants({ size: "sm", className: "shrink-0" })}
+            href="/app/settings/security"
+          >
+            Set up
+          </Link>
+          <Button
+            aria-label="Dismiss for 30 days"
+            className="shrink-0"
+            onClick={dismiss}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </>
+      }
       aria-label="Account security"
-      className="mx-auto mb-6 flex max-w-5xl items-start gap-3 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm sm:items-center"
+      className="mx-auto mb-6 max-w-5xl"
+      icon={ShieldCheck}
     >
-      <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary sm:mt-0" />
-      <p className="min-w-0 flex-1">
-        Other people rely on this workspace. Add a passkey or two-step sign-in so a stolen password
-        alone can&apos;t get in.
-      </p>
-      <Link
-        className={buttonVariants({ size: "sm", className: "shrink-0" })}
-        href="/app/settings/security"
-      >
-        Set up
-      </Link>
-      <Button
-        aria-label="Dismiss for 30 days"
-        className="shrink-0"
-        onClick={dismiss}
-        size="icon-sm"
-        variant="ghost"
-      >
-        <X aria-hidden="true" />
-      </Button>
-    </aside>
+      Other people rely on this workspace. Add a passkey or two-step sign-in so a stolen password
+      alone can&apos;t get in.
+    </Banner>
   );
 }

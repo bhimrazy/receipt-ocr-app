@@ -15,24 +15,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@receipt-ocr/ui/components/popover";
-import { useSyncExternalStore } from "react";
-
-const DESKTOP = "(min-width: 768px)";
-
-function subscribe(onChange: () => void) {
-  const query = window.matchMedia(DESKTOP);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-}
-
-/** True from md up. On the server (nothing is open yet) it says desktop. */
-function useIsDesktop() {
-  return useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(DESKTOP).matches,
-    () => true,
-  );
-}
+import { useIsDesktop } from "@/lib/use-is-desktop";
 
 /**
  * A popover beside its trigger from md up, a bottom sheet below. Both trap

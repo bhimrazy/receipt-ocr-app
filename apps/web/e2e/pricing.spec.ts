@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { signUp, uniqueEmail } from "./helpers";
 
-// The e2e stack has no PADDLE_* settings, so billing is off: prices show, no checkout runs.
+// The e2e stack has Paddle's sandbox keys under `next start` (production), the live site's state:
+// the public pages say Pro opens soon and only platform admins can check out (upgrade.spec.ts).
 
 test("pricing shows Free, Pro and Custom with a monthly/yearly switch, and the FAQ", async ({
   page,
@@ -47,7 +48,7 @@ test("pricing shows Free, Pro and Custom with a monthly/yearly switch, and the F
   await expect(page.getByRole("radio", { name: /Yearly/ })).toBeChecked();
   await expect(page.getByText("$90", { exact: true })).toBeVisible();
 
-  // Billing is off in this stack: no checkout link, no Paddle script.
+  // Pro is not open to everyone in this stack: no checkout link, no Paddle script.
   await expect(page.getByRole("link", { name: /Get Pro/ })).toHaveCount(0);
   await expect(page.getByText("Pro checkout opens soon.")).toBeVisible();
   expect(await page.locator('script[src*="paddle.com"]').count()).toBe(0);
@@ -72,7 +73,9 @@ test("the footer links Pricing and Refunds, and refunds names Paddle", async ({ 
   await expect(page.getByText(/Paddle.com is our reseller/)).toBeVisible();
 });
 
-test("billing settings show the plan without a checkout while billing is off", async ({ page }) => {
+test("billing settings show the plan without a checkout while Pro is closed to the viewer", async ({
+  page,
+}) => {
   await signUp(page, uniqueEmail("billing"));
   await page.goto("/app/settings/billing");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Billing");

@@ -1,4 +1,5 @@
 import { and, asc, count, createDb, eq, member, organization } from "@receipt-ocr/db";
+import { cache } from "react";
 import { authEnv } from "./env";
 import { workspaceCapNote } from "./plan-copy";
 import { getAccountPlan } from "./plan-limits";
@@ -40,8 +41,8 @@ export interface WorkspaceOption {
   name: string;
 }
 
-/** Every workspace the signed-in user belongs to, for the switcher. */
-export async function listWorkspaces(): Promise<WorkspaceOption[]> {
+/** Every workspace the signed-in user belongs to, for the switcher. Deduplicated per request. */
+export const listWorkspaces = cache(async (): Promise<WorkspaceOption[]> => {
   const session = await getSession();
   if (!session || !authEnv.databaseUrl) return [];
   return createDb(authEnv.databaseUrl)
@@ -50,7 +51,7 @@ export async function listWorkspaces(): Promise<WorkspaceOption[]> {
     .innerJoin(organization, eq(organization.id, member.organizationId))
     .where(eq(member.userId, session.user.id))
     .orderBy(asc(member.createdAt));
-}
+});
 
 /** Whether a workspace has anyone besides one member (the security nudge targets those). */
 export async function isSharedWorkspace(organizationId: string): Promise<boolean> {
