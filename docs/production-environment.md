@@ -552,9 +552,8 @@ and server maps. A separate step then runs the pinned `sentry-cli` (`.github/ver
 holds the token: not the build (it runs repository code), and never Vercel. Sentry matches frames by debug ID
 (`scrubEvent` keeps the IDs), so they show original files, lines and function names.
 
-To enable: create an organization token ([secrets.md](secrets.md)) and add it as the secret `SENTRY_AUTH_TOKEN` in
-the GitHub `vercel` environment (Settings, Environments, vercel). Until it is set the production deploy fails at the
-upload step. Previews and Docker builds emit no maps. Docker: pass `--build-arg SENTRY_DSN=...` and
+The upload token's scope, location and rotation are in [secrets.md](secrets.md#operator-tokens-how-to-create-each-one);
+without it the production deploy fails at the upload step. Previews and Docker builds emit no maps. Docker: pass `--build-arg SENTRY_DSN=...` and
 `--build-arg GIT_COMMIT_SHA=$(git rev-parse HEAD)` to `docker/Dockerfile.prod` for browser reporting and the release;
 `SENTRY_DSN` in the container's environment alone turns on server reporting only.
 
