@@ -5,6 +5,11 @@ ways to capture them, checks what the models accept, and recommends one pipeline
 in PR #47 (`apps/web/lib/capture/` on `feat/capture`: crop, straighten and filters on one image, a batch tray where every
 photo becomes its own receipt) and on the upload shrinker in `apps/web/lib/upload-prep.ts`.
 
+**Status (2026-11-09): parked.** The direction stands (multi-part, no stitching) but nothing is built. The photo-flow
+rework uploads a very long receipt (above about 1:2.6) at the largest size the model reads, with a short note, and keeps
+that threshold in one constant for this work to hook into. Resume with the benchmark in §4 step 1; it needs 8–10 of
+the owner's long receipts, kept out of the public repo.
+
 ## TL;DR
 
 - **Recommend multi-part receipts:** one receipt with 1–4 image parts, sent to the model as several images in one request.

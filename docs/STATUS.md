@@ -294,6 +294,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
+- **Long receipts in parts (parked 2026-11-09).** Decided 2026-11-07: split, don't stitch; multi-part receipts
+  ("Add part") and automatic splitting of very tall photos, sent as several images in one request
+  ([plan](plans/2026-11-07-long-receipt-capture.md)). Not built. Until then a very long receipt uploads at the largest
+  size the model reads, with a short note. Pick it up when long receipts come up again: benchmark first (8–10 of the
+  owner's long receipts, kept local, as one shot vs parts), then auto-splitting (about 1 day) or full multi-part
+  (about 4–5 days).
 - **Email templates cleanup.** One file per template and no committed `generated.ts` (generate at build, or render
   at runtime if measured cheap): [plan](plans/2026-11-08-email-templates-cleanup.md).
 - **Play Store app (Trusted Web Activity).** Wrap the PWA with Bubblewrap for a Play Store listing; its native
