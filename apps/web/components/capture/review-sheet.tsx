@@ -634,7 +634,8 @@ export default function ReviewSheet({
           >
             {adjusting ? (
               <p className="pt-1">
-                Drag a corner to the edge of the receipt, or select one and use the arrow keys.
+                Drag a corner or the middle of a side to the edge of the receipt. You can also
+                select one and use the arrow keys.
               </p>
             ) : (
               <>

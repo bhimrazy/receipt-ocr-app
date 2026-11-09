@@ -33,3 +33,54 @@ export function clipLoupe(
   const k = size / span;
   return { sx, sy, sw, sh, dx: (sx - left) * k, dy: (sy - top) * k, dw: sw * k, dh: sh * k };
 }
+
+/** Where the loupe sits relative to the point it magnifies. */
+export type LoupePlacement = "above" | "left" | "right";
+
+/** Loupe diameter, its gap to the point, the margin it keeps inside the stage, and the hysteresis. */
+export const LOUPE = 104;
+const GAP = 40;
+const MARGIN = 4;
+const HYSTERESIS = 20;
+
+/**
+ * Picks the loupe's side for the point (x, y) in a stage `width` wide. Above the finger where
+ * it fits, else beside it, away from the nearer stage edge. With a `previous` placement (the
+ * same drag) it keeps it until the loupe would leave the stage, and goes back above only once
+ * there is `HYSTERESIS` px to spare, so it does not flip back and forth.
+ */
+export function loupePlacement(
+  x: number,
+  y: number,
+  width: number,
+  previous: LoupePlacement | null,
+): LoupePlacement {
+  const roomAbove = y - GAP - LOUPE - MARGIN;
+  const fitsRight = x + GAP + LOUPE <= width - MARGIN;
+  const fitsLeft = x - GAP - LOUPE >= MARGIN;
+  if (previous === null || previous === "above") {
+    if (roomAbove >= 0) return "above";
+    return x < width / 2 ? "right" : "left";
+  }
+  if (roomAbove >= HYSTERESIS) return "above";
+  if (previous === "right" && !fitsRight && fitsLeft) return "left";
+  if (previous === "left" && !fitsLeft && fitsRight) return "right";
+  return previous;
+}
+
+/** Top-left of the loupe for the point (x, y) and `placement`, kept inside the stage. */
+export function loupePosition(
+  x: number,
+  y: number,
+  placement: LoupePlacement,
+  stage: { width: number; height: number },
+): { left: number; top: number } {
+  const left =
+    placement === "above" ? x - LOUPE / 2 : placement === "right" ? x + GAP : x - GAP - LOUPE;
+  const top = placement === "above" ? y - GAP - LOUPE : y - LOUPE / 2;
+  const clamp = (n: number, max: number) => Math.min(Math.max(MARGIN, n), Math.max(MARGIN, max));
+  return {
+    left: clamp(left, stage.width - LOUPE - MARGIN),
+    top: clamp(top, stage.height - LOUPE - MARGIN),
+  };
+}

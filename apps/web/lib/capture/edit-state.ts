@@ -1,5 +1,5 @@
 import type { Filter } from "./filters";
-import { isConvex, type Point, type Quad } from "./geometry";
+import { edgeNormal, isConvex, slideEdge, type Point, type Quad } from "./geometry";
 
 /**
  * What the reviewer changed on one image. Corners are normalised (0..1) in the frame of the
@@ -67,9 +67,98 @@ export function moveCorner(state: EditState, index: number, to: Point): EditStat
   return { ...state, quad };
 }
 
+/** Convex, with no moved corner closer than MIN_GAP to any other. */
+function allowed(quad: Quad, moved: readonly number[]): boolean {
+  if (!isConvex(quad)) return false;
+  return moved.every((i) =>
+    quad.every((p, j) => j === i || Math.hypot(p.x - quad[i]!.x, p.y - quad[i]!.y) >= MIN_GAP),
+  );
+}
+
+/**
+ * `at(1)` if it is allowed, else the furthest allowed `at(t)` for t in 0..1, by 12 bisection
+ * steps (within 1/4000 of the move). `at(0)` is the start, assumed allowed.
+ */
+function furthest(at: (t: number) => Quad, moved: readonly number[]): Quad {
+  const end = at(1);
+  if (allowed(end, moved)) return end;
+  let lo = 0;
+  let hi = 1;
+  for (let step = 0; step < 12; step++) {
+    const mid = (lo + hi) / 2;
+    if (allowed(at(mid), moved)) lo = mid;
+    else hi = mid;
+  }
+  return at(lo);
+}
+
+const withQuad = (state: EditState, quad: Quad) =>
+  sameQuad(quad, state.quad) ? state : { ...state, quad };
+
+/**
+ * Moves corner `index` of `from` (the quad at drag start) by `delta` (normalised), clamped to
+ * the image, and stopped at the last allowed position before the crop would fold or two
+ * corners get closer than MIN_GAP. Returns `state` itself when nothing moves.
+ */
+export function dragCorner(state: EditState, index: number, from: Quad, delta: Point): EditState {
+  const start = from[index]!;
+  const end = { x: clamp01(start.x + delta.x), y: clamp01(start.y + delta.y) };
+  const at = (t: number) =>
+    from.map((p, i) =>
+      i === index ? { x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t } : p,
+    ) as Quad;
+  return withQuad(state, furthest(at, [index]));
+}
+
 export function nudgeCorner(state: EditState, index: number, dx: number, dy: number): EditState {
-  const p = state.quad[index]!;
-  return moveCorner(state, index, { x: p.x + dx, y: p.y + dy });
+  return dragCorner(state, index, state.quad, { x: dx, y: dy });
+}
+
+/**
+ * Moves `edge` of `from` (the quad at drag start) by the part of `delta` (normalised) that runs
+ * across it, clamped to the image, and stopped at the last valid position before corners get
+ * closer than MIN_GAP. Returns `state` itself when nothing moves.
+ */
+export function moveEdge(
+  state: EditState,
+  edge: number,
+  from: Quad,
+  delta: Point,
+  aspect: number,
+): EditState {
+  const n = edgeNormal(from, edge, aspect);
+  let distance = delta.x * aspect * n.x + delta.y * n.y;
+  // Each corner moves linearly with the distance, so the image border bounds it to an interval.
+  const unit = slideEdge(from, edge, 1, aspect);
+  let low = -Infinity;
+  let high = Infinity;
+  for (const i of [edge % 4, (edge + 1) % 4]) {
+    for (const axis of ["x", "y"] as const) {
+      const p = from[i]![axis];
+      const v = unit[i]![axis] - p;
+      if (Math.abs(v) < 1e-12) continue;
+      const [a, b] = [-p / v, (1 - p) / v];
+      low = Math.max(low, Math.min(a, b));
+      high = Math.min(high, Math.max(a, b));
+    }
+  }
+  distance = Math.min(high, Math.max(low, distance));
+  const at = (t: number) =>
+    slideEdge(from, edge, distance * t, aspect).map((p) => ({
+      x: clamp01(p.x),
+      y: clamp01(p.y),
+    })) as Quad;
+  return withQuad(state, furthest(at, [edge % 4, (edge + 1) % 4]));
+}
+
+export function nudgeEdge(
+  state: EditState,
+  edge: number,
+  dx: number,
+  dy: number,
+  aspect: number,
+): EditState {
+  return moveEdge(state, edge, state.quad, { x: dx, y: dy }, aspect);
 }
 
 /** Arrow keys to a nudge; null for any other key. */
