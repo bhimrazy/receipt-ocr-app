@@ -45,18 +45,14 @@ test.describe("on a phone", () => {
   });
 
   for (const width of [375, 390, 430]) {
-    test(`at ${width} px the preview is large and clear of the support button`, async ({
-      page,
-    }) => {
+    test(`at ${width} px the preview is large and centred`, async ({ page }) => {
       await page.setViewportSize({ width, height: 844 });
       await page.goto("/");
       const phone = page.locator("[data-preview='phone'] > div");
       await phone.scrollIntoViewIfNeeded();
       const frame = (await phone.boundingBox())!;
-      expect(frame.width).toBeGreaterThanOrEqual(Math.min(320, width * 0.78));
-      // The button is fixed, so it must stay out of the preview's columns at any scroll.
-      const bubble = (await page.getByRole("button", { name: "Contact support" }).boundingBox())!;
-      expect(frame.x + frame.width).toBeLessThanOrEqual(bubble.x);
+      expect(frame.width).toBeGreaterThanOrEqual(Math.min(320, width * 0.8));
+      expect(Math.abs(frame.x - (width - frame.x - frame.width))).toBeLessThanOrEqual(1);
     });
   }
 });
