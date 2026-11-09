@@ -459,6 +459,30 @@ for (const viewport of [
     same(base, await rects(controls));
     await page.mouse.up();
     await expect(review.getByTestId("loupe")).toHaveCount(0);
+    // An edge drag (a long side, so its handle shows), watched frame by frame.
+    const edge = review.getByRole("button", { name: /^Left edge/ });
+    const edgeBox = (await edge.boundingBox())!;
+    steady(
+      await watchBoxes(
+        page,
+        {
+          stage: "[data-testid=stage]",
+          primary: "[data-testid=primary]",
+          controls: "[data-testid=controls]",
+          hint: "[data-testid=hint]",
+        },
+        async () => {
+          const x = edgeBox.x + edgeBox.width / 2;
+          const y = edgeBox.y + edgeBox.height / 2;
+          await page.mouse.move(x, y);
+          await page.mouse.down();
+          await page.mouse.move(x + 20, y, { steps: 4 });
+          await expect(review.getByTestId("loupe")).toBeVisible();
+          await page.mouse.up();
+        },
+      ),
+    );
+    await expect(review.getByTestId("loupe")).toHaveCount(0);
     await review.getByRole("button", { name: "Photo 2" }).click();
     await expect(review.getByText("Photo 2 of 2").filter({ visible: true })).toBeVisible();
     await settle();
