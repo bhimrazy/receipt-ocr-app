@@ -190,12 +190,9 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                                                                                                                           |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| #148 | SEO: home title leads with "receipt scanner" and names CSV and JSON (never Excel; nothing writes .xlsx); one source for the home title/description; WebApplication JSON-LD with featureList and the free Offer, no ratings     |
-| #184 | Upgrade call-to-action for Free workspace owners: meter button, menu item, Home card, limit-state button and blocked banner, all opening one modal that starts Paddle's overlay; admin-only while production runs sandbox keys |
-| #191 | Four upload sizes: Compact (new, 600 px, 350 KB) · Small (800 px) · Standard (default) · Sharpest; `size_choice` adds `compact`; 2 × 2 picker on phones                                                                        |
-| #166 | Light theme, part 2: System by default, a System/Light/Dark toggle in Settings, the account menu and footers, light iOS splash images (plus iPhone Air), light error and offline pages. Part 1 (tokens, #163) is merged        |
+| PR   | Work                                                                                      |
+| ---- | ----------------------------------------------------------------------------------------- |
+| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1) |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -347,6 +344,18 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   R2, which stay as they are) when traffic or billing makes it necessary.
 
 ## Known follow-ups
+
+- **From the 2026-11-09 Home incident** ([note](reviews/2026-11-09-home-stuck-incident.md), fixed in #210 by moving to
+  node-postgres; server role timeouts applied the same day, see [db.md](architecture/db.md)):
+  - Restore the pushed-screen slide transitions turned off in #205 (`TODO(2026-11-16)` in `pushed-screen.tsx`).
+  - Sentry source maps: stack traces still point at minified files.
+  - `db.pool_error` is only logged once core's Db layer is built; a process that has only built the auth pool logs
+    nothing for an idle-client error.
+  - A CI job against a real PgBouncer in transaction mode.
+  - Home still reads `member` three times and counts passkeys twice per render.
+- **From the [database review](reviews/2026-11-09-database-review.md)** (owner said go on D4 only so far): D1 backups
+  (#131, then Supabase Pro at launch), D2 turn off the Supabase Data API and revoke `anon`/`authenticated` grants, D3
+  retention and a purge job.
 
 - Linking a new subscription looks up early revoking adjustments in `billing_events` with a sequential scan. Add a
   partial expression index `billing_events (provider, (payload->'adjustment'->>'subscriptionId')) where outcome =
