@@ -62,7 +62,10 @@ describe("isEntitled (subscription state to plan)", () => {
   });
 
   it(`gives a past_due subscription ${PAST_DUE_GRACE_DAYS} days of grace`, () => {
+    // Paddle Retain's default dunning window; Pro must outlast its retries.
+    expect(PAST_DUE_GRACE_DAYS).toBe(30);
     expect(entitled(sub({ status: "past_due", pastDueSince: at(-1) }), now)).toBe(true);
+    expect(entitled(sub({ status: "past_due", pastDueSince: at(-29) }), now)).toBe(true);
     expect(
       entitled(sub({ status: "past_due", pastDueSince: at(-PAST_DUE_GRACE_DAYS + 0.01) }), now),
     ).toBe(true);

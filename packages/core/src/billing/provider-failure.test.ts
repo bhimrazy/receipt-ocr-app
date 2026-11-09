@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BillingProviderError } from "../errors";
 import { errorFields } from "../telemetry/redact";
 import { PaddleApiError } from "./paddle";
-import { providerFailureKind } from "./service";
+import { providerErrorCode, providerFailure, providerFailureKind } from "./service";
 
 describe("provider failure kind", () => {
   it("names the Paddle status, an unreadable body, or a network failure", () => {
@@ -20,5 +20,27 @@ describe("provider failure kind", () => {
     const fields = errorFields(error);
     expect(fields).toMatchObject({ type: "BillingProviderError", kind: "http-403" });
     expect(JSON.stringify(fields)).not.toContain("checkout request failed");
+  });
+
+  it("names the provider's error code, and only when it has one", () => {
+    expect(
+      providerErrorCode(new BillingProviderError({ message: "m", providerCode: "invalid_field" })),
+    ).toBe("invalid_field");
+    expect(providerErrorCode(new BillingProviderError({ message: "m" }))).toBeUndefined();
+    expect(providerErrorCode(new PaddleApiError(400, "status", "invalid_field"))).toBeUndefined();
+  });
+
+  it("carries Paddle's code from the call's error to the log fields", () => {
+    const error = providerFailure(
+      "Paddle checkout request failed",
+      new PaddleApiError(400, "status", "transaction_default_checkout_url_not_set"),
+    );
+    expect(error).toMatchObject({
+      kind: "http-400",
+      providerCode: "transaction_default_checkout_url_not_set",
+    });
+    expect(providerErrorCode(error)).toBe("transaction_default_checkout_url_not_set");
+    expect(providerFailure("m", new PaddleApiError(500)).providerCode).toBeUndefined();
+    expect(providerFailure("m", new TypeError("fetch failed")).providerCode).toBeUndefined();
   });
 });

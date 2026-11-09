@@ -5,8 +5,12 @@ import type { AdjustmentSnapshot, BillingStatus } from "./provider";
  * (`workspacePlan`, `accountPlan`, `entitledSql`) are in service.ts.
  */
 
-/** Pro keeps working this long after a renewal payment fails, while the provider retries the card. */
-export const PAST_DUE_GRACE_DAYS = 14;
+/**
+ * Pro keeps working this long after a renewal payment fails, while the provider retries the card.
+ * Matches Paddle Retain's default 30-day dunning window, so Pro doesn't end while Paddle can still
+ * recover the payment (https://developer.paddle.com/concepts/retain/payment-recovery-dunning).
+ */
+export const PAST_DUE_GRACE_DAYS = 30;
 export const PAST_DUE_GRACE_MS = PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000;
 
 export type EntitlementFields = {

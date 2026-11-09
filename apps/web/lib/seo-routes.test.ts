@@ -32,6 +32,7 @@ describe("robots.txt per host", () => {
       "/admin/",
       "/accept-invitation",
       "/account-deleted",
+      "/pay",
       "/offline.html",
     ]) {
       expect(rules.disallow, path).toContain(path);

@@ -38,16 +38,22 @@ const cancelRevoked = (subscriptionId: string) =>
         return Effect.fail(new NonRetryableJobError({ kind: "billing-off" }));
       }
       const status = error.cause instanceof PaddleApiError ? error.cause.status : null;
+      const code = annotateEvent({ billing: { provider_error_code: error.providerCode } });
       if (status === 401 || status === 403) {
-        return Effect.fail(new NonRetryableJobError({ kind: "provider-auth" }));
+        return code.pipe(
+          Effect.zipRight(Effect.fail(new NonRetryableJobError({ kind: "provider-auth" }))),
+        );
       }
       if (status !== null && status >= 400 && status < 500 && status !== 429) {
         // A notice on the job's wide event, at error level.
-        return annotateEvent({ error: errorFields(error) }).pipe(
+        return code.pipe(
+          Effect.zipRight(annotateEvent({ error: errorFields(error) })),
           Effect.zipRight(Effect.logError("billing.cancel_refused")),
         );
       }
-      return Effect.fail(new RetryableJobError({ kind: "provider-error" }));
+      return code.pipe(
+        Effect.zipRight(Effect.fail(new RetryableJobError({ kind: "provider-error" }))),
+      );
     }),
   );
 

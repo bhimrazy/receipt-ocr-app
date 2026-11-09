@@ -160,8 +160,9 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
   4. In each Paddle account, set the **default payment link** (Checkout → Checkout settings; without it every checkout
      fails with `transaction_default_checkout_url_not_set`), the sales tax mode (exclusive), the API key's permissions
      and expiry, and the rest of [account settings](production-environment.md#paddle-account-settings). Before live:
-     the public `_ptxn` payment page and the other follow-ups in the
-     [Paddle docs review](reviews/2026-11-09-paddle-docs-review.md).
+     point the default payment link at `/pay` in both accounts once it is deployed (F1 in the
+     [Paddle docs review](reviews/2026-11-09-paddle-docs-review.md), built with F2 and F3). Its other follow-ups (F4 to
+     F7) don't block live. The owner accepted all the review's decisions on 2026-11-09.
   5. Test a sandbox checkout, then submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
      account verification, and switch to live values ([10c](production-environment.md#10c-switch-from-sandbox-to-live)).
   6. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).

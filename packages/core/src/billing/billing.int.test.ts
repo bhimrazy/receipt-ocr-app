@@ -27,6 +27,7 @@ import { checkQuota, quotaLimits, type QuotaLimits } from "../quota";
 import { Db } from "../services";
 import { ensurePersonalWorkspace } from "../workspace";
 import { deleteWorkspace, prepareUserDeletion, workspacesBlockingDeletion } from "../admin";
+import { PAST_DUE_GRACE_DAYS } from "./entitlement";
 import type { AdjustmentSnapshot, BillingEvent, SubscriptionSnapshot } from "./provider";
 import {
   accountPlan,
@@ -315,6 +316,24 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
   });
 
   describe("plan per workspace", () => {
+    it("counts the grace from the first failure: a later past_due update doesn't restart it", async () => {
+      const workspaceId = await createWorkspace(other.userId, "dunning");
+      const id = `sub_${tag}_dunning`;
+      const t1 = new Date(Date.now() - 10 * 86_400_000);
+      const t2 = new Date(Date.now() - 86_400_000);
+      await deliver(
+        event(snapshot({ subscriptionId: id, workspaceId, updatedAt: t1, status: "past_due" })),
+      );
+      expect((await subscriptionRow(id))?.pastDueSince?.getTime()).toBe(t1.getTime());
+      // Paddle's next retry fails: subscription.updated, still past_due.
+      await deliver(
+        event(snapshot({ subscriptionId: id, workspaceId, updatedAt: t2, status: "past_due" })),
+      );
+      const row = await subscriptionRow(id);
+      expect(row?.providerUpdatedAt.getTime()).toBe(t2.getTime());
+      expect(row?.pastDueSince?.getTime()).toBe(t1.getTime());
+    });
+
     it("is Pro while subscribed, through past_due grace and a cancel at period end, then Free", async () => {
       const workspaceId = await createWorkspace(other.userId, "lifecycle");
       const id = `sub_${tag}_life`;
@@ -751,7 +770,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       await db((d) =>
         d
           .update(billingSubscriptions)
-          .set({ pastDueSince: new Date(Date.now() - 30 * 86_400_000) })
+          .set({ pastDueSince: new Date(Date.now() - (PAST_DUE_GRACE_DAYS + 1) * 86_400_000) })
           .where(eq(billingSubscriptions.providerSubscriptionId, id)),
       );
       expect(await planOf(buyer.organizationId)).toBe("free");

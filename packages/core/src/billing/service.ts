@@ -803,11 +803,23 @@ export const providerFailureKind = (cause: unknown) =>
       : `http-${cause.status}`
     : "network";
 
+/** The provider's error code on a failed billing call, for `billing.provider_error_code`. */
+export const providerErrorCode = (error: unknown): string | undefined =>
+  error instanceof BillingProviderError ? error.providerCode : undefined;
+
+/** A failed provider call as a typed error, with its loggable kind and the provider's code. */
+export const providerFailure = (message: string, cause: unknown) =>
+  new BillingProviderError({
+    message,
+    kind: providerFailureKind(cause),
+    ...(cause instanceof PaddleApiError && cause.code ? { providerCode: cause.code } : {}),
+    cause,
+  });
+
 const providerCall = <A>(message: string, call: (signal: AbortSignal) => Promise<A>) =>
   Effect.tryPromise({
     try: call,
-    catch: (cause) =>
-      new BillingProviderError({ message, kind: providerFailureKind(cause), cause }),
+    catch: (cause) => providerFailure(message, cause),
   }).pipe(
     Effect.timeoutFail({
       duration: "10 seconds",

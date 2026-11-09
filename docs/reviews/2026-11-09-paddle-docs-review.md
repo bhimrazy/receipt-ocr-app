@@ -92,12 +92,13 @@ Paddle dashboard step for the owner; "F*n*" is a code follow-up below.
 
 ## Code follow-ups
 
-None is changed in this PR.
+None is changed in this PR. F1, F2 and F3 were built afterwards, in one follow-up PR: `/pay`, `billing.provider_error_code`
+with an admin-only hint, and a 30-day grace.
 
 | #   | Severity | What                                                                                                                                                                                                                                                                                                               |
 | --- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | F1  | High     | A public payment page (for example `/pay`), no sign-in, that loads Paddle.js when `_ptxn` is present: `Environment.set` for the sandbox, `Initialize` with the client token and `checkout.settings` (overlay, theme). Then set the default payment link to it in both accounts. Must ship before live: it's where Paddle's failed-renewal emails send customers. |
-| F2  | Medium   | Keep Paddle's `error.code` on `PaddleApiError` and log it (for example `billing.paddle_error_code`; a closed set from Paddle, no PII). Add it to `telemetry/schema.ts` and the PR's field audit. Map `transaction_default_checkout_url_not_set` and `checkout_url_domain_not_approved` to an admin-readable hint. |
+| F2  | Medium   | Keep Paddle's `error.code` on `PaddleApiError` and log it (for example `billing.paddle_error_code`; a closed set from Paddle, no PII). Add it to `telemetry/schema.ts` and the PR's field audit. Map `transaction_default_checkout_url_not_set` and the domain codes (`checkout_url_domain_not_approved` when setting the link, `transaction_checkout_url_domain_is_not_approved` on a transaction) to an admin-readable hint. |
 | F3  | Medium   | Make the `past_due` grace follow the Retain window (decision 3), and update the billing page copy and `isEntitled` tests.                                                                                                                                                                                       |
 | F4  | Medium   | Monthly ↔ yearly switch: `PATCH /subscriptions/{id}` with the other Pro price and `proration_billing_mode: prorated_immediately` (decision 5).                                                                                                                                                                  |
 | F5  | Low      | Pass `pwCustomer: { id: ctm_… }` to `Paddle.Initialize` on signed-in pages for Retain's in-app recovery prompts.                                                                                                                                                                                                |
@@ -137,17 +138,20 @@ checkout with a 100% discount, a cancel, and the discount archived ([10c](../pro
 
 ## Owner decisions
 
-| #   | Decision                                     | Recommended default                                                                                                                                                                                                              |
-| --- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Default payment link until F1 ships          | Set it to `https://receipt-ocr.bhimraj.com.np/` now in the sandbox (unblocks checkout; any domain works there), and point it at the F1 page before live.                                                                        |
-| 2   | Automatic currency conversion                | Off at launch: one USD price everywhere, matching `/pricing`. Revisit with `PricePreview` on `/pricing` and price overrides for key markets once there's traffic from outside the US and EU.                                    |
-| 3   | `past_due` grace vs Paddle's dunning window   | Keep Paddle's 30-day window (more recoveries) and raise our grace to 30 days (F3). Cost: at most a month of one workspace's 500 scans per failed card. Alternative: set Retain's window to 14 days to match the code today.      |
-| 4   | $9 under Paddle's $10 line                    | Keep $9 at the standard 5% + 50¢ (about $0.95). Ask Paddle about bespoke low-value pricing during onboarding, but don't move to $10 for it.                                                                                      |
-| 5   | Monthly → yearly switch                       | Support handles it by hand in Paddle at launch (replace the price, prorated now); build F4 when the first few ask.                                                                                                              |
-| 6   | Retain cancellation flows                     | Turn on, discount offers only; no pause or plan-switch offers.                                                                                                                                                                  |
-| 7   | API key lifetime                              | One-year expiry on both keys, a calendar reminder a month before, and an email destination for `api_key.expiring` and `api_key.expired`.                                                                                       |
-| 8   | Webhook IP allowlist                          | Skip: the signature check is the control, Vercel has no cheap per-path allowlist, and Paddle's list changes. Revisit if forged traffic shows up.                                                                               |
-| 9   | Paddle AI tooling                             | Use the read-only docs sources (below) when working on billing. Don't install the Paddle MCP server or plugin with write access; if ever needed, the sandbox MCP with a read-only sandbox key, vetted like any dependency.         |
+The owner accepted every recommended default on 2026-11-09. Decision 1 is now: the default payment link is
+`https://receipt-ocr.bhimraj.com.np/pay` in both accounts once F1 is deployed.
+
+| #   | Decision                                     | Recommended default | Owner (2026-11-09) |
+| --- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| 1   | Default payment link until F1 ships          | Set it to `https://receipt-ocr.bhimraj.com.np/` now in the sandbox (unblocks checkout; any domain works there), and point it at the F1 page before live. | Accepted |
+| 2   | Automatic currency conversion                | Off at launch: one USD price everywhere, matching `/pricing`. Revisit with `PricePreview` on `/pricing` and price overrides for key markets once there's traffic from outside the US and EU. | Accepted |
+| 3   | `past_due` grace vs Paddle's dunning window   | Keep Paddle's 30-day window (more recoveries) and raise our grace to 30 days (F3). Cost: at most a month of one workspace's 500 scans per failed card. Alternative: set Retain's window to 14 days to match the code today. | Accepted |
+| 4   | $9 under Paddle's $10 line                    | Keep $9 at the standard 5% + 50¢ (about $0.95). Ask Paddle about bespoke low-value pricing during onboarding, but don't move to $10 for it. | Accepted |
+| 5   | Monthly → yearly switch                       | Support handles it by hand in Paddle at launch (replace the price, prorated now); build F4 when the first few ask. | Accepted |
+| 6   | Retain cancellation flows                     | Turn on, discount offers only; no pause or plan-switch offers. | Accepted |
+| 7   | API key lifetime                              | One-year expiry on both keys, a calendar reminder a month before, and an email destination for `api_key.expiring` and `api_key.expired`. | Accepted |
+| 8   | Webhook IP allowlist                          | Skip: the signature check is the control, Vercel has no cheap per-path allowlist, and Paddle's list changes. Revisit if forged traffic shows up. | Accepted |
+| 9   | Paddle AI tooling                             | Use the read-only docs sources (below) when working on billing. Don't install the Paddle MCP server or plugin with write access; if ever needed, the sandbox MCP with a read-only sandbox key, vetted like any dependency. | Accepted |
 
 ## Paddle's AI and agent resources (noted, nothing installed)
 
