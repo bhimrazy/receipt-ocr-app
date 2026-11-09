@@ -5,37 +5,19 @@ import { useEffect, useRef, useState } from "react";
 import { startCheckoutAction } from "@/app/app/settings/billing/actions";
 import type { CheckoutVia } from "@/lib/upgrade-event";
 import type { BillingInterval } from "./interval-toggle";
-
-/** Paddle.js v2, the one script Paddle supports: always loaded from its CDN. */
-export const PADDLE_JS_URL = "https://cdn.paddle.com/paddle/v2/paddle.js";
-
-type PaddleEvent = { name?: string };
-type PaddleGlobal = {
-  Environment: { set: (environment: "sandbox") => void };
-  Initialize: (options: { token: string; eventCallback: (event: PaddleEvent) => void }) => void;
-  Checkout: {
-    open: (options: { transactionId: string; settings?: Record<string, string | boolean> }) => void;
-  };
-};
-
-declare global {
-  interface Window {
-    Paddle?: PaddleGlobal;
-  }
-}
-
-export type CheckoutSettings = {
-  environment: "sandbox" | "production";
-  clientToken: string;
-};
+import {
+  initializePaddle,
+  onPaddleEvent,
+  openPaddleCheckout,
+  PADDLE_JS_URL,
+  type CheckoutSettings,
+  type PaddleEvent,
+} from "./paddle-js";
 
 /**
- * Paddle.Initialize may run once per page. Every mounted checkout listens, but only the one
- * that opened the overlay (`owner`) reacts, so Billing's button and the upgrade modal can share
- * a page.
+ * Every mounted checkout listens to Paddle.js, but only the one that opened the overlay (`owner`)
+ * reacts, so Billing's button and the upgrade modal can share a page.
  */
-let initialized = false;
-const listeners = new Set<(event: PaddleEvent) => void>();
 let owner: symbol | null = null;
 
 /** How often, and how many times, the page refreshes after payment while it waits for the webhook. */
@@ -48,8 +30,6 @@ const POLL_TRIES = 20;
  */
 export type CheckoutState =
   "idle" | "starting" | "paid" | "slow" | "done" | "error" | "unavailable";
-
-const paddleTheme = () => (document.documentElement.classList.contains("light") ? "light" : "dark");
 
 /**
  * Paddle's overlay checkout for the active workspace. `create` asks the server for the
@@ -99,9 +79,9 @@ export function useProCheckout({
         onClosedRef.current?.();
       }
     };
-    listeners.add(listener);
+    const unsubscribe = onPaddleEvent(listener);
     return () => {
-      listeners.delete(listener);
+      unsubscribe();
       if (owner === id) owner = null;
     };
   }, [id]);
@@ -122,19 +102,7 @@ export function useProCheckout({
   }, [state, done, router]);
 
   function initialize() {
-    const paddle = window.Paddle;
-    if (!paddle || !settings) return;
-    if (!initialized) {
-      if (settings.environment === "sandbox") paddle.Environment.set("sandbox");
-      paddle.Initialize({
-        token: settings.clientToken,
-        eventCallback: (event) => {
-          for (const listener of listeners) listener(event);
-        },
-      });
-      initialized = true;
-    }
-    setReady(true);
+    if (settings && initializePaddle(settings)) setReady(true);
   }
 
   /** The transaction id, or null with `error` set. */
@@ -159,10 +127,7 @@ export function useProCheckout({
 
   function open(transactionId: string) {
     owner = id;
-    window.Paddle?.Checkout.open({
-      transactionId,
-      settings: { displayMode: "overlay", theme: paddleTheme(), allowLogout: false },
-    });
+    openPaddleCheckout(transactionId);
   }
 
   return {
