@@ -1,7 +1,9 @@
 "use server";
 
+import { hitRateLimit } from "@receipt-ocr/core";
 import { cookies } from "next/headers";
 import { isProduction } from "./env";
+import { runtime } from "./runtime";
 import { track } from "./telemetry/analytics";
 import { getActiveScope } from "./session";
 import {
@@ -13,13 +15,22 @@ import {
 import { isOneOf, UPGRADE_SURFACES, type UpgradeSurface } from "./upgrade-event";
 import { getUpgradeOffer } from "./upgrade-offer";
 
+/** Calls one person may make per minute to these actions; past it they do nothing. */
+const UPGRADE_CALLS_PER_MINUTE = 20;
+
 /**
- * The owner's offer and who they are, or null: no offer, a member, or an admin signed in as
- * someone (the offer is null then too).
+ * The owner's offer and who they are, or null: signed out, an admin signed in as someone, over
+ * the per-user limit (checked before the offer's reads), no offer, or a member.
  */
 async function ownerOffer() {
-  const [offer, scope] = await Promise.all([getUpgradeOffer(), getActiveScope().catch(() => null)]);
-  if (!offer || offer.audience !== "owner" || !scope || scope.impersonatedBy) return null;
+  const scope = await getActiveScope().catch(() => null);
+  if (!scope || scope.impersonatedBy) return null;
+  const { allowed } = await runtime
+    .runPromise(hitRateLimit(`upgrade-cta:${scope.userId}`, 60_000, UPGRADE_CALLS_PER_MINUTE))
+    .catch(() => ({ allowed: false }));
+  if (!allowed) return null;
+  const offer = await getUpgradeOffer();
+  if (!offer || offer.audience !== "owner") return null;
   return { offer, scope };
 }
 
