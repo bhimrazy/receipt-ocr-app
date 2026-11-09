@@ -741,6 +741,19 @@ class TimeoutClosingClient extends pg.Client {
   }
 }
 
+/**
+ * With `DATABASE_SSL_CA` (PEM) set, the connection is TLS verified against that CA, for a server
+ * whose certificate no public CA signs (Supabase, RDS). The URL's `sslmode` is dropped then: pg lets
+ * it override `ssl`, and treats `require` as verify-full against Node's public CAs.
+ */
+export function tlsOptions(connectionString: string, ca = process.env.DATABASE_SSL_CA) {
+  const pem = ca?.trim().replaceAll("\\n", "\n");
+  if (!pem) return { connectionString };
+  const url = new URL(connectionString);
+  url.searchParams.delete("sslmode");
+  return { connectionString: url.toString(), ssl: { ca: pem, rejectUnauthorized: true } };
+}
+
 /** A pg pool with this app's limits and timeouts; `createDb` is the one caller outside tests. */
 export function createPool(
   connectionString: string,
@@ -748,7 +761,7 @@ export function createPool(
 ) {
   const pool = new pg.Pool({
     Client: TimeoutClosingClient,
-    connectionString,
+    ...tlsOptions(connectionString),
     max,
     idleTimeoutMillis: 20_000,
     // Also bounds the wait for a free client when all `max` are busy.
