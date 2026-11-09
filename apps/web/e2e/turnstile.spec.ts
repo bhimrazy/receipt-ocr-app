@@ -62,7 +62,7 @@ test.describe("with Turnstile on and a passing secret", () => {
     const section = page.getByRole("region", { name: "Hear when something new ships" });
     await section.getByLabel("Email address").fill(uniqueEmail("turnstile-updates"));
     await expect(section.locator('[data-turnstile="ready"]')).toBeAttached({ timeout: 30_000 });
-    await section.getByRole("button", { name: "Get product updates" }).click();
+    await section.getByRole("button", { name: "Subscribe" }).click();
     await expect(section.getByRole("status")).toContainText("Check your inbox");
   });
 
@@ -110,7 +110,7 @@ test.describe("with Turnstile on and a rejecting secret", () => {
     const section = page.getByRole("region", { name: "Hear when something new ships" });
     await section.getByLabel("Email address").fill(uniqueEmail("turnstile-fail-updates"));
     await expect(section.locator('[data-turnstile="ready"]')).toBeAttached({ timeout: 30_000 });
-    await section.getByRole("button", { name: "Get product updates" }).click();
+    await section.getByRole("button", { name: "Subscribe" }).click();
     await expect(section.getByRole("alert")).toContainText("The security check failed");
   });
 
