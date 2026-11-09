@@ -109,6 +109,32 @@ Until then, the live value stays in Vercel and nothing is lost by waiting.
 **Disable Secret Deletion**. Never "Overwrite Destination Secrets" while anything is missing: it deletes Vercel
 variables that Infisical lacks, which takes production down.
 
+## Operator tokens: how to create each one
+
+Tokens that act on the accounts, not inside the app. They live in Infisical `dev` → `/ops` and, for local work, the
+repo's `.env` (gitignored). Give each the smallest scope that works and an expiry; note the expiry date in Infisical's
+comment. Check a token by calling the API and looking only at the status code, never by printing it.
+
+| Token                             | Used for                                                                         | Create it                                                                                                                                             | Permissions                                                                              | Expiry                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `VERCEL_TOKEN` (local)            | Reading env var names, deployments and runtime logs                              | vercel.com/account/settings/tokens → **Create Token**                                                                                                 | **Scope:** the `receipt-ocr-workspace` team (not "Full Account")                         | 90 days                                                |
+| `VERCEL_TOKEN` (GitHub Actions)   | `preview.yml` and `production.yml` deploys                                       | Same page, a **separate** token named `github-actions`, saved as the repo's Actions secret `VERCEL_TOKEN` (with `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`) | Team scope                                                                               | 1 year, with a calendar reminder                       |
+| `SUPABASE_ACCESS_TOKEN`           | Management API: read-only SQL checks (`read_only: true`), logs, project settings | supabase.com/dashboard/account/tokens → **Generate new token**                                                                                        | Account-wide (Supabase has no narrower personal token); use it only for read-only checks | Set one if offered; else rotate every 90 days          |
+| `SENTRY_AUTH_TOKEN`               | Source-map upload in CI only                                                     | Sentry → **Settings → Developer Settings → Organization Tokens** → **Create New Token**                                                               | Organization token (release and source-map upload only); can't read issues               | Rotate yearly                                          |
+| `SENTRY_READ_TOKEN`               | Reading issues and events when debugging                                         | sentry.io/settings/account/api/auth-tokens/ → **Create New Token**                                                                                    | `org:read`, `project:read`, `event:read` only                                            | 90 days                                                |
+| `AXIOM_TOKEN`                     | Sending logs (the app's ingest token)                                            | Axiom → **Settings → API tokens** → **New API token**                                                                                                 | Ingest into dataset `receipt-ocr` only; it can't query                                   | Rotate yearly                                          |
+| `AXIOM_QUERY_TOKEN` (optional)    | Reading logs when debugging                                                      | Same page, a second token                                                                                                                             | Query dataset `receipt-ocr` only                                                         | 90 days                                                |
+| `GITHUB_TOKEN`                    | Dispatching and re-running workflows from the Codespace                          | github.com/settings/personal-access-tokens → **Fine-grained token**, repository `bhimrazy/receipt-ocr-app` only                                       | Actions: read and write; Contents: read; Metadata: read                                  | 30–90 days (current one: 2026-11-14)                   |
+| `INFISICAL_CLIENT_ID` / `_SECRET` | One-off imports over the API                                                     | See [one-time setup](#one-time-setup-about-30-minutes), step 2                                                                                        | Project role Developer                                                                   | Client secret TTL 1 day; delete the identity after use |
+
+When a token stops working:
+
+- **Vercel "re-authenticate to this scope"**: the token was created before the team required a fresh login, or under
+  "Full Account". Create a new team-scoped one.
+- **Supabase or Sentry "invalid token" / "no permission"**: revoked, expired, or (Sentry) an organization token used
+  for reading. Create the right kind from the table.
+- **After rotating `VERCEL_TOKEN` for CI**, update the GitHub Actions secret too, or the next deploy fails.
+
 ## Rotating a key
 
 Change it in the service, paste the new value into Infisical, let the sync push it, redeploy
