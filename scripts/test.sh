@@ -57,6 +57,10 @@ export E2E_BASE_URL="http://localhost:$port"
 
 bun run db:migrate
 bun run test:int
+# Match CI's e2e: Paddle's sandbox public settings with no API key or webhook secret. Under
+# `next start` that is the live site's state, checkout for platform admins only (upgrade.spec.ts).
+export PADDLE_ENV=sandbox NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=test_e2e_not_a_real_token
+export PADDLE_PRICE_PRO_MONTHLY=pri_e2e_month PADDLE_PRICE_PRO_YEARLY=pri_e2e_year
 bun run build
 bun run test:e2e
 

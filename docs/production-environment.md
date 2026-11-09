@@ -567,7 +567,9 @@ in Vercel), maps deleted before deploy (security plan M11). Docker: pass `--buil
 Events (server-side only, `lib/telemetry/analytics.ts`): `signed_up` (`method`, `standalone`), `receipt_uploaded` (`mode`, `plan`, `size_choice`),
 `receipt_scanned` (`trigger`, `model`, `fallback`, `calls`), `receipt_scan_failed` (`trigger`, `error_kind`),
 `csv_exported` (`count`), `plan_limit_hit` (`limit`: `day` or `minute`, `plan`; a user's first 3 a minute),
-`install_offer` (`action`, `surface`, `platform`: the in-app install card, menu rows and Settings). `signed_up` also
+`install_offer` (`action`, `surface`, `platform`: the in-app install card, menu rows and Settings),
+`upgrade_cta` (`action`: opened or dismissed, `surface`, `level`) and `checkout_started` (`interval`, `via`, `level`;
+see [billing](architecture/flows/billing.md#upgrade-offer)). `signed_up` also
 carries `standalone` (signed up from the installed app). Each
 carries the user id, `workspace_id` as a plain prop (PostHog's `groups` need the paid group-analytics add-on) and the
 `workspace` group. Nothing is sent for what an admin does while impersonating a user,

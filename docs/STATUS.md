@@ -184,10 +184,11 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                                                                                                                       |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #148 | SEO: home title leads with "receipt scanner" and names CSV and JSON (never Excel; nothing writes .xlsx); one source for the home title/description; WebApplication JSON-LD with featureList and the free Offer, no ratings |
-| #166 | Light theme, part 2: System by default, a System/Light/Dark toggle in Settings, the account menu and footers, light iOS splash images (plus iPhone Air), light error and offline pages. Part 1 (tokens, #163) is merged    |
+| PR   | Work                                                                                                                                                                                                                           |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #148 | SEO: home title leads with "receipt scanner" and names CSV and JSON (never Excel; nothing writes .xlsx); one source for the home title/description; WebApplication JSON-LD with featureList and the free Offer, no ratings     |
+| #184 | Upgrade call-to-action for Free workspace owners: meter button, menu item, Home card, limit-state button and blocked banner, all opening one modal that starts Paddle's overlay; admin-only while production runs sandbox keys |
+| #166 | Light theme, part 2: System by default, a System/Light/Dark toggle in Settings, the account menu and footers, light iOS splash images (plus iPhone Air), light error and offline pages. Part 1 (tokens, #163) is merged        |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -239,9 +240,10 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 **Next up (ordered, 2026-11-08):** [plans/2026-11-08-next-up.md](plans/2026-11-08-next-up.md). The list below is the
 longer-term roadmap.
 
-**Planned:** upgrade call-to-action for Free workspaces (Home card, meter button, account menu, at-limit banner, all
+**In review (#184):** upgrade call-to-action for Free workspaces (Home card, meter button, account menu, at-limit banner, all
 opening an in-app upgrade modal with Paddle's overlay checkout):
-[plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), with owner decisions to make.
+[plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), owner took every default. Hidden on production
+for everyone but platform admins until live Paddle keys replace the sandbox ones.
 
 **Planned:** edge handles in the crop editor (drag the middle of a side to move it) and a layout-stability pass over the
 capture review sheet: [plans/2026-11-09-crop-edge-handles.md](plans/2026-11-09-crop-edge-handles.md), with owner

@@ -20,6 +20,8 @@ const EVENTS = {
   plan_limit_hit: { limit: "token", plan: "token" },
   plan_changed: { from: "token", to: "token" },
   install_offer: { action: "token", surface: "token", platform: "token" },
+  upgrade_cta: { action: "token", surface: "token", level: "token" },
+  checkout_started: { interval: "token", via: "token", level: "token" },
 } as const satisfies Record<string, Record<string, Kind>>;
 
 export type ProductEventName = keyof typeof EVENTS;

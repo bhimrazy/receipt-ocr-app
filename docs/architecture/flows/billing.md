@@ -13,6 +13,7 @@ in [`apps/web/app/api/billing`](../../../apps/web/app/api/billing) and
 
 - [Plans are per workspace](#plans-are-per-workspace)
 - [From checkout to plan](#from-checkout-to-plan)
+- [Upgrade offer](#upgrade-offer)
 - [Entitlement](#entitlement)
 - [Ordering and idempotency](#ordering-and-idempotency)
 - [Plans and limits](#plans-and-limits)
@@ -60,18 +61,19 @@ Anything else is Free. The rules:
 sequenceDiagram
   autonumber
   actor Owner as Workspace owner
-  participant Page as /app/settings/billing
+  participant Page as Billing page or upgrade modal
   participant Paddle as Paddle (Paddle.js + API)
   participant Hook as POST /api/billing/paddle/webhook
   participant DB as Postgres
   participant Job as billing.apply_event job
   participant Quota as Upload quota check
 
-  Owner->>Page: Open Billing (owner only)
+  Owner->>Page: Open Billing, or the upgrade modal from any /app page (owner only)
   Page-->>Owner: Paddle.js loads, Upgrade button
-  Owner->>Page: Upgrade (startCheckoutAction)
+  Owner->>Page: Upgrade (startCheckoutAction, with where it started)
   Page->>Paddle: POST /transactions: Pro price for the interval,<br/>custom_data {workspaceId, userId}, customer by email
   Paddle-->>Page: txn_…
+  Page-->>Owner: The upgrade modal closes before the overlay opens
   Owner->>Paddle: Overlay checkout opens the transaction
   Paddle-->>Owner: Payment done (checkout.completed)
   Paddle->>Hook: subscription.created / activated (signed)
@@ -91,9 +93,10 @@ Steps in words:
    ([`actions.ts`](../../../apps/web/app/app/settings/billing/actions.ts)) checks the owner again, finds or creates the
    Paddle customer by the owner's email, and creates the transaction with the configured price for the chosen interval
    and `custom_data { workspaceId, userId }`. The browser opens that `txn_…` id in Paddle's overlay; Paddle copies the
-   custom data to the subscription. See [`checkout-button.tsx`](../../../apps/web/components/billing/checkout-button.tsx).
-   If Pro still isn't on after the page has refreshed 20 times (about a minute), the button says the payment was
-   received, to reload in a few minutes and to use the support button if it stays Free.
+   custom data to the subscription. Billing's button and the [upgrade modal](#upgrade-offer) share
+   [`use-pro-checkout.ts`](../../../apps/web/components/billing/use-pro-checkout.ts). If Pro still isn't on after the
+   page has refreshed 20 times (about a minute), Billing (or a toast, from the modal) says the payment was received,
+   to reload in a few minutes and to use the support button if it stays Free.
 2. **Webhook.** [`receiveWebhook`](../../../packages/core/src/billing/service.ts) verifies the signature, parses the body
    into a provider-neutral `BillingEvent`, and calls `recordBillingEvent`. That function inserts the `billing_events`
    row and enqueues the `billing.apply_event` job in one transaction, so there is never an event without its job.
@@ -128,6 +131,38 @@ per user.
 Paddle retries 400 and 401 responses, so a bad deployment (for example a wrong secret) heals once it is fixed. Events
 handled: `subscription.created`, `.updated`, `.activated`, `.canceled`, `.past_due`, `.paused`, `.resumed` and
 `transaction.completed`.
+
+## Upgrade offer
+
+Free workspace owners are offered Pro inside the app, and can buy it without leaving the page
+([plan](../../plans/2026-11-08-upgrade-cta.md)). One server gate, `getUpgradeOffer()` in
+[`upgrade-offer.ts`](../../../apps/web/lib/upgrade-offer.ts) (the rules in `decideUpgradeOffer`,
+[`upgrade-level.ts`](../../../apps/web/lib/upgrade-level.ts)), feeds every surface. It is null for a workspace that
+isn't Free (comps included), while an admin impersonates, while the viewer can't check out (billing off, or sandbox
+keys on the live site for anyone but a platform admin, so nothing shows on production today), and while the
+service-wide cap pauses every plan.
+
+| Level   | When                                       | Surfaces (owners)                                                                                         |
+| ------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `quiet` | under 80% (`NEAR_RATIO`) of the month used | Meter button (outline), account-menu item; Home card from 20% used (`WARM_RATIO`)                         |
+| `near`  | 80% or more                                | Meter button (filled, amber meter), menu item, Home card (edged, above "To check" on phones)              |
+| `at`    | blocked by the month, the day or the pool  | Upload panel's limit state gets the button; banner on other pages (not Home, Upload, Billing or receipts) |
+
+- **Members** (workspace admins too) get no offer, only "Ask the workspace owner to upgrade this workspace to Pro."
+  at the limit and next to an amber meter, and only when Pro is open to everyone.
+- **The modal** ([`upgrade-modal.tsx`](../../../apps/web/components/upgrade/upgrade-modal.tsx)) is mounted once in the
+  app layout: a dialog from md up, a bottom sheet below. Surfaces open it with the `upgrade-modal:open` window event;
+  `/app/...?upgrade=1` (`&via=email`, `&interval=year`) opens it once and is stripped with `replaceState`. Every
+  trigger is a real link to Billing, so it works without JavaScript. Paddle.js is mounted when the modal first opens.
+  The primary button creates the transaction, closes the modal, and opens Paddle's overlay when the close transition
+  ends (an overlay on top of a focus-trapping dialog loses focus and closes the dialog). After payment a toast
+  follows the same refresh loop as Billing.
+- **Dismissals** ("Not now" on the Home card and the banner, never closing the modal) are in the httpOnly
+  `receiptocr.upgrade` cookie (`path=/app`, listed on /cookies), read by the gate, so a hidden card never renders.
+  Home quiet: 30 days, then for good the second time; Home near: until the month resets; banner: until uploads open.
+- **Events** (server-side, closed sets): `upgrade_cta { action: opened | dismissed, surface, level }` from the
+  modal's open and the dismiss action, and `checkout_started { interval, via, level }` from `startCheckoutAction`
+  (`via` is the surface, or `billing`). The level is read on the server; the workspace name is never sent.
 
 ## Entitlement
 
@@ -252,7 +287,8 @@ What "used" means is in [core: quota ledger semantics](../core.md#design-princip
   charge" badge. `startCheckoutAction` refuses everyone else.
 - **Data kept.** Ids, status, dates, interval and price id. No card, address or tax data, and no raw webhook body.
 - **No SDK.** The Paddle adapter uses `node:crypto` and `fetch`, so there is no Paddle package to trust or update.
-- **Paddle.js.** It loads only on the billing page, and only when billing is configured. The report-only CSP allows
+- **Paddle.js.** It loads only when billing is configured and the viewer can check out: on the billing page, and in
+  the app once an owner opens the upgrade modal (never on page load). The report-only CSP allows
   `https://cdn.paddle.com` (script), `https://buy.paddle.com` and `https://sandbox-buy.paddle.com` (frame) and
   `https://*.paddle.com` (connect) only when `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` is set at build time
   ([`lib/csp.ts`](../../../apps/web/lib/csp.ts)).
@@ -267,7 +303,7 @@ What "used" means is in [core: quota ledger semantics](../core.md#design-princip
 ### Invariants
 
 - **Verified emails.** The Paddle customer is found by the owner's email, so it relies on sign-in only trusting verified emails; an unverified address must never reach `startCheckoutAction`.
-- **Client token.** `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` must never be referenced from client code. It is sent only in the billing page's server-rendered payload (and read at build time by the CSP).
+- **Client token.** `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` must never be referenced from client code. It is sent only in server-rendered payloads, the billing page's and the app layout's upgrade offer for an owner who can check out (and read at build time by the CSP).
 - **Orphans.** A subscription that can still charge but whose workspace or buyer was deleted logs `billing.orphan_charging` at error level when its next event is applied, and the job then cancels it with Paddle (see the failure modes).
 
 ## Pure files
