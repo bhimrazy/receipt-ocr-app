@@ -16,6 +16,7 @@ Rules:
 
 - Stay inside the files the brief gives you. If a fix needs a file another track owns, say so in the report instead of
   editing it.
+- Load the `database` skill before touching queries, transactions, the pool or migrations.
 - Backend workflows go in `packages/core` Effect services through the shared runtime; route handlers stay thin adapters.
   Every query is scoped to the active workspace.
 - UI uses `packages/ui` primitives and theme tokens; works at 390px; keyboard, focus and AA contrast checked.
