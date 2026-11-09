@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import { ConsentManager } from "@/components/consent/consent-manager";
 import { Pwa } from "@/components/pwa";
+import { NavigationTracker } from "@/components/standalone";
 import { ThemeProvider } from "@/components/theme-provider";
 import { gaMeasurementId } from "@/lib/consent/env";
 import { DISPLAY_MODE_SCRIPT } from "@/lib/display-mode";
@@ -93,6 +94,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <ThemeProvider />
         <Pwa />
+        <NavigationTracker />
         {/* VERCEL is set in Vercel builds only; Docker images run no page counts. */}
         <ConsentManager
           gaMeasurementId={gaMeasurementId}

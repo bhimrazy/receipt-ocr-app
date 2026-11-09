@@ -1,8 +1,8 @@
 "use client";
 
 import { ArrowLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { isStandaloneDisplay, standaloneHome } from "@/lib/display-mode";
 import { hasSignedInHint } from "@/lib/signed-in-hint";
 
@@ -16,6 +16,35 @@ export function StandaloneHome() {
   useEffect(() => {
     if (isStandaloneDisplay()) router.replace(standaloneHome(hasSignedInHint()));
   }, [router]);
+  return null;
+}
+
+/** Set once this tab has moved between pages of the app; per tab, so a new window starts without it. */
+const NAVIGATED_KEY = "receiptocr.navigated";
+
+function hasNavigated(): boolean {
+  try {
+    return sessionStorage.getItem(NAVIGATED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Records that this tab navigated within the app, so StandaloneBack knows there is an app page
+ * to go back to. `history.length` can't tell: a window opened on a page already counts it.
+ */
+export function NavigationTracker() {
+  const pathname = usePathname();
+  const first = useRef(pathname);
+  useEffect(() => {
+    if (pathname === first.current) return;
+    try {
+      sessionStorage.setItem(NAVIGATED_KEY, "1");
+    } catch {
+      // Storage blocked: Back falls back to `fallback`.
+    }
+  }, [pathname]);
   return null;
 }
 
@@ -35,7 +64,7 @@ export function StandaloneBack({
   return (
     <button
       className={className}
-      onClick={() => (window.history.length > 1 ? router.back() : router.replace(fallback))}
+      onClick={() => (hasNavigated() ? router.back() : router.replace(fallback))}
       type="button"
     >
       <ArrowLeft aria-hidden className="size-4" /> Back
