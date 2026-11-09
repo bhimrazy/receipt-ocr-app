@@ -10,6 +10,9 @@ Production uses Paddle's **sandbox** (test mode, `PADDLE_ENV=sandbox`). Only pla
 marked "Test mode: no real charge"; everyone else sees "Pro checkout opens soon" on `/pricing`. Nothing real is charged.
 Upgrade prompts elsewhere in the app stay hidden until checkout opens to everyone, so test those on a PR preview.
 
+The sandbox default payment link was set to `https://receipt-ocr.bhimraj.com.np/` over the API on 2026-11-09; it gets
+repointed to `/pay` once `/pay` is deployed ([§10](production-environment.md#paddle-account-settings)).
+
 ## Steps
 
 1. **Open checkout.** Sign in on https://receipt-ocr.bhimraj.com.np as an admin, open **Settings → Billing** in a

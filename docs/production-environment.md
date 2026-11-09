@@ -672,6 +672,13 @@ settings, products, keys or destinations. Menu names are the ones in Paddle's
      to load Paddle.js and open the checkout
      ([default payment link](https://developer.paddle.com/build/transactions/default-payment-link)). `/pay` does that,
      without a sign-in ([billing flow](architecture/flows/billing.md#from-checkout-to-plan)).
+   - It can also be set over the API: `PATCH /settings/checkout-url` with `{"default_url": "<url>"}`, using a key with
+     `checkout_settings.write` (not the app's key, which shouldn't have it). In the sandbox the domain needs no
+     approval; in live the host must be approved first, or Paddle answers `checkout_url_domain_not_approved`
+     ([default payment link](https://developer.paddle.com/build/transactions/default-payment-link),
+     [update checkout URL](https://developer.paddle.com/api-reference/settings/update-checkout-url)).
+   - **State on 2026-11-09:** the sandbox default link is `https://receipt-ocr.bhimraj.com.np/` (set over the API). It
+     gets repointed to `/pay` once `/pay` is deployed. Live isn't set yet.
    - Check it: open `https://receipt-ocr.bhimraj.com.np/pay`. It should say "Payments for ReceiptOCR" and link to
      pricing. A transaction's `checkout.url` should open Paddle's overlay there.
    - In live the link's host must be an **approved domain, matched exactly** (or its `www.` form). Approving
