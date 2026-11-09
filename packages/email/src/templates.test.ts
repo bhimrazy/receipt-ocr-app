@@ -34,7 +34,7 @@ import {
 
 const withSupport = { appUrl: "https://app.example", supportEmail: "help@app.example" };
 const PLAN_LINE =
-  "Your Free plan includes 20 scans a day, up to 100 a month, per person. Limits reset at 00:00 UTC.";
+  "Your Free plan includes 20 scans a day, up to 100 a month. Limits reset at 00:00 UTC.";
 const noSupport = { appUrl: "https://app.example" };
 const token = "tok_9f8e7d6c5b4a39281706f5e4d3c2b1a0";
 const url = `https://app.example/api/auth/verify?token=${token}`;
