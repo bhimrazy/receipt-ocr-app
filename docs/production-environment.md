@@ -667,6 +667,8 @@ The sandbox and the live account each need their own destination.
 
 ### 10b. Check it in the sandbox
 
+A shorter walkthrough to follow along is in [testing-payments.md](testing-payments.md).
+
 1. Open **Settings → Billing** in a workspace you own. The Upgrade button should appear.
 2. Pay with a Paddle sandbox test card (see Paddle's "test payment methods" page; for example `4242 4242 4242 4242`,
    any future expiry, any CVC).

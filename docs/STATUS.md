@@ -245,6 +245,10 @@ opening an in-app upgrade modal with Paddle's overlay checkout):
 [plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), owner took every default. Hidden on production
 for everyone but platform admins until live Paddle keys replace the sandbox ones.
 
+**Planned:** edge handles in the crop editor (drag the middle of a side to move it) and a layout-stability pass over the
+capture review sheet: [plans/2026-11-09-crop-edge-handles.md](plans/2026-11-09-crop-edge-handles.md), with owner
+decisions to make.
+
 From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 1. ~~Usage capture + quota ledger~~ (shipped in #27).
@@ -292,6 +296,16 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 
+- **App-like mobile screens (owner, 2026-11-09).** A design and layout review of the phone versions of the landing
+  page, sign-in and sign-up, so the installed app feels native there too (full-height layouts, thumb-reach actions,
+  no website chrome once installed), then fixes in small PRs. Do it after the first friends' test round, using their
+  feedback.
+- **Long receipts in parts (parked 2026-11-09).** Decided 2026-11-07: split, don't stitch; multi-part receipts
+  ("Add part") and automatic splitting of very tall photos, sent as several images in one request
+  ([plan](plans/2026-11-07-long-receipt-capture.md)). Not built. Until then a very long receipt uploads at the largest
+  size the model reads, with a short note. Pick it up when long receipts come up again: benchmark first (8–10 of the
+  owner's long receipts, kept local, as one shot vs parts), then auto-splitting (about 1 day) or full multi-part
+  (about 4–5 days).
 - **Email templates cleanup.** One file per template and no committed `generated.ts` (generate at build, or render
   at runtime if measured cheap): [plan](plans/2026-11-08-email-templates-cleanup.md).
 - **Play Store app (Trusted Web Activity).** Wrap the PWA with Bubblewrap for a Play Store listing; its native
