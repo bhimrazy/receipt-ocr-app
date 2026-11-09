@@ -33,6 +33,7 @@ export function FullScreen({
           className,
         )}
         initialFocus={initialFocus}
+        phoneSheet={false}
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>

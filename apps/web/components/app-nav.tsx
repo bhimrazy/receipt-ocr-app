@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { MOBILE_TABS, type MobileTabs } from "./mobile-tabs";
+import { backWithTransition } from "@/lib/back-transition";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
@@ -372,7 +373,7 @@ export function MobileTopBar({
             onClick={(event) => {
               if (visit.previous !== back.href) return;
               event.preventDefault();
-              router.back();
+              backWithTransition(() => router.back());
             }}
           >
             <ChevronLeft aria-hidden="true" className="size-6" />

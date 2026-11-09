@@ -1,9 +1,12 @@
+import { cn } from "@receipt-ocr/ui/lib/utils";
+
 /** A settings group: heading and description on the left at desktop width, content on the right. */
 export function SettingsSection({
   id,
   title,
   description,
   badge,
+  className,
   children,
 }: {
   id: string;
@@ -11,12 +14,16 @@ export function SettingsSection({
   description: string;
   /** A status beside the heading, such as On/Off or a count. */
   badge?: React.ReactNode;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
     <section
       aria-labelledby={id}
-      className="grid gap-4 border-t border-border py-8 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-10"
+      className={cn(
+        "grid gap-4 border-t border-border py-8 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-10",
+        className,
+      )}
     >
       <div>
         <div className="flex flex-wrap items-center gap-2">
