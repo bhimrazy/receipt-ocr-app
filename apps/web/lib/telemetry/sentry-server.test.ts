@@ -62,7 +62,8 @@ describe("Sentry on the server", () => {
     expect(sent).toContain('"route":"/api/receipts"');
     for (const leak of [
       "Dr Smith",
-      "9.5",
+      // The key with the value: a bare "9.5" can turn up by chance in the event's timestamp.
+      '"total":9.5',
       "Type validation",
       "AI_TypeValidationError",
       "No object generated",
