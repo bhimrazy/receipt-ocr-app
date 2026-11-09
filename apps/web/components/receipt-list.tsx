@@ -42,6 +42,7 @@ export function ReceiptList({
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-3">
                 <Link
+                  data-touch-row=""
                   className={cn(
                     "min-w-0 truncate text-sm font-medium outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset",
                     title.isFile && "font-mono text-xs",

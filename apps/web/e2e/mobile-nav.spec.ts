@@ -165,3 +165,26 @@ test("Delete moves focus from the sheet to the confirm dialog", async ({ page })
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Receipt actions" })).toBeFocused();
 });
+
+test("a pressed button changes colour; chrome is unselectable, receipt data is not", async ({
+  page,
+}) => {
+  await page.goto("/app/settings");
+  const seePlans = page.getByRole("link", { name: /See plans|Manage/ });
+  const bg = () => seePlans.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const resting = await bg();
+  const box = (await seePlans.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect.poll(bg).not.toBe(resting);
+  await page.mouse.up();
+
+  const userSelect = (loc: ReturnType<Page["locator"]>) =>
+    loc.evaluate((el) => getComputedStyle(el).userSelect);
+  expect(await userSelect(tabBar(page).getByRole("link").first())).toBe("none");
+
+  await page.goto("/app/history");
+  const row = page.getByRole("list").getByRole("listitem").filter({ hasText: "Phone Market" });
+  await expect(row).toBeVisible();
+  expect(await userSelect(row.locator("span.font-mono"))).not.toBe("none");
+});
