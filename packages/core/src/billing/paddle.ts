@@ -207,15 +207,56 @@ const portalResponse = z.object({
 });
 
 /**
- * Paddle's `error.code` from an error body (`transaction_default_checkout_url_not_set`), or null.
- * Only a snake_case token is kept, so free text (`error.detail` can name ids) never gets through.
+ * The Paddle error codes we log by name (https://developer.paddle.com/errors): the ones our
+ * calls (customers, transactions, portal sessions, cancel) can hit and that name what to fix.
  */
-export function paddleErrorCode(body: unknown): string | null {
+export const PADDLE_ERROR_CODES = [
+  // The account can't sell yet; platform admins see the fix.
+  "transaction_default_checkout_url_not_set",
+  "checkout_url_domain_not_approved",
+  "transaction_checkout_url_domain_is_not_approved",
+  // The API key.
+  "authentication_missing",
+  "authentication_malformed",
+  "invalid_token",
+  "forbidden",
+  // Our request.
+  "bad_request",
+  "invalid_field",
+  "not_found",
+  "entity_archived",
+  "transaction_price_not_found",
+  // Finding or creating the customer.
+  "customer_email_invalid",
+  "customer_email_domain_not_allowed",
+  "customer_already_exists",
+  // Cancelling after a refund or chargeback.
+  "subscription_is_canceled_action_invalid",
+  "subscription_locked_pending_changes",
+  "subscription_locked_processing",
+  "subscription_locked_renewal",
+  // Paddle's side.
+  "too_many_requests",
+  "internal_error",
+] as const;
+
+/** A code from `PADDLE_ERROR_CODES`, or `other` for any code Paddle sent that isn't listed. */
+export type PaddleErrorCode = (typeof PADDLE_ERROR_CODES)[number] | "other";
+
+const KNOWN_CODES: ReadonlySet<string> = new Set(PADDLE_ERROR_CODES);
+
+/**
+ * Paddle's `error.code` from an error body, as a closed set: a listed code, `other` for any other
+ * value, or null when the body has no code. Nothing Paddle wrote (not even an unlisted code, nor
+ * `error.detail`, which can name ids) reaches the logs.
+ */
+export function paddleErrorCode(body: unknown): PaddleErrorCode | null {
   if (typeof body !== "object" || body === null || !("error" in body)) return null;
   const error = body.error;
   if (typeof error !== "object" || error === null || !("code" in error)) return null;
   const code = error.code;
-  return typeof code === "string" && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : null;
+  if (code === undefined || code === null) return null;
+  return typeof code === "string" && KNOWN_CODES.has(code) ? (code as PaddleErrorCode) : "other";
 }
 
 /** Paddle's API answered with an error status or a body we can't read. */
@@ -227,7 +268,7 @@ export class PaddleApiError extends Error {
   constructor(
     readonly status: number,
     readonly reason: "status" | "body" = "status",
-    readonly code: string | null = null,
+    readonly code: PaddleErrorCode | null = null,
   ) {
     super(`Paddle API returned ${status}`);
     this.name = "PaddleApiError";

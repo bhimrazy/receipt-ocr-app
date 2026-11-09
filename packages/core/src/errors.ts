@@ -46,7 +46,7 @@ export class BillingProviderError extends Data.TaggedError("BillingProviderError
   readonly message: string;
   /** Why the provider call failed, safe to log: `http-<status>`, `bad-response`, `network` or `timeout`. */
   readonly kind?: string;
-  /** The provider's own error code (Paddle's `error.code`), a snake_case token, safe to log. */
+  /** The provider's error code from a closed set (Paddle: `PADDLE_ERROR_CODES` or `other`), safe to log. */
   readonly providerCode?: string;
   readonly cause?: unknown;
 }> {}

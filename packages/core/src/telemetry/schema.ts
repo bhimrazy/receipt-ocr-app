@@ -218,9 +218,9 @@ export const EVENT_SCHEMA = {
       plan_from: "token",
       plan_to: "token",
       /**
-       * The provider's error code on a failed call (Paddle's `error.code`, e.g.
-       * `transaction_default_checkout_url_not_set`). From the provider's error body, kept only
-       * when snake_case; a closed set of Paddle's, no personal data.
+       * The provider's error code on a failed call, from a closed set: Paddle's `error.code` when
+       * it is in `PADDLE_ERROR_CODES` (e.g. `transaction_default_checkout_url_not_set`), else
+       * `other`. Our own list, never free text from the provider; no personal data.
        */
       provider_error_code: "token",
     },

@@ -5,6 +5,7 @@ import {
   createPaddleCheckoutTransaction,
   createPaddlePortalSession,
   PaddleApiError,
+  PADDLE_ERROR_CODES,
   paddleErrorCode,
   parsePaddleEvent,
   SIGNATURE_TOLERANCE_SECONDS,
@@ -349,7 +350,7 @@ describe("Paddle error codes", () => {
     expect(String((error as Error).message)).not.toContain("a@example.com");
   });
 
-  it("is null without a body, or for anything but a snake_case token", async () => {
+  it("is null without a code, and maps any code not on the list to other", async () => {
     const { fake } = scripted(new Response("<html>Bad gateway</html>", { status: 502 }));
     await expect(
       cancelPaddleSubscription({ environment: "sandbox", apiKey: "k", subscriptionId: "s" }, fake),
@@ -360,14 +361,21 @@ describe("Paddle error codes", () => {
       {},
       { error: null },
       { error: "not_found" },
-      errorBody(42),
-      errorBody("Not found: sub_1"),
-      errorBody("a@example.com"),
-      errorBody("x".repeat(81)),
+      errorBody(null),
     ]) {
       expect(paddleErrorCode(body), JSON.stringify(body)).toBeNull();
     }
-    expect(paddleErrorCode(errorBody("not_found"))).toBe("not_found");
+    for (const code of [
+      42,
+      "Not found: sub_1",
+      "a@example.com",
+      "x".repeat(81),
+      "some_new_paddle_code",
+      "constructor",
+    ]) {
+      expect(paddleErrorCode(errorBody(code)), String(code)).toBe("other");
+    }
+    for (const code of PADDLE_ERROR_CODES) expect(paddleErrorCode(errorBody(code))).toBe(code);
   });
 });
 

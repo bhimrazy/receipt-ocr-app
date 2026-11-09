@@ -1,3 +1,5 @@
+import type { PaddleErrorCode } from "@receipt-ocr/core";
+
 const DOMAIN_NOT_APPROVED =
   "Admin: Paddle refused the checkout because the default payment link's domain isn't approved. Approve it in Paddle, My account, Settings, Website approval, then set the link again.";
 
@@ -5,7 +7,7 @@ const DOMAIN_NOT_APPROVED =
  * Paddle error codes that mean the Paddle account isn't set up to sell, with the fix. They name
  * dashboard settings, so they are shown to platform admins only; customers keep the generic message.
  */
-const HINTS: Record<string, string> = {
+const HINTS: Partial<Record<PaddleErrorCode, string>> = {
   transaction_default_checkout_url_not_set:
     "Admin: Paddle has no default payment link. Set it to this site's /pay page in Paddle, Checkout, Checkout settings.",
   // Paddle's code when the account's default link is on an unapproved domain, and when a
@@ -16,5 +18,5 @@ const HINTS: Record<string, string> = {
 
 /** The fix a platform admin should make for a provider error code, or null for any other failure. */
 export function billingSetupHint(code: string | undefined): string | null {
-  return code !== undefined && Object.hasOwn(HINTS, code) ? HINTS[code]! : null;
+  return code !== undefined && Object.hasOwn(HINTS, code) ? HINTS[code as PaddleErrorCode]! : null;
 }
