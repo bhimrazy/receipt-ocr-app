@@ -75,8 +75,22 @@ maximum duration ended the response. #184 raised the per-render fan-out past the
 2. **A deadline on every query.** A query unanswered after `DATABASE_QUERY_TIMEOUT_MS` (default 15 s) rejects with
    `QueryTimeoutError`. postgres.js can't drop the one connection the query is stuck on, so the pool is replaced: new
    queries go to a fresh pool, and the old one gets 5 s to finish its other queries before it is closed. A query that
-   waits 15 s for the gate also fails, but keeps the pool. A transaction's BEGIN and each of its queries are timed;
-   its body as a whole is not.
+   waits 15 s for the gate also fails, but keeps the pool. A transaction's BEGIN, each of its queries, and its COMMIT
+   or ROLLBACK (timed from when the body settles) are timed; its body as a whole is not. Without the COMMIT deadline,
+   a COMMIT whose reply never came held its permit forever. With `max` 1 that wedged the instance: every later query
+   failed with a queue timeout and the pool was never replaced (`pool.int.test.ts` reproduces it, and it now ends in
+   `QueryTimeoutError` and a fresh pool). On timeout the statement also gets a best-effort cancel request.
+
+   **Risk, by design:** a valid statement slower than the deadline also fails and replaces the pool for everyone on
+   the instance. The likely ones wait on a lock: `lockQuota`'s advisory locks (`usage.ts`), the billing subscription
+   lock (`billing/service.ts`), and `FOR UPDATE` in the job admin actions (`jobs/admin.ts`). At 15 s against
+   millisecond queries that takes a lock held for over 15 s, which is itself a fault, but it's a trade-off. The env
+   var's comment says so, and the fix is to raise it, not lower it.
+
+   I considered also replacing the pool when a queue timeout fires while every permit has been held longer than the
+   deadline, and decided against it. With BEGIN, queries and COMMIT/ROLLBACK all timed, a permit held that long is a
+   transaction body running app code, and a new pool wouldn't free it. It would also kill a legitimately long
+   transaction.
 3. **A visible error instead of an endless skeleton.** Each Home section (Upload, To check, Spending, Recent) and the
    sidebar usage meter sit in a `catchError` boundary (`components/section-error.tsx`). A failed or timed-out read
    shows "<Section> couldn't load." with **Try again**, which re-fetches only that section through `router.refresh()`.
@@ -110,8 +124,7 @@ owner's first report.
   to client rendering because the server rendering errored", which renders their "couldn't load" cards. One
   `db.query_timeout` event was logged.
 
-Screenshots of the card at 390 and 1440 are pending. Playwright's Chromium can't start on this machine (a system
-library is missing), so they'll come from a preview.
+Screenshots of the card at 390 and 1440 are in PR #210.
 
 ### What the gate counts, and module copies (DB review #208)
 
@@ -132,9 +145,15 @@ When the client deadline gives up, the server may still be working:
 
 - **A lost reply** (this incident): the server has already finished the statement, or, as at 14:14, it sits waiting
   for the rest of the protocol. Production's 120 s `statement_timeout` ends that wait.
-- **A slow statement:** it keeps running until it finishes or hits the 120 s `statement_timeout`. The PR doesn't send
-  a cancel request. postgres.js's `cancel()` fires its request without a handle to catch a failure, which would risk
-  an unhandled rejection.
+- **A slow statement:** on timeout the gate sends postgres.js's cancel request before replacing the pool. It calls the
+  query's `canceller` directly because `query.cancel()` drops the returned promise, and a failed cancel would be an
+  unhandled rejection. On compose, `pg_sleep(5)` is gone from `pg_stat_activity` within 0.5 s of a 300 ms deadline
+  (`pool.int.test.ts`). Without the cancel it stays active. The cancel is best effort: a lost reply has nothing to
+  cancel, and whether Supavisor forwards cancel requests wasn't verified. The 120 s `statement_timeout` remains the
+  backstop.
+- **A timed-out write may still have committed.** The deadline only means the reply didn't arrive in time: an
+  `insert` or `update` that timed out, or a transaction whose COMMIT reply was lost, may have taken effect. Callers
+  that retry a timed-out write must be idempotent.
 - **An abandoned transaction** (for example one holding `lockQuota`'s advisory lock): the pool reset closes the old
   pool's sockets 5 s later. Directly against Postgres, a closed socket aborts the session and releases its locks
   (Postgres behaviour; not asserted by a test here). Through Supavisor, the pooler owns the backend. When the
