@@ -36,7 +36,6 @@ for (const colorScheme of ["dark", "light"] as const) {
       test(`${path} fills the screen with no card and no sideways scroll`, async ({ page }) => {
         await page.goto(path);
         await expect(page.locator("main h1").first()).toBeVisible();
-        // Centred like the logo and buttons around it.
         await expect(page.locator("main h1").first()).toHaveCSS("text-align", "center");
         for (const box of await chromeAroundHeading(page)) {
           expect(box).toEqual({ shadow: "none", border: "0px", background: "rgba(0, 0, 0, 0)" });
@@ -63,7 +62,6 @@ for (const colorScheme of ["dark", "light"] as const) {
   });
 }
 
-// iPhone SE: the main button (and on sign-in, the link to sign-up) fit without scrolling.
 test.describe("at 375 x 667", () => {
   test.use({ viewport: { width: 375, height: 667 } });
 
