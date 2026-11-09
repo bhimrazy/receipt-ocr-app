@@ -325,6 +325,21 @@ A release without migration changes deploys by itself after CI. For one with mig
 - **Database:** migrations only go forward. Old code runs against the newer schema, so a code rollback normally
   needs nothing else. If a migration damaged data, restore the backup from step 3.
 
+### Old deployments
+
+Every deployment keeps its own copy of the functions, and Hobby counts them all towards Functions Storage (10 GB).
+
+- **Retention policy (automatic):** the project deletes previews, canceled and errored deployments after 1 week and
+  production deployments after 1 month. Vercel always keeps the one production's domain points at and the last 3
+  ready production deployments. Set on 2026-11-09 through the API (`PATCH /v9/projects/{id}/deployment-expiration`);
+  see it in project Settings → Build and Deployment → Deployment Retention Policy.
+- **Clearing a backlog now:** Actions → **Vercel Cleanup** → Run workflow, from main. Choose how many ready production
+  deployments to keep (default 3, the live one always stays) and the minimum age of previews to delete (default 1
+  day). The `plan` job lists what it would delete in the run summary; `delete` waits for the owner's approval in the
+  `vercel-cleanup` environment.
+- **Undo:** a deleted deployment can be restored for a while (up to 30 days, shorter for young ones) in project
+  Settings → Security → Recently Deleted Deployments.
+
 ### Rotating the auth secret
 
 The auth secret signs sessions and encrypts stored OAuth tokens.
