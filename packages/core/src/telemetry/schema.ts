@@ -217,6 +217,12 @@ export const EVENT_SCHEMA = {
       /** Set when an applied event moved its workspace between plans (`free`, `pro`): the `plan_changed` product event. */
       plan_from: "token",
       plan_to: "token",
+      /**
+       * The provider's error code on a failed call (Paddle's `error.code`, e.g.
+       * `transaction_default_checkout_url_not_set`). From the provider's error body, kept only
+       * when snake_case; a closed set of Paddle's, no personal data.
+       */
+      provider_error_code: "token",
     },
   },
 

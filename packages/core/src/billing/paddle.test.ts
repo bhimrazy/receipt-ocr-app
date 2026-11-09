@@ -5,6 +5,7 @@ import {
   createPaddleCheckoutTransaction,
   createPaddlePortalSession,
   PaddleApiError,
+  paddleErrorCode,
   parsePaddleEvent,
   SIGNATURE_TOLERANCE_SECONDS,
   verifyPaddleSignature,
@@ -313,6 +314,60 @@ describe("createPaddleCheckoutTransaction", () => {
     await expect(createPaddleCheckoutTransaction(options, failing.fake)).rejects.toBeInstanceOf(
       PaddleApiError,
     );
+  });
+});
+
+describe("Paddle error codes", () => {
+  // Paddle's error body: https://developer.paddle.com/api-reference/about/errors
+  const errorBody = (code: unknown) => ({
+    error: {
+      type: "request_error",
+      code,
+      detail: "Cannot create a transaction for ctm_01h for a@example.com",
+      documentation_url: "https://developer.paddle.com/errors/x",
+    },
+    meta: { request_id: "9346b365-4cad-43a6-b7c1-48ff6a1c7836" },
+  });
+
+  it("keeps the code from the error body on the thrown error", async () => {
+    const { fake } = scripted(
+      Response.json({ data: [{ id: "ctm_1" }] }),
+      Response.json(errorBody("transaction_default_checkout_url_not_set"), { status: 400 }),
+    );
+    const error = await createPaddleCheckoutTransaction(
+      {
+        environment: "sandbox",
+        apiKey: "k",
+        priceId: "pri_m",
+        email: "a@example.com",
+        customData: { workspaceId: "org_1", userId: "user_1" },
+      },
+      fake,
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PaddleApiError);
+    expect(error).toMatchObject({ status: 400, code: "transaction_default_checkout_url_not_set" });
+    expect(String((error as Error).message)).not.toContain("a@example.com");
+  });
+
+  it("is null without a body, or for anything but a snake_case token", async () => {
+    const { fake } = scripted(new Response("<html>Bad gateway</html>", { status: 502 }));
+    await expect(
+      cancelPaddleSubscription({ environment: "sandbox", apiKey: "k", subscriptionId: "s" }, fake),
+    ).rejects.toMatchObject({ status: 502, code: null });
+    for (const body of [
+      null,
+      "text",
+      {},
+      { error: null },
+      { error: "not_found" },
+      errorBody(42),
+      errorBody("Not found: sub_1"),
+      errorBody("a@example.com"),
+      errorBody("x".repeat(81)),
+    ]) {
+      expect(paddleErrorCode(body), JSON.stringify(body)).toBeNull();
+    }
+    expect(paddleErrorCode(errorBody("not_found"))).toBe("not_found");
   });
 });
 

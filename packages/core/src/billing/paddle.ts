@@ -206,12 +206,28 @@ const portalResponse = z.object({
   }),
 });
 
+/**
+ * Paddle's `error.code` from an error body (`transaction_default_checkout_url_not_set`), or null.
+ * Only a snake_case token is kept, so free text (`error.detail` can name ids) never gets through.
+ */
+export function paddleErrorCode(body: unknown): string | null {
+  if (typeof body !== "object" || body === null || !("error" in body)) return null;
+  const error = body.error;
+  if (typeof error !== "object" || error === null || !("code" in error)) return null;
+  const code = error.code;
+  return typeof code === "string" && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : null;
+}
+
 /** Paddle's API answered with an error status or a body we can't read. */
 export class PaddleApiError extends Error {
-  /** `status`: Paddle answered with an error status; `body`: a 2xx whose body didn't parse. */
+  /**
+   * `status`: Paddle answered with an error status; `body`: a 2xx whose body didn't parse.
+   * `code`: Paddle's error code, when the error body had one (see `paddleErrorCode`).
+   */
   constructor(
     readonly status: number,
     readonly reason: "status" | "body" = "status",
+    readonly code: string | null = null,
   ) {
     super(`Paddle API returned ${status}`);
     this.name = "PaddleApiError";
@@ -242,7 +258,10 @@ async function paddleRequest<T>(
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: options.signal,
   });
-  if (!response.ok) throw new PaddleApiError(response.status);
+  if (!response.ok) {
+    const code = paddleErrorCode(await response.json().catch(() => null));
+    throw new PaddleApiError(response.status, "status", code);
+  }
   const parsed = schema.safeParse(await response.json().catch(() => null));
   if (!parsed.success) throw new PaddleApiError(response.status, "body");
   return parsed.data;
