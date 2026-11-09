@@ -199,15 +199,19 @@ test("a large photo offers upload sizes, shows the real file and sends it", asyn
   const sizes = review.getByRole("group", { name: "Upload size" });
   await expect(sizes.getByRole("radio", { name: /^Standard/ })).toBeChecked();
   // Every option shows its real bytes once encoded in the background.
-  for (const name of ["Compact", "Standard", "Sharpest"]) {
+  await expect(sizes.getByRole("radio")).toHaveCount(4);
+  for (const name of ["Compact", "Small", "Standard", "Sharpest"]) {
     await expect(sizes.getByRole("radio", { name: new RegExp(`^${name}`) })).toHaveAccessibleName(
       /\d+ (KB|MB)$/,
       { timeout: 20_000 },
     );
   }
   // The radios are visually hidden inside their labels, so pick by the label like a user does.
-  await sizes.getByText("Compact").click();
+  await sizes.getByText("Compact", { exact: true }).click();
   await expect(sizes.getByRole("radio", { name: /^Compact/ })).toBeChecked();
+  await expect(review.getByTestId("resolution")).toHaveText(/^ *671 × +894 px · +\d+ KB$/);
+  await sizes.getByText("Small", { exact: true }).click();
+  await expect(sizes.getByRole("radio", { name: /^Small/ })).toBeChecked();
   await expect(review.getByTestId("resolution")).toHaveText(/^ *866 × 1155 px · +\d+ KB$/);
 
   await review.getByRole("button", { name: "See it at full size" }).click();
@@ -528,8 +532,26 @@ for (const viewport of [
       await change.click();
       const picker = review.getByRole("group", { name: "Upload size" });
       await expect(picker).toBeVisible();
+      // Every segment the same size, inside the picker, its text on unwrapped lines.
+      const segments = await picker.locator("label").evaluateAll((labels) =>
+        labels.map((label) => {
+          const r = label.getBoundingClientRect();
+          const box = label.closest("fieldset")!.getBoundingClientRect();
+          return {
+            size: [Math.round(r.width), Math.round(r.height)],
+            inside: r.left >= box.left - 0.5 && r.right <= box.right + 0.5,
+            overflow: label.scrollWidth > label.clientWidth + 1,
+          };
+        }),
+      );
+      if (viewport.width < 768) {
+        for (const segment of segments) {
+          expect(segment.size).toEqual(segments[0]!.size);
+          expect(segment).toMatchObject({ inside: true, overflow: false });
+        }
+      }
       const open = { ...watched, change: "[data-testid=size-change]", picker: "#upload-size" };
-      for (const label of ["Compact", "Sharpest", "Standard"]) {
+      for (const label of ["Compact", "Small", "Sharpest", "Standard"]) {
         const option = picker.getByText(label, { exact: true });
         if ((await option.count()) === 0) continue;
         steady(await watchBoxes(page, open, () => option.click()));

@@ -229,3 +229,14 @@ The owner took every recommended default above, with one change to decision 3 an
 Telemetry added as section 4 asked, plus the compression review's fields: `file.width`, `file.height` and
 `file.bytes_per_pixel` (read on the server from the uploaded bytes' header) and `encode.quality`, `encode.attempts`,
 `encode.filter`, `encode.rescued` (sent by the browser, checked against our own values). None can carry PII.
+
+## Owner decision, 2026-11-09 (later): four options
+
+The owner chose four options instead of three: **Compact** 0.6 MP with the short edge kept at 600 px (new),
+**Small** 1 MP / 800 px (the earlier Compact), **Standard** 2 MP / 1,000 px (default), **Sharpest** at the model's
+maximum. Byte targets: 350 KB Compact, 500 KB Small, 700 KB Standard, 1 MB Sharpest, on the same 0.80 / 0.72 / 0.65
+ladder and 1.5 MB hard cap; the rescue encode stays at Small's size. Compact stays at 600 px, not 500: 600 px is
+7.5 px/mm on 80 mm paper (an 11 x 22 px Font A cell), just under the printer's 8 dots/mm, while 500 px is well below
+it (table above). Four options fit at 375 px as a 2 x 2 grid, so the layout did not need it either. Options that come
+out the same size for a photo are offered once (Standard first, then Small, Sharpest, Compact). `size_choice` keeps
+`smaller` / `recommended` / `larger` for Small / Standard / Sharpest so history compares, and adds `compact`; no PII.

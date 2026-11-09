@@ -19,6 +19,14 @@ describe("upload encoding telemetry", () => {
     });
   });
 
+  it("accepts every size id, Compact's included", () => {
+    for (const size of ["compact", "smaller", "recommended", "larger"]) {
+      const form = new FormData();
+      form.set("size_choice", size);
+      expect(readUploadInfo(form)).toEqual({ size_choice: size });
+    }
+  });
+
   it("drops values outside our own vocabulary", () => {
     const form = new FormData();
     form.set("size_choice", "huge");

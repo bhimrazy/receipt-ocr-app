@@ -247,7 +247,8 @@ for everyone but platform admins until live Paddle keys replace the sandbox ones
 
 **In review:** the photo-flow rework, owner decisions recorded 2026-11-09 (all recommended, plus a file-size rule).
 Sizing and preview ([sizing review](reviews/2026-11-09-upload-sizing.md),
-[compression research](reviews/2026-11-09-image-compression.md)): Compact / Standard / Sharpest by shape, a
+[compression research](reviews/2026-11-09-image-compression.md)): Compact / Small / Standard / Sharpest by shape
+(four options from 2026-11-09: Compact is a new 600 px option, Small the earlier 800 px Compact), a
 JPEG quality ladder to land normal photos at 700 KB or less (1.5 MB hard cap), the real encoded file in the preview
 with "Actual pixels", and bytes per pixel in telemetry. Then edge handles in the crop editor and the rest of the
 layout-stability pass ([plan](plans/2026-11-09-crop-edge-handles.md)).

@@ -102,8 +102,9 @@ export const EVENT_SCHEMA = {
   /** Upload mode: `instant` or `queued`. */
   mode: "token",
   /**
-   * Upload size a reviewed photo was sent at: `smaller` (labelled Compact), `recommended`
-   * (Standard) or `larger` (Sharpest; also every long receipt). Absent for PDFs.
+   * Upload size a reviewed photo was sent at: `compact` (labelled Compact, 600 px wide),
+   * `smaller` (Small), `recommended` (Standard) or `larger` (Sharpest; also every long receipt).
+   * Absent for PDFs.
    */
   size_choice: "token",
   /** How the browser encoded a reviewed photo; client-reported, checked against our own values. */
