@@ -49,6 +49,7 @@ import {
   createPaddleCheckoutTransaction,
   createPaddlePortalSession,
   PADDLE,
+  PaddleApiError,
   parsePaddleEvent,
   verifyPaddleSignature,
 } from "./paddle";
@@ -794,14 +795,24 @@ export type CheckoutRequest = {
   interval: "month" | "year";
 };
 
+/** The logged reason for a failed provider call; the status names what to fix (401 key, 403 permission, 400 request). */
+export const providerFailureKind = (cause: unknown) =>
+  cause instanceof PaddleApiError
+    ? cause.reason === "body"
+      ? "bad-response"
+      : `http-${cause.status}`
+    : "network";
+
 const providerCall = <A>(message: string, call: (signal: AbortSignal) => Promise<A>) =>
   Effect.tryPromise({
     try: call,
-    catch: (cause) => new BillingProviderError({ message, cause }),
+    catch: (cause) =>
+      new BillingProviderError({ message, kind: providerFailureKind(cause), cause }),
   }).pipe(
     Effect.timeoutFail({
       duration: "10 seconds",
-      onTimeout: () => new BillingProviderError({ message: `${message}: timed out` }),
+      onTimeout: () =>
+        new BillingProviderError({ message: `${message}: timed out`, kind: "timeout" }),
     }),
   );
 

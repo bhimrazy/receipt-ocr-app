@@ -44,6 +44,8 @@ export class DbError extends Data.TaggedError("DbError")<{
 /** The billing provider's API failed or answered with something we can't read. */
 export class BillingProviderError extends Data.TaggedError("BillingProviderError")<{
   readonly message: string;
+  /** Why the provider call failed, safe to log: `http-<status>`, `bad-response`, `network` or `timeout`. */
+  readonly kind?: string;
   readonly cause?: unknown;
 }> {}
 

@@ -208,7 +208,11 @@ const portalResponse = z.object({
 
 /** Paddle's API answered with an error status or a body we can't read. */
 export class PaddleApiError extends Error {
-  constructor(readonly status: number) {
+  /** `status`: Paddle answered with an error status; `body`: a 2xx whose body didn't parse. */
+  constructor(
+    readonly status: number,
+    readonly reason: "status" | "body" = "status",
+  ) {
     super(`Paddle API returned ${status}`);
     this.name = "PaddleApiError";
   }
@@ -240,7 +244,7 @@ async function paddleRequest<T>(
   });
   if (!response.ok) throw new PaddleApiError(response.status);
   const parsed = schema.safeParse(await response.json().catch(() => null));
-  if (!parsed.success) throw new PaddleApiError(response.status);
+  if (!parsed.success) throw new PaddleApiError(response.status, "body");
   return parsed.data;
 }
 
