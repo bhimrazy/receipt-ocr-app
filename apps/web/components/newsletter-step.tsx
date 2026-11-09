@@ -55,7 +55,7 @@ export function NewsletterStep({
   const problem = result ? PROBLEMS[result] : token ? undefined : PROBLEMS.invalid;
   return (
     <>
-      <SlimHeader />
+      <SlimHeader backFallback="/app" />
       <main className="bg-background px-5 py-14 text-foreground md:py-16">
         <div className="mx-auto max-w-md">
           {result === "done" ? (

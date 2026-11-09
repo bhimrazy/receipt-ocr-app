@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Brand } from "@/components/brand";
 import { useSiteInstall } from "@/components/landing-install";
+import { StandaloneBack } from "@/components/standalone";
 import type { NavLink } from "@/components/site-header";
 import { hasSignedInHint } from "@/lib/signed-in-hint";
 
@@ -77,13 +78,19 @@ export function SiteHeaderBar({
       >
         <Link
           aria-label="ReceiptOCR home"
-          className={join("inline-flex min-h-11 items-center rounded-lg", focusRing)}
+          className={join(
+            "inline-flex min-h-11 items-center rounded-lg standalone:hidden",
+            focusRing,
+          )}
           href="/"
         >
           <Brand />
         </Link>
+        <div className="hidden min-h-11 items-center standalone:flex">
+          <Brand />
+        </div>
 
-        <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
+        <nav aria-label="Main" className="hidden items-center gap-1 lg:flex standalone:hidden!">
           {links.map((link) => (
             <a
               className={join(
@@ -98,7 +105,14 @@ export function SiteHeaderBar({
           ))}
         </nav>
 
-        <div className="flex items-center gap-1.5">
+        <StandaloneBack
+          className={join(
+            "hidden min-h-11 items-center gap-1.5 rounded-full px-4 text-sm text-muted-foreground transition-colors hover:text-foreground standalone:inline-flex",
+            focusRing,
+          )}
+        />
+        {/* The installed app has its own way in; it offers Back instead (above). */}
+        <div className="flex items-center gap-1.5 standalone:hidden">
           {session ? (
             <Link className={primaryClass} href="/app">
               Open the app <ArrowRight aria-hidden className="size-4" />

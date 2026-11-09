@@ -10,6 +10,7 @@ import {
 } from "@receipt-ocr/ui/components/card";
 import { useRouter } from "next/navigation";
 import { signOutAndClearHint } from "@/lib/auth-client";
+import { signedOutPath } from "@/lib/display-mode";
 
 /** Shown to a signed-in user whose workspace could not be found or created. */
 export function NoWorkspace({ email }: { email: string }) {
@@ -17,7 +18,7 @@ export function NoWorkspace({ email }: { email: string }) {
 
   async function handleSignOut() {
     await signOutAndClearHint();
-    router.push("/");
+    router.push(signedOutPath());
     router.refresh();
   }
 

@@ -33,6 +33,24 @@ const valueProps = (freeAllowance: string | null) => [
 const footerLink =
   "inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
+/** Links to the landing page, except in the installed app, which has no landing page. */
+function HomeLogo({ className }: { className: string }) {
+  return (
+    <div className={className}>
+      <Link
+        aria-label="ReceiptOCR home"
+        className="inline-flex min-h-11 items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring standalone:hidden"
+        href="/"
+      >
+        <Brand />
+      </Link>
+      <div className="hidden min-h-11 items-center standalone:flex">
+        <Brand />
+      </div>
+    </div>
+  );
+}
+
 /**
  * Shows the free plan's saved limits unless `planInCard` (the page's own card states them); pages using it
  * revalidate hourly or on save.
@@ -60,13 +78,7 @@ export async function AuthLayout({
           aria-hidden
           className="hero-aurora pointer-events-none absolute left-1/3 top-1/2 size-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60"
         />
-        <Link
-          aria-label="ReceiptOCR home"
-          className="relative z-10 inline-flex min-h-11 w-fit items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          href="/"
-        >
-          <Brand />
-        </Link>
+        <HomeLogo className="relative z-10 w-fit" />
         <div className="relative z-10 max-w-md">
           {/* The form card holds the page's h1, so this stays a paragraph. */}
           <p className="text-balance text-4xl font-bold leading-tight tracking-tight">
@@ -104,19 +116,13 @@ export async function AuthLayout({
             for an error before the page scrolls; phones add the logo above it. */}
         <main className="relative z-10 flex flex-1 flex-col items-center px-4 pb-4 pt-[max(1rem,calc(50dvh-24rem))] sm:px-5 lg:pt-[max(1rem,calc(50dvh-21rem))]">
           <div className="flex w-full max-w-md flex-col items-center">
-            <Link
-              aria-label="ReceiptOCR home"
-              className="mb-6 inline-flex min-h-11 items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
-              href="/"
-            >
-              <Brand />
-            </Link>
+            <HomeLogo className="mb-6 lg:hidden" />
             {children}
           </div>
         </main>
         <footer className="relative z-10 flex flex-wrap items-center justify-center gap-x-6 px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <nav aria-label="Legal" className="flex gap-6 text-sm text-muted-foreground">
-            <Link className={footerLink} href="/">
+            <Link className={cn(footerLink, "standalone:hidden")} href="/">
               Home
             </Link>
             <Link className={footerLink} href="/privacy">
