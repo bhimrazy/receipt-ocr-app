@@ -1,5 +1,5 @@
 import path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { signUp, uniqueEmail, uploadFromReview } from "./helpers";
 
 // Runs in the `mobile-camera` project (touch, 390x844 Chromium with a fake camera; the camera
@@ -525,6 +525,130 @@ for (const viewport of [
     expect(stageAfter).toEqual(stageBefore);
   });
 }
+
+/** The corners step on the whole image, so every side is long enough to show its handle. */
+async function wholeImage(review: Locator) {
+  const fullImage = review.getByRole("button", { name: "Use full image" });
+  if (await fullImage.isEnabled()) await fullImage.click();
+  await expect(
+    review.getByRole("button", { name: "Bottom-right corner, 100% across, 100% down" }),
+  ).toBeVisible();
+}
+
+const centre = (box: { x: number; y: number; width: number; height: number }) => ({
+  x: box.x + box.width / 2,
+  y: box.y + box.height / 2,
+});
+
+test("a side moves with the arrow keys, in perimeter order, and corners win their spot", async ({
+  page,
+}) => {
+  await signUp(page, uniqueEmail("crop-edge-keys"));
+  const review = await pickTwo(page);
+  await wholeImage(review);
+  const top = review.getByRole("button", { name: /^Top edge/ });
+  const topLeft = review.getByRole("button", { name: /^Top-left corner/ });
+  const topRight = review.getByRole("button", { name: /^Top-right corner/ });
+
+  // Tab follows the perimeter: a corner, then the side after it.
+  await topLeft.focus();
+  await page.keyboard.press("Tab");
+  await expect(top).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(topRight).toBeFocused();
+
+  const corners = [
+    await topLeft.getAttribute("aria-label"),
+    await topRight.getAttribute("aria-label"),
+  ];
+  await top.focus();
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(top).toHaveAttribute("aria-label", "Top edge, 5% down");
+  await expect(topLeft).not.toHaveAttribute("aria-label", corners[0]!);
+  await expect(topRight).not.toHaveAttribute("aria-label", corners[1]!);
+  // Across a top edge, Left and Right do nothing.
+  await page.keyboard.press("ArrowLeft");
+  await expect(top).toHaveAttribute("aria-label", "Top edge, 5% down");
+
+  for (const name of ["Top-left", "Top-right", "Bottom-right", "Bottom-left"]) {
+    const point = centre(
+      (await review.getByRole("button", { name: new RegExp(`^${name} corner`) }).boundingBox())!,
+    );
+    const hit = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.getAttribute("aria-label"),
+      point,
+    );
+    expect(hit).toMatch(new RegExp(`^${name} corner`));
+  }
+});
+
+test("dragging a side moves both its corners and never redraws the photo", async ({ page }) => {
+  await signUp(page, uniqueEmail("crop-edge-drag"));
+  await page.addInitScript(() => {
+    const w = window as unknown as { photoDraws: number };
+    w.photoDraws = 0;
+    const draw = CanvasRenderingContext2D.prototype.drawImage as (...args: unknown[]) => void;
+    CanvasRenderingContext2D.prototype.drawImage = function (
+      this: CanvasRenderingContext2D,
+      ...args: unknown[]
+    ) {
+      if (this.canvas.getAttribute("aria-label") === "Receipt photo") w.photoDraws++;
+      return draw.apply(this, args);
+    } as unknown as CanvasRenderingContext2D["drawImage"];
+  });
+  const review = await pickTwo(page);
+  await wholeImage(review);
+  const draws = () => page.evaluate(() => (window as unknown as { photoDraws: number }).photoDraws);
+  await expect.poll(draws).toBeGreaterThan(0);
+  const before = await draws();
+
+  const drag = async (name: RegExp, dx: number, dy: number) => {
+    const from = centre((await review.getByRole("button", { name }).boundingBox())!);
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + dx, from.y + dy, { steps: 4 });
+    await expect(review.getByTestId("loupe")).toBeVisible();
+    await page.mouse.up();
+    await expect(review.getByTestId("loupe")).toHaveCount(0);
+  };
+
+  await drag(/^Top-left corner/, 30, 30);
+  const bottomRight = review.getByRole("button", { name: /^Bottom-right corner/ });
+  const bottomLeft = review.getByRole("button", { name: /^Bottom-left corner/ });
+  const corners = [
+    await bottomRight.getAttribute("aria-label"),
+    await bottomLeft.getAttribute("aria-label"),
+  ];
+  await drag(/^Bottom edge/, 0, -40);
+  await expect(review.getByRole("button", { name: /^Bottom edge/ })).not.toHaveAttribute(
+    "aria-label",
+    "Bottom edge, 100% down",
+  );
+  await expect(bottomRight).not.toHaveAttribute("aria-label", corners[0]!);
+  await expect(bottomLeft).not.toHaveAttribute("aria-label", corners[1]!);
+  expect(await draws()).toBe(before);
+});
+
+test("after a turn every corner handle sits on the photo", async ({ page }) => {
+  await signUp(page, uniqueEmail("crop-rotate"));
+  const review = await pickTwo(page);
+  await wholeImage(review);
+  const photo = review.getByRole("img", { name: "Receipt photo" });
+  for (let turn = 0; turn < 2; turn++) {
+    const wide = await photo.evaluate((c) => c.clientWidth > c.clientHeight);
+    await review.getByRole("button", { name: "Rotate" }).click();
+    await expect.poll(() => photo.evaluate((c) => c.clientWidth > c.clientHeight)).toBe(!wide);
+    const box = (await photo.boundingBox())!;
+    for (const name of ["Top-left", "Top-right", "Bottom-right", "Bottom-left"]) {
+      const corner = review.getByRole("button", { name: new RegExp(`^${name} corner`) });
+      const point = centre((await corner.boundingBox())!);
+      expect(point.x, name).toBeGreaterThanOrEqual(box.x - 1);
+      expect(point.x, name).toBeLessThanOrEqual(box.x + box.width + 1);
+      expect(point.y, name).toBeGreaterThanOrEqual(box.y - 1);
+      expect(point.y, name).toBeLessThanOrEqual(box.y + box.height + 1);
+    }
+  }
+});
 
 test("every control is reachable on a short phone", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
