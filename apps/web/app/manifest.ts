@@ -2,8 +2,10 @@ import type { MetadataRoute } from "next";
 import { PWA_SOURCE } from "@/lib/signed-in-hint";
 import { SITE_NAME } from "@/lib/site";
 import { SHARE_TARGET_FIELD, SHARE_TARGET_PATH } from "@/lib/share-target";
+import { manifestScreenshotEntries } from "@/lib/manifest-screenshots";
 
-// --background in packages/ui/src/styles.css; the app is dark-only.
+// The dark --background in packages/ui/src/styles.css. A manifest can't follow the theme, so the
+// Android splash stays dark (the brand is dark-first), even for light-theme users.
 const BACKGROUND = "#0a0a0b";
 
 export default function manifest(): MetadataRoute.Manifest {
@@ -20,7 +22,10 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "any",
     background_color: BACKGROUND,
     theme_color: BACKGROUND,
+    // A shortcut or a share reuses the open app window instead of opening a second one.
+    launch_handler: { client_mode: ["navigate-existing", "auto"] },
     categories: ["finance", "productivity", "business"],
+    screenshots: manifestScreenshotEntries(),
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
@@ -45,6 +50,12 @@ export default function manifest(): MetadataRoute.Manifest {
         description: "Upload or photograph a receipt",
         // capture=1 is for the camera track's upload page, which will open the camera from it.
         url: "/app/upload?capture=1",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+      },
+      {
+        name: "History",
+        description: "Your scanned receipts",
+        url: "/app/history",
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
       },
     ],

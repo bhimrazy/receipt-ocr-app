@@ -192,14 +192,14 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
         </section>
 
         {/* Product preview */}
-        <section className="relative px-5 pb-8">
+        <section className="relative px-5 sm:pb-8">
           <div className="mx-auto -mt-6 max-w-4xl animate-rise">
             <ProductPreview />
           </div>
         </section>
 
         {/* Stats band */}
-        <section className="mt-16 border-y border-border bg-secondary/30 px-5 py-12">
+        <section className="mt-8 border-y border-border bg-secondary/30 px-5 py-12 sm:mt-16">
           <div className="mx-auto grid max-w-5xl grid-cols-2 gap-x-8 gap-y-10 text-center md:grid-cols-4">
             {stats.map(([value, label]) => (
               <div key={label}>

@@ -60,7 +60,7 @@ export function SiteHeaderBar({
   const solid = scrolled || menuOpen;
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 px-3 pt-3 md:px-6 md:pt-4">
+    <header className="fixed inset-x-0 top-0 z-50 px-2 pt-3 sm:px-3 md:px-6 md:pt-4">
       {menuOpen && (
         <div
           aria-hidden
@@ -70,7 +70,7 @@ export function SiteHeaderBar({
       )}
       <div
         className={join(
-          "mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 rounded-full px-2 pl-4 transition-[background-color,box-shadow] duration-300 sm:pl-5",
+          "mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 rounded-full px-1.5 pl-3 transition-[background-color,box-shadow] duration-300 sm:gap-3 sm:px-2 sm:pl-5",
           solid
             ? "bg-background/85 shadow-lg shadow-black/40 light:shadow-float ring-1 ring-border backdrop-blur-xl"
             : "bg-transparent",
@@ -84,7 +84,8 @@ export function SiteHeaderBar({
           )}
           href="/"
         >
-          <Brand />
+          {/* Below 375px only the mark fits beside Sign in, Start free and the menu. */}
+          <Brand wordmarkClassName="max-[374px]:hidden" />
         </Link>
         <div className="hidden min-h-11 items-center standalone:flex">
           <Brand />
@@ -112,7 +113,7 @@ export function SiteHeaderBar({
           )}
         />
         {/* The installed app has its own way in; it offers Back instead (above). */}
-        <div className="flex items-center gap-1.5 standalone:hidden">
+        <div className="flex items-center gap-1 sm:gap-1.5 standalone:hidden">
           {session ? (
             <Link className={primaryClass} href="/app">
               Open the app <ArrowRight aria-hidden className="size-4" />
@@ -122,8 +123,10 @@ export function SiteHeaderBar({
               <Link className={ghostClass} href="/sign-in">
                 Sign in
               </Link>
+              {/* Shorter on phones, so Sign in fits beside it instead of hiding in the menu. */}
               <Link className={primaryClass} href="/sign-up">
-                Get started free
+                <span className="sm:hidden">Start free</span>
+                <span className="hidden sm:inline">Get started free</span>
               </Link>
             </>
           )}
@@ -169,20 +172,6 @@ export function SiteHeaderBar({
                 </a>
               </li>
             ))}
-            {!session && (
-              <li className="mt-1 border-t border-border pt-1 sm:hidden">
-                <Link
-                  className={join(
-                    "flex min-h-12 items-center rounded-2xl px-4 text-base text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground",
-                    focusRing,
-                  )}
-                  href="/sign-in"
-                  onClick={() => closeMenu(false)}
-                >
-                  Sign in
-                </Link>
-              </li>
-            )}
             {install.available && (
               <li className="mt-1 border-t border-border pt-1">
                 <button
