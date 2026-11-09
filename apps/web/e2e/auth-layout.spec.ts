@@ -36,6 +36,8 @@ for (const colorScheme of ["dark", "light"] as const) {
       test(`${path} fills the screen with no card and no sideways scroll`, async ({ page }) => {
         await page.goto(path);
         await expect(page.locator("main h1").first()).toBeVisible();
+        // Centred like the logo and buttons around it.
+        await expect(page.locator("main h1").first()).toHaveCSS("text-align", "center");
         for (const box of await chromeAroundHeading(page)) {
           expect(box).toEqual({ shadow: "none", border: "0px", background: "rgba(0, 0, 0, 0)" });
         }
@@ -61,4 +63,5 @@ test("at 1440 px sign-in keeps its card", async ({ page }) => {
   await page.goto("/sign-in");
   const boxes = await chromeAroundHeading(page);
   expect(boxes.some((box) => box.shadow !== "none")).toBe(true);
+  await expect(page.locator("main h1").first()).toHaveCSS("text-align", "left");
 });

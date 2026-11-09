@@ -17,7 +17,8 @@ export const authLinkClass =
 
 export function AuthHeading({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <div>
+    // Centred on phones, where the card is gone and the logo and buttons above are centred.
+    <div className="text-center sm:text-left">
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       {children ? (
         <p className="mt-2 text-pretty text-sm leading-6 text-muted-foreground">{children}</p>
