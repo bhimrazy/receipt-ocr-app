@@ -14,8 +14,9 @@ Upgrade prompts elsewhere in the app stay hidden until checkout opens to everyon
 
 1. **Open checkout.** Sign in on https://receipt-ocr.bhimraj.com.np as an admin, open **Settings → Billing** in a
    workspace you own, and click **Upgrade**. Pick monthly or yearly.
-2. **Pay with a test card.** `4242 4242 4242 4242`, any future expiry, any CVC. Paddle's "test payment methods" page
-   lists cards that are declined or ask for 3-D Secure, for checking the failure paths.
+2. **Pay with a test card.** `4242 4242 4242 4242`, any name, any future expiry, CVV `100`. `4000 0000 0000 0002` is
+   declined; Paddle's [test cards](https://developer.paddle.com/concepts/payment-methods/card) page lists more,
+   including 3-D Secure.
 3. **See Pro arrive.** The page says "Payment received" and refreshes until the workspace is Pro, usually within a few
    seconds.
 4. **Check it went through.**
@@ -30,12 +31,20 @@ Upgrade prompts elsewhere in the app stay hidden until checkout opens to everyon
 
 ## If something's off
 
-| What you see                       | Look at                                                                                        |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------- |
-| No Upgrade button                  | You're not an admin, not the workspace owner, or a Paddle config value is missing or Sensitive |
-| "Checkout couldn't load"           | A content blocker is stopping Paddle.js; turn it off for the page                              |
-| Paid, but the workspace stays Free | The webhook destination's URL and secret, then its delivery logs                               |
-| Job outcome `unmatched`            | Buyer isn't the owner, the workspace is gone, or the price isn't a `PADDLE_PRICE_PRO_*` id     |
+| What you see                                                    | Look at                                                                                                                                                                                                                                          |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| No Upgrade button                                               | You're not an admin, not the workspace owner, or a Paddle config value is missing or Sensitive                                                                                                                                                   |
+| "The checkout couldn't start"                                   | Paddle refused the server's call. Find `billing.checkout_failed` in the logs: `error.kind` says why (`http-400`, `http-401`, `http-403`, `network`, `timeout`)                                                                                   |
+| `http-400` (Paddle: `transaction_default_checkout_url_not_set`) | No default payment link: Paddle → Checkout → Checkout settings → Default payment link ([§10](production-environment.md#paddle-account-settings)). In live it must be on an approved domain. Our log has the status only, not Paddle's error code |
+| `http-401`                                                      | `PADDLE_API_KEY` is wrong, revoked, from the other environment, or **expired** (Paddle's default expiry is 90 days)                                                                                                                              |
+| `http-403`                                                      | The API key lacks a permission: it needs `customer.write`, `transaction.write`, `customer_portal_session.write` and `subscription.write`                                                                                                         |
+| Overlay opens with "Something went wrong"                       | Default payment link missing, or (live) the domain isn't approved yet                                                                                                                                                                            |
+| "Checkout couldn't load"                                        | A content blocker is stopping Paddle.js; turn it off for the page                                                                                                                                                                                |
+| Paid, but the workspace stays Free                              | The webhook destination's URL and secret, then its delivery logs. Sandbox gives up after 3 tries in about two minutes: replay the delivery once it's fixed                                                                                       |
+| Job outcome `unmatched`                                         | Buyer isn't the owner, the workspace is gone, or the price isn't a `PADDLE_PRICE_PRO_*` id                                                                                                                                                       |
+
+Test with a real checkout (the steps above). `POST /transactions/preview` doesn't check the default payment link, the
+customer or the domain, so it passes while real checkouts fail.
 
 ## Going live
 
