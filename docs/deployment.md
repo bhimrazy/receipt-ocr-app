@@ -336,7 +336,7 @@ Every deployment keeps its own copy of the functions, and Hobby counts them all 
 - **Clearing a backlog now:** Actions → **Vercel Cleanup** → Run workflow, from main. Choose how many ready production
   deployments to keep (default 3, the live one always stays) and the minimum age of previews to delete (default 1
   day). The `plan` job lists what it would delete in the run summary; `delete` waits for the owner's approval in the
-  `vercel-cleanup` environment. It reads the live domain from the `PRODUCTION_DOMAIN` repository variable.
+  `vercel-cleanup` environment. Both environments hold a `PRODUCTION_DOMAIN` variable, the live domain.
 - **Undo:** a deleted deployment can be restored for a while (up to 30 days, shorter for young ones) in project
   Settings → Security → Recently Deleted Deployments.
 
