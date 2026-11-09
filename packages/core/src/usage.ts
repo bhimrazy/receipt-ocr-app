@@ -114,19 +114,23 @@ export async function countUsage(
     window.scope === "workspace"
       ? sql`r.organization_id = ${organizationId} and r.plan = ${window.plan}`
       : sql`r.user_id = ${userId} and r.plan = ${window.plan}`;
-  const rows = await db.execute<{
-    user_minute: number;
-    day: number;
-    month: number | null;
-    plan_day: number | null;
-    global_day: number | null;
-  }>(sql`select
+  const rows = await db
+    .execute<{
+      user_minute: number;
+      day: number;
+      month: number | null;
+      plan_day: number | null;
+      global_day: number | null;
+    }>(
+      sql`select
     (select count(*)::int from ocr_rounds r
       where r.user_id = ${userId} and r.created_at >= ${ts(window.minuteStart)}) as user_minute,
     ${usedSql(whose, window.dayStart, window.pendingSince)} as day,
     ${window.monthStart ? usedSql(whose, window.monthStart, window.pendingSince) : NULL_INT} as month,
     ${window.includePlanPool ? planRoundsSince(window.plan, window.dayStart) : NULL_INT} as plan_day,
-    ${window.includeGlobal ? roundsSince(window.dayStart) : NULL_INT} as global_day`);
+    ${window.includeGlobal ? roundsSince(window.dayStart) : NULL_INT} as global_day`,
+    )
+    .then((r) => r.rows);
   const row = rows[0];
   const orZero = (value: number | null | undefined, on: boolean) => (on ? (value ?? 0) : null);
   return {

@@ -1078,9 +1078,11 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       });
       expect(probe.allowed).toBe(true);
       const [{ used }] = await db((d) =>
-        d.execute<{ used: number }>(
-          sql`select count(*)::int as used from ocr_rounds where plan = 'free' and created_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`,
-        ),
+        d
+          .execute<{ used: number }>(
+            sql`select count(*)::int as used from ocr_rounds where plan = 'free' and created_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`,
+          )
+          .then((r) => r.rows),
       );
       const full: QuotaLimits = {
         plan: "free",

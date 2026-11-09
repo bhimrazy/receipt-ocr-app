@@ -77,9 +77,11 @@ const GROUPS_LOCK_NAMESPACE = 7_302;
  * limits and the name check can't be raced past. Group writes are rare.
  */
 const lockGroups = (tx: Tx, organizationId: string) =>
-  tx.execute(
-    sql`select pg_advisory_xact_lock(${GROUPS_LOCK_NAMESPACE}, hashtext(${organizationId}))`,
-  );
+  tx
+    .execute(
+      sql`select pg_advisory_xact_lock(${GROUPS_LOCK_NAMESPACE}, hashtext(${organizationId}))`,
+    )
+    .then((r) => r.rows);
 
 const isUniqueViolation = (error: unknown) => hasCode(error, "23505");
 

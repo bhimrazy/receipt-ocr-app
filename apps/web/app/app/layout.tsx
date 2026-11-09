@@ -1,5 +1,6 @@
 import { AppSidebarNav, AppTabBar, MobileTopBar } from "@/components/app-nav";
 import { MOBILE_TABS } from "@/components/mobile-tabs";
+import { SectionBoundary } from "@/components/section-error";
 import { SkipLink } from "@/components/skip-link";
 import { Brand } from "@/components/brand";
 import { NoWorkspace } from "@/components/no-workspace";
@@ -131,9 +132,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     workspaces,
   };
   const meter = (
-    <Suspense fallback={<MeterSkeleton withAction={ownerOffer !== null} />}>
-      <Meter offer={offer} />
-    </Suspense>
+    <SectionBoundary label="Usage">
+      <Suspense fallback={<MeterSkeleton withAction={ownerOffer !== null} />}>
+        <Meter offer={offer} />
+      </Suspense>
+    </SectionBoundary>
   );
 
   return (

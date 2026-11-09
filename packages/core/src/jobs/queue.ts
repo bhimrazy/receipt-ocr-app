@@ -137,7 +137,7 @@ const logEntry = (outcome: string, errorKind: string | null) =>
 const inForce = sql`(c.paused or c.until is not null) and (c.until is null or c.until > now())`;
 
 async function rows(db: Queryable, query: SQL): Promise<Job[]> {
-  return (await db.execute<RawJob>(query)).map(toJob);
+  return (await db.execute<RawJob>(query).then((r) => r.rows)).map(toJob);
 }
 
 export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
@@ -264,11 +264,15 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
       heartbeat: (job, worker, leaseSeconds) =>
         use(async (db) => {
           // Touches no indexed column, so it is a HOT update.
-          const result = await db.execute(sql`update jobs
+          const result = await db
+            .execute(
+              sql`update jobs
             set locked_until = now() + make_interval(secs => ${leaseSeconds}::int)
             where id = ${job.id} and locked_by = ${worker} and attempts = ${job.attempts}
               and state = 'running'
-            returning id`);
+            returning id`,
+            )
+            .then((r) => r.rows);
           return result.length > 0;
         }),
 
@@ -289,12 +293,16 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
               : sql``;
           const errorSet =
             kind === null ? sql`` : sql`, last_error_kind = ${kind}, last_error_at = now()`;
-          const result = await db.execute(sql`update jobs j set ${set}${errorSet}${scrub},
+          const result = await db
+            .execute(
+              sql`update jobs j set ${set}${errorSet}${scrub},
               attempt_log = ${appendLog(logEntry(outcome.type, kind))},
               locked_by = null, locked_until = null, updated_at = now()
             where j.id = ${job.id} and j.locked_by = ${worker} and j.attempts = ${job.attempts}
               and j.state = 'running'
-            returning j.id`);
+            returning j.id`,
+            )
+            .then((r) => r.rows);
           return result.length > 0;
         }),
 
@@ -339,45 +347,67 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
         kinds.length === 0 || ids?.length === 0
           ? Effect.succeed(null)
           : use(async (db) => {
-              const [row] = await db.execute<{ ms: string | number | null }>(sql`
+              const [row] = await db
+                .execute<{ ms: string | number | null }>(
+                  sql`
                 select extract(epoch from min(run_at) - now()) * 1000 as ms from jobs j
                 where j.state = 'queued' and j.kind in (${list(kinds)})
-                  ${ids ? sql`and j.id in (${list(ids)})` : sql``}`);
+                  ${ids ? sql`and j.id in (${list(ids)})` : sql``}`,
+                )
+                .then((r) => r.rows);
               return row?.ms == null ? null : Number(row.ms);
             }),
 
       pause: (scope, input) =>
         use((db) =>
-          db.execute(sql`insert into job_controls (scope, paused, until, reason, updated_by)
+          db
+            .execute(
+              sql`insert into job_controls (scope, paused, until, reason, updated_by)
             values (${scope}, true, ${input.until ? ts(input.until) : null}, ${input.reason ?? null}, ${input.by ?? null})
             on conflict (scope) do update set paused = true, until = excluded.until,
-              reason = excluded.reason, updated_by = excluded.updated_by, updated_at = now()`),
+              reason = excluded.reason, updated_by = excluded.updated_by, updated_at = now()`,
+            )
+            .then((r) => r.rows),
         ).pipe(Effect.asVoid),
 
       resume: (scope) =>
         use((db) =>
-          db.execute(sql`update job_controls set paused = false, until = null, updated_at = now()
-            where scope = ${scope}`),
+          db
+            .execute(
+              sql`update job_controls set paused = false, until = null, updated_at = now()
+            where scope = ${scope}`,
+            )
+            .then((r) => r.rows),
         ).pipe(Effect.asVoid),
 
       cooldowns: use(async (db) => {
-        const result = await db.execute<{ scope: string; until: string | Date }>(sql`
+        const result = await db
+          .execute<{ scope: string; until: string | Date }>(
+            sql`
           select scope, until from job_controls
-          where scope like 'provider:%' and until > now()`);
+          where scope like 'provider:%' and until > now()`,
+          )
+          .then((r) => r.rows);
         return new Map(result.map((r) => [r.scope.slice("provider:".length), toDate(r.until)]));
       }),
 
       coolDown: (provider, ms) =>
         use((db) =>
-          db.execute(sql`insert into job_controls (scope, until, reason)
+          db
+            .execute(
+              sql`insert into job_controls (scope, until, reason)
             values (${`provider:${provider}`}, now() + make_interval(secs => ${ms / 1000}::float8), 'rate-limited')
             on conflict (scope) do update
-              set until = greatest(job_controls.until, excluded.until), updated_at = now()`),
+              set until = greatest(job_controls.until, excluded.until), updated_at = now()`,
+            )
+            .then((r) => r.rows),
         ).pipe(Effect.asVoid),
 
       dueReceiptJob: (receiptId, ownerCap = DEFAULT_OWNER_CAP) =>
         use(async (db) => {
-          const [row] = await db.execute<{ id: string }>(sql`select j.id from jobs j
+          const [row] = await db
+            .execute<{ id: string }>(
+              sql`select j.id from jobs j
             where j.receipt_id = ${receiptId} and j.kind like 'receipt.%'
               and j.state in ('queued', 'running')
               and ((j.state = 'queued' and j.run_at <= now())
@@ -387,7 +417,9 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
               and (j.user_id is null or (select count(*) from jobs o
                 where o.user_id = j.user_id and o.state = 'running' and o.locked_until >= now()
                   and o.id <> j.id) < ${ownerCap})
-            limit 1`);
+            limit 1`,
+            )
+            .then((r) => r.rows);
           return row?.id ?? null;
         }),
 
@@ -395,12 +427,16 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
         kinds.length === 0
           ? Effect.void
           : use((db) =>
-              db.execute(sql`insert into job_controls (scope)
+              db
+                .execute(
+                  sql`insert into job_controls (scope)
                 values ${sql.join(
                   kinds.map((kind) => sql`(${tickScope(kind)})`),
                   sql`, `,
                 )}
-                on conflict (scope) do update set updated_at = now()`),
+                on conflict (scope) do update set updated_at = now()`,
+                )
+                .then((r) => r.rows),
             ).pipe(Effect.asVoid),
     })),
   );

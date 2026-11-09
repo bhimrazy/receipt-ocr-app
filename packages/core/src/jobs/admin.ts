@@ -55,9 +55,13 @@ export const rerunJob = <R>(
   options: { reason?: string | null; dailyCap?: number; now?: Date } = {},
 ) =>
   transact(async (tx) => {
-    const [job] = await tx.execute<LockedJob>(sql`select id, kind, state, attempts, max_attempts,
+    const [job] = await tx
+      .execute<LockedJob>(
+        sql`select id, kind, state, attempts, max_attempts,
         receipt_id, organization_id, user_id, last_error_kind, payload
-      from jobs where id = ${id}::uuid for update`);
+      from jobs where id = ${id}::uuid for update`,
+      )
+      .then((r) => r.rows);
     if (!job) throw new NotFound({ message: "That job no longer exists." });
     const definition = Object.hasOwn(registry, job.kind) ? registry[job.kind] : undefined;
     if (!definition) throw new Conflict({ message: `No handler runs ${job.kind} jobs any more.` });
@@ -69,9 +73,11 @@ export const rerunJob = <R>(
     }
 
     if (options.dailyCap !== undefined) {
-      const [row] = await tx.execute<{ used: number }>(
-        sql`select ${roundsSince(utcDayStart(options.now ?? new Date()))} as used`,
-      );
+      const [row] = await tx
+        .execute<{ used: number }>(
+          sql`select ${roundsSince(utcDayStart(options.now ?? new Date()))} as used`,
+        )
+        .then((r) => r.rows);
       if ((row?.used ?? 0) >= options.dailyCap) {
         throw new Conflict({
           message: "The service-wide daily cap is reached. Re-run after 00:00 UTC.",
@@ -83,9 +89,11 @@ export const rerunJob = <R>(
     let receiptLabel: string | null = null;
     if (job.receipt_id && job.kind.startsWith("receipt.")) {
       if (round === null) throw new Conflict({ message: "This job has no round to re-run." });
-      const [receipt] = await tx.execute<{ status: string; attempts: number }>(
-        sql`select status, attempts from receipts where id = ${job.receipt_id}::uuid for update`,
-      );
+      const [receipt] = await tx
+        .execute<{ status: string; attempts: number }>(
+          sql`select status, attempts from receipts where id = ${job.receipt_id}::uuid for update`,
+        )
+        .then((r) => r.rows);
       if (!receipt) throw new Conflict({ message: "Its receipt was deleted." });
       if (receipt.attempts !== round) {
         throw new Conflict({
@@ -95,9 +103,13 @@ export const rerunJob = <R>(
       if (receipt.status === "completed") {
         throw new Conflict({ message: "Its receipt has been read since." });
       }
-      const [live] = await tx.execute<{ id: string }>(sql`select j.id from jobs j
+      const [live] = await tx
+        .execute<{ id: string }>(
+          sql`select j.id from jobs j
         where j.receipt_id = ${job.receipt_id}::uuid and j.id <> ${id}::uuid and ${liveReceiptJob("j")}
-        limit 1`);
+        limit 1`,
+        )
+        .then((r) => r.rows);
       if (live) throw new Conflict({ message: "Another job for this receipt is still running." });
       await tx
         .update(receipts)
@@ -115,7 +127,9 @@ export const rerunJob = <R>(
         where receipt_id = ${job.receipt_id}::uuid and id <> ${id}::uuid
           and kind like 'receipt.%' and state in ('queued', 'running')`);
     }
-    const [updated] = await tx.execute<{ max_attempts: number }>(sql`update jobs j set
+    const [updated] = await tx
+      .execute<{ max_attempts: number }>(
+        sql`update jobs j set
         state = 'queued', run_at = now(), finished_at = null, locked_by = null, locked_until = null,
         max_attempts = j.attempts + ${definition.maxAttempts}, updated_at = now(),
         attempt_log = (select coalesce(jsonb_agg(e order by i), '[]'::jsonb) from (
@@ -123,7 +137,9 @@ export const rerunJob = <R>(
             'n', j.attempts, 'at', now(), 'outcome', 'admin-rerun', 'kind', null, 'worker', null, 'ms', null))
             with ordinality as t(e, i) order by i desc limit 5) s)
       where j.id = ${id}::uuid
-      returning j.max_attempts`);
+      returning j.max_attempts`,
+      )
+      .then((r) => r.rows);
 
     await insertAudit(tx, {
       ...audit,
@@ -159,17 +175,19 @@ export const cancelQueuedJob = <R>(
 ) =>
   Effect.gen(function* () {
     const job = yield* transact(async (tx) => {
-      const [row] = await tx.execute<LockedJob & { run_at: string | Date; priority: number }>(
-        sql`update jobs set state = 'cancelled', finished_at = now(), last_error_kind = 'cancelled',
+      const [row] = await tx
+        .execute<LockedJob & { run_at: string | Date; priority: number }>(
+          sql`update jobs set state = 'cancelled', finished_at = now(), last_error_kind = 'cancelled',
             last_error_at = now(), locked_by = null, locked_until = null, updated_at = now()
           where id = ${id}::uuid and state = 'queued'
           returning id, kind, state, attempts, max_attempts, receipt_id, organization_id, user_id,
             last_error_kind, payload, run_at, priority`,
-      );
+        )
+        .then((r) => r.rows);
       if (!row) {
-        const [exists] = await tx.execute<{ state: string }>(
-          sql`select state from jobs where id = ${id}::uuid`,
-        );
+        const [exists] = await tx
+          .execute<{ state: string }>(sql`select state from jobs where id = ${id}::uuid`)
+          .then((r) => r.rows);
         throw exists
           ? new Conflict({
               message: `Only queued jobs can be cancelled; this one is ${exists.state}.`,
@@ -231,9 +249,11 @@ export const setQueueControl = <R>(
         message: "Providers cool down on their own; pause a kind instead.",
       });
     }
-    const [before] = await tx.execute<{ paused: boolean; until: string | null }>(
-      sql`select paused, until from job_controls where scope = ${scope} for update`,
-    );
+    const [before] = await tx
+      .execute<{ paused: boolean; until: string | null }>(
+        sql`select paused, until from job_controls where scope = ${scope} for update`,
+      )
+      .then((r) => r.rows);
     if (paused) {
       await tx.execute(sql`insert into job_controls (scope, paused, until, reason, updated_by)
         values (${scope}, true, null, ${input.reason ?? null}, ${audit.actor.email})

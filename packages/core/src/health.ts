@@ -21,7 +21,9 @@ const status = <E, R>(check: Effect.Effect<unknown, E, R>): Effect.Effect<CheckS
     Effect.orElseSucceed(() => "down" as const),
   );
 
-const database = status(Effect.flatMap(Db, ({ use }) => use((db) => db.execute(sql`select 1`))));
+const database = status(
+  Effect.flatMap(Db, ({ use }) => use((db) => db.execute(sql`select 1`).then((r) => r.rows))),
+);
 
 /** Storage is reported but optional: without storage config it is `not_configured`, not down. */
 const storage = Effect.option(loadStorageConfig).pipe(

@@ -1,4 +1,4 @@
-import { and, asc, count, createDb, eq, member, organization } from "@receipt-ocr/db";
+import { asc, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { cache } from "react";
 import { authEnv } from "./env";
 import { workspaceCapNote } from "./plan-copy";
@@ -26,19 +26,16 @@ export async function getWorkspaceAllowance(): Promise<WorkspaceAllowance> {
     return { owned: 0, limit, canCreate: false, planNote };
   }
 
-  const db = createDb(authEnv.databaseUrl);
-  const [row] = await db
-    .select({ value: count() })
-    .from(member)
-    .where(and(eq(member.userId, session.user.id), eq(member.role, "owner")));
-
-  const owned = Number(row?.value ?? 0);
+  // From the switcher's list (per-request cached), not a query of its own.
+  const owned = (await listWorkspaces()).filter((w) => w.role === "owner").length;
   return { owned, limit, canCreate: owned < limit, planNote };
 }
 
 export interface WorkspaceOption {
   id: string;
   name: string;
+  /** The signed-in user's role in it. */
+  role: string;
 }
 
 /** Every workspace the signed-in user belongs to, for the switcher. Deduplicated per request. */
@@ -46,7 +43,7 @@ export const listWorkspaces = cache(async (): Promise<WorkspaceOption[]> => {
   const session = await getSession();
   if (!session || !authEnv.databaseUrl) return [];
   return createDb(authEnv.databaseUrl)
-    .select({ id: organization.id, name: organization.name })
+    .select({ id: organization.id, name: organization.name, role: member.role })
     .from(member)
     .innerJoin(organization, eq(organization.id, member.organizationId))
     .where(eq(member.userId, session.user.id))

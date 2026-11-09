@@ -220,7 +220,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         } catch (error) {
           // Drizzle wraps the driver's error; the constraint is on the cause.
           for (let e = error; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
-            const name = (e as { constraint_name?: string }).constraint_name;
+            const name = (e as { constraint?: string }).constraint;
             if (name) return name;
           }
           throw error;
@@ -278,6 +278,9 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const g = await gate();
     expect(await repo((r) => r.get(receiptId, b))).toBeNull();
     expect((await repo((r) => r.list(b, {}, { limit: 50, offset: 0 }))).total).toBe(0);
+    const recent = await repo((r) => r.list(a, {}, { limit: 50, offset: 0, total: false }));
+    expect(recent.total).toBeNull();
+    expect(recent.rows.map((row) => row.id)).toContain(receiptId);
     expect(await repo((r) => r.exportRows(b, {}, 50))).toEqual([]);
     expect(await repo((r) => r.update(receiptId, b, { merchant: "pwned" }))).toBe(false);
     expect(await repo((r) => r.claimRetry(receiptId, b, g))).toEqual({ kind: "not-found" });
@@ -703,7 +706,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect((await run(hitRateLimit(key, 1, 3))).allowed).toBe(true);
     await run(
       Effect.flatMap(Db, ({ use }) =>
-        use((db) => db.execute(sql`delete from rate_limit where id = ${key}`)),
+        use((db) => db.execute(sql`delete from rate_limit where id = ${key}`).then((r) => r.rows)),
       ),
     );
   });

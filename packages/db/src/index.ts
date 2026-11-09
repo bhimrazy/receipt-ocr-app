@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
+import { drizzle } from "drizzle-orm/node-postgres";
 import {
   bigint,
   boolean,
@@ -18,7 +18,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import postgres from "postgres";
+import pg from "pg";
 import {
   account,
   invitation,
@@ -672,27 +672,100 @@ export const schema = {
   passkey,
 };
 
-/**
- * One pool per connection string, per process, shared by auth, admin and the
- * Effect runtime. A pool per caller would exhaust the Supabase pooler.
- */
-const pools = new Map<string, ReturnType<typeof drizzle<typeof schema>>>();
+const POOLS_KEY = Symbol.for("@receipt-ocr/db/pools");
 
-/** Max pooled connections per process. Keep this low on serverless. */
-const MAX_CONNECTIONS = Number.parseInt(process.env.DATABASE_POOL_MAX ?? "", 10) || 5;
+/**
+ * One pool per connection string, per process, shared by auth, admin and the Effect runtime. A
+ * pool per caller would exhaust a pooler's client limit. On `globalThis` because Next can load
+ * this module more than once per process (instrumentation, route bundles).
+ */
+const pools: Map<string, ReturnType<typeof drizzle<typeof schema>>> = ((
+  globalThis as { [POOLS_KEY]?: Map<string, ReturnType<typeof drizzle<typeof schema>>> }
+)[POOLS_KEY] ??= new Map());
+
+const envInt = (name: string, fallback: number) =>
+  Number.parseInt(process.env[name] ?? "", 10) || fallback;
+
+/**
+ * Max connections per process. Behind a pooler each is one of its client connections (Supavisor
+ * on Nano/Micro: 200), so instances x this must stay under that limit.
+ */
+const MAX_CONNECTIONS = envInt("DATABASE_POOL_MAX", 10);
+
+/**
+ * How long a query may go unanswered before it fails (pg's `query_timeout`). It catches what the
+ * server can't: a dead socket or a reply lost on the way. A valid statement that runs longer,
+ * typically one waiting on a lock, fails too, and a timed-out write may still commit. Keep the
+ * server's `statement_timeout` below this so the server ends long statements first.
+ */
+const QUERY_TIMEOUT_MS = envInt("DATABASE_QUERY_TIMEOUT_MS", 15_000);
+
+const isQueryTimeout = (error: unknown) =>
+  error instanceof Error && error.message === "Query read timeout";
+
+/**
+ * Closes the connection when a query on it times out. `pool.query` already drops such a client,
+ * but drizzle's `transaction()` releases its client without the error, which would put a
+ * connection with an unfinished statement (and maybe an open transaction) back in the pool.
+ * Statements sent after that (drizzle's ROLLBACK) fail with the timeout itself, not "Client was
+ * closed", so the caller sees why.
+ */
+class TimeoutClosingClient extends pg.Client {
+  private timedOut: Error | undefined;
+
+  constructor(...args: ConstructorParameters<typeof pg.Client>) {
+    super(...args);
+    // pg-pool removes its own listener while a client is checked out and drizzle's transaction()
+    // adds none, so a session the server ends mid-transaction (idle_in_transaction_session_timeout,
+    // a restart) would otherwise be an uncaught exception. The next query on it fails instead.
+    this.on("error", () => {});
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- one override for all of pg's overloads
+  override query(...args: unknown[]): any {
+    const callback = args.at(-1);
+    if (this.timedOut) {
+      if (typeof callback !== "function") return Promise.reject(this.timedOut);
+      process.nextTick(callback as (error: Error) => void, this.timedOut);
+      return undefined;
+    }
+    const result = (super.query as (...a: unknown[]) => unknown)(...args);
+    if (typeof callback !== "function" && result instanceof Promise) {
+      result.catch((error: unknown) => {
+        if (!isQueryTimeout(error)) return;
+        this.timedOut = error as Error;
+        void this.end();
+      });
+    }
+    return result;
+  }
+}
+
+/** A pg pool with this app's limits and timeouts; `createDb` is the one caller outside tests. */
+export function createPool(
+  connectionString: string,
+  { max = MAX_CONNECTIONS, queryTimeoutMs = QUERY_TIMEOUT_MS } = {},
+) {
+  const pool = new pg.Pool({
+    Client: TimeoutClosingClient,
+    connectionString,
+    max,
+    idleTimeoutMillis: 20_000,
+    // Also bounds the wait for a free client when all `max` are busy.
+    connectionTimeoutMillis: 10_000,
+    query_timeout: queryTimeoutMs,
+    keepAlive: true,
+    allowExitOnIdle: true,
+  });
+  // An idle client whose server went away emits here; the pool has already dropped it.
+  pool.on("error", () => {});
+  return pool;
+}
 
 export function createDb(databaseUrl: string) {
   const cached = pools.get(databaseUrl);
   if (cached) return cached;
-
-  const client = postgres(databaseUrl, {
-    // Supabase's transaction pooler does not support prepared statements.
-    prepare: false,
-    max: MAX_CONNECTIONS,
-    idle_timeout: 20,
-    connect_timeout: 10,
-  });
-  const db = drizzle(client, { schema });
+  const db = drizzle(createPool(databaseUrl), { schema });
   pools.set(databaseUrl, db);
   return db;
 }

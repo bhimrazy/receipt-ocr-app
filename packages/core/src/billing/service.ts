@@ -169,12 +169,16 @@ export const workspacePlan = (organizationId: string, now = new Date()) =>
     const { use } = yield* Db;
     const prices = yield* loadProPriceIds;
     const rows = yield* use((db) =>
-      db.execute<{ pro: boolean }>(sql`select (
+      db
+        .execute<{ pro: boolean }>(
+          sql`select (
         exists (select 1 from billing_subscriptions s
           where s.organization_id = ${organizationId} and ${entitledSql(now, prices)})
         or exists (select 1 from member m join "user" u on u.id = m.user_id
           where m.organization_id = ${organizationId} and m.role = 'owner' and u.plan = 'pro')
-      ) as pro`),
+      ) as pro`,
+        )
+        .then((r) => r.rows),
     );
     return yield* resolve(rows[0]?.pro === true);
   });
@@ -189,11 +193,15 @@ export const accountPlan = (userId: string, now = new Date()) =>
     const { use } = yield* Db;
     const prices = yield* loadProPriceIds;
     const rows = yield* use((db) =>
-      db.execute<{ pro: boolean }>(sql`select (
+      db
+        .execute<{ pro: boolean }>(
+          sql`select (
         exists (select 1 from "user" u where u.id = ${userId} and u.plan = 'pro')
         or exists (select 1 from member m join billing_subscriptions s on s.organization_id = m.organization_id
           where m.user_id = ${userId} and m.role = 'owner' and ${entitledSql(now, prices)})
-      ) as pro`),
+      ) as pro`,
+        )
+        .then((r) => r.rows),
     );
     return yield* resolve(rows[0]?.pro === true);
   });
@@ -209,9 +217,11 @@ export const workspaceCreationCheck = (userId: string) =>
       [
         accountPlan(userId),
         use((db) =>
-          db.execute<{ owned: number }>(
-            sql`select count(*)::int as owned from member where user_id = ${userId} and role = 'owner'`,
-          ),
+          db
+            .execute<{ owned: number }>(
+              sql`select count(*)::int as owned from member where user_id = ${userId} and role = 'owner'`,
+            )
+            .then((r) => r.rows),
         ),
       ],
       { concurrency: "unbounded" },
@@ -257,9 +267,13 @@ export const memberLimitCheck = (
         workspacePlan(organizationId, now),
         Effect.flatMap(Settings, (settings) => settings.plans),
         use((db) =>
-          db.execute<{ members: number; pending: number }>(sql`select
+          db
+            .execute<{ members: number; pending: number }>(
+              sql`select
             (select count(*) from member m where m.organization_id = ${organizationId})::int as members,
-            ${pending}::int as pending`),
+            ${pending}::int as pending`,
+            )
+            .then((r) => r.rows),
         ),
       ],
       { concurrency: "unbounded" },
@@ -291,7 +305,9 @@ export async function chargingWorkspacesOf(
   db: Queryable,
   userId: string,
 ): Promise<{ id: string; name: string }[]> {
-  const rows = await db.execute<{ id: string; name: string }>(sql`
+  const rows = await db
+    .execute<{ id: string; name: string }>(
+      sql`
     select distinct o.id, o.name from billing_subscriptions s
     join organization o on o.id = s.organization_id
     where ${chargingSql} and (
@@ -301,7 +317,9 @@ export async function chargingWorkspacesOf(
         and (select count(*) from member m where m.organization_id = o.id) = 1
       )
     )
-    order by o.name`);
+    order by o.name`,
+    )
+    .then((r) => r.rows);
   return [...rows];
 }
 
@@ -310,9 +328,13 @@ export async function hasChargingSubscription(
   db: Queryable,
   organizationId: string,
 ): Promise<boolean> {
-  const rows = await db.execute<{ charging: boolean }>(sql`
+  const rows = await db
+    .execute<{ charging: boolean }>(
+      sql`
     select exists (select 1 from billing_subscriptions s
-      where s.organization_id = ${organizationId} and ${chargingSql}) as charging`);
+      where s.organization_id = ${organizationId} and ${chargingSql}) as charging`,
+    )
+    .then((r) => r.rows);
   return rows[0]?.charging === true;
 }
 
@@ -327,10 +349,14 @@ export const workspaceHasChargingSubscription = (organizationId: string) =>
 export const userPaysForWorkspace = (organizationId: string, userId: string) =>
   Effect.flatMap(Db, ({ use }) =>
     use(async (db) => {
-      const rows = await db.execute<{ pays: boolean }>(sql`
+      const rows = await db
+        .execute<{ pays: boolean }>(
+          sql`
         select exists (select 1 from billing_subscriptions s
           where s.organization_id = ${organizationId} and s.user_id = ${userId}
-            and ${chargingSql}) as pays`);
+            and ${chargingSql}) as pays`,
+        )
+        .then((r) => r.rows);
       return rows[0]?.pays === true;
     }),
   );
@@ -423,9 +449,11 @@ export class BillingPayloadError extends Error {
 const SUBSCRIPTION_LOCK_NAMESPACE = 7_303;
 
 const lockSubscription = (tx: Tx, provider: string, subscriptionId: string) =>
-  tx.execute(
-    sql`select pg_advisory_xact_lock(${SUBSCRIPTION_LOCK_NAMESPACE}, hashtext(${`${provider}:${subscriptionId}`}))`,
-  );
+  tx
+    .execute(
+      sql`select pg_advisory_xact_lock(${SUBSCRIPTION_LOCK_NAMESPACE}, hashtext(${`${provider}:${subscriptionId}`}))`,
+    )
+    .then((r) => r.rows);
 
 const storedSubscription = async (tx: Tx, provider: string, subscriptionId: string) => {
   const [row] = await tx
@@ -661,10 +689,14 @@ async function linkNewSubscription(
   prices: ReadonlySet<string>,
 ): Promise<{ organizationId: string; userId: string } | { unmatched: UnmatchedReason }> {
   if (!snapshot.workspaceId) return { unmatched: "workspace" };
-  const rows = await tx.execute<{ workspace: boolean; owner: boolean }>(sql`select
+  const rows = await tx
+    .execute<{ workspace: boolean; owner: boolean }>(
+      sql`select
     exists (select 1 from organization where id = ${snapshot.workspaceId}) as workspace,
     exists (select 1 from member where organization_id = ${snapshot.workspaceId}
-      and user_id = ${snapshot.userId ?? ""} and role = 'owner') as owner`);
+      and user_id = ${snapshot.userId ?? ""} and role = 'owner') as owner`,
+    )
+    .then((r) => r.rows);
   if (rows[0]?.workspace !== true) return { unmatched: "workspace" };
   if (rows[0]?.owner !== true || !snapshot.userId) return { unmatched: "owner" };
   if (!snapshot.priceId || !prices.has(snapshot.priceId)) return { unmatched: "price" };
@@ -936,9 +968,13 @@ export class Billing extends Context.Tag("@receipt-ocr/core/Billing")<
           return Effect.gen(function* () {
             const { use } = db;
             const owner = yield* use((d) =>
-              d.execute<{ owner: boolean }>(sql`select exists (select 1 from member
+              d
+                .execute<{ owner: boolean }>(
+                  sql`select exists (select 1 from member
                 where organization_id = ${request.organizationId} and user_id = ${request.userId}
-                and role = 'owner') as owner`),
+                and role = 'owner') as owner`,
+                )
+                .then((r) => r.rows),
             );
             if (owner[0]?.owner !== true) {
               return yield* new Forbidden({ message: "Only the workspace owner can upgrade it." });

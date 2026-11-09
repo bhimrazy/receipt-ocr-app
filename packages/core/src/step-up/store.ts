@@ -171,7 +171,9 @@ export const issueStepUpCode = (input: {
     const now = input.now ?? new Date();
     const since = new Date(now.getTime() - STEP_UP_CODE_WINDOW_MS);
     // Serialises concurrent sends for one user, so the window count holds.
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`step-up:${input.userId}`}))`);
+    await tx
+      .execute(sql`select pg_advisory_xact_lock(hashtext(${`step-up:${input.userId}`}))`)
+      .then((r) => r.rows);
     const recent = await tx
       .select({ createdAt: stepUpCodes.createdAt })
       .from(stepUpCodes)

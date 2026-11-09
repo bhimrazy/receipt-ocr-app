@@ -211,7 +211,9 @@ describe.skipIf(!enabled)("spending aggregates against Postgres", () => {
     const big = await workspace("big");
     // About 10k receipts over two years, a few currencies, some unreadable dates.
     await db((d) =>
-      d.execute(sql`insert into receipts
+      d
+        .execute(
+          sql`insert into receipts
           (organization_id, user_id, status, currency, category, merchant, receipt_date, total, tax, created_at)
         select ${big.organizationId}, ${big.userId}, 'completed',
           (array['USD','USD','USD','EUR','JPY'])[1 + i % 5],
@@ -220,22 +222,30 @@ describe.skipIf(!enabled)("spending aggregates against Postgres", () => {
           case when i % 50 = 0 then null else ${TODAY}::date - (i % 730) end,
           (i % 97) + 0.99, (i % 7) + 0.10,
           (${TODAY}::date - (i % 730))::timestamptz + interval '13 hours'
-        from generate_series(1, 10000) as i`),
+        from generate_series(1, 10000) as i`,
+        )
+        .then((r) => r.rows),
     );
     // Other workspaces share the table, as in production.
     const noise = await workspace("noise");
     await db((d) =>
-      d.execute(sql`insert into receipts (organization_id, status, currency, receipt_date, total, created_at)
+      d
+        .execute(
+          sql`insert into receipts (organization_id, status, currency, receipt_date, total, created_at)
         select ${noise.organizationId}, 'completed', 'USD', ${TODAY}::date - (i % 730),
           10, (${TODAY}::date - (i % 730))::timestamptz
-        from generate_series(1, 40000) as i`),
+        from generate_series(1, 40000) as i`,
+        )
+        .then((r) => r.rows),
     );
-    await db((d) => d.execute(sql`analyze receipts`));
+    await db((d) => d.execute(sql`analyze receipts`).then((r) => r.rows));
 
     const plan = await db((d) =>
-      d.execute<{ "QUERY PLAN": string }>(
-        sql`explain (analyze, buffers) ${spendDashboardSql(big, query({ range: "12m" }))}`,
-      ),
+      d
+        .execute<{ "QUERY PLAN": string }>(
+          sql`explain (analyze, buffers) ${spendDashboardSql(big, query({ range: "12m" }))}`,
+        )
+        .then((r) => r.rows),
     );
     const text = plan.map((r) => r["QUERY PLAN"]).join("\n");
     console.log(`spend dashboard plan, 10k receipts, 12 months:\n${text}`);

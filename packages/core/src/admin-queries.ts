@@ -108,28 +108,32 @@ export const adminOverview = (plans: PlanTable, now = new Date()) =>
         .where(sql`${receipts.createdAt} >= ${ts(chartStart)}`)
         .groupBy(sql`1`);
 
-      const [reads] = await db.execute<{ value: number }>(
-        sql`select ${roundsSince(today)} as value`,
-      );
+      const [reads] = await db
+        .execute<{ value: number }>(sql`select ${roundsSince(today)} as value`)
+        .then((r) => r.rows);
 
       // Anyone at 80% of the smallest daily limit is a candidate; their own plan decides.
       const threshold = Math.ceil(
         Math.min(...Object.values(plans).map((p) => p.receiptsPerDay)) * 0.8,
       );
-      const heavy = await db.execute<{
-        id: string;
-        name: string;
-        email: string;
-        plan: string;
-        used: number;
-      }>(sql`select * from (
+      const heavy = await db
+        .execute<{
+          id: string;
+          name: string;
+          email: string;
+          plan: string;
+          used: number;
+        }>(
+          sql`select * from (
           select u.id, u.name, u.email, u.plan, ${usedSince(sql.raw("u.id"), today)} as used
           from "user" u
           where u.id in (select r.user_id from ocr_rounds r where r.created_at >= ${ts(today)})
         ) t
         where t.used >= ${threshold}
         order by t.used desc
-        limit 50`);
+        limit 50`,
+        )
+        .then((r) => r.rows);
       const nearLimit = heavy
         .map((row) => ({ ...row, limit: policyFor(plans, row.plan).receiptsPerDay }))
         .filter((row) => row.used >= row.limit * 0.8)

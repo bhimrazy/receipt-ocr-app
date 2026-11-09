@@ -3,6 +3,21 @@ import { deleteObjects, getObject, putObject, signedGetUrl } from "@receipt-ocr/
 import { Context, Effect, Layer, Redacted } from "effect";
 import { DatabaseUrl, loadStorageConfig } from "./config";
 import { DbError, NotConfigured, StorageError } from "./errors";
+import { logger } from "./telemetry/logger";
+import { errorFields } from "./telemetry/redact";
+
+/**
+ * Logs `db.pool_error` for an idle client the server dropped (a database restart, a socket that
+ * died while a serverless instance was suspended). The pool has already removed the client.
+ * `createPool` attaches a silent listener, so this is the second one; attached once per pool.
+ */
+function logPoolErrors(client: DbClient) {
+  const pool = client.$client;
+  if (pool.listenerCount("error") > 1) return;
+  pool.on("error", (error) =>
+    logger.error({ event: "db.pool_error", unit: "log", error: errorFields(error) }),
+  );
+}
 
 export class Db extends Context.Tag("@receipt-ocr/core/Db")<
   Db,
@@ -24,6 +39,7 @@ export class Db extends Context.Tag("@receipt-ocr/core/Db")<
       ),
       Effect.map((url) => {
         const client = createDb(Redacted.value(url));
+        logPoolErrors(client);
         return {
           client,
           use: <A>(query: (db: DbClient) => Promise<A>) =>

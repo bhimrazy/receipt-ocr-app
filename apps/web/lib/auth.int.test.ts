@@ -93,9 +93,11 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
   );
 
   it("P1-1: the personal workspace built from a hostile display name is plain text", async () => {
-    const [org] = await db.execute<{ name: string }>(
-      sql`select o.name from organization o join member m on m.organization_id = o.id where m.user_id = ${userId}`,
-    );
+    const [org] = await db
+      .execute<{ name: string }>(
+        sql`select o.name from organization o join member m on m.organization_id = o.id where m.user_id = ${userId}`,
+      )
+      .then((r) => r.rows);
     expect(org?.name).toBe("bInt/b Tester's Workspace");
   });
 
@@ -285,9 +287,11 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     expect(lockedKnown).toEqual({ code: 429, message: expect.any(String) });
     expect(lockedKnown).toEqual(lockedUnknown);
     // Not permanent: ageing the counter past the window reopens sign-in.
-    await db.execute(
-      sql`update rate_limit set last_request = last_request - ${16 * 60 * 1000} where id like 'signin-fail:%'`,
-    );
+    await db
+      .execute(
+        sql`update rate_limit set last_request = last_request - ${16 * 60 * 1000} where id like 'signin-fail:%'`,
+      )
+      .then((r) => r.rows);
     // The real password then clears the count, so a fresh budget of wrong guesses follows.
     expect(await status(attempt(victim, password))).toBe(200);
     for (let i = 0; i < 9; i++) expect(await status(attempt(victim, "wrong-password-1"))).toBe(401);
@@ -330,9 +334,11 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       .set({ stepUpAt: new Date(), stepUpMethod: "totp" })
       .where(eq(session.userId, a.id));
     // Isolate from admins other tests or a shared database may hold.
-    await db.execute(
-      sql`update "user" set banned = true where role like '%admin%' and id not in (${a.id}, ${b.id})`,
-    );
+    await db
+      .execute(
+        sql`update "user" set banned = true where role like '%admin%' and id not in (${a.id}, ${b.id})`,
+      )
+      .then((r) => r.rows);
     const setRole = (actor: typeof a, userId: string, role: string) =>
       auth.api.setRole({ headers: actor.headers, body: { userId, role: role as "user" } });
     expect(await status(setRole(a, a.id, "user"))).toBe(403);

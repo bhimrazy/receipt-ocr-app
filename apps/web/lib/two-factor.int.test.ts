@@ -393,9 +393,11 @@ describe.skipIf(!enabled)("two-factor sign-in and step-up against Postgres", () 
 
   it("needs a step-up to unlink a sign-in method, even right after sign-in", async () => {
     const account = await signUp("unlink");
-    const [credential] = await db.execute<{ id: string }>(
-      sql`select id from account where user_id = ${account.userId} and provider_id = 'credential'`,
-    );
+    const [credential] = await db
+      .execute<{ id: string }>(
+        sql`select id from account where user_id = ${account.userId} and provider_id = 'credential'`,
+      )
+      .then((r) => r.rows);
     const unlink = () =>
       auth.api.unlinkAccount({ headers: account.headers, body: { accountId: credential!.id } });
     expect(await failure(unlink())).toEqual({ status: 403, code: "STEP_UP_REQUIRED" });
