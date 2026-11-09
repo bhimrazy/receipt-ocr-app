@@ -81,7 +81,10 @@ function PhonePreview() {
   return (
     <div className="mx-auto w-full max-w-[16.5rem] rounded-[2.5rem] border border-hairline bg-card/70 p-2 shadow-2xl shadow-black/50 light:shadow-float backdrop-blur-xl sm:hidden">
       <div className="overflow-hidden rounded-[2rem] bg-background">
-        <div aria-hidden className="mx-auto mt-2.5 h-5 w-20 rounded-full bg-border light:bg-foreground/90" />
+        <div
+          aria-hidden
+          className="mx-auto mt-2.5 h-5 w-20 rounded-full bg-border light:bg-foreground/90"
+        />
         <div className="px-4 pt-3">
           <span className="inline-flex items-center gap-0.5 text-xs text-primary">
             <ChevronLeft aria-hidden className="size-4" /> History
