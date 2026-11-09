@@ -7,7 +7,7 @@ plan and checkout reads) is being built separately. This review comments on it b
 
 ## How it was measured
 
-- **Production** (project `rlyovliebwnsqcewvirc`, Postgres 17.11): read-only Management API SQL as
+- **Production** (Postgres 17.11): read-only Management API SQL as
   `supabase_read_only_user`, plus GET calls for the PostgREST, pooler and backup config. Nothing was written. Production
   holds test data only (9 receipts, 13 MB), so its index-usage counts say nothing about scale.
 - **Local volume**: the baseline and `0001_billing` migrations applied to a new database, seeded with 300 workspaces of
