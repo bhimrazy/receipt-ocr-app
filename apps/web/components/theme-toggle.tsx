@@ -104,6 +104,12 @@ export function ThemeToggle({
   );
 }
 
+/** The chosen theme's name, for a row's value; empty while server rendering. */
+export function ThemeChoiceLabel() {
+  const preference = useThemePreference();
+  return preference ? OPTIONS.find((o) => o.value === preference)!.label : null;
+}
+
 /**
  * The Theme row of the desktop account menu. Menu radio items, so the menu's own arrow-key
  * navigation reaches them; choosing one keeps the menu open.

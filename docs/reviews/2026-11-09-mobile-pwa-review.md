@@ -334,3 +334,10 @@ cookies between the installed app and browser tabs, so a cookie would also redir
    before PR 3.
 9. **Install-dialog screenshots.** These need two or three test-data screenshots of Home and a receipt result.
    Recommended: make them from the compose stack with sample receipts.
+
+**Also decided 2026-11-09 (#201):**
+
+- The signed-in app keeps its 16 px phone side gutter; only the auth screens use 24 px, because forms need more air
+  than lists.
+- On the iPhone SE, sign-up's "Already have an account? Sign in" line stays below the fold rather than hiding the
+  logo on short screens.

@@ -223,3 +223,57 @@
     animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 }
+
+/* Pushed screens (components/pushed-screen.tsx) slide in a little from the right and back out on
+   Back, while the rest of the page (root) cross-fades. Transitions draw snapshots above the page,
+   so layout never moves, and clicks during them reach the new page. */
+::view-transition {
+  pointer-events: none;
+}
+
+/* Named so they are drawn above a sliding screen instead of under it. */
+[data-slot="app-bar"] {
+  view-transition-name: app-bar;
+}
+[data-slot="tab-bar"] {
+  view-transition-name: tab-bar;
+}
+::view-transition-group(app-bar),
+::view-transition-group(tab-bar) {
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-old(app-bar),
+  ::view-transition-new(app-bar) {
+    animation-duration: 150ms;
+  }
+  ::view-transition-new(.push-in) {
+    animation: push-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  ::view-transition-old(.push-out) {
+    animation: push-in 160ms cubic-bezier(0.4, 0, 1, 1) both reverse;
+  }
+}
+
+@keyframes push-in {
+  from {
+    opacity: 0;
+    transform: translateX(48px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Nothing moves or fades: the new screen replaces the old one at once. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
