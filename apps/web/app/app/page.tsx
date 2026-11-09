@@ -10,6 +10,7 @@ import { ReceiptList } from "@/components/receipt-list";
 import { NoReadReceipts } from "@/components/dashboard/empty-states";
 import { SpendDashboardView } from "@/components/dashboard/spend-dashboard";
 import { UploadPanel } from "@/components/upload-panel";
+import { UpgradeHomeCard } from "@/components/upgrade/upgrade-home-card";
 import { formatTimeUntil } from "@/lib/format";
 import { errorFields, logger } from "@/lib/log";
 import { getSpendView } from "@/lib/spend";
@@ -34,6 +35,8 @@ import { Suspense } from "react";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { getReceiptCounts, getUsageSummary, listReceiptSummaries } from "@/lib/receipts";
 import { logPageRender } from "@/lib/page-event";
+import { getUpgradeOffer } from "@/lib/upgrade-offer";
+import { usageRatio, WARM_RATIO } from "@/lib/upgrade-level";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -180,23 +183,42 @@ async function HomeTitle() {
 }
 
 async function UploadSection() {
-  const [usage, { policy }] = await Promise.all([getUsageSummary(), getCurrentPlan()]);
+  const [usage, { policy }, offer] = await Promise.all([
+    getUsageSummary(),
+    getCurrentPlan(),
+    getUpgradeOffer(),
+  ]);
   return (
     <UploadPanel
       batchMax={policy.batchMax}
       resetsIn={formatTimeUntil(usage.opensAt)}
+      upgrade={offer ? { audience: offer.audience, pro: offer.pro } : null}
       usage={usage}
     />
   );
 }
 
+/**
+ * The owner's upgrade card, from WARM_RATIO used: earlier, a card would get snoozed long before
+ * it mattered. None at the limit, where the upload panel carries the button.
+ */
+async function UpgradeCard() {
+  const offer = await getUpgradeOffer();
+  if (!offer || offer.audience !== "owner" || offer.dismissed.home || offer.level === "at") {
+    return null;
+  }
+  if (offer.level === "quiet" && usageRatio(offer.usage) < WARM_RATIO) return null;
+  return <UpgradeHomeCard level={offer.level} offer={offer} />;
+}
+
 async function CheckSection() {
   const [counts, { policy }] = await Promise.all([getReceiptCounts(), getCurrentPlan()]);
   return (
-    <>
+    <div className="flex flex-col gap-6">
       <ListPoller active={counts.inFlight > 0} counts={counts} />
       {counts.total === 0 ? <HowItWorks batchMax={policy.batchMax} /> : <ToCheck counts={counts} />}
-    </>
+      <UpgradeCard />
+    </div>
   );
 }
 

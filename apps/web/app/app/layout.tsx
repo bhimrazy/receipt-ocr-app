@@ -10,6 +10,12 @@ import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { SecurityNudge } from "@/components/security/security-nudge";
 import { SecurityPrompt } from "@/components/security/security-prompt";
 import { StepUpProvider } from "@/components/step-up/step-up";
+import { UpgradeBanner } from "@/components/upgrade/upgrade-banner";
+import { UpgradeModal } from "@/components/upgrade/upgrade-modal";
+import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
+import { ASK_OWNER } from "@/lib/upgrade-copy";
+import { getUpgradeOffer } from "@/lib/upgrade-offer";
+import type { UpgradeOffer } from "@/lib/upgrade-level";
 import { errorFields, logger } from "@/lib/log";
 import { getCurrentPlan } from "@/lib/plan-limits";
 import { planLabel } from "@/lib/plans";
@@ -35,14 +41,43 @@ async function loadUsage(): Promise<Usage | null> {
   }
 }
 
-/** Streams in after the shell: the meter's two queries must not hold up the page. Both reads are per-request cached. */
-async function Meter() {
+/**
+ * Streams in after the shell. Both reads are per-request cached, and the layout has already
+ * made them for the upgrade offer. Owners get the upgrade button at every level; a member gets
+ * the "ask the owner" line once the meter is amber.
+ */
+async function Meter({ offer }: { offer: UpgradeOffer | null }) {
   const [usage, { plan }] = await Promise.all([loadUsage(), getCurrentPlan()]);
-  return usage ? <UsageMeter planLabel={planLabel(plan)} usage={usage} /> : null;
+  if (!usage) return null;
+  const owner = offer?.audience === "owner";
+  return (
+    <UsageMeter
+      action={
+        owner ? (
+          <UpgradeTrigger
+            className="w-full"
+            size="sm"
+            surface="meter"
+            variant={offer.level === "quiet" ? "outline" : "default"}
+          >
+            Upgrade to Pro
+          </UpgradeTrigger>
+        ) : null
+      }
+      ownerNote={offer?.audience === "member" ? ASK_OWNER : undefined}
+      planLabel={planLabel(plan)}
+      usage={usage}
+    />
+  );
 }
 
-function MeterSkeleton() {
-  return <Skeleton aria-hidden="true" className="h-[5.25rem] w-full rounded-lg" />;
+function MeterSkeleton({ withAction }: { withAction: boolean }) {
+  return (
+    <Skeleton
+      aria-hidden="true"
+      className={withAction ? "h-[8.25rem] w-full rounded-lg" : "h-[5.25rem] w-full rounded-lg"}
+    />
+  );
 }
 
 // Signed-in pages are private; keep them out of search results even if a link leaks.
@@ -61,7 +96,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     !session.session.impersonatedBy &&
     (scope.role === "owner" || scope.role === "admin");
   // The one-time card after the fifth receipt; never next to the nudge.
-  const [allowance, workspaces, nudge, prompt] = await Promise.all([
+  // The upgrade offer reads the plan, usage, plan limits and checkout settings up front: the
+  // modal, banner and menu item render with the shell. The meter and Home reuse those reads.
+  const [allowance, workspaces, nudge, prompt, offer, plan] = await Promise.all([
     getWorkspaceAllowance(),
     listWorkspaces(),
     mayNudge
@@ -71,7 +108,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         ]).then(([shared, strong]) => shared && !strong)
       : false,
     showSecurityPrompt(session),
+    getUpgradeOffer(),
+    // Only tells the modal when a payment has turned Pro on; a failed read just means Free.
+    getCurrentPlan().then(
+      (current) => current.plan,
+      () => "free" as const,
+    ),
   ]);
+  const ownerOffer = offer?.audience === "owner" ? offer : null;
   const showAdmin = isAdmin(session);
   const user: MenuUser = {
     name: session.user.name ?? null,
@@ -85,8 +129,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     workspaces,
   };
   const meter = (
-    <Suspense fallback={<MeterSkeleton />}>
-      <Meter />
+    <Suspense fallback={<MeterSkeleton withAction={ownerOffer !== null} />}>
+      <Meter offer={offer} />
     </Suspense>
   );
 
@@ -108,7 +152,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <AppSidebarNav showAdmin={showAdmin} />
               <div className="mt-auto flex flex-col gap-3">
                 {meter}
-                <UserMenu showAdmin={showAdmin} user={user} />
+                <UserMenu showAdmin={showAdmin} upgrade={ownerOffer !== null} user={user} />
               </div>
             </aside>
           </div>
@@ -138,7 +182,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               tabIndex={-1}
               className="min-w-0 flex-1 px-4 pt-5 pb-[calc(2rem+var(--app-bottom-inset,0px))] md:px-10 md:py-10"
             >
-              {nudge ? <SecurityNudge /> : prompt ? <SecurityPrompt /> : null}
+              {nudge ? (
+                <SecurityNudge />
+              ) : prompt ? (
+                <SecurityPrompt />
+              ) : ownerOffer?.level === "at" && !ownerOffer.dismissed.banner ? (
+                <UpgradeBanner offer={ownerOffer} />
+              ) : null}
               {children}
             </main>
           </div>
@@ -146,6 +196,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <AppTabBar />
       </div>
       <StepUpProvider />
+      <UpgradeModal offer={ownerOffer} plan={plan} />
     </Toaster>
   );
 }

@@ -3,7 +3,15 @@
 /** `dismissed`: the Home card's or the banner's own "Not now", never closing the modal. */
 export const UPGRADE_ACTIONS = ["opened", "dismissed"] as const;
 /** Where the modal was opened from. `email` and `link` are the `?upgrade=1` deep link, with and without `via=email`. */
-export const UPGRADE_SURFACES = ["home", "meter", "menu", "limit", "banner", "email", "link"] as const;
+export const UPGRADE_SURFACES = [
+  "home",
+  "meter",
+  "menu",
+  "limit",
+  "banner",
+  "email",
+  "link",
+] as const;
 export const UPGRADE_LEVELS = ["quiet", "near", "at"] as const;
 /** Where a checkout started: an upgrade surface, or the billing page's own button. */
 export const CHECKOUT_VIAS = [...UPGRADE_SURFACES, "billing"] as const;

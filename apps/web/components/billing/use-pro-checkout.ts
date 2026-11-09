@@ -46,10 +46,10 @@ const POLL_TRIES = 20;
  * `paid`: refreshing until the plan flips. `slow`: it didn't within POLL_TRIES. `done`: the
  * caller saw Pro arrive. `unavailable`: Paddle.js didn't load (content blockers).
  */
-export type CheckoutState = "idle" | "starting" | "paid" | "slow" | "done" | "error" | "unavailable";
+export type CheckoutState =
+  "idle" | "starting" | "paid" | "slow" | "done" | "error" | "unavailable";
 
-const paddleTheme = () =>
-  document.documentElement.classList.contains("light") ? "light" : "dark";
+const paddleTheme = () => (document.documentElement.classList.contains("light") ? "light" : "dark");
 
 /**
  * Paddle's overlay checkout for the active workspace. `create` asks the server for the
@@ -148,6 +148,12 @@ export function useProCheckout({
     return result.transactionId;
   }
 
+  /** Clears a shown error, e.g. when the modal opens again. */
+  function reset() {
+    setError(null);
+    setState((current) => (current === "error" ? "idle" : current));
+  }
+
   function open(transactionId: string) {
     owner = id;
     window.Paddle?.Checkout.open({
@@ -172,6 +178,7 @@ export function useProCheckout({
     state: done && (state === "paid" || state === "slow") ? ("done" as const) : state,
     error,
     create,
+    reset,
     open,
   };
 }
