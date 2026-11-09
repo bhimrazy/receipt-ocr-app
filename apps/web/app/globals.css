@@ -11,6 +11,10 @@
   }
 }
 
+/* Phones as short as the iPhone SE (667px): the auth screens tighten so the main button and the
+   sign-in/sign-up switch fit without scrolling. */
+@custom-variant short (@media (width < 40rem) and (height < 44rem));
+
 .grid-mask {
   mask-image: radial-gradient(ellipse 60% 50% at 50% 40%, black 20%, transparent 72%);
 }
