@@ -18,7 +18,15 @@ import {
   DrawerTrigger,
 } from "@receipt-ocr/ui/components/drawer";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { ChevronsUpDown, Cookie, LogOut, Settings, ShieldCheck, SunMoon } from "lucide-react";
+import {
+  ChevronsUpDown,
+  Cookie,
+  LogOut,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  SunMoon,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -27,7 +35,9 @@ import { InstallAppMenuItem, InstallAppSheetAction } from "@/components/install-
 import { useInstallAction } from "@/components/use-install-action";
 import { ThemeMenuRow, ThemeToggle } from "@/components/theme-toggle";
 import { CreateWorkspaceDialog, WorkspaceList } from "@/components/workspace-switcher";
+import { OPEN_UPGRADE, openUpgradeModal } from "@/components/upgrade/upgrade-trigger";
 import { openConsentSettingsFrom } from "@/lib/consent/store";
+import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import type { WorkspaceOption } from "@/lib/workspaces";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
@@ -63,16 +73,32 @@ function useSignOut() {
 
 /**
  * Desktop account menu at the foot of the sidebar. The server layout passes the user, so
- * there's no loading flash.
+ * there's no loading flash. `upgrade`: a Free workspace's owner, offered Pro above Settings.
  */
-export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boolean }) {
+export function UserMenu({
+  user,
+  showAdmin,
+  upgrade = false,
+}: {
+  user: MenuUser;
+  showAdmin: boolean;
+  upgrade?: boolean;
+}) {
   const handleSignOut = useSignOut();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const install = useInstallAction("menu", null);
+  // The modal opens once the menu has closed, so focus hands over cleanly.
+  const upgradePending = useRef(false);
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu
+        onOpenChangeComplete={(open) => {
+          if (open || !upgradePending.current) return;
+          upgradePending.current = false;
+          openUpgradeModal("menu", triggerRef.current);
+        }}
+      >
         <DropdownMenuTrigger
           ref={triggerRef}
           aria-label="Account menu"
@@ -93,6 +119,19 @@ export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boole
             <p className="truncate text-xs text-muted-foreground">{user.email}</p>
           </div>
           <DropdownMenuSeparator />
+          {upgrade ? (
+            <DropdownMenuItem
+              onClick={() => {
+                upgradePending.current = true;
+              }}
+            >
+              <Sparkles aria-hidden="true" className="text-primary" />
+              <span className="flex-1">Upgrade to Pro</span>
+              <span className="font-mono text-xs text-muted-foreground">
+                {PRO_PRICE_LABEL.month}/mo
+              </span>
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem render={<Link href="/app/settings" />}>
             <Settings aria-hidden="true" />
             Settings
@@ -171,15 +210,31 @@ export function AccountSheet({
   const install = useInstallAction("menu", null);
   const themeLabel = useId();
 
+  // The meter's upgrade button sits in this sheet: close it and leave focus to the modal.
+  const handingOff = useRef(false);
   useEffect(() => {
     const openSheet = () => setOpen(true);
+    const handOff = () => {
+      handingOff.current = true;
+      setOpen(false);
+    };
     window.addEventListener(OPEN_ACCOUNT_SHEET, openSheet);
-    return () => window.removeEventListener(OPEN_ACCOUNT_SHEET, openSheet);
+    window.addEventListener(OPEN_UPGRADE, handOff);
+    return () => {
+      window.removeEventListener(OPEN_ACCOUNT_SHEET, openSheet);
+      window.removeEventListener(OPEN_UPGRADE, handOff);
+    };
   }, []);
 
   return (
     <>
-      <Drawer onOpenChange={setOpen} open={open}>
+      <Drawer
+        onOpenChange={(next) => {
+          if (next) handingOff.current = false;
+          setOpen(next);
+        }}
+        open={open}
+      >
         <DrawerTrigger
           ref={triggerRef}
           aria-label="Account and workspace"
@@ -187,7 +242,7 @@ export function AccountSheet({
         >
           <Avatar className="size-9 border border-border" user={user} />
         </DrawerTrigger>
-        <DrawerContent>
+        <DrawerContent finalFocus={() => !handingOff.current}>
           <DrawerHeader className="flex-row items-center gap-3">
             <Avatar className="size-10" user={user} />
             <div className="min-w-0">

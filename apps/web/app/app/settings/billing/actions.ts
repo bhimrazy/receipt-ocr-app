@@ -4,8 +4,12 @@ import { Billing, hitRateLimit } from "@receipt-ocr/core";
 import { Cause, Effect, Exit, Option } from "effect";
 import { canManageBilling, getCheckoutFor } from "@/lib/billing";
 import { errorFields, logger } from "@/lib/log";
+import { getUsageSummary } from "@/lib/receipts";
 import { runtime } from "@/lib/runtime";
 import { getSession, isAdmin, requireActiveScope } from "@/lib/session";
+import { track } from "@/lib/telemetry/analytics";
+import { CHECKOUT_VIAS, isOneOf, type CheckoutVia } from "@/lib/upgrade-event";
+import { upgradeLevel } from "@/lib/upgrade-level";
 
 export type PortalTarget = "overview" | "cancel" | "payment";
 
@@ -94,17 +98,26 @@ export async function openBillingPortalAction(
  * Starts a Pro checkout for the active workspace: the server creates the
  * Paddle transaction with the configured price for `interval` and the
  * workspace and buyer in its custom data, and the browser opens that
- * transaction. Owners only, at most a few a minute.
+ * transaction. Owners only, at most a few a minute. `via` says which button started it, for
+ * the `checkout_started` product event; anything outside the closed set is refused.
+ * `workspaceId` is the workspace the page named: a tab left open after switching workspace
+ * is refused rather than checking out a different one.
  */
 export async function startCheckoutAction(
   interval: "month" | "year",
+  via: CheckoutVia,
+  workspaceId: string,
 ): Promise<ActionResult<{ transactionId: string }>> {
   if (interval !== "month" && interval !== "year") {
     return { ok: false, error: "Choose monthly or yearly." };
   }
+  if (!isOneOf(CHECKOUT_VIAS, via)) return { ok: false, error: "Reload the page and try again." };
   const caller = await billingCaller("checkout");
   if (!caller.ok) return caller;
   const { session, scope } = caller;
+  if (workspaceId !== scope.organizationId) {
+    return { ok: false, error: "Your active workspace changed. Reload and try again." };
+  }
   if (!(await getCheckoutFor(isAdmin(session)))) {
     return { ok: false, error: "Paid plans aren't open yet." };
   }
@@ -135,5 +148,14 @@ export async function startCheckoutAction(
     });
     return { ok: false, error: "The checkout couldn't start. Try again in a minute." };
   }
+  // Read on the server, not sent by the browser. Billing's own button has no level.
+  const usage = via === "billing" ? null : await getUsageSummary().catch(() => null);
+  const level = (usage && upgradeLevel(usage)) ?? "none";
+  track({
+    name: "checkout_started",
+    userId: session.user.id,
+    workspaceId: scope.organizationId,
+    props: { interval, via, level },
+  });
   return { ok: true, transactionId: exit.value.transactionId };
 }
