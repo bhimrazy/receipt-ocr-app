@@ -182,6 +182,8 @@ function useLongPress(onLongPress: (id: string) => void) {
       timer.current = setTimeout(() => {
         fired.current = true;
         start.current = null;
+        // The hold may have started selecting the row's text.
+        window.getSelection()?.removeAllRanges();
         navigator.vibrate?.(10);
         onLongPress(id);
       }, 500);
@@ -317,7 +319,9 @@ export function HistoryResults({
             return (
               <li
                 className={cn(
-                  "group relative flex items-center gap-3 transition-colors select-none [-webkit-touch-callout:none] focus-within:bg-wash-subtle hover:bg-wash-subtle active:bg-wash",
+                  "group relative flex items-center gap-3 transition-colors [-webkit-touch-callout:none] focus-within:bg-wash-subtle hover:bg-wash-subtle active:bg-wash",
+                  // Amounts and names stay selectable outside selection mode.
+                  selecting && "select-none",
                   selecting && on && "bg-primary/5",
                 )}
                 key={receipt.id}
