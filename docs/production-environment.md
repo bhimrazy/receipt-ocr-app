@@ -549,14 +549,16 @@ Source maps (security plan M11): `production.yml` builds with `UPLOAD_SOURCE_MAP
 and server maps. A separate step then runs the pinned `sentry-cli` (`.github/vercel-cli`) on the files that deploy:
 the browser bundles in `.vercel/output/static/_next` (not `public/`: `sw.js` must not change), and the server files, which `vercel build` doesn't copy (each function's
 `.vc-config.json` points at them in `apps/web/.next/server` through `filePathMap`, and `vercel deploy` reads them
-from there). `sourcemaps inject` stamps a debug ID into each file and map, and `sourcemaps upload` sends them under
-release = the 7-character commit. The next step deletes every `*.map` in `.vercel/output` and `apps/web/.next` before
+from there). Only bundles with a map on disk (by `sourceMappingURL`, else `<name>.map`) are passed, and the step refuses any `*-manifest.*` file
+(`server-reference-manifest.js` holds the Server Actions encryption key). `sourcemaps inject` stamps a debug ID into
+each file and map, and `sourcemaps upload` sends them under release = the 7-character commit, which the build also
+reports (`GIT_COMMIT_SHA` for the browser bundle, Vercel's `VERCEL_GIT_COMMIT_SHA` on the server). The next step deletes every `*.map` in `.vercel/output` and `apps/web/.next` before
 `vercel deploy` and fails the job if one is left, so none is public. Only the upload step holds the token: not the
 build (it runs repository code), and never Vercel. Sentry matches frames by debug ID (`scrubEvent` keeps the IDs), so
 they show original files, lines and function names.
 
-The upload is best effort: if `SENTRY_AUTH_TOKEN` or one of the `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL`
-variables is missing, or the upload fails, the run shows a warning and deploys anyway, with minified stack traces for
+The upload is best effort: if `SENTRY_AUTH_TOKEN` or one of the `SENTRY_ORG`, `SENTRY_PROJECT` variables is
+missing, or the upload fails or takes over 5 minutes, the run shows a warning and deploys anyway, with minified stack traces for
 that release. Where they live and the token's scope and rotation:
 [deployment.md](deployment.md#5-deploy) and [secrets.md](secrets.md#operator-tokens-how-to-create-each-one).
 Previews and Docker builds emit no maps. Docker: pass `--build-arg SENTRY_DSN=...` and

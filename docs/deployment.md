@@ -134,17 +134,17 @@ Actions tab on `main`; a manual run deploys once CI passed on that commit and pr
 
 The Vercel workflows use two GitHub environments (Settings → Environments):
 
-| Environment         | Used by                                                                                  | Branch policy                       | Secrets                                                                   | Variables                                                         |
-| ------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `vercel-preview`    | `preview.yml`                                                                            | None: previews run from PR branches | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                      | None                                                              |
-| `vercel-production` | `production.yml` (deploy job) and `vercel-cleanup.yml` (`plan`, `delete`), all from main | Selected branches → `main` only     | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `SENTRY_AUTH_TOKEN` | `PRODUCTION_DOMAIN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL` |
+| Environment         | Used by                                                                                  | Branch policy                       | Secrets                                                                   | Variables                                           |
+| ------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------- |
+| `vercel-preview`    | `preview.yml`                                                                            | None: previews run from PR branches | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                      | None                                                |
+| `vercel-production` | `production.yml` (deploy job) and `vercel-cleanup.yml` (`plan`, `delete`), all from main | Selected branches → `main` only     | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `SENTRY_AUTH_TOKEN` | `PRODUCTION_DOMAIN`, `SENTRY_ORG`, `SENTRY_PROJECT` |
 
 Don't add a branch policy to `vercel-preview`, or previews stop, and put nothing there that only production may
 read: a PR branch can change `preview.yml` and print what that environment holds. Create `vercel-production` with
 its branch policy **before** adding secrets to it (an environment without one lets any branch's workflow read them);
 if either environment is missing, GitHub creates it empty on the next run and that workflow fails at `vercel pull`.
-The Sentry values are the organization slug, the project slug and the region URL (for example
-`https://us.sentry.io`); none is secret. Without any of them, or without the token, the deploy warns and goes on
+The Sentry values are the organization and project slugs; neither is secret, and the Sentry URL comes from the
+organization token itself. Without any of them, or without the token, the deploy warns and goes on
 without uploading source maps.
 
 **Every production secret is stored as Vercel _Sensitive_.** Sensitive values can't be read back, so `vercel pull` in
