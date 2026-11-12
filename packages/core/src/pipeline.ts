@@ -24,7 +24,7 @@ import { Ocr, providerOf, type ProviderCooldowns } from "./ocr";
 import { quotaExceeded, quotaGate, type QuotaLimits } from "./quota";
 import { Storage } from "./services";
 import { annotateEvent } from "./telemetry/current";
-import { errorFields } from "./telemetry/redact";
+import { errorFields, sqlState } from "./telemetry/redact";
 import type { WideEventFields } from "./telemetry/schema";
 
 export type StepTiming = { step: string; ms: number };
@@ -157,6 +157,18 @@ const totalCost = (rows: readonly OcrCallRow[]) =>
   );
 
 /**
+ * A failed insert that may still have committed: it failed while committing
+ * (`atCommit`), and not with a server error that rolled it back. No SQLSTATE
+ * (a timeout, a lost socket) or a connection exception (class 08, which a
+ * pooler can send while COMMIT is in flight) leaves the outcome unknown.
+ */
+function mayHaveCommitted(error: { _tag: string; atCommit?: boolean; cause?: unknown }) {
+  if (error._tag !== "DbError" || !error.atCommit) return false;
+  const state = sqlState(error.cause);
+  return state === undefined || state.startsWith("08");
+}
+
+/**
  * Stage 1, always synchronous: validate the file, store it, create the row
  * and enqueue its extraction job. The quota is checked again where the row is
  * created, under the user's lock: a parallel burst can't all pass an earlier
@@ -199,8 +211,17 @@ export const ingestUpload = (input: {
           ? Effect.succeed(result)
           : Effect.fail(quotaExceeded(result.verdict)),
       ),
-      // No row means nothing would ever delete the object.
-      Effect.tapError(() => storage.remove([imageObjectKey]).pipe(Effect.ignore)),
+      // No row means nothing would ever delete the object, so it goes unless
+      // the insert may have committed (see `mayHaveCommitted`); then it stays
+      // and is logged, since deleting it would strand a committed receipt.
+      Effect.tapError((error) =>
+        mayHaveCommitted(error)
+          ? Effect.logError("receipt.ingest_unknown", {
+              receipt_id: id,
+              error: errorFields(error),
+            })
+          : storage.remove([imageObjectKey]).pipe(Effect.ignore),
+      ),
       Effect.ensuring(annotateTimings(timings)),
     );
     return { receipt: inserted.receipt, jobId: inserted.jobId, timings };

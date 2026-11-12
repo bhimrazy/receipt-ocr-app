@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
 import { jsonError, runRoute, withRequestEvent } from "@/lib/http";
 import { kickJob } from "@/lib/jobs";
+import { readCapped } from "@/lib/json-body";
 import type { WideEvent } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -23,14 +24,20 @@ export const POST = withRequestEvent(
 );
 
 async function webhook(request: Request, _context: unknown, event: WideEvent) {
-  // Refuse by the declared length before reading anything; the read is checked again
-  // (in bytes) for a body sent without one or longer than it said.
+  // Refuse by the declared length before reading anything; the read itself stops at the
+  // limit for a body sent without one or longer than it said.
   const declared = request.headers.get("content-length");
   if (declared !== null && !(Number(declared) <= MAX_BODY_BYTES)) {
     return jsonError(413, "Too large");
   }
-  const rawBody = await request.text();
-  if (Buffer.byteLength(rawBody) > MAX_BODY_BYTES) return jsonError(413, "Too large");
+  let bytes: Uint8Array | null;
+  try {
+    bytes = await readCapped(request, MAX_BODY_BYTES);
+  } catch {
+    return jsonError(400, "Unreadable event");
+  }
+  if (!bytes) return jsonError(413, "Too large");
+  const rawBody = new TextDecoder().decode(bytes);
   const signature = request.headers.get("paddle-signature");
 
   return runRoute(

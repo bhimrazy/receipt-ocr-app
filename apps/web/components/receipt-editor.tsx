@@ -24,6 +24,7 @@ import {
 import { Loader2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { apiRequest } from "@/lib/api-request";
 
 type Draft = {
   merchant: string;
@@ -90,15 +91,15 @@ export function ReceiptEditor({
     event.preventDefault();
     setSaving(true);
     setError(null);
-    const res = await fetch(`/api/receipts/${receipt.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(draft),
-    });
+    const result = await apiRequest(
+      `/api/receipts/${receipt.id}`,
+      "PATCH",
+      draft,
+      "Couldn't save your changes.",
+    );
     setSaving(false);
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      setError(body?.error ?? "Couldn't save your changes.");
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
     onClose();

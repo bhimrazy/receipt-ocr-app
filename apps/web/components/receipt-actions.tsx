@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useRef, useState } from "react";
+import { apiRequest } from "@/lib/api-request";
 import { csvFilename, receiptItemsToCsv } from "@/lib/csv";
 import { ReceiptEditor } from "@/components/receipt-editor";
 import { useRetryReceipt } from "@/components/retry-receipt-button";
@@ -51,11 +52,13 @@ function downloadBlob(contents: string, filename: string, type: string) {
 function useDeleteReceipt(receipt: ReceiptWithItems) {
   const router = useRouter();
   return async (): Promise<string | void> => {
-    const res = await fetch(`/api/receipts/${receipt.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      return body?.error ?? "Couldn't delete this receipt. Try again.";
-    }
+    const result = await apiRequest(
+      `/api/receipts/${receipt.id}`,
+      "DELETE",
+      undefined,
+      "Couldn't delete this receipt. Try again.",
+    );
+    if (!result.ok) return result.error;
     toast.add({ title: "Receipt deleted", type: "success" });
     router.push("/app/history");
     router.refresh();

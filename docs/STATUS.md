@@ -360,6 +360,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - **From the [database review](reviews/2026-11-09-database-review.md)** (owner said go on D4 only so far): D1 backups
   (#131, then Supabase Pro at launch), D2 turn off the Supabase Data API and revoke `anon`/`authenticated` grants, D3
   retention and a purge job.
+- **From the 2026-11-12 staff code review (#217):**
+  - A sweep for stored objects that no receipt row references. An upload whose insert fails while committing keeps
+    its object (`receipt.ingest_unknown`), and a failed delete leaves one (`receipt.object_delete_failed`). Purges find
+    objects through rows, so these also survive account and workspace deletion.
+  - Make a missing stored file (`NoSuchKey`) non-retryable in the extract job: today it is a `StorageError` and uses
+    all 4 attempts.
 
 - Linking a new subscription looks up early revoking adjustments in `billing_events` with a sequential scan. Add a
   partial expression index `billing_events (provider, (payload->'adjustment'->>'subscriptionId')) where outcome =

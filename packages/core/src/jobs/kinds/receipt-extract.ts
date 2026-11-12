@@ -6,7 +6,7 @@ import { noCallRow, runExtraction, settleFailure, type ExtractionError } from ".
 import type { ReceiptRepo } from "../../repository";
 import type { Storage } from "../../services";
 import { annotateEvent } from "../../telemetry/current";
-import { errorFields } from "../../telemetry/redact";
+import { errorFields, sqlState } from "../../telemetry/redact";
 import {
   JobDeferred,
   NonRetryableJobError,
@@ -49,6 +49,9 @@ const RETRYABLE_OCR: ReadonlySet<OcrFailureKind> = new Set([
   "provider-error",
 ]);
 
+/** Data exceptions (class 22) and integrity constraint violations (class 23). */
+const isDataError = (cause: unknown) => /^2[23]/.test(sqlState(cause) ?? "");
+
 /** A 429 with no Retry-After still cools its provider down this long. */
 const DEFAULT_COOLDOWN_MS = 30_000;
 /** However long a provider asks for, other jobs try again after at most this. */
@@ -57,7 +60,8 @@ const MAX_COOLDOWN_MS = 10 * 60_000;
 /**
  * Maps a failed attempt to the job's next step:
  * - retry: timeout, rate-limited, provider-error, storage and database errors;
- * - dead now: invalid-output (every model in the chain returned it), bad-image, not-configured (an admin re-runs it
+ * - dead now: a value or row Postgres refuses (SQLSTATE class 22 or 23; the same extraction would fail again),
+ *   invalid-output (every model in the chain returned it), bad-image, not-configured (an admin re-runs it
  *   once keys are fixed), refused and unsupported-file (every model in the
  *   chain was already tried), and an unreadable stored file;
  * - deferred, without spending an attempt: every provider is cooling down.
@@ -99,7 +103,9 @@ export function classifyExtractionError(error: ExtractionError, now = Date.now()
     case "StorageError":
       return new RetryableJobError({ kind: "storage-error" });
     case "DbError":
-      return new RetryableJobError({ kind: "db-error" });
+      return isDataError(error.cause)
+        ? new NonRetryableJobError({ kind: "db-data-error" })
+        : new RetryableJobError({ kind: "db-error" });
     case "ProvidersCooling":
       return new JobDeferred({ kind: "providers-cooling", until: error.until });
   }

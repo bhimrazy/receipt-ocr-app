@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("./runtime", () => ({ runtime: {} }));
 vi.mock("./session", () => ({}));
 
-const { cleanFilters, filtersFromSearchParams, MAX_GROUP_FILTERS } = await import("./receipts");
+const { cleanFilters, filtersFromSearchParams, MAX_GROUP_FILTERS, MAX_PAGE, pageNumber } =
+  await import("./receipts");
 const { exportHref, historyHref, isFiltered } = await import("@/components/history/history-href");
 
 const A = "6f1c1d1e-7a3b-4c2d-9e8f-0a1b2c3d4e5f";
@@ -16,6 +17,18 @@ describe("date filter params", () => {
       to: undefined,
     });
     expect(cleanFilters({ from: "31/01/2026" }).from).toBeUndefined();
+  });
+});
+
+describe("page param", () => {
+  it("clamps a huge or bad ?page= so OFFSET stays a valid bigint", () => {
+    const page = (value: string) => pageNumber(filtersFromSearchParams({ page: value }).page);
+    expect(page("3")).toBe(3);
+    expect(page("99999999999999999999")).toBe(MAX_PAGE);
+    expect(page("0")).toBe(1);
+    expect(page("-5")).toBe(1);
+    expect(page("abc")).toBe(1);
+    expect(pageNumber(Infinity)).toBe(1);
   });
 });
 

@@ -26,7 +26,7 @@ import {
   user,
 } from "@receipt-ocr/db";
 import { Context, Effect, Layer } from "effect";
-import { InvalidInput, type DbError } from "./errors";
+import { DbError, InvalidInput } from "./errors";
 import { liveReceiptJob, STALE_AFTER_MS } from "./jobs/live";
 import { enqueueJob } from "./jobs/queue";
 import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-job";
@@ -40,7 +40,13 @@ import {
   type UsageWindow,
 } from "./usage";
 import { isUuid } from "./ids";
-import { isIsoDay, parseCurrency, parseReceiptDate } from "./receipt-fields";
+import {
+  isIsoDay,
+  parseCurrency,
+  parseReceiptDate,
+  storableAmount,
+  storableQuantity,
+} from "./receipt-fields";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -274,8 +280,6 @@ const toSummary = (row: SummaryRow): ReceiptSummary => ({
   confidence: row.confidence == null ? null : Number(row.confidence),
 });
 
-const decimal = (value: number | null) => (value == null ? null : String(value));
-
 /** The latest receipt date the row's `receipts_receipt_date_check` allows: a day past the UTC upload day. */
 const latestReceiptDate = sql`(${receipts.createdAt} at time zone 'UTC')::date + 1`;
 
@@ -411,8 +415,11 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
   static readonly Live = Layer.effect(
     ReceiptRepo,
     Effect.map(Db, ({ use }) => ({
-      insert: ({ id, scope, fileName, imageObjectKey, priority }, quota) =>
-        use((db) =>
+      insert: ({ id, scope, fileName, imageObjectKey, priority }, quota) => {
+        // Drizzle sends COMMIT only once the callback returns: a failure after
+        // this is set may have committed the row.
+        let committing = false;
+        return use((db) =>
           db.transaction(async (tx): Promise<InsertResult> => {
             await lockQuota(tx, scope, quota.window.scope === "workspace");
             const verdict = quota.decide(await countUsage(tx, scope, quota.window));
@@ -450,9 +457,17 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               ),
             );
             if (!("id" in job)) throw new Error("A new receipt already had a live job");
+            committing = true;
             return { kind: "inserted", receipt: row, jobId: job.id };
           }),
-        ),
+        ).pipe(
+          Effect.mapError((error) =>
+            committing
+              ? new DbError({ message: error.message, cause: error.cause, atCommit: true })
+              : error,
+          ),
+        );
+      },
 
       complete: (id, scope, attempt, extraction, model, calls) =>
         use((db) =>
@@ -466,10 +481,10 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 receiptDate: plausibleDate(parseReceiptDate(extraction.receiptDate)),
                 category: normalizeCategory(extraction.category),
                 currency: parseCurrency(extraction.currency),
-                subtotal: decimal(extraction.subtotal),
-                tax: decimal(extraction.tax),
-                tip: decimal(extraction.tip),
-                total: String(extraction.total),
+                subtotal: storableAmount(extraction.subtotal),
+                tax: storableAmount(extraction.tax),
+                tip: storableAmount(extraction.tip),
+                total: storableAmount(extraction.total),
                 confidence: String(extraction.confidence),
                 rawJson: extraction,
                 model,
@@ -489,9 +504,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                       extraction.items.map((item) => ({
                         receiptId: id,
                         name: item.name,
-                        quantity: Math.max(1, Math.round(item.quantity || 1)),
-                        unitPrice: String(item.unitPrice),
-                        totalPrice: String(item.totalPrice),
+                        quantity: storableQuantity(item.quantity),
+                        unitPrice: storableAmount(item.unitPrice),
+                        totalPrice: storableAmount(item.totalPrice),
                         confidence: String(item.confidence),
                       })),
                     )

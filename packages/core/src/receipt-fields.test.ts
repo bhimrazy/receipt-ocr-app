@@ -1,5 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { isIsoDay, latestReceiptDate, parseCurrency, parseReceiptDate } from "./receipt-fields";
+import {
+  isIsoDay,
+  latestReceiptDate,
+  MAX_ITEM_QUANTITY,
+  parseCurrency,
+  parseReceiptDate,
+  storableAmount,
+  storableQuantity,
+} from "./receipt-fields";
+
+describe("storableAmount", () => {
+  it("keeps any amount numeric(12,2) holds once rounded, negative too", () => {
+    expect(storableAmount(12.5)).toBe("12.5");
+    expect(storableAmount(-3)).toBe("-3");
+    expect(storableAmount(0)).toBe("0");
+    expect(storableAmount(9_999_999_999.99)).toBe("9999999999.99");
+    expect(storableAmount(-9_999_999_999.994)).toBe("-9999999999.994");
+  });
+
+  it("drops a missing amount, or one that would overflow the column", () => {
+    for (const value of [null, undefined, 4111111111111111, 1e12, 9_999_999_999.995, -1e10, NaN]) {
+      expect(storableAmount(value)).toBeNull();
+    }
+  });
+});
+
+describe("storableQuantity", () => {
+  it("rounds to whole units, at least 1", () => {
+    expect(storableQuantity(2.4)).toBe(2);
+    expect(storableQuantity(0.25)).toBe(1);
+    expect(storableQuantity(0)).toBe(1);
+    expect(storableQuantity(-4)).toBe(1);
+    expect(storableQuantity(MAX_ITEM_QUANTITY)).toBe(MAX_ITEM_QUANTITY);
+  });
+
+  it("reads an implausible or missing quantity as 1, so it always fits int4", () => {
+    for (const value of [MAX_ITEM_QUANTITY + 1, 1e12, NaN, null]) {
+      expect(storableQuantity(value)).toBe(1);
+    }
+  });
+});
 
 describe("parseReceiptDate", () => {
   it("keeps a real ISO day from 2000 on, trimmed", () => {

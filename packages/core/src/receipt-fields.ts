@@ -36,6 +36,32 @@ export function parseReceiptDate(value: string | null | undefined): string | nul
   return isIsoDay(text) && text >= EARLIEST_RECEIPT_DATE ? text : null;
 }
 
+/** Largest magnitude in cents a `numeric(12,2)` column holds: 9,999,999,999.99. */
+const MAX_AMOUNT_CENTS = 999_999_999_999;
+
+/**
+ * An amount as a `numeric(12,2)` literal, or null when it is missing or would
+ * overflow the column once rounded to cents. A misread barcode or card number
+ * becomes "not read" instead of failing the whole receipt.
+ */
+export function storableAmount(value: number | null | undefined): string | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.round(Math.abs(value) * 100) <= MAX_AMOUNT_CENTS ? String(value) : null;
+}
+
+/** Largest item quantity kept; anything above is a misread. */
+export const MAX_ITEM_QUANTITY = 1_000_000;
+
+/**
+ * An item quantity in whole units for `receipt_items.quantity`: at least 1, and
+ * 1 (none printed) for a missing or implausible value, so it always fits `int4`.
+ */
+export function storableQuantity(value: number | null | undefined): number {
+  if (value == null || !Number.isFinite(value)) return 1;
+  const units = Math.round(value);
+  return units > MAX_ITEM_QUANTITY ? 1 : Math.max(1, units);
+}
+
 /** An ISO 4217-shaped code in upper case, else null (shown as USD, as before). */
 export function parseCurrency(value: string | null | undefined): string | null {
   const code = value?.trim().toUpperCase() ?? "";

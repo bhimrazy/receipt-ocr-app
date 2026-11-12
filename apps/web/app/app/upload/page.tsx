@@ -7,6 +7,7 @@ import {
   PageHeaderDescription,
   PageHeaderTitle,
 } from "@/components/page-header";
+import { SectionBoundary } from "@/components/section-error";
 import { UploadPanel } from "@/components/upload-panel";
 import { formatTimeUntil } from "@/lib/format";
 import { getCurrentPlan } from "@/lib/plan-limits";
@@ -47,9 +48,11 @@ export default function UploadPage() {
           </PageHeaderDescription>
         </PageHeaderContent>
       </PageHeader>
-      <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-        <Panel />
-      </Suspense>
+      <SectionBoundary label="Upload">
+        <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+          <Panel />
+        </Suspense>
+      </SectionBoundary>
     </div>
   );
 }

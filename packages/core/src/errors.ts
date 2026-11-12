@@ -39,6 +39,11 @@ export class NotConfigured extends Data.TaggedError("NotConfigured")<{
 export class DbError extends Data.TaggedError("DbError")<{
   readonly message: string;
   readonly cause?: unknown;
+  /**
+   * The transaction's statements all ran and it failed while committing, so it
+   * may have committed. Set only by writes that track it (`ReceiptRepo.insert`).
+   */
+  readonly atCommit?: boolean;
 }> {}
 
 /** The billing provider's API failed or answered with something we can't read. */

@@ -15,6 +15,7 @@ import {
   PageHeaderTitle,
 } from "@/components/page-header";
 import { ListPoller } from "@/components/processing-poller";
+import { SectionBoundary } from "@/components/section-error";
 import { isInFlight } from "@/components/receipt-status";
 import {
   cleanFilters,
@@ -27,6 +28,7 @@ import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { Download } from "lucide-react";
 import type { Metadata } from "next";
+import { unstable_rethrow } from "next/navigation";
 import { Suspense, cache } from "react";
 import { logPageRender } from "@/lib/page-event";
 
@@ -38,7 +40,13 @@ const loadPage = cache((key: string) =>
 );
 
 async function Summary({ query }: { query: string }) {
-  const { total, page, pageSize } = await loadPage(query);
+  // Results reports a failed read, with a retry; the header just leaves the count out.
+  const loaded = await loadPage(query).catch((error: unknown) => {
+    unstable_rethrow(error);
+    return null;
+  });
+  if (!loaded) return null;
+  const { total, page, pageSize } = loaded;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <>
@@ -126,12 +134,16 @@ export default async function HistoryPage({
         <HistoryToolbar filters={filters} />
       </Suspense>
       {/* groups */}
-      <Suspense fallback={<Skeleton className="mb-5 h-9 w-full" />}>
-        <Groups filters={filters} selecting={selecting} />
-      </Suspense>
-      <Suspense fallback={<RowsSkeleton />} key={`${query}${selecting}`}>
-        <Results filters={filters} query={query} selecting={selecting} />
-      </Suspense>
+      <SectionBoundary className="mb-5" label="Groups">
+        <Suspense fallback={<Skeleton className="mb-5 h-9 w-full" />}>
+          <Groups filters={filters} selecting={selecting} />
+        </Suspense>
+      </SectionBoundary>
+      <SectionBoundary key={`${query}${selecting}`} label="Receipts">
+        <Suspense fallback={<RowsSkeleton />}>
+          <Results filters={filters} query={query} selecting={selecting} />
+        </Suspense>
+      </SectionBoundary>
     </div>
   );
 }
