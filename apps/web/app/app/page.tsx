@@ -99,7 +99,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
       count: counts.needsReview,
       href: "/app/history?status=needs-review",
       label: "Needs review",
-      hint: "Scanned with low confidence. Compare them with the photo.",
+      hint: "A field is missing, the amounts don't add up, or the date is unclear.",
       icon: TriangleAlert,
       tone: "text-warning border-warning/30 bg-warning/10",
     },
@@ -134,7 +134,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
       {open.length === 0 ? (
         <p className="flex items-start gap-3 px-4 py-5 text-sm text-muted-foreground">
           <CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
-          Nothing to check. Every receipt was scanned with high confidence.
+          Nothing to check. Every receipt passed its checks.
         </p>
       ) : (
         <ul className="divide-y divide-border">

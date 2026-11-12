@@ -10,7 +10,8 @@ test("marking a receipt reviewed replaces its checks with who reviewed it, and U
   const [id] = await seedReceipts(email, ["Review Test Shop"]);
   const sql = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
   try {
-    await sql`update receipts set confidence = 0.6 where id = ${id!}`;
+    // As migration 0003 flags a receipt the old confidence rule did.
+    await sql`update receipts set confidence = 0.6, review_reasons = '{low_confidence}' where id = ${id!}`;
   } finally {
     await sql.end();
   }
