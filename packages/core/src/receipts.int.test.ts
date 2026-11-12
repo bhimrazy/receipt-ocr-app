@@ -432,6 +432,34 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     await run(deleteReceipt({ receiptId: id, scope: a }));
   });
 
+  it("a review needs a completed receipt; an admin can review a member's upload, and an impersonating admin is the reviewer", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    const member = { organizationId: a.organizationId, userId: b.userId, role: "member" };
+    const admin = { organizationId: a.organizationId, userId: a.userId, role: "admin" };
+    const id = (
+      await run(ingestUpload({ scope: member, fileName: "members.jpg", body: JPEG, limits }))
+    ).receipt.id;
+
+    // Still processing: even its uploader can't review it yet.
+    expect(await repo((r) => r.setReviewed(id, member, true))).toBe(false);
+    await extract(id);
+
+    expect(await repo((r) => r.setReviewed(id, admin, true))).toBe(true);
+    expect((await repo((r) => r.get(id, a)))?.reviewedBy).toBe(a.userId);
+
+    expect(
+      await repo((r) => r.setReviewed(id, { ...member, impersonatedBy: a.userId }, true)),
+    ).toBe(true);
+    const impersonated = await repo((r) => r.get(id, a));
+    expect(impersonated?.reviewedBy).toBe(a.userId);
+    expect(impersonated?.reviewer?.name).toBe("alice");
+    expect(await repo((r) => r.setReviewed(id, member, true))).toBe(true);
+    expect((await repo((r) => r.get(id, a)))?.reviewedBy).toBe(b.userId);
+
+    await run(deleteReceipt({ receiptId: id, scope: admin }));
+  });
+
   it("U2: a receipt stuck in processing with no live job reads as failed and stops counting against quota", async () => {
     const stuck = await run(ingestUpload({ scope: a, fileName: "stuck.jpg", body: JPEG, limits }));
     const before = await run(checkQuota(a, limits));

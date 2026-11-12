@@ -399,7 +399,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
     ) => Effect.Effect<boolean, DbError | InvalidInput>;
     /**
      * Marks a completed receipt reviewed by the caller (now), or clears that.
-     * False when nothing matched or the caller may not edit it. Edits keep the
+     * While impersonating, the admin (`impersonatedBy`) is recorded as the
+     * reviewer. False when nothing matched, the receipt isn't completed, or the
+     * caller may not edit it. Edits keep the
      * flag; a new extraction (`complete`) clears it.
      */
     readonly setReviewed: (
@@ -739,7 +741,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             .update(receipts)
             .set(
               reviewed
-                ? { reviewedAt: sql`now()`, reviewedBy: scope.userId }
+                ? // An admin signed in as the user is the one vouching for the values.
+                  { reviewedAt: sql`now()`, reviewedBy: scope.impersonatedBy ?? scope.userId }
                 : { reviewedAt: null, reviewedBy: null },
             )
             .where(and(writable(id, scope), eq(receipts.status, "completed")))
