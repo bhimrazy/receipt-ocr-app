@@ -7,7 +7,7 @@ const ca = process.env.DATABASE_SSL_CA?.trim().replaceAll("\\n", "\n");
 // With a URL, drizzle-kit hands it to pg, which reads `sslmode=require` as verify-full against public
 // CAs. A provider with its own CA (Supabase) needs that CA, which drizzle-kit only takes with fields.
 function credentials() {
-  if (!ca) return { url };
+  if (!ca || !url) return { url };
   const u = new URL(url);
   return {
     host: u.hostname,

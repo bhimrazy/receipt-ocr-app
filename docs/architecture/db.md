@@ -81,7 +81,7 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   (drizzle-kit, also pg) read the same variable in `drizzle.config.ts`; the Database Migration workflow gets it from the
   `staging-db` and `production-db` environments' variables.
   postgres.js read `require` as encrypt-without-verify, which is why the switch to pg broke production for about 15 minutes
-  until it was rolled back. Migrations still run through drizzle-kit's postgres.js and are unaffected.
+  until it was rolled back.
 - **One pool per connection string per process.** `createDb` caches it on `globalThis` (Next can load the module more
   than once). Better Auth, the admin pages and the Effect runtime share it. `DATABASE_POOL_MAX` (default 10). Behind a
   pooler each connection is one of its clients: Supavisor on Nano/Micro allows 200, so instances × 10 must stay under 200. Direct Postgres counts them against `max_connections` instead.
