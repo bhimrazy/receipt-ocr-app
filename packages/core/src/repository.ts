@@ -40,7 +40,13 @@ import {
   type UsageWindow,
 } from "./usage";
 import { isUuid } from "./ids";
-import { isIsoDay, parseCurrency, parseReceiptDate } from "./receipt-fields";
+import {
+  isIsoDay,
+  parseCurrency,
+  parseReceiptDate,
+  storableAmount,
+  storableQuantity,
+} from "./receipt-fields";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -274,8 +280,6 @@ const toSummary = (row: SummaryRow): ReceiptSummary => ({
   confidence: row.confidence == null ? null : Number(row.confidence),
 });
 
-const decimal = (value: number | null) => (value == null ? null : String(value));
-
 /** The latest receipt date the row's `receipts_receipt_date_check` allows: a day past the UTC upload day. */
 const latestReceiptDate = sql`(${receipts.createdAt} at time zone 'UTC')::date + 1`;
 
@@ -466,10 +470,10 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 receiptDate: plausibleDate(parseReceiptDate(extraction.receiptDate)),
                 category: normalizeCategory(extraction.category),
                 currency: parseCurrency(extraction.currency),
-                subtotal: decimal(extraction.subtotal),
-                tax: decimal(extraction.tax),
-                tip: decimal(extraction.tip),
-                total: String(extraction.total),
+                subtotal: storableAmount(extraction.subtotal),
+                tax: storableAmount(extraction.tax),
+                tip: storableAmount(extraction.tip),
+                total: storableAmount(extraction.total),
                 confidence: String(extraction.confidence),
                 rawJson: extraction,
                 model,
@@ -489,9 +493,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                       extraction.items.map((item) => ({
                         receiptId: id,
                         name: item.name,
-                        quantity: Math.max(1, Math.round(item.quantity || 1)),
-                        unitPrice: String(item.unitPrice),
-                        totalPrice: String(item.totalPrice),
+                        quantity: storableQuantity(item.quantity),
+                        unitPrice: storableAmount(item.unitPrice),
+                        totalPrice: storableAmount(item.totalPrice),
                         confidence: String(item.confidence),
                       })),
                     )

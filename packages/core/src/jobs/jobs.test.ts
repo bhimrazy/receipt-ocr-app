@@ -210,6 +210,20 @@ describe("classifyExtractionError", () => {
     );
   });
 
+  it("retries a timeout or a lost connection, but not a value or row Postgres refuses", () => {
+    const db = (cause: unknown) => classifyExtractionError(new DbError({ message: "x", cause }));
+    const pg = (code: string) => Object.assign(new Error("pg"), { code });
+    expect(db(new Error("Query read timeout"))._tag).toBe("RetryableJobError");
+    expect(db(pg("40001"))._tag).toBe("RetryableJobError");
+    expect(db(pg("57014"))._tag).toBe("RetryableJobError");
+    for (const code of ["22003", "22P02", "23505", "23514"]) {
+      expect(db({ cause: pg(code) })).toMatchObject({
+        _tag: "NonRetryableJobError",
+        kind: "db-data-error",
+      });
+    }
+  });
+
   it("carries the longest Retry-After of the chain, and defers when every provider is cooling", () => {
     const limited = ocrError("rate-limited", [
       attempt("rate-limited", 5_000),

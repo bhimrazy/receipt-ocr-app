@@ -148,8 +148,8 @@ export function sanitize(event: Record<string, unknown>): {
   return { fields, dropped: sink.dropped.slice(0, MAX_ITEMS), redacted: sink.redacted };
 }
 
-/** A Postgres SQLSTATE, from the driver error or the error it wraps. */
-function sqlState(error: unknown, depth = 0): string | undefined {
+/** A Postgres SQLSTATE, from the driver error or the error it wraps; undefined for pg's own failures. */
+export function sqlState(error: unknown, depth = 0): string | undefined {
   if (!error || typeof error !== "object" || depth > 3) return undefined;
   const code = (error as { code?: unknown }).code;
   if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) return code;
