@@ -84,14 +84,37 @@ export const receipts = pgTable(
      * `YYYY-MM-DD`. Null when none was read or it failed the plausibility check.
      */
     receiptDate: date("receipt_date", { mode: "string" }),
+    /**
+     * The calendar the receipt printed its date in: 'gregory' | 'bikram-sambat'. Null when unknown (no date, or
+     * read before printed dates were kept); readers treat it as 'gregory'. BS is derived from `receipt_date`, never
+     * stored.
+     */
+    receiptDateCalendar: text("receipt_date_calendar"),
     category: text("category"),
     /** ISO 4217, upper case. Null = not read; readers show it as USD. */
     currency: text("currency").default("USD"),
     subtotal: numeric("subtotal", { precision: 12, scale: 2 }),
     tax: numeric("tax", { precision: 12, scale: 2 }),
     tip: numeric("tip", { precision: 12, scale: 2 }),
+    /** Document-level discounts (EN 16931 BT-107), a positive amount taken off the total. */
+    discount: numeric("discount", { precision: 12, scale: 2 }),
+    /** Document-level charges such as a restaurant service charge (BT-108). */
+    serviceCharge: numeric("service_charge", { precision: 12, scale: 2 }),
     total: numeric("total", { precision: 12, scale: 2 }),
+    /** The seller's bill or invoice number as printed (BT-1). Not unique: duplicates are flagged, never refused. */
+    invoiceNumber: text("invoice_number"),
+    /** The seller's tax registration number as printed: PAN, VAT, GSTIN (BT-31). Can be personal data. */
+    merchantTaxId: text("merchant_tax_id"),
+    /** Model's own overall score: a hint, no longer the "needs review" rule. */
     confidence: numeric("confidence", { precision: 5, scale: 4 }),
+    /**
+     * Codes of the checks that failed (`REVIEW_REASONS` in core). Needs review =
+     * completed, non-empty and not reviewed. No CHECK on the values: readers ignore codes they don't know.
+     */
+    reviewReasons: text("review_reasons")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     status: receiptStatus("status").notNull().default("uploaded"),
     /** Original upload name; kept outside raw_json, which extraction overwrites. */
     fileName: text("file_name"),
@@ -134,6 +157,15 @@ export const receipts = pgTable(
     ),
     check("receipts_currency_check", sql`currency ~ '^[A-Z]{3}$'`),
     check("receipts_attempts_check", sql.raw(`attempts between 1 and ${MAX_EXTRACTION_ATTEMPTS}`)),
+    // One column per check, so code that doesn't write a column can't violate one.
+    check(
+      "receipts_receipt_date_calendar_check",
+      sql`receipt_date_calendar in ('gregory', 'bikram-sambat')`,
+    ),
+    check("receipts_invoice_number_check", sql`char_length(invoice_number) between 1 and 64`),
+    check("receipts_merchant_tax_id_check", sql`char_length(merchant_tax_id) between 1 and 32`),
+    check("receipts_discount_check", sql`discount >= 0`),
+    check("receipts_service_charge_check", sql`service_charge >= 0`),
   ],
 ).enableRLS();
 
@@ -150,11 +182,14 @@ export const receiptItems = pgTable(
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }),
     totalPrice: numeric("total_price", { precision: 12, scale: 2 }),
     confidence: numeric("confidence", { precision: 5, scale: 4 }),
+    /** Printed order, from 0. Items are read `ORDER BY position, id`. */
+    position: smallint("position").notNull().default(0),
   },
   (table) => [
     // Loading a receipt's items and the cascade delete both look up by receipt.
     index("receipt_items_receipt_id_idx").on(table.receiptId),
     check("receipt_items_quantity_check", sql`quantity >= 1`),
+    check("receipt_items_position_check", sql`position >= 0`),
   ],
 ).enableRLS();
 

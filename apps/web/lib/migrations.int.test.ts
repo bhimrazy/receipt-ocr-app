@@ -64,12 +64,13 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is the baseline, billing and receipt review", () => {
+  it("is the baseline, billing, receipt review and receipt fields", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
     expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
       "0000_baseline",
       "0001_billing",
       "0002_receipt_review",
+      "0003_receipt_fields",
     ]);
   });
 
@@ -102,10 +103,16 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "jobs_last_error_kind_check",
       "ocr_calls_status_check",
       "ocr_rounds_plan_check",
+      "receipt_items_position_check",
       "receipt_items_quantity_check",
       "receipts_attempts_check",
       "receipts_currency_check",
+      "receipts_discount_check",
+      "receipts_invoice_number_check",
+      "receipts_merchant_tax_id_check",
+      "receipts_receipt_date_calendar_check",
       "receipts_receipt_date_check",
+      "receipts_service_charge_check",
       "step_up_events_method_check",
       "step_up_events_outcome_check",
     ]);
