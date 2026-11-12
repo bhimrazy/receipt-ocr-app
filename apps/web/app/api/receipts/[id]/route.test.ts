@@ -46,4 +46,18 @@ describe("PATCH /api/receipts/[id] body", () => {
     expect((await patch("{nope")).status).toBe(400);
     expect((await patch("[1]")).status).toBe(400);
   });
+
+  it("accepts reviewed only as a boolean, sent on its own", async () => {
+    expect((await patch(JSON.stringify({ reviewed: "yes" }))).status).toBe(400);
+    expect((await patch(JSON.stringify({ reviewed: true, merchant: "x" }))).status).toBe(400);
+    expect(runRoute).not.toHaveBeenCalled();
+  });
+
+  it("maps a review the repository refuses to 404", async () => {
+    runRoute.mockImplementationOnce(
+      async (_effect: unknown, onSuccess: (updated: boolean) => Response) => onSuccess(false),
+    );
+    expect((await patch(JSON.stringify({ reviewed: false }))).status).toBe(404);
+    expect(runRoute).toHaveBeenCalledOnce();
+  });
 });

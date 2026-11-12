@@ -28,13 +28,8 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import {
-  confidenceLevel,
-  formatConfidence,
-  formatDate,
-  formatDateTime,
-  formatMoney,
-} from "@/lib/format";
+import { confidenceLevel, formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { checksFor, fileNoun } from "@/lib/receipt-checks";
 import { InstallOfferCard } from "@/components/install-offer";
 import { ProcessingPoller } from "@/components/processing-poller";
 import {
@@ -43,66 +38,14 @@ import {
   ReceiptWorkspace,
 } from "@/components/receipt-actions";
 import { receiptTitle } from "@/components/receipt-list";
-import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
+import { ReceiptReviewProvider, ReviewedConfidenceBadge } from "@/components/receipt-review";
+import { StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 
 const FAILED_FALLBACK = {
   photo: "The photo may be blurry, cropped or too dark. Try again, or upload a clearer photo.",
   pdf: "The PDF may be a blurry scan or have no receipt in it. Try again, or upload a clearer copy.",
 };
-
-/** "photo" or "PDF", so failure and review copy names what the person actually uploaded. */
-function fileNoun(receipt: { imageObjectKey: string | null }) {
-  return receipt.imageObjectKey?.endsWith(".pdf") ? "PDF" : "photo";
-}
-
-function toNumber(value: string | null | undefined) {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** Items (or subtotal) + tax + tip vs total; null when there's nothing to compare. */
-function totalsMismatch(receipt: ReceiptWithItems) {
-  const total = toNumber(receipt.total);
-  if (total === null) return null;
-  const itemsSum = receipt.items.length
-    ? receipt.items.reduce((sum, item) => sum + (toNumber(item.totalPrice) ?? 0), 0)
-    : null;
-  const base = toNumber(receipt.subtotal) ?? itemsSum;
-  if (base === null) return null;
-  const expected = base + (toNumber(receipt.tax) ?? 0) + (toNumber(receipt.tip) ?? 0);
-  return Math.abs(expected - total) > 0.01 ? expected : null;
-}
-
-/** Everything a person should look at before trusting this receipt, in plain words. */
-function checksFor(receipt: ReceiptWithItems, money: (value: string | null) => string | null) {
-  const checks: string[] = [];
-  const level = confidenceLevel(receipt.confidence);
-  if (level === "review" || level === "check") {
-    checks.push(
-      `Overall confidence is ${formatConfidence(receipt.confidence)}. Compare the merchant, date and total with the ${fileNoun(receipt)}.`,
-    );
-  }
-  const lowLines = receipt.items.filter((item) => confidenceLevel(item.confidence) === "review");
-  if (lowLines.length > 0) {
-    checks.push(
-      lowLines.length === 1
-        ? "1 line was hard to read. It's marked in Line items."
-        : `${lowLines.length} lines were hard to read. They're marked in Line items.`,
-    );
-  }
-  const expected = totalsMismatch(receipt);
-  if (expected !== null) {
-    checks.push(
-      `The amounts add up to ${money(String(expected))}, but the total says ${money(receipt.total)}. Check for a discount or a misread number.`,
-    );
-  }
-  if (!receipt.merchant) checks.push("No merchant name was found.");
-  if (!receipt.receiptDate) checks.push("No date was found.");
-  if (toNumber(receipt.total) === null) checks.push("No total was found.");
-  return checks;
-}
 
 function NotFound() {
   return <span className="text-muted-foreground">Not found</span>;
@@ -142,11 +85,14 @@ function Field({
 export function ReceiptResult({
   receipt,
   canEdit,
+  viewerName,
   groups,
 }: {
   receipt: ReceiptWithItems;
-  /** False for members viewing someone else's receipt: no edit or delete controls. */
+  /** False for members viewing someone else's receipt: no edit, review or delete controls. */
   canEdit: boolean;
+  /** Shown as the reviewer until the page refreshes after "Looks right". */
+  viewerName: string;
   /** groups: the receipt's group chips and picker, shown under the title. */
   groups?: React.ReactNode;
 }) {
@@ -169,7 +115,7 @@ export function ReceiptResult({
             <>
               <span>{formatDate(receipt.receiptDate) ?? "No date found"}</span>
               {receipt.category ? <Badge variant="secondary">{receipt.category}</Badge> : null}
-              <ConfidenceBadge value={receipt.confidence} />
+              <ReviewedConfidenceBadge value={receipt.confidence} />
             </>
           ) : (
             <>
@@ -466,20 +412,22 @@ export function ReceiptResult({
   );
 
   return (
-    <ReceiptEditingProvider>
-      <div className="mx-auto max-w-6xl">
-        {back}
-        {header}
-        <ReceiptWorkspace
-          canEdit={canEdit}
-          checks={checksFor(receipt, money)}
-          details={details}
-          footer={footer}
-          image={image}
-          items={items}
-          receipt={receipt}
-        />
-      </div>
-    </ReceiptEditingProvider>
+    <ReceiptReviewProvider receipt={receipt} viewerName={viewerName}>
+      <ReceiptEditingProvider>
+        <div className="mx-auto max-w-6xl">
+          {back}
+          {header}
+          <ReceiptWorkspace
+            canEdit={canEdit}
+            checks={checksFor(receipt, money)}
+            details={details}
+            footer={footer}
+            image={image}
+            items={items}
+            receipt={receipt}
+          />
+        </div>
+      </ReceiptEditingProvider>
+    </ReceiptReviewProvider>
   );
 }

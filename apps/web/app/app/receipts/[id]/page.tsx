@@ -3,7 +3,7 @@ import { ReceiptResult } from "@/components/receipt-result";
 import { getReceiptGroups, getWorkspaceGroups } from "@/lib/groups"; // groups
 import { canEditReceipt } from "@/lib/receipt-permissions";
 import { getReceiptForWorkspace } from "@/lib/receipts";
-import { requireActiveScope } from "@/lib/session";
+import { requireActiveScope, requireSession } from "@/lib/session";
 import { notFound } from "next/navigation";
 import { logPageRender } from "@/lib/page-event";
 
@@ -11,9 +11,10 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
   logPageRender("/app/receipts/[id]");
   const { id } = await params;
   // groups: chips and "Add to group" under the title.
-  const [receipt, scope, groups, inGroups] = await Promise.all([
+  const [receipt, scope, session, groups, inGroups] = await Promise.all([
     getReceiptForWorkspace(id),
     requireActiveScope(),
+    requireSession(),
     getWorkspaceGroups(),
     getReceiptGroups(id),
   ]);
@@ -23,6 +24,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
       canEdit={canEditReceipt(scope, receipt)}
       groups={<ReceiptGroups groups={groups} inGroups={inGroups} receiptId={receipt.id} />}
       receipt={receipt}
+      viewerName={session.user.name}
     />
   );
 }

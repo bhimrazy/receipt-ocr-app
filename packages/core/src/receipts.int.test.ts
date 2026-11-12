@@ -384,6 +384,87 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(counts.total).toBe((await list({})).total);
   });
 
+  it("a review takes a receipt out of needs-review until it is read again; only editors can review", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    const needsReview = async () => ({
+      count: (await repo((r) => r.counts(a))).needsReview,
+      listed: (await repo((r) => r.list(a, { status: "needs-review" }, { limit: 50, offset: 0 })))
+        .total,
+    });
+    const id = (await run(ingestUpload({ scope: a, fileName: "review.jpg", body: JPEG, limits })))
+      .receipt.id;
+    await extract(id);
+    // The fixture read picks a receipt by the upload's bytes, and one of them is below the threshold.
+    const setConfidence = (value: string) =>
+      db((d) => d.update(receipts).set({ confidence: value }).where(eq(receipts.id, id)));
+    await setConfidence("0.95");
+    const before = await needsReview();
+    await setConfidence("0.5");
+    const low = await needsReview();
+    expect(low).toEqual({ count: before.count + 1, listed: before.listed! + 1 });
+
+    // A plain member who didn't upload it, and another workspace, can't review it.
+    const member = { organizationId: a.organizationId, userId: b.userId, role: "member" };
+    expect(await repo((r) => r.setReviewed(id, member, true))).toBe(false);
+    expect(await repo((r) => r.setReviewed(id, b, true))).toBe(false);
+    expect(await needsReview()).toEqual(low);
+
+    expect(await repo((r) => r.setReviewed(id, a, true))).toBe(true);
+    expect(await needsReview()).toEqual(before);
+    const reviewed = await repo((r) => r.get(id, a));
+    expect(reviewed?.reviewedBy).toBe(a.userId);
+    expect(reviewed?.reviewedAt).toBeInstanceOf(Date);
+    expect(reviewed?.reviewer?.name).toBe("alice");
+
+    // An edit keeps the review; undo clears it.
+    expect(await repo((r) => r.update(id, a, { merchant: "Reviewed Shop" }))).toBe(true);
+    expect((await repo((r) => r.get(id, a)))?.reviewedAt).toBeInstanceOf(Date);
+    expect(await repo((r) => r.setReviewed(id, a, false))).toBe(true);
+    const undone = await repo((r) => r.get(id, a));
+    expect([undone?.reviewedAt, undone?.reviewedBy, undone?.reviewer]).toEqual([null, null, null]);
+    expect(await needsReview()).toEqual(low);
+
+    // A new extraction clears the review.
+    expect(await repo((r) => r.setReviewed(id, a, true))).toBe(true);
+    await db((d) => d.update(receipts).set({ status: "processing" }).where(eq(receipts.id, id)));
+    const extraction = { ...FIXTURE_RECEIPTS[0]!, confidence: 0.5 };
+    expect(await repo((r) => r.complete(id, a, 1, extraction, "fixture", []))).not.toBeNull();
+    const reread = await repo((r) => r.get(id, a));
+    expect([reread?.reviewedAt, reread?.reviewedBy]).toEqual([null, null]);
+    expect(await needsReview()).toEqual(low);
+
+    await run(deleteReceipt({ receiptId: id, scope: a }));
+  });
+
+  it("a review needs a completed receipt; an admin can review a member's upload, and an impersonating admin is the reviewer", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    const member = { organizationId: a.organizationId, userId: b.userId, role: "member" };
+    const admin = { organizationId: a.organizationId, userId: a.userId, role: "admin" };
+    const id = (
+      await run(ingestUpload({ scope: member, fileName: "members.jpg", body: JPEG, limits }))
+    ).receipt.id;
+
+    // Still processing: even its uploader can't review it yet.
+    expect(await repo((r) => r.setReviewed(id, member, true))).toBe(false);
+    await extract(id);
+
+    expect(await repo((r) => r.setReviewed(id, admin, true))).toBe(true);
+    expect((await repo((r) => r.get(id, a)))?.reviewedBy).toBe(a.userId);
+
+    expect(
+      await repo((r) => r.setReviewed(id, { ...member, impersonatedBy: a.userId }, true)),
+    ).toBe(true);
+    const impersonated = await repo((r) => r.get(id, a));
+    expect(impersonated?.reviewedBy).toBe(a.userId);
+    expect(impersonated?.reviewer?.name).toBe("alice");
+    expect(await repo((r) => r.setReviewed(id, member, true))).toBe(true);
+    expect((await repo((r) => r.get(id, a)))?.reviewedBy).toBe(b.userId);
+
+    await run(deleteReceipt({ receiptId: id, scope: admin }));
+  });
+
   it("U2: a receipt stuck in processing with no live job reads as failed and stops counting against quota", async () => {
     const stuck = await run(ingestUpload({ scope: a, fileName: "stuck.jpg", body: JPEG, limits }));
     const before = await run(checkQuota(a, limits));

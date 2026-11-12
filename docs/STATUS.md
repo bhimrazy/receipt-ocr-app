@@ -121,6 +121,9 @@ reset. **From the first real user onward we never squash again.** Details:
 
 Steps are in [deployment.md](deployment.md).
 
+- Migration `0002_receipt_review` (reviewed receipts): run **Database Migration** on `staging-db`, then
+  `production-db`, before deploying the release that contains it. It adds two nullable columns, a foreign key and a
+  partial index to `receipts`, with `lock_timeout = '3s'`.
 - Reset `staging-db` and `production-db` with the 2026-11-08 SQL (23 tables, two enum types, the `drizzle`
   bookkeeping schema; [release note](deployment.md#squashed-baseline-again-2026-11-08), not `DROP SCHEMA public`),
   run **Database Migration** on `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies
@@ -354,6 +357,13 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- **Receipt review and the totals check (#216):**
+  - The totals check treats a total equal to the subtotal or the line sum as tax-inclusive prices. So a total
+    misread as the subtotal raises no warning. Fixing that needs a `taxIncluded` signal from extraction.
+  - History's confidence badge still shows "Review N%" on a receipt someone has reviewed. The receipts-list PR
+    will handle it.
+  - At millions of `receipts` rows, revisit how review-style columns are added: the FK `NOT VALID` then
+    `VALIDATE`, and the index `CONCURRENTLY`, in separate migrations (`0002` runs as one transaction).
 - **From the 2026-11-09 Home incident** ([note](reviews/2026-11-09-home-stuck-incident.md), fixed in #210 by moving to
   node-postgres; server role timeouts applied the same day, see [db.md](architecture/db.md)):
   - Restore the pushed-screen slide transitions turned off in #205 (`TODO(2026-11-16)` in `pushed-screen.tsx`).

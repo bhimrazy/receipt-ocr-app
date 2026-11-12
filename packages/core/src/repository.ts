@@ -75,7 +75,12 @@ export const canManageAnyReceipt = (role: string | undefined) =>
 /** Receipt ids are UUIDs; anything else can't match, and Postgres would reject the cast. */
 export const isReceiptId = isUuid;
 
-export type ReceiptWithItems = Receipt & { items: ReceiptItem[]; imageUrl?: string };
+export type ReceiptWithItems = Receipt & {
+  items: ReceiptItem[];
+  imageUrl?: string;
+  /** Who marked it reviewed; set by `get`, null once that user is deleted. */
+  reviewer?: { name: string } | null;
+};
 
 /** A History row: table columns only, no items or raw extraction. */
 export type ReceiptSummary = {
@@ -163,8 +168,10 @@ export type RetryClaim =
 /** Upload plus two retries: a receipt that keeps failing can't loop provider calls. */
 export { MAX_EXTRACTION_ATTEMPTS };
 
-/** Completed receipts below this overall confidence are flagged "needs review". */
+/** Completed receipts below this overall confidence are flagged "needs review" until someone reviews them. */
 export const NEEDS_REVIEW_BELOW = 0.9;
+
+const needsReview = sql`${receipts.status} = 'completed' and ${receipts.confidence} < ${String(NEEDS_REVIEW_BELOW)} and ${receipts.reviewedAt} is null`;
 
 /**
  * A `processing` receipt whose job is gone or long overdue (nothing ran the
@@ -220,10 +227,7 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
   }
   if (filters.category) conditions.push(eq(receipts.category, filters.category));
   if (filters.status === "needs-review") {
-    conditions.push(
-      eq(receipts.status, "completed"),
-      lt(receipts.confidence, String(NEEDS_REVIEW_BELOW)),
-    );
+    conditions.push(needsReview);
   } else if (filters.status === "processing") {
     // Matches the Home "Reading now" count, which includes receipts not yet picked up.
     conditions.push(sql`${effectiveStatus} in ('uploaded', 'processing')`);
@@ -397,6 +401,18 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       scope: ReceiptScope,
       patch: ReceiptPatch,
     ) => Effect.Effect<boolean, DbError | InvalidInput>;
+    /**
+     * Marks a completed receipt reviewed by the caller (now), or clears that.
+     * While impersonating, the admin (`impersonatedBy`) is recorded as the
+     * reviewer. False when nothing matched, the receipt isn't completed, or the
+     * caller may not edit it. Edits keep the
+     * flag; a new extraction (`complete`) clears it.
+     */
+    readonly setReviewed: (
+      id: string,
+      scope: ReceiptScope,
+      reviewed: boolean,
+    ) => Effect.Effect<boolean, DbError>;
     /** Deletes the row (items cascade); returns its object key, or null when nothing matched or not allowed. */
     readonly remove: (
       id: string,
@@ -489,6 +505,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 rawJson: extraction,
                 model,
                 errorMessage: null,
+                // A review vouched for the previous values, not these.
+                reviewedAt: null,
+                reviewedBy: null,
                 updatedAt: new Date(),
               })
               .where(currentAttempt(id, scope, attempt))
@@ -615,7 +634,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           if (!isReceiptId(id)) return null;
           const row = await db.query.receipts.findFirst({
             where: inScope(id, scope),
-            with: { items: true },
+            with: { items: true, reviewer: { columns: { name: true } } },
           });
           if (!row || !isStaleCandidate(row)) return row ?? null;
           const [live] = await db
@@ -653,7 +672,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           const [row] = await db
             .select({
               total: sql<number>`count(*)::int`,
-              needsReview: sql<number>`(count(*) filter (where ${receipts.status} = 'completed' and ${receipts.confidence} < ${String(NEEDS_REVIEW_BELOW)}))::int`,
+              needsReview: sql<number>`(count(*) filter (where ${needsReview}))::int`,
               failed: sql<number>`(count(*) filter (where ${effectiveStatus} = 'failed'))::int`,
               inFlight: sql<number>`(count(*) filter (where ${effectiveStatus} in ('uploaded', 'processing')))::int`,
             })
@@ -729,6 +748,22 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               : Effect.succeed(result),
         );
       },
+
+      setReviewed: (id, scope, reviewed) =>
+        use(async (db) => {
+          if (!isReceiptId(id)) return false;
+          const rows = await db
+            .update(receipts)
+            .set(
+              reviewed
+                ? // An admin signed in as the user is the one vouching for the values.
+                  { reviewedAt: sql`now()`, reviewedBy: scope.impersonatedBy ?? scope.userId }
+                : { reviewedAt: null, reviewedBy: null },
+            )
+            .where(and(writable(id, scope), eq(receipts.status, "completed")))
+            .returning({ id: receipts.id });
+          return rows.length > 0;
+        }),
 
       remove: (id, scope) =>
         use(async (db) => {

@@ -135,6 +135,7 @@ Notes:
 erDiagram
   organization ||--o{ receipts : "owns"
   user |o--o{ receipts : "uploaded (user_id)"
+  user |o--o{ receipts : "reviewed (reviewed_by)"
   receipts ||--o{ receipt_items : "has"
   receipts ||..o{ ocr_rounds : "receipt_id, no FK"
   ocr_rounds ||..o{ ocr_calls : "same receipt_id and round"
@@ -154,6 +155,8 @@ erDiagram
     numeric total
     numeric confidence
     jsonb raw_json
+    timestamptz reviewed_at "null = not reviewed"
+    text reviewed_by FK "nullable, set null on user delete"
   }
   receipt_items {
     uuid id PK
@@ -208,6 +211,11 @@ How the ledger is used:
 real `YYYY-MM-DD` day from 2000 on and at most one day past the UTC upload day; anything else, including a Bikram
 Sambat year given as AD, is stored as null and shows as "No date found". Bikram Sambat is meant to stay a view of this
 date, never a second column ([dual-calendar plan](../plans/2026-11-07-dual-calendar-dates.md)).
+
+`receipts.reviewed_at` and `reviewed_by` record that someone who may edit the receipt confirmed it looks right
+(`PATCH /api/receipts/[id]` with `{ reviewed }`, migration `0002_receipt_review`). A reviewed receipt leaves "Needs
+review" (History filter and the Home count) and its checks card shows as one "Reviewed by" line. Edits keep the
+review; a new extraction (`complete`, after a retry) clears both columns.
 
 ## Receipt groups
 
@@ -371,11 +379,11 @@ erDiagram
 
 ## What happens on delete
 
-| When this is deleted | Rows that cascade (are deleted)                                                                                                        | Rows that stay with the id set to null                                                                                                                                                                                               |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `passkey`, `step_up_events`, `step_up_codes` | `receipts.user_id`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by`, `billing_subscriptions.user_id` |
-| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`                                                | `ocr_rounds.organization_id`, `ocr_calls.organization_id`, `billing_subscriptions.organization_id`                                                                                                                                   |
-| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                      | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                                                              |
+| When this is deleted | Rows that cascade (are deleted)                                                                                                        | Rows that stay with the id set to null                                                                                                                                                                                                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `passkey`, `step_up_events`, `step_up_codes` | `receipts.user_id`, `receipts.reviewed_by`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by`, `billing_subscriptions.user_id` |
+| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`                                                | `ocr_rounds.organization_id`, `ocr_calls.organization_id`, `billing_subscriptions.organization_id`                                                                                                                                                           |
+| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                      | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                                                                                      |
 
 Two rules sit on top of the cascades, in [packages/core](core.md):
 
@@ -422,6 +430,7 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `receipts_org_receipt_date_idx` (`organization_id, receipt_date`)                          | History's date filters                                                                                                                                      |
 | `receipts_user_created_at_idx`                                                             | A user's uploads, the set-null on account delete                                                                                                            |
 | `receipts_created_at_idx`                                                                  | Admin upload charts and counts across workspaces                                                                                                            |
+| `receipts_reviewed_by_idx` (`reviewed_by` where not null)                                  | The set-null on account delete; partial, since most receipts are never reviewed                                                                             |
 | `receipt_items_receipt_id_idx`                                                             | Loading items, cascade delete                                                                                                                               |
 | `ocr_rounds_user_created_at_idx`                                                           | Per-user quota windows                                                                                                                                      |
 | `ocr_rounds_org_created_at_idx` (`organization_id, created_at`)                            | A Pro workspace's day and month counts; also the set-null when a workspace is deleted (replaces `ocr_rounds_organization_id_idx`, migration `0001_billing`) |

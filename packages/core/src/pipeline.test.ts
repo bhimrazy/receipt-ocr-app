@@ -130,6 +130,7 @@ function harness(
     counts: () => Effect.die("unused"),
     exportRows: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
+    setReviewed: () => Effect.die("unused"),
     remove: (id) =>
       Effect.sync(() => {
         const row = rows.get(id);
