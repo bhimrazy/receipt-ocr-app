@@ -197,6 +197,10 @@ Open pull requests only.
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
 
+Reviews of 2026-11-12: [design critique](reviews/2026-11-12-design-critique.md),
+[code organization](reviews/2026-11-12-code-organization.md), [principal](reviews/2026-11-12-principal-review.md),
+[receipt fields](reviews/2026-11-12-receipt-fields-review.md), [extraction](reviews/2026-11-12-extraction-review.md).
+
 ## Brand decisions (owner, 2026-11-07)
 
 Logo: "Scan line" (receipt crossed by a bar that overshoots both edges; keep the overshoot in every drawing). Palette:
@@ -467,8 +471,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 2. Tests the way CI runs them: `scripts/test.sh` (compose Postgres on 5433 + RustFS on 9000, fresh test database,
    unit + Playwright e2e). Integration suites: `bun run --filter @receipt-ocr/core test:int` and `--filter @receipt-ocr/web test:int` against a throwaway database.
 3. Conventions:
-   - One worktree per track next to the repo (`git worktree add ../receipt-ocr-<track> -b <branch> origin/main`);
-     remove it after merge.
+   - One worktree per track under `.claude/worktrees/` (git-ignored), branched from `origin/main`; remove it after
+     merge.
    - Squash-merge every PR. For stacked PRs, update each child with merge commits only (no rebase or force push):
      merge the parent branch, then `git merge -s ours <parent squash commit>` after checking the trees match, then
      `git merge origin/main`. GitHub stacks need the async merge endpoint (`PUT …/pulls/{n}/merge-async`).

@@ -18,16 +18,19 @@ simple and portable.
 3. **Keep transactions short.** No network calls (R2, the model, Paddle, email) inside a transaction or while holding an
    advisory lock. Writes that can be retried must be idempotent: a timed-out write may still have committed.
 4. **Every streamed section can fail.** A Suspense section that reads the database has an error state with Try again
-   (`SectionBoundary` in `apps/web/components/section-error.tsx`), never an endless skeleton. Next's own signals pass through (`unstable_rethrow`).
+   (`SectionBoundary` in `apps/web/components/section-error.tsx`), never an endless skeleton. Next's own signals pass
+   through (`unstable_rethrow`).
 5. **Query budget per page.** When a page's data loading changes, count its statements (Home is about 13) and don't
    start more at once than the pool holds. Share per-request reads through `cache()`. No N+1, no `COUNT(*)` that the
    page doesn't show.
-6. **Measure, don't guess.** For a new or changed hot query, run `EXPLAIN (ANALYZE, BUFFERS)` on seeded volume and
-   check the index it uses. Scope every tenant query by `organization_id`.
-7. **Safe migrations.** Through the Database Migration workflow only, never on deploy. Start with
+6. **Scope every tenant query by `organization_id`.**
+7. **Measure, don't guess.** For a new or changed hot query, run `EXPLAIN (ANALYZE, BUFFERS)` on seeded volume and
+   check the index it uses.
+8. **Safe migrations.** Through the Database Migration workflow only, never on deploy. Start with
    `SET LOCAL lock_timeout`, and add `SET LOCAL statement_timeout` for anything that may run past 10 s (index builds,
-   backfills). Old code must keep working against the new schema until the deploy.
-8. **Prove it in CI.** Behaviour that depends on Postgres goes in an `*.int.test.ts` that CI runs (`test:int` in the
+   backfills). Old code must keep working against the new schema until the deploy. Locally, `bun run db:migrate` reads
+   `DIRECT_URL` before `DATABASE_URL`, so point both at the compose database.
+9. **Prove it in CI.** Behaviour that depends on Postgres goes in an `*.int.test.ts` that CI runs (`test:int` in the
    package, listed in `ci.yml`).
 
 Background: [Home incident](../../../docs/reviews/2026-11-09-home-stuck-incident.md),

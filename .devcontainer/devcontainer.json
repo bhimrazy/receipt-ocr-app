@@ -1,0 +1,5 @@
+{
+  "name": "receipt-ocr-app",
+  "image": "mcr.microsoft.com/devcontainers/universal:6.1.12@sha256:7d644a3e845e78e2175c9c265a383436c93ab740e77947bbcaff9592e39f7205",
+  "postCreateCommand": "bash .devcontainer/setup.sh"
+}
