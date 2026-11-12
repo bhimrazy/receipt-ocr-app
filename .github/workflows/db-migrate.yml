@@ -122,7 +122,7 @@ jobs:
             }
             const sslmode = url.searchParams.get("sslmode") ?? "";
             if (["require", "verify-ca", "verify-full"].includes(sslmode) && !process.env.DATABASE_SSL_CA?.trim()) {
-              console.log(`::error::DIRECT_URL asks for TLS but DATABASE_SSL_CA is not set in the ${target} environment's variables; pg would verify against public CAs only.`);
+              console.log(`::error::DIRECT_URL asks for TLS but DATABASE_SSL_CA is not set in the variables of the ${target} environment; pg would verify against public CAs only.`);
               process.exit(1);
             }
           '
