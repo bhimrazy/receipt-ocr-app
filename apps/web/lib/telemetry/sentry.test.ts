@@ -31,6 +31,15 @@ describe("parseSentryDsn", () => {
     expect(sentryRelease({ VERCEL_GIT_COMMIT_SHA: "9bd27c4aaaaaaaa" })).toBe("9bd27c4");
     expect(sentryRelease({})).toBeUndefined();
   });
+
+  it("prefers the commit the deploy workflow passes over Vercel's", () => {
+    expect(
+      sentryRelease({ GIT_COMMIT_SHA: "aaaaaaa1111", VERCEL_GIT_COMMIT_SHA: "bbbbbbb2222" }),
+    ).toBe("aaaaaaa");
+    expect(sentryRelease({ GIT_COMMIT_SHA: "", VERCEL_GIT_COMMIT_SHA: "bbbbbbb2222" })).toBe(
+      "bbbbbbb",
+    );
+  });
 });
 
 const leaky = (): ErrorEvent => ({
@@ -118,6 +127,22 @@ describe("scrubEvent", () => {
       lineno: 1,
     });
     expect(out.exception?.values?.[1]?.value).toBe("Failed query: select … [redacted]");
+  });
+
+  it("keeps source-map debug IDs and drops other debug images", () => {
+    const id = "0f3e7a52-1b6c-4d2e-8f90-aabbccddeeff";
+    const event = leaky();
+    event.debug_meta = {
+      images: [
+        { type: "sourcemap", code_file: "/var/task/app.js?x=1", debug_id: id },
+        { type: "sourcemap", code_file: "/var/task/b.js", debug_id: "not an id" },
+        { type: "macho", debug_id: id, image_addr: "0x1" },
+      ],
+    };
+    expect(scrubEvent(event).debug_meta).toEqual({
+      images: [{ type: "sourcemap", code_file: "/var/task/app.js", debug_id: id }],
+    });
+    expect(scrubEvent(leaky()).debug_meta).toBeUndefined();
   });
 
   it("keeps navigation and fetch breadcrumbs with scrubbed URLs, and drops console and clicks (B5)", () => {

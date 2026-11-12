@@ -18,6 +18,10 @@ const sentryBrowserEnv = {
   NEXT_PUBLIC_SENTRY_ENVIRONMENT: sentry ? sentryEnvironment(process.env) : "",
 };
 
+// Set only by the production workflow, which uploads the maps to Sentry and deletes them before
+// deploy. Other builds (previews, Docker) ship none: browser maps are served as static files.
+const emitSourceMaps = process.env.UPLOAD_SOURCE_MAPS === "1";
+
 const contentSecurityPolicy = buildContentSecurityPolicy(
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
   {
@@ -76,10 +80,12 @@ const nextConfig: NextConfig = {
     "@receipt-ocr/ui",
   ],
   poweredByHeader: false,
+  productionBrowserSourceMaps: emitSourceMaps,
   env: sentryBrowserEnv,
   // Loaded only when SENTRY_DSN is set; kept out of the bundle, as Sentry's Node SDK expects.
   serverExternalPackages: ["@sentry/node"],
   experimental: {
+    serverSourceMaps: emitSourceMaps,
     // Tab switches within 30 s reuse the page already fetched instead of rendering it again on the
     // server. Mutations call router.refresh() or a Server Action, which drop the whole client
     // cache, so edits show at once. Server-side auth checks are untouched: only what the browser

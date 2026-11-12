@@ -108,11 +108,14 @@ jobs:
     if: needs.gate.outputs.deploy == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 20
-    environment: vercel
+    # Main-only (deployment branch policy), so its secrets, SENTRY_AUTH_TOKEN among them, never reach
+    # PR runs; previews use `vercel-preview`. See docs/deployment.md, Deploy.
+    environment: vercel-production
     permissions:
       contents: read
     env:
       VERCEL_BIN: ${{ github.workspace }}/.github/vercel-cli/node_modules/.bin/vercel
+      SENTRY_BIN: ${{ github.workspace }}/.github/vercel-cli/node_modules/.bin/sentry-cli
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
@@ -123,7 +126,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-bun
 
-      - name: Install Vercel CLI (pinned, own lockfile)
+      - name: Install Vercel and Sentry CLIs (pinned, own lockfile)
         run: |
           bun install --frozen-lockfile --cwd .github/vercel-cli
 
@@ -134,9 +137,107 @@ jobs:
           "$VERCEL_BIN" pull --yes --environment=production
 
       # No token for the build step: it runs repository code, which only needs the pulled settings.
+      # UPLOAD_SOURCE_MAPS makes Next emit browser and server maps (next.config.ts). GIT_COMMIT_SHA
+      # is the release the browser bundle reports when the pulled VERCEL_GIT_COMMIT_SHA is empty;
+      # the server reads VERCEL_GIT_COMMIT_SHA, which the deploy sets from the same checkout.
       - name: Build project
+        env:
+          UPLOAD_SOURCE_MAPS: "1"
+          GIT_COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           "$VERCEL_BIN" build --prod
+
+      # Runs no repository code: only the pinned Sentry CLI reads the build output while the token
+      # is set. Debug IDs tie each file to its map; the release (the short commit the SDK reports)
+      # only groups the upload. A missing setting or a failed upload warns and the deploy goes on
+      # with unreadable stack traces, never with maps. The org token carries the Sentry URL.
+      - name: Upload source maps to Sentry
+        id: sentry
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          for name in SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT; do
+            if [ -z "${!name}" ]; then
+              echo "::warning::$name is not set in the vercel-production environment; source maps not uploaded."
+              exit 0
+            fi
+          done
+          # Browser bundles are in .vercel/output/static/_next; the rest of static is public/, hard
+          # linked to the checkout and left alone (sw.js must not change). Server files are deployed
+          # from where Next wrote them (each function's .vc-config.json lists them in filePathMap).
+          # A function that holds its own copies has a `.next` inside instead.
+          server=()
+          while IFS= read -r dir; do
+            if [ -d "$dir" ]; then server+=("$dir"); fi
+          done < <(
+            find .vercel/output/functions -name .vc-config.json -not -path '*/node_modules/*' \
+              -exec jq -r '.filePathMap[]?' {} + 2>/dev/null |
+              sed -n 's#^\(\(.*/\)\{0,1\}\.next/server\)/.*\.js$#\1#p' | sort -u
+          )
+          if [ "${#server[@]}" -eq 0 ]; then
+            while IFS= read -r dir; do server+=("$dir"); done < <(
+              find .vercel/output/functions -type d -name .next -not -path '*/node_modules/*' -prune 2>/dev/null | sort
+            )
+          fi
+          dirs=("${server[@]}")
+          if [ -d .vercel/output/static/_next ]; then dirs+=(.vercel/output/static/_next); fi
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "::warning::No static or server files found in .vercel/output; source maps not uploaded."
+            exit 0
+          fi
+          if [ "${#server[@]}" -eq 0 ]; then
+            echo "::warning::No server files found through .vercel/output/functions; uploading browser maps only."
+          fi
+          # Only bundles with a map on disk, and never a manifest: server-reference-manifest.js
+          # holds the Server Actions encryption key. The map is named by the bundle's
+          # sourceMappingURL (browser bundles are renamed after their map is written) or else
+          # sits next to it as <name>.map.
+          files=()
+          while IFS= read -r -d '' js; do
+            url=$(tail -c 4096 "$js" | sed -n 's|^//# sourceMappingURL=\([^ ]*\)$|\1|p' | tail -n 1)
+            # Percent-encoded: server chunk names hold brackets like [externals].
+            map="$(dirname "$js")/$(printf '%b' "${url//%/\\x}")"
+            if [ -z "$url" ] || [ ! -f "$map" ]; then map="$js.map"; fi
+            if [ -f "$map" ]; then files+=("$js" "$map"); fi
+          done < <(find "${dirs[@]}" -name '*.js' -not -path '*/node_modules/*' -print0)
+          for file in "${files[@]}"; do
+            case "${file##*/}" in
+              *-manifest.*)
+                echo "::error::Refusing to upload $file: manifests can hold keys."
+                exit 1
+                ;;
+            esac
+          done
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::warning::No source maps found in the build output; nothing uploaded."
+            exit 0
+          fi
+          echo "Uploading $(( ${#files[@]} / 2 )) files with their maps."
+          "$SENTRY_BIN" sourcemaps inject --ignore '*-manifest.*' "${files[@]}"
+          "$SENTRY_BIN" sourcemaps upload --ignore '*-manifest.*' \
+            --release "${COMMIT_SHA:0:7}" "${files[@]}"
+
+      - name: Warn if the source-map upload failed
+        if: steps.sentry.outcome == 'failure'
+        run: |
+          echo "::warning::Source-map upload to Sentry failed; deploying without it (stack traces stay minified for this release)."
+
+      # Browser maps left in the output would be served as static files, and a server map would
+      # ship if a function listed it. Fails the job if any is left.
+      - name: Delete source maps
+        run: |
+          find .vercel/output apps/web/.next -name '*.map' -delete
+          left=$(find .vercel/output apps/web/.next -name '*.map' -print -quit)
+          if [ -n "$left" ]; then
+            echo "::error::Source map left in the build output: $left"
+            exit 1
+          fi
 
       - name: Deploy to production
         env:

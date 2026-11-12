@@ -25,9 +25,12 @@ export function parseSentryDsn(value: string | undefined): SentryDsn | null {
   return { dsn: raw, ingestOrigin: url.origin };
 }
 
-/** The short commit SHA, as `/api/health` reports it, so an issue names the build that threw. */
+/**
+ * The short commit SHA, so an issue names the build that threw. `GIT_COMMIT_SHA` comes first: the
+ * production workflow sets it at build to the commit whose source maps it uploads.
+ */
 export function sentryRelease(env: Record<string, string | undefined>): string | undefined {
-  const sha = env.VERCEL_GIT_COMMIT_SHA || env.GIT_COMMIT_SHA;
+  const sha = env.GIT_COMMIT_SHA || env.VERCEL_GIT_COMMIT_SHA;
   return sha ? sha.slice(0, 7) : undefined;
 }
 

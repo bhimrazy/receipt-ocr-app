@@ -29,7 +29,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    environment: vercel
+    environment: vercel-production
     permissions: {}
     outputs:
       ids: ${{ steps.plan.outputs.ids }}
@@ -46,7 +46,7 @@ jobs:
           MIN_AGE_DAYS: ${{ inputs.preview_min_age_days }}
         run: |
           set -euo pipefail
-          [ -n "$PRODUCTION_DOMAIN" ] || { echo "::error::Set PRODUCTION_DOMAIN in the vercel environment"; exit 1; }
+          [ -n "$PRODUCTION_DOMAIN" ] || { echo "::error::Set PRODUCTION_DOMAIN in the vercel-production environment"; exit 1; }
           [[ "$KEEP" =~ ^[0-9]+$ && "$KEEP" -ge 1 ]] || { echo "::error::keep_production must be 1 or more"; exit 1; }
           [[ "$MIN_AGE_DAYS" =~ ^[0-9]+$ ]] || { echo "::error::preview_min_age_days must be 0 or more"; exit 1; }
           api() { curl -sS --fail-with-body -H @- "https://api.vercel.com$1" <<< "Authorization: Bearer $VERCEL_TOKEN"; }
@@ -96,7 +96,7 @@ jobs:
     needs: [plan, approve]
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    environment: vercel
+    environment: vercel-production
     permissions: {}
     steps:
       - name: Delete the planned deployments

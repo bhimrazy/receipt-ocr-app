@@ -51,7 +51,7 @@ sequenceDiagram
   allows 100 deployments a day, shared with production. A PR gets one only when it carries the `preview` label, and the
   deploy runs once, when the label is added; later pushes don't redeploy. To refresh, remove and re-add the label. The
   repository variable `PREVIEW_MODE=auto` also deploys pushes to ready-for-review PRs that change something the app
-  ships, and a push to the `preview` branch always deploys the fixed preview domains. They run in the GitHub environment `vercel`, like production, and use the Vercel project's preview environment,
+  ships, and a push to the `preview` branch always deploys the fixed preview domains. They run in the GitHub environment `vercel-preview` (no branch policy; production uses the main-only `vercel-production`), and use the Vercel project's preview environment,
   which points at the staging database. They never migrate it, so a PR's own migration isn't there until it merges.
   The app's origin on a preview is its own host (`VERCEL_BRANCH_URL`, else `VERCEL_URL`) unless `BETTER_AUTH_URL` is
   set, and both preview hosts stay trusted either way ([`lib/env.ts`](../../../apps/web/lib/env.ts)). Dependabot PRs are skipped because they get no secrets.
@@ -64,7 +64,9 @@ sequenceDiagram
   lockfile); a manual run deploys only if CI passed on its commit and the newest
   successful `production-db` migration run had the same `apps/web/drizzle/`.
 - The Vercel token is given only to the `pull` and `deploy` steps. The build step runs repository code and gets no
-  token. Deploys upload one archive (`--archive=tgz`) to stay under the free plan's file-upload quota.
+  token. Production builds with source maps; the next step uploads them to Sentry with the pinned `sentry-cli` and
+  `SENTRY_AUTH_TOKEN` (best effort: a failure warns and the deploy goes on), and every map is deleted before
+  `vercel deploy`, which fails the job if one is left ([production-environment.md](../../production-environment.md#9c-sentry)). Deploys upload one archive (`--archive=tgz`) to stay under the free plan's file-upload quota.
 
 ## Migrations run by hand, first
 
