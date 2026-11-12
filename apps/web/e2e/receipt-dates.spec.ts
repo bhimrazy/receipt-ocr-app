@@ -28,7 +28,7 @@ test("a receipt that printed Bikram Sambat shows BS first, and its date can be c
   await expect(page.getByRole("radio", { name: "Bikram Sambat (BS)" })).toBeChecked();
   const date = page.getByLabel("Date", { exact: true });
   await expect(date).toHaveValue("2080-04-09");
-  await date.fill("2080-04-32");
+  await date.fill("2080-05-32"); // Bhadra 2080 has 31 days
   await expect(page.getByText("Enter a BS date as YYYY-MM-DD, like 2080-04-09.")).toBeVisible();
   await date.fill("2080-04-10");
   await expect(page.getByText("26 Jul 2023 in AD")).toBeVisible();
@@ -38,7 +38,7 @@ test("a receipt that printed Bikram Sambat shows BS first, and its date can be c
   // Setting the date clears the date check.
   await expect(page.getByText("10 Shrawan 2080").first()).toBeVisible();
   await expect(card).toBeHidden();
-  await expect(page.getByText("SI-0042-80/81")).toBeVisible();
+  await expect(page.getByText("SI-0042-80/81", { exact: true })).toBeVisible();
 
   // Switching to AD keeps the day and stops showing BS.
   await page.getByRole("button", { name: "Edit details" }).click();
