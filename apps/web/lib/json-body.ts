@@ -6,7 +6,7 @@ import { jsonError } from "./http";
 const MAX_JSON_BYTES = 16 * 1024;
 
 /** The body's bytes, or null once it passes the limit; stops reading at that point. */
-async function readCapped(request: Request, limit: number): Promise<Uint8Array | null> {
+export async function readCapped(request: Request, limit: number): Promise<Uint8Array | null> {
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
