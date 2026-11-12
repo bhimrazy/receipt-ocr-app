@@ -199,7 +199,14 @@ Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (fou
 
 Reviews of 2026-11-12: [design critique](reviews/2026-11-12-design-critique.md),
 [code organization](reviews/2026-11-12-code-organization.md), [principal](reviews/2026-11-12-principal-review.md),
-[receipt fields](reviews/2026-11-12-receipt-fields-review.md), [extraction](reviews/2026-11-12-extraction-review.md).
+[receipt fields](reviews/2026-11-12-receipt-fields-review.md), [extraction](reviews/2026-11-12-extraction-review.md),
+[dates and fields research](reviews/2026-11-12-dates-and-fields-research.md); plan: [edge detection](plans/2026-11-12-edge-detection.md).
+
+Owner decisions (2026-11-12): one stored AD `receipt_date` plus `receipt_date_calendar` (`gregory` | `bikram-sambat`), BS
+derived and shown only for receipts printed in BS; BS wins over a disagreeing AD date on NPR bills, flagged. New fields
+`invoice_number`, `merchant_tax_id`, `discount`, `service_charge`, `review_reasons`, `receipt_items.position`.
+"Needs review" comes from deterministic checks, not model scores; the model may leave merchant, total and currency
+empty. Edge detection: auto-crop only when confident, then the benchmarked redesign.
 
 ## Brand decisions (owner, 2026-11-07)
 
