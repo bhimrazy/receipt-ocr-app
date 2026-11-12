@@ -104,6 +104,17 @@ test("on a phone, Select turns rows into checkboxes with actions over the tab ba
   await page.getByRole("checkbox", { name: "Select Bookshop" }).check();
   const bar = page.getByRole("toolbar", { name: "Selected receipts" });
   await expect(bar).toBeInViewport();
+  // The bar replaces the tab bar, Scan's raised button included.
+  const tabs = page.locator("[data-slot=tab-bar]");
+  await expect(tabs).toBeHidden();
+  await expect(tabs.locator('a[href*="/app/upload"]')).toBeHidden();
+  // The last row clears the bar.
+  const lastRow = page.getByRole("list", { name: "Receipts" }).getByRole("listitem").last();
+  await lastRow.scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const rowBox = (await lastRow.boundingBox())!;
+  const barBox = (await bar.boundingBox())!;
+  expect(rowBox.y + rowBox.height).toBeLessThanOrEqual(barBox.y);
   await bar.getByRole("button", { name: "Delete" }).click();
   await page
     .getByRole("alertdialog", { name: "Delete 2 receipts?" })
@@ -112,5 +123,7 @@ test("on a phone, Select turns rows into checkboxes with actions over the tab ba
   await expect(page.getByText("Deleted 2 receipts")).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
   await expect(bar).toBeHidden();
+  await expect(tabs).toBeVisible();
+  await expect(tabs.getByRole("link", { name: "Scan" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

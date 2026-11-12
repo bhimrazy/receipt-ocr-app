@@ -19,7 +19,7 @@ import { toast } from "@receipt-ocr/ui/components/toast";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Download, FolderPlus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { addReceiptsRequest, createGroupRequest } from "@/components/groups/api";
 import { nextGroupColor } from "@/components/groups/group-colors";
 import { GroupPicker } from "@/components/groups/group-picker";
@@ -231,6 +231,14 @@ export function SelectionBars({
   onAction: (pending: PendingAction) => void;
 }) {
   const { selection, setSelection, selecting, organizationId } = useSelection();
+  // The tab bar (and Scan's raised button, which rises above it) hides while this bar
+  // replaces it; the page keeps the tab bar's bottom inset, so the last row stays clear.
+  useEffect(() => {
+    if (!selecting) return;
+    const root = document.documentElement;
+    root.setAttribute("data-selecting", "");
+    return () => root.removeAttribute("data-selecting");
+  }, [selecting]);
   const exporter = useExport(organizationId, filters, view);
   const n = selectedCount(selection);
   const none = n === 0;

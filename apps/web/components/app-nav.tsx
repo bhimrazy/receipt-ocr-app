@@ -108,6 +108,7 @@ export function SidebarNav({ items, label = "Main" }: { items: NavItem[]; label?
 /**
  * Fixed bottom tab bar below md, above the home indicator. `center` adds a raised primary
  * action in the middle slot. Pages pad themselves by `--app-bottom-inset` (styles.css).
+ * Hidden while `<html data-selecting>`: a page's selection bar takes its place and height.
  */
 export function BottomTabBar({
   items,
@@ -131,7 +132,7 @@ export function BottomTabBar({
   return (
     <nav
       aria-label={label}
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur md:hidden [:root[data-selecting]_&]:hidden"
       data-slot="tab-bar"
     >
       <ul className="grid h-[var(--tabbar-h,4rem)] auto-cols-fr grid-flow-col">
