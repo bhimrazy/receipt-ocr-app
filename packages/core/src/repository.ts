@@ -33,6 +33,7 @@ import { liveReceiptJob, STALE_AFTER_MS } from "./jobs/live";
 import { enqueueJob } from "./jobs/queue";
 import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-job";
 import { storageDeleteJob } from "./jobs/storage-delete-job";
+import { MAX_BULK_DELETE } from "./bulk-limits";
 import type { QuotaVerdict } from "./quota";
 import { Db } from "./services";
 import {
@@ -136,8 +137,7 @@ export type ReceiptSort = {
 
 const NEWEST_FIRST: ReceiptSort = { by: "uploaded", dir: "desc" };
 
-/** Most receipts one bulk delete removes; one transaction and one cleanup job each. */
-export const MAX_BULK_DELETE = 1000;
+export { MAX_BULK_DELETE };
 
 /**
  * What a bulk delete removes: chosen receipts, or every receipt matching History's filters.
@@ -206,6 +206,13 @@ export type RetryClaim =
   | { kind: "not-found" }
   | { kind: "not-retryable" }
   | { kind: "attempts-exhausted" };
+
+/** Thrown inside the bulk delete transaction to roll it back. */
+class ListChanged extends Error {
+  constructor(readonly matched: number) {
+    super("The receipts changed during the delete");
+  }
+}
 
 /** Upload plus two retries: a receipt that keeps failing can't loop provider calls. */
 export { MAX_EXTRACTION_ATTEMPTS };
@@ -336,7 +343,7 @@ function sortOrder({ by, dir }: ReceiptSort): SQL[] {
       : by === "total"
         ? receipts.total
         : sql`lower(${receipts.merchant})`;
-  return [sql`${key} ${sql.raw(dir)} nulls last`, order(receipts.id)];
+  return [sql`${key} ${dir === "asc" ? sql`asc` : sql`desc`} nulls last`, order(receipts.id)];
 }
 
 type SummaryRow = {
@@ -457,6 +464,13 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       filters: ReceiptFilters,
       page: { limit: number; offset: number; total?: boolean; sort?: ReceiptSort },
     ) => Effect.Effect<{ rows: ReceiptSummary[]; total: number | null }, DbError>;
+    /** Ids of the receipts matching `filters`, in `sort` order, at most `limit`. */
+    readonly matchingIds: (
+      scope: ReceiptScope,
+      filters: ReceiptFilters,
+      limit: number,
+      sort?: ReceiptSort,
+    ) => Effect.Effect<string[], DbError>;
     readonly counts: (scope: ReceiptScope) => Effect.Effect<ReceiptCounts, DbError>;
     readonly exportRows: (
       scope: ReceiptScope,
@@ -749,6 +763,17 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           };
         }),
 
+      matchingIds: (scope, filters, limit, sort = NEWEST_FIRST) =>
+        use(async (db) => {
+          const rows = await db
+            .select({ id: receipts.id })
+            .from(receipts)
+            .where(filterWhere(scope, filters))
+            .orderBy(...sortOrder(sort))
+            .limit(limit);
+          return rows.map((row) => row.id);
+        }),
+
       counts: (scope) =>
         use(async (db) => {
           const [row] = await db
@@ -848,7 +873,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
         }),
 
       removeMany: (scope, target) =>
-        use((db) => {
+        use(async (db): Promise<BulkDeleteResult> => {
           const ids =
             "filters" in target ? null : [...new Set(target.ids.map((id) => id.toLowerCase()))];
           const match = filterWhere(
@@ -856,7 +881,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             "filters" in target ? { ...target.filters, ids: undefined } : { ids: ids ?? [] },
           );
           const mine = ownUnlessManager(scope);
-          return db.transaction(async (tx): Promise<BulkDeleteResult> => {
+          const deleting = db.transaction(async (tx): Promise<BulkDeleteResult> => {
             const [counted] = await tx
               .select({
                 matched: sql<number>`count(*)::int`,
@@ -879,6 +904,14 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                     .delete(receipts)
                     .where(and(match, mine))
                     .returning({ id: receipts.id, key: receipts.imageObjectKey });
+            // Rows can change between the count and the delete (read committed). A filter
+            // delete must remove exactly what was confirmed; and never more than one job's keys.
+            if (
+              rows.length > MAX_BULK_DELETE ||
+              ("expected" in target && rows.length !== deletable)
+            ) {
+              throw new ListChanged(matched);
+            }
             const keys = rows.flatMap((row) => (row.key ? [row.key] : []));
             const job =
               keys.length > 0
@@ -892,6 +925,12 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               jobId: job && "id" in job ? job.id : null,
             };
           });
+          try {
+            return await deleting;
+          } catch (error) {
+            if (error instanceof ListChanged) return { kind: "changed", matched: error.matched };
+            throw error;
+          }
         }),
 
       objectKeys: (owner) =>

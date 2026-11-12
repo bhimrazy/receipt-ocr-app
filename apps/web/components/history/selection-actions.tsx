@@ -69,7 +69,7 @@ export function SelectionDialogs({
   canDeleteAny: boolean;
 }) {
   const router = useRouter();
-  const { setSelection } = useSelection();
+  const { setSelection, organizationId } = useSelection();
   const [groups, setGroups] = useState(initialGroups);
   const [busyId, setBusyId] = useState<string | null>(null);
   // Keeps the title and count while a dialog animates closed.
@@ -80,7 +80,7 @@ export function SelectionDialogs({
   const n = selectedCount(target);
 
   async function remove(): Promise<string | void> {
-    const result = await deleteRequest(target, filters);
+    const result = await deleteRequest(organizationId, target, filters);
     if (!result.ok) return result.error;
     const { deleted, skipped, notFound } = result.data;
     toast.add({
@@ -101,7 +101,7 @@ export function SelectionDialogs({
     let ids: string[];
     let truncated = false;
     if (target.kind === "all") {
-      const matching = await matchingIdsRequest(filters);
+      const matching = await matchingIdsRequest(organizationId, filters);
       if (!matching.ok) {
         setBusyId(null);
         toast.add({ title: matching.error, type: "error" });
@@ -199,17 +199,18 @@ export function SelectionDialogs({
   );
 }
 
-function useExport(filters: HistoryFilters, view: ListView) {
+function useExport(organizationId: string, filters: HistoryFilters, view: ListView) {
   const [busy, setBusy] = useState(false);
   async function run(selection: Selection) {
     if (selection.kind === "all") {
       const link = document.createElement("a");
-      link.href = exportHref(filters, view);
+      const href = exportHref(filters, view);
+      link.href = `${href}${href.includes("?") ? "&" : "?"}${new URLSearchParams({ org: organizationId })}`;
       link.click();
       return;
     }
     setBusy(true);
-    const error = await exportSelection([...selection.ids], view.sort);
+    const error = await exportSelection(organizationId, [...selection.ids], view.sort);
     setBusy(false);
     if (error) toast.add({ title: error, type: "error" });
   }
@@ -229,8 +230,8 @@ export function SelectionBars({
   view: ListView;
   onAction: (pending: PendingAction) => void;
 }) {
-  const { selection, setSelection, selecting } = useSelection();
-  const exporter = useExport(filters, view);
+  const { selection, setSelection, selecting, organizationId } = useSelection();
+  const exporter = useExport(organizationId, filters, view);
   const n = selectedCount(selection);
   const none = n === 0;
   const open = (action: "delete" | "group") =>
@@ -244,9 +245,7 @@ export function SelectionBars({
           className="sticky bottom-4 z-30 mt-4 hidden items-center gap-2 rounded-xl border border-border bg-popover/95 py-2 pr-2 pl-4 shadow-2xl backdrop-blur md:flex"
           role="toolbar"
         >
-          <span aria-live="polite" className="mr-auto text-sm font-medium">
-            {receiptCount(n)} selected
-          </span>
+          <span className="mr-auto text-sm font-medium">{receiptCount(n)} selected</span>
           <Button onClick={() => setSelection(NOTHING)} size="sm" variant="ghost">
             <X aria-hidden="true" />
             Clear

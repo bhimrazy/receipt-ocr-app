@@ -53,21 +53,11 @@ test("sort, page size, select across pages and delete in bulk on desktop", async
   await expect(page.getByText("No receipts match")).toBeVisible();
 });
 
-test("select all that match across pages, and the row menu", async ({ page }) => {
+test("the row menu, then delete all that match a filter across pages", async ({ page }) => {
   const email = uniqueEmail("bulk-all");
   await signUp(page, email);
-  await seedReceipts(
-    email,
-    Array.from({ length: 30 }, (_, i) => `Cafe ${i + 1}`),
-  );
+  await seedReceipts(email, [...Array.from({ length: 30 }, (_, i) => `Cafe ${i + 1}`), "Hardware"]);
   await page.goto("/app/history");
-  await page.getByRole("checkbox", { name: "Select all on this page" }).check();
-  await page.getByRole("button", { name: "Select all 30 receipts that match" }).click();
-  await expect(page.getByText("All 30 receipts that match are selected.")).toBeVisible();
-  const bar = page.getByRole("toolbar", { name: "Selected receipts" });
-  await expect(bar).toContainText("30 receipts selected");
-  await bar.getByRole("button", { name: "Clear" }).click();
-  await expect(bar).toBeHidden();
 
   // One row's menu deletes just that receipt.
   await page.getByRole("button", { name: "Actions for Cafe 30" }).click();
@@ -77,7 +67,28 @@ test("select all that match across pages, and the row menu", async ({ page }) =>
     .getByRole("button", { name: "Delete receipt" })
     .click();
   await expect(page.getByText("Deleted 1 receipt")).toBeVisible();
-  await expect(page.getByText("29 receipts in this workspace")).toBeVisible();
+  await expect(page.getByText("30 receipts in this workspace")).toBeVisible();
+
+  // 29 cafes match the search, over two pages: select them all and delete them.
+  await page.goto("/app/history?q=Cafe");
+  await expect(page.getByRole("navigation", { name: "Pagination" })).toContainText("1–25 of 29");
+  await page.getByRole("checkbox", { name: "Select all on this page" }).check();
+  await page.getByRole("button", { name: "Select all 29 receipts that match" }).click();
+  await expect(page.getByRole("button", { name: "Clear selection" })).toBeVisible();
+  const bar = page.getByRole("toolbar", { name: "Selected receipts" });
+  await expect(bar).toContainText("29 receipts selected");
+  await bar.getByRole("button", { name: "Delete" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Delete 29 receipts?" })
+    .getByRole("button", { name: "Delete 29 receipts" })
+    .click();
+  await expect(page.getByText("Deleted 29 receipts")).toBeVisible();
+  await expect(page.getByText("No receipts match")).toBeVisible();
+
+  // Only what matched went.
+  await page.goto("/app/history");
+  await expect(page.getByText("1 receipt in this workspace")).toBeVisible();
+  await expect(page.getByRole("table").getByRole("link", { name: "Hardware" })).toBeVisible();
 });
 
 test("on a phone, Select turns rows into checkboxes with actions over the tab bar", async ({

@@ -18,7 +18,6 @@ import { PAGE_SIZES, rangeText, type ListView } from "./list-view";
 
 const SIZE_ITEMS = PAGE_SIZES.map((size) => ({ value: size, label: String(size) }));
 
-/** "26–50 of 312", rows per page and Previous/Next. */
 export function HistoryPagination({
   filters,
   view,

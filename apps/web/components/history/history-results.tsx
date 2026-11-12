@@ -239,22 +239,36 @@ export function HistoryResults({
     setSelection((current) => toggle(current, id, on, pageIds));
   const flipPage = (on: boolean) => setSelection((current) => togglePage(current, pageIds, on));
 
+  // Shared by the empty state: rows picked on other pages are still selected there.
+  const actions = (
+    <>
+      <SelectionBars filters={filters} onAction={setPending} view={view} />
+      <SelectionDialogs
+        canDeleteAny={canDeleteAny}
+        filters={filters}
+        groups={groups}
+        onClose={() => setPending(null)}
+        pending={pending}
+      />
+    </>
+  );
+
   if (receipts.length === 0) {
     return (
-      <EmptyState
-        filtered={isFiltered(filters)}
-        firstPage={page > 1 && total > 0 ? historyHref(filters, 1, view) : null}
-      />
+      <>
+        <EmptyState
+          filtered={isFiltered(filters)}
+          firstPage={page > 1 && total > 0 ? historyHref(filters, 1, view) : null}
+        />
+        {actions}
+      </>
     );
   }
 
   const allMatching = selection.kind === "all";
   const banner =
     allMatching || canSelectAllMatching(selection, pageIds, total) ? (
-      <div
-        aria-live="polite"
-        className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-border bg-primary/5 px-4 py-2 text-center text-sm"
-      >
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-border bg-primary/5 px-4 py-2 text-center text-sm">
         {allMatching ? (
           <>
             <span>All {receiptCount(total)} that match are selected.</span>
@@ -289,7 +303,7 @@ export function HistoryResults({
                 />
                 <span aria-hidden="true">All on this page</span>
               </label>
-              <span aria-live="polite" className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {receiptCount(allMatching ? total : selection.ids.size)} selected
               </span>
             </div>
@@ -303,7 +317,7 @@ export function HistoryResults({
             return (
               <li
                 className={cn(
-                  "group relative flex items-center gap-3 transition-colors focus-within:bg-wash-subtle hover:bg-wash-subtle active:bg-wash",
+                  "group relative flex items-center gap-3 transition-colors select-none [-webkit-touch-callout:none] focus-within:bg-wash-subtle hover:bg-wash-subtle active:bg-wash",
                   selecting && on && "bg-primary/5",
                 )}
                 key={receipt.id}
@@ -509,14 +523,7 @@ export function HistoryResults({
       </Card>
 
       <HistoryPagination filters={filters} page={page} total={total} view={view} />
-      <SelectionBars filters={filters} onAction={setPending} view={view} />
-      <SelectionDialogs
-        canDeleteAny={canDeleteAny}
-        filters={filters}
-        groups={groups}
-        onClose={() => setPending(null)}
-        pending={pending}
-      />
+      {actions}
     </>
   );
 }

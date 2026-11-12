@@ -71,5 +71,4 @@ export function canSelectAllMatching(
 
 const count = new Intl.NumberFormat("en");
 
-/** "1 receipt", "1,204 receipts". */
 export const receiptCount = (n: number) => `${count.format(n)} ${n === 1 ? "receipt" : "receipts"}`;

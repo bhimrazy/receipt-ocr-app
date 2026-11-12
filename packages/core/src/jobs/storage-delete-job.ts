@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_BULK_DELETE } from "../bulk-limits";
 import type { NewJob } from "./definition";
 
 /**
@@ -7,11 +8,8 @@ import type { NewJob } from "./definition";
  */
 export const STORAGE_DELETE = "storage.delete";
 
-/** One bulk delete's worth: `MAX_BULK_DELETE` receipts, one file each. */
-const MAX_STORAGE_DELETE_KEYS = 1000;
-
 export const storageDeletePayload = z.object({
-  keys: z.array(z.string().min(1).max(512)).min(1).max(MAX_STORAGE_DELETE_KEYS),
+  keys: z.array(z.string().min(1).max(512)).min(1).max(MAX_BULK_DELETE),
 });
 
 export type StorageDeletePayload = z.infer<typeof storageDeletePayload>;

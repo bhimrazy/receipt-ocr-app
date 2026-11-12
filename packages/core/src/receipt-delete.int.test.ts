@@ -153,6 +153,103 @@ describe.skipIf(!enabled)("bulk delete against Postgres + S3", () => {
     );
   });
 
+  it("rolls a filter delete back when the rows change between the count and the delete", async () => {
+    const q = `${tag}-race`;
+    const kept = await upload(owner, `${q}-1.jpg`);
+    const skipped = await upload(owner, `${q}-skip.jpg`);
+    // Stands in for a concurrent change: the delete statement leaves one counted row alone.
+    const fn = `del_race_${Date.now()}`;
+    await db(async (d) => {
+      await d.execute(
+        sql.raw(`create function ${fn}() returns trigger language plpgsql as $$
+          begin if old.file_name = '${q}-skip.jpg' then return null; end if; return old; end $$`),
+      );
+      await d.execute(
+        sql.raw(
+          `create trigger ${fn} before delete on receipts for each row execute function ${fn}()`,
+        ),
+      );
+    });
+    try {
+      const exit = await runExit(
+        deleteReceipts({ scope: owner, target: { filters: { q }, expected: 2 } }),
+      );
+      expect(failureTag(exit)).toBe("Conflict");
+      // Rolled back: the row the delete did reach is still there, and no job was queued.
+      expect(await existing([kept.id, skipped.id])).toEqual([kept.id, skipped.id].sort());
+      const queued = await db((d) =>
+        d
+          .select({ id: jobs.id })
+          .from(jobs)
+          .where(
+            sql`${jobs.kind} = ${STORAGE_DELETE} and ${jobs.payload}::text like ${`%${kept.imageObjectKey}%`}`,
+          ),
+      );
+      expect(queued).toEqual([]);
+    } finally {
+      await db(async (d) => {
+        await d.execute(sql.raw(`drop trigger if exists ${fn} on receipts`));
+        await d.execute(sql.raw(`drop function if exists ${fn}()`));
+      });
+    }
+    expect(
+      await run(deleteReceipts({ scope: owner, target: { filters: { q }, expected: 2 } })),
+    ).toMatchObject({ deleted: 2 });
+  });
+
+  it("sorts with missing values last in both directions and a stable id tiebreak", async () => {
+    const q = `${tag}-sort`;
+    const rows = await db((d) =>
+      d
+        .insert(receipts)
+        .values(
+          [
+            { merchant: "beta", total: "5.00", receiptDate: "2026-01-02" },
+            { merchant: "Alpha", total: "5.00", receiptDate: "2026-01-02" },
+            { merchant: null, total: null, receiptDate: null },
+            { merchant: "gamma", total: "9.00", receiptDate: "2026-01-01" },
+          ].map((row, i) => ({
+            ...row,
+            organizationId: owner.organizationId,
+            userId: owner.userId,
+            status: "completed" as const,
+            fileName: `${q}-${i}.jpg`,
+          })),
+        )
+        .returning({ id: receipts.id, fileName: receipts.fileName }),
+    );
+    const name = new Map(rows.map((r) => [r.id, r.fileName!.slice(q.length + 1, -4)]));
+    const order = async (by: "date" | "total" | "merchant", dir: "asc" | "desc") =>
+      (
+        await run(
+          Effect.flatMap(ReceiptRepo, (r) =>
+            r.list(owner, { q }, { limit: 10, offset: 0, sort: { by, dir } }),
+          ),
+        )
+      ).rows.map((row) => name.get(row.id));
+    const [b, a] = [rows[0]!.id, rows[1]!.id];
+    // Equal keys (beta and Alpha share total and date) fall back to the id, in the same direction.
+    const tie = (dir: "asc" | "desc") =>
+      (dir === "asc" ? a < b : a > b) ? ["1", "0"] : ["0", "1"];
+    expect(await order("merchant", "asc")).toEqual(["1", "0", "3", "2"]);
+    expect(await order("merchant", "desc")).toEqual(["3", "0", "1", "2"]);
+    expect(await order("total", "desc")).toEqual(["3", ...tie("desc"), "2"]);
+    expect(await order("total", "asc")).toEqual([...tie("asc"), "3", "2"]);
+    expect(await order("date", "asc")).toEqual(["3", ...tie("asc"), "2"]);
+    // Paging the same order never repeats or skips a row.
+    const paged = [];
+    for (let offset = 0; offset < 4; offset += 1) {
+      const page = await run(
+        Effect.flatMap(ReceiptRepo, (r) =>
+          r.list(owner, { q }, { limit: 1, offset, sort: { by: "total", dir: "desc" } }),
+        ),
+      );
+      paged.push(name.get(page.rows[0]!.id));
+    }
+    expect(paged).toEqual(await order("total", "desc"));
+    await db((d) => d.delete(receipts).where(sql`${receipts.fileName} like ${`${q}%`}`));
+  });
+
   it("refuses more than MAX_BULK_DELETE at once and deletes nothing", async () => {
     const q = `${tag}-many`;
     await db((d) =>

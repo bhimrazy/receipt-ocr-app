@@ -6,27 +6,32 @@ import type { Selection } from "./selection";
 
 export type DeleteResult = { deleted: number; skipped: number; notFound: number };
 
-/** Deletes the selection; "all that match" sends the filters and the count the person confirmed. */
-export const deleteRequest = (target: Selection, filters: HistoryFilters) =>
+/**
+ * Deletes the selection; "all that match" sends the filters and the count the person confirmed.
+ * Every request names the workspace the selection was made in.
+ */
+export const deleteRequest = (organizationId: string, target: Selection, filters: HistoryFilters) =>
   apiRequest<DeleteResult>(
     "/api/receipts/delete",
     "POST",
     target.kind === "all"
-      ? { filter: filterQuery(filters), expected: target.total }
-      : { ids: [...target.ids] },
+      ? { organizationId, filter: filterQuery(filters), expected: target.total }
+      : { organizationId, ids: [...target.ids] },
   );
 
 /** The ids "all that match" stands for, up to the server's limit. */
-export function matchingIdsRequest(filters: HistoryFilters) {
+export function matchingIdsRequest(organizationId: string, filters: HistoryFilters) {
   const query = filterQuery(filters);
+  const org = new URLSearchParams({ org: organizationId });
   return apiRequest<{ ids: string[]; truncated: boolean }>(
-    query ? `/api/receipts/ids?${query}` : "/api/receipts/ids",
+    `/api/receipts/ids?${org}${query ? `&${query}` : ""}`,
     "GET",
   );
 }
 
 /** Saves the selected receipts' CSV through a temporary link; returns an error to show. */
 export async function exportSelection(
+  organizationId: string,
   ids: readonly string[],
   sort: ListSort | undefined,
 ): Promise<string | void> {
@@ -35,7 +40,7 @@ export async function exportSelection(
     res = await fetch("/api/receipts/export", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ids, ...(sort ? { sort } : {}) }),
+      body: JSON.stringify({ organizationId, ids, ...(sort ? { sort } : {}) }),
     });
   } catch {
     return OFFLINE_MESSAGE;

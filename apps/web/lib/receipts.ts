@@ -87,6 +87,28 @@ function cleanGroups(input: string[] | undefined) {
   return parsed.success && parsed.data.length > 0 ? parsed.data : undefined;
 }
 
+const FILTER_PARAMS = new Set(["q", "category", "status", "from", "to", "group"]);
+const SINGLE_FILTERS = ["q", "category", "status", "from", "to"] as const;
+
+/**
+ * History's filters from a query string an action carries ("delete all that match"), or null
+ * when it has a key that isn't a filter, a repeated single key, or a value `cleanFilters` would
+ * drop: an action must never act on a wider list than the one the person saw.
+ */
+export function strictFiltersFromQuery(query: string): ReceiptFilters | null {
+  const params = new URLSearchParams(query);
+  for (const key of new Set(params.keys())) {
+    if (!FILTER_PARAMS.has(key)) return null;
+    if (key !== "group" && params.getAll(key).length > 1) return null;
+  }
+  const raw = filtersFromSearchParams(params);
+  const clean = cleanFilters({ ...raw, ids: undefined });
+  for (const key of SINGLE_FILTERS) if (raw[key] && !clean[key]) return null;
+  const groups = new Set(raw.groups?.map((id) => id.toLowerCase()));
+  if (groups.size !== (clean.groups?.length ?? 0)) return null;
+  return clean;
+}
+
 /** Filters from URL search params (History page and the export route share these). */
 export function filtersFromSearchParams(
   params: URLSearchParams | Record<string, string | string[] | undefined>,
@@ -166,20 +188,16 @@ export const exportRows = (
  */
 export const matchingReceiptIds = (scope: ReceiptScope, filters: ReceiptListFilters) =>
   Effect.flatMap(ReceiptRepo, (repo) =>
-    repo.list(
+    repo.matchingIds(
       scope,
       { ...cleanFilters(filters), ids: undefined },
-      {
-        limit: MAX_BULK_DELETE + 1,
-        offset: 0,
-        total: false,
-        sort: filters.sort,
-      },
+      MAX_BULK_DELETE + 1,
+      filters.sort,
     ),
   ).pipe(
-    Effect.map(({ rows }) => ({
-      ids: rows.slice(0, MAX_BULK_DELETE).map((row) => row.id),
-      truncated: rows.length > MAX_BULK_DELETE,
+    Effect.map((ids) => ({
+      ids: ids.slice(0, MAX_BULK_DELETE),
+      truncated: ids.length > MAX_BULK_DELETE,
     })),
   );
 
@@ -193,3 +211,7 @@ export const getReceiptCounts = cache(async (): Promise<ReceiptCounts> => {
   const scope = await requireActiveScope();
   return runtime.runPromise(Effect.flatMap(ReceiptRepo, (repo) => repo.counts(scope)));
 });
+
+/** For a `409`: a selection was made in one workspace and the session has since moved to another. */
+export const WORKSPACE_CHANGED =
+  "You switched workspace since selecting these receipts. Reload the page and select them again.";

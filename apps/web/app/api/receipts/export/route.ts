@@ -15,6 +15,7 @@ import {
   exportRows,
   filtersFromSearchParams,
   MAX_EXPORT_ROWS,
+  WORKSPACE_CHANGED,
   type ReceiptListFilters,
 } from "@/lib/receipts";
 import { getActiveScope } from "@/lib/session";
@@ -22,7 +23,9 @@ import { getActiveScope } from "@/lib/session";
 /**
  * CSV of the active workspace's receipts. GET takes the same query params as
  * History (q, category, status, from, to, group, sort, dir); POST takes a
- * selection, `{ ids, sort? }`. Built in memory: fine up to MAX_EXPORT_ROWS; a
+ * selection, `{ organizationId, ids, sort? }`. `organizationId` (or `?org=` on
+ * GET) is the workspace a selection was made in: `409` once the session's active
+ * workspace is another one. Built in memory: fine up to MAX_EXPORT_ROWS; a
  * truncated export says so in a header.
  */
 export const GET = withRequestEvent(
@@ -31,7 +34,11 @@ export const GET = withRequestEvent(
     const scope = await getActiveScope();
     if (!scope) return jsonError(401, "Unauthorized");
     annotateCaller(event, { scope });
-    const filters = filtersFromSearchParams(new URL(request.url).searchParams);
+    const params = new URL(request.url).searchParams;
+    // Set by an export of "all that match": the workspace the selection was made in.
+    const org = params.get("org");
+    if (org !== null && org !== scope.organizationId) return jsonError(409, WORKSPACE_CHANGED);
+    const filters = filtersFromSearchParams(params);
     // Which filters were used, never their values (a search can be a merchant name).
     event.flags = Object.fromEntries(
       Object.entries(filters).flatMap(([key, value]) =>
@@ -46,6 +53,7 @@ export const GET = withRequestEvent(
 const MAX_BODY_BYTES = 256 * 1024;
 
 const selectionSchema = z.strictObject({
+  organizationId: z.string().min(1),
   ids: z.array(z.uuid()).min(1).max(MAX_EXPORT_ROWS),
   sort: z.strictObject({ by: z.enum(SORT_KEYS), dir: z.enum(["asc", "desc"]) }).optional(),
 });
@@ -60,6 +68,9 @@ export const POST = withRequestEvent(
     annotateCaller(event, { scope });
     const read = await readJson(request, selectionSchema, MAX_BODY_BYTES);
     if ("response" in read) return read.response;
+    if (read.data.organizationId !== scope.organizationId) {
+      return jsonError(409, WORKSPACE_CHANGED);
+    }
     event.mode = "selection";
     return csv(scope, { ids: read.data.ids, sort: read.data.sort }, event);
   },

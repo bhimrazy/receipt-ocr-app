@@ -1,5 +1,4 @@
 import { RowsSkeleton } from "@/components/app-skeletons";
-// groups: filter chips
 import { GroupFilter } from "@/components/groups/group-filter";
 import { getWorkspaceGroups } from "@/lib/groups";
 import { exportHref, isFiltered } from "@/components/history/history-href";
@@ -105,9 +104,12 @@ export default async function HistoryPage({
   const filters = cleanFilters(raw);
   const view: ListView = { size: pageSize ?? DEFAULT_PAGE_SIZE, sort };
   const query = JSON.stringify({ ...filters, page: requested, pageSize: view.size, sort });
+  const scope = await requireActiveScope();
+  // A selection belongs to one workspace and one filtered list.
+  const listKey = JSON.stringify([scope.organizationId, filters]);
 
   return (
-    <SelectionProvider filterKey={JSON.stringify(filters)}>
+    <SelectionProvider filterKey={listKey} organizationId={scope.organizationId}>
       <div className="mx-auto max-w-6xl">
         <PageHeader>
           <PageHeaderContent>
@@ -129,13 +131,13 @@ export default async function HistoryPage({
         <Suspense fallback={<Skeleton className="h-11 w-full" />}>
           <HistoryToolbar filters={filters} />
         </Suspense>
-        {/* groups */}
         <SectionBoundary className="mb-5" label="Groups">
           <Suspense fallback={<Skeleton className="mb-5 h-9 w-full" />}>
             <Groups filters={filters} />
           </Suspense>
         </SectionBoundary>
-        <SectionBoundary key={query} label="Receipts">
+        {/* Not keyed on page or sort, so paging and sorting keep focus in the table. */}
+        <SectionBoundary key={listKey} label="Receipts">
           <Suspense fallback={<RowsSkeleton />}>
             <Results filters={filters} query={query} view={view} />
           </Suspense>

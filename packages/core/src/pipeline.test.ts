@@ -128,6 +128,7 @@ function harness(
     get: (id) => Effect.sync(() => rows.get(id) ?? null),
     list: () => Effect.die("unused"),
     counts: () => Effect.die("unused"),
+    matchingIds: () => Effect.die("unused"),
     exportRows: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
     setReviewed: () => Effect.die("unused"),
