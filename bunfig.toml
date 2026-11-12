@@ -1,6 +1,3 @@
 [install]
 # Owner policy: only install releases at least 7 days old.
 minimumReleaseAge = "7d"
-# Owner-approved exception, 2026-11-07: Better Auth 1.7.16+ security fixes (GHSAs of 2026-11-03) and
-# passkeys for 2FA. Exact names only. Remove after 2026-11-12, when 1.7.18 clears the cooldown.
-minimumReleaseAgeExcludes = ["better-auth", "@better-auth/core", "@better-auth/telemetry", "@better-auth/drizzle-adapter", "@better-auth/kysely-adapter", "@better-auth/memory-adapter", "@better-auth/mongo-adapter", "@better-auth/prisma-adapter", "@better-auth/passkey", "better-call"]
