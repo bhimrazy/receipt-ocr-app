@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Full-page screenshots of a running instance at desktop and phone widths, using the globally
-// installed Playwright (npm i -g playwright@<pinned> && playwright install chromium).
+// Full-page screenshots of a running instance at desktop and phone widths, using the project's
+// Playwright (`bunx playwright install chromium` once per machine).
 //
 //   node scripts/screenshot.mjs --out <dir> [--base http://localhost:3000]
 //        [--login email:password] [--widths 1440,390] [--theme light|dark] <path>...
@@ -8,13 +8,9 @@
 // --theme stores that choice before each page loads, as the theme toggle does (default: dark).
 // --login signs in through the Better Auth API first, so app routes render as that user.
 // Files are named <path-slug>@<width>-<theme>.png. Console errors and failed requests are printed per page.
-import { createRequire } from "node:module";
-import { execSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-
-const require = createRequire(import.meta.url);
-const { chromium } = require(path.join(execSync("npm root -g").toString().trim(), "playwright"));
+import { chromium } from "@playwright/test";
 
 const args = process.argv.slice(2);
 const valued = new Set(["--out", "--base", "--login", "--widths", "--theme"]);
