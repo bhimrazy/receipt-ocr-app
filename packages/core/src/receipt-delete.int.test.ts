@@ -250,6 +250,34 @@ describe.skipIf(!enabled)("bulk delete against Postgres + S3", () => {
     await db((d) => d.delete(receipts).where(sql`${receipts.fileName} like ${`${q}%`}`));
   });
 
+  it("list rows carry who reviewed a receipt, and when", async () => {
+    const q = `${tag}-reviewed`;
+    const [row] = await db((d) =>
+      d
+        .insert(receipts)
+        .values({
+          organizationId: owner.organizationId,
+          userId: owner.userId,
+          status: "completed",
+          confidence: "0.5",
+          fileName: `${q}.jpg`,
+        })
+        .returning({ id: receipts.id }),
+    );
+    const listed = () =>
+      run(Effect.flatMap(ReceiptRepo, (r) => r.list(owner, { q }, { limit: 1, offset: 0 }))).then(
+        (page) => page.rows[0]!,
+      );
+    expect(await listed()).toMatchObject({ reviewedAt: null, reviewerName: null });
+    expect(await run(Effect.flatMap(ReceiptRepo, (r) => r.setReviewed(row!.id, owner, true)))).toBe(
+      true,
+    );
+    const reviewed = await listed();
+    expect(reviewed.reviewedAt).toBeInstanceOf(Date);
+    expect(reviewed.reviewerName).toBe("owner");
+    await db((d) => d.delete(receipts).where(eq(receipts.id, row!.id)));
+  });
+
   it("refuses more than MAX_BULK_DELETE at once and deletes nothing", async () => {
     const q = `${tag}-many`;
     await db((d) =>

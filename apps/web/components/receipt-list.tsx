@@ -3,7 +3,12 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { ReceiptSummary } from "@/lib/receipts";
-import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
+import {
+  CheckedBadge,
+  ConfidenceBadge,
+  StatusBadge,
+  isInFlight,
+} from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 import { confidenceLevel, formatDate, formatMoney } from "@/lib/format";
 
@@ -13,6 +18,24 @@ export function receiptTitle(receipt: Pick<ReceiptSummary, "status" | "merchant"
     return { text: receipt.merchant ?? "Merchant not found", isFile: false };
   }
   return { text: receipt.fileName ?? "Uploaded photo", isFile: true };
+}
+
+/**
+ * A completed receipt's badge: Checked once someone reviewed it, else the confidence tier when
+ * it is worth a look; null for a confident read nobody had to check.
+ */
+export function ReviewBadge({
+  receipt,
+  className,
+}: {
+  receipt: Pick<ReceiptSummary, "confidence" | "reviewedAt" | "reviewerName">;
+  className?: string;
+}) {
+  if (receipt.reviewedAt) return <CheckedBadge by={receipt.reviewerName} className={className} />;
+  const level = confidenceLevel(receipt.confidence);
+  return level && level !== "high" ? (
+    <ConfidenceBadge className={className} value={receipt.confidence} />
+  ) : null;
 }
 
 /** The row's title as a link that covers the whole row. */
@@ -36,7 +59,6 @@ export function ReceiptRowContent({
   const completed = receipt.status === "completed";
   const amount = completed ? formatMoney(receipt.total, receipt.currency) : null;
   const date = completed ? formatDate(receipt.receiptDate) : null;
-  const level = completed ? confidenceLevel(receipt.confidence) : null;
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-baseline justify-between gap-3">
@@ -53,9 +75,7 @@ export function ReceiptRowContent({
                 <span>{receipt.category}</span>
               </>
             ) : null}
-            {level && level !== "high" ? (
-              <ConfidenceBadge className="ml-auto" value={receipt.confidence} />
-            ) : null}
+            <ReviewBadge className="ml-auto" receipt={receipt} />
           </>
         ) : (
           <>

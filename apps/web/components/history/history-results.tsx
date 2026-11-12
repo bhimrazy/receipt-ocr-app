@@ -34,8 +34,8 @@ import {
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { historyHref, isFiltered } from "@/components/history/history-href";
-import { ReceiptRowContent, receiptTitle, ROW_LINK } from "@/components/receipt-list";
-import { ConfidenceBadge, StatusBadge } from "@/components/receipt-status";
+import { ReceiptRowContent, receiptTitle, ReviewBadge, ROW_LINK } from "@/components/receipt-list";
+import { StatusBadge } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 import { confidenceLevel, formatDate, formatMoney } from "@/lib/format";
 import { canEditReceipt } from "@/lib/receipt-permissions";
@@ -68,16 +68,16 @@ function Missing() {
 }
 
 /** A low-confidence read, a failed one or one still scanning; a receipt that is fine shows nothing. */
-function needsAttention(receipt: ReceiptSummary) {
-  if (receipt.status !== "completed") return true;
+function hasStatus(receipt: ReceiptSummary) {
+  if (receipt.status !== "completed" || receipt.reviewedAt) return true;
   const level = confidenceLevel(receipt.confidence);
   return level !== null && level !== "high";
 }
 
-/** The status column: only what needs attention, with Try again on a failed read. */
+/** The status column: Checked, what needs attention (with Try again on a failed read), or nothing. */
 function RowStatus({ receipt, retry = true }: { receipt: ReceiptSummary; retry?: boolean }) {
-  if (!needsAttention(receipt)) return <span className="sr-only">Done</span>;
-  if (receipt.status === "completed") return <ConfidenceBadge value={receipt.confidence} />;
+  if (!hasStatus(receipt)) return <span className="sr-only">Done</span>;
+  if (receipt.status === "completed") return <ReviewBadge receipt={receipt} />;
   return (
     <div className="flex items-center gap-2">
       <StatusBadge status={receipt.status} />
@@ -447,7 +447,7 @@ export function HistoryResults({
                       {title.text}
                     </Link>
                     {/* The Status column only fits from lg; until then it sits under the name. */}
-                    {needsAttention(receipt) ? (
+                    {hasStatus(receipt) ? (
                       <div className="mt-1 lg:hidden">
                         <RowStatus receipt={receipt} retry={false} />
                       </div>

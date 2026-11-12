@@ -103,6 +103,10 @@ export type ReceiptSummary = {
   userId: string | null;
   /** Set on list rows: the uploader's name, null once their account is deleted. */
   uploaderName?: string | null;
+  /** When someone marked it reviewed; null until then, and again after a new extraction. */
+  reviewedAt: Date | null;
+  /** Set on list rows: who marked it reviewed, null once their account is deleted. */
+  reviewerName?: string | null;
   /** Set on list rows: when a processing receipt's job next runs, if that is still ahead (waiting to retry). */
   retryAt?: Date | null;
 };
@@ -323,12 +327,16 @@ const summaryColumns = {
   errorMessage: effectiveError,
   createdAt: receipts.createdAt,
   userId: receipts.userId,
+  reviewedAt: receipts.reviewedAt,
 };
 
 // Qualified by hand, as above.
 const uploaderNameColumn = sql<
   string | null
 >`(select u.name from "user" u where u.id = receipts.user_id)`;
+const reviewerNameColumn = sql<
+  string | null
+>`(select u.name from "user" u where u.id = receipts.reviewed_by)`;
 
 /**
  * A total order for offset paging: the sort key (missing values last either way), then the
@@ -746,6 +754,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 ...summaryColumns,
                 retryAt: retryAtColumn,
                 uploaderName: uploaderNameColumn,
+                reviewerName: reviewerNameColumn,
               })
               .from(receipts)
               .where(where)

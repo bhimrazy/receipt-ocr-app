@@ -59,6 +59,7 @@ function row(overrides: Partial<ReceiptExportRow> = {}): ReceiptExportRow {
     itemCount: 1,
     groups: [],
     userId: null,
+    reviewedAt: null,
     createdAt: new Date("2026-08-01T10:00:00Z"),
     ...overrides,
   };

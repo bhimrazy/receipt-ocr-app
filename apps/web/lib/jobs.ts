@@ -69,9 +69,10 @@ export const runJobNow = (jobId: string, context: WideEventFields) =>
   }).pipe(Effect.map((stats) => stats.runs.find((run) => run.jobId === jobId)));
 
 /**
- * For `after()` of a poll that found the receipt's job due and nobody running
- * it: runs that one job, or returns at once if it can't be claimed. Never
- * other jobs, so poll traffic doesn't become queue concurrency.
+ * For `after()`: runs one job a request just enqueued or found due (a poll's
+ * stalled receipt job, a delete's `storage.delete`), or returns at once if it
+ * can't be claimed. Never other jobs, so request traffic doesn't become queue
+ * concurrency.
  */
 export async function kickJob(jobId: string, context: WideEventFields): Promise<void> {
   await runtime.runPromise(runJobNow(jobId, context));
