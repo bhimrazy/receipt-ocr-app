@@ -121,9 +121,11 @@ jobs:
             }
           '
 
-      # drizzle.config.ts reads DIRECT_URL (session pooler, port 5432). No --verbose: the URL and
-      # the SQL stay out of the log.
+      # drizzle.config.ts reads DIRECT_URL (session pooler, port 5432) and verifies TLS against
+      # DATABASE_SSL_CA (a public certificate, so a variable). No --verbose: the URL and the SQL stay
+      # out of the log.
       - name: Apply migrations
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_SSL_CA: ${{ vars.DATABASE_SSL_CA }}
         run: bun run db:migrate
