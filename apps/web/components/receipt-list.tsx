@@ -1,8 +1,14 @@
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { ReceiptSummary } from "@/lib/receipts";
-import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
+import {
+  CheckedBadge,
+  ConfidenceBadge,
+  StatusBadge,
+  isInFlight,
+} from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 import { confidenceLevel, formatDate, formatMoney } from "@/lib/format";
 
@@ -15,9 +21,90 @@ export function receiptTitle(receipt: Pick<ReceiptSummary, "status" | "merchant"
 }
 
 /**
- * Receipts as stacked rows, each one link. Used on Home and for History below
- * lg, where a table would need sideways scrolling. Confidence only shows when
- * there's something to check, so the rows that need attention stand out.
+ * A completed receipt's badge: Checked once someone reviewed it, else the confidence tier when
+ * it is worth a look; null for a confident read nobody had to check.
+ */
+export function ReviewBadge({
+  receipt,
+  className,
+}: {
+  receipt: Pick<ReceiptSummary, "confidence" | "reviewedAt" | "reviewerName">;
+  className?: string;
+}) {
+  if (receipt.reviewedAt) return <CheckedBadge by={receipt.reviewerName} className={className} />;
+  const level = confidenceLevel(receipt.confidence);
+  return level && level !== "high" ? (
+    <ConfidenceBadge className={className} value={receipt.confidence} />
+  ) : null;
+}
+
+/** The row's title as a link that covers the whole row. */
+export const ROW_LINK =
+  "min-w-0 truncate text-sm font-medium outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset";
+
+/**
+ * A row's text: `title` (a link, or plain text while selecting), the amount, and a line with
+ * the date and category, or the status and what to do next. `retry` adds Try again to a failed
+ * row; leave it out where the row itself is a control.
+ */
+export function ReceiptRowContent({
+  receipt,
+  title,
+  retry = true,
+}: {
+  receipt: ReceiptSummary;
+  title: ReactNode;
+  retry?: boolean;
+}) {
+  const completed = receipt.status === "completed";
+  const amount = completed ? formatMoney(receipt.total, receipt.currency) : null;
+  const date = completed ? formatDate(receipt.receiptDate) : null;
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-baseline justify-between gap-3">
+        {title}
+        {amount ? <span className="shrink-0 font-mono text-sm tabular-nums">{amount}</span> : null}
+      </div>
+      <div className="mt-1.5 flex min-h-6 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs text-muted-foreground">
+        {completed ? (
+          <>
+            <span>{date ?? "No date"}</span>
+            {receipt.category ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{receipt.category}</span>
+              </>
+            ) : null}
+            <ReviewBadge className="ml-auto" receipt={receipt} />
+          </>
+        ) : (
+          <>
+            <StatusBadge status={receipt.status} />
+            <span className="min-w-0 truncate">
+              {isInFlight(receipt.status)
+                ? receipt.retryAt
+                  ? "Waiting to retry"
+                  : "Usually takes a few seconds"
+                : "Open it to see why"}
+            </span>
+            {retry && receipt.status === "failed" ? (
+              <RetryReceiptButton
+                className="relative z-10 ml-auto"
+                receiptId={receipt.id}
+                size="sm"
+                variant="outline"
+              />
+            ) : null}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Receipts as stacked rows, each one link. Used on Home. Confidence only shows when there's
+ * something to check, so the rows that need attention stand out.
  */
 export function ReceiptList({
   receipts,
@@ -30,67 +117,23 @@ export function ReceiptList({
     <ul className={cn("divide-y divide-border", className)}>
       {receipts.map((receipt) => {
         const title = receiptTitle(receipt);
-        const completed = receipt.status === "completed";
-        const amount = completed ? formatMoney(receipt.total, receipt.currency) : null;
-        const date = completed ? formatDate(receipt.receiptDate) : null;
-        const level = completed ? confidenceLevel(receipt.confidence) : null;
         return (
           <li
             className="group relative flex items-center gap-3 px-4 py-3 transition-colors focus-within:bg-wash-subtle hover:bg-wash-subtle active:bg-wash"
             key={receipt.id}
           >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-3">
+            <ReceiptRowContent
+              receipt={receipt}
+              title={
                 <Link
+                  className={cn(ROW_LINK, title.isFile && "font-mono text-xs")}
                   data-touch-row=""
-                  className={cn(
-                    "min-w-0 truncate text-sm font-medium outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset",
-                    title.isFile && "font-mono text-xs",
-                  )}
                   href={`/app/receipts/${receipt.id}`}
                 >
                   {title.text}
                 </Link>
-                {amount ? (
-                  <span className="shrink-0 font-mono text-sm tabular-nums">{amount}</span>
-                ) : null}
-              </div>
-              <div className="mt-1.5 flex min-h-6 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs text-muted-foreground">
-                {completed ? (
-                  <>
-                    <span>{date ?? "No date"}</span>
-                    {receipt.category ? (
-                      <>
-                        <span aria-hidden="true">·</span>
-                        <span>{receipt.category}</span>
-                      </>
-                    ) : null}
-                    {level && level !== "high" ? (
-                      <ConfidenceBadge className="ml-auto" value={receipt.confidence} />
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    <StatusBadge status={receipt.status} />
-                    <span className="min-w-0 truncate">
-                      {isInFlight(receipt.status)
-                        ? receipt.retryAt
-                          ? "Waiting to retry"
-                          : "Usually takes a few seconds"
-                        : "Open it to see why"}
-                    </span>
-                    {receipt.status === "failed" ? (
-                      <RetryReceiptButton
-                        className="relative z-10 ml-auto"
-                        receiptId={receipt.id}
-                        size="sm"
-                        variant="outline"
-                      />
-                    ) : null}
-                  </>
-                )}
-              </div>
-            </div>
+              }
+            />
             <ChevronRight
               aria-hidden="true"
               className="size-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 max-sm:hidden"

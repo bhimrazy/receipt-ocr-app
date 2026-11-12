@@ -128,14 +128,21 @@ function harness(
     get: (id) => Effect.sync(() => rows.get(id) ?? null),
     list: () => Effect.die("unused"),
     counts: () => Effect.die("unused"),
+    matchingIds: () => Effect.die("unused"),
     exportRows: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
     setReviewed: () => Effect.die("unused"),
-    remove: (id) =>
+    removeMany: (_scope, target) =>
       Effect.sync(() => {
-        const row = rows.get(id);
-        rows.delete(id);
-        return row ? { imageObjectKey: row.imageObjectKey } : null;
+        const ids = "ids" in target ? target.ids : [];
+        const gone = ids.filter((id) => rows.delete(id));
+        return {
+          kind: "deleted" as const,
+          deleted: gone,
+          skipped: 0,
+          notFound: ids.length - gone.length,
+          jobId: gone.length > 0 ? "job-cleanup" : null,
+        };
       }),
     objectKeys: () => Effect.sync(() => [...objects.keys()]),
     usage: () => Effect.die("unused"),
@@ -450,15 +457,19 @@ describe("claimRetry", () => {
 });
 
 describe("deleteReceipt (U1)", () => {
-  it("deletes the stored file along with the row", async () => {
+  it("deletes the row and returns the job that deletes its stored file", async () => {
     const h = harness();
     const ingested = await h.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits }));
     if (!Exit.isSuccess(ingested)) throw new Error("ingest failed");
-    expect(h.objects.size).toBe(1);
     const exit = await h.run(deleteReceipt({ receiptId: ingested.value.receipt.id, scope }));
-    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(exit).toEqual(Exit.succeed({ jobId: "job-cleanup" }));
     expect(h.rows.size).toBe(0);
-    expect(h.objects.size).toBe(0);
+  });
+
+  it("is NotFound when nothing was deleted", async () => {
+    const h = harness();
+    const exit = await h.run(deleteReceipt({ receiptId: crypto.randomUUID(), scope }));
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("NotFound");
   });
 });
 

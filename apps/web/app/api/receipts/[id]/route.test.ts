@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 const runRoute = vi.fn();
+const after = vi.hoisted(() => vi.fn((task: () => unknown) => void task()));
+const kickJob = vi.hoisted(() => vi.fn());
 
 vi.mock("@receipt-ocr/ai/categories", () => ({ parseCategory: (value: string) => value }));
 vi.mock("@receipt-ocr/core", () => ({
@@ -9,10 +11,10 @@ vi.mock("@receipt-ocr/core", () => ({
   ReceiptRepo: {},
 }));
 vi.mock("next/server", () => ({
-  after: vi.fn(),
+  after,
   NextResponse: { json: (body: unknown, init?: ResponseInit) => Response.json(body, init) },
 }));
-vi.mock("@/lib/jobs", () => ({ kickJob: vi.fn() }));
+vi.mock("@/lib/jobs", () => ({ kickJob }));
 vi.mock("@/lib/session", () => ({
   getActiveScope: async () => ({ userId: "u1", organizationId: "o1", role: "owner" }),
 }));
@@ -27,7 +29,7 @@ vi.mock("@/lib/http", () => ({
       handler(request, context, { event: "test" }),
 }));
 
-const { PATCH } = await import("./route");
+const { DELETE, PATCH } = await import("./route");
 
 const patch = (body: BodyInit, headers?: HeadersInit) =>
   PATCH(new Request("http://localhost/api/receipts/r1", { method: "PATCH", body, headers }), {
@@ -59,5 +61,34 @@ describe("PATCH /api/receipts/[id] body", () => {
     );
     expect((await patch(JSON.stringify({ reviewed: false }))).status).toBe(404);
     expect(runRoute).toHaveBeenCalledOnce();
+  });
+});
+
+describe("DELETE /api/receipts/[id]", () => {
+  const remove = () =>
+    DELETE(new Request("http://localhost/api/receipts/r1", { method: "DELETE" }), {
+      params: Promise.resolve({ id: "r1" }),
+    });
+
+  it("starts the job that deletes the stored file after the response", async () => {
+    runRoute.mockImplementationOnce(
+      async (_effect: unknown, onSuccess: (result: { jobId: string | null }) => Response) =>
+        onSuccess({ jobId: "job-1" }),
+    );
+    expect((await remove()).status).toBe(200);
+    expect(after).toHaveBeenCalledOnce();
+    expect(kickJob).toHaveBeenCalledWith("job-1", expect.objectContaining({ trigger: "delete" }));
+  });
+
+  it("starts nothing when the receipt had no stored file", async () => {
+    after.mockClear();
+    kickJob.mockClear();
+    runRoute.mockImplementationOnce(
+      async (_effect: unknown, onSuccess: (result: { jobId: string | null }) => Response) =>
+        onSuccess({ jobId: null }),
+    );
+    expect((await remove()).status).toBe(200);
+    expect(after).not.toHaveBeenCalled();
+    expect(kickJob).not.toHaveBeenCalled();
   });
 });

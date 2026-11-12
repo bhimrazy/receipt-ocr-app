@@ -70,7 +70,7 @@ Everything is exported from `@receipt-ocr/core`. Import-free entry points for cl
 
 | Area        | Exports                                                                                                                                                                                       |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pipeline    | `ingestUpload`, `runExtraction`, `settleFailure`, `claimRetry`, `deleteReceipt`, `purgeReceiptFiles`, `getReceiptWithImage`                                                                   |
+| Pipeline    | `ingestUpload`, `runExtraction`, `settleFailure`, `claimRetry`, `deleteReceipts`, `deleteReceipt`, `purgeReceiptFiles`, `getReceiptWithImage`                                                 |
 | Jobs        | `JobQueue`, `enqueueJob`, `tick`, `drainOnce`, `runWorkerLoop`, `cancelJob`, `JOB_REGISTRY`, `receiptExtract`, `backoffMs`, job errors                                                        |
 | Billing     | `Billing`, `workspacePlan`, `accountPlan`, `workspaceCreationCheck`, `isEntitled`, `workspaceBilling`, `loadCheckoutConfig`, `applyBillingEvent`, `verifyPaddleSignature`, `parsePaddleEvent` |
 | Quota       | `quotaLimits`, `checkQuota`, `enforceQuota`, `quotaGate`, `decideQuota`, `quotaMessage`                                                                                                       |
@@ -196,8 +196,10 @@ default, how it is counted and the check order are in the single
 throwing `Conflict`, `NotFound` or `InvalidInput` inside rolls it back. Member changes lock all member rows of the
 workspace (`FOR UPDATE`) so the "at least one owner" check can't race another admin.
 
-**Files after rows.** Deletes remove database rows first and stored objects afterwards. A failed object delete is
-logged with its key (`receipt.object_delete_failed`, `admin.purge_failed`) rather than failing the request; an
+**Files after rows.** Deletes remove database rows first and stored objects afterwards. A user's delete (one receipt
+or many) deletes the rows and enqueues one `storage.delete` job with their object keys in the same transaction, so the
+files go if and only if the rows did; the job retries until the bucket answers. Account and workspace purges still
+delete objects inline and log a failure with its key (`admin.purge_failed`) rather than failing the request; an
 orphaned object costs storage only. On ingest, the just-stored object is removed whenever the insert can't have
 committed: a quota refusal, or any failure before the transaction's last statement finished. A failure while
 committing (`DbError.atCommit`) keeps the object unless Postgres answered with a SQLSTATE outside class 08 (a

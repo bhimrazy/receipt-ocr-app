@@ -156,7 +156,11 @@ async function update(request: Request, { params }: Params, event: WideEvent) {
   );
 }
 
-/** Deletes the receipt and its stored file. Members may delete only their own uploads. */
+/**
+ * Deletes the receipt. Its stored file goes with the `storage.delete` job the delete enqueued,
+ * started after the response (the next drain runs it otherwise). Members may delete only their
+ * own uploads.
+ */
 export const DELETE = withRequestEvent(
   { event: "receipt.delete", route: "/api/receipts/[id]" },
   remove,
@@ -172,7 +176,13 @@ async function remove(request: Request, { params }: Params, event: WideEvent) {
   event.receipt_id = id;
   return runRoute(
     deleteReceipt({ receiptId: id, scope }),
-    () => NextResponse.json({ ok: true }),
+    ({ jobId }) => {
+      if (jobId) {
+        event.job_id = jobId;
+        after(() => kickJob(jobId, { request_id: event.request_id, trigger: "delete" }));
+      }
+      return NextResponse.json({ ok: true });
+    },
     event,
   );
 }

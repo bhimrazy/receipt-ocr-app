@@ -191,9 +191,10 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
 
 Open pull requests only.
 
-| PR   | Work                                                                                      |
-| ---- | ----------------------------------------------------------------------------------------- |
-| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1) |
+| PR   | Work                                                                                                                          |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------- |
+| #219 | Receipts list: sorting, page size, range, selection across pages, bulk delete (`storage.delete` job), export and Add to group |
+| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                     |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).

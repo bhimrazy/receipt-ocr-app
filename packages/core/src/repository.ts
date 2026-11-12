@@ -1,11 +1,13 @@
 import { normalizeCategory, type ReceiptExtraction } from "@receipt-ocr/ai";
 import {
   and,
+  asc,
   count,
   desc,
   eq,
   gte,
   ilike,
+  inArray,
   jobs,
   lt,
   lte,
@@ -30,6 +32,8 @@ import { DbError, InvalidInput } from "./errors";
 import { liveReceiptJob, STALE_AFTER_MS } from "./jobs/live";
 import { enqueueJob } from "./jobs/queue";
 import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-job";
+import { storageDeleteJob } from "./jobs/storage-delete-job";
+import { MAX_BULK_DELETE } from "./bulk-limits";
 import type { QuotaVerdict } from "./quota";
 import { Db } from "./services";
 import {
@@ -95,6 +99,14 @@ export type ReceiptSummary = {
   fileName: string | null;
   errorMessage: string | null;
   createdAt: Date;
+  /** The uploader; null once their account is deleted. */
+  userId: string | null;
+  /** Set on list rows: the uploader's name, null once their account is deleted. */
+  uploaderName?: string | null;
+  /** When someone marked it reviewed; null until then, and again after a new extraction. */
+  reviewedAt: Date | null;
+  /** Set on list rows: who marked it reviewed, null once their account is deleted. */
+  reviewerName?: string | null;
   /** Set on list rows: when a processing receipt's job next runs, if that is still ahead (waiting to retry). */
   retryAt?: Date | null;
 };
@@ -117,7 +129,41 @@ export type ReceiptFilters = {
   to?: string;
   /** Group ids: receipts in any of them. */
   groups?: string[];
+  /** Only these receipts (a selection); ids that aren't UUIDs match nothing. */
+  ids?: string[];
 };
+
+/** History's sort orders; `uploaded` (newest first) is the default. */
+export type ReceiptSort = {
+  by: "uploaded" | "date" | "total" | "merchant";
+  dir: "asc" | "desc";
+};
+
+const NEWEST_FIRST: ReceiptSort = { by: "uploaded", dir: "desc" };
+
+export { MAX_BULK_DELETE };
+
+/**
+ * What a bulk delete removes: chosen receipts, or every receipt matching History's filters.
+ * `expected` is the match count the user confirmed; a different count now means the list
+ * changed under them, and nothing is deleted.
+ */
+export type DeleteTarget =
+  { ids: readonly string[] } | { filters: ReceiptFilters; expected: number };
+
+export type BulkDeleteResult =
+  | {
+      kind: "deleted";
+      deleted: string[];
+      /** In the workspace, but the caller may not delete them (someone else's upload). */
+      skipped: number;
+      /** Ids not in this workspace (or gone already). Always 0 for a filter. */
+      notFound: number;
+      /** The job deleting the stored files; null when none had a file. */
+      jobId: string | null;
+    }
+  | { kind: "changed"; matched: number }
+  | { kind: "too-many"; deletable: number };
 
 /** Fields a user may correct on an extracted receipt. */
 export type ReceiptPatch = {
@@ -165,6 +211,13 @@ export type RetryClaim =
   | { kind: "not-retryable" }
   | { kind: "attempts-exhausted" };
 
+/** Thrown inside the bulk delete transaction to roll it back. */
+class ListChanged extends Error {
+  constructor(readonly matched: number) {
+    super("The receipts changed during the delete");
+  }
+}
+
 /** Upload plus two retries: a receipt that keeps failing can't loop provider calls. */
 export { MAX_EXTRACTION_ATTEMPTS };
 
@@ -210,11 +263,12 @@ const currentAttempt = (id: string, scope: ReceiptScope, attempt: number) =>
 const inScope = (id: string, scope: ReceiptScope) =>
   and(eq(receipts.id, id), eq(receipts.organizationId, scope.organizationId));
 
-/** User edits and deletes: in the workspace, and the caller's own upload unless owner or admin. */
+/** What the caller may edit or delete within the workspace: their own uploads unless owner or admin. */
+const ownUnlessManager = (scope: ReceiptScope) =>
+  canManageAnyReceipt(scope.role) ? undefined : eq(receipts.userId, scope.userId);
+
 const writable = (id: string, scope: ReceiptScope) =>
-  canManageAnyReceipt(scope.role)
-    ? inScope(id, scope)
-    : and(inScope(id, scope), eq(receipts.userId, scope.userId));
+  and(inScope(id, scope), ownUnlessManager(scope));
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
 
@@ -238,6 +292,10 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
   if (filters.from && isIsoDay(filters.from))
     conditions.push(gte(receipts.receiptDate, filters.from));
   if (filters.to && isIsoDay(filters.to)) conditions.push(lte(receipts.receiptDate, filters.to));
+  if (filters.ids) {
+    const ids = filters.ids.filter(isReceiptId);
+    conditions.push(ids.length > 0 ? inArray(receipts.id, ids) : sql`false`);
+  }
   const groupIds = filters.groups?.filter(isReceiptId) ?? [];
   if (groupIds.length > 0) {
     // Qualified by hand, as in exportRows. The group must also be this workspace's.
@@ -268,7 +326,33 @@ const summaryColumns = {
   fileName: receipts.fileName,
   errorMessage: effectiveError,
   createdAt: receipts.createdAt,
+  userId: receipts.userId,
+  reviewedAt: receipts.reviewedAt,
 };
+
+// Qualified by hand, as above.
+const uploaderNameColumn = sql<
+  string | null
+>`(select u.name from "user" u where u.id = receipts.user_id)`;
+const reviewerNameColumn = sql<
+  string | null
+>`(select u.name from "user" u where u.id = receipts.reviewed_by)`;
+
+/**
+ * A total order for offset paging: the sort key (missing values last either way), then the
+ * id. Newest-first keeps the plain form the `(organization_id, created_at)` index serves.
+ */
+function sortOrder({ by, dir }: ReceiptSort): SQL[] {
+  const order = dir === "asc" ? asc : desc;
+  if (by === "uploaded") return [order(receipts.createdAt), order(receipts.id)];
+  const key =
+    by === "date"
+      ? receipts.receiptDate
+      : by === "total"
+        ? receipts.total
+        : sql`lower(${receipts.merchant})`;
+  return [sql`${key} ${dir === "asc" ? sql`asc` : sql`desc`} nulls last`, order(receipts.id)];
+}
 
 type SummaryRow = {
   [K in keyof typeof summaryColumns]: K extends "status"
@@ -379,17 +463,28 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       id: string,
       scope: ReceiptScope,
     ) => Effect.Effect<ReceiptWithItems | null, DbError>;
-    /** One page, newest first. `total` (all matches) is null when the page asks for none. */
+    /**
+     * One page, newest upload first unless `sort` says otherwise. `total` (all matches) is
+     * null when the page asks for none.
+     */
     readonly list: (
       scope: ReceiptScope,
       filters: ReceiptFilters,
-      page: { limit: number; offset: number; total?: boolean },
+      page: { limit: number; offset: number; total?: boolean; sort?: ReceiptSort },
     ) => Effect.Effect<{ rows: ReceiptSummary[]; total: number | null }, DbError>;
+    /** Ids of the receipts matching `filters`, in `sort` order, at most `limit`. */
+    readonly matchingIds: (
+      scope: ReceiptScope,
+      filters: ReceiptFilters,
+      limit: number,
+      sort?: ReceiptSort,
+    ) => Effect.Effect<string[], DbError>;
     readonly counts: (scope: ReceiptScope) => Effect.Effect<ReceiptCounts, DbError>;
     readonly exportRows: (
       scope: ReceiptScope,
       filters: ReceiptFilters,
       limit: number,
+      sort?: ReceiptSort,
     ) => Effect.Effect<ReceiptExportRow[], DbError>;
     /**
      * Applies user corrections; false when nothing matched or the caller may not
@@ -413,11 +508,16 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       scope: ReceiptScope,
       reviewed: boolean,
     ) => Effect.Effect<boolean, DbError>;
-    /** Deletes the row (items cascade); returns its object key, or null when nothing matched or not allowed. */
-    readonly remove: (
-      id: string,
+    /**
+     * Deletes the receipts the caller may delete (items and group memberships cascade) and
+     * enqueues one job for their stored files, in one transaction. Others' uploads are
+     * skipped for a plain member; other workspaces' ids count as not found. Refuses, deleting
+     * nothing, over MAX_BULK_DELETE or when a filter's match count isn't `expected`.
+     */
+    readonly removeMany: (
       scope: ReceiptScope,
-    ) => Effect.Effect<{ imageObjectKey: string | null } | null, DbError>;
+      target: DeleteTarget,
+    ) => Effect.Effect<BulkDeleteResult, DbError>;
     /** Object keys of every receipt in a workspace or uploaded by a user, before a cascade delete. */
     readonly objectKeys: (
       owner: { organizationId: string } | { userId: string },
@@ -650,10 +750,15 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           const where = filterWhere(scope, filters);
           const [rows, totals] = await Promise.all([
             db
-              .select({ ...summaryColumns, retryAt: retryAtColumn })
+              .select({
+                ...summaryColumns,
+                retryAt: retryAtColumn,
+                uploaderName: uploaderNameColumn,
+                reviewerName: reviewerNameColumn,
+              })
               .from(receipts)
               .where(where)
-              .orderBy(desc(receipts.createdAt), desc(receipts.id))
+              .orderBy(...sortOrder(page.sort ?? NEWEST_FIRST))
               .limit(page.limit)
               .offset(page.offset),
             page.total === false ? null : db.select({ value: count() }).from(receipts).where(where),
@@ -665,6 +770,17 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             })),
             total: totals ? (totals[0]?.value ?? 0) : null,
           };
+        }),
+
+      matchingIds: (scope, filters, limit, sort = NEWEST_FIRST) =>
+        use(async (db) => {
+          const rows = await db
+            .select({ id: receipts.id })
+            .from(receipts)
+            .where(filterWhere(scope, filters))
+            .orderBy(...sortOrder(sort))
+            .limit(limit);
+          return rows.map((row) => row.id);
         }),
 
       counts: (scope) =>
@@ -686,7 +802,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           };
         }),
 
-      exportRows: (scope, filters, limit) =>
+      exportRows: (scope, filters, limit, sort = NEWEST_FIRST) =>
         use(async (db) => {
           const rows = await db
             .select({
@@ -702,7 +818,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             })
             .from(receipts)
             .where(filterWhere(scope, filters))
-            .orderBy(desc(receipts.createdAt), desc(receipts.id))
+            .orderBy(...sortOrder(sort))
             .limit(limit);
           return rows.map((row) => ({ ...row, ...toSummary(row) }));
         }),
@@ -765,14 +881,65 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           return rows.length > 0;
         }),
 
-      remove: (id, scope) =>
-        use(async (db) => {
-          if (!isReceiptId(id)) return null;
-          const [row] = await db
-            .delete(receipts)
-            .where(writable(id, scope))
-            .returning({ imageObjectKey: receipts.imageObjectKey });
-          return row ?? null;
+      removeMany: (scope, target) =>
+        use(async (db): Promise<BulkDeleteResult> => {
+          const ids =
+            "filters" in target ? null : [...new Set(target.ids.map((id) => id.toLowerCase()))];
+          const match = filterWhere(
+            scope,
+            "filters" in target ? { ...target.filters, ids: undefined } : { ids: ids ?? [] },
+          );
+          const mine = ownUnlessManager(scope);
+          const deleting = db.transaction(async (tx): Promise<BulkDeleteResult> => {
+            const [counted] = await tx
+              .select({
+                matched: sql<number>`count(*)::int`,
+                deletable: mine
+                  ? sql<number>`(count(*) filter (where ${mine}))::int`
+                  : sql<number>`count(*)::int`,
+              })
+              .from(receipts)
+              .where(match);
+            const matched = counted?.matched ?? 0;
+            const deletable = counted?.deletable ?? 0;
+            if ("expected" in target && matched !== target.expected) {
+              return { kind: "changed", matched };
+            }
+            if (deletable > MAX_BULK_DELETE) return { kind: "too-many", deletable };
+            const rows =
+              deletable === 0
+                ? []
+                : await tx
+                    .delete(receipts)
+                    .where(and(match, mine))
+                    .returning({ id: receipts.id, key: receipts.imageObjectKey });
+            // Rows can change between the count and the delete (read committed). A filter
+            // delete must remove exactly what was confirmed; and never more than one job's keys.
+            if (
+              rows.length > MAX_BULK_DELETE ||
+              ("expected" in target && rows.length !== deletable)
+            ) {
+              throw new ListChanged(matched);
+            }
+            const keys = rows.flatMap((row) => (row.key ? [row.key] : []));
+            const job =
+              keys.length > 0
+                ? await enqueueJob(tx, storageDeleteJob(keys, scope.organizationId))
+                : null;
+            return {
+              kind: "deleted",
+              deleted: rows.map((row) => row.id),
+              skipped: Math.max(0, matched - rows.length),
+              notFound: ids ? Math.max(0, ids.length - matched) : 0,
+              jobId: job && "id" in job ? job.id : null,
+            };
+          });
+          try {
+            return await deleting;
+          } catch (error) {
+            if (error instanceof ListChanged) return { kind: "changed", matched: error.matched };
+            throw error;
+          }
         }),
 
       objectKeys: (owner) =>

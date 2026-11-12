@@ -2,6 +2,7 @@ import type { JobRegistry } from "./definition";
 import { billingApply } from "./kinds/billing-apply";
 import { contactReply } from "./kinds/contact-reply";
 import { receiptExtract } from "./kinds/receipt-extract";
+import { storageDelete } from "./kinds/storage-delete";
 import { welcomeEmail } from "./kinds/welcome-email";
 
 type Requirements<D> = D extends { run: (...args: never[]) => infer E }
@@ -13,11 +14,16 @@ type Requirements<D> = D extends { run: (...args: never[]) => infer E }
 /** Every job kind the app runs, by kind. Workers and drains run these. */
 export const JOB_REGISTRY: JobRegistry<
   Requirements<
-    typeof receiptExtract | typeof welcomeEmail | typeof contactReply | typeof billingApply
+    | typeof receiptExtract
+    | typeof welcomeEmail
+    | typeof contactReply
+    | typeof billingApply
+    | typeof storageDelete
   >
 > = {
   [receiptExtract.kind]: receiptExtract,
   [welcomeEmail.kind]: welcomeEmail,
   [contactReply.kind]: contactReply,
   [billingApply.kind]: billingApply,
+  [storageDelete.kind]: storageDelete,
 };

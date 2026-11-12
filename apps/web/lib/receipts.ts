@@ -3,16 +3,19 @@ import { parseCategory } from "@receipt-ocr/ai/categories";
 import {
   getReceiptWithImage,
   isIsoDay,
+  MAX_BULK_DELETE,
   ReceiptRepo,
   type ReceiptCounts,
   type ReceiptExportRow,
   type ReceiptFilters,
+  type ReceiptScope,
   type ReceiptSummary as CoreReceiptSummary,
   type ReceiptWithItems,
 } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { cache } from "react";
 import { z } from "zod";
+import { DEFAULT_PAGE_SIZE, viewFromParams, type ListSort } from "@/components/history/list-view";
 import { runtime } from "./runtime";
 import { requireActiveScope } from "./session";
 
@@ -27,6 +30,8 @@ export type HistoryFilters = ReceiptFilters;
 export type ReceiptListFilters = HistoryFilters & {
   page?: number;
   pageSize?: number;
+  /** Newest upload first without one. */
+  sort?: ListSort;
 };
 
 export type ReceiptSummaryPage = {
@@ -36,7 +41,6 @@ export type ReceiptSummaryPage = {
   pageSize: number;
 };
 
-export const HISTORY_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
 /** Highest History page served: keeps OFFSET far inside Postgres' bigint for any `?page=`. */
 export const MAX_PAGE = 1_000_000;
@@ -67,12 +71,42 @@ export function cleanFilters(input: ReceiptListFilters): ReceiptFilters {
     from: input.from && isIsoDay(input.from) ? input.from : undefined,
     to: input.to && isIsoDay(input.to) ? input.to : undefined,
     groups: cleanGroups(input.groups),
+    ids: input.ids ? cleanIds(input.ids) : undefined,
   };
+}
+
+/** A selection's ids: UUIDs only, lower case, deduplicated. Empty stays empty (matches nothing). */
+function cleanIds(ids: string[]) {
+  return [
+    ...new Set(ids.filter((id) => z.uuid().safeParse(id).success).map((id) => id.toLowerCase())),
+  ];
 }
 
 function cleanGroups(input: string[] | undefined) {
   const parsed = groupFilterSchema.safeParse(input ?? []);
   return parsed.success && parsed.data.length > 0 ? parsed.data : undefined;
+}
+
+const FILTER_PARAMS = new Set(["q", "category", "status", "from", "to", "group"]);
+const SINGLE_FILTERS = ["q", "category", "status", "from", "to"] as const;
+
+/**
+ * History's filters from a query string an action carries ("delete all that match"), or null
+ * when it has a key that isn't a filter, a repeated single key, or a value `cleanFilters` would
+ * drop: an action must never act on a wider list than the one the person saw.
+ */
+export function strictFiltersFromQuery(query: string): ReceiptFilters | null {
+  const params = new URLSearchParams(query);
+  for (const key of new Set(params.keys())) {
+    if (!FILTER_PARAMS.has(key)) return null;
+    if (key !== "group" && params.getAll(key).length > 1) return null;
+  }
+  const raw = filtersFromSearchParams(params);
+  const clean = cleanFilters({ ...raw, ids: undefined });
+  for (const key of SINGLE_FILTERS) if (raw[key] && !clean[key]) return null;
+  const groups = new Set(raw.groups?.map((id) => id.toLowerCase()));
+  if (groups.size !== (clean.groups?.length ?? 0)) return null;
+  return clean;
 }
 
 /** Filters from URL search params (History page and the export route share these). */
@@ -84,6 +118,7 @@ export function filtersFromSearchParams(
     return (Array.isArray(value) ? value[0] : value) ?? undefined;
   };
   const page = Number.parseInt(get("page") ?? "", 10);
+  const view = viewFromParams(params);
   const groups = params instanceof URLSearchParams ? params.getAll("group") : params.group;
   return {
     q: get("q"),
@@ -93,6 +128,8 @@ export function filtersFromSearchParams(
     to: get("to"),
     groups: groups === undefined ? undefined : Array.isArray(groups) ? groups : [groups],
     page: Number.isFinite(page) ? page : undefined,
+    pageSize: view.size,
+    sort: view.sort,
   };
 }
 
@@ -102,7 +139,7 @@ export async function listReceiptSummaries(
 ): Promise<ReceiptSummaryPage> {
   const pageSize = Math.min(
     MAX_PAGE_SIZE,
-    Math.max(1, Math.trunc(filters.pageSize ?? HISTORY_PAGE_SIZE)),
+    Math.max(1, Math.trunc(filters.pageSize ?? DEFAULT_PAGE_SIZE)),
   );
   const page = pageNumber(filters.page);
   const clean = cleanFilters(filters);
@@ -110,7 +147,11 @@ export async function listReceiptSummaries(
   const scope = await requireActiveScope();
   const { rows, total } = await runtime.runPromise(
     Effect.flatMap(ReceiptRepo, (repo) =>
-      repo.list(scope, clean, { limit: pageSize, offset: (page - 1) * pageSize }),
+      repo.list(scope, clean, {
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+        sort: filters.sort,
+      }),
     ),
   );
   return { rows, total: total ?? 0, page, pageSize };
@@ -133,11 +174,30 @@ export const exportRows = (
   filters: ReceiptListFilters,
 ) =>
   Effect.flatMap(ReceiptRepo, (repo) =>
-    repo.exportRows(scope, cleanFilters(filters), MAX_EXPORT_ROWS + 1),
+    repo.exportRows(scope, cleanFilters(filters), MAX_EXPORT_ROWS + 1, filters.sort),
   ).pipe(
     Effect.map((rows): { rows: ReceiptExportRow[]; truncated: boolean } => ({
       rows: rows.slice(0, MAX_EXPORT_ROWS),
       truncated: rows.length > MAX_EXPORT_ROWS,
+    })),
+  );
+
+/**
+ * Ids of every receipt matching History's filters, for acting on "all that match" where the
+ * action takes ids. `truncated` when more than MAX_BULK_DELETE match.
+ */
+export const matchingReceiptIds = (scope: ReceiptScope, filters: ReceiptListFilters) =>
+  Effect.flatMap(ReceiptRepo, (repo) =>
+    repo.matchingIds(
+      scope,
+      { ...cleanFilters(filters), ids: undefined },
+      MAX_BULK_DELETE + 1,
+      filters.sort,
+    ),
+  ).pipe(
+    Effect.map((ids) => ({
+      ids: ids.slice(0, MAX_BULK_DELETE),
+      truncated: ids.length > MAX_BULK_DELETE,
     })),
   );
 
@@ -151,3 +211,7 @@ export const getReceiptCounts = cache(async (): Promise<ReceiptCounts> => {
   const scope = await requireActiveScope();
   return runtime.runPromise(Effect.flatMap(ReceiptRepo, (repo) => repo.counts(scope)));
 });
+
+/** For a `409`: a selection was made in one workspace and the session has since moved to another. */
+export const WORKSPACE_CHANGED =
+  "You switched workspace since selecting these receipts. Reload the page and select them again.";

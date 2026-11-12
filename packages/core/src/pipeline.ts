@@ -14,9 +14,11 @@ import {
 } from "./errors";
 import { sniffMediaType, validateUpload } from "./files";
 import {
+  MAX_BULK_DELETE,
   MAX_EXTRACTION_ATTEMPTS,
   EXTRACTION_FAILED_MESSAGE,
   ReceiptRepo,
+  type DeleteTarget,
   type OcrCallRow,
   type ReceiptScope,
 } from "./repository";
@@ -430,25 +432,43 @@ export const claimRetry = (input: {
     return { round: claim.round, jobId: claim.jobId };
   });
 
-/** Deletes the row, then its stored file. */
-export const deleteReceipt = (input: { receiptId: string; scope: ReceiptScope }) =>
+/**
+ * Permanently deletes receipts the caller may delete: the rows in one transaction, which also
+ * enqueues the `storage.delete` job for their files. Run `jobId` soon (the drain picks it up
+ * otherwise). Fails Conflict when a filter now matches a different number than `expected`,
+ * and InvalidInput over MAX_BULK_DELETE; nothing is deleted then.
+ */
+export const deleteReceipts = (input: { scope: ReceiptScope; target: DeleteTarget }) =>
   Effect.gen(function* () {
     const repo = yield* ReceiptRepo;
-    const storage = yield* Storage;
-    const removed = yield* repo.remove(input.receiptId, input.scope);
-    if (!removed) return yield* new NotFound({ message: "Receipt not found" });
-    if (removed.imageObjectKey) {
-      // The row is already gone; a leftover object is logged with the receipt id for a sweep.
-      yield* storage.remove([removed.imageObjectKey]).pipe(
-        Effect.catchAll((error) =>
-          Effect.logError("receipt.object_delete_failed", {
-            receipt_id: input.receiptId,
-            error: errorFields(error),
-          }),
-        ),
-      );
+    const result = yield* repo.removeMany(input.scope, input.target);
+    if (result.kind === "changed") {
+      return yield* new Conflict({
+        message: "The list changed since you selected these receipts. Check it and try again.",
+      });
     }
+    if (result.kind === "too-many") {
+      return yield* new InvalidInput({
+        message: `You can delete up to ${MAX_BULK_DELETE.toLocaleString("en")} receipts at a time. Narrow the filters and try again.`,
+      });
+    }
+    return {
+      deleted: result.deleted.length,
+      skipped: result.skipped,
+      notFound: result.notFound,
+      jobId: result.jobId,
+    };
   });
+
+/** One receipt, through `deleteReceipts`. NotFound when it isn't there or isn't the caller's to delete. */
+export const deleteReceipt = (input: { receiptId: string; scope: ReceiptScope }) =>
+  Effect.flatMap(
+    deleteReceipts({ scope: input.scope, target: { ids: [input.receiptId] } }),
+    (result) =>
+      result.deleted === 0
+        ? Effect.fail(new NotFound({ message: "Receipt not found" }))
+        : Effect.succeed({ jobId: result.jobId }),
+  );
 
 /** Deletes every stored file of a workspace or user, before their rows cascade away. */
 export const purgeReceiptFiles = (owner: { organizationId: string } | { userId: string }) =>
