@@ -183,8 +183,6 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
   privacy policy names OpenAI as an opt-in processor, so add `OPENAI_API_KEY` knowingly ([ai.md](architecture/ai.md#openai)).
 - `receipt-ocr.vercel.app` belongs to another Vercel project, so it is not this app's URL; use the project's own
   `*.vercel.app` URL or the custom domain (the production host is `receipt-ocr.bhimraj.com.np`).
-- After 2026-11-12, delete `minimumReleaseAgeExcludes` from `bunfig.toml`: it exempts Better Auth 1.7.18 (#90, security
-  fixes and passkeys) from the 7-day cooldown, approved on 2026-11-07, and 1.7.18 clears the cooldown by then.
 
 ## In flight
 
