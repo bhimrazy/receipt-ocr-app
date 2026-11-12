@@ -42,7 +42,8 @@ export function ReceiptChecks({
     setSyncedKey(serverKey);
     setReview(server);
   }
-  const [saving, setSaving] = useState(false);
+  // Not `disabled` while saving: the control that just appeared must be able to take focus.
+  const saving = useRef(false);
   // The control that replaces the one just used takes focus, so keyboard users aren't dropped to <body>.
   const focusAfter = useRef(false);
   const undoRef = useRef<HTMLButtonElement>(null);
@@ -55,10 +56,11 @@ export function ReceiptChecks({
   }, [review]);
 
   async function setReviewed(reviewed: boolean) {
+    if (saving.current) return;
+    saving.current = true;
     const previous = review;
     focusAfter.current = true;
     setReview(reviewed ? { at: new Date(), name: viewerName } : null);
-    setSaving(true);
     const ok = await fetch(`/api/receipts/${receipt.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -66,7 +68,7 @@ export function ReceiptChecks({
     })
       .then((res) => res.ok)
       .catch(() => false);
-    setSaving(false);
+    saving.current = false;
     if (!ok) {
       focusAfter.current = true;
       setReview(previous);
@@ -97,8 +99,7 @@ export function ReceiptChecks({
             <span aria-hidden="true">·</span>
             <button
               aria-label="Undo review"
-              className="rounded-sm font-medium text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 max-md:min-h-11"
-              disabled={saving}
+              className="rounded-sm font-medium text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
               onClick={() => void setReviewed(false)}
               ref={undoRef}
               type="button"
@@ -137,7 +138,6 @@ export function ReceiptChecks({
         {canEdit ? (
           <div className="mt-4 flex flex-wrap gap-2">
             <Button
-              disabled={saving}
               onClick={() => void setReviewed(true)}
               ref={looksRightRef}
               size="sm"
@@ -159,7 +159,6 @@ export function ReceiptChecks({
         <Button
           aria-label="Mark as reviewed"
           className="absolute top-2 right-2"
-          disabled={saving}
           onClick={() => void setReviewed(true)}
           size="icon-sm"
           variant="ghost"
