@@ -121,6 +121,9 @@ reset. **From the first real user onward we never squash again.** Details:
 
 Steps are in [deployment.md](deployment.md).
 
+- Migration `0002_receipt_review` (reviewed receipts): run **Database Migration** on `staging-db`, then
+  `production-db`, before deploying the release that contains it. It adds two nullable columns, a foreign key and a
+  partial index to `receipts`, with `lock_timeout = '3s'`.
 - Reset `staging-db` and `production-db` with the 2026-11-08 SQL (23 tables, two enum types, the `drizzle`
   bookkeeping schema; [release note](deployment.md#squashed-baseline-again-2026-11-08), not `DROP SCHEMA public`),
   run **Database Migration** on `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies

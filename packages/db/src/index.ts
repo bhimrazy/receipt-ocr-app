@@ -106,10 +106,17 @@ export const receipts = pgTable(
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     /** `provider:model` that produced the extraction; null until one has. */
     model: text("model"),
+    /** When someone confirmed the extraction looks right; a new extraction clears it. */
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedBy: text("reviewed_by").references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // The set-null on account delete; partial because most receipts are never reviewed.
+    index("receipts_reviewed_by_idx")
+      .on(table.reviewedBy)
+      .where(sql`reviewed_by is not null`),
     // A user's uploads, and the set-null on account delete.
     index("receipts_user_created_at_idx").on(table.userId, table.createdAt),
     // Admin upload charts and counts across workspaces.
@@ -570,8 +577,9 @@ export const billingEvents = pgTable(
   ],
 ).enableRLS();
 
-export const receiptsRelations = relations(receipts, ({ many }) => ({
+export const receiptsRelations = relations(receipts, ({ many, one }) => ({
   items: many(receiptItems),
+  reviewer: one(user, { fields: [receipts.reviewedBy], references: [user.id] }),
 }));
 
 export const receiptItemsRelations = relations(receiptItems, ({ one }) => ({
