@@ -37,7 +37,8 @@ import { historyHref, isFiltered } from "@/components/history/history-href";
 import { ReceiptRowContent, receiptTitle, ReviewBadge, ROW_LINK } from "@/components/receipt-list";
 import { StatusBadge } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
-import { confidenceLevel, formatDate, formatMoney } from "@/lib/format";
+import { confidenceLevel, formatMoney } from "@/lib/format";
+import { ReceiptDate } from "@/components/receipt-date";
 import { canEditReceipt } from "@/lib/receipt-permissions";
 import type { HistoryFilters, ReceiptSummary } from "@/lib/receipts";
 import { HistoryPagination } from "./history-pagination";
@@ -419,7 +420,6 @@ export function HistoryResults({
               const on = isSelected(selection, receipt.id);
               const completed = receipt.status === "completed";
               const amount = completed ? formatMoney(receipt.total, receipt.currency) : null;
-              const date = completed ? formatDate(receipt.receiptDate) : null;
               const target = { kind: "ids" as const, ids: new Set([receipt.id]) };
               return (
                 <TableRow
@@ -454,7 +454,16 @@ export function HistoryResults({
                     ) : null}
                   </TableCell>
                   <TableCell className="px-2 whitespace-nowrap text-muted-foreground lg:px-4">
-                    {date ?? <Missing />}
+                    {completed ? (
+                      <ReceiptDate
+                        calendar={receipt.receiptDateCalendar}
+                        date={receipt.receiptDate}
+                        fallback={<Missing />}
+                        stacked
+                      />
+                    ) : (
+                      <Missing />
+                    )}
                   </TableCell>
                   <TableCell className="hidden truncate text-muted-foreground xl:table-cell">
                     {completed && receipt.category ? receipt.category : <Missing />}

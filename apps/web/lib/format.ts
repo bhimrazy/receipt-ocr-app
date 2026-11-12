@@ -1,3 +1,5 @@
+import { formatBs, printedBsDate } from "@receipt-ocr/core/calendar";
+
 // Fixed locale and time zone so server and client render identical strings
 // (a runtime-default locale causes hydration mismatches).
 const LOCALE = "en-GB";
@@ -89,6 +91,30 @@ export function formatDate(value: string | Date | null | undefined): string | nu
       : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return threeLetterMonth(dateFormatter.format(date));
+}
+
+/**
+ * A receipt's date in the calendar it printed: `{ bs: "9 Shrawan 2080", ad: "25 Jul 2023" }` for a receipt that
+ * printed Bikram Sambat, `{ bs: null, ad: "25 Jul 2023" }` otherwise; null without a date. The AD day always stays,
+ * so a list sorted by date reads in order whatever each receipt printed.
+ */
+export function receiptDateParts(
+  date: string | null | undefined,
+  calendar: string | null | undefined,
+): { bs: string | null; ad: string } | null {
+  const ad = formatDate(date);
+  if (!ad || !date) return null;
+  const bs = printedBsDate(date, calendar ?? null);
+  return { bs: bs ? formatBs(bs) : null, ad };
+}
+
+/** `receiptDateParts` as one string: "9 Shrawan 2080 · 25 Jul 2023", or "25 Jul 2023". */
+export function formatReceiptDate(
+  date: string | null | undefined,
+  calendar: string | null | undefined,
+): string | null {
+  const parts = receiptDateParts(date, calendar);
+  return parts ? [parts.bs, parts.ad].filter(Boolean).join(" · ") : null;
 }
 
 /** "27 Oct 2026, 14:05 UTC". */

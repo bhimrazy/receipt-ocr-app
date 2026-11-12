@@ -14,6 +14,12 @@ function receipt(overrides: Partial<ReceiptWithItems> = {}): ReceiptWithItems {
     subtotal: "10.00",
     tax: "1.00",
     tip: null,
+    discount: null,
+    serviceCharge: null,
+    invoiceNumber: null,
+    merchantTaxId: null,
+    receiptDateCalendar: null,
+    reviewReasons: [],
     total: "11.00",
     confidence: "0.9500",
     status: "completed",
@@ -52,6 +58,12 @@ function row(overrides: Partial<ReceiptExportRow> = {}): ReceiptExportRow {
     subtotal: "10.00",
     tax: "1.00",
     tip: null,
+    discount: null,
+    serviceCharge: null,
+    invoiceNumber: null,
+    merchantTaxId: null,
+    receiptDateCalendar: null,
+    reviewReasons: [],
     total: "11.00",
     confidence: 0.95,
     fileName: "corner.jpg",
@@ -104,6 +116,37 @@ describe("receiptsToCsv", () => {
     expect(receiptsToCsv([row({ groups: ["=SUM(A1)"] })])).toContain("'=SUM(A1)");
   });
 
+  it("adds the BS date, dotted, only for a receipt that printed Bikram Sambat", () => {
+    const csv = receiptsToCsv([
+      row({ receiptDate: "2023-07-25", receiptDateCalendar: "bikram-sambat" }),
+      row({ receiptDate: "2023-07-25", receiptDateCalendar: "gregory" }),
+    ]);
+    const [header, bs, ad] = csv.trimEnd().split("\n");
+    const at = header!.split(",").indexOf("receipt_date_bs");
+    expect(at).toBe(header!.split(",").indexOf("receipt_date") + 1);
+    expect(bs!.split(",")[at]).toBe("2080.04.09");
+    expect(ad!.split(",")[at]).toBe("");
+  });
+
+  it("exports the bill number, tax ID, discount, service charge and review reasons", () => {
+    const csv = receiptsToCsv([
+      row({
+        invoiceNumber: "-80/81",
+        merchantTaxId: "601234567",
+        discount: "5.00",
+        serviceCharge: "10.00",
+        reviewReasons: ["no_date", "totals_mismatch"],
+      }),
+    ]);
+    const [header, line] = csv.trimEnd().split("\n");
+    const value = (name: string) => line!.split(",")[header!.split(",").indexOf(name)];
+    expect(value("invoice_number")).toBe("'-80/81");
+    expect(value("merchant_tax_id")).toBe("601234567");
+    expect(value("discount")).toBe("5.00");
+    expect(value("service_charge")).toBe("10.00");
+    expect(value("review_reasons")).toBe("no_date; totals_mismatch");
+  });
+
   it("leaves negative amounts numeric so refunds still add up (L7)", () => {
     const csv = receiptsToCsv([row({ total: "-5.00", tax: "-0.40" })]);
     expect(csv).toContain(",-5.00,");
@@ -115,9 +158,19 @@ describe("receiptItemsToCsv", () => {
   it("includes every line item and the totals rows", () => {
     const csv = receiptItemsToCsv(receipt());
     expect(csv).toContain("Milk");
-    for (const label of ["Subtotal", "Tax", "Tip", "Total"]) {
+    for (const label of ["Subtotal", "Discount", "Service charge", "Tax", "Tip", "Total"]) {
       expect(csv).toContain(label);
     }
+  });
+
+  it("carries the BS date on every row of a BS receipt", () => {
+    const lines = receiptItemsToCsv(
+      receipt({ receiptDate: "2023-07-25", receiptDateCalendar: "bikram-sambat" }),
+    )
+      .trimEnd()
+      .split("\n");
+    expect(lines[0]).toMatch(/^receipt_id,merchant,receipt_date,receipt_date_bs,item,/);
+    for (const line of lines.slice(1)) expect(line).toContain(",2023-07-25,2080.04.09,");
   });
 
   it("still emits totals when there are no line items", () => {

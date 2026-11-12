@@ -4,10 +4,11 @@ const runRoute = vi.fn();
 const after = vi.hoisted(() => vi.fn((task: () => unknown) => void task()));
 const kickJob = vi.hoisted(() => vi.fn());
 
-vi.mock("@receipt-ocr/ai/categories", () => ({ parseCategory: (value: string) => value }));
-vi.mock("@receipt-ocr/core", () => ({
+vi.mock("@receipt-ocr/core", async () => ({
   deleteReceipt: vi.fn(),
   JobQueue: {},
+  parseReceiptPatch: (await import("../../../../../../packages/core/src/receipt-patch"))
+    .parseReceiptPatch,
   ReceiptRepo: {},
 }));
 vi.mock("next/server", () => ({
@@ -53,6 +54,29 @@ describe("PATCH /api/receipts/[id] body", () => {
     expect((await patch(JSON.stringify({ reviewed: "yes" }))).status).toBe(400);
     expect((await patch(JSON.stringify({ reviewed: true, merchant: "x" }))).status).toBe(400);
     expect(runRoute).not.toHaveBeenCalled();
+  });
+
+  it("refuses a field it can't read with 400 and the field's problem, saving nothing", async () => {
+    runRoute.mockClear();
+    for (const [body, error] of [
+      [{ total: "12.50abc" }, "Total must be an amount, like 12.50."],
+      [{ currency: "EURO" }, "Currency must be a 3-letter code, like USD."],
+      [{ confidence: 1 }, "Unknown field: confidence"],
+    ] as const) {
+      const res = await patch(JSON.stringify(body));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error });
+    }
+    expect(runRoute).not.toHaveBeenCalled();
+  });
+
+  it("saves a decimal-comma amount", async () => {
+    runRoute.mockImplementationOnce(
+      async (_effect: unknown, onSuccess: (updated: boolean) => Response) => onSuccess(true),
+    );
+    expect((await patch(JSON.stringify({ total: "12,50", discount: "1,00" }))).status).toBe(200);
+    expect(runRoute).toHaveBeenCalledOnce();
+    runRoute.mockClear();
   });
 
   it("maps a review the repository refuses to 404", async () => {

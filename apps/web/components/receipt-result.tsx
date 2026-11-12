@@ -28,8 +28,9 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { confidenceLevel, formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { confidenceLevel, formatDateTime, formatMoney } from "@/lib/format";
 import { checksFor, fileNoun } from "@/lib/receipt-checks";
+import { ReceiptDate } from "@/components/receipt-date";
 import { InstallOfferCard } from "@/components/install-offer";
 import { ProcessingPoller } from "@/components/processing-poller";
 import {
@@ -113,7 +114,13 @@ export function ReceiptResult({
         <PageHeaderDescription className="mt-2.5 flex max-w-none flex-wrap items-center gap-x-3 gap-y-2">
           {completed ? (
             <>
-              <span>{formatDate(receipt.receiptDate) ?? "No date found"}</span>
+              <span>
+                <ReceiptDate
+                  calendar={receipt.receiptDateCalendar}
+                  date={receipt.receiptDate}
+                  fallback="No date found"
+                />
+              </span>
               {receipt.category ? <Badge variant="secondary">{receipt.category}</Badge> : null}
               <ReviewedConfidenceBadge value={receipt.confidence} />
             </>
@@ -310,14 +317,42 @@ export function ReceiptResult({
         <div className="col-span-2">
           <Field label="Merchant">{receipt.merchant ?? <NotFound />}</Field>
         </div>
-        <Field label="Date">{formatDate(receipt.receiptDate) ?? <NotFound />}</Field>
+        <Field label="Date">
+          <ReceiptDate
+            calendar={receipt.receiptDateCalendar}
+            date={receipt.receiptDate}
+            fallback={<NotFound />}
+            stacked
+          />
+        </Field>
         <Field label="Category">{receipt.category ?? <NotFound />}</Field>
         <Field label="Currency" mono>
           {currency}
         </Field>
+        {/* Printed on some receipts only, so shown only when read. */}
+        {receipt.invoiceNumber ? (
+          <Field label="Bill number" mono>
+            {receipt.invoiceNumber}
+          </Field>
+        ) : null}
+        {receipt.merchantTaxId ? (
+          <Field label="Merchant tax ID" mono>
+            {receipt.merchantTaxId}
+          </Field>
+        ) : null}
         <Field label="Subtotal" mono>
           {money(receipt.subtotal) ?? <None />}
         </Field>
+        {receipt.discount ? (
+          <Field label="Discount" mono>
+            {money(receipt.discount)}
+          </Field>
+        ) : null}
+        {receipt.serviceCharge ? (
+          <Field label="Service charge" mono>
+            {money(receipt.serviceCharge)}
+          </Field>
+        ) : null}
         <Field label="Tax" mono>
           {money(receipt.tax) ?? <None />}
         </Field>

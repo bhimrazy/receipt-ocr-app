@@ -10,7 +10,7 @@ import {
   isInFlight,
 } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
-import { confidenceLevel, formatDate, formatMoney } from "@/lib/format";
+import { confidenceLevel, formatMoney, formatReceiptDate } from "@/lib/format";
 
 /** What a row is called: the merchant once read, the uploaded file name until then. */
 export function receiptTitle(receipt: Pick<ReceiptSummary, "status" | "merchant" | "fileName">) {
@@ -58,7 +58,9 @@ export function ReceiptRowContent({
 }) {
   const completed = receipt.status === "completed";
   const amount = completed ? formatMoney(receipt.total, receipt.currency) : null;
-  const date = completed ? formatDate(receipt.receiptDate) : null;
+  const date = completed
+    ? formatReceiptDate(receipt.receiptDate, receipt.receiptDateCalendar)
+    : null;
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-baseline justify-between gap-3">
