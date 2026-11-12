@@ -24,7 +24,7 @@ import { Ocr, providerOf, type ProviderCooldowns } from "./ocr";
 import { quotaExceeded, quotaGate, type QuotaLimits } from "./quota";
 import { Storage } from "./services";
 import { annotateEvent } from "./telemetry/current";
-import { errorFields } from "./telemetry/redact";
+import { errorFields, sqlState } from "./telemetry/redact";
 import type { WideEventFields } from "./telemetry/schema";
 
 export type StepTiming = { step: string; ms: number };
@@ -199,8 +199,17 @@ export const ingestUpload = (input: {
           ? Effect.succeed(result)
           : Effect.fail(quotaExceeded(result.verdict)),
       ),
-      // No row means nothing would ever delete the object.
-      Effect.tapError(() => storage.remove([imageObjectKey]).pipe(Effect.ignore)),
+      // No row means nothing would ever delete the object. Postgres answering
+      // with an error means the transaction rolled back; a timeout or lost
+      // connection may still have committed it, so the object stays and is logged.
+      Effect.tapError((error) =>
+        error._tag === "QuotaExceeded" || sqlState(error.cause) !== undefined
+          ? storage.remove([imageObjectKey]).pipe(Effect.ignore)
+          : Effect.logError("receipt.ingest_unknown", {
+              receipt_id: id,
+              error: errorFields(error),
+            }),
+      ),
       Effect.ensuring(annotateTimings(timings)),
     );
     return { receipt: inserted.receipt, jobId: inserted.jobId, timings };

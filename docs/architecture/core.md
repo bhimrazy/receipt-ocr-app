@@ -198,7 +198,9 @@ workspace (`FOR UPDATE`) so the "at least one owner" check can't race another ad
 
 **Files after rows.** Deletes remove database rows first and stored objects afterwards. A failed object delete is
 logged with its key (`receipt.object_delete_failed`, `admin.purge_failed`) rather than failing the request; an
-orphaned object costs storage only. On ingest, if the insert fails the just-stored object is removed.
+orphaned object costs storage only. On ingest, the just-stored object is removed when the quota refuses the upload
+or Postgres answers the insert with an error (it rolled back). A timeout or lost connection may have committed, so
+the object stays and `receipt.ingest_unknown` logs the receipt id for a sweep.
 
 ## Receipt groups
 

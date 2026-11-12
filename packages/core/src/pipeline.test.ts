@@ -2,7 +2,7 @@ import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, PROMPT_VERSION } from "@receipt-
 import type { Receipt } from "@receipt-ocr/db";
 import { Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
-import { NotConfigured, OcrError, StorageError } from "./errors";
+import { DbError, NotConfigured, OcrError, StorageError } from "./errors";
 import {
   claimRetry,
   deleteReceipt,
@@ -14,6 +14,7 @@ import {
 } from "./pipeline";
 import {
   EXTRACTION_FAILED_MESSAGE,
+  type InsertResult,
   ReceiptRepo,
   type OcrCallRow,
   type ReceiptWithItems,
@@ -36,6 +37,8 @@ const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 function harness(
   options: {
     storagePut?: "fail";
+    /** The insert fails with a DbError wrapping this driver error. */
+    insertCause?: unknown;
     ocr?: "fixture" | "fail" | "unconfigured";
     /** The receipt is deleted while the model runs. */
     deleteDuringOcr?: boolean;
@@ -57,9 +60,12 @@ function harness(
 
   const repo = Layer.succeed(ReceiptRepo, {
     insert: ({ id, scope, fileName, imageObjectKey }, quota) =>
-      Effect.sync(() => {
+      Effect.suspend((): Effect.Effect<InsertResult, DbError> => {
+        if (options.insertCause !== undefined) {
+          return Effect.fail(new DbError({ message: "insert", cause: options.insertCause }));
+        }
         const verdict = quota.decide(counts());
-        if (!verdict.allowed) return { kind: "quota" as const, verdict };
+        if (!verdict.allowed) return Effect.succeed({ kind: "quota" as const, verdict });
         const row = {
           id,
           organizationId: scope.organizationId,
@@ -73,7 +79,11 @@ function harness(
           updatedAt: new Date(),
         } as unknown as ReceiptWithItems;
         rows.set(id, row);
-        return { kind: "inserted" as const, receipt: row as Receipt, jobId: `job-${id}` };
+        return Effect.succeed({
+          kind: "inserted" as const,
+          receipt: row as Receipt,
+          jobId: `job-${id}`,
+        });
       }),
     complete: (id, _scope, attempt, extraction, model, written) =>
       Effect.sync(() => {
@@ -212,6 +222,20 @@ describe("ingestUpload", () => {
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("QuotaExceeded");
     expect(h.rows.size).toBe(0);
     expect(h.objects.size).toBe(0);
+  });
+
+  it("removes the stored file when Postgres refused the insert, so it rolled back", async () => {
+    const h = harness({ insertCause: Object.assign(new Error("pg"), { code: "57014" }) });
+    const exit = await h.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits }));
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("DbError");
+    expect(h.objects.size).toBe(0);
+  });
+
+  it("keeps the stored file when the insert timed out, as it may have committed", async () => {
+    const h = harness({ insertCause: new Error("Query read timeout") });
+    const exit = await h.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits }));
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(h.objects.size).toBe(1);
   });
 
   it("creates no row when storage fails, so nothing points at a missing file", async () => {
