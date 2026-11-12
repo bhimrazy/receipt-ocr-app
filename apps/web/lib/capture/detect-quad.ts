@@ -30,21 +30,32 @@ export const MIN_CONFIDENCE = 0.75;
 /*
  * Applying a crop nobody reviews needs evidence that it holds the whole paper. Each rule
  * targets a way the largest-blob detector cuts print:
+ * - The blob is darker than its surroundings: a phone, a card reader, a dark block inside
+ *   a page. Receipts are light paper.
+ * - The blob is small (under 20% of the frame): a light card or screen is as likely.
  * - The blob touches the frame: a wall, a door, screenshot chrome, or paper that runs on.
  * - Part of the blob lies outside the quad: fingers, a second paper, a cut-off corner.
- * - Other foreground of the same tone rivals the blob: it may be the wrong object.
- * - One side's edge is much weaker than the others: a shadow or glare boundary across the
- *   paper rather than paper against table.
+ * - Other foreground of the same tone rivals the blob: it may be the wrong object, or a
+ *   dark band across the paper split off part of it.
+ * - One side's edge is much weaker than the others, or an edge carries on past a corner:
+ *   a shadow or glare boundary across the paper rather than paper against table.
  */
+const APPLY_MIN_COVER = 0.2;
 /**
  * Furthest the blob may reach outside the quad, in detection pixels (about 2% of the long
  * edge). Blur and the pixel staircase put a clean tilted sheet up to ~3.5 px out.
  */
 const APPLY_MAX_OUTSIDE = 5;
-const APPLY_MIN_SHARE = 0.9;
+const APPLY_MIN_SHARE = 0.97;
 /** The weakest side's luma step, absolute (0..255) and against the strongest side's. */
 const APPLY_MIN_STEP = 24;
 const APPLY_MIN_SIDE_RATIO = 0.6;
+/**
+ * A side's line continued past either corner may step by at most this share of the side's
+ * own step (or APPLY_MIN_STEP). Wood grain beside a clean sheet reaches ~0.25; a shadow cast
+ * across paper and table carries on at 0.4 and up.
+ */
+const APPLY_MAX_RUN_ON = 0.3;
 
 type Grey = { data: Uint8Array; width: number; height: number };
 
@@ -255,35 +266,35 @@ function outsideBy(q: Quad, p: Point) {
 }
 
 /**
- * Per side of `q`, mean luma `gap` px inside minus `gap` px outside, along its middle 80%
- * (corners blur both ways). NaN for a side with no samples in the frame.
+ * Mean luma `gap` px on the quad's inner side of the line through side `i` of `q`, minus
+ * `gap` px on its outer side, for `t` from `t0` to `t1` along it (0 and 1 are its corners).
+ * NaN with fewer than `min` samples in the frame.
  */
-function sideSteps(grey: Grey, q: Quad, gap = 3): number[] {
+function lineStep(grey: Grey, q: Quad, i: number, t0: number, t1: number, min = 1, gap = 3) {
+  const a = q[i]!;
+  const b = q[(i + 1) % 4]!;
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  // Clockwise on screen, so (dy, -dx) points out of the quad.
+  const nx = (b.y - a.y) / len;
+  const ny = -(b.x - a.x) / len;
   const at = (x: number, y: number) => {
     const xi = Math.round(x);
     const yi = Math.round(y);
     if (xi < 0 || yi < 0 || xi >= grey.width || yi >= grey.height) return null;
     return grey.data[yi * grey.width + xi]!;
   };
-  return q.map((a, i) => {
-    const b = q[(i + 1) % 4]!;
-    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    // Clockwise on screen, so (dy, -dx) points out of the quad.
-    const nx = (b.y - a.y) / len;
-    const ny = -(b.x - a.x) / len;
-    let sum = 0;
-    let n = 0;
-    for (let t = 0.1; t <= 0.9; t += 1 / len) {
-      const x = a.x + (b.x - a.x) * t;
-      const y = a.y + (b.y - a.y) * t;
-      const inside = at(x - nx * gap, y - ny * gap);
-      const outside = at(x + nx * gap, y + ny * gap);
-      if (inside === null || outside === null) continue;
-      sum += inside - outside;
-      n++;
-    }
-    return n ? sum / n : Number.NaN;
-  });
+  let sum = 0;
+  let n = 0;
+  for (let t = t0; t <= t1; t += 1 / len) {
+    const x = a.x + (b.x - a.x) * t;
+    const y = a.y + (b.y - a.y) * t;
+    const inside = at(x - nx * gap, y - ny * gap);
+    const outside = at(x + nx * gap, y + ny * gap);
+    if (inside === null || outside === null) continue;
+    sum += inside - outside;
+    n++;
+  }
+  return n >= min ? sum / n : Number.NaN;
 }
 
 /** `polarity` is 1 when the mask holds the lighter class, -1 for the darker. */
@@ -323,14 +334,24 @@ function candidate(mask: Uint8Array, grey: Grey, polarity: 1 | -1): Detection {
     ([y, [x0, x1]]) => x0 === 0 || x1 === width - 1 || y === 0 || y === height - 1,
   );
   const outside = Math.max(...hull.map((p) => outsideBy(corners, p)));
-  const steps = sideSteps(grey, corners).map((s) => s * polarity);
+  // Middle 80% of each side: its corners blur both ways.
+  const steps = corners.map((_, i) => polarity * lineStep(grey, corners, i, 0.1, 0.9));
   const weakest = Math.min(...steps);
+  // The same step carrying on past a corner means the side is a boundary across the paper.
+  const runsOn = corners.some((_, i) =>
+    [lineStep(grey, corners, i, -0.3, -0.08, 4), lineStep(grey, corners, i, 1.08, 1.3, 4)].some(
+      (s) => polarity * s >= Math.max(APPLY_MIN_STEP, APPLY_MAX_RUN_ON * steps[i]!),
+    ),
+  );
   const apply =
+    polarity === 1 &&
+    cover >= APPLY_MIN_COVER &&
     !touchesFrame &&
     outside <= APPLY_MAX_OUTSIDE &&
     share >= APPLY_MIN_SHARE &&
     weakest >= APPLY_MIN_STEP &&
-    weakest >= APPLY_MIN_SIDE_RATIO * Math.max(...steps);
+    weakest >= APPLY_MIN_SIDE_RATIO * Math.max(...steps) &&
+    !runsOn;
   return { quad, confidence, level: apply ? "apply" : "suggest" };
 }
 

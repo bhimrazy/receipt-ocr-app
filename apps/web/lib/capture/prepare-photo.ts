@@ -17,8 +17,7 @@ const isUnedited = (edit: EditState) =>
 
 /**
  * The file to upload for one reviewed photo. `edit` is what the user saw, or `startingEdit`
- * builds it for a photo they never opened (`editFromDetection`: cropped only on a confident
- * detection, so an unseen photo is never cut on a guess). The rendered edit is encoded directly, at the upload
+ * builds it for a photo they never opened. The rendered edit is encoded directly, at the upload
  * size picked in review (`size`, see `encodeUpload`).
  *
  * - The browser can't decode it (HEIC outside Safari): the original goes, and the server judges

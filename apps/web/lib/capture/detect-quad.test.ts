@@ -199,11 +199,15 @@ describe("detectQuad on synthetic scenes", () => {
 
 type Tone = number | ((u: number, v: number) => number);
 
-/** `layers` painted in order over `background`, each a tone (or a function of 0..1 paper coordinates) on a quad. */
+/**
+ * `layers` painted in order over `background`, each a tone (or a function of 0..1 paper
+ * coordinates) on a quad, then everything multiplied by `light` (shadows, gradients).
+ */
 function paint(
   background: (x: number, y: number) => number,
   layers: { quad: Quad; tone: Tone }[],
   noise = 8,
+  light: (x: number, y: number) => number = () => 1,
 ): Pixels {
   const unit: Quad = [
     { x: 0, y: 0 },
@@ -223,6 +227,7 @@ function paint(
         if (p.x < 0 || p.y < 0 || p.x >= 1 || p.y >= 1) continue;
         v = typeof tone === "number" ? tone : tone(p.x, p.y);
       }
+      v *= light(x, y);
       const n = rand();
       data.set([v + n, v + n, v + n, 255], (y * W + x) * 4);
     }
@@ -244,6 +249,16 @@ const printed =
 const darkTable = () => 40;
 const woodTable = (x: number, y: number) => 70 + 25 * Math.sin(x / 9 + Math.sin(y / 40) * 2);
 
+/** A 260x460 sheet turned `deg` degrees about the frame's centre. */
+function turned(deg: number): Quad {
+  const c = Math.cos((deg * Math.PI) / 180);
+  const s = Math.sin((deg * Math.PI) / 180);
+  const at = (x: number, y: number) => ({ x: 300 + x * c - y * s, y: 400 + x * s + y * c });
+  return [at(-130, -230), at(130, -230), at(130, 230), at(-130, 230)];
+}
+/** Light falling off from 1 on the right to 0.55 on the left. */
+const gradient = (x: number) => 0.55 + (0.45 * x) / W;
+
 describe("detectQuad: cropping a photo nobody reviews", () => {
   it("applies the outline of a printed receipt on a dark table", () => {
     const result = detectQuad(paint(darkTable, [{ quad: tilted, tone: printed() }]));
@@ -251,85 +266,155 @@ describe("detectQuad: cropping a photo nobody reviews", () => {
     expect(cornerError(result.quad!, norm(tilted, W, H))).toBeLessThan(0.02);
   });
 
-  it("applies it on wood grain, and for paper darker than the table", () => {
-    expect(detectQuad(paint(woodTable, [{ quad: tilted, tone: printed() }])).level).toBe("apply");
-    expect(detectQuad(scene(W, H, tilted, 60, 220, 6)).level).toBe("apply");
+  it("applies it on wood grain, under uneven light, and turned up to 44 degrees", () => {
+    const sheet = [{ quad: tilted, tone: printed() }];
+    expect(detectQuad(paint(woodTable, sheet)).level).toBe("apply");
+    expect(detectQuad(paint(woodTable, sheet, 8, gradient)).level).toBe("apply");
+    expect(detectQuad(paint(() => 110, sheet, 8, gradient)).level).toBe("apply");
+    expect(detectQuad(paint(woodTable, [{ quad: turned(44), tone: printed() }])).level).toBe(
+      "apply",
+    );
   });
 
-  it("finds and applies a long 1:5 receipt standing 80% of the frame's height", () => {
+  it("applies the whole sheet under a shadow too faint to split it", () => {
+    const result = detectQuad(
+      paint(darkTable, [{ quad: tilted, tone: printed() }], 8, (x, y) =>
+        x * 0.9 + y * 0.35 > 520 ? 0.6 : 1,
+      ),
+    );
+    expect(result.level).toBe("apply");
+    expect(cornerError(result.quad!, norm(tilted, W, H))).toBeLessThan(0.02);
+  });
+
+  it("returns nothing for a white receipt on a light table", () => {
+    expect(detectQuad(paint(() => 215, [{ quad: tilted, tone: printed() }])).level).toBe("none");
+  });
+
+  // Each case below fails exactly one apply rule, so removing any rule fails a test.
+
+  it("suggests a blob darker than its surroundings (dark card in a screenshot, dark paper)", () => {
+    const card = paint(() => 250, [{ quad: box(30, 100, 570, 290), tone: 90 }], 0);
+    expect(detectQuad(card).level).toBe("suggest");
+    expect(detectQuad(scene(W, H, tilted, 60, 220, 6)).level).toBe("suggest");
+  });
+
+  it("finds a long 1:5 receipt at 80% of the frame's height, but only suggests it (17% cover)", () => {
     const tall = box(236, 80, 364, 720);
     const result = detectQuad(paint(darkTable, [{ quad: tall, tone: printed() }]));
-    expect(result.level).toBe("apply");
+    expect(result.level).toBe("suggest");
     expect(cornerError(result.quad!, norm(tall, W, H))).toBeLessThan(0.02);
   });
 
-  it("only suggests a receipt that runs off the frame", () => {
-    const result = detectQuad(scene(W, H, box(160, 100, 440, 900), 235, 40, 8));
-    expect(result.quad).not.toBeNull();
-    expect(result.level).toBe("suggest");
+  it("suggests a receipt with a corner past the frame", () => {
+    const poking: Quad = [
+      { x: 150, y: -10 },
+      { x: 470, y: 60 },
+      { x: 430, y: 690 },
+      { x: 110, y: 640 },
+    ];
+    expect(detectQuad(paint(darkTable, [{ quad: poking, tone: printed() }])).level).toBe("suggest");
   });
 
-  it("does not apply a white receipt on a light table", () => {
-    const result = detectQuad(paint(() => 215, [{ quad: tilted, tone: printed() }]));
-    expect(result.level).not.toBe("apply");
-  });
-
-  it("does not apply when light objects touch the receipt", () => {
+  it("suggests a receipt with a light note stuck to its side", () => {
     const result = detectQuad(
       paint(darkTable, [
-        { quad: box(20, 600, 200, 780), tone: 220 },
-        { quad: box(420, 40, 590, 160), tone: 210 },
         { quad: tilted, tone: printed() },
-        { quad: box(440, 380, 560, 470), tone: 225 },
+        { quad: box(440, 380, 520, 450), tone: 225 },
       ]),
     );
-    expect(result.level).not.toBe("apply");
-  });
-
-  it("does not apply when another light object rivals the receipt", () => {
-    const result = detectQuad(
-      paint(darkTable, [
-        { quad: box(10, 10, 120, 300), tone: 220 },
-        { quad: box(480, 500, 590, 790), tone: 215 },
-        { quad: box(180, 150, 420, 650), tone: printed() },
-      ]),
-    );
-    expect(result.quad).not.toBeNull();
     expect(result.level).toBe("suggest");
   });
 
-  it("does not apply a hand-held receipt with fingers over its edge", () => {
+  it("suggests when a dark header band splits off the top of the paper", () => {
+    const header = (u: number, v: number) => (v > 0.06 && v < 0.1 ? 35 : printed()(u, v));
+    expect(detectQuad(paint(darkTable, [{ quad: tilted, tone: header }])).level).toBe("suggest");
+  });
+
+  it("suggests when another light paper lies apart from the receipt", () => {
+    const result = detectQuad(
+      paint(darkTable, [
+        { quad: box(120, 100, 400, 700), tone: printed() },
+        { quad: box(440, 560, 560, 680), tone: printed() },
+      ]),
+    );
+    expect(result.level).toBe("suggest");
+  });
+
+  it("suggests when every edge is faint", () => {
+    expect(detectQuad(paint(() => 140, [{ quad: tilted, tone: 160 }], 4)).level).toBe("suggest");
+  });
+
+  it("suggests when one side borders something much lighter than the table", () => {
+    const result = detectQuad(
+      paint(
+        () => 10,
+        [
+          { quad: box(150, 100, 450, 700), tone: printed() },
+          { quad: box(452, 130, 520, 670), tone: 110 },
+        ],
+        4,
+      ),
+    );
+    expect(result.level).toBe("suggest");
+  });
+
+  it("suggests when a cast shadow across paper and table cuts the sheet short", () => {
+    const sheet = [{ quad: box(100, 60, 500, 760), tone: printed() }];
+    const shadow = (_: number, y: number) => (y > 500 ? 0.45 : 1);
+    expect(detectQuad(paint(() => 110, sheet, 8, shadow)).level).toBe("suggest");
+    const onWood = detectQuad(
+      paint(
+        woodTable,
+        [
+          {
+            quad: [
+              { x: 120, y: 60 },
+              { x: 500, y: 100 },
+              { x: 470, y: 760 },
+              { x: 90, y: 730 },
+            ],
+            tone: printed(),
+          },
+        ],
+        8,
+        (_, y) => (y > 520 ? 0.5 : 1),
+      ),
+    );
+    expect(onWood.level).toBe("suggest");
+  });
+
+  it("only suggests a receipt that runs off the frame, or a screenshot's page in app chrome", () => {
+    expect(detectQuad(scene(W, H, box(160, 100, 440, 900), 235, 40, 8)).level).toBe("suggest");
+    const screenshot = paint(
+      () => 30,
+      [
+        { quad: box(0, 90, 600, 720), tone: printed() },
+        { quad: box(0, 90, 600, 170), tone: 90 },
+      ],
+      0,
+    );
+    expect(detectQuad(screenshot).level).toBe("suggest");
+  });
+
+  it("suggests when light objects touch the receipt, or fingers hold it", () => {
+    const touching = paint(darkTable, [
+      { quad: box(20, 600, 200, 780), tone: 220 },
+      { quad: box(420, 40, 590, 160), tone: 210 },
+      { quad: tilted, tone: printed() },
+      { quad: box(440, 380, 560, 470), tone: 225 },
+    ]);
+    expect(detectQuad(touching).level).toBe("suggest");
     const fingers = [box(90, 580, 160, 800), box(140, 620, 260, 800)].map((quad) => ({
       quad,
       tone: 170,
     }));
-    const onTable = detectQuad(paint(darkTable, [{ quad: tilted, tone: printed() }, ...fingers]));
-    expect(onTable.level).not.toBe("apply");
-    const byWall = detectQuad(
-      paint((_, y) => (y < 350 ? 200 : 60), [{ quad: tilted, tone: printed() }, ...fingers]),
+    const onTable = paint(darkTable, [{ quad: tilted, tone: printed() }, ...fingers]);
+    expect(detectQuad(onTable).level).toBe("suggest");
+    const byWall = paint(
+      (_, y) => (y < 350 ? 200 : 60),
+      [{ quad: tilted, tone: printed() }, ...fingers],
     );
-    expect(byWall.level).not.toBe("apply");
-  });
-
-  it("does not apply when a shadow edge could be a side", () => {
-    const shadowed = printed((u, v) => (u + v * 0.3 > 0.6 ? 120 : 235));
-    const result = detectQuad(paint(darkTable, [{ quad: tilted, tone: shadowed }]));
-    expect(result.quad).not.toBeNull();
-    expect(result.level).toBe("suggest");
-  });
-
-  it("does not apply a screenshot's white page inside dark app chrome", () => {
-    const result = detectQuad(
-      paint(
-        () => 30,
-        [
-          { quad: box(0, 90, 600, 720), tone: printed() },
-          { quad: box(0, 90, 600, 170), tone: 90 },
-        ],
-        0,
-      ),
-    );
-    expect(result.level).not.toBe("apply");
+    expect(detectQuad(byWall).level).toBe("suggest");
   });
 });
 
