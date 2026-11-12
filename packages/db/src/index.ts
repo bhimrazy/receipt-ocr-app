@@ -106,10 +106,17 @@ export const receipts = pgTable(
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     /** `provider:model` that produced the extraction; null until one has. */
     model: text("model"),
+    /** When someone confirmed the extraction looks right; a new extraction clears it. */
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedBy: text("reviewed_by").references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // The set-null on account delete; partial because most receipts are never reviewed.
+    index("receipts_reviewed_by_idx")
+      .on(table.reviewedBy)
+      .where(sql`reviewed_by is not null`),
     // A user's uploads, and the set-null on account delete.
     index("receipts_user_created_at_idx").on(table.userId, table.createdAt),
     // Admin upload charts and counts across workspaces.
@@ -570,8 +577,9 @@ export const billingEvents = pgTable(
   ],
 ).enableRLS();
 
-export const receiptsRelations = relations(receipts, ({ many }) => ({
+export const receiptsRelations = relations(receipts, ({ many, one }) => ({
   items: many(receiptItems),
+  reviewer: one(user, { fields: [receipts.reviewedBy], references: [user.id] }),
 }));
 
 export const receiptItemsRelations = relations(receiptItems, ({ one }) => ({
@@ -741,6 +749,19 @@ class TimeoutClosingClient extends pg.Client {
   }
 }
 
+/**
+ * With `DATABASE_SSL_CA` (PEM) set, the connection is TLS verified against that CA, for a server
+ * whose certificate no public CA signs (Supabase, RDS). The URL's `sslmode` is dropped then: pg lets
+ * it override `ssl`, and treats `require` as verify-full against Node's public CAs.
+ */
+export function tlsOptions(connectionString: string, ca = process.env.DATABASE_SSL_CA) {
+  const pem = ca?.trim().replaceAll("\\n", "\n");
+  if (!pem) return { connectionString };
+  const url = new URL(connectionString);
+  url.searchParams.delete("sslmode");
+  return { connectionString: url.toString(), ssl: { ca: pem, rejectUnauthorized: true } };
+}
+
 /** A pg pool with this app's limits and timeouts; `createDb` is the one caller outside tests. */
 export function createPool(
   connectionString: string,
@@ -748,7 +769,7 @@ export function createPool(
 ) {
   const pool = new pg.Pool({
     Client: TimeoutClosingClient,
-    connectionString,
+    ...tlsOptions(connectionString),
     max,
     idleTimeoutMillis: 20_000,
     // Also bounds the wait for a free client when all `max` are busy.

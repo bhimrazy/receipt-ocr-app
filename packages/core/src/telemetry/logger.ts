@@ -31,7 +31,8 @@ export function deploymentFields(): Environment {
     version: env.VERCEL_GIT_COMMIT_SHA || env.GIT_COMMIT_SHA || "local",
     env: env.VERCEL_ENV || env.NODE_ENV || "development",
     region: env.VERCEL_REGION || "local",
-    instance: `${env.HOSTNAME || "local"}:${process.pid}`,
+    // A random id rather than process.pid, which the Edge runtime (middleware) doesn't have.
+    instance: `${env.HOSTNAME || "local"}:${crypto.randomUUID().slice(0, 8)}`,
   };
   return environment;
 }

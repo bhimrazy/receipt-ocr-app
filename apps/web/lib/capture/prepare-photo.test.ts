@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FULL_QUAD, initialEdit, type EditState } from "./edit-state";
+import { editFromDetection, FULL_QUAD, initialEdit, type EditState } from "./edit-state";
 import { TooLargeError } from "@/lib/upload-encoding";
 import { EditFailedError, preparePhoto } from "./prepare-photo";
 
@@ -181,5 +181,29 @@ describe("preparePhoto", () => {
     );
     expect(startingEdit).toHaveBeenCalledOnce();
     expect(prepareFile).not.toHaveBeenCalled();
+  });
+
+  it("uploads a never-opened photo uncropped when the outline is only a suggestion", async () => {
+    stubCanvas({});
+    stubDecode();
+    let size = "";
+    encodeUpload.mockImplementationOnce(async (canvas, name) => {
+      size = `${canvas.width}x${canvas.height}`;
+      return new File([new Uint8Array(10)], name, { type: "image/jpeg" });
+    });
+    const outline: EditState["quad"] = [
+      { x: 0.25, y: 0.1 },
+      { x: 0.75, y: 0.1 },
+      { x: 0.75, y: 0.9 },
+      { x: 0.25, y: 0.9 },
+    ];
+    await preparePhoto(photo, undefined, () =>
+      editFromDetection({ quad: outline, level: "suggest" }, null),
+    );
+    expect(size).toBe("400x300");
+    expect(encodeUpload).toHaveBeenLastCalledWith(expect.anything(), "receipt.jpg", {
+      size: undefined,
+      filter: "original",
+    });
   });
 });

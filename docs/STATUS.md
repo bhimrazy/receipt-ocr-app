@@ -121,6 +121,9 @@ reset. **From the first real user onward we never squash again.** Details:
 
 Steps are in [deployment.md](deployment.md).
 
+- Migration `0002_receipt_review` (reviewed receipts): run **Database Migration** on `staging-db`, then
+  `production-db`, before deploying the release that contains it. It adds two nullable columns, a foreign key and a
+  partial index to `receipts`, with `lock_timeout = '3s'`.
 - Reset `staging-db` and `production-db` with the 2026-11-08 SQL (23 tables, two enum types, the `drizzle`
   bookkeeping schema; [release note](deployment.md#squashed-baseline-again-2026-11-08), not `DROP SCHEMA public`),
   run **Database Migration** on `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies
@@ -183,8 +186,6 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
   privacy policy names OpenAI as an opt-in processor, so add `OPENAI_API_KEY` knowingly ([ai.md](architecture/ai.md#openai)).
 - `receipt-ocr.vercel.app` belongs to another Vercel project, so it is not this app's URL; use the project's own
   `*.vercel.app` URL or the custom domain (the production host is `receipt-ocr.bhimraj.com.np`).
-- After 2026-11-12, delete `minimumReleaseAgeExcludes` from `bunfig.toml`: it exempts Better Auth 1.7.18 (#90, security
-  fixes and passkeys) from the 7-day cooldown, approved on 2026-11-07, and 1.7.18 clears the cooldown by then.
 
 ## In flight
 
@@ -196,6 +197,17 @@ Open pull requests only.
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
+
+Reviews of 2026-11-12: [design critique](reviews/2026-11-12-design-critique.md),
+[code organization](reviews/2026-11-12-code-organization.md), [principal](reviews/2026-11-12-principal-review.md),
+[receipt fields](reviews/2026-11-12-receipt-fields-review.md), [extraction](reviews/2026-11-12-extraction-review.md),
+[dates and fields research](reviews/2026-11-12-dates-and-fields-research.md); plan: [edge detection](plans/2026-11-12-edge-detection.md).
+
+Owner decisions (2026-11-12): one stored AD `receipt_date` plus `receipt_date_calendar` (`gregory` | `bikram-sambat`), BS
+derived and shown only for receipts printed in BS; BS wins over a disagreeing AD date on NPR bills, flagged. New fields
+`invoice_number`, `merchant_tax_id`, `discount`, `service_charge`, `review_reasons`, `receipt_items.position`.
+"Needs review" comes from deterministic checks, not model scores; the model may leave merchant, total and currency
+empty. Edge detection: auto-crop only when confident, then the benchmarked redesign.
 
 ## Brand decisions (owner, 2026-11-07)
 
@@ -345,6 +357,13 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- **Receipt review and the totals check (#216):**
+  - The totals check treats a total equal to the subtotal or the line sum as tax-inclusive prices. So a total
+    misread as the subtotal raises no warning. Fixing that needs a `taxIncluded` signal from extraction.
+  - History's confidence badge still shows "Review N%" on a receipt someone has reviewed. The receipts-list PR
+    will handle it.
+  - At millions of `receipts` rows, revisit how review-style columns are added: the FK `NOT VALID` then
+    `VALIDATE`, and the index `CONCURRENTLY`, in separate migrations (`0002` runs as one transaction).
 - **From the 2026-11-09 Home incident** ([note](reviews/2026-11-09-home-stuck-incident.md), fixed in #210 by moving to
   node-postgres; server role timeouts applied the same day, see [db.md](architecture/db.md)):
   - Restore the pushed-screen slide transitions turned off in #205 (`TODO(2026-11-16)` in `pushed-screen.tsx`).
@@ -356,6 +375,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - **From the [database review](reviews/2026-11-09-database-review.md)** (owner said go on D4 only so far): D1 backups
   (#131, then Supabase Pro at launch), D2 turn off the Supabase Data API and revoke `anon`/`authenticated` grants, D3
   retention and a purge job.
+- **From the 2026-11-12 staff code review (#217):**
+  - A sweep for stored objects that no receipt row references. An upload whose insert fails while committing keeps
+    its object (`receipt.ingest_unknown`), and a failed delete leaves one (`receipt.object_delete_failed`). Purges find
+    objects through rows, so these also survive account and workspace deletion.
+  - Make a missing stored file (`NoSuchKey`) non-retryable in the extract job: today it is a `StorageError` and uses
+    all 4 attempts.
 
 - Linking a new subscription looks up early revoking adjustments in `billing_events` with a sequential scan. Add a
   partial expression index `billing_events (provider, (payload->'adjustment'->>'subscriptionId')) where outcome =
@@ -467,8 +492,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 2. Tests the way CI runs them: `scripts/test.sh` (compose Postgres on 5433 + RustFS on 9000, fresh test database,
    unit + Playwright e2e). Integration suites: `bun run --filter @receipt-ocr/core test:int` and `--filter @receipt-ocr/web test:int` against a throwaway database.
 3. Conventions:
-   - One worktree per track next to the repo (`git worktree add ../receipt-ocr-<track> -b <branch> origin/main`);
-     remove it after merge.
+   - One worktree per track under `.claude/worktrees/` (git-ignored), branched from `origin/main`; remove it after
+     merge.
    - Squash-merge every PR. For stacked PRs, update each child with merge commits only (no rebase or force push):
      merge the parent branch, then `git merge -s ours <parent squash commit>` after checking the trees match, then
      `git merge origin/main`. GitHub stacks need the async merge endpoint (`PUT …/pulls/{n}/merge-async`).

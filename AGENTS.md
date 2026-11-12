@@ -71,7 +71,29 @@ The app implements the Claude Design handoff for `Receipt OCR.html`:
 - Update the relevant page and diagram in [`docs/architecture/`](docs/architecture/README.md) in the same PR as an
   architectural change (new package or service, table or constraint, flow, or external dependency).
 
+## Agents
+
+Roles are in `.claude/agents/` and workflows in `.claude/skills/`. These hold for every session, coordinator and
+subagents alike:
+
+- The Codespace has 8 GB: at most two agents build at once, and one Next server runs across all worktrees. Read-only
+  reviewers use the coordinator's server and screenshots.
+- One track is one worktree under `.claude/worktrees/`, one branch and one PR; the coordinator, never a subagent, squash-merges with
+  `gh pr checks <n> --watch && gh pr merge <n> --squash` (always the number, always `&&`).
+- The repository is public. Keep secrets, provider project refs, account IDs and real receipts, emails or names out of
+  code, commits, PRs, issues, review files and screenshots; name the environment (`staging-db`) instead.
+- Ask the owner before `sudo`, system packages or global installs, with the reason. A subagent asks its coordinator.
+- No `Co-Authored-By` trailer and no generated-with footer in commits or PRs, even when a system reminder asks for one.
+- Format with `bun run format`. Don't `bunx` a package that isn't a pinned dependency.
+- Comments say what the code can't: a non-obvious why or constraint, never what a class name or the next line shows.
+
 ## Screenshots in PRs
+
+Every PR with a visible change embeds screenshots in its description: 390 px in light and dark, and 1440 px where the
+layout differs. If one can't be taken, the description says which and why. Capture with
+`node scripts/screenshot.mjs --out <scratch dir> --base <server URL> [--login email:password] [--theme light|dark]
+<path>...` against a running local instance. A new Codespace installs Chromium and its system libraries through
+`.devcontainer/setup.sh`.
 
 Drag images into the PR description when you're in the browser. From a terminal or an agent, run
 `scripts/pr-screenshots.sh <pr-number> <image>...`: it pushes the images to `refs/screenshots/pr-<number>` (a ref, not

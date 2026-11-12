@@ -88,9 +88,10 @@ function text(value: unknown, maxLength = 200): string | null | undefined {
 }
 
 /**
- * User corrections to an extracted receipt. Only human-correctable fields
- * are accepted: never status, confidence, ownership or the raw extraction.
- * Members may edit only their own uploads (enforced in ReceiptRepo).
+ * User corrections to an extracted receipt, or `{ reviewed: boolean }` on its
+ * own to mark it reviewed or not. Only human-correctable fields are accepted:
+ * never status, confidence, ownership or the raw extraction. Members may edit
+ * only their own uploads (enforced in ReceiptRepo).
  */
 export const PATCH = withRequestEvent(
   { event: "receipt.update", route: "/api/receipts/[id]" },
@@ -109,6 +110,18 @@ async function update(request: Request, { params }: Params, event: WideEvent) {
   const read = await readJson(request, z.record(z.string(), z.unknown()), MAX_FORM_JSON_BYTES);
   if ("response" in read) return read.response;
   const body = read.data;
+
+  if ("reviewed" in body) {
+    const { reviewed, ...rest } = body;
+    if (typeof reviewed !== "boolean") return jsonError(400, "reviewed must be true or false");
+    if (Object.keys(rest).length > 0) return jsonError(400, "Send reviewed on its own");
+    event.flags = { reviewed };
+    return runRoute(
+      Effect.flatMap(ReceiptRepo, (repo) => repo.setReviewed(id, scope, reviewed)),
+      (updated) => (updated ? NextResponse.json({ ok: true }) : notFound()),
+      event,
+    );
+  }
 
   const rawCategory = text(body.category, 40);
   const category = rawCategory ? parseCategory(rawCategory) : rawCategory;

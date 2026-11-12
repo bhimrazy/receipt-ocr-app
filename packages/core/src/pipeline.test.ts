@@ -1,8 +1,8 @@
 import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, PROMPT_VERSION } from "@receipt-ocr/ai";
 import type { Receipt } from "@receipt-ocr/db";
-import { Effect, Exit, Layer } from "effect";
+import { Effect, Exit, Layer, Logger } from "effect";
 import { describe, expect, it } from "vitest";
-import { NotConfigured, OcrError, StorageError } from "./errors";
+import { DbError, NotConfigured, OcrError, StorageError } from "./errors";
 import {
   claimRetry,
   deleteReceipt,
@@ -14,6 +14,7 @@ import {
 } from "./pipeline";
 import {
   EXTRACTION_FAILED_MESSAGE,
+  type InsertResult,
   ReceiptRepo,
   type OcrCallRow,
   type ReceiptWithItems,
@@ -36,6 +37,8 @@ const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 function harness(
   options: {
     storagePut?: "fail";
+    /** The insert fails with a DbError wrapping this driver error, while committing when `atCommit`. */
+    insertFails?: { cause: unknown; atCommit?: boolean };
     ocr?: "fixture" | "fail" | "unconfigured";
     /** The receipt is deleted while the model runs. */
     deleteDuringOcr?: boolean;
@@ -57,9 +60,12 @@ function harness(
 
   const repo = Layer.succeed(ReceiptRepo, {
     insert: ({ id, scope, fileName, imageObjectKey }, quota) =>
-      Effect.sync(() => {
+      Effect.suspend((): Effect.Effect<InsertResult, DbError> => {
+        if (options.insertFails) {
+          return Effect.fail(new DbError({ message: "insert", ...options.insertFails }));
+        }
         const verdict = quota.decide(counts());
-        if (!verdict.allowed) return { kind: "quota" as const, verdict };
+        if (!verdict.allowed) return Effect.succeed({ kind: "quota" as const, verdict });
         const row = {
           id,
           organizationId: scope.organizationId,
@@ -73,7 +79,11 @@ function harness(
           updatedAt: new Date(),
         } as unknown as ReceiptWithItems;
         rows.set(id, row);
-        return { kind: "inserted" as const, receipt: row as Receipt, jobId: `job-${id}` };
+        return Effect.succeed({
+          kind: "inserted" as const,
+          receipt: row as Receipt,
+          jobId: `job-${id}`,
+        });
       }),
     complete: (id, _scope, attempt, extraction, model, written) =>
       Effect.sync(() => {
@@ -120,6 +130,7 @@ function harness(
     counts: () => Effect.die("unused"),
     exportRows: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
+    setReviewed: () => Effect.die("unused"),
     remove: (id) =>
       Effect.sync(() => {
         const row = rows.get(id);
@@ -180,9 +191,15 @@ function harness(
     },
   });
 
+  /** Messages logged through Effect's logger. */
+  const logs: unknown[] = [];
+  const logger = Logger.replace(
+    Logger.defaultLogger,
+    Logger.make(({ message }) => void logs.push(...(Array.isArray(message) ? message : [message]))),
+  );
   const run = <A, E>(effect: Effect.Effect<A, E, ReceiptRepo | Storage | Ocr>) =>
-    Effect.runPromiseExit(effect.pipe(Effect.provide(Layer.mergeAll(repo, storage, ocr))));
-  return { rows, objects, calls, run };
+    Effect.runPromiseExit(effect.pipe(Effect.provide(Layer.mergeAll(repo, storage, ocr, logger))));
+  return { rows, objects, calls, logs, run };
 }
 
 describe("ingestUpload", () => {
@@ -213,6 +230,39 @@ describe("ingestUpload", () => {
     expect(h.rows.size).toBe(0);
     expect(h.objects.size).toBe(0);
   });
+
+  const pgError = (code: string) => Object.assign(new Error("pg"), { code });
+  const ingest = (h: ReturnType<typeof harness>) =>
+    h.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits }));
+
+  it.each([
+    ["a pool connect timeout", { cause: new Error("timeout exceeded when trying to connect") }],
+    ["a timeout before COMMIT", { cause: new Error("Query read timeout") }],
+    ["a statement Postgres refused", { cause: pgError("57014") }],
+    ["a server error on COMMIT, which rolls back", { cause: pgError("40001"), atCommit: true }],
+    ["a socket errno before COMMIT", { cause: pgError("EPIPE") }],
+  ])("removes the stored file after %s: the insert can't have committed", async (_, fails) => {
+    const h = harness({ insertFails: fails });
+    const exit = await ingest(h);
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("DbError");
+    expect(h.objects.size).toBe(0);
+    expect(h.logs).not.toContain("receipt.ingest_unknown");
+  });
+
+  it.each([
+    ["timed out", new Error("Query read timeout")],
+    ["lost its socket", pgError("EPIPE")],
+    ["got a pooler's connection error", pgError("08P01")],
+  ])(
+    "keeps the stored file and logs it when COMMIT %s, as it may have committed",
+    async (_, cause) => {
+      const h = harness({ insertFails: { cause, atCommit: true } });
+      const exit = await ingest(h);
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(h.objects.size).toBe(1);
+      expect(h.logs).toContain("receipt.ingest_unknown");
+    },
+  );
 
   it("creates no row when storage fails, so nothing points at a missing file", async () => {
     const h = harness({ storagePut: "fail" });

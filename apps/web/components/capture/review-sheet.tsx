@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  editFromDetection,
   editKey,
-  initialEdit,
   isDetected,
   isFullFrame,
   resetToDetected,
@@ -26,7 +26,7 @@ import {
   fullImage,
   type EditState,
 } from "@/lib/capture/edit-state";
-import { defaultFilter, FILTER_LABELS, FILTERS, type Filter } from "@/lib/capture/filters";
+import { FILTER_LABELS, FILTERS, type Filter } from "@/lib/capture/filters";
 import { EditFailedError, preparePhoto } from "@/lib/capture/prepare-photo";
 import {
   detectOnBitmap,
@@ -91,10 +91,8 @@ function rememberSize(size: SizeId) {
 
 const rememberedFilter = () => remembered(FILTER_KEY, FILTERS);
 
-/** The starting edit: the detected outline when there is one, and the session's filter. */
 function startingEdit(bitmap: ImageBitmap): EditState {
-  const { quad } = detectOnBitmap(bitmap);
-  return initialEdit(quad, defaultFilter(rememberedFilter(), quad !== null));
+  return editFromDetection(detectOnBitmap(bitmap), rememberedFilter());
 }
 
 /** Wait after the last edit before the full-size render, which blocks the main thread. */

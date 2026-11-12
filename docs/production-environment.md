@@ -852,16 +852,17 @@ password.
 
 These were set when the project was created. Listed so a new environment doesn't miss them.
 
-| Key                   | What                                                                | Kind   |
-| --------------------- | ------------------------------------------------------------------- | ------ |
-| `DATABASE_URL`        | Supabase connection (transaction pooler, port 6543)                 | Secret |
-| `BETTER_AUTH_SECRET`  | Signs sessions: `openssl rand -base64 32`, one per environment      | Secret |
-| `BETTER_AUTH_SECRETS` | Optional, for rotating the secret: `1:<current secret>`             | Secret |
-| `BETTER_AUTH_URL`     | `https://receipt-ocr.bhimraj.com.np` (Production only)              | Config |
-| `ADMIN_EMAILS`        | Who becomes admin on sign-up, comma-separated                       | Config |
-| `LOG_SAMPLE_RATE`     | `0.1`: keep 10% of routine logs (Production)                        | Config |
-| `OCR_DAILY_CAP`       | `200` Production, `50` Preview                                      | Config |
-| `CRON_SECRET`         | Bearer secret for `/api/jobs/drain` ([step 8](#8-queue-drain-cron)) | Secret |
+| Key                   | What                                                                              | Kind   |
+| --------------------- | --------------------------------------------------------------------------------- | ------ |
+| `DATABASE_URL`        | Supabase connection (transaction pooler, port 6543)                               | Secret |
+| `DATABASE_SSL_CA`     | Supabase's CA certificate (PEM), so TLS is verified ([db.md](architecture/db.md)) | Config |
+| `BETTER_AUTH_SECRET`  | Signs sessions: `openssl rand -base64 32`, one per environment                    | Secret |
+| `BETTER_AUTH_SECRETS` | Optional, for rotating the secret: `1:<current secret>`                           | Secret |
+| `BETTER_AUTH_URL`     | `https://receipt-ocr.bhimraj.com.np` (Production only)                            | Config |
+| `ADMIN_EMAILS`        | Who becomes admin on sign-up, comma-separated                                     | Config |
+| `LOG_SAMPLE_RATE`     | `0.1`: keep 10% of routine logs (Production)                                      | Config |
+| `OCR_DAILY_CAP`       | `200` Production, `50` Preview                                                    | Config |
+| `CRON_SECRET`         | Bearer secret for `/api/jobs/drain` ([step 8](#8-queue-drain-cron))               | Secret |
 
 Two-step sign-in and "confirm it's you" need nothing new: they use `BETTER_AUTH_SECRET(S)` and the mailer above.
 `ADMIN_MFA_ENFORCE` exists only as an emergency off switch for the admin requirement (see

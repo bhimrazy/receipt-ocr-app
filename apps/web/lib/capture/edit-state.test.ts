@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   arrowDelta,
   dragCorner,
+  editFromDetection,
   editKey,
   FULL_QUAD,
   initialEdit,
@@ -38,6 +39,26 @@ describe("initial state", () => {
     const s = initialEdit(detected, "enhance");
     expect(s.quad).toEqual(detected);
     expect(isDetected(s)).toBe(true);
+  });
+});
+
+describe("editFromDetection", () => {
+  it("crops to a confident outline and defaults to Enhance", () => {
+    const s = editFromDetection({ quad: detected, level: "apply" }, null);
+    expect(s.quad).toEqual(detected);
+    expect(s.filter).toBe("enhance");
+  });
+
+  it("starts an unsure outline on the full image, offered through Reset to detected", () => {
+    const s = editFromDetection({ quad: detected, level: "suggest" }, null);
+    expect(isFullFrame(s.quad)).toBe(true);
+    expect(s.filter).toBe("original");
+    expect(resetToDetected(s).quad).toEqual(detected);
+  });
+
+  it("keeps the session's filter either way", () => {
+    expect(editFromDetection({ quad: detected, level: "suggest" }, "bw").filter).toBe("bw");
+    expect(editFromDetection({ quad: null, level: "none" }, "bw").filter).toBe("bw");
   });
 });
 

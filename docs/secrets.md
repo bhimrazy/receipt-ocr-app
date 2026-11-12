@@ -15,8 +15,10 @@ One Infisical project, `receipt-ocr`, with Infisical's default environments (Dev
 | `dev`                 | The repo's `.env` (app keys) | Nothing; read locally | Local development                    |
 | `dev`, folder `/ops`  | The repo's `.env` (tokens)   | Nothing; read locally | Tooling, not the app (see below)     |
 
-Operator tokens (`/ops`): `SUPABASE_ACCESS_TOKEN`, `VERCEL_TOKEN`, `GITHUB_TOKEN`, `SENTRY_AUTH_TOKEN`,
-`AXIOM_TOKEN`. They act on the accounts, not inside the app, so they never sync to Vercel.
+Operator tokens (`/ops`): `SUPABASE_ACCESS_TOKEN`, `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `GITHUB_TOKEN`,
+`SENTRY_AUTH_TOKEN`, `SENTRY_READ_TOKEN`, `AXIOM_TOKEN`. They act on the accounts, not inside the app, so they never
+sync to Vercel. Infisical doesn't sync to Vercel on its own today: a new app variable (for example `DATABASE_SSL_CA`,
+added 2026-11-09) goes into both Infisical and Vercel.
 
 Build-time values (`NEXT_PUBLIC_*`, `SENTRY_DSN`, `POSTHOG_KEY`, `OTEL_EXPORTER_OTLP_ENDPOINT`) must stay
 **not Sensitive** in Vercel ([why](production-environment.md#how-to-add-a-variable)). Keep them in Infisical like the

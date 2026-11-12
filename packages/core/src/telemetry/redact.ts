@@ -148,13 +148,25 @@ export function sanitize(event: Record<string, unknown>): {
   return { fields, dropped: sink.dropped.slice(0, MAX_ITEMS), redacted: sink.redacted };
 }
 
-/** A Postgres SQLSTATE, from the driver error or the error it wraps. */
-function sqlState(error: unknown, depth = 0): string | undefined {
+/** The first `code` on the error or the errors it wraps (3 deep) that `accept` takes. */
+function findCode(
+  error: unknown,
+  accept: (code: string) => boolean,
+  depth = 0,
+): string | undefined {
   if (!error || typeof error !== "object" || depth > 3) return undefined;
   const code = (error as { code?: unknown }).code;
-  if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) return code;
-  return sqlState((error as { cause?: unknown }).cause, depth + 1);
+  if (typeof code === "string" && accept(code)) return code;
+  return findCode((error as { cause?: unknown }).cause, accept, depth + 1);
 }
+
+/**
+ * The SQLSTATE of an error the Postgres server sent, from the driver error or
+ * one it wraps. Undefined for a failure on the client side: a pg timeout or a
+ * socket errno such as `EPIPE` (every SQLSTATE has a digit; no errno does).
+ */
+export const sqlState = (error: unknown) =>
+  findCode(error, (code) => /^[0-9A-Z]{5}$/.test(code) && /\d/.test(code));
 
 /** pg's own failures (timeouts, a lost connection) carry no code, only these fixed messages. */
 const DRIVER_CODES: [message: string, code: string][] = [
@@ -165,9 +177,9 @@ const DRIVER_CODES: [message: string, code: string][] = [
   ["Client was closed and is not queryable", "connection_closed"],
 ];
 
-/** A SQLSTATE, else a short code for one of pg's own failures (`DRIVER_CODES`). */
+/** A SQLSTATE or a short errno (`EPIPE`), else a code for one of pg's own failures (`DRIVER_CODES`). */
 function driverCode(error: unknown, depth = 0): string | undefined {
-  const state = sqlState(error);
+  const state = findCode(error, (code) => /^[0-9A-Z]{5}$/.test(code));
   if (state) return state;
   if (!error || typeof error !== "object" || depth > 3) return undefined;
   const message = error instanceof Error ? error.message : undefined;

@@ -22,20 +22,13 @@ import {
   DropdownMenuTrigger,
 } from "@receipt-ocr/ui/components/dropdown-menu";
 import { toast } from "@receipt-ocr/ui/components/toast";
-import {
-  Copy,
-  Download,
-  Loader2,
-  MoreHorizontal,
-  Pencil,
-  RotateCw,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react";
+import { Copy, Download, Loader2, MoreHorizontal, Pencil, RotateCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useRef, useState } from "react";
+import { apiRequest } from "@/lib/api-request";
 import { csvFilename, receiptItemsToCsv } from "@/lib/csv";
 import { ReceiptEditor } from "@/components/receipt-editor";
+import { ReceiptChecks } from "@/components/receipt-review";
 import { useRetryReceipt } from "@/components/retry-receipt-button";
 import { AppBarActions } from "@/components/app-nav";
 
@@ -51,11 +44,13 @@ function downloadBlob(contents: string, filename: string, type: string) {
 function useDeleteReceipt(receipt: ReceiptWithItems) {
   const router = useRouter();
   return async (): Promise<string | void> => {
-    const res = await fetch(`/api/receipts/${receipt.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      return body?.error ?? "Couldn't delete this receipt. Try again.";
-    }
+    const result = await apiRequest(
+      `/api/receipts/${receipt.id}`,
+      "DELETE",
+      undefined,
+      "Couldn't delete this receipt. Try again.",
+    );
+    if (!result.ok) return result.error;
     toast.add({ title: "Receipt deleted", type: "success" });
     router.push("/app/history");
     router.refresh();
@@ -299,7 +294,7 @@ export function ReceiptActions({
 
 /**
  * Editing swaps the Details card for the form, so the photo stays beside the fields being
- * corrected; the checklist's button and the phone sheet open the same form.
+ * corrected; the checks card's "Correct details" and the phone sheet open the same form.
  */
 export function ReceiptWorkspace({
   receipt,
@@ -323,33 +318,11 @@ export function ReceiptWorkspace({
 
   return (
     <>
-      {checks.length > 0 ? (
-        <section
-          aria-labelledby="checks-heading"
-          className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-start"
-        >
-          <TriangleAlert
-            aria-hidden="true"
-            className="size-5 shrink-0 text-warning max-sm:hidden"
-          />
-          <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-medium text-warning" id="checks-heading">
-              Check this receipt before you export it
-            </h2>
-            <ul className="mt-2 flex list-disc flex-col gap-1 pl-4 text-sm text-muted-foreground marker:text-warning">
-              {checks.map((check) => (
-                <li key={check}>{check}</li>
-              ))}
-            </ul>
-          </div>
-          {editing || !canEdit ? null : (
-            <Button className="shrink-0" onClick={() => startEditing()} variant="outline">
-              <Pencil aria-hidden="true" />
-              Correct details
-            </Button>
-          )}
-        </section>
-      ) : null}
+      <ReceiptChecks
+        canEdit={canEdit}
+        checks={checks}
+        onCorrect={editing ? undefined : () => startEditing()}
+      />
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         {image}
         <div className="flex min-w-0 flex-col gap-5">

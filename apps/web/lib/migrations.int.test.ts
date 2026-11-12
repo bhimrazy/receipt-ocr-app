@@ -64,11 +64,12 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is the baseline plus billing", () => {
+  it("is the baseline, billing and receipt review", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
     expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
       "0000_baseline",
       "0001_billing",
+      "0002_receipt_review",
     ]);
   });
 
@@ -147,6 +148,9 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     // The workspace quota index leads with organization_id, so it serves the set-null too.
     expect(def("ocr_rounds_org_created_at_idx")).toContain("(organization_id, created_at)");
     expect(def("ocr_rounds_organization_id_idx")).toBe("");
+    expect(def("receipts_reviewed_by_idx")).toMatch(
+      /\(reviewed_by\) WHERE \(reviewed_by IS NOT NULL\)$/,
+    );
     expect(def("receipts_last_attempt_at_idx")).toBe("");
     expect(def("member_organization_id_idx")).toBe("");
   });

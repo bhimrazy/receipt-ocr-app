@@ -55,7 +55,12 @@ export default function CameraSheet({
   const [problem, setProblem] = useState<CameraProblem | null>(null);
   const [shots, setShots] = useState<Shot[]>([]);
   const [torch, setTorchState] = useState({ supported: false, on: false });
-  const [outline, setOutline] = useState<{ quad: Quad; w: number; h: number } | null>(null);
+  const [outline, setOutline] = useState<{
+    quad: Quad;
+    sure: boolean;
+    w: number;
+    h: number;
+  } | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [flash, setFlash] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -151,8 +156,10 @@ export default function CameraSheet({
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (!ctx) return;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const { quad } = detectQuad(ctx.getImageData(0, 0, canvas.width, canvas.height));
-      setOutline(quad ? { quad, w: video.videoWidth, h: video.videoHeight } : null);
+      const { quad, level } = detectQuad(ctx.getImageData(0, 0, canvas.width, canvas.height));
+      setOutline(
+        quad ? { quad, sure: level === "apply", w: video.videoWidth, h: video.videoHeight } : null,
+      );
     }, OUTLINE_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [status]);
@@ -265,6 +272,8 @@ export default function CameraSheet({
             <polygon
               className="fill-primary/15 stroke-primary"
               points={outline.quad.map((p) => `${p.x * outline.w},${p.y * outline.h}`).join(" ")}
+              // Dashed when the photo won't start cropped to it (a suggestion only).
+              strokeDasharray={outline.sure ? undefined : `${Math.max(outline.w, outline.h) / 50}`}
               strokeLinejoin="round"
               strokeWidth={Math.max(outline.w, outline.h) / 200}
             />

@@ -38,9 +38,11 @@ From `@receipt-ocr/db` ([`src/index.ts`](../../packages/db/src/index.ts)):
 
 ## Migrations
 
-| File                                                            | What it holds                                                                                                                                                              |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`0000_baseline.sql`](../../apps/web/drizzle/0000_baseline.sql) | Every table, enum, index, `CHECK` and foreign key, `ENABLE ROW LEVEL SECURITY` on all 23 tables; hand-written: `lock_timeout` first and the `jobs` storage parameters last |
+| File                                                                        | What it holds                                                                                                                                                              |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`0000_baseline.sql`](../../apps/web/drizzle/0000_baseline.sql)             | Every table, enum, index, `CHECK` and foreign key, `ENABLE ROW LEVEL SECURITY` on all 23 tables; hand-written: `lock_timeout` first and the `jobs` storage parameters last |
+| [`0001_billing.sql`](../../apps/web/drizzle/0001_billing.sql)               | `billing_events` and `billing_subscriptions`, `ocr_rounds.plan`, and `ocr_rounds_org_created_at_idx` in place of `ocr_rounds_organization_id_idx`                          |
+| [`0002_receipt_review.sql`](../../apps/web/drizzle/0002_receipt_review.sql) | `receipts.reviewed_at`, `reviewed_by` (foreign key to `user`, set null) and the partial `receipts_reviewed_by_idx`; `lock_timeout` first                                   |
 
 The migrations were **squashed into this one baseline again on 2026-11-08, before launch**, when both databases held
 only test data and were reset. The first squash (2026-11-07) was followed by three migrations: the `refused` and
@@ -70,6 +72,16 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   caused the [2026-11-09 Home incident](../reviews/2026-11-09-home-stuck-incident.md)). Drizzle sends unnamed
   statements, so no prepared-statement setting is needed for poolers. Nothing in the app is provider-specific;
   migrations need DDL and use a session connection through `DIRECT_URL`.
+- **TLS: `DATABASE_SSL_CA` decides.** With the server's CA certificate (PEM) in `DATABASE_SSL_CA`, `tlsOptions` connects
+  over TLS verified against it and drops the URL's `sslmode`, which pg would otherwise let override `ssl`. Without it,
+  the URL decides as pg reads it: no `sslmode` is a plain connection (local Docker), and `require` means verify-full
+  against Node's public CAs, which fails for a server whose CA isn't public. Supabase signs with its own "Supabase Root
+  2021 CA" ([download](https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt), SHA-256
+  `80:70:25:AD:…:E6:CA:FA`, valid to 2031-04-26), so staging and production set it (Infisical and Vercel, 2026-11-09). Migrations
+  (drizzle-kit, also pg) read the same variable in `drizzle.config.ts`; the Database Migration workflow gets it from the
+  `staging-db` and `production-db` environments' variables.
+  postgres.js read `require` as encrypt-without-verify, which is why the switch to pg broke production for about 15 minutes
+  until it was rolled back.
 - **One pool per connection string per process.** `createDb` caches it on `globalThis` (Next can load the module more
   than once). Better Auth, the admin pages and the Effect runtime share it. `DATABASE_POOL_MAX` (default 10). Behind a
   pooler each connection is one of its clients: Supavisor on Nano/Micro allows 200, so instances × 10 must stay under 200. Direct Postgres counts them against `max_connections` instead.
