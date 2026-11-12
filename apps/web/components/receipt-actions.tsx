@@ -22,20 +22,12 @@ import {
   DropdownMenuTrigger,
 } from "@receipt-ocr/ui/components/dropdown-menu";
 import { toast } from "@receipt-ocr/ui/components/toast";
-import {
-  Copy,
-  Download,
-  Loader2,
-  MoreHorizontal,
-  Pencil,
-  RotateCw,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react";
+import { Copy, Download, Loader2, MoreHorizontal, Pencil, RotateCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useRef, useState } from "react";
 import { csvFilename, receiptItemsToCsv } from "@/lib/csv";
 import { ReceiptEditor } from "@/components/receipt-editor";
+import { ReceiptChecks } from "@/components/receipt-review";
 import { useRetryReceipt } from "@/components/retry-receipt-button";
 import { AppBarActions } from "@/components/app-nav";
 
@@ -299,7 +291,7 @@ export function ReceiptActions({
 
 /**
  * Editing swaps the Details card for the form, so the photo stays beside the fields being
- * corrected; the checklist's button and the phone sheet open the same form.
+ * corrected; the checks card's "Correct details" and the phone sheet open the same form.
  */
 export function ReceiptWorkspace({
   receipt,
@@ -309,9 +301,11 @@ export function ReceiptWorkspace({
   details,
   items,
   footer,
+  viewerName,
 }: {
   receipt: ReceiptWithItems;
   canEdit: boolean;
+  viewerName: string;
   /** Plain-words reasons to check this receipt; empty when there are none. */
   checks: string[];
   image: React.ReactNode;
@@ -323,33 +317,13 @@ export function ReceiptWorkspace({
 
   return (
     <>
-      {checks.length > 0 ? (
-        <section
-          aria-labelledby="checks-heading"
-          className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-start"
-        >
-          <TriangleAlert
-            aria-hidden="true"
-            className="size-5 shrink-0 text-warning max-sm:hidden"
-          />
-          <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-medium text-warning" id="checks-heading">
-              Check this receipt before you export it
-            </h2>
-            <ul className="mt-2 flex list-disc flex-col gap-1 pl-4 text-sm text-muted-foreground marker:text-warning">
-              {checks.map((check) => (
-                <li key={check}>{check}</li>
-              ))}
-            </ul>
-          </div>
-          {editing || !canEdit ? null : (
-            <Button className="shrink-0" onClick={() => startEditing()} variant="outline">
-              <Pencil aria-hidden="true" />
-              Correct details
-            </Button>
-          )}
-        </section>
-      ) : null}
+      <ReceiptChecks
+        canEdit={canEdit}
+        checks={checks}
+        onCorrect={editing ? undefined : () => startEditing()}
+        receipt={receipt}
+        viewerName={viewerName}
+      />
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         {image}
         <div className="flex min-w-0 flex-col gap-5">
