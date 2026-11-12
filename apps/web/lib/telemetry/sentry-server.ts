@@ -96,7 +96,9 @@ export function startSentryServer(
   Sentry.init({
     dsn,
     ...(transport ? { transport } : {}),
-    release: sentryRelease(env),
+    // Inlined at build (next.config.ts), so server and browser report the release the source maps
+    // were uploaded under.
+    release: process.env.NEXT_PUBLIC_SENTRY_RELEASE || sentryRelease(env),
     environment: sentryEnvironment(env),
     enableOpenTelemetrySetup: false,
     enableRuntimeChannelInjection: false,

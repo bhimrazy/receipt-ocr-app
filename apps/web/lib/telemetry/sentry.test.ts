@@ -31,6 +31,15 @@ describe("parseSentryDsn", () => {
     expect(sentryRelease({ VERCEL_GIT_COMMIT_SHA: "9bd27c4aaaaaaaa" })).toBe("9bd27c4");
     expect(sentryRelease({})).toBeUndefined();
   });
+
+  it("prefers the commit the deploy workflow passes over Vercel's", () => {
+    expect(
+      sentryRelease({ GIT_COMMIT_SHA: "aaaaaaa1111", VERCEL_GIT_COMMIT_SHA: "bbbbbbb2222" }),
+    ).toBe("aaaaaaa");
+    expect(sentryRelease({ GIT_COMMIT_SHA: "", VERCEL_GIT_COMMIT_SHA: "bbbbbbb2222" })).toBe(
+      "bbbbbbb",
+    );
+  });
 });
 
 const leaky = (): ErrorEvent => ({
