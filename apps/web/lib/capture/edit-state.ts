@@ -1,4 +1,5 @@
-import type { Filter } from "./filters";
+import type { Detection } from "./detect-quad";
+import { defaultFilter, type Filter } from "./filters";
 import { edgeNormal, isConvex, slideEdge, type Point, type Quad } from "./geometry";
 
 /**
@@ -30,6 +31,20 @@ const MIN_GAP = 0.04;
 /** Starts on the detected outline when there is one (the seam for better detectors later). */
 export function initialEdit(detected: Quad | null = null, filter: Filter = "original"): EditState {
   return { rotation: 0, quad: detected ?? FULL_QUAD, detected, filter };
+}
+
+/**
+ * The edit a photo starts on, which is also what a photo nobody opens is uploaded with. It is
+ * cropped only when detection is sure enough to apply the outline unseen; otherwise it is the
+ * full image, with the outline offered through "Reset to detected".
+ */
+export function editFromDetection(
+  detection: Pick<Detection, "quad" | "level">,
+  rememberedFilter: Filter | null,
+): EditState {
+  const apply = detection.level === "apply";
+  const edit = initialEdit(detection.quad, defaultFilter(rememberedFilter, apply));
+  return apply ? edit : fullImage(edit);
 }
 
 /** (x, y) in the old frame lands at (1 - y, x) after a quarter turn clockwise. */

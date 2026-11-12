@@ -197,6 +197,142 @@ describe("detectQuad on synthetic scenes", () => {
   });
 });
 
+type Tone = number | ((u: number, v: number) => number);
+
+/** `layers` painted in order over `background`, each a tone (or a function of 0..1 paper coordinates) on a quad. */
+function paint(
+  background: (x: number, y: number) => number,
+  layers: { quad: Quad; tone: Tone }[],
+  noise = 8,
+): Pixels {
+  const unit: Quad = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 0, y: 1 },
+  ];
+  const maps = layers.map((l) => ({ toUnit: homography(l.quad, unit)!, tone: l.tone }));
+  const data = new Uint8ClampedArray(W * H * 4);
+  let seed = 11;
+  const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5) * noise;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let v = background(x, y);
+      for (const { toUnit, tone } of maps) {
+        const p = applyHomography(toUnit, { x: x + 0.5, y: y + 0.5 });
+        if (p.x < 0 || p.y < 0 || p.x >= 1 || p.y >= 1) continue;
+        v = typeof tone === "number" ? tone : tone(p.x, p.y);
+      }
+      const n = rand();
+      data.set([v + n, v + n, v + n, 255], (y * W + x) * 4);
+    }
+  }
+  return { data, width: W, height: H };
+}
+
+const box = (x0: number, y0: number, x1: number, y1: number): Quad => [
+  { x: x0, y: y0 },
+  { x: x1, y: y0 },
+  { x: x1, y: y1 },
+  { x: x0, y: y1 },
+];
+/** White paper with rows of grey print; `shade` overrides the paper's tone. */
+const printed =
+  (shade: (u: number, v: number) => number = () => 235) =>
+  (u: number, v: number) =>
+    shade(u, v) - (u > 0.08 && u < 0.9 && v > 0.05 && v < 0.95 && (v * 40) % 1 < 0.2 ? 150 : 0);
+const darkTable = () => 40;
+const woodTable = (x: number, y: number) => 70 + 25 * Math.sin(x / 9 + Math.sin(y / 40) * 2);
+
+describe("detectQuad: cropping a photo nobody reviews", () => {
+  it("applies the outline of a printed receipt on a dark table", () => {
+    const result = detectQuad(paint(darkTable, [{ quad: tilted, tone: printed() }]));
+    expect(result.level).toBe("apply");
+    expect(cornerError(result.quad!, norm(tilted, W, H))).toBeLessThan(0.02);
+  });
+
+  it("applies it on wood grain, and for paper darker than the table", () => {
+    expect(detectQuad(paint(woodTable, [{ quad: tilted, tone: printed() }])).level).toBe("apply");
+    expect(detectQuad(scene(W, H, tilted, 60, 220, 6)).level).toBe("apply");
+  });
+
+  it("finds and applies a long 1:5 receipt standing 80% of the frame's height", () => {
+    const tall = box(236, 80, 364, 720);
+    const result = detectQuad(paint(darkTable, [{ quad: tall, tone: printed() }]));
+    expect(result.level).toBe("apply");
+    expect(cornerError(result.quad!, norm(tall, W, H))).toBeLessThan(0.02);
+  });
+
+  it("only suggests a receipt that runs off the frame", () => {
+    const result = detectQuad(scene(W, H, box(160, 100, 440, 900), 235, 40, 8));
+    expect(result.quad).not.toBeNull();
+    expect(result.level).toBe("suggest");
+  });
+
+  it("does not apply a white receipt on a light table", () => {
+    const result = detectQuad(paint(() => 215, [{ quad: tilted, tone: printed() }]));
+    expect(result.level).not.toBe("apply");
+  });
+
+  it("does not apply when light objects touch the receipt", () => {
+    const result = detectQuad(
+      paint(darkTable, [
+        { quad: box(20, 600, 200, 780), tone: 220 },
+        { quad: box(420, 40, 590, 160), tone: 210 },
+        { quad: tilted, tone: printed() },
+        { quad: box(440, 380, 560, 470), tone: 225 },
+      ]),
+    );
+    expect(result.level).not.toBe("apply");
+  });
+
+  it("does not apply when another light object rivals the receipt", () => {
+    const result = detectQuad(
+      paint(darkTable, [
+        { quad: box(10, 10, 120, 300), tone: 220 },
+        { quad: box(480, 500, 590, 790), tone: 215 },
+        { quad: box(180, 150, 420, 650), tone: printed() },
+      ]),
+    );
+    expect(result.quad).not.toBeNull();
+    expect(result.level).toBe("suggest");
+  });
+
+  it("does not apply a hand-held receipt with fingers over its edge", () => {
+    const fingers = [box(90, 580, 160, 800), box(140, 620, 260, 800)].map((quad) => ({
+      quad,
+      tone: 170,
+    }));
+    const onTable = detectQuad(paint(darkTable, [{ quad: tilted, tone: printed() }, ...fingers]));
+    expect(onTable.level).not.toBe("apply");
+    const byWall = detectQuad(
+      paint((_, y) => (y < 350 ? 200 : 60), [{ quad: tilted, tone: printed() }, ...fingers]),
+    );
+    expect(byWall.level).not.toBe("apply");
+  });
+
+  it("does not apply when a shadow edge could be a side", () => {
+    const shadowed = printed((u, v) => (u + v * 0.3 > 0.6 ? 120 : 235));
+    const result = detectQuad(paint(darkTable, [{ quad: tilted, tone: shadowed }]));
+    expect(result.quad).not.toBeNull();
+    expect(result.level).toBe("suggest");
+  });
+
+  it("does not apply a screenshot's white page inside dark app chrome", () => {
+    const result = detectQuad(
+      paint(
+        () => 30,
+        [
+          { quad: box(0, 90, 600, 720), tone: printed() },
+          { quad: box(0, 90, 600, 170), tone: 90 },
+        ],
+        0,
+      ),
+    );
+    expect(result.level).not.toBe("apply");
+  });
+});
+
 describe("detectQuad on bench receipts", () => {
   const fixtures = path.join(import.meta.dirname, "../../../../packages/bench/fixtures");
   for (const name of ["npr-lakh", "long-groceries"]) {
