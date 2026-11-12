@@ -44,13 +44,18 @@ import {
   type UsageWindow,
 } from "./usage";
 import { isUuid } from "./ids";
+import { asciiDigits } from "./calendar/bs";
+import { resolveReceiptDate, type PrintedDate } from "./calendar/resolve";
 import {
   isIsoDay,
+  latestReceiptDate as latestReceiptDay,
   parseCurrency,
   parseReceiptDate,
   storableAmount,
   storableQuantity,
 } from "./receipt-fields";
+import type { ReceiptPatch } from "./receipt-patch";
+import { isDateReason, reviewReasons } from "./review-reasons";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -92,10 +97,14 @@ export type ReceiptSummary = {
   status: ReceiptStatus;
   merchant: string | null;
   receiptDate: string | null;
+  /** 'gregory' | 'bikram-sambat', or null when unknown (read as 'gregory'). */
+  receiptDateCalendar: string | null;
   category: string | null;
   currency: string;
   total: string | null;
   confidence: number | null;
+  /** Codes of the failed checks; a completed receipt with any, not yet reviewed, needs review. */
+  reviewReasons: string[];
   fileName: string | null;
   errorMessage: string | null;
   createdAt: Date;
@@ -115,6 +124,10 @@ export type ReceiptExportRow = ReceiptSummary & {
   subtotal: string | null;
   tax: string | null;
   tip: string | null;
+  discount: string | null;
+  serviceCharge: string | null;
+  invoiceNumber: string | null;
+  merchantTaxId: string | null;
   itemCount: number;
   /** Names of the receipt's groups, alphabetical. */
   groups: string[];
@@ -165,18 +178,6 @@ export type BulkDeleteResult =
   | { kind: "changed"; matched: number }
   | { kind: "too-many"; deletable: number };
 
-/** Fields a user may correct on an extracted receipt. */
-export type ReceiptPatch = {
-  merchant?: string | null;
-  receiptDate?: string | null;
-  category?: string | null;
-  currency?: string | null;
-  subtotal?: string | null;
-  tax?: string | null;
-  tip?: string | null;
-  total?: string | null;
-};
-
 /** Workspace-wide counts for the home screen; `needsReview` and `failed` are what to act on. */
 export type ReceiptCounts = {
   total: number;
@@ -221,10 +222,8 @@ class ListChanged extends Error {
 /** Upload plus two retries: a receipt that keeps failing can't loop provider calls. */
 export { MAX_EXTRACTION_ATTEMPTS };
 
-/** Completed receipts below this overall confidence are flagged "needs review" until someone reviews them. */
-export const NEEDS_REVIEW_BELOW = 0.9;
-
-const needsReview = sql`${receipts.status} = 'completed' and ${receipts.confidence} < ${String(NEEDS_REVIEW_BELOW)} and ${receipts.reviewedAt} is null`;
+/** A completed receipt with a failed check (`review-reasons.ts`) that nobody has reviewed yet. */
+const needsReview = sql`${receipts.status} = 'completed' and ${receipts.reviewReasons} <> '{}' and ${receipts.reviewedAt} is null`;
 
 /**
  * A `processing` receipt whose job is gone or long overdue (nothing ran the
@@ -319,10 +318,12 @@ const summaryColumns = {
   status: effectiveStatus,
   merchant: receipts.merchant,
   receiptDate: receipts.receiptDate,
+  receiptDateCalendar: receipts.receiptDateCalendar,
   category: receipts.category,
   currency: receipts.currency,
   total: receipts.total,
   confidence: receipts.confidence,
+  reviewReasons: receipts.reviewReasons,
   fileName: receipts.fileName,
   errorMessage: effectiveError,
   createdAt: receipts.createdAt,
@@ -368,17 +369,33 @@ const toSummary = (row: SummaryRow): ReceiptSummary => ({
   confidence: row.confidence == null ? null : Number(row.confidence),
 });
 
-/** The latest receipt date the row's `receipts_receipt_date_check` allows: a day past the UTC upload day. */
-const latestReceiptDate = sql`(${receipts.createdAt} at time zone 'UTC')::date + 1`;
+/** Fields extraction v3 adds, read when present so the schema can gain them without a change here. */
+type ExtractionExtras = {
+  dates?: readonly PrintedDate[] | null;
+  invoiceNumber?: string | null;
+  merchantTaxId?: string | null;
+  discount?: number | null;
+  serviceCharge?: number | null;
+};
 
-/**
- * An extracted date, or null when it is after the upload: a misread, or a
- * Bikram Sambat year (2080) given as AD. Null shows as "No date found".
- */
-const plausibleDate = (date: string | null) =>
-  date === null
-    ? null
-    : sql`case when ${date}::date <= ${latestReceiptDate} then ${date}::date end`;
+/** Printed text for a length-checked column, or null when missing or too long to be what was asked for. */
+const boundedText = (value: unknown, max: number) => {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > 0 && text.length <= max ? text : null;
+};
+
+/** For comparing printed identifiers only (`PAN: 123 456 789` and `123456789`); never stored. */
+const identifierKey = (value: string) =>
+  asciiDigits(value.normalize("NFKC"))
+    .replace(/[^\p{L}\p{N}]/gu, "")
+    .toUpperCase();
+
+/** A discount or charge for a `>= 0` column: the model may sign a discount. */
+const storableCharge = (value: number | null | undefined) =>
+  value == null ? null : storableAmount(Math.abs(value));
+
+/** The UTC upload day, as the date CHECK counts it. */
+const uploadDayOf = (createdAt: Date) => createdAt.toISOString().slice(0, 10);
 
 /**
  * Writes the calls of a round. The workspace or the user may have been
@@ -424,7 +441,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       quota: QuotaGate,
     ) => Effect.Effect<InsertResult, DbError>;
     /**
-     * Persists an extraction, its items and the model that produced it. Only the
+     * Persists an extraction, its items (in printed order) and the model that produced it, with the date resolved
+     * against the upload day and the review reasons computed. Only the
      * current attempt of a `processing` receipt may complete it; null when the
      * receipt is gone or a newer attempt or a final state superseded this one.
      * `calls` are recorded either way, in the same transaction: they were made.
@@ -487,9 +505,10 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       sort?: ReceiptSort,
     ) => Effect.Effect<ReceiptExportRow[], DbError>;
     /**
-     * Applies user corrections; false when nothing matched or the caller may not
-     * edit it. Fails InvalidInput for a date that isn't a real day from 2000 on,
-     * or is after the day the receipt was uploaded.
+     * Applies user corrections and recomputes the review reasons from the result; false when nothing matched or
+     * the caller may not edit it. Date reasons are kept unless the patch changes the date or its calendar; clearing
+     * the date clears the calendar. Fails InvalidInput for a date that isn't a real day from 2000 on, or is after
+     * the day the receipt was uploaded.
      */
     readonly update: (
       id: string,
@@ -589,19 +608,60 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
         use((db) =>
           db.transaction(async (tx) => {
             await recordCalls(tx, calls);
+            const [current] = await tx
+              .select({ createdAt: receipts.createdAt })
+              .from(receipts)
+              .where(currentAttempt(id, scope, attempt));
+            if (!current) return null;
+            const extras = extraction as typeof extraction & ExtractionExtras;
+            const merchantTaxId = boundedText(extras.merchantTaxId, 32);
+            const printedNumber = boundedText(extras.invoiceNumber, 64);
+            // The model took the seller's PAN for the bill number.
+            const invoiceNumber =
+              printedNumber &&
+              merchantTaxId &&
+              identifierKey(printedNumber) === identifierKey(merchantTaxId)
+                ? null
+                : printedNumber;
+            const currency = parseCurrency(extraction.currency);
+            const resolved = resolveReceiptDate({
+              dates: Array.isArray(extras.dates) ? extras.dates : null,
+              modelReading: extraction.receiptDate,
+              uploadDay: uploadDayOf(current.createdAt),
+              currency,
+              fiscalYearHints: [printedNumber],
+            });
+            const fields = {
+              merchant: extraction.merchant?.trim() || null,
+              receiptDate: resolved.date,
+              currency,
+              subtotal: storableAmount(extraction.subtotal),
+              tax: storableAmount(extraction.tax),
+              tip: storableAmount(extraction.tip),
+              discount: storableCharge(extras.discount),
+              serviceCharge: storableCharge(extras.serviceCharge),
+              total: storableAmount(extraction.total),
+            };
+            const itemRows = extraction.items.map((item, position) => ({
+              receiptId: id,
+              position,
+              name: item.name,
+              quantity: storableQuantity(item.quantity),
+              unitPrice: storableAmount(item.unitPrice),
+              totalPrice: storableAmount(item.totalPrice),
+              confidence: String(item.confidence),
+            }));
             const [row] = await tx
               .update(receipts)
               .set({
+                ...fields,
                 status: "completed",
-                merchant: extraction.merchant,
-                receiptDate: plausibleDate(parseReceiptDate(extraction.receiptDate)),
+                receiptDateCalendar: resolved.calendar,
+                invoiceNumber,
+                merchantTaxId,
                 category: normalizeCategory(extraction.category),
-                currency: parseCurrency(extraction.currency),
-                subtotal: storableAmount(extraction.subtotal),
-                tax: storableAmount(extraction.tax),
-                tip: storableAmount(extraction.tip),
-                total: storableAmount(extraction.total),
                 confidence: String(extraction.confidence),
+                reviewReasons: reviewReasons({ ...fields, items: itemRows }, resolved.reasons),
                 rawJson: extraction,
                 model,
                 errorMessage: null,
@@ -615,21 +675,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             if (!row) return null;
             await tx.delete(receiptItems).where(eq(receiptItems.receiptId, id));
             const items =
-              extraction.items.length === 0
+              itemRows.length === 0
                 ? []
-                : await tx
-                    .insert(receiptItems)
-                    .values(
-                      extraction.items.map((item) => ({
-                        receiptId: id,
-                        name: item.name,
-                        quantity: storableQuantity(item.quantity),
-                        unitPrice: storableAmount(item.unitPrice),
-                        totalPrice: storableAmount(item.totalPrice),
-                        confidence: String(item.confidence),
-                      })),
-                    )
-                    .returning();
+                : await tx.insert(receiptItems).values(itemRows).returning();
             return { ...row, items };
           }),
         ),
@@ -734,7 +782,10 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           if (!isReceiptId(id)) return null;
           const row = await db.query.receipts.findFirst({
             where: inScope(id, scope),
-            with: { items: true, reviewer: { columns: { name: true } } },
+            with: {
+              items: { orderBy: [asc(receiptItems.position), asc(receiptItems.id)] },
+              reviewer: { columns: { name: true } },
+            },
           });
           if (!row || !isStaleCandidate(row)) return row ?? null;
           const [live] = await db
@@ -810,6 +861,10 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               subtotal: receipts.subtotal,
               tax: receipts.tax,
               tip: receipts.tip,
+              discount: receipts.discount,
+              serviceCharge: receipts.serviceCharge,
+              invoiceNumber: receipts.invoiceNumber,
+              merchantTaxId: receipts.merchantTaxId,
               // Qualified by hand: Drizzle renders columns unqualified in a single-table select.
               itemCount: sql<number>`(select count(*)::int from receipt_items where receipt_items.receipt_id = receipts.id)`,
               groups: sql<
@@ -833,26 +888,44 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
         return Effect.flatMap(
           use(async (db) => {
             if (!isReceiptId(id)) return false;
-            const fields = Object.fromEntries(
-              Object.entries(patch).filter(([, v]) => v !== undefined),
-            );
-            const [row] = await db
-              .update(receipts)
-              .set({ ...fields, updatedAt: new Date() })
-              .where(
-                and(
-                  writable(id, scope),
-                  date == null ? undefined : sql`${date}::date <= ${latestReceiptDate}`,
-                ),
-              )
-              .returning({ id: receipts.id });
-            if (row || date == null) return Boolean(row);
-            // Tell a date after the upload apart from a receipt the caller can't edit.
-            const [editable] = await db
-              .select({ id: receipts.id })
-              .from(receipts)
-              .where(writable(id, scope));
-            return editable ? ("date-after-upload" as const) : false;
+            return db.transaction(async (tx) => {
+              // Locked: the reasons are computed from this row and must match what is written.
+              const [row] = await tx
+                .select()
+                .from(receipts)
+                .where(writable(id, scope))
+                .for("update");
+              if (!row) return false;
+              if (date != null && date > latestReceiptDay(row.createdAt)) {
+                return "date-after-upload" as const;
+              }
+              const changes: ReceiptPatch = Object.fromEntries(
+                Object.entries(patch).filter(([, v]) => v !== undefined),
+              );
+              if (changes.receiptDate === null) changes.receiptDateCalendar = null;
+              // A person changed the date, so the resolver's doubts about the printed one no longer apply.
+              const dateSet =
+                (changes.receiptDate !== undefined && changes.receiptDate !== row.receiptDate) ||
+                (changes.receiptDateCalendar !== undefined &&
+                  changes.receiptDateCalendar !== row.receiptDateCalendar);
+              const items = await tx
+                .select({ totalPrice: receiptItems.totalPrice })
+                .from(receiptItems)
+                .where(eq(receiptItems.receiptId, id));
+              const next = { ...row, ...changes, items };
+              await tx
+                .update(receipts)
+                .set({
+                  ...changes,
+                  reviewReasons:
+                    row.status === "completed"
+                      ? reviewReasons(next, dateSet ? [] : row.reviewReasons.filter(isDateReason))
+                      : row.reviewReasons,
+                  updatedAt: new Date(),
+                })
+                .where(eq(receipts.id, id));
+              return true;
+            });
           }),
           (result) =>
             result === "date-after-upload"
