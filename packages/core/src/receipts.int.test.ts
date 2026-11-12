@@ -321,21 +321,16 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
 
     // The model took the PAN for the bill number: it is dropped. Over-long text is not stored.
     const other = await ingest();
-    const pan = await repo((r) =>
-      r.complete(
-        other,
-        d,
-        1,
-        { ...extraction, invoiceNumber: "PAN 601 234 567", merchantTaxId: "x".repeat(33) },
-        "fixture",
-        [],
-      ),
-    );
+    const tooLong = {
+      ...extraction,
+      invoiceNumber: "PAN 601 234 567",
+      merchantTaxId: "x".repeat(33),
+    };
+    const pan = await repo((r) => r.complete(other, d, 1, tooLong, "fixture", []));
     expect([pan?.invoiceNumber, pan?.merchantTaxId]).toEqual(["PAN 601 234 567", null]);
     const same = await ingest();
-    const dropped = await repo((r) =>
-      r.complete(same, d, 1, { ...extraction, invoiceNumber: "601-234-567" }, "fixture", []),
-    );
+    const panAsNumber = { ...extraction, invoiceNumber: "601-234-567" };
+    const dropped = await repo((r) => r.complete(same, d, 1, panAsNumber, "fixture", []));
     expect(dropped?.invoiceNumber).toBeNull();
 
     // The new columns' checks hold whatever writes them.
