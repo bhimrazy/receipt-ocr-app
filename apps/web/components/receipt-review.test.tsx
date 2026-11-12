@@ -4,20 +4,52 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
-const { ReceiptChecks, reviewFailure } = await import("./receipt-review");
+const { ReceiptChecks, ReceiptReviewProvider, ReviewedConfidenceBadge, reviewFailure } =
+  await import("./receipt-review");
 
 const receipt = (fields: Partial<ReceiptWithItems> = {}) =>
   ({ id: "r1", reviewedAt: null, reviewer: null, ...fields }) as ReceiptWithItems;
 
-const render = (props: { receipt: ReceiptWithItems; checks?: string[]; canEdit?: boolean }) =>
+const withReview = (receipt: ReceiptWithItems, children: React.ReactNode) =>
   renderToStaticMarkup(
+    <ReceiptReviewProvider receipt={receipt} viewerName="Test User">
+      {children}
+    </ReceiptReviewProvider>,
+  );
+
+const render = (props: { receipt: ReceiptWithItems; checks?: string[]; canEdit?: boolean }) =>
+  withReview(
+    props.receipt,
     <ReceiptChecks
       canEdit={props.canEdit ?? true}
       checks={props.checks ?? ["No date was found."]}
-      receipt={props.receipt}
-      viewerName="Test User"
     />,
   );
+
+describe("ReviewedConfidenceBadge", () => {
+  it("shows the confidence until the receipt is reviewed, then Checked with who checked it", () => {
+    const unreviewed = withReview(receipt(), <ReviewedConfidenceBadge value="0.62" />);
+    expect(unreviewed).toContain("Review");
+    expect(unreviewed).toContain("62%");
+    expect(unreviewed).not.toContain("Checked");
+
+    const reviewed = withReview(
+      receipt({ reviewedAt: new Date("2026-11-10T09:00:00Z"), reviewer: { name: "Test User" } }),
+      <ReviewedConfidenceBadge value="0.62" />,
+    );
+    expect(reviewed).toContain("Checked by Test User");
+    expect(reviewed).not.toContain("62%");
+  });
+
+  it("says Checked without a name once the reviewer's account is gone", () => {
+    const html = withReview(
+      receipt({ reviewedAt: new Date("2026-11-10T09:00:00Z") }),
+      <ReviewedConfidenceBadge value="0.62" />,
+    );
+    expect(html).toContain(">Checked</span>");
+    expect(html).not.toContain("Checked by");
+  });
+});
 
 describe("ReceiptChecks", () => {
   it("offers Looks right and a dismiss X to editors", () => {

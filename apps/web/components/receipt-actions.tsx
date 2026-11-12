@@ -301,11 +301,9 @@ export function ReceiptWorkspace({
   details,
   items,
   footer,
-  viewerName,
 }: {
   receipt: ReceiptWithItems;
   canEdit: boolean;
-  viewerName: string;
   /** Plain-words reasons to check this receipt; empty when there are none. */
   checks: string[];
   image: React.ReactNode;
@@ -321,8 +319,6 @@ export function ReceiptWorkspace({
         canEdit={canEdit}
         checks={checks}
         onCorrect={editing ? undefined : () => startEditing()}
-        receipt={receipt}
-        viewerName={viewerName}
       />
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         {image}

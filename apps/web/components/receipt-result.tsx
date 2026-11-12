@@ -38,7 +38,8 @@ import {
   ReceiptWorkspace,
 } from "@/components/receipt-actions";
 import { receiptTitle } from "@/components/receipt-list";
-import { ConfidenceBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
+import { ReceiptReviewProvider, ReviewedConfidenceBadge } from "@/components/receipt-review";
+import { StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 
 const FAILED_FALLBACK = {
@@ -114,7 +115,7 @@ export function ReceiptResult({
             <>
               <span>{formatDate(receipt.receiptDate) ?? "No date found"}</span>
               {receipt.category ? <Badge variant="secondary">{receipt.category}</Badge> : null}
-              <ConfidenceBadge value={receipt.confidence} />
+              <ReviewedConfidenceBadge value={receipt.confidence} />
             </>
           ) : (
             <>
@@ -411,21 +412,22 @@ export function ReceiptResult({
   );
 
   return (
-    <ReceiptEditingProvider>
-      <div className="mx-auto max-w-6xl">
-        {back}
-        {header}
-        <ReceiptWorkspace
-          canEdit={canEdit}
-          checks={checksFor(receipt, money)}
-          details={details}
-          footer={footer}
-          image={image}
-          items={items}
-          receipt={receipt}
-          viewerName={viewerName}
-        />
-      </div>
-    </ReceiptEditingProvider>
+    <ReceiptReviewProvider receipt={receipt} viewerName={viewerName}>
+      <ReceiptEditingProvider>
+        <div className="mx-auto max-w-6xl">
+          {back}
+          {header}
+          <ReceiptWorkspace
+            canEdit={canEdit}
+            checks={checksFor(receipt, money)}
+            details={details}
+            footer={footer}
+            image={image}
+            items={items}
+            receipt={receipt}
+          />
+        </div>
+      </ReceiptEditingProvider>
+    </ReceiptReviewProvider>
   );
 }

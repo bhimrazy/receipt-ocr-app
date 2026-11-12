@@ -45,6 +45,20 @@ export const CONFIDENCE = {
   },
 } as const satisfies Record<ConfidenceLevel, unknown>;
 
+/**
+ * Shown in place of the confidence badge once someone marked the receipt
+ * reviewed: the score no longer says whether to trust it.
+ */
+export function CheckedBadge({ by, className }: { by?: string | null; className?: string }) {
+  return (
+    <Badge className={className} title={by ? `Checked by ${by}` : undefined} variant="success">
+      <CircleCheck aria-hidden="true" />
+      <span aria-hidden={by ? true : undefined}>Checked</span>
+      {by ? <span className="sr-only">Checked by {by}</span> : null}
+    </Badge>
+  );
+}
+
 /** Confidence tier (High / Check / Review) with icon, label and score. */
 export function ConfidenceBadge({
   value,

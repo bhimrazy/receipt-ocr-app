@@ -7,7 +7,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@receipt-ocr/ui/compone
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, CircleCheck, Pencil, TriangleAlert, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { CheckedBadge, ConfidenceBadge } from "@/components/receipt-status";
 import { formatDate } from "@/lib/format";
 
 type Review = { at: Date | string; name: string | null } | null;
@@ -23,24 +24,36 @@ export function reviewFailure(status: number | null) {
 const fromReceipt = (receipt: ReceiptWithItems): Review =>
   receipt.reviewedAt ? { at: receipt.reviewedAt, name: receipt.reviewer?.name ?? null } : null;
 
+type ReviewState = {
+  review: Review;
+  setReviewed: (reviewed: boolean) => Promise<void>;
+  /** Where focus goes after the person's own review or undo. */
+  undoRef: React.RefObject<HTMLButtonElement | null>;
+  looksRightRef: React.RefObject<HTMLButtonElement | null>;
+};
+
+const ReviewContext = createContext<ReviewState | null>(null);
+
+function useReview() {
+  const value = useContext(ReviewContext);
+  if (!value) throw new Error("useReview needs ReceiptReviewProvider");
+  return value;
+}
+
 /**
- * The "check before you use this" card, or once someone has marked the receipt
- * reviewed, one line saying who and when. Editors can mark it reviewed and undo
- * that; the change shows at once and the page refreshes after.
+ * Review state shared by the header badge and the checks card, which sit in
+ * different parts of the page. Marking reviewed shows at once, rolls back if the
+ * save fails, and refreshes the page once it succeeds.
  */
-export function ReceiptChecks({
+export function ReceiptReviewProvider({
   receipt,
-  checks,
-  canEdit,
   viewerName,
-  onCorrect,
+  children,
 }: {
   receipt: ReceiptWithItems;
-  checks: string[];
-  canEdit: boolean;
+  /** Shown as the reviewer until the refresh brings the saved one. */
   viewerName: string;
-  /** Opens the edit form; omitted while it is already open. */
-  onCorrect?: () => void;
+  children: React.ReactNode;
 }) {
   const router = useRouter();
   const server = fromReceipt(receipt);
@@ -90,6 +103,35 @@ export function ReceiptChecks({
     }
     router.refresh();
   }
+
+  return (
+    <ReviewContext.Provider value={{ review, setReviewed, undoRef, looksRightRef }}>
+      {children}
+    </ReviewContext.Provider>
+  );
+}
+
+/** The header's confidence badge, or "Checked" once the receipt is reviewed. */
+export function ReviewedConfidenceBadge({ value }: { value: string | null }) {
+  const { review } = useReview();
+  return review ? <CheckedBadge by={review.name} /> : <ConfidenceBadge value={value} />;
+}
+
+/**
+ * The "check before you use this" card, or once someone has marked the receipt
+ * reviewed, one line saying who and when. Editors can mark it reviewed and undo that.
+ */
+export function ReceiptChecks({
+  checks,
+  canEdit,
+  onCorrect,
+}: {
+  checks: string[];
+  canEdit: boolean;
+  /** Opens the edit form; omitted while it is already open. */
+  onCorrect?: () => void;
+}) {
+  const { review, setReviewed, undoRef, looksRightRef } = useReview();
 
   if (review) {
     const date = formatDate(review.at);
