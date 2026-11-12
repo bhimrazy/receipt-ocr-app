@@ -148,7 +148,7 @@ test("receipt actions sheet offers edit, export and delete", async ({ page }) =>
   await page.getByRole("button", { name: "Receipt actions" }).click();
   await sheet.getByRole("button", { name: "Edit details" }).click();
   await expect(sheet).toBeHidden();
-  await expect(page.getByLabel("Merchant")).toBeFocused();
+  await expect(page.getByLabel("Merchant", { exact: true })).toBeFocused();
 });
 
 test("Delete moves focus from the sheet to the confirm dialog", async ({ page }) => {
