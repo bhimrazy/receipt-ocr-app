@@ -326,19 +326,23 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const seed = async () =>
       (await run(ingestUpload({ scope: a, fileName: "policy.jpg", body: JPEG, limits }))).receipt
         .id;
+    const removed = async (id: string, scope: ReturnType<typeof asRole>) => {
+      const result = await repo((r) => r.removeMany(scope, { ids: [id] }));
+      return result.kind === "deleted" ? result.deleted.length : -1;
+    };
 
     // Member: neither edit nor delete Alice's receipt, but both on their own upload.
     const alices = await seed();
     expect(
       await repo((r) => r.update(alices, asRole("member"), { merchant: "=HYPERLINK()" })),
     ).toBe(false);
-    expect(await repo((r) => r.remove(alices, asRole("member")))).toBeNull();
+    expect(await removed(alices, asRole("member"))).toBe(0);
     expect((await repo((r) => r.get(alices, a)))?.merchant).not.toBe("=HYPERLINK()");
     const own = (
       await run(ingestUpload({ scope: asRole("member"), fileName: "m.jpg", body: JPEG, limits }))
     ).receipt.id;
     expect(await repo((r) => r.update(own, asRole("member"), { merchant: "Mine" }))).toBe(true);
-    expect(await repo((r) => r.remove(own, asRole("member")))).not.toBeNull();
+    expect(await removed(own, asRole("member"))).toBe(1);
 
     // No role at all fails closed.
     expect(await repo((r) => r.update(alices, { ...asRole("x"), role: undefined }, {}))).toBe(
@@ -349,7 +353,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     for (const role of ["admin", "owner"]) {
       const id = await seed();
       expect(await repo((r) => r.update(id, asRole(role), { merchant: `By ${role}` }))).toBe(true);
-      expect(await repo((r) => r.remove(id, asRole(role)))).not.toBeNull();
+      expect(await removed(id, asRole(role))).toBe(1);
     }
     await run(deleteReceipt({ receiptId: alices, scope: a }));
   });
@@ -359,7 +363,10 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
     expect(await repo((r) => r.get("not-a-uuid", a))).toBeNull();
     expect(await repo((r) => r.update("not-a-uuid", a, { merchant: "x" }))).toBe(false);
-    expect(await repo((r) => r.remove("not-a-uuid", a))).toBeNull();
+    expect(await repo((r) => r.removeMany(a, { ids: ["not-a-uuid"] }))).toMatchObject({
+      deleted: [],
+      notFound: 1,
+    });
     const g = await gate();
     expect(await repo((r) => r.claimRetry("not-a-uuid", a, g))).toEqual({ kind: "not-found" });
   });
@@ -641,7 +648,18 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const storage = <A>(f: (s: typeof Storage.Service) => Effect.Effect<A, unknown>) =>
       runExit(Effect.flatMap(Storage, f));
     expect(Exit.isSuccess(await storage((s) => s.get(objectKey)))).toBe(true);
-    await run(deleteReceipt({ receiptId, scope: a }));
+    const { jobId } = await run(deleteReceipt({ receiptId, scope: a }));
+    // The row is gone at once; the file goes with the `storage.delete` job.
+    expect(Exit.isSuccess(await storage((s) => s.get(objectKey)))).toBe(true);
+    await run(
+      tick({
+        worker: `${tag}-worker`,
+        registry: JOB_REGISTRY,
+        budgetMs: 60_000,
+        ids: [jobId!],
+        waitForRetries: false,
+      }),
+    );
     expect(Exit.isFailure(await storage((s) => s.get(objectKey)))).toBe(true);
   });
 
