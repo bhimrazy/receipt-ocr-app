@@ -109,7 +109,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     # Main-only (deployment branch policy), so its secrets, SENTRY_AUTH_TOKEN among them, never reach
-    # PR runs; previews use the `vercel` environment. See docs/deployment.md, Deploy.
+    # PR runs; previews use `vercel-preview`. See docs/deployment.md, Deploy.
     environment: vercel-production
     permissions:
       contents: read

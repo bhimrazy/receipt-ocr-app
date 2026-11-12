@@ -51,7 +51,7 @@ sequenceDiagram
   allows 100 deployments a day, shared with production. A PR gets one only when it carries the `preview` label, and the
   deploy runs once, when the label is added; later pushes don't redeploy. To refresh, remove and re-add the label. The
   repository variable `PREVIEW_MODE=auto` also deploys pushes to ready-for-review PRs that change something the app
-  ships, and a push to the `preview` branch always deploys the fixed preview domains. They run in the GitHub environment `vercel` (no branch policy; production uses the main-only `vercel-production`), and use the Vercel project's preview environment,
+  ships, and a push to the `preview` branch always deploys the fixed preview domains. They run in the GitHub environment `vercel-preview` (no branch policy; production uses the main-only `vercel-production`), and use the Vercel project's preview environment,
   which points at the staging database. They never migrate it, so a PR's own migration isn't there until it merges.
   The app's origin on a preview is its own host (`VERCEL_BRANCH_URL`, else `VERCEL_URL`) unless `BETTER_AUTH_URL` is
   set, and both preview hosts stay trusted either way ([`lib/env.ts`](../../../apps/web/lib/env.ts)). Dependabot PRs are skipped because they get no secrets.

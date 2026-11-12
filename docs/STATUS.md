@@ -144,9 +144,10 @@ Steps are in [deployment.md](deployment.md).
   deploys need a successful `production-db` run with the same migrations. The automatic gate compares with the last
   run of the workflow on `main` whose `deploy-production` job succeeded; CI creates no git tags (tags are for real
   releases, later).
-- `vercel` environment (review P2-1): previews use it, so its `VERCEL_TOKEN`, which can deploy to production, reaches
-  same-repo PR runs; it can't get a `main`-only policy without breaking previews. Production deploys from the main-only
-  `vercel-production` environment, which alone holds `SENTRY_AUTH_TOKEN`. Mitigations:
+- `vercel-preview` environment (review P2-1): previews use it, so its `VERCEL_TOKEN`, which can deploy to production,
+  reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Production and cleanup use
+  the main-only `vercel-production`, which alone holds `SENTRY_AUTH_TOKEN`. Both tokens are team-scoped for now (owner
+  to replace them with separate ones). Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
   no outside collaborators. The full fix is a separate Vercel project for previews, with its own token.
 - Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
