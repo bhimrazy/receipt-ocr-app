@@ -18,10 +18,11 @@ import {
   sql,
   user,
 } from "@receipt-ocr/db";
-import { Effect, Exit, ManagedRuntime } from "effect";
+import { Cause, Effect, Exit, ManagedRuntime } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppLayer, type AppServices } from "./index";
 import { JOB_REGISTRY, tick } from "./jobs";
+import { classifyExtractionError } from "./jobs/kinds/receipt-extract";
 import { claimRetry, deleteReceipt, ingestUpload, purgeReceiptFiles } from "./pipeline";
 import { FREE_FAILED_ROUNDS } from "./plans";
 import { checkQuota, quotaGate, usageWindow } from "./quota";
@@ -535,6 +536,24 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       total: null,
     });
     expect(completed?.items).toMatchObject([{ quantity: 1, unitPrice: null, totalPrice: "3.00" }]);
+  });
+
+  it("a value Postgres refuses on complete ends the job instead of retrying it", async () => {
+    const fresh = await run(ingestUpload({ scope: a, fileName: "nul.jpg", body: JPEG, limits }));
+    const id = fresh.receipt.id;
+    await dropJob(id);
+    // Postgres text can't hold a NUL: invalid byte sequence, SQLSTATE 22021.
+    const extraction = { ...FIXTURE_RECEIPTS[0]!, merchant: "a\u0000b" };
+    const exit = await runExit(
+      Effect.flatMap(ReceiptRepo, (r) => r.complete(id, a, 1, extraction, "fixture", [])),
+    );
+    if (!Exit.isFailure(exit)) throw new Error("complete() should have failed");
+    const error = Cause.failureOption(exit.cause);
+    if (error._tag !== "Some") throw new Error("expected a typed failure");
+    expect(classifyExtractionError(error.value)).toMatchObject({
+      _tag: "NonRetryableJobError",
+      kind: "db-data-error",
+    });
   });
 
   it("U1: deleting a receipt deletes its stored object", async () => {

@@ -157,6 +157,18 @@ const totalCost = (rows: readonly OcrCallRow[]) =>
   );
 
 /**
+ * A failed insert that may still have committed: it failed while committing
+ * (`atCommit`), and not with a server error that rolled it back. No SQLSTATE
+ * (a timeout, a lost socket) or a connection exception (class 08, which a
+ * pooler can send while COMMIT is in flight) leaves the outcome unknown.
+ */
+function mayHaveCommitted(error: { _tag: string; atCommit?: boolean; cause?: unknown }) {
+  if (error._tag !== "DbError" || !error.atCommit) return false;
+  const state = sqlState(error.cause);
+  return state === undefined || state.startsWith("08");
+}
+
+/**
  * Stage 1, always synchronous: validate the file, store it, create the row
  * and enqueue its extraction job. The quota is checked again where the row is
  * created, under the user's lock: a parallel burst can't all pass an earlier
@@ -199,16 +211,16 @@ export const ingestUpload = (input: {
           ? Effect.succeed(result)
           : Effect.fail(quotaExceeded(result.verdict)),
       ),
-      // No row means nothing would ever delete the object. Postgres answering
-      // with an error means the transaction rolled back; a timeout or lost
-      // connection may still have committed it, so the object stays and is logged.
+      // No row means nothing would ever delete the object, so it goes unless
+      // the insert may have committed (see `mayHaveCommitted`); then it stays
+      // and is logged, since deleting it would strand a committed receipt.
       Effect.tapError((error) =>
-        error._tag === "QuotaExceeded" || sqlState(error.cause) !== undefined
-          ? storage.remove([imageObjectKey]).pipe(Effect.ignore)
-          : Effect.logError("receipt.ingest_unknown", {
+        mayHaveCommitted(error)
+          ? Effect.logError("receipt.ingest_unknown", {
               receipt_id: id,
               error: errorFields(error),
-            }),
+            })
+          : storage.remove([imageObjectKey]).pipe(Effect.ignore),
       ),
       Effect.ensuring(annotateTimings(timings)),
     );

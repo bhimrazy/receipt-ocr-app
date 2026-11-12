@@ -26,7 +26,7 @@ import {
   user,
 } from "@receipt-ocr/db";
 import { Context, Effect, Layer } from "effect";
-import { InvalidInput, type DbError } from "./errors";
+import { DbError, InvalidInput } from "./errors";
 import { liveReceiptJob, STALE_AFTER_MS } from "./jobs/live";
 import { enqueueJob } from "./jobs/queue";
 import { PRIORITY_INTERACTIVE, receiptExtractJob } from "./jobs/receipt-extract-job";
@@ -415,8 +415,11 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
   static readonly Live = Layer.effect(
     ReceiptRepo,
     Effect.map(Db, ({ use }) => ({
-      insert: ({ id, scope, fileName, imageObjectKey, priority }, quota) =>
-        use((db) =>
+      insert: ({ id, scope, fileName, imageObjectKey, priority }, quota) => {
+        // Drizzle sends COMMIT only once the callback returns: a failure after
+        // this is set may have committed the row.
+        let committing = false;
+        return use((db) =>
           db.transaction(async (tx): Promise<InsertResult> => {
             await lockQuota(tx, scope, quota.window.scope === "workspace");
             const verdict = quota.decide(await countUsage(tx, scope, quota.window));
@@ -454,9 +457,17 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               ),
             );
             if (!("id" in job)) throw new Error("A new receipt already had a live job");
+            committing = true;
             return { kind: "inserted", receipt: row, jobId: job.id };
           }),
-        ),
+        ).pipe(
+          Effect.mapError((error) =>
+            committing
+              ? new DbError({ message: error.message, cause: error.cause, atCommit: true })
+              : error,
+          ),
+        );
+      },
 
       complete: (id, scope, attempt, extraction, model, calls) =>
         use((db) =>

@@ -216,6 +216,7 @@ describe("classifyExtractionError", () => {
     expect(db(new Error("Query read timeout"))._tag).toBe("RetryableJobError");
     expect(db(pg("40001"))._tag).toBe("RetryableJobError");
     expect(db(pg("57014"))._tag).toBe("RetryableJobError");
+    expect(db(pg("EPIPE"))._tag).toBe("RetryableJobError");
     for (const code of ["22003", "22P02", "23505", "23514"]) {
       expect(db({ cause: pg(code) })).toMatchObject({
         _tag: "NonRetryableJobError",
