@@ -394,8 +394,12 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const id = (await run(ingestUpload({ scope: a, fileName: "review.jpg", body: JPEG, limits })))
       .receipt.id;
     await extract(id);
+    // The fixture read picks a receipt by the upload's bytes, and one of them is below the threshold.
+    const setConfidence = (value: string) =>
+      db((d) => d.update(receipts).set({ confidence: value }).where(eq(receipts.id, id)));
+    await setConfidence("0.95");
     const before = await needsReview();
-    await db((d) => d.update(receipts).set({ confidence: "0.5" }).where(eq(receipts.id, id)));
+    await setConfidence("0.5");
     const low = await needsReview();
     expect(low).toEqual({ count: before.count + 1, listed: before.listed! + 1 });
 
