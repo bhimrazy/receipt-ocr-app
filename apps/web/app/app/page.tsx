@@ -297,6 +297,7 @@ async function SpendSection({ searchParams }: { searchParams: SearchParams }) {
   try {
     view = await getSpendView(await searchParams);
   } catch (error) {
+    unstable_rethrow(error);
     // The rest of Home still works; don't let the dashboard take it down.
     logger.error({ event: "home.spend_failed", unit: "log", error: errorFields(error) });
   }

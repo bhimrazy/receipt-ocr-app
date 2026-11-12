@@ -38,6 +38,14 @@ export type ReceiptSummaryPage = {
 
 export const HISTORY_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
+/** Highest History page served: keeps OFFSET far inside Postgres' bigint for any `?page=`. */
+export const MAX_PAGE = 1_000_000;
+
+/** A 1-based page number from any requested one, within 1..MAX_PAGE. */
+export function pageNumber(requested: number | undefined): number {
+  const page = Math.trunc(requested ?? 1);
+  return Number.isFinite(page) ? Math.min(MAX_PAGE, Math.max(1, page)) : 1;
+}
 const STATUSES = new Set(["uploaded", "processing", "completed", "failed", "needs-review"]);
 /** Group filter from `?group=` (repeatable): valid ids only, at most MAX_GROUP_FILTERS. */
 export const MAX_GROUP_FILTERS = 20;
@@ -96,7 +104,7 @@ export async function listReceiptSummaries(
     MAX_PAGE_SIZE,
     Math.max(1, Math.trunc(filters.pageSize ?? HISTORY_PAGE_SIZE)),
   );
-  const page = Math.max(1, Math.trunc(filters.page ?? 1));
+  const page = pageNumber(filters.page);
   const clean = cleanFilters(filters);
 
   const scope = await requireActiveScope();
