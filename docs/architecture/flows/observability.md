@@ -145,6 +145,8 @@ Errors only, and only with a valid `SENTRY_DSN` (`parseSentryDsn`; anything else
   and the request's method and URL through `scrubUrl` (no query or hash; reset tokens, invitation and receipt ids
   replaced, security plan B5). `dataCollection` is all off as well. No tunnel: the browser posts to Sentry's ingest
   host, which joins `connect-src` only when the DSN is set (a tunnel would forward cookies, security plan B2/B3).
+- **Source maps**: production deploys upload browser and server maps and delete them before publishing; frames are
+  matched by the debug IDs `scrubEvent` keeps ([production-environment.md](../../production-environment.md#9c-sentry)).
 
 ## PostHog
 

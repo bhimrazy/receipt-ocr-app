@@ -144,8 +144,9 @@ Steps are in [deployment.md](deployment.md).
   deploys need a successful `production-db` run with the same migrations. The automatic gate compares with the last
   run of the workflow on `main` whose `deploy-production` job succeeded; CI creates no git tags (tags are for real
   releases, later).
-- `vercel` environment (review P2-1): previews and production share it, so the same `VERCEL_TOKEN`, which can deploy
-  to production, reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Mitigations:
+- `vercel` environment (review P2-1): previews use it, so its `VERCEL_TOKEN`, which can deploy to production, reaches
+  same-repo PR runs; it can't get a `main`-only policy without breaking previews. Production deploys from the main-only
+  `vercel-production` environment, which alone holds `SENTRY_AUTH_TOKEN`. Mitigations:
   every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
   no outside collaborators. The full fix is a separate Vercel project for previews, with its own token.
 - Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
@@ -367,7 +368,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - **From the 2026-11-09 Home incident** ([note](reviews/2026-11-09-home-stuck-incident.md), fixed in #210 by moving to
   node-postgres; server role timeouts applied the same day, see [db.md](architecture/db.md)):
   - Restore the pushed-screen slide transitions turned off in #205 (`TODO(2026-11-16)` in `pushed-screen.tsx`).
-  - Sentry source maps: upload built (`production.yml`); first deploy proves it.
+  - Sentry source maps: upload built (`production.yml`); needs the `vercel-production` environment ([deployment.md](deployment.md#5-deploy)), and the first deploy proves it.
   - `db.pool_error` is only logged once core's Db layer is built; a process that has only built the auth pool logs
     nothing for an idle-client error.
   - A CI job against a real PgBouncer in transaction mode.

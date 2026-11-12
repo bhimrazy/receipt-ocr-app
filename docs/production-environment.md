@@ -546,14 +546,20 @@ rejections, dead jobs, and browser errors outside or inside error boundaries. Er
 Feedback or Logs. Each event is rebuilt from an allowlist (see [observability](architecture/flows/observability.md#sentry)).
 
 Source maps (security plan M11): `production.yml` builds with `UPLOAD_SOURCE_MAPS=1`, which makes Next emit browser
-and server maps. A separate step then runs the pinned `sentry-cli` (`.github/vercel-cli`) on `.vercel/output`:
-`sourcemaps inject` stamps a debug ID into each file and map, and `sourcemaps upload` sends them under release = the
-7-character commit. The next step deletes every `*.map` before `vercel deploy`, so none is public. Only that step
-holds the token: not the build (it runs repository code), and never Vercel. Sentry matches frames by debug ID
-(`scrubEvent` keeps the IDs), so they show original files, lines and function names.
+and server maps. A separate step then runs the pinned `sentry-cli` (`.github/vercel-cli`) on the files that deploy:
+the browser bundles in `.vercel/output/static/_next` (not `public/`: `sw.js` must not change), and the server files, which `vercel build` doesn't copy (each function's
+`.vc-config.json` points at them in `apps/web/.next/server` through `filePathMap`, and `vercel deploy` reads them
+from there). `sourcemaps inject` stamps a debug ID into each file and map, and `sourcemaps upload` sends them under
+release = the 7-character commit. The next step deletes every `*.map` in `.vercel/output` and `apps/web/.next` before
+`vercel deploy` and fails the job if one is left, so none is public. Only the upload step holds the token: not the
+build (it runs repository code), and never Vercel. Sentry matches frames by debug ID (`scrubEvent` keeps the IDs), so
+they show original files, lines and function names.
 
-The upload token's scope, location and rotation are in [secrets.md](secrets.md#operator-tokens-how-to-create-each-one);
-without it the production deploy fails at the upload step. Previews and Docker builds emit no maps. Docker: pass `--build-arg SENTRY_DSN=...` and
+The upload is best effort: if `SENTRY_AUTH_TOKEN` or one of the `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL`
+variables is missing, or the upload fails, the run shows a warning and deploys anyway, with minified stack traces for
+that release. Where they live and the token's scope and rotation:
+[deployment.md](deployment.md#5-deploy) and [secrets.md](secrets.md#operator-tokens-how-to-create-each-one).
+Previews and Docker builds emit no maps. Docker: pass `--build-arg SENTRY_DSN=...` and
 `--build-arg GIT_COMMIT_SHA=$(git rev-parse HEAD)` to `docker/Dockerfile.prod` for browser reporting and the release;
 `SENTRY_DSN` in the container's environment alone turns on server reporting only.
 

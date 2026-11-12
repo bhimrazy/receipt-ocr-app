@@ -132,16 +132,30 @@ release changes migrations (see [Migrations](#migrations)). Pull requests get a 
 `.github/workflows/preview.yml`. To deploy by hand, run the **Vercel Production Deployment** workflow from the
 Actions tab on `main`; a manual run deploys once CI passed on that commit and production has its migrations.
 
-Both Vercel workflows use the GitHub environment `vercel`, which holds `VERCEL_TOKEN`, `VERCEL_ORG_ID` and
-`VERCEL_PROJECT_ID`. It has no branch policy, because previews run from PR branches; don't add one, or previews stop.
+The Vercel workflows use two GitHub environments (Settings → Environments):
+
+| Environment         | Used by                                            | Branch policy                       | Secrets                                                                   | Variables                                    |
+| ------------------- | -------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------- |
+| `vercel`            | `preview.yml`, `vercel-cleanup.yml`                | None: previews run from PR branches | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                      | `PRODUCTION_DOMAIN`                          |
+| `vercel-production` | `production.yml` (deploy job, runs only from main) | Selected branches → `main` only     | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `SENTRY_AUTH_TOKEN` | `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL` |
+
+Don't add a branch policy to `vercel`, or previews stop. Anything only production may read goes in
+`vercel-production`, never in `vercel`: a PR branch can change `preview.yml` and print what that environment holds.
+Create `vercel-production` with its branch policy **before** adding secrets to it (an environment without one lets any
+branch's workflow read them); if it is missing, GitHub creates it empty on the next run and the deploy fails at
+`vercel pull`. Its `VERCEL_TOKEN` can be a separate token from the preview one (see
+[secrets.md](secrets.md#operator-tokens-how-to-create-each-one)), so revoking one doesn't stop the other. The Sentry
+values are the organization slug, the project slug and the region URL (for example `https://us.sentry.io`); none is
+secret. Without any of them, or without the token, the deploy warns and goes on without uploading source maps.
 
 **Every production secret is stored as Vercel _Sensitive_.** Sensitive values can't be read back, so `vercel pull` in
 CI gets empty or placeholder values for them and the build must not depend on them: `lib/env.ts` treats a malformed
 runtime-only secret as unset during `next build` and refuses it only when the server starts. Mark any new production
 secret Sensitive when you add it.
 
-**The Vercel token reaches PR runs.** The same `VERCEL_TOKEN` that deploys production is available to same-repository
-PR runs of `preview.yml`, so a PR branch could deploy to production with it. What limits that today: production
+**The Vercel token reaches PR runs.** The `vercel` environment's `VERCEL_TOKEN` is available to same-repository PR
+runs of `preview.yml`, and a team-scoped token can deploy to production, so a PR branch could do so with it, even
+when `vercel-production` holds a different token. What limits that today: production
 secrets are Sensitive, so the token can't read them back, and the repository has no outside collaborators (fork PRs
 get no secrets). The full fix is a separate Vercel project for previews with its own token. Treat the token as a
 production credential and rotate it if a PR workflow might have leaked it.
