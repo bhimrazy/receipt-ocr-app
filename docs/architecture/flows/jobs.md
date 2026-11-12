@@ -170,6 +170,14 @@ enqueued in the same transaction that stores the event, with the idempotency key
 `after()` right after the webhook response. Up to 8 attempts (30 s lease, backoff 5 s doubling to 10 min). A database
 error retries; the outcome (`applied`, `stale`, `ignored`, `unmatched`) is logged. See [Billing](billing.md).
 
+`storage.delete` ([`kinds/storage-delete.ts`](../../../packages/core/src/jobs/kinds/storage-delete.ts)) deletes the
+stored files of receipts a user deleted. `ReceiptRepo.removeMany` enqueues it in the transaction that deletes the rows,
+with the object keys as the payload (at most 1,000, one bulk delete) and the workspace id, but no user, so it never
+takes one of the user's running slots. Priority 9, behind receipt reads. The bulk delete route starts it in `after()`;
+otherwise the next drain runs it. A key already gone counts as deleted, so a retry is safe. Up to 8 attempts (backoff
+30 s doubling to 1 h); storage not configured is dead at once. It is not a `receipt.%` kind, so the per-receipt live-job
+index and the stale rule ignore it.
+
 `email.contact-reply` ([`kinds/contact-reply.ts`](../../../packages/core/src/jobs/kinds/contact-reply.ts)) sends the
 "we got your message" reply to a contact-form sender. `/api/contact` queues it only after Turnstile passes and the
 support mail is sent, and only within `allowContactReply` in `lib/email-limits.ts`: 1 reply per address and 3 per IP a

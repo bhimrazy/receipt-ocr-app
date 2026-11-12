@@ -14,18 +14,17 @@ test("create a group from a selection, filter History by it, export it, then man
   await signUp(page, email);
   await seedReceipts(email, ["Café Berlin", "Hotel Berlin", "Office Depot"]);
 
-  // Select two receipts and add them to a new group from the picker.
+  // Tick two receipts and add them to a new group from the picker.
   await page.goto("/app/history");
-  await page.getByRole("link", { name: "Select" }).click();
-  const list = page.getByRole("list", { name: "Receipts to select" });
-  await list.getByText("Café Berlin").click();
-  await list.getByText("Hotel Berlin").click();
-  await expect(page.getByText("2 receipts selected")).toBeVisible();
-  await page.getByRole("button", { name: "Add to group" }).click();
+  await page.getByRole("checkbox", { name: "Select Café Berlin" }).check();
+  await page.getByRole("checkbox", { name: "Select Hotel Berlin" }).check();
+  const bar = page.getByRole("toolbar", { name: "Selected receipts" });
+  await expect(bar).toContainText("2 receipts selected");
+  await bar.getByRole("button", { name: "Add to group" }).click();
   await page.getByLabel("Search or create a group").fill("Berlin trip");
   await page.getByRole("button", { name: "Create “Berlin trip”" }).click();
   await expect(page.getByText("Added 2 receipts to Berlin trip")).toBeVisible();
-  await page.getByRole("link", { name: "Done selecting" }).click();
+  await expect(bar).toBeHidden();
 
   // Filter by the group.
   const filter = page.getByRole("group", { name: "Filter by group" });

@@ -33,6 +33,7 @@ export function exampleCsv(example: ContentExample): string {
       confidence: row.confidence,
       itemCount: row.itemCount,
       groups: example.groups ?? [],
+      userId: null,
       fileName: row.fileName,
       errorMessage: null,
       createdAt: SAMPLE_CREATED,

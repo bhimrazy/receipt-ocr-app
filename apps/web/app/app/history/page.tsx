@@ -1,12 +1,12 @@
 import { RowsSkeleton } from "@/components/app-skeletons";
-// groups: filter chips and selection mode
+// groups: filter chips
 import { GroupFilter } from "@/components/groups/group-filter";
-import { GroupSelectList } from "@/components/groups/group-select-list";
-import { SELECT_PARAM } from "@/components/groups/hrefs";
 import { getWorkspaceGroups } from "@/lib/groups";
 import { exportHref, isFiltered } from "@/components/history/history-href";
 import { HistoryResults } from "@/components/history/history-results";
 import { HistoryToolbar } from "@/components/history/history-toolbar";
+import { DEFAULT_PAGE_SIZE, type ListView } from "@/components/history/list-view";
+import { PhoneSelectButton, SelectionProvider } from "@/components/history/selection-context";
 import {
   PageHeader,
   PageHeaderActions,
@@ -22,8 +22,11 @@ import {
   filtersFromSearchParams,
   getReceiptCounts,
   listReceiptSummaries,
+  type HistoryFilters,
   type ReceiptListFilters,
 } from "@/lib/receipts";
+import { requireActiveScope } from "@/lib/session";
+import { isSharedWorkspace } from "@/lib/workspaces";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { Download } from "lucide-react";
@@ -46,12 +49,9 @@ async function Summary({ query }: { query: string }) {
     return null;
   });
   if (!loaded) return null;
-  const { total, page, pageSize } = loaded;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <>
-      {total} {total === 1 ? "receipt" : "receipts"} in this workspace
-      {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ""}
+      {loaded.total} {loaded.total === 1 ? "receipt" : "receipts"} in this workspace
     </>
   );
 }
@@ -59,45 +59,39 @@ async function Summary({ query }: { query: string }) {
 async function Results({
   query,
   filters,
-  selecting,
+  view,
 }: {
   query: string;
-  filters: ReceiptListFilters;
-  selecting: boolean;
+  filters: HistoryFilters;
+  view: ListView;
 }) {
-  const [{ rows, total, page, pageSize }, counts] = await Promise.all([
+  const scope = await requireActiveScope();
+  const [{ rows, total, page }, counts, groups, shared] = await Promise.all([
     loadPage(query),
     getReceiptCounts(),
+    getWorkspaceGroups(),
+    isSharedWorkspace(scope.organizationId),
   ]);
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <>
       <ListPoller active={rows.some((receipt) => isInFlight(receipt.status))} counts={counts} />
-      {/* groups: selection mode for bulk "Add to group" */}
-      {selecting ? (
-        <GroupSelectList
-          filters={filters}
-          groups={await getWorkspaceGroups()}
-          page={page}
-          receipts={rows}
-          totalPages={totalPages}
-        />
-      ) : (
-        <HistoryResults filters={filters} page={page} receipts={rows} totalPages={totalPages} />
-      )}
+      <HistoryResults
+        filters={filters}
+        groups={groups}
+        page={page}
+        receipts={rows}
+        shared={shared}
+        total={total}
+        view={view}
+        viewer={{ userId: scope.userId, role: scope.role }}
+      />
     </>
   );
 }
 
 // groups: the chip row under the toolbar
-async function Groups({ filters, selecting }: { filters: ReceiptListFilters; selecting: boolean }) {
-  return (
-    <GroupFilter
-      groups={await getWorkspaceGroups()}
-      selectedIds={filters.groups ?? []}
-      selecting={selecting}
-    />
-  );
+async function Groups({ filters }: { filters: HistoryFilters }) {
+  return <GroupFilter groups={await getWorkspaceGroups()} selectedIds={filters.groups ?? []} />;
 }
 
 export default async function HistoryPage({
@@ -107,43 +101,46 @@ export default async function HistoryPage({
 }) {
   logPageRender("/app/history");
   const params = await searchParams;
-  const { page: requested, ...raw } = filtersFromSearchParams(params);
+  const { page: requested, pageSize, sort, ...raw } = filtersFromSearchParams(params);
   const filters = cleanFilters(raw);
-  const selecting = params[SELECT_PARAM] === "1"; // groups
-  const query = JSON.stringify({ ...filters, page: requested });
+  const view: ListView = { size: pageSize ?? DEFAULT_PAGE_SIZE, sort };
+  const query = JSON.stringify({ ...filters, page: requested, pageSize: view.size, sort });
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader>
-        <PageHeaderContent>
-          <PageHeaderTitle>History</PageHeaderTitle>
-          <PageHeaderDescription>
-            <Suspense fallback={<Skeleton className="h-5 w-48" />}>
-              <Summary query={query} />
-            </Suspense>
-          </PageHeaderDescription>
-        </PageHeaderContent>
-        <PageHeaderActions>
-          <a className={buttonVariants({ variant: "outline" })} href={exportHref(filters)}>
-            <Download aria-hidden="true" />
-            {isFiltered(filters) ? "Export filtered CSV" : "Export CSV"}
-          </a>
-        </PageHeaderActions>
-      </PageHeader>
-      <Suspense fallback={<Skeleton className="h-11 w-full" />}>
-        <HistoryToolbar filters={filters} />
-      </Suspense>
-      {/* groups */}
-      <SectionBoundary className="mb-5" label="Groups">
-        <Suspense fallback={<Skeleton className="mb-5 h-9 w-full" />}>
-          <Groups filters={filters} selecting={selecting} />
+    <SelectionProvider filterKey={JSON.stringify(filters)}>
+      <div className="mx-auto max-w-6xl">
+        <PageHeader>
+          <PageHeaderContent>
+            <PageHeaderTitle>History</PageHeaderTitle>
+            <PageHeaderDescription>
+              <Suspense fallback={<Skeleton className="h-5 w-48" />}>
+                <Summary query={query} />
+              </Suspense>
+            </PageHeaderDescription>
+          </PageHeaderContent>
+          <PageHeaderActions>
+            <a className={buttonVariants({ variant: "outline" })} href={exportHref(filters, view)}>
+              <Download aria-hidden="true" />
+              {isFiltered(filters) ? "Export filtered CSV" : "Export CSV"}
+            </a>
+          </PageHeaderActions>
+        </PageHeader>
+        <PhoneSelectButton />
+        <Suspense fallback={<Skeleton className="h-11 w-full" />}>
+          <HistoryToolbar filters={filters} />
         </Suspense>
-      </SectionBoundary>
-      <SectionBoundary key={`${query}${selecting}`} label="Receipts">
-        <Suspense fallback={<RowsSkeleton />}>
-          <Results filters={filters} query={query} selecting={selecting} />
-        </Suspense>
-      </SectionBoundary>
-    </div>
+        {/* groups */}
+        <SectionBoundary className="mb-5" label="Groups">
+          <Suspense fallback={<Skeleton className="mb-5 h-9 w-full" />}>
+            <Groups filters={filters} />
+          </Suspense>
+        </SectionBoundary>
+        <SectionBoundary key={query} label="Receipts">
+          <Suspense fallback={<RowsSkeleton />}>
+            <Results filters={filters} query={query} view={view} />
+          </Suspense>
+        </SectionBoundary>
+      </div>
+    </SelectionProvider>
   );
 }

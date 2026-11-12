@@ -3,25 +3,22 @@
 import type { ReceiptGroup } from "@receipt-ocr/core/group-rules";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { CheckSquare, FolderCog, X } from "lucide-react";
+import { FolderCog, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { GroupDot } from "./group-chip";
-import { SELECT_PARAM } from "./hrefs";
 
 /**
  * History's group chips: each toggles `?group=<id>` (several mean "in any of
- * them"). Also the way into selection mode and the Groups page.
+ * them"). Also the way to the Groups page.
  */
 export function GroupFilter({
   groups,
   selectedIds,
-  selecting,
 }: {
   groups: ReceiptGroup[];
   selectedIds: string[];
-  selecting: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -48,14 +45,6 @@ export function GroupFilter({
     params.delete("group");
     navigate(params);
   }
-
-  const selectHref = (() => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (selecting) params.delete(SELECT_PARAM);
-    else params.set(SELECT_PARAM, "1");
-    const qs = params.toString();
-    return qs ? `${pathname}?${qs}` : pathname;
-  })();
 
   return (
     <div aria-busy={pending} className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -100,19 +89,10 @@ export function GroupFilter({
         </div>
       ) : (
         <p className="flex-1 text-sm text-muted-foreground">
-          Group receipts by trip, client or year: select them, then add them to a group.
+          Group receipts by trip, client or year: tick them, then choose Add to group.
         </p>
       )}
       <div className="flex shrink-0 gap-2">
-        <Link
-          className={buttonVariants({ size: "sm", variant: selecting ? "secondary" : "outline" })}
-          href={selectHref}
-          replace
-          scroll={false}
-        >
-          <CheckSquare aria-hidden="true" />
-          {selecting ? "Done selecting" : "Select"}
-        </Link>
         <Link className={buttonVariants({ size: "sm", variant: "ghost" })} href="/app/groups">
           <FolderCog aria-hidden="true" />
           Manage groups
