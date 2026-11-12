@@ -108,7 +108,9 @@ jobs:
     if: needs.gate.outputs.deploy == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 20
-    environment: vercel
+    # Main-only (deployment branch policy), so its secrets, SENTRY_AUTH_TOKEN among them, never reach
+    # PR runs; previews use the `vercel` environment. See docs/deployment.md, Deploy.
+    environment: vercel-production
     permissions:
       contents: read
     env:
@@ -143,33 +145,72 @@ jobs:
           "$VERCEL_BIN" build --prod
 
       # Runs no repository code: only the pinned Sentry CLI reads the build output while the token
-      # is set. Debug IDs tie each file to its map, so the release only groups the upload; it is the
-      # short commit the SDK reports. Fails, and so blocks the deploy, if the token is missing.
+      # is set. Debug IDs tie each file to its map; the release (the short commit the SDK reports)
+      # only groups the upload. A missing setting or a failed upload warns and the deploy goes on
+      # with unreadable stack traces, never with maps.
       - name: Upload source maps to Sentry
+        id: sentry
+        continue-on-error: true
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: receiptocr
-          SENTRY_PROJECT: receipt-ocr
-          SENTRY_URL: https://us.sentry.io
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_URL: ${{ vars.SENTRY_URL }}
           COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
-          # The CLI skips hidden directories below the paths it is given, and the server bundles
-          # sit in `.next`, so each one is named.
-          dirs=(.vercel/output/static)
-          while IFS= read -r dir; do dirs+=("$dir"); done < <(
-            find .vercel/output/functions -type d -name .next -not -path '*/node_modules/*' -prune | sort
+          for name in SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT SENTRY_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::warning::$name is not set in the vercel-production environment; source maps not uploaded."
+              exit 0
+            fi
+          done
+          # Browser bundles are in .vercel/output/static/_next; the rest of static is public/, hard
+          # linked to the checkout and left alone (sw.js must not change). Server files are deployed
+          # from where Next wrote them (each function's .vc-config.json lists them in filePathMap),
+          # so their `.next/server` directories are named: the CLI skips hidden directories below
+          # the paths it is given. A function that holds its own copies has a `.next` inside.
+          server=()
+          while IFS= read -r dir; do
+            if [ -d "$dir" ]; then server+=("$dir"); fi
+          done < <(
+            find .vercel/output/functions -name .vc-config.json -not -path '*/node_modules/*' \
+              -exec jq -r '.filePathMap[]?' {} + 2>/dev/null |
+              sed -n 's#^\(\(.*/\)\{0,1\}\.next/server\)/.*\.js$#\1#p' | sort -u
           )
-          [ "${#dirs[@]}" -gt 1 ] || { echo "::error::No server bundle (.next) in the build output"; exit 1; }
+          if [ "${#server[@]}" -eq 0 ]; then
+            while IFS= read -r dir; do server+=("$dir"); done < <(
+              find .vercel/output/functions -type d -name .next -not -path '*/node_modules/*' -prune 2>/dev/null | sort
+            )
+          fi
+          dirs=("${server[@]}")
+          if [ -d .vercel/output/static/_next ]; then dirs+=(.vercel/output/static/_next); fi
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "::warning::No static or server files found in .vercel/output; source maps not uploaded."
+            exit 0
+          fi
+          if [ "${#server[@]}" -eq 0 ]; then
+            echo "::warning::No server files found through .vercel/output/functions; uploading browser maps only."
+          fi
           "$SENTRY_BIN" sourcemaps inject --ignore node_modules "${dirs[@]}"
-          "$SENTRY_BIN" sourcemaps upload --strict --ignore node_modules \
+          "$SENTRY_BIN" sourcemaps upload --ignore node_modules \
             --release "${COMMIT_SHA:0:7}" "${dirs[@]}"
 
-      # Maps are served as static files if left in the output.
+      - name: Warn if the source-map upload failed
+        if: steps.sentry.outcome == 'failure'
+        run: |
+          echo "::warning::Source-map upload to Sentry failed; deploying without it (stack traces stay minified for this release)."
+
+      # Browser maps left in the output would be served as static files, and a server map would
+      # ship if a function listed it. Fails the job if any is left.
       - name: Delete source maps
         run: |
-          find .vercel/output -name '*.map' -delete
-          test -z "$(find .vercel/output -name '*.map' -print -quit)"
+          find .vercel/output apps/web/.next -name '*.map' -delete
+          left=$(find .vercel/output apps/web/.next -name '*.map' -print -quit)
+          if [ -n "$left" ]; then
+            echo "::error::Source map left in the build output: $left"
+            exit 1
+          fi
 
       - name: Deploy to production
         env:
