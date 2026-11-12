@@ -3,6 +3,7 @@
 import type { ReceiptWithItems } from "@receipt-ocr/core";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { toast } from "@receipt-ocr/ui/components/toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@receipt-ocr/ui/components/tooltip";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, CircleCheck, Pencil, TriangleAlert, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -10,6 +11,14 @@ import { useEffect, useRef, useState } from "react";
 import { formatDate } from "@/lib/format";
 
 type Review = { at: Date | string; name: string | null } | null;
+
+/** What to tell someone whose review didn't save; `status` is null when the request never got a response. */
+export function reviewFailure(status: number | null) {
+  if (status === null) return "Check your connection and try again.";
+  if (status === 404)
+    return "This receipt was deleted, or you can no longer change it. Refresh the page to see it as it is now.";
+  return "Try again.";
+}
 
 const fromReceipt = (receipt: ReceiptWithItems): Review =>
   receipt.reviewedAt ? { at: receipt.reviewedAt, name: receipt.reviewer?.name ?? null } : null;
@@ -61,20 +70,20 @@ export function ReceiptChecks({
     const previous = review;
     focusAfter.current = true;
     setReview(reviewed ? { at: new Date(), name: viewerName } : null);
-    const ok = await fetch(`/api/receipts/${receipt.id}`, {
+    const status = await fetch(`/api/receipts/${receipt.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reviewed }),
     })
-      .then((res) => res.ok)
-      .catch(() => false);
+      .then((res) => res.status)
+      .catch(() => null);
     saving.current = false;
-    if (!ok) {
+    if (status === null || status >= 400) {
       focusAfter.current = true;
       setReview(previous);
       toast.add({
         title: reviewed ? "Couldn't mark this receipt reviewed" : "Couldn't undo the review",
-        description: "Try again.",
+        description: reviewFailure(status),
         type: "error",
       });
       return;
@@ -156,15 +165,22 @@ export function ReceiptChecks({
         ) : null}
       </div>
       {canEdit ? (
-        <Button
-          aria-label="Mark as reviewed"
-          className="absolute top-2 right-2"
-          onClick={() => void setReviewed(true)}
-          size="icon-sm"
-          variant="ghost"
-        >
-          <X aria-hidden="true" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                aria-label="Mark as reviewed"
+                className="absolute top-2 right-2"
+                onClick={() => void setReviewed(true)}
+                size="icon-sm"
+                variant="ghost"
+              />
+            }
+          >
+            <X aria-hidden="true" />
+          </TooltipTrigger>
+          <TooltipContent side="left">Mark as reviewed</TooltipContent>
+        </Tooltip>
       ) : null}
     </section>
   );

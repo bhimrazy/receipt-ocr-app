@@ -36,4 +36,18 @@ test("marking a receipt reviewed replaces its checks with who reviewed it, and U
   await expect(card.getByRole("button", { name: "Looks right" })).toBeFocused();
   await page.reload();
   await expect(card).toBeVisible();
+
+  // A save the server refuses puts the card back and says why, without offering a pointless retry.
+  await page.route(`**/api/receipts/${id}`, (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({ status: 404, json: { error: "Receipt not found" } })
+      : route.continue(),
+  );
+  await card.getByRole("button", { name: "Looks right" }).click();
+  await expect(
+    page.getByText("This receipt was deleted, or you can no longer change it"),
+  ).toBeVisible();
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("button", { name: "Looks right" })).toBeFocused();
+  await expect(page.getByText("Reviewed by E2E User")).toHaveCount(0);
 });

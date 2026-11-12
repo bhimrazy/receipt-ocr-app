@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
-const { ReceiptChecks } = await import("./receipt-review");
+const { ReceiptChecks, reviewFailure } = await import("./receipt-review");
 
 const receipt = (fields: Partial<ReceiptWithItems> = {}) =>
   ({ id: "r1", reviewedAt: null, reviewer: null, ...fields }) as ReceiptWithItems;
@@ -56,5 +56,13 @@ describe("ReceiptChecks", () => {
 
   it("renders nothing for an unreviewed receipt with no checks", () => {
     expect(render({ receipt: receipt(), checks: [] })).toBe("");
+  });
+});
+
+describe("reviewFailure", () => {
+  it("doesn't offer a retry that can't work", () => {
+    expect(reviewFailure(404)).toMatch(/deleted, or you can no longer change it/);
+    expect(reviewFailure(null)).toBe("Check your connection and try again.");
+    expect(reviewFailure(500)).toBe("Try again.");
   });
 });
