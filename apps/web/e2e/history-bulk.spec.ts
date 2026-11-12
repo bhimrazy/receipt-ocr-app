@@ -21,7 +21,7 @@ test("sort, page size, select across pages and delete in bulk on desktop", async
   await page.getByRole("link", { name: /^Merchant/ }).click();
   await expect(page).toHaveURL(/sort=merchant&dir=asc/);
   const table = page.getByRole("table");
-  await expect(table.getByRole("link").first()).toHaveText("Shop 01");
+  await expect(table.locator("tbody").getByRole("link").first()).toHaveText("Shop 01");
 
   // Tick a row, go to page 2, tick another: both stay selected.
   await page.getByRole("checkbox", { name: "Select Shop 01" }).check();

@@ -19,8 +19,8 @@ test("sign up, history, receipt detail, CSV export, sign out and back in", async
   const [receiptId] = await seedReceipts(email, [merchant, "Second Market"]);
 
   await page.goto("/app/history");
-  await expect(page.getByRole("cell", { name: merchant })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Second Market" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: merchant, exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Second Market", exact: true })).toBeVisible();
 
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: "Export CSV" }).click();
@@ -42,5 +42,5 @@ test("sign up, history, receipt detail, CSV export, sign out and back in", async
 
   await signIn(page, email);
   await page.goto("/app/history");
-  await expect(page.getByRole("cell", { name: merchant })).toBeVisible();
+  await expect(page.getByRole("cell", { name: merchant, exact: true })).toBeVisible();
 });
