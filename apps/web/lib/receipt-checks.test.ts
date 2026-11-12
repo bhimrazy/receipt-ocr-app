@@ -53,6 +53,13 @@ describe("totalsMismatch", () => {
     expect(totalsMismatch(receipt({ subtotal: "20.00", tax: "1.60", total: "30.00" }))).toBe(21.6);
   });
 
+  it("compares to the cent: a one-cent gap always counts, float sums never do", () => {
+    expect(totalsMismatch(receipt({ lines: ["0.06"], total: "0.07" }))).toBe(0.06);
+    expect(totalsMismatch(receipt({ lines: ["9.99"], total: "10.00" }))).toBe(9.99);
+    expect(totalsMismatch(receipt({ lines: ["0.10", "0.20"], total: "0.30" }))).toBe(null);
+    expect(totalsMismatch(receipt({ subtotal: "0.10", tax: "0.20", total: "0.30" }))).toBe(null);
+  });
+
   it("has nothing to compare without a total or any amounts", () => {
     expect(totalsMismatch(receipt({ lines: ["1.00"] }))).toBe(null);
     expect(totalsMismatch(receipt({ total: "5.00" }))).toBe(null);
@@ -65,7 +72,7 @@ describe("checksFor", () => {
   it("explains a mismatch in plain words", () => {
     const checks = checksFor(receipt({ lines: ["10.00"], total: "12.00" }), money);
     expect(checks).toEqual([
-      "The amounts add up to $10.00, but the total says $12.00. A discount, a coupon or tax already included in the prices often explains this.",
+      "The amounts add up to $10.00, but the total says $12.00. A service charge, discount or rounding can explain the gap; otherwise check the numbers against the photo.",
     ]);
   });
 

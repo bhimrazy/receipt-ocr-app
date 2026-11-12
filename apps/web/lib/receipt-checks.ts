@@ -25,31 +25,32 @@ function toNumber(value: string | null | undefined) {
   return Number.isFinite(n) ? n : null;
 }
 
-const CENT = 0.01;
+/** Whole cents, so sums compare exactly instead of within a float tolerance. */
+function cents(value: string | null | undefined) {
+  const n = toNumber(value);
+  return n === null ? null : Math.round(n * 100);
+}
 
 /**
  * The amount the receipt's parts add up to, when no reading of them matches the
- * total; null when one does or there is nothing to compare. Negative lines are
- * discounts and already reduce the item sum. A total equal to the subtotal or
- * the item sum (with or without the tip) means the prices include tax, so tax
- * isn't added on top.
+ * total to the cent; null when one does or there is nothing to compare. Negative
+ * lines are discounts and already reduce the item sum. A total equal to the
+ * subtotal or the item sum (with or without the tip) means the prices include
+ * tax, so tax isn't added on top.
  */
 export function totalsMismatch(receipt: CheckedReceipt): number | null {
-  const total = toNumber(receipt.total);
+  const total = cents(receipt.total);
   if (total === null) return null;
   const itemsSum = receipt.items.length
-    ? receipt.items.reduce((sum, item) => sum + (toNumber(item.totalPrice) ?? 0), 0)
+    ? receipt.items.reduce((sum, item) => sum + (cents(item.totalPrice) ?? 0), 0)
     : null;
-  const subtotal = toNumber(receipt.subtotal);
-  const bases = [subtotal, itemsSum].filter((base) => base !== null);
+  const bases = [cents(receipt.subtotal), itemsSum].filter((base) => base !== null);
   if (bases.length === 0) return null;
-  const tax = toNumber(receipt.tax) ?? 0;
-  const tip = toNumber(receipt.tip) ?? 0;
-  const matches = bases.some((base) =>
-    [base, base + tip, base + tax + tip].some((sum) => Math.abs(sum - total) < CENT),
-  );
+  const tax = cents(receipt.tax) ?? 0;
+  const tip = cents(receipt.tip) ?? 0;
+  const matches = bases.some((base) => [base, base + tip, base + tax + tip].includes(total));
   if (matches) return null;
-  return Math.round((bases[0]! + tax + tip) * 100) / 100;
+  return (bases[0]! + tax + tip) / 100;
 }
 
 /** Everything a person should look at before trusting this receipt, in plain words. */
@@ -72,7 +73,7 @@ export function checksFor(receipt: CheckedReceipt, money: (value: string | null)
   const expected = totalsMismatch(receipt);
   if (expected !== null) {
     checks.push(
-      `The amounts add up to ${money(expected.toFixed(2))}, but the total says ${money(receipt.total)}. A discount, a coupon or tax already included in the prices often explains this.`,
+      `The amounts add up to ${money(expected.toFixed(2))}, but the total says ${money(receipt.total)}. A service charge, discount or rounding can explain the gap; otherwise check the numbers against the ${fileNoun(receipt)}.`,
     );
   }
   if (!receipt.merchant) checks.push("No merchant name was found.");
