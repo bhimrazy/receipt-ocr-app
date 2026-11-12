@@ -16,7 +16,7 @@ Check against, in order:
 4. Claims: nothing on the landing page, legal pages or emails that the product cannot back up today.
 
 How: use the server, test login and screenshots the brief gives you. Only one Next server fits on this machine, so
-start one yourself only when the brief gives you the slot: export the env block from `scripts/test.sh` (compose
+start one yourself only when the brief gives you the slot: export the env block from `scripts/test.sh` (compose default database `receipt_ocr`,
 Postgres and RustFS, `OCR_PROVIDER=fixture`; never a remote database or a real OCR provider), then
 `bun run docker:up`, `bun run db:migrate`, `bun run build` and `bun run start` in `apps/web`, and stop it when you
 finish. Capture every page in scope with `node scripts/screenshot.mjs --out <scratch dir> --base <server URL>` at 1440

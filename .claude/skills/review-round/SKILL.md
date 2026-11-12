@@ -8,15 +8,15 @@ description: Run the Receipt OCR review round — CTO, CEO, security, product an
 The machine has 8 GB: one Next server at a time across all worktrees, and at most two agents building at once.
 Reviewers are read-only and share the server and screenshots from step 1.
 
-1. **Prepare the app once.** Export the env block from `scripts/test.sh` (compose Postgres and RustFS,
-   `OCR_PROVIDER=fixture`, `DIRECT_URL` as well as `DATABASE_URL`; never a remote database or a real OCR provider), then
+1. **Prepare the app once.** Run the Validation block in `AGENTS.md` first and keep its output for the reviewers. Then
+   export the env block from `scripts/test.sh` (compose Postgres and RustFS,
+   `OCR_PROVIDER=fixture`, `DIRECT_URL` as well as `DATABASE_URL`; never a remote database or a real OCR provider; use the compose default database `receipt_ocr`), then
    `bun run docker:up`, `bun run db:migrate`, `bun run build` and `bun run start` in `apps/web`. The root `bun dev`
    ignores shell variables (Turbo strict env mode) and reads `apps/web/.env.local` instead. Seed receipts across
    statuses and currencies by uploading through the app (the fixture returns USD and EUR; a file containing
    `FIXTURE_FAIL` fails) and editing some to INR and NPR. Capture every route with
    `node scripts/screenshot.mjs --out <scratch dir> --base http://localhost:3004 --login <email:password>` at 1440 and
-   390, in `--theme dark` and `--theme light`. Run the Validation block in `AGENTS.md` and keep its output for the
-   reviewers.
+   390, in `--theme dark` and `--theme light`.
 
 2. **Launch the reviewers in one message, in the background:** `cto-advisor`, `ceo-advisor` (includes market
    research), `security-reviewer`, `product-reviewer` and `principal-designer` (critique). All five are read-only in a

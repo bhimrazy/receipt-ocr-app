@@ -1,6 +1,6 @@
 ---
 name: engineer
-description: Builds one feature or fix track end to end in its own git worktree, with tests and green gates, and handles fix rounds on its PR. Use for every implementation track.
+description: Builds one feature or fix track end to end in its own git worktree, with tests and green gates, and handles fix rounds on its PR. Use for every implementation track; for a fix round, continue the track's engineer with SendMessage instead of starting a new one.
 model: sonnet
 isolation: worktree
 ---
@@ -32,7 +32,7 @@ or the installed package for the pinned version, or a matching skill if the sess
 Local QA uses the compose Postgres and RustFS and the offline OCR fixture: no remote database, and no real OCR provider
 unless the brief allows it. Export the env block from `scripts/test.sh` with your own database name and port (it sets
 `OCR_PROVIDER=fixture`, and `DIRECT_URL` as well as `DATABASE_URL`, because migrations read `DIRECT_URL` first). Then
-`bun run db:migrate`, `bun run build`, and `bun run start` in `apps/web`. The root `bun dev` won't do: Turbo runs `dev`
+`bun run docker:up`, `docker compose exec -T postgres psql -U postgres -c 'create database <name>'`, `bun run db:migrate`, `bun run build`, and `bun run start` in `apps/web`. The root `bun dev` won't do: Turbo runs `dev`
 in strict env mode, so it drops your shell variables and Next falls back to `apps/web/.env.local`. Never read `.env`
 files.
 

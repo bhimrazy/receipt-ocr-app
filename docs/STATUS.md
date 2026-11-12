@@ -197,6 +197,10 @@ Open pull requests only.
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
 
+Reviews of 2026-11-12: [design critique](reviews/2026-11-12-design-critique.md),
+[code organization](reviews/2026-11-12-code-organization.md), [principal](reviews/2026-11-12-principal-review.md),
+[receipt fields](reviews/2026-11-12-receipt-fields-review.md), [extraction](reviews/2026-11-12-extraction-review.md).
+
 ## Brand decisions (owner, 2026-11-07)
 
 Logo: "Scan line" (receipt crossed by a bar that overshoots both edges; keep the overshoot in every drawing). Palette:

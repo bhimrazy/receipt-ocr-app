@@ -78,7 +78,7 @@ subagents alike:
 
 - The Codespace has 8 GB: at most two agents build at once, and one Next server runs across all worktrees. Read-only
   reviewers use the coordinator's server and screenshots.
-- One track is one worktree under `.claude/worktrees/`, one branch and one PR, squash-merged with
+- One track is one worktree under `.claude/worktrees/`, one branch and one PR; the coordinator, never a subagent, squash-merges with
   `gh pr checks <n> --watch && gh pr merge <n> --squash` (always the number, always `&&`).
 - The repository is public. Keep secrets, provider project refs, account IDs and real receipts, emails or names out of
   code, commits, PRs, issues, review files and screenshots; name the environment (`staging-db`) instead.

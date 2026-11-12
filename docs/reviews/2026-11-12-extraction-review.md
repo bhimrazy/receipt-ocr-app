@@ -79,9 +79,8 @@ score the resolver's output.
   Yinyang receipt prints `Date : 2071/11/25` over `2015/03/09` with no calendar marker, which is the owner's case.
   The year decides, and a label that contradicts the year is a `conflict` (probably a misread digit).
 - **Order conventions in the evidence we have.** BS with the year first is YMD (Yinyang `2071/11/25`). BS with the
-  year last is DMY (all BS dates in the owner's six Nepal receipts, e.g. Bhat-Bhateni `09/04/2080`, Saathimart Miti
-  `20/06/2080`). AD on Nepali POS printers was MDY on every receipt where a Miti settles it (Saathimart, Drishya
-  Lounge). That's a small sample, so it is a tie-breaker, not a rule.
+  year last is DMY (all BS dates in the owner's six Nepal receipts, e.g. `09/04/2080` and a Miti
+  `20/06/2080`). AD on Nepali POS printers was MDY on every receipt where a Miti settles it (two receipts). That's a small sample, so it is a tie-breaker, not a rule.
 
 ### Model output: transcribe, don't decide
 
@@ -105,7 +104,7 @@ line that shows the printed text and the readings.
 | --- | --- | --- | --- | --- | --- |
 | 1 | `2071/11/25` and `2015/03/09` under one `Date` (Yinyang) | BS (year ≥ 2056) and AD (year ≤ upload year), both year first so YMD; BS→AD = 2015-03-09 | 2015-03-09 | `agree` | No |
 | 2 | `Date 10/07/2023`, `Miti 20/06/2080` | AD readings 10 Jul / 7 Oct; Miti DMY → 2023-10-07; only MDY matches | 2023-10-07 | `agree` | No |
-| 3 | `09/04/2080` only, no label (Bhat-Bhateni) | BS by year; year last so DMY; Shrawan 9 2080 | 2023-07-25 | `single` | No |
+| 3 | `09/04/2080` only, no label | BS by year; year last so DMY; Shrawan 9 2080 | 2023-07-25 | `single` | No |
 | 4 | `२०८१/०७/१५`, `2081-07-15`, `15/07/81` | Digits normalised; BS by year (`81` can only be BS); convert | AD equivalent | `single` | No |
 | 5 | `१५ कार्तिक २०८१`, `15 Kartik 2081` | Month name → BS | AD equivalent | `single` | No |
 | 6 | `25/07/2023` alone | AD; 25 > 12, so only DMY is valid | 2023-07-25 | `single` | No |
