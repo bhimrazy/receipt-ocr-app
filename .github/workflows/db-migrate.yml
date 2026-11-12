@@ -92,6 +92,7 @@ jobs:
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           TARGET: ${{ inputs.environment }}
+          DATABASE_SSL_CA: ${{ vars.DATABASE_SSL_CA }}
         run: |
           bun -e '
             const target = process.env.TARGET;
@@ -119,11 +120,18 @@ jobs:
               console.log(`::error::DIRECT_URL in the ${target} environment is not a postgres:// URL.`);
               process.exit(1);
             }
+            const sslmode = url.searchParams.get("sslmode") ?? "";
+            if (["require", "verify-ca", "verify-full"].includes(sslmode) && !process.env.DATABASE_SSL_CA?.trim()) {
+              console.log(`::error::DIRECT_URL asks for TLS but DATABASE_SSL_CA is not set in the ${target} environment's variables; pg would verify against public CAs only.`);
+              process.exit(1);
+            }
           '
 
-      # drizzle.config.ts reads DIRECT_URL (session pooler, port 5432). No --verbose: the URL and
-      # the SQL stay out of the log.
+      # drizzle.config.ts reads DIRECT_URL (session pooler, port 5432) and verifies TLS against
+      # DATABASE_SSL_CA (a public certificate, so a variable). No --verbose: the URL and the SQL stay
+      # out of the log.
       - name: Apply migrations
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_SSL_CA: ${{ vars.DATABASE_SSL_CA }}
         run: bun run db:migrate
