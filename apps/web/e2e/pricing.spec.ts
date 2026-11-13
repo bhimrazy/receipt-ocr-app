@@ -82,7 +82,6 @@ test("billing settings show the plan without a checkout while Pro is closed to t
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Plan and billing");
   const main = page.locator("#main-content");
   await expect(main.getByText("Opens soon", { exact: true })).toBeVisible();
-  await expect(main.getByText("Nothing to pay on Free.")).toBeVisible();
   await expect(main.getByText("Your plan", { exact: true })).toBeVisible();
   await expect(main.getByRole("button", { name: /Upgrade to Pro/ })).toHaveCount(0);
   await expect(main.getByText(/^\d+ \/ \d+ scans$/)).toBeVisible();

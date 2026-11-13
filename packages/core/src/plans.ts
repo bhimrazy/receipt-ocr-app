@@ -108,6 +108,22 @@ export const EARLY_ACCESS = {
   receiptsPerMonth: 100,
 } as const;
 
+/** The early-access terms, for a saved Free policy: null once over, or when Free already gives as much. */
+export function earlyAccessOffer(
+  free: PlanPolicy,
+  now = new Date(),
+): { receiptsPerMonth: number; thenPerMonth: number; joinedBefore: Date; endsAt: Date } | null {
+  if (now >= EARLY_ACCESS.endsAt) return null;
+  if (free.receiptsPerMonth === null || free.receiptsPerMonth >= EARLY_ACCESS.receiptsPerMonth)
+    return null;
+  return {
+    receiptsPerMonth: EARLY_ACCESS.receiptsPerMonth,
+    thenPerMonth: free.receiptsPerMonth,
+    joinedBefore: EARLY_ACCESS.joinedBefore,
+    endsAt: EARLY_ACCESS.endsAt,
+  };
+}
+
 /** When an account's early-access allowance ends, or null if it has none or it has ended. */
 export function earlyAccessUntil(
   accountCreatedAt: Date | string | null | undefined,

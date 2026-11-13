@@ -168,7 +168,10 @@ const scans = (n: number) => `${n} ${n === 1 ? "scan" : "scans"}`;
 const monthDay = (date: Date) =>
   date.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
 
-/** What a refused upload is told: which limit, when it resets, and where more room is. */
+/**
+ * What a refused upload is told: which limit and when it resets. Never "upgrade": this text is
+ * shown without a control, whatever the checkout state.
+ */
 export function quotaMessage(verdict: QuotaVerdict): string {
   const reset = `They reset on ${monthDay(verdict.resetsAt)} at 00:00 UTC.`;
   const workspace = verdict.scope === "workspace";
@@ -182,7 +185,7 @@ export function quotaMessage(verdict: QuotaVerdict): string {
     case "month":
       return workspace
         ? `This workspace has used all ${scans(verdict.limit)} for this month. ${reset}`
-        : `You've used all ${scans(verdict.limit)} on the Free plan this month. ${reset} Upgrade a workspace to Pro for more scans.`;
+        : `You've used all ${scans(verdict.limit)} on the Free plan this month. ${reset}`;
     default: {
       const day = verdict.day?.limit ?? verdict.limit;
       if (workspace) {

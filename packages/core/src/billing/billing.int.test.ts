@@ -516,7 +516,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
     const check = (organizationId: string, email = `${tag}-next@example.com`) =>
       run(memberLimitCheck(organizationId, { kind: "invite", email }));
 
-    it("refuses a 4th on Free, counting pending invitations, and names the upgrade", async () => {
+    it("refuses a 4th on Free, counting pending invitations, and names the Pro limit", async () => {
       const boss = await createUser("seats-free");
       const mate = await createUser("seats-mate");
       await addMember(boss.organizationId, mate.userId);
@@ -526,7 +526,9 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const full = await check(boss.organizationId);
       expect(full).toMatchObject({ allowed: false, used: 3, limit: 3, plan: "free" });
       expect(full.message).toContain("Free workspaces have up to 3 members");
-      expect(full.message).toContain(`Pro for up to ${DEFAULT_PLANS.pro.membersPerWorkspace}`);
+      expect(full.message).toContain(
+        `Pro workspaces up to ${DEFAULT_PLANS.pro.membersPerWorkspace}`,
+      );
 
       // Re-inviting the same address replaces its invitation, so it isn't refused.
       expect(await check(boss.organizationId, `${tag}-THIRD@example.com`)).toMatchObject({
@@ -575,7 +577,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       );
       const free = await run(memberLimitCheck(boss.organizationId, { kind: "accept" }));
       expect(free).toMatchObject({ allowed: false, used: 9, limit: 3, plan: "free" });
-      expect(free.message).toContain("Ask its owner to upgrade it to Pro");
+      expect(free.message).toContain("Ask its owner to make room.");
       const members = await db((d) =>
         d.select().from(member).where(eq(member.organizationId, boss.organizationId)),
       );
@@ -1407,7 +1409,8 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const message = Exit.isFailure(refused) ? JSON.stringify(refused.cause) : "";
       expect(message).toContain("QuotaExceeded");
       expect(message).toContain("You've used all 3 scans on the Free plan this month.");
-      expect(message).toContain("at 00:00 UTC. Upgrade a workspace to Pro for more scans.");
+      expect(message).toContain("They reset on");
+      expect(message).not.toMatch(/upgrade/i);
       expect(await verdict(u, free)).toMatchObject({
         window: "month",
         used: 3,

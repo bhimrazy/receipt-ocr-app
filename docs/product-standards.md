@@ -20,6 +20,10 @@ it here in the same session, with the date. `product-reviewer` checks every line
 
 - A screen never asks for an action it can't offer: "Upgrade" appears only beside a control that starts it. While
   checkout is closed the copy says Pro opens soon. (2026-11-13)
+- Server error messages follow the same rule: they are shown without a control, so they state the limit and what the
+  reader can do now, never "upgrade". (2026-11-13)
+- A page has one name everywhere it is mentioned, legal pages and server messages included ("Plan and billing", not
+  "Billing" or "Settings, Billing"). (2026-11-13)
 
 ## Billing
 

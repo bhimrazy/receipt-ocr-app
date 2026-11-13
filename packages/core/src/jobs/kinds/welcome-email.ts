@@ -36,8 +36,8 @@ export class WelcomeMailer extends Context.Tag("@receipt-ocr/core/WelcomeMailer"
       /** The account's plan when sending; the mail states its limits. */
       plan: PlanId;
       policy: PlanPolicy;
-      /** Set while the Free month is the early-access allowance: when it ends. */
-      earlyAccessUntil: Date | null;
+      /** Set while the Free month is the early-access allowance: when it ends, and the month after. */
+      earlyAccess: { until: Date; thenPerMonth: number | null } | null;
     }) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected">;
   }
 >() {
@@ -103,7 +103,10 @@ export const welcomeEmail: JobDefinition<WelcomeEmailPayload, Db | Settings | We
       const account = yield* accountPlan(payload.userId);
       const { plan } = account;
       const { policy, earlyAccessUntil } = personalPolicy(plan, account.policy, row.createdAt);
-      const outcome = yield* mailer.send({ to: row.email, plan, policy, earlyAccessUntil });
+      const earlyAccess = earlyAccessUntil
+        ? { until: earlyAccessUntil, thenPerMonth: account.policy.receiptsPerMonth }
+        : null;
+      const outcome = yield* mailer.send({ to: row.email, plan, policy, earlyAccess });
       yield* annotateEvent({ kind: "welcome", plan, delivered: outcome === "delivered" });
       if (outcome === "rejected")
         return yield* new NonRetryableJobError({ kind: "email-render-failed" });

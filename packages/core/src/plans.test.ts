@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PLANS, EARLY_ACCESS, earlyAccessUntil, personalPolicy } from "./plans";
+import {
+  DEFAULT_PLANS,
+  EARLY_ACCESS,
+  earlyAccessOffer,
+  earlyAccessUntil,
+  personalPolicy,
+} from "./plans";
 
 const before = new Date(EARLY_ACCESS.joinedBefore.getTime() - 1);
 const during = new Date(EARLY_ACCESS.endsAt.getTime() - 86_400_000);
@@ -40,5 +46,16 @@ describe("early access", () => {
     expect(personalPolicy("free", generous, before, during).policy).toBe(generous);
     const daily = { ...DEFAULT_PLANS.free, receiptsPerMonth: null };
     expect(personalPolicy("free", daily, before, during).policy).toBe(daily);
+  });
+
+  it("offers nothing to state once it has ended or when Free already gives as much", () => {
+    expect(earlyAccessOffer(DEFAULT_PLANS.free, during)).toMatchObject({
+      receiptsPerMonth: EARLY_ACCESS.receiptsPerMonth,
+      thenPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
+    });
+    expect(earlyAccessOffer(DEFAULT_PLANS.free, EARLY_ACCESS.endsAt)).toBeNull();
+    const saved = { ...DEFAULT_PLANS.free, receiptsPerMonth: EARLY_ACCESS.receiptsPerMonth };
+    expect(earlyAccessOffer(saved, during)).toBeNull();
+    expect(personalPolicy("free", saved, before, during).earlyAccessUntil).toBeNull();
   });
 });

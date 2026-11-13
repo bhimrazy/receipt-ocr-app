@@ -272,7 +272,9 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 
 15. Early-access dates: accounts created before `EARLY_ACCESS.joinedBefore` (placeholder 1 December 2026) keep 100
     a month until `EARLY_ACCESS.endsAt` (placeholder 1 March 2027). Set the cutoff to the launch date. If Admin →
-    Settings has a saved plan table, its Free month (likely 100) wins over the new default of 30: lower it there.
+    Settings has a saved plan table, its Free month (likely 100) wins over the new default of 30.
+    **Deploy step for #238:** on production, open Admin → Settings → Plan limits and set the Free month to 30 (or clear
+    the saved row). Until then Free stays at the saved value and the early-access lines are hidden.
 
 ## Roadmap (order)
 

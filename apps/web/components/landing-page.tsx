@@ -28,7 +28,7 @@ import { SiteHeader } from "@/components/site-header";
 import { StandaloneHome } from "@/components/standalone";
 import { SupportWidget } from "@/components/support-widget";
 import { homeFaqs as faqs } from "@/lib/home-faqs";
-import { CUSTOM_PLAN, freeFeatures, proFeatures } from "@/lib/plan-copy";
+import { CUSTOM_PLAN, freeFeatures, pricingHeadline, proFeatures } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { homeJsonLd, jsonLdScript } from "@/lib/seo";
 import type { PlanTable } from "@receipt-ocr/core/plans";
@@ -350,7 +350,7 @@ export function LandingPage({
             <div className="mx-auto mb-14 max-w-2xl text-center">
               <SectionLabel>Pricing</SectionLabel>
               <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
-                Start free. Upgrade a workspace when it needs more.
+                {pricingHeadline(checkoutOpen)}
               </h2>
               <p className="mt-4 text-pretty text-muted-foreground">
                 No card needed. When a workspace needs more, Pro is {PRO_PRICE_LABEL.month} a month

@@ -61,7 +61,7 @@ describe("welcome email job", () => {
       );
       expect(Exit.isSuccess(exit)).toBe(true);
       expect(sent).toEqual([
-        { to: "a@example.com", plan, policy: DEFAULT_PLANS[plan], earlyAccessUntil: null },
+        { to: "a@example.com", plan, policy: DEFAULT_PLANS[plan], earlyAccess: null },
       ]);
     }
     expect(DEFAULT_PLANS.free.receiptsPerDay).not.toBe(DEFAULT_PLANS.pro.receiptsPerDay);
@@ -71,8 +71,11 @@ describe("welcome email job", () => {
     const createdAt = new Date(EARLY_ACCESS.joinedBefore.getTime() - 86_400_000);
     const sent: unknown[] = [];
     await run([[{ email: "a@example.com", createdAt }], [{ pro: false }]], () => "delivered", sent);
-    const expected = personalPolicy("free", DEFAULT_PLANS.free, createdAt);
-    expect(sent).toEqual([{ to: "a@example.com", plan: "free", ...expected }]);
+    const { policy, earlyAccessUntil } = personalPolicy("free", DEFAULT_PLANS.free, createdAt);
+    const earlyAccess = earlyAccessUntil
+      ? { until: earlyAccessUntil, thenPerMonth: DEFAULT_PLANS.free.receiptsPerMonth }
+      : null;
+    expect(sent).toEqual([{ to: "a@example.com", plan: "free", policy, earlyAccess }]);
   });
 
   it("skips a user who has been deleted", async () => {

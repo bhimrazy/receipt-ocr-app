@@ -133,7 +133,7 @@ describe("decideQuota, Free (per user: 20 a day, 30 a month, shared pool)", () =
       retryAfterSeconds: untilDecember,
     });
     expect(quotaMessage(verdict)).toBe(
-      "You've used all 30 scans on the Free plan this month. They reset on 1 December at 00:00 UTC. Upgrade a workspace to Pro for more scans.",
+      "You've used all 30 scans on the Free plan this month. They reset on 1 December at 00:00 UTC.",
     );
   });
 

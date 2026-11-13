@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { getPlanTable } from "@/lib/plan-limits";
-import { EARLY_ACCESS } from "@receipt-ocr/core/plans";
+import { earlyAccessOffer } from "@receipt-ocr/core/plans";
 import { allowance, longDate } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { authorName } from "@/lib/site";
@@ -19,6 +19,7 @@ export const revalidate = 3600;
 
 export default async function TermsPage() {
   const { free, pro } = await getPlanTable();
+  const early = earlyAccessOffer(free);
   const owned = (n: number) => (n === 1 ? "1 workspace" : `${n} workspaces`);
   const workspaces = owned(free.workspaces);
   return (
@@ -53,7 +54,11 @@ export default async function TermsPage() {
           heading: "Plans and limits",
           body: [
             `The free plan currently includes ${allowance(free)} per person, counted across every workspace they use, up to ${free.membersPerWorkspace} members in a workspace, and ${workspaces} to own, with no card required.`,
-            `Accounts created before ${longDate(EARLY_ACCESS.joinedBefore)} get ${EARLY_ACCESS.receiptsPerMonth} scans a month on the free plan instead, as an early-access offer, until ${longDate(EARLY_ACCESS.endsAt)}.`,
+            ...(early
+              ? [
+                  `Accounts created before ${longDate(early.joinedBefore)} get ${early.receiptsPerMonth} scans a month on the free plan instead of ${early.thenPerMonth}, as an early-access offer, until ${longDate(early.endsAt)}. The daily limit is unchanged.`,
+                ]
+              : []),
             `Pro is a subscription for one workspace, at ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year, plus any sales tax or VAT. It currently includes ${allowance(pro)} for that workspace, shared by its members, up to ${pro.membersPerWorkspace} members, and lets its owner own up to ${owned(pro.workspaces)}. Each workspace needs its own subscription to be on Pro.`,
             "Daily limits reset at 00:00 UTC and monthly limits on the 1st of each month at 00:00 UTC. Unused scans don't carry over.",
             "We may change these limits or prices. A price change applies from your next billing period, and we'll tell you by email before it does.",
@@ -64,7 +69,7 @@ export default async function TermsPage() {
           body: [
             "Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all our orders. Paddle provides all customer service inquiries and handles returns.",
             "When you buy Pro, you buy it from Paddle under Paddle's buyer terms, which apply alongside these terms. Paddle charges your payment method, adds sales tax or VAT where it applies, and sends your receipts and invoices.",
-            "A subscription renews automatically at the end of each billing period until you cancel it. You can cancel any time from Settings, Billing; Pro stays on until the end of the period you've paid for. Refunds follow our refund policy.",
+            "A subscription renews automatically at the end of each billing period until you cancel it. You can cancel any time from Settings, Plan and billing; Pro stays on until the end of the period you've paid for. Refunds follow our refund policy.",
           ],
           links: [
             { label: "Refund policy", href: "/refunds" },

@@ -77,6 +77,12 @@ export const CUSTOM_PLAN = {
 export const SEPARATE_UPGRADE =
   "This workspace is on Free. Your Pro subscription covers one workspace; each workspace is upgraded separately.";
 
+/** The pricing headline on /pricing and the landing page; it promises an upgrade only once one can be bought. */
+export const pricingHeadline = (checkoutOpen: boolean) =>
+  checkoutOpen
+    ? "Start free. Upgrade a workspace when it needs more."
+    : "Start free. Pro opens soon for workspaces that need more.";
+
 /** "1 March 2027", in UTC like every plan window. */
 export const longDate = (date: Date) =>
   date.toLocaleDateString("en-GB", {
@@ -92,20 +98,25 @@ export const earlyAccessLine = (limit: number, until: Date) =>
 
 /**
  * The welcome email's plan line: "Your Free plan includes 20 scans a day, up to 30 a month. …".
- * A shared Pro allowance still says so; a Free one is the reader's own, and names an
- * early-access allowance with its end.
+ * A shared Pro allowance still says so; a Free one is the reader's own. With early access it says
+ * which part ends (the month) and which carries on (the day).
  */
 export function welcomePlanLine(
   plan: "free" | "pro",
   policy: PlanPolicy,
-  earlyAccessUntil: Date | null = null,
+  earlyAccess: { until: Date; thenPerMonth: number | null } | null = null,
 ): string {
   const name = plan === "pro" ? "Pro" : "Free";
   const owner = policy.scope === "workspace" ? `, ${allowanceOwner(policy)}` : "";
-  const early = earlyAccessUntil
-    ? `, an early-access allowance until ${longDate(earlyAccessUntil)}`
-    : "";
-  return `Your ${name} plan includes ${allowance(policy)}${owner}${early}. Limits reset at 00:00 UTC.`;
+  const line = `Your ${name} plan includes ${allowance(policy)}${owner}.`;
+  if (!earlyAccess || policy.receiptsPerMonth === null) {
+    return `${line} Limits reset at 00:00 UTC.`;
+  }
+  const then =
+    earlyAccess.thenPerMonth === null
+      ? "there is no monthly limit"
+      : `it is ${earlyAccess.thenPerMonth} a month`;
+  return `${line} The ${policy.receiptsPerMonth} a month is an early-access allowance until ${longDate(earlyAccess.until)}; after that ${then}, and ${policy.receiptsPerDay} a day carries on. Limits reset at 00:00 UTC.`;
 }
 
 /**

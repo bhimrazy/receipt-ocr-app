@@ -155,7 +155,7 @@ function Subscription(props: PlanAndBillingProps & { subscription: WorkspaceBill
           this subscription, or{" "}
           <ContactButton
             className="h-auto p-0 align-baseline max-md:h-auto max-md:px-0"
-            topic="feature"
+            topic="use-case"
             variant="link"
           >
             contact us
@@ -242,7 +242,7 @@ function Plans(props: PlanAndBillingProps) {
       />
     );
   } else {
-    proAction = <p className="text-sm text-muted-foreground">Nothing to pay on Free.</p>;
+    proAction = null;
   }
 
   return (
@@ -279,7 +279,7 @@ function Plans(props: PlanAndBillingProps) {
               <span className="font-sans text-sm font-normal text-muted-foreground">a month</span>
             </p>
             <FeatureList features={[scansLine(plans.pro), membersLine(plans.pro)]} />
-            <div className="mt-auto pt-2">{proAction}</div>
+            {proAction ? <div className="mt-auto pt-2">{proAction}</div> : null}
           </Card>
         </div>
         {subscription ? null : <FooterLinks />}
