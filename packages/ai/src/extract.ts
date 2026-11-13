@@ -59,7 +59,7 @@ export type ExtractReceiptResult = {
 };
 
 /**
- * A congested model once stalled a request for 163 s while the SDK retried
+ * A congested model can stall a request for minutes while the SDK retries
  * "high demand" with backoff; a hard ceiling fails fast into the retryable
  * "failed" state instead.
  */
@@ -160,7 +160,7 @@ const GROQ_MAX_IMAGE_BASE64_BYTES = 20_000_000;
  * OpenAI request settings (Responses API, the provider's default).
  * - `reasoningEffort` defaults to "none" (`effortFor`): reading a receipt is transcription, so no
  *   reasoning tokens are billed. Both offered models accept it (Luna and Terra: none, low, medium, high, xhigh, max;
- *   default medium). Not benchmarked against "low" yet; `bun run bench:ocr` can compare them.
+ *   default medium). Not benchmarked against "low"; `bun run bench:ocr` can compare them.
  * - `store: false`: the Responses API otherwise keeps the response as application state for 30
  *   days (https://developers.openai.com/api/docs/guides/your-data). Nothing here reads it back.
  * - Strict JSON schema (the provider's default); the model's `schemaMode` drops keywords it may refuse.

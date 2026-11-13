@@ -2,8 +2,7 @@ import { pixelBasedPreset, type TailwindConfig } from "react-email";
 
 /**
  * Email palette. The accent, dark surfaces and font stacks come from packages/ui/src/styles.css;
- * the app is dark-only, so the light neutrals are Tailwind's zinc scale, which the dark ones
- * already follow. Mail is light-first: Gmail and Outlook apps invert light designs predictably,
+ * the light neutrals are Tailwind's zinc scale, which the dark ones follow. Mail is light-first: Gmail and Outlook apps invert light designs predictably,
  * while a forced-dark design turns muddy (Litmus, "The ultimate guide to dark mode").
  * Pairs used for text are WCAG AA (>= 4.5:1) on their surface.
  */

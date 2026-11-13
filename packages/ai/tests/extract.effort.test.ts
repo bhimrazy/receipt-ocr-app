@@ -1,5 +1,5 @@
 // What each provider is sent for a chain step's effort. Values are the ones in each provider's docs
-// (see the effort fields in models.ts); an unset step keeps the behaviour that predates the setting.
+// (see the effort fields in models.ts); an unset step keeps the model's default.
 import { describe, expect, it } from "vitest";
 import { maxOutputTokensFor, providerOptionsFor } from "../src/extract";
 

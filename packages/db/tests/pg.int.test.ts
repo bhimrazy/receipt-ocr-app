@@ -1,8 +1,8 @@
 /**
  * The app's pg pool against real Postgres, directly and through a TCP proxy that misbehaves two
  * ways: `release` drops the server's replies after each ReadyForQuery(idle) until the client
- * writes again, the way a transaction-mode pooler hands its backend on once a transaction ends
- * (the 2026-11-09 incident); `freeze` forwards nothing, like a dead socket.
+ * writes again, the way a transaction-mode pooler hands its backend on once a transaction ends;
+ * `freeze` forwards nothing, like a dead socket.
  * Skipped unless INTEGRATION=1 (scripts/test.sh and CI set DATABASE_URL).
  */
 import { createServer, connect, type Server, type Socket } from "node:net";

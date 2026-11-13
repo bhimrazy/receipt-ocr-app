@@ -40,8 +40,8 @@ export const CATEGORY_DESCRIPTIONS: Record<ReceiptCategory, string> = {
 };
 
 /**
- * Older values (the previous consumer list and free-text categories already
- * stored in rows) mapped onto the canonical list. Keys are lowercase.
+ * Legacy labels and free-text categories already stored in rows, mapped onto the
+ * canonical list. Keys are lowercase.
  */
 const SYNONYMS: Record<string, ReceiptCategory> = {
   grocery: "Groceries",

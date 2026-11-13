@@ -882,7 +882,7 @@ export const CATEGORIES: Category[] = [
 
 /**
  * Seed pools. `tune` is for choosing thresholds, `gate` is the per-PR check, `holdout` is never tuned against and is
- * run for the detector rewrites and before v2 becomes the default. The pools do not overlap at their caps.
+ * run when the detector is rewritten. The pools do not overlap at their caps.
  */
 export const SEED_SETS = {
   tune: { first: 1000, max: 1000, scenes: 10 },

@@ -82,8 +82,7 @@ export const OCR_PROVIDERS: readonly OcrProvider[] = [
 // defaults are medium (Haiku, Opus) and high (Sonnet); transcription runs at low.
 // The API also takes xhigh and max, left out on purpose: a chain step is limited to 50 s, in which
 // a model emits about 5-10K tokens, so those levels would mostly time out after the provider has
-// billed the reasoning. Add them back when calls may run longer (e.g. a worker without the
-// serverless time limit); maxOutputTokensFor already has room for them.
+// billed the reasoning. `maxOutputTokensFor` already has room for them if calls may run longer.
 const CLAUDE_EFFORT: OcrEffort = {
   values: ["low", "medium", "high"],
   default: "low",
@@ -186,7 +185,7 @@ export const OCR_MODELS: readonly OcrModel[] = [
   // Strict structured outputs documents `pattern`, `format`, `minimum`/`maximum` and
   // `minItems`/`maxItems` as supported, and lists length bounds as unsupported only for fine-tuned
   // models; that is unproven here, so every bound is dropped from the request and the reply is
-  // still checked against the full schema. Loosen to "full" after a live check.
+  // still checked against the full schema.
   {
     id: "openai:gpt-6-luna",
     provider: "openai",

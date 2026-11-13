@@ -26,7 +26,7 @@ export const user = pgTable(
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
     // App-level plan; drives limits such as how many organizations a user
-    // may create ("free" = 1). Paid plans can raise it later.
+    // may create ("free" = 1).
     plan: text("plan").notNull().default("free"),
     // Admin plugin fields.
     role: text("role").notNull().default("user"),

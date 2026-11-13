@@ -88,7 +88,7 @@ describe("category scoring", () => {
   });
 
   it("reads a legacy label in the ground truth as the app's canonical category", () => {
-    // The 2026-11-07 run scored 0% here: "Restaurant" can never equal the schema's "Meals".
+    // Without the mapping this scores 0%: "Restaurant" can never equal the schema's "Meals".
     expect(scoreReceipt({ ...truth, category: "Restaurant" }, truth).category).toBe(1);
   });
 });
@@ -167,7 +167,7 @@ describe("v3 fields, scored on what the app stores", () => {
 });
 
 describe("bench fixtures", () => {
-  // The synthetic set, plus the committed real sets (packages/bench/fixtures-real/<set>/) once they exist.
+  // The synthetic set, plus the committed real sets (packages/bench/fixtures-real/<set>/) when present.
   const benchDir = path.join(import.meta.dirname, "..");
   const dirs = ["fixtures", "fixtures-real"]
     .map((name) => path.join(benchDir, name))
