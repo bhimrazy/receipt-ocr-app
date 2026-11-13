@@ -3,6 +3,7 @@ import { billingApply } from "./kinds/billing-apply";
 import { contactReply } from "./kinds/contact-reply";
 import { receiptExtract } from "./kinds/receipt-extract";
 import { storageDelete } from "./kinds/storage-delete";
+import { supportNotify } from "./kinds/support-notify";
 import { welcomeEmail } from "./kinds/welcome-email";
 
 type Requirements<D> = D extends { run: (...args: never[]) => infer E }
@@ -19,6 +20,7 @@ export const JOB_REGISTRY: JobRegistry<
     | typeof contactReply
     | typeof billingApply
     | typeof storageDelete
+    | typeof supportNotify
   >
 > = {
   [receiptExtract.kind]: receiptExtract,
@@ -26,4 +28,5 @@ export const JOB_REGISTRY: JobRegistry<
   [contactReply.kind]: contactReply,
   [billingApply.kind]: billingApply,
   [storageDelete.kind]: storageDelete,
+  [supportNotify.kind]: supportNotify,
 };

@@ -249,6 +249,10 @@ export const EVENT_SCHEMA = {
   delivered: "bool",
   /** Contact form: `queued`, `rate_limited` or `enqueue_failed`. */
   auto_reply: "token",
+  /** Contact form: where a stored support message came from (`help`, `receipt`, `public`). */
+  support_source: "token",
+  /** Contact form: the stored message is linked to a receipt in the sender's workspace. */
+  has_receipt: "bool",
   turnstile_errors: "tokens",
   /** Newsletter routes: the step and its result (`confirm_sent`, `confirmed`, `expired`). No address. */
   newsletter: "token",
