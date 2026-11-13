@@ -95,4 +95,4 @@ minutes between the migration and the deploy get:
 
 The read path tolerates the second: items are read `ORDER BY position, ctid`, so lines that all have position 0
 come back in insertion order, which is printed order. For the first, the 0003 `low_confidence` backfill is
-idempotent and can run again after the deploy. The follow-up migration that validates the 0003 CHECKs repeats it.
+idempotent and can run again after the deploy. `0004_billing_checkouts` validates the 0003 CHECKs and repeats it.
