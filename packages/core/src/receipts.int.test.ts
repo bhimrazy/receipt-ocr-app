@@ -193,10 +193,16 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       receiptDate: "2026-01-31",
       currency: "EUR",
     });
-    // Not a real day, day-first, a Bikram Sambat year read as AD, before 2000: no date.
-    for (const date of ["2026-02-30", "31/01/2026", "2080-04-09", "1999-12-31"]) {
-      expect((await complete(date, "USD"))?.receiptDate).toBeNull();
+    // Not a real day, after the upload, before 2000: no date, and a reason.
+    for (const date of ["2026-02-30", "2099-01-01", "1999-12-31"]) {
+      const row = await complete(date, "USD");
+      expect([row?.receiptDate, row?.reviewReasons]).toEqual([null, ["date_implausible"]]);
     }
+    // A Bikram Sambat date the model returned as AD is converted, and marked BS.
+    expect(await complete("2080-04-09", "NPR")).toMatchObject({
+      receiptDate: "2023-07-25",
+      receiptDateCalendar: "bikram-sambat",
+    });
     expect((await complete(null, "US$"))?.currency).toBeNull();
 
     const row = await complete("2026-01-31", "USD");
@@ -231,6 +237,140 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(await write({ currency: "usd" })).toBe("receipts_currency_check");
     expect(await write({ attempts: 4 })).toBe("receipts_attempts_check");
     await run(purgeReceiptFiles({ organizationId: c.organizationId }));
+  });
+
+  it("stores extraction v3's fields, the printed item order and the review reasons; edits recompute them", async () => {
+    const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
+      run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
+    const d = await createUser("dave");
+    const ingest = async () => {
+      const id = (await run(ingestUpload({ scope: d, fileName: "v3.jpg", body: JPEG, limits })))
+        .receipt.id;
+      await dropJob(id);
+      return id;
+    };
+    const names = Array.from({ length: 12 }, (_, i) => `Line ${String(i).padStart(2, "0")}`);
+    const id = await ingest();
+    // A Nepali restaurant bill as extraction v3 would return it: the Miti disagrees with the AD date.
+    const extraction = {
+      ...FIXTURE_RECEIPTS[0]!,
+      currency: "NPR",
+      subtotal: 1000,
+      tax: 128.7,
+      tip: null,
+      total: 1118.7,
+      items: names
+        .map((name) => ({ name, quantity: 1, unitPrice: 0, totalPrice: 0, confidence: 0.9 }))
+        .reverse(),
+      receiptDate: "2025-07-25",
+      dates: [
+        { text: "25/07/2025", label: "Date", calendar: "ad", role: "transaction" },
+        { text: "01/04/2082", label: "Miti", calendar: "bs", role: "transaction" },
+      ],
+      invoiceNumber: "SI-0042-82/83",
+      merchantTaxId: "601234567",
+      discount: -100,
+      serviceCharge: 90,
+    };
+    const done = await repo((r) => r.complete(id, d, 1, extraction, "fixture", []));
+    expect(done).toMatchObject({
+      receiptDate: "2025-07-17",
+      receiptDateCalendar: "bikram-sambat",
+      invoiceNumber: "SI-0042-82/83",
+      merchantTaxId: "601234567",
+      discount: "100.00",
+      serviceCharge: "90.00",
+      reviewReasons: ["date_conflict"],
+    });
+    const stored = await repo((r) => r.get(id, d));
+    expect(stored!.items.map((item) => item.name)).toEqual([...names].reverse());
+    expect(stored!.items.map((item) => item.position)).toEqual(names.map((_, i) => i));
+
+    const needsReview = async () => ({
+      count: (await repo((r) => r.counts(d))).needsReview,
+      listed: (await repo((r) => r.list(d, { status: "needs-review" }, { limit: 50, offset: 0 })))
+        .total,
+    });
+    expect(await needsReview()).toEqual({ count: 1, listed: 1 });
+
+    // An edit that leaves the date keeps the date reason, and adds what the edit breaks.
+    expect(await repo((r) => r.update(id, d, { total: "999.00" }))).toBe(true);
+    expect((await repo((r) => r.get(id, d)))?.reviewReasons).toEqual([
+      "totals_mismatch",
+      "date_conflict",
+    ]);
+    // Re-sending the same date is not a change; setting it is, and clears the date reason.
+    await repo((r) => r.update(id, d, { receiptDate: "2025-07-17", total: "1118.70" }));
+    expect((await repo((r) => r.get(id, d)))?.reviewReasons).toEqual(["date_conflict"]);
+    await repo((r) =>
+      r.update(id, d, { receiptDate: "2025-07-25", receiptDateCalendar: "gregory" }),
+    );
+    expect(await repo((r) => r.get(id, d))).toMatchObject({
+      receiptDate: "2025-07-25",
+      receiptDateCalendar: "gregory",
+      reviewReasons: [],
+    });
+    expect(await needsReview()).toEqual({ count: 0, listed: 0 });
+    // Clearing the date clears its calendar, and the receipt needs review again.
+    await repo((r) => r.update(id, d, { receiptDate: null }));
+    expect(await repo((r) => r.get(id, d))).toMatchObject({
+      receiptDate: null,
+      receiptDateCalendar: null,
+      reviewReasons: ["no_date"],
+    });
+    // A calendar needs a date.
+    const calendarOnly = await runExit(
+      Effect.flatMap(ReceiptRepo, (r) => r.update(id, d, { receiptDateCalendar: "gregory" })),
+    );
+    expect(Exit.isFailure(calendarOnly) && JSON.stringify(calendarOnly.cause)).toContain(
+      "InvalidInput",
+    );
+
+    // An old receipt flagged by the confidence rule keeps the flag through edits, and an edit
+    // doesn't flag what it didn't touch (the date is still missing, but no_date wasn't there).
+    await db((dbc) =>
+      dbc
+        .update(receipts)
+        .set({ reviewReasons: ["low_confidence"] })
+        .where(eq(receipts.id, id)),
+    );
+    await repo((r) => r.update(id, d, { merchant: "Renamed Kitchen" }));
+    expect((await repo((r) => r.get(id, d)))?.reviewReasons).toEqual(["low_confidence"]);
+
+    // The model took the PAN for the bill number: it is dropped. Over-long text is not stored.
+    const other = await ingest();
+    const tooLong = {
+      ...extraction,
+      invoiceNumber: "PAN 601 234 567",
+      merchantTaxId: "x".repeat(33),
+    };
+    const pan = await repo((r) => r.complete(other, d, 1, tooLong, "fixture", []));
+    expect([pan?.invoiceNumber, pan?.merchantTaxId]).toEqual(["PAN 601 234 567", null]);
+    const same = await ingest();
+    const panAsNumber = { ...extraction, invoiceNumber: "601-234-567" };
+    const dropped = await repo((r) => r.complete(same, d, 1, panAsNumber, "fixture", []));
+    expect(dropped?.invoiceNumber).toBeNull();
+
+    // The new columns' checks hold whatever writes them.
+    const write = (set: Record<string, unknown>) =>
+      db(async (dbc) => {
+        try {
+          await dbc.update(receipts).set(set).where(eq(receipts.id, id));
+          return "ok";
+        } catch (error) {
+          for (let e = error; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
+            const name = (e as { constraint?: string }).constraint;
+            if (name) return name;
+          }
+          throw error;
+        }
+      });
+    expect(await write({ receiptDateCalendar: "bs" })).toBe("receipts_receipt_date_calendar_check");
+    expect(await write({ discount: "-1" })).toBe("receipts_discount_check");
+    expect(await write({ serviceCharge: "-1" })).toBe("receipts_service_charge_check");
+    expect(await write({ invoiceNumber: "" })).toBe("receipts_invoice_number_check");
+    expect(await write({ merchantTaxId: "x".repeat(33) })).toBe("receipts_merchant_tax_id_check");
+    await run(purgeReceiptFiles({ organizationId: d.organizationId }));
   });
 
   it("completes through the fixture provider with a canonical category", async () => {
@@ -384,7 +524,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect((await list({ from: "2099-01-01" })).total).toBe(0);
     // Not a day: ignored rather than failing the date cast.
     expect((await list({ from: "2026-02-30" })).total).toBe((await list({})).total);
-    const needsReview = Number(receipt!.confidence) < 0.9 ? 1 : 0;
+    const needsReview = receipt!.reviewReasons.length > 0 ? 1 : 0;
     expect((await list({ status: "needs-review" })).total).toBe(needsReview);
     const counts = await run(Effect.flatMap(ReceiptRepo, (r) => r.counts(a)));
     expect(counts.needsReview).toBe(needsReview);
@@ -402,12 +542,13 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const id = (await run(ingestUpload({ scope: a, fileName: "review.jpg", body: JPEG, limits })))
       .receipt.id;
     await extract(id);
-    // The fixture read picks a receipt by the upload's bytes, and one of them is below the threshold.
-    const setConfidence = (value: string) =>
-      db((d) => d.update(receipts).set({ confidence: value }).where(eq(receipts.id, id)));
-    await setConfidence("0.95");
+    // The fixture read picks a receipt by the upload's bytes; set the state under test directly.
+    const set = (values: Partial<typeof receipts.$inferInsert>) =>
+      db((d) => d.update(receipts).set(values).where(eq(receipts.id, id)));
+    await set({ reviewReasons: [] });
     const before = await needsReview();
-    await setConfidence("0.5");
+    // No merchant: edits recompute the reasons, and this one stays.
+    await set({ merchant: null, reviewReasons: ["no_merchant"] });
     const low = await needsReview();
     expect(low).toEqual({ count: before.count + 1, listed: before.listed! + 1 });
 
@@ -425,7 +566,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(reviewed?.reviewer?.name).toBe("alice");
 
     // An edit keeps the review; undo clears it.
-    expect(await repo((r) => r.update(id, a, { merchant: "Reviewed Shop" }))).toBe(true);
+    expect(await repo((r) => r.update(id, a, { category: "Other" }))).toBe(true);
     expect((await repo((r) => r.get(id, a)))?.reviewedAt).toBeInstanceOf(Date);
     expect(await repo((r) => r.setReviewed(id, a, false))).toBe(true);
     const undone = await repo((r) => r.get(id, a));
@@ -435,7 +576,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     // A new extraction clears the review.
     expect(await repo((r) => r.setReviewed(id, a, true))).toBe(true);
     await db((d) => d.update(receipts).set({ status: "processing" }).where(eq(receipts.id, id)));
-    const extraction = { ...FIXTURE_RECEIPTS[0]!, confidence: 0.5 };
+    const extraction = { ...FIXTURE_RECEIPTS[0]!, merchant: "" };
     expect(await repo((r) => r.complete(id, a, 1, extraction, "fixture", []))).not.toBeNull();
     const reread = await repo((r) => r.get(id, a));
     expect([reread?.reviewedAt, reread?.reviewedBy]).toEqual([null, null]);

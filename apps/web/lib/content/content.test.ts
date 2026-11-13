@@ -191,7 +191,9 @@ describe("content pages", () => {
   it("the History CSV example is what the real exporter writes", () => {
     const page = contentPages.find((p) => p.example?.exportView === "history-csv")!;
     const lines = exampleCsv(page.example!).trimEnd().split("\n");
-    expect(lines[0]).toMatch(/^receipt_id,status,merchant,receipt_date,category,currency,/);
+    expect(lines[0]).toMatch(
+      /^receipt_id,status,merchant,receipt_date,receipt_date_bs,category,currency,/,
+    );
     expect(lines).toHaveLength(1 + 1 + (page.example!.historyRows?.length ?? 0));
     expect(lines[1]).toContain(page.example!.extraction.merchant);
     expect(lines[1]).toContain(page.example!.extraction.total.toFixed(2));

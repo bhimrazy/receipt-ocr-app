@@ -1,5 +1,4 @@
-import { parseCategory } from "@receipt-ocr/ai/categories";
-import { deleteReceipt, JobQueue, ReceiptRepo, type ReceiptPatch } from "@receipt-ocr/core";
+import { deleteReceipt, JobQueue, parseReceiptPatch, ReceiptRepo } from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
@@ -70,28 +69,11 @@ async function poll(_request: Request, { params }: Params, event: WideEvent) {
   );
 }
 
-/** Decimal string for a numeric column, or null to clear it. */
-function decimal(value: unknown): string | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === "") return null;
-  const parsed = typeof value === "number" ? value : Number.parseFloat(String(value));
-  if (!Number.isFinite(parsed)) return undefined;
-  return parsed.toFixed(2);
-}
-
-function text(value: unknown, maxLength = 200): string | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim().slice(0, maxLength);
-  return trimmed === "" ? null : trimmed;
-}
-
 /**
- * User corrections to an extracted receipt, or `{ reviewed: boolean }` on its
- * own to mark it reviewed or not. Only human-correctable fields are accepted:
- * never status, confidence, ownership or the raw extraction. Members may edit
- * only their own uploads (enforced in ReceiptRepo).
+ * User corrections to an extracted receipt (`parseReceiptPatch`: 400 with the field's problem, never a silent
+ * drop), or `{ reviewed: boolean }` on its own to mark it reviewed or not. Only human-correctable fields are
+ * accepted: never status, confidence, ownership or the raw extraction. Members may edit only their own uploads
+ * (enforced in ReceiptRepo).
  */
 export const PATCH = withRequestEvent(
   { event: "receipt.update", route: "/api/receipts/[id]" },
@@ -123,27 +105,9 @@ async function update(request: Request, { params }: Params, event: WideEvent) {
     );
   }
 
-  const rawCategory = text(body.category, 40);
-  const category = rawCategory ? parseCategory(rawCategory) : rawCategory;
-  if (category === undefined && rawCategory) return jsonError(400, "Unknown category");
-
-  // Checked in ReceiptRepo.update: a real day from 2000 to a day past the upload.
-  const receiptDate = text(body.receiptDate, 32);
-
-  const currency = text(body.currency, 3);
-  if (currency && !/^[A-Za-z]{3}$/.test(currency))
-    return jsonError(400, "Currency must be a 3-letter code");
-
-  const patch: ReceiptPatch = {
-    merchant: text(body.merchant),
-    receiptDate,
-    category,
-    currency: currency ? currency.toUpperCase() : currency,
-    subtotal: decimal(body.subtotal),
-    tax: decimal(body.tax),
-    tip: decimal(body.tip),
-    total: decimal(body.total),
-  };
+  const parsed = parseReceiptPatch(body);
+  if ("error" in parsed) return jsonError(400, parsed.error);
+  const { patch } = parsed;
 
   // Which fields changed, never their values.
   event.flags = Object.fromEntries(

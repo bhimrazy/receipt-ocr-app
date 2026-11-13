@@ -45,10 +45,17 @@ export const CONFIDENCE = {
   },
 } as const satisfies Record<ConfidenceLevel, unknown>;
 
-/**
- * Shown in place of the confidence badge once someone marked the receipt
- * reviewed: the score no longer says whether to trust it.
- */
+/** A completed receipt in Needs review: it has review reasons and nobody has reviewed it. */
+export function NeedsReviewBadge({ className }: { className?: string }) {
+  return (
+    <Badge className={className} variant="warning">
+      <TriangleAlert aria-hidden="true" />
+      Needs review
+    </Badge>
+  );
+}
+
+/** A receipt someone marked reviewed. */
 export function CheckedBadge({ by, className }: { by?: string | null; className?: string }) {
   return (
     <Badge className={className} title={by ? `Checked by ${by}` : undefined} variant="success">

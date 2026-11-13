@@ -1,82 +1,61 @@
 import type { ReceiptWithItems } from "@receipt-ocr/core";
 import { describe, expect, it } from "vitest";
-import { checksFor, totalsMismatch } from "./receipt-checks";
+import { checksFor } from "./receipt-checks";
 
-type Parts = Partial<Pick<ReceiptWithItems, "subtotal" | "tax" | "tip" | "total">> & {
-  lines?: string[];
-};
-
-const receipt = ({ lines = [], ...fields }: Parts) =>
-  ({
+const receipt = (fields: Partial<ReceiptWithItems> & { lines?: string[] }) => {
+  const { lines = [], ...rest } = fields;
+  return {
     confidence: "0.98",
+    currency: "USD",
     imageObjectKey: "r.jpg",
     merchant: "Test Shop",
     receiptDate: "2026-11-01",
+    reviewReasons: [],
     subtotal: null,
     tax: null,
     tip: null,
+    discount: null,
+    serviceCharge: null,
     total: null,
-    ...fields,
+    ...rest,
     items: lines.map((totalPrice) => ({ totalPrice, confidence: "0.99" })),
-  }) as unknown as ReceiptWithItems;
+  } as unknown as ReceiptWithItems;
+};
 
-describe("totalsMismatch", () => {
-  it("accepts prices that already include tax: total equals the line sum or the subtotal", () => {
-    expect(totalsMismatch(receipt({ lines: ["10.00", "5.00"], tax: "1.36", total: "15.00" }))).toBe(
-      null,
-    );
-    expect(totalsMismatch(receipt({ subtotal: "15.00", tax: "1.36", total: "15.00" }))).toBe(null);
-    expect(
-      totalsMismatch(
-        receipt({ lines: ["10.00", "5.00"], tax: "1.36", tip: "2.00", total: "17.00" }),
-      ),
-    ).toBe(null);
-  });
-
-  it("counts negative lines as discounts", () => {
-    expect(
-      totalsMismatch(receipt({ lines: ["10.00", "5.00", "-2.50"], tax: "1.00", total: "13.50" })),
-    ).toBe(null);
-    expect(totalsMismatch(receipt({ lines: ["10.00", "-2.50"], total: "7.50" }))).toBe(null);
-  });
-
-  it("accepts tax and tip added on top", () => {
-    expect(
-      totalsMismatch(receipt({ subtotal: "20.00", tax: "1.60", tip: "3.00", total: "24.60" })),
-    ).toBe(null);
-  });
-
-  it("flags a real mismatch with the sum it expected", () => {
-    expect(totalsMismatch(receipt({ lines: ["10.00", "5.00"], tax: "1.20", total: "19.99" }))).toBe(
-      16.2,
-    );
-    expect(totalsMismatch(receipt({ subtotal: "20.00", tax: "1.60", total: "30.00" }))).toBe(21.6);
-  });
-
-  it("compares to the cent: a one-cent gap always counts, float sums never do", () => {
-    expect(totalsMismatch(receipt({ lines: ["0.06"], total: "0.07" }))).toBe(0.06);
-    expect(totalsMismatch(receipt({ lines: ["9.99"], total: "10.00" }))).toBe(9.99);
-    expect(totalsMismatch(receipt({ lines: ["0.10", "0.20"], total: "0.30" }))).toBe(null);
-    expect(totalsMismatch(receipt({ subtotal: "0.10", tax: "0.20", total: "0.30" }))).toBe(null);
-  });
-
-  it("has nothing to compare without a total or any amounts", () => {
-    expect(totalsMismatch(receipt({ lines: ["1.00"] }))).toBe(null);
-    expect(totalsMismatch(receipt({ total: "5.00" }))).toBe(null);
-  });
-});
+const money = (value: string | null) => (value === null ? null : `$${value}`);
 
 describe("checksFor", () => {
-  const money = (value: string | null) => (value === null ? null : `$${value}`);
+  it("is empty when no check failed, whatever the confidence", () => {
+    expect(
+      checksFor(receipt({ confidence: "0.5", lines: ["10.00"], total: "12.00" }), money),
+    ).toEqual([]);
+  });
 
-  it("explains a mismatch in plain words", () => {
-    const checks = checksFor(receipt({ lines: ["10.00"], total: "12.00" }), money);
+  it("explains a totals mismatch with the sum it expected", () => {
+    const checks = checksFor(
+      receipt({ reviewReasons: ["totals_mismatch"], lines: ["10.00"], total: "12.00" }),
+      money,
+    );
     expect(checks).toEqual([
-      "The amounts add up to $10.00, but the total says $12.00. A service charge, discount or rounding can explain the gap; otherwise check the numbers against the photo.",
+      "The amounts add up to $10.00, but the total says $12.00. Rounding can explain a small gap; otherwise check the numbers against the photo.",
     ]);
   });
 
-  it("is empty for a clean receipt", () => {
-    expect(checksFor(receipt({ lines: ["10.00"], total: "10.00" }), money)).toEqual([]);
+  it("names the file a PDF was uploaded as, and keeps unknown reasons visible", () => {
+    expect(
+      checksFor(
+        receipt({ imageObjectKey: "r.pdf", reviewReasons: ["date_conflict", "something_new"] }),
+        money,
+      ),
+    ).toEqual([
+      "The dates printed on the receipt don't agree. Check the date against the PDF.",
+      "Something on this receipt needs a check. Compare it with the PDF.",
+    ]);
+  });
+
+  it("explains the legacy low-confidence flag with the score", () => {
+    expect(
+      checksFor(receipt({ confidence: "0.62", reviewReasons: ["low_confidence"] }), money),
+    ).toEqual(["Overall confidence is 62%. Compare the merchant, date and total with the photo."]);
   });
 });

@@ -22,6 +22,13 @@
       "when": 1794487113385,
       "tag": "0002_receipt_review",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794500535023,
+      "tag": "0003_receipt_fields",
+      "breakpoints": true
     }
   ]
 }

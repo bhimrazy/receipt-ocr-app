@@ -1,4 +1,5 @@
 import type { ReceiptExportRow, ReceiptWithItems } from "@receipt-ocr/core";
+import { bsDotted, printedBsDate } from "@receipt-ocr/core/calendar";
 
 const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
 
@@ -23,18 +24,36 @@ function row(values: unknown[]): string {
   return values.map(cell).join(",");
 }
 
+/**
+ * `2080.04.09` for a receipt that printed Bikram Sambat, else empty. Dotted, as Nepal's IRD billing API takes it;
+ * a dashed `2080-04-09` would read as a Gregorian date in 2080 in a spreadsheet.
+ */
+const receiptDateBs = (receipt: {
+  receiptDate: string | null;
+  receiptDateCalendar: string | null;
+}) => {
+  const bs = printedBsDate(receipt.receiptDate, receipt.receiptDateCalendar);
+  return bs ? bsDotted(bs) : null;
+};
+
 const RECEIPT_HEADERS = [
   "receipt_id",
   "status",
   "merchant",
   "receipt_date",
+  "receipt_date_bs",
   "category",
   "currency",
   "subtotal",
+  "discount",
+  "service_charge",
   "tax",
   "tip",
   "total",
+  "invoice_number",
+  "merchant_tax_id",
   "confidence",
+  "review_reasons",
   "items",
   "groups",
   "file_name",
@@ -51,13 +70,19 @@ export function receiptsToCsv(receipts: ReceiptExportRow[]): string {
         receipt.status,
         receipt.merchant,
         receipt.receiptDate,
+        receiptDateBs(receipt),
         receipt.category,
         receipt.currency,
         receipt.subtotal,
+        receipt.discount,
+        receipt.serviceCharge,
         receipt.tax,
         receipt.tip,
         receipt.total,
+        receipt.invoiceNumber,
+        receipt.merchantTaxId,
         receipt.confidence,
+        receipt.reviewReasons.join("; "),
         receipt.itemCount,
         receipt.groups.map(guardFormula).join("; "),
         receipt.fileName,
@@ -72,6 +97,7 @@ const ITEM_HEADERS = [
   "receipt_id",
   "merchant",
   "receipt_date",
+  "receipt_date_bs",
   "item",
   "quantity",
   "unit_price",
@@ -79,45 +105,26 @@ const ITEM_HEADERS = [
   "confidence",
 ];
 
-/** One row per line item. For a single receipt's "Export CSV". */
+/** One row per line item, in printed order. For a single receipt's "Export CSV". */
 export function receiptItemsToCsv(receipt: ReceiptWithItems): string {
+  const head = [receipt.id, receipt.merchant, receipt.receiptDate, receiptDateBs(receipt)];
   const lines = [row(ITEM_HEADERS)];
   for (const item of receipt.items) {
     lines.push(
-      row([
-        receipt.id,
-        receipt.merchant,
-        receipt.receiptDate,
-        item.name,
-        item.quantity,
-        item.unitPrice,
-        item.totalPrice,
-        item.confidence,
-      ]),
+      row([...head, item.name, item.quantity, item.unitPrice, item.totalPrice, item.confidence]),
     );
   }
   // Totals belong in the export too, otherwise tax and tip are lost.
-  lines.push(
-    row([
-      receipt.id,
-      receipt.merchant,
-      receipt.receiptDate,
-      "Subtotal",
-      "",
-      "",
-      receipt.subtotal,
-      "",
-    ]),
-  );
-  lines.push(
-    row([receipt.id, receipt.merchant, receipt.receiptDate, "Tax", "", "", receipt.tax, ""]),
-  );
-  lines.push(
-    row([receipt.id, receipt.merchant, receipt.receiptDate, "Tip", "", "", receipt.tip, ""]),
-  );
-  lines.push(
-    row([receipt.id, receipt.merchant, receipt.receiptDate, "Total", "", "", receipt.total, ""]),
-  );
+  for (const [label, amount] of [
+    ["Subtotal", receipt.subtotal],
+    ["Discount", receipt.discount],
+    ["Service charge", receipt.serviceCharge],
+    ["Tax", receipt.tax],
+    ["Tip", receipt.tip],
+    ["Total", receipt.total],
+  ] as const) {
+    lines.push(row([...head, label, "", "", amount, ""]));
+  }
   return `${lines.join("\n")}\n`;
 }
 

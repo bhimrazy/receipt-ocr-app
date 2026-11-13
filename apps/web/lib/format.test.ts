@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTimeUntil, money, pct } from "./format";
+import { formatReceiptDate, formatTimeUntil, money, pct, receiptDateParts } from "./format";
 
 describe("money", () => {
   it("formats decimal strings from numeric columns", () => {
@@ -40,5 +40,21 @@ describe("formatTimeUntil", () => {
   });
   it("never says zero or a past time", () => {
     expect(formatTimeUntil(new Date("2026-11-04T17:00:00Z"), now)).toBe("in 1 minute");
+  });
+});
+
+describe("formatReceiptDate", () => {
+  it("shows a receipt that printed Bikram Sambat in BS first, with the AD day", () => {
+    expect(formatReceiptDate("2023-07-25", "bikram-sambat")).toBe("9 Shrawan 2080 · 25 Jul 2023");
+    expect(receiptDateParts("2023-07-25", "bikram-sambat")).toEqual({
+      bs: "9 Shrawan 2080",
+      ad: "25 Jul 2023",
+    });
+  });
+
+  it("shows every other receipt in AD only", () => {
+    expect(formatReceiptDate("2023-07-25", "gregory")).toBe("25 Jul 2023");
+    expect(formatReceiptDate("2023-07-25", null)).toBe("25 Jul 2023");
+    expect(formatReceiptDate(null, "bikram-sambat")).toBeNull();
   });
 });

@@ -121,6 +121,12 @@ reset. **From the first real user onward we never squash again.** Details:
 
 Steps are in [deployment.md](deployment.md).
 
+- Migration `0003_receipt_fields` (#224, receipt fields and review reasons): run **Database Migration** on
+  `staging-db`, then `production-db`, then deploy production by hand straight away. The window between migration and
+  deploy is in the [rollout notes](architecture/dates.md#migration-0003-rollout).
+- **By 2027-04-14: update the Bikram Sambat table for 2084.** That day the guard test in
+  `packages/core/src/calendar/bs.test.ts` turns CI red. Do the update once the 2084 almanac is approved
+  ([runbook](architecture/dates.md#yearly-table-update-runbook)).
 - Migration `0002_receipt_review` (reviewed receipts): run **Database Migration** on `staging-db`, then
   `production-db`, before deploying the release that contains it. It adds two nullable columns, a foreign key and a
   partial index to `receipts`, with `lock_timeout = '3s'`.
@@ -312,10 +318,14 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
 13. In-app feedback: "Send feedback" in the account menu and Settings, "Your feedback" list, admin inbox with email
     replies; public board later ([feedback and requests](plans/2026-11-07-feedback-and-requests.md)).
-14. Dual-calendar dates: `receipt_date` as a real AD `date` (column, check and index landed in #127; the
-    `receipt_date_check` column comes with the resolver), BS derived from a vendored month table, the model
-    transcribes dates and code cross-checks AD against the Miti; BS display, `date_bs` CSV, Nepal fiscal-year
-    presets ([dual-calendar dates](plans/2026-11-07-dual-calendar-dates.md)).
+14. Dual-calendar dates and receipt fields. Track 1 (in review): migration `0003_receipt_fields` (new columns,
+    CHECKs `NOT VALID`, backfills), the vendored BS table and resolver in `@receipt-ocr/core/calendar`,
+    `reviewReasons()` as the Needs review rule, BS-first display for BS receipts, the editor's AD/BS date and new
+    fields, zod PATCH parsing, CSV `receipt_date_bs` and the new columns. Next: extraction v3 (`dates[]`, bill
+    number, tax id, discount, service charge in the prompt and schema, benchmarked), migration `0004` validating
+    the `0003` CHECKs, "Copy JSON" from the row, list badges from `review_reasons`, then Nepal fiscal-year and
+    BS-month presets ([research](reviews/2026-11-12-dates-and-fields-research.md),
+    [dual-calendar dates](plans/2026-11-07-dual-calendar-dates.md)).
 
 ## Later, once the app is stable (owner notes, 2026-11-07)
 

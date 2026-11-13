@@ -10,7 +10,9 @@
     "./telemetry/otlp": "./src/telemetry/otlp.ts",
     "./upload-limits": "./src/upload-limits.ts",
     "./group-rules": "./src/group-rules.ts",
-    "./receipt-fields": "./src/receipt-fields.ts"
+    "./receipt-fields": "./src/receipt-fields.ts",
+    "./calendar": "./src/calendar/index.ts",
+    "./review-reasons": "./src/review-reasons.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
-const { ReceiptChecks, ReceiptReviewProvider, ReviewedConfidenceBadge, reviewFailure } =
+const { ReceiptChecks, ReceiptReviewProvider, ReviewStateBadge, reviewFailure } =
   await import("./receipt-review");
 
 const receipt = (fields: Partial<ReceiptWithItems> = {}) =>
@@ -26,25 +26,28 @@ const render = (props: { receipt: ReceiptWithItems; checks?: string[]; canEdit?:
     />,
   );
 
-describe("ReviewedConfidenceBadge", () => {
-  it("shows the confidence until the receipt is reviewed, then Checked with who checked it", () => {
-    const unreviewed = withReview(receipt(), <ReviewedConfidenceBadge value="0.62" />);
-    expect(unreviewed).toContain("Review");
-    expect(unreviewed).toContain("62%");
+describe("ReviewStateBadge", () => {
+  it("shows Needs review until the receipt is reviewed, then Checked with who checked it", () => {
+    const unreviewed = withReview(receipt(), <ReviewStateBadge needsReview />);
+    expect(unreviewed).toContain("Needs review");
     expect(unreviewed).not.toContain("Checked");
 
     const reviewed = withReview(
       receipt({ reviewedAt: new Date("2026-11-10T09:00:00Z"), reviewer: { name: "Test User" } }),
-      <ReviewedConfidenceBadge value="0.62" />,
+      <ReviewStateBadge needsReview />,
     );
     expect(reviewed).toContain("Checked by Test User");
-    expect(reviewed).not.toContain("62%");
+    expect(reviewed).not.toContain("Needs review");
+  });
+
+  it("shows nothing for a receipt that passed its checks", () => {
+    expect(withReview(receipt(), <ReviewStateBadge needsReview={false} />)).toBe("");
   });
 
   it("says Checked without a name once the reviewer's account is gone", () => {
     const html = withReview(
       receipt({ reviewedAt: new Date("2026-11-10T09:00:00Z") }),
-      <ReviewedConfidenceBadge value="0.62" />,
+      <ReviewStateBadge needsReview />,
     );
     expect(html).toContain(">Checked</span>");
     expect(html).not.toContain("Checked by");

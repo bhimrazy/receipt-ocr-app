@@ -149,11 +149,17 @@ erDiagram
     receipt_status status "uploaded, processing, completed, failed"
     int attempts "rounds so far, CHECK 1 to 3"
     date receipt_date "AD, CHECK 2000 to upload day + 1"
+    text receipt_date_calendar "gregory or bikram-sambat, null = unknown"
     text currency "CHECK ISO 4217 shape, null = read as USD"
+    text invoice_number "as printed, 1 to 64"
+    text merchant_tax_id "as printed, 1 to 32"
     text image_object_key
     text model "provider:model that read it"
+    numeric discount "CHECK >= 0"
+    numeric service_charge "CHECK >= 0"
     numeric total
-    numeric confidence
+    numeric confidence "a hint, not the review rule"
+    text_array review_reasons "default empty"
     jsonb raw_json
     timestamptz reviewed_at "null = not reviewed"
     text reviewed_by FK "nullable, set null on user delete"
@@ -161,6 +167,7 @@ erDiagram
   receipt_items {
     uuid id PK
     uuid receipt_id FK
+    smallint position "printed order from 0"
     text name
     int quantity "CHECK >= 1"
     numeric total_price
@@ -207,15 +214,38 @@ How the ledger is used:
   [core: quota ledger semantics](core.md#design-principles-and-invariants).
 - Neither table has free-text columns, so neither can hold receipt contents or provider messages.
 
-`receipts.receipt_date` is a plain `date` in the AD calendar (it was free text until the 2026-11-08 schema fixes). Core writes only a
-real `YYYY-MM-DD` day from 2000 on and at most one day past the UTC upload day; anything else, including a Bikram
-Sambat year given as AD, is stored as null and shows as "No date found". Bikram Sambat is meant to stay a view of this
-date, never a second column ([dual-calendar plan](../plans/2026-11-07-dual-calendar-dates.md)).
+**Dates.** `receipts.receipt_date` is a plain `date` in the AD calendar, the only stored date: sorting, filters, the
+dashboard and the CSV's `receipt_date` all use it. `receipt_date_calendar` records the calendar the receipt printed
+(`gregory`, or `bikram-sambat` when a BS date was printed, alone or beside an AD one; Unicode `u-ca` identifiers).
+Null means unknown (no date, or read before printed dates were kept) and reads as `gregory`. Bikram Sambat is never
+stored: it is `adToBs(receipt_date)` from the vendored month table in `@receipt-ocr/core/calendar`, shown BS-first
+("9 Shrawan 2080 · 25 Jul 2023") and exported as `receipt_date_bs` (`2080.04.09`) only for BS receipts. At
+completion the date resolver (`resolveReceiptDate`) turns what was printed into that one day, bounded by the
+2000-01-01 to upload day + 1 window the CHECK enforces
+([research](../reviews/2026-11-12-dates-and-fields-research.md),
+[decision table](../reviews/2026-11-12-extraction-review.md#decision-table-resolver-packagescore-pure)).
+
+**Fields.** `invoice_number` (EN 16931 BT-1) and `merchant_tax_id` (BT-31) are kept as printed, not unique, and
+never logged (a sole trader's PAN is personal data). `discount` (BT-107) and `service_charge` (BT-108) are positive
+document-level amounts the totals check uses: `subtotal − discount + service_charge + tax + tip = total`.
+`receipt_items.position` is the printed order; items are read `ORDER BY position, ctid`. Extraction v3 fills these;
+before it, they stay null.
+
+**Needs review** is `status = 'completed' AND review_reasons <> '{}' AND reviewed_at IS NULL` (History filter and
+the Home count, and every warning badge). `review_reasons` holds the codes of the deterministic checks that failed,
+decided in `packages/core/src/review-reasons.ts`: `reviewReasons()` at completion, `editedReasons()` on an edit. The
+codes are `no_merchant`, `no_date`, `no_total`, `no_currency`, `totals_mismatch`, and the resolver's
+`date_ambiguous`, `date_conflict` and `date_implausible`. The totals check is exact to the cent, except that a
+whole-number total may be up to 0.99 off (bills rounded to the unit). An edit rechecks only the reasons that read a
+changed field; a changed date or calendar drops the date reasons. `low_confidence` is set only by migration
+`0003_receipt_fields`, on receipts below 0.9 confidence, and edits keep it; reviewing the receipt is what clears it
+from Needs review. The model's `confidence` is a hint only. There is no CHECK on the values: readers show a generic
+line for a code they don't know.
 
 `receipts.reviewed_at` and `reviewed_by` record that someone who may edit the receipt confirmed it looks right
 (`PATCH /api/receipts/[id]` with `{ reviewed }`, migration `0002_receipt_review`). A reviewed receipt leaves "Needs
-review" (History filter and the Home count) and its checks card shows as one "Reviewed by" line. Edits keep the
-review; a new extraction (`complete`, after a retry) clears both columns.
+review" and its checks card shows as one "Reviewed by" line. Edits keep the review; a new extraction (`complete`,
+after a retry) clears both columns.
 
 ## Receipt groups
 
@@ -417,7 +447,11 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `receipts`              | `receipts_receipt_date_check`: from `2000-01-01` to `(created_at at time zone 'UTC')::date + 1` | No misread or Bikram Sambat year stored as AD; the dashboard's `created_at` scan bound relies on the upper limit                                                    |
 | `receipts`              | `receipts_currency_check`: `~ '^[A-Z]{3}$'`                                                     | One spelling per currency, so totals group without normalising per row                                                                                              |
 | `receipts`              | `receipts_attempts_check`: `between 1 and 3`                                                    | The retry cap, `MAX_EXTRACTION_ATTEMPTS` in `packages/db`                                                                                                           |
+| `receipts`              | `receipts_receipt_date_calendar_check`: `in ('gregory', 'bikram-sambat')`                       | One spelling per calendar. Added `NOT VALID` in `0003`; the next migration validates it, as it does each check below                                                |
+| `receipts`              | `receipts_invoice_number_check` (1 to 64), `receipts_merchant_tax_id_check` (1 to 32)           | No empty strings (null means not printed) and nothing past what the field asks for                                                                                  |
+| `receipts`              | `receipts_discount_check`, `receipts_service_charge_check`: `>= 0`                              | One sign convention: both are amounts, and the totals check subtracts or adds them                                                                                  |
 | `receipt_items`         | `receipt_items_quantity_check`: `>= 1`                                                          | Core rounds a weight or a 0 up to 1, and reads one over 1,000,000 as 1                                                                                              |
+| `receipt_items`         | `receipt_items_position_check`: `>= 0`                                                          | Printed order from 0                                                                                                                                                |
 | `receipt_groups`        | `receipt_groups_org_name_idx` on `(organization_id, lower(name))`                               | Group names are unique per workspace, ignoring case                                                                                                                 |
 | `receipt_group_members` | Primary key on `(group_id, receipt_id)`                                                         | A receipt is in a group once                                                                                                                                        |
 | `app_settings`          | Primary key on `key`                                                                            | One row per setting, upserted on save                                                                                                                               |

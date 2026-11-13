@@ -1,17 +1,22 @@
 import type { ReceiptWithItems } from "@receipt-ocr/core";
-import { confidenceLevel, formatConfidence } from "@/lib/format";
+import { totalsMismatch } from "@receipt-ocr/core/review-reasons";
+import { formatConfidence } from "@/lib/format";
 
 type CheckedReceipt = Pick<
   ReceiptWithItems,
   | "confidence"
+  | "currency"
+  | "discount"
   | "imageObjectKey"
+  | "items"
   | "merchant"
   | "receiptDate"
+  | "reviewReasons"
+  | "serviceCharge"
   | "subtotal"
   | "tax"
   | "tip"
   | "total"
-  | "items"
 >;
 
 /** "photo" or "PDF", so failure and review copy names what the person actually uploaded. */
@@ -19,65 +24,39 @@ export function fileNoun(receipt: { imageObjectKey: string | null }) {
   return receipt.imageObjectKey?.endsWith(".pdf") ? "PDF" : "photo";
 }
 
-function toNumber(value: string | null | undefined) {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** Whole cents, so sums compare exactly instead of within a float tolerance. */
-function cents(value: string | null | undefined) {
-  const n = toNumber(value);
-  return n === null ? null : Math.round(n * 100);
-}
-
 /**
- * The amount the receipt's parts add up to, when no reading of them matches the
- * total to the cent; null when one does or there is nothing to compare. Negative
- * lines are discounts and already reduce the item sum. A total equal to the
- * subtotal or the item sum (with or without the tip) means the prices include
- * tax, so tax isn't added on top.
+ * The receipt's stored review reasons in plain words, one line each: the same list that puts it in Needs review.
+ * A reason this version doesn't know gets a generic line rather than none.
  */
-export function totalsMismatch(receipt: CheckedReceipt): number | null {
-  const total = cents(receipt.total);
-  if (total === null) return null;
-  const itemsSum = receipt.items.length
-    ? receipt.items.reduce((sum, item) => sum + (cents(item.totalPrice) ?? 0), 0)
-    : null;
-  const bases = [cents(receipt.subtotal), itemsSum].filter((base) => base !== null);
-  if (bases.length === 0) return null;
-  const tax = cents(receipt.tax) ?? 0;
-  const tip = cents(receipt.tip) ?? 0;
-  const matches = bases.some((base) => [base, base + tip, base + tax + tip].includes(total));
-  if (matches) return null;
-  return (bases[0]! + tax + tip) / 100;
-}
-
-/** Everything a person should look at before trusting this receipt, in plain words. */
 export function checksFor(receipt: CheckedReceipt, money: (value: string | null) => string | null) {
-  const checks: string[] = [];
-  const level = confidenceLevel(receipt.confidence);
-  if (level === "review" || level === "check") {
-    checks.push(
-      `Overall confidence is ${formatConfidence(receipt.confidence)}. Compare the merchant, date and total with the ${fileNoun(receipt)}.`,
-    );
-  }
-  const lowLines = receipt.items.filter((item) => confidenceLevel(item.confidence) === "review");
-  if (lowLines.length > 0) {
-    checks.push(
-      lowLines.length === 1
-        ? "1 line was hard to read. It's marked in Line items."
-        : `${lowLines.length} lines were hard to read. They're marked in Line items.`,
-    );
-  }
-  const expected = totalsMismatch(receipt);
-  if (expected !== null) {
-    checks.push(
-      `The amounts add up to ${money(expected.toFixed(2))}, but the total says ${money(receipt.total)}. A service charge, discount or rounding can explain the gap; otherwise check the numbers against the ${fileNoun(receipt)}.`,
-    );
-  }
-  if (!receipt.merchant) checks.push("No merchant name was found.");
-  if (!receipt.receiptDate) checks.push("No date was found.");
-  if (toNumber(receipt.total) === null) checks.push("No total was found.");
-  return checks;
+  const noun = fileNoun(receipt);
+  const lines = receipt.reviewReasons.map((reason) => {
+    switch (reason) {
+      case "no_merchant":
+        return "No merchant name was found.";
+      case "no_date":
+        return "No date was found.";
+      case "no_total":
+        return "No total was found.";
+      case "no_currency":
+        return `No currency was found. Amounts show as USD until you set it.`;
+      case "totals_mismatch": {
+        const expected = totalsMismatch(receipt);
+        return expected === null
+          ? `The amounts don't add up to the total. Check them against the ${noun}.`
+          : `The amounts add up to ${money(expected.toFixed(2))}, but the total says ${money(receipt.total)}. Rounding can explain a small gap; otherwise check the numbers against the ${noun}.`;
+      }
+      case "date_ambiguous":
+        return `The date could be read more than one way, or is a long time ago. Check it against the ${noun}.`;
+      case "date_conflict":
+        return `The dates printed on the receipt don't agree. Check the date against the ${noun}.`;
+      case "date_implausible":
+        return `The printed date isn't a possible date for this receipt, so none was saved. Check the ${noun}.`;
+      case "low_confidence":
+        return `Overall confidence is ${formatConfidence(receipt.confidence) ?? "low"}. Compare the merchant, date and total with the ${noun}.`;
+      default:
+        return `Something on this receipt needs a check. Compare it with the ${noun}.`;
+    }
+  });
+  return [...new Set(lines)];
 }

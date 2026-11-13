@@ -4,7 +4,9 @@ import { ReceiptText, TriangleAlert } from "lucide-react";
 import { ConfidenceBadge } from "@/components/receipt-status";
 import { exampleCsv } from "@/lib/content/example-csv";
 import type { ContentExample } from "@/lib/content/types";
+import { reviewReasons } from "@receipt-ocr/core/review-reasons";
 import { confidenceLevel, formatConfidence, formatDate, formatMoney } from "@/lib/format";
+import { checksFor } from "@/lib/receipt-checks";
 
 function Field({ label, mono, children }: { label: string; mono?: boolean; children: string }) {
   return (
@@ -15,24 +17,30 @@ function Field({ label, mono, children }: { label: string; mono?: boolean; child
   );
 }
 
-/** The receipt page's confidence checks (`checksFor` in receipt-result.tsx), one item each. */
-function checksFor(receipt: ContentExample["extraction"], noun: string): string[] {
-  const checks: string[] = [];
-  const level = confidenceLevel(receipt.confidence);
-  if (level === "review" || level === "check") {
-    checks.push(
-      `Overall confidence is ${formatConfidence(receipt.confidence)}. Compare the merchant, date and total with the ${noun}.`,
-    );
-  }
-  const low = receipt.items.filter((item) => confidenceLevel(item.confidence) === "review").length;
-  if (low > 0) {
-    checks.push(
-      low === 1
-        ? "1 line was hard to read. It's marked in Line items."
-        : `${low} lines were hard to read. They're marked in Line items.`,
-    );
-  }
-  return checks;
+/** The checks the receipt page would show for this extraction. */
+function exampleChecks(receipt: ContentExample["extraction"], fileName: string): string[] {
+  const amount = (n: number | null) => (n === null ? null : n.toFixed(2));
+  const fields = {
+    merchant: receipt.merchant,
+    receiptDate: receipt.receiptDate,
+    currency: receipt.currency,
+    subtotal: amount(receipt.subtotal),
+    tax: amount(receipt.tax),
+    tip: amount(receipt.tip),
+    discount: null,
+    serviceCharge: null,
+    total: amount(receipt.total),
+    items: receipt.items.map((item) => ({ totalPrice: amount(item.totalPrice) })),
+  };
+  return checksFor(
+    {
+      ...fields,
+      confidence: String(receipt.confidence),
+      imageObjectKey: fileName.toLowerCase(),
+      reviewReasons: reviewReasons(fields),
+    } as Parameters<typeof checksFor>[0],
+    (value) => (value === null ? null : formatMoney(value, receipt.currency)),
+  );
 }
 
 /** A sample receipt laid out like the receipt page: checks, Details, Line items, then an export. */
@@ -41,7 +49,7 @@ export function ContentExampleView({ example }: { example: ContentExample }) {
   const money = (n: number | null) =>
     n === null ? "—" : (formatMoney(n, receipt.currency) ?? "—");
   const noun = example.fileName.toLowerCase().endsWith(".pdf") ? "PDF" : "photo";
-  const checks = checksFor(receipt, noun);
+  const checks = exampleChecks(receipt, example.fileName);
   const exportLabel = example.exportView === "json" ? "Copy JSON" : "History CSV export";
   const exportText =
     example.exportView === "json" ? JSON.stringify(receipt, null, 2) : exampleCsv(example);
