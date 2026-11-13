@@ -25,7 +25,7 @@ HTTP.
 | [`app/page.tsx`](../../apps/web/app/page.tsx)                                                                                                                                                      | Landing page                                                                                                                                                                                                                                                      |
 | `app/sign-in`, `sign-up`, `forgot-password`, `reset-password`                                                                                                                                      | Auth pages; forms in [`components/auth`](../../apps/web/components/auth)                                                                                                                                                                                          |
 | [`app/accept-invitation/[id]`](../../apps/web/app/accept-invitation/[id]/page.tsx)                                                                                                                 | Invitation landing page                                                                                                                                                                                                                                           |
-| [`app/app`](../../apps/web/app/app)                                                                                                                                                                | Signed-in app: Home with upload panel (`/app`), Receipts (`/app/receipts`), receipt detail, Groups (`/app/receipts/groups`), Settings (plan, workspace, read-only Receipt reading from `receiptReaders`), Members                                                 |
+| [`app/app`](../../apps/web/app/app)                                                                                                                                                                | Signed-in app: Home with upload panel (`/app`), Receipts (`/app/receipts`), Spending dashboard (`/app/spending`), receipt detail, Groups (`/app/receipts/groups`), Settings (plan, workspace, read-only Receipt reading from `receiptReaders`), Members           |
 | [`app/admin`](../../apps/web/app/admin)                                                                                                                                                            | Platform admin panel: overview, users, workspaces, operations, jobs, audit log, settings                                                                                                                                                                          |
 | [`app/pricing`](../../apps/web/app/pricing/page.tsx), [`app/refunds`](../../apps/web/app/refunds/page.tsx)                                                                                         | Public pricing (Free and Pro, monthly or yearly, FAQ) and refund policy. Terms and privacy name Paddle as reseller and merchant of record                                                                                                                         |
 | [`app/pay`](../../apps/web/app/pay/page.tsx)                                                                                                                                                       | Paddle's default payment link, public and noindex: with a well-formed `?_ptxn=txn_…` it loads Paddle.js and opens the overlay for that transaction (checkout links, update-payment-method links in Paddle's emails); otherwise a short page linking to `/pricing` |
@@ -59,12 +59,12 @@ The signed-in shell ([`app/app/layout.tsx`](../../apps/web/app/app/layout.tsx)) 
 ```mermaid
 flowchart TB
   subgraph desktop["md and wider"]
-    sidebar["Sidebar: brand, workspace switcher (dropdown),<br/>Home / Receipts / Settings, Platform: Admin,<br/>usage meter, account menu (dropdown)"]
+    sidebar["Sidebar: brand, workspace switcher (dropdown),<br/>Home / Receipts / Spending / Settings, Platform: Admin,<br/>usage meter, account menu (dropdown)"]
   end
   subgraph phone["Below md"]
     bar["Top app bar (sticky): brand or Back, workspace name or<br/>scrolled page title, page actions slot, account button"]
     sheet["Account sheet: account, workspaces (switch, create),<br/>usage meter, Admin, sign out"]
-    tabs["Bottom tab bar (fixed): Home, Receipts, Scan, Settings"]
+    tabs["Bottom tab bar (fixed): Home, Receipts, Scan, Spending, Settings"]
     bar -- "account button" --> sheet
   end
   tabs -- "Scan" --> scan["/app/upload?capture=1"]

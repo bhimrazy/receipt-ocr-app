@@ -13,6 +13,7 @@ import {
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
+  ChartNoAxesColumn,
   ChevronLeft,
   Ellipsis,
   House,
@@ -35,6 +36,7 @@ export type NavItem = { href: string; label: string; icon: LucideIcon; exact?: b
 export const APP_NAV: NavItem[] = [
   { href: "/app", label: "Home", icon: House, exact: true },
   { href: "/app/receipts", label: "Receipts", icon: ReceiptText },
+  { href: "/app/spending", label: "Spending", icon: ChartNoAxesColumn },
   { href: "/app/settings", label: "Settings", icon: Settings },
 ];
 
@@ -282,6 +284,7 @@ function labelFor(pathname: string): string | null {
     "/app": "Home",
     "/app/receipts": "Receipts",
     "/app/receipts/groups": "Groups",
+    "/app/spending": "Spending",
     "/app/settings": "Settings",
     "/admin/jobs": "Jobs",
     "/admin/operations": "Operations",

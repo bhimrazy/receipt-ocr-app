@@ -53,6 +53,13 @@ describe("phone navigation", () => {
     expect(backFor("/app/receipts/abc")).toEqual({ href: "/app/receipts", label: "Receipts" });
   });
 
+  it("lists Home, Receipts, Spending and Settings, and highlights Spending on its page", () => {
+    expect(APP_NAV.map((item) => item.label)).toEqual(["Home", "Receipts", "Spending", "Settings"]);
+    const spending = APP_NAV.find((i) => i.href === "/app/spending")!;
+    expect(APP_NAV.filter((item) => isActive("/app/spending", item))).toEqual([spending]);
+    expect(backFor("/app/spending")).toBeNull();
+  });
+
   it("highlights no sidebar row on the upload page", () => {
     expect(APP_NAV.some((item) => isActive("/app/upload", item))).toBe(false);
   });

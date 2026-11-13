@@ -58,6 +58,15 @@ test("tab bar moves between sections and marks the active one", async ({ page })
   await expect(tabs.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
   await expectNoSideScroll(page);
 
+  await tabs.getByRole("link", { name: "Spending" }).click();
+  await expect(page).toHaveURL(/\/app\/spending$/);
+  await expect(tabs.getByRole("link", { name: "Spending" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(tabs.getByRole("link", { name: "Receipts" })).not.toHaveAttribute("aria-current");
+  await expectNoSideScroll(page);
+
   await tabs.getByRole("link", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/app\/settings$/);
   await expect(tabs.getByRole("link", { name: "Settings" })).toHaveAttribute(
@@ -66,8 +75,15 @@ test("tab bar moves between sections and marks the active one", async ({ page })
   );
   await expectNoSideScroll(page);
 
+  await expect(tabs.getByRole("link")).toHaveText([
+    "Home",
+    "Receipts",
+    "Scan",
+    "Spending",
+    "Settings",
+  ]);
   // Every tab is at least 44px tall.
-  for (const name of ["Home", "Receipts", "Scan", "Settings"]) {
+  for (const name of ["Home", "Receipts", "Scan", "Spending", "Settings"]) {
     const box = await tabs.getByRole("link", { name }).boundingBox();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   }
