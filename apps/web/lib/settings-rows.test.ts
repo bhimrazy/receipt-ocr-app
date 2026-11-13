@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { settingsRows } from "./settings-rows";
 
 describe("settingsRows", () => {
-  it("lists Plan, Workspace, Appearance and Security with their current values", () => {
+  it("lists Plan, Workspace, Groups, Appearance and Security with their current values", () => {
     const rows = settingsRows({
       planLabel: "Free",
       workspaceName: "Sam's",
@@ -11,6 +11,7 @@ describe("settingsRows", () => {
     expect(rows.map((r) => (r === "appearance" ? r : [r.label, r.value, r.href]))).toEqual([
       ["Plan", "Free", "/app/settings/billing"],
       ["Workspace", "Sam's", "/app/settings/members"],
+      ["Groups", "", "/app/receipts/groups"],
       "appearance",
       ["Security", "Set up", "/app/settings/security"],
     ]);
