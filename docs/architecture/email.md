@@ -171,7 +171,7 @@ mentions `@react-email/render` as an optional peer for its unused `react` option
   colour-scheme meta, dark media rules, hidden preheader), absolute links, the single logo image, plain text; hostile
   input (markup, quotes, CRLF, `javascript:` links, `{{slot}}` look-alikes, 2,000-character names) never breaks out;
   tokens never visible. [`index.test.ts`](../../packages/email/tests/index.test.ts) covers sending and logging.
-- `apps/web/lib/auth.int.test.ts` and `step-up.int.test.ts` send through the real templates against Postgres.
+- `apps/web/tests/lib/auth.int.test.ts` and `step-up.int.test.ts` send through the real templates against Postgres.
 - `bun run email:preview [--out dir]` writes every template as `.html` and `.txt` with sample data (to
   `.email-preview/`, git-ignored). Open the HTML and switch the colour scheme to check dark mode.
 - For real delivery, Resend's test recipients (`delivered@resend.dev` and others, listed in
