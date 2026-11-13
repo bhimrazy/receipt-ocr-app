@@ -5,12 +5,14 @@ import {
   PageHeaderTitle,
 } from "@/components/page-header";
 import { PanelSkeleton, RowsSkeleton } from "@/components/app-skeletons";
+import { selectCurrency, ThisMonthCard } from "@/components/dashboard/spend-dashboard";
 import { SectionBoundary } from "@/components/section-error";
 import { ListPoller } from "@/components/processing-poller";
 import { ReceiptList } from "@/components/receipt-list";
 import { UploadPanel } from "@/components/upload-panel";
 import { UpgradeHomeCard } from "@/components/upgrade/upgrade-home-card";
 import { formatTimeUntil } from "@/lib/format";
+import { errorFields, logger } from "@/lib/log";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { cn } from "@receipt-ocr/ui/lib/utils";
@@ -33,6 +35,7 @@ import { Suspense } from "react";
 import { getCurrentPlan, getPlanTable } from "@/lib/plan-limits";
 import { getReceiptCounts, getUsageSummary, listRecentReceipts } from "@/lib/receipts";
 import { logPageRender } from "@/lib/page-event";
+import { getSpendView } from "@/lib/spend";
 import { getUpgradeOffer } from "@/lib/upgrade-offer";
 
 export const metadata: Metadata = { title: "Home" };
@@ -184,19 +187,69 @@ async function HomeTitle() {
   return counts?.total === 0 ? "Scan your first receipt" : "Home";
 }
 
+async function HomeDescription() {
+  const counts = await getReceiptCounts().catch((error: unknown) => {
+    unstable_rethrow(error);
+    return null;
+  });
+  if (counts?.total !== 0) return null;
+  return (
+    <PageHeaderDescription>
+      Add a photo of a receipt and we scan the merchant, date, items and total.
+    </PageHeaderDescription>
+  );
+}
+
+/** Below md the Scan tab replaces the panel, except in an empty workspace where it is the only action. */
 async function UploadSection() {
-  const [usage, { plan, policy }, offer, plans] = await Promise.all([
+  const [usage, { plan, policy }, offer, plans, counts] = await Promise.all([
     getUsageSummary(),
     getCurrentPlan(),
     getUpgradeOffer(),
     getPlanTable(),
+    getReceiptCounts(),
   ]);
   return (
-    <UploadPanel
-      batchMax={policy.batchMax}
-      plan={{ pro: plan === "free" ? plans.pro : null, offer: offer?.audience ?? null }}
-      resetsIn={formatTimeUntil(usage.opensAt)}
-      usage={usage}
+    <section aria-label="Upload" className={cn("order-1", counts.total > 0 && "max-md:hidden")}>
+      <SectionBoundary label="Upload">
+        <UploadPanel
+          batchMax={policy.batchMax}
+          plan={{ pro: plan === "free" ? plans.pro : null, offer: offer?.audience ?? null }}
+          resetsIn={formatTimeUntil(usage.opensAt)}
+          usage={usage}
+        />
+      </SectionBoundary>
+    </section>
+  );
+}
+
+async function MonthSection() {
+  const counts = await getReceiptCounts();
+  if (counts.total - counts.failed - counts.inFlight <= 0) return null;
+  let spend: ReturnType<typeof selectCurrency> | null = null;
+  let currencies = 0;
+  try {
+    const { dashboard } = await getSpendView({});
+    spend = selectCurrency(dashboard);
+    currencies = dashboard.currencies.length;
+  } catch (error) {
+    unstable_rethrow(error);
+    logger.error({ event: "home.spend_failed", unit: "log", error: errorFields(error) });
+  }
+  if (!spend) return null;
+  return (
+    <ThisMonthCard
+      currency={spend.currency}
+      footer={
+        <Link
+          className="inline-flex items-center gap-1 self-start rounded-md text-sm font-medium text-primary outline-none select-none hover:underline active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
+          href="/app/spending"
+        >
+          {currencies > 1 ? `See spending (${currencies} currencies)` : "See spending"}
+          <ArrowRight aria-hidden="true" className="size-4" />
+        </Link>
+      }
+      month={spend.thisMonth}
     />
   );
 }
@@ -229,7 +282,7 @@ async function RecentSection() {
   if (counts.total === 0) return null;
 
   return (
-    <section aria-labelledby="recent-heading" className="mt-10">
+    <section aria-labelledby="recent-heading">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-base font-semibold" id="recent-heading">
           Recent receipts
@@ -260,39 +313,42 @@ export default function HomePage() {
               <HomeTitle />
             </Suspense>
           </PageHeaderTitle>
-          <PageHeaderDescription>
-            Add a photo of a receipt and we scan the merchant, date, items and total. Several photos
-            are scanned in the background while you keep working.
-          </PageHeaderDescription>
+          <Suspense fallback={null}>
+            <HomeDescription />
+          </Suspense>
         </PageHeaderContent>
       </PageHeader>
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <section aria-label="Upload">
-          <SectionBoundary label="Upload">
-            <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-              <UploadSection />
-            </Suspense>
-          </SectionBoundary>
-        </section>
-        <SectionBoundary label="To check">
-          <Suspense fallback={<PanelSkeleton />}>
-            <CheckSection />
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+        <div className="contents lg:flex lg:flex-col lg:gap-6">
+          <div className="order-2">
+            <SectionBoundary label="To check">
+              <Suspense fallback={<PanelSkeleton />}>
+                <CheckSection />
+              </Suspense>
+            </SectionBoundary>
+          </div>
+          <div className="order-4 lg:mt-4">
+            <SectionBoundary label="Recent receipts">
+              <Suspense fallback={<RowsSkeleton rows={RECENT} />}>
+                <RecentSection />
+              </Suspense>
+            </SectionBoundary>
+          </div>
+        </div>
+        <div className="contents lg:col-start-2 lg:row-start-1 lg:flex lg:flex-col lg:gap-6">
+          <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl max-md:hidden" />}>
+            <UploadSection />
           </Suspense>
-        </SectionBoundary>
+          <div className="order-3 empty:hidden">
+            <SectionBoundary label="This month">
+              <Suspense fallback={<Skeleton className="h-36 w-full rounded-lg" />}>
+                <MonthSection />
+              </Suspense>
+            </SectionBoundary>
+          </div>
+        </div>
       </div>
-
-      <SectionBoundary className="mt-10" label="Recent receipts">
-        <Suspense
-          fallback={
-            <div className="mt-10">
-              <RowsSkeleton rows={RECENT} />
-            </div>
-          }
-        >
-          <RecentSection />
-        </Suspense>
-      </SectionBoundary>
     </div>
   );
 }

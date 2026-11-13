@@ -3,6 +3,7 @@ import { Card } from "@receipt-ocr/ui/components/card";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ArrowDownRight, ArrowUpRight, Info, Minus } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   PageHeader,
   PageHeaderContent,
@@ -176,12 +177,14 @@ function Delta({ fraction, against }: { fraction: number | null; against: string
   );
 }
 
-function ThisMonthCard({
+export function ThisMonthCard({
   month,
   currency,
+  footer,
 }: {
   month: CurrencySpend["thisMonth"];
   currency: string;
+  footer?: ReactNode;
 }) {
   const money = (v: number) => formatMoney(v, currency);
   const lastName = formatMonth(month.lastMonth).split(" ")[0]!;
@@ -225,6 +228,7 @@ function ThisMonthCard({
           rows={points}
         />
       }
+      footer={footer}
       title="This month"
     >
       <div className="flex flex-col gap-1">

@@ -13,6 +13,7 @@ export function ChartCard({
   description,
   summary,
   table,
+  footer,
   className,
   children,
 }: {
@@ -20,6 +21,7 @@ export function ChartCard({
   description?: ReactNode;
   summary?: ReactNode;
   table?: ReactNode;
+  footer?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
@@ -32,6 +34,7 @@ export function ChartCard({
       {summary ? <p className="text-sm text-muted-foreground">{summary}</p> : null}
       {children}
       {table}
+      {footer}
     </Card>
   );
 }

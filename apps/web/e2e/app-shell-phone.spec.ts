@@ -89,7 +89,7 @@ test("offline, the screen stays, a bar says so, and links wait for the connectio
   page,
   context,
 }) => {
-  await page.goto("/app");
+  await page.goto("/app/upload");
   const bar = page.locator("[data-slot=offline-bar]");
   await expect(page.locator("[data-ready]").first()).toBeVisible();
   await expect(bar).toBeEmpty();
@@ -120,7 +120,7 @@ test("offline, the screen stays, a bar says so, and links wait for the connectio
     .getByRole("link", { name: "Receipts" })
     .click();
   await expect(bar).toContainText("that page can't open");
-  await expect(page).toHaveURL(/\/app$/);
+  await expect(page).toHaveURL(/\/app\/upload$/);
   await expect(page.getByRole("heading", { name: "You're offline" })).toHaveCount(0);
 
   await context.setOffline(false);
