@@ -75,10 +75,13 @@ flowchart LR
     and the last choice is remembered for the session) applied after the warp. The filter thumbnails are of the same
     flattened page. About 400 ms after the last change, the edit is rendered once at full size and the real upload
     is encoded from it: the chosen size first, then the other options, so the picker shows real bytes. The preview
-    then shows that file, and tapping it opens it whole ("Whole receipt") or at "Actual pixels" (one image pixel per
-    device pixel, so a 1,000 px image is 333 CSS px wide on a 3x phone), captioned from the file itself ("Uploads
-    exactly this: 1000 × 2163 px · 241 KB JPEG"). While a new encode runs, the size line keeps the last values,
-    dimmed. "Upload" sends the files already made and encodes any photo that wasn't previewed.
+    then shows that file, and tapping it opens the full-size view of that file: full screen on phones, the stage on
+    desktop (so the size picker stays beside it). It opens at Fit, or for a long receipt (height ÷ width ≥ 2) at its
+    width, capped at 100%, from the top, and zooms freely from Fit to 400% (100% is one image pixel per CSS pixel) by
+    pinch, Ctrl/Cmd + wheel, click or double-tap, the `−` · readout · `+` pill or the keys; drag, wheel and arrows pan
+    within bounds (the maths is `apps/web/lib/capture/zoom.ts`). It is captioned from the file itself ("Uploads as
+    1000 × 2163 px · 241 KB JPEG"); a size change keeps the last image, dimmed, until the new file decodes. While a
+    new encode runs, the size line keeps the last values, dimmed. "Upload" sends the files already made and encodes any photo that wasn't previewed.
   - State (corners, rotation, filter) is kept per photo across steps; the photo is decoded once and kept while it is
     shown. Escape or the back arrow goes step 2, step 1, then asks to discard. The stage is a fixed box, so no action
     moves the controls around it (the e2e suite measures this).

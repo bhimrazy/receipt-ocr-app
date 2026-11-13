@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Ref } from "react";
 import type { EditState } from "@/lib/capture/edit-state";
 import { FILTER_LABELS, type Filter } from "@/lib/capture/filters";
 import { PREVIEW_RENDER, renderPreview } from "@/lib/capture/render";
@@ -19,6 +19,7 @@ export function ResultPreview({
   edit,
   upload,
   onInspect,
+  inspectRef,
 }: {
   bitmap: ImageBitmap;
   edit: EditState;
@@ -26,6 +27,7 @@ export function ResultPreview({
   upload: string | null;
   /** Opens the full-size view. */
   onInspect: () => void;
+  inspectRef?: Ref<HTMLButtonElement>;
 }) {
   const [frame, setFrame] = useState<Frame | null>(null);
 
@@ -85,6 +87,7 @@ export function ResultPreview({
         aria-label="See it at full size"
         className="absolute inset-0 cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         onClick={onInspect}
+        ref={inspectRef}
         type="button"
       />
     </div>

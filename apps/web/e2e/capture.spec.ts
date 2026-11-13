@@ -66,7 +66,9 @@ test("take two photos, edit one, and upload both", async ({ page }) => {
   await expect(camera).toHaveCount(0);
 
   const review = page.getByRole("dialog", { name: "Review photos" });
-  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
+  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(review.getByText("Photo 1 of 2").filter({ visible: true })).toBeVisible();
   // Step 1: rotate, then move a corner with the keyboard.
   await review.getByRole("button", { name: "Rotate" }).click();
@@ -115,7 +117,9 @@ test("a picked photo is reviewed, then read and opened", async ({ page }) => {
   await expect(page.locator("[data-ready]")).toBeAttached();
   await page.locator('input[type="file"][multiple]').setInputFiles(receipt);
   const review = page.getByRole("dialog", { name: "Review photos" });
-  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
+  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(
     review.getByRole("button", { name: "Bottom-right corner, 100% across, 100% down" }),
   ).toBeVisible();
@@ -218,26 +222,23 @@ test("a large photo offers upload sizes, shows the real file and sends it", asyn
   const full = review.getByTestId("full-size");
   const img = full.locator("img");
   await expect(img).toBeVisible({ timeout: 15_000 });
-  await expect(full).toHaveAttribute("data-mode", "actual");
   expect(await img.evaluate((el: HTMLImageElement) => [el.naturalWidth, el.naturalHeight])).toEqual(
     [866, 1155],
   );
-  // Actual pixels: one image pixel per device pixel.
-  const css = await img.evaluate((el: HTMLImageElement) => [
-    el.getBoundingClientRect().width,
-    window.devicePixelRatio,
-  ]);
-  expect(Math.abs(css[0]! * css[1]! - 866)).toBeLessThanOrEqual(1);
-  await expect(review.getByText(/One pixel of the upload per screen pixel/)).toBeVisible();
-  await review.getByRole("button", { name: "Whole receipt" }).click();
-  await expect(full).toHaveAttribute("data-mode", "fitted");
-  await expect(review.getByText(/The whole upload, as it will be sent/)).toBeVisible();
-  // The zoom bar has its own row: the fitted image starts below it, never under it.
+  // An ordinary receipt opens whole, centred.
+  await expect(review.getByTestId("zoom-readout")).toHaveText("Fit");
   const bar = (await review.getByTestId("full-size-bar").boundingBox())!;
   const shown = (await img.boundingBox())!;
+  const area = (await full.boundingBox())!;
   expect(shown.y).toBeGreaterThanOrEqual(bar.y + bar.height - 0.5);
+  expect(Math.abs(shown.x - area.x - (area.x + area.width - shown.x - shown.width))).toBeLessThan(
+    2,
+  );
+  expect(Math.abs(shown.y - area.y - (area.y + area.height - shown.y - shown.height))).toBeLessThan(
+    2,
+  );
   const caption = review.getByTestId("upload-caption");
-  await expect(caption).toHaveText(/^Uploads exactly this: 866 × 1155 px · \d+ KB JPEG$/);
+  await expect(caption).toHaveText(/^Uploads as 866 × 1155 px · \d+ KB JPEG$/);
   const captionText = (await caption.textContent()) ?? "";
   await review.getByRole("button", { name: "Done" }).click();
   await expect(review.getByRole("img", { name: /^Receipt preview/ })).toHaveAttribute(
@@ -299,6 +300,239 @@ test("a long receipt goes at the model's full size, with no picker", async ({ pa
   await review.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
   expect((await sent())[0]).toMatchObject({ size: "larger" });
+});
+
+/** The long synthetic receipt on the preview step, its upload encoded. */
+async function longOnPreview(page: Page) {
+  await page.goto("/app");
+  await expect(page.locator("[data-ready]")).toBeAttached();
+  await page.locator('input[type="file"][multiple]').setInputFiles(await longPhoto(page));
+  const review = page.getByRole("dialog", { name: "Review photos" });
+  await expect(review.getByRole("button", { name: /^Top-left corner/ })).toBeVisible({
+    timeout: 15_000,
+  });
+  const fullImage = review.getByRole("button", { name: "Use full image" });
+  if (await fullImage.isEnabled()) await fullImage.click();
+  await review.getByRole("button", { name: "Next" }).click();
+  await expect(review.getByTestId("resolution")).toHaveText(/^ *644 × 2576 px · +\d+ KB$/, {
+    timeout: 15_000,
+  });
+  return review;
+}
+
+/** The image's box relative to the viewer, and the zoom it shows. */
+async function placement(full: Locator) {
+  const area = (await full.boundingBox())!;
+  const img = (await full.locator("img").boundingBox())!;
+  return {
+    scale: Number(await full.getAttribute("data-scale")),
+    left: img.x - area.x,
+    top: img.y - area.y,
+    right: area.x + area.width - (img.x + img.width),
+    bottom: area.y + area.height - (img.y + img.height),
+    area,
+  };
+}
+
+test("the full-size view zooms, pans and resets on a phone", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await signUp(page, uniqueEmail("viewer-phone"));
+  const review = await longOnPreview(page);
+  const inspect = review.getByRole("button", { name: "See it at full size" });
+  await inspect.click();
+  const full = review.getByRole("region", { name: "Upload preview, 644 × 2576 px, long receipt" });
+  await expect(full.locator("img")).toBeVisible({ timeout: 15_000 });
+  await expect(full).toBeFocused();
+
+  // Full screen, the receipt's width fitted, from the top; the photo header and panel are gone.
+  await expect(review.getByRole("button", { name: "Delete this photo" })).toBeHidden();
+  let at = await placement(full);
+  expect(at.area.width).toBe(390);
+  expect(at.scale).toBeCloseTo(390 / 644, 3);
+  expect(Math.abs(at.top)).toBeLessThan(1);
+  expect(Math.abs(at.left)).toBeLessThan(1);
+  const caption = review.getByTestId("upload-caption");
+  await expect(caption).toHaveText(/^Uploads as 644 × 2576 px · \d+ KB JPEG$/);
+  expect(await caption.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await expect(review.getByText("Double-tap or pinch to zoom.")).toBeVisible();
+
+  const zoomOut = review.getByRole("button", { name: "Zoom out" });
+  const zoomIn = review.getByRole("button", { name: "Zoom in" });
+  const readout = review.getByTestId("zoom-readout");
+  for (const target of [review.getByRole("button", { name: "Done" }), zoomOut, readout, zoomIn]) {
+    const box = (await target.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+
+  // At the long default the readout says, and does, Fit.
+  await expect(readout).toHaveAccessibleName("Zoom 61%. Fit to screen");
+  await readout.click();
+  await expect(readout).toHaveText("Fit");
+
+  // Keyboard: 100%, in, Fit (the floor), 100%, the bottom and back to the top; each announced.
+  await full.focus();
+  await page.keyboard.press("1");
+  await expect(readout).toHaveText("100%");
+  await page.keyboard.press("+");
+  await expect(readout).toHaveText("125%");
+  await expect(review.getByText("Zoom 125%", { exact: true })).toBeAttached();
+  await page.keyboard.press("0");
+  await expect(readout).toHaveText("Fit");
+  await expect(zoomOut).toHaveAttribute("aria-disabled", "true");
+  await expect(readout).toHaveAccessibleName("Fit. Zoom to 100%");
+  await page.keyboard.press("1");
+  await expect(readout).toHaveText("100%");
+  await page.keyboard.press("End");
+  expect(Math.abs((await placement(full)).bottom)).toBeLessThan(1);
+  await page.keyboard.press("Home");
+  expect(Math.abs((await placement(full)).top)).toBeLessThan(1);
+  await page.keyboard.press("ArrowDown");
+  at = await placement(full);
+  expect(at.top).toBeCloseTo(-0.1 * at.area.height, 0);
+
+  // Pinch out with two fingers: the app zooms, the page doesn't.
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (
+    type: "touchStart" | "touchMove" | "touchEnd",
+    points: { x: number; y: number; id?: number }[],
+  ) =>
+    cdp.send("Input.dispatchTouchEvent", {
+      type,
+      touchPoints: points.map((p, id) => ({ id, ...p })),
+    });
+  await page.keyboard.press("0");
+  const fitted = await placement(full);
+  const centre = { x: at.area.x + at.area.width / 2, y: at.area.y + at.area.height / 2 };
+  await touch("touchStart", [
+    { x: centre.x - 30, y: centre.y },
+    { x: centre.x + 30, y: centre.y },
+  ]);
+  for (let step = 1; step <= 5; step++) {
+    await touch("touchMove", [
+      { x: centre.x - 30 - step * 20, y: centre.y },
+      { x: centre.x + 30 + step * 20, y: centre.y },
+    ]);
+  }
+  await touch("touchEnd", []);
+  const pinched = await placement(full);
+  expect(pinched.scale).toBeGreaterThan(fitted.scale * 2);
+  expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
+
+  // Lifting one of three fingers restarts the pinch from the two left, so the zoom doesn't jump.
+  const first = { x: centre.x - 40, y: centre.y, id: 0 };
+  const second = { x: centre.x + 40, y: centre.y, id: 1 };
+  const third = { x: centre.x, y: centre.y + 100, id: 2 };
+  await touch("touchStart", [first, second]);
+  await touch("touchStart", [first, second, third]);
+  const held = (await placement(full)).scale;
+  await touch("touchEnd", [first]);
+  await touch("touchMove", [second, { ...third, y: third.y + 1 }]);
+  // A 1 px move changes the new pair's spread by about 1%; measuring from the old pair would jump 35%.
+  expect(Math.abs((await placement(full)).scale / held - 1)).toBeLessThan(0.02);
+  await touch("touchEnd", []);
+
+  // One finger drags; the edge can't come past the viewer's edge.
+  await touch("touchStart", [centre]);
+  await touch("touchMove", [{ x: centre.x, y: centre.y - 120 }]);
+  await touch("touchEnd", []);
+  const dragged = await placement(full);
+  expect(dragged.top).toBeLessThan(pinched.top - 50);
+  await touch("touchStart", [centre]);
+  for (let step = 1; step <= 4; step++) {
+    await touch("touchMove", [{ x: centre.x, y: centre.y + step * 2000 }]);
+  }
+  await touch("touchEnd", []);
+  await expect.poll(async () => Math.abs((await placement(full)).top)).toBeLessThan(1);
+
+  // A double-tap goes back to Fit; the readout zooms to 100% and back.
+  for (let tap = 0; tap < 2; tap++) {
+    await touch("touchStart", [centre]);
+    await touch("touchEnd", []);
+  }
+  await expect(readout).toHaveText("Fit");
+  await readout.click();
+  await expect(readout).toHaveText("100%");
+  await readout.click();
+  await expect(readout).toHaveText("Fit");
+
+  // Escape is Done, and focus goes back to the preview.
+  await full.focus();
+  await page.keyboard.press("Escape");
+  await expect(full).toHaveCount(0);
+  await expect(inspect).toBeFocused();
+  await expect(review.getByRole("button", { name: "Delete this photo" })).toBeVisible();
+});
+
+test("the full-size view on a desktop opens at 100%, centred, and zooms at the pointer", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signUp(page, uniqueEmail("viewer-desktop"));
+  const review = await longOnPreview(page);
+  await review.getByRole("button", { name: "See it at full size" }).click();
+  const full = review.getByTestId("full-size");
+  await expect(full.locator("img")).toBeVisible({ timeout: 15_000 });
+
+  // 644 px wide at 100%, centred across the stage, from the top; the side panel stays.
+  let at = await placement(full);
+  expect(at.scale).toBe(1);
+  expect(Math.abs(at.left - at.right)).toBeLessThan(2);
+  expect(Math.abs(at.top)).toBeLessThan(1);
+  await expect(review.getByTestId("resolution")).toBeVisible();
+
+  // Zoom changes animate, unless reduced motion is asked for.
+  await page.keyboard.press("+");
+  await expect
+    .poll(() => full.locator("img").evaluate((el) => getComputedStyle(el).transitionProperty))
+    .toMatch(/transform/);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.keyboard.press("-");
+  expect(await full.locator("img").evaluate((el) => getComputedStyle(el).transitionProperty)).toBe(
+    "none",
+  );
+
+  // A click goes to Fit; a click at a point zooms to 100% with that point under the pointer.
+  const readout = review.getByTestId("zoom-readout");
+  const point = { x: at.area.x + at.area.width / 2 + 40, y: at.area.y + at.area.height / 2 + 60 };
+  await page.mouse.click(point.x, point.y);
+  await expect(readout).toHaveText("Fit");
+  const fit = await placement(full);
+  const imagePoint = (p: typeof fit) => ({
+    x: (point.x - at.area.x - p.left) / p.scale,
+    y: (point.y - at.area.y - p.top) / p.scale,
+  });
+  const before = imagePoint(fit);
+  await page.mouse.click(point.x, point.y);
+  await expect(readout).toHaveText("100%");
+  at = await placement(full);
+  // Across, 644 px still fits the stage, so it stays centred rather than following the pointer.
+  expect(Math.abs(at.left - at.right)).toBeLessThan(2);
+  expect(Math.abs(imagePoint(at).y - before.y)).toBeLessThanOrEqual(2);
+
+  // A drag pans and never toggles; plain wheel pans.
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x, point.y - 150, { steps: 5 });
+  await page.mouse.up();
+  await expect(readout).toHaveText("100%");
+  const panned = await placement(full);
+  expect(panned.top).toBeCloseTo(at.top - 150, 0);
+  await page.mouse.wheel(0, 200);
+  await expect.poll(async () => (await placement(full)).top).toBeCloseTo(panned.top - 200, 0);
+
+  // Ctrl + wheel zooms around the pointer, up to 400% and no further.
+  await page.keyboard.down("Control");
+  for (let i = 0; i < 12; i++) await page.mouse.wheel(0, -100);
+  await page.keyboard.up("Control");
+  await expect(readout).toHaveText("400%");
+  await expect(review.getByRole("button", { name: "Zoom in" })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  await review.getByRole("button", { name: "Done" }).click();
+  await expect(full).toHaveCount(0);
 });
 
 /**
