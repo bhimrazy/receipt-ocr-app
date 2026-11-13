@@ -90,8 +90,10 @@ flowchart TD
   email[packages/email<br/>Resend]
   ui[packages/ui<br/>primitives]
   calendar[packages/calendar<br/>BS dates, no dependencies]
+  vision[packages/vision<br/>image maths]
 
   web --> core
+  web --> vision
   web --> ui
   web --> calendar
   web --> email
@@ -118,6 +120,7 @@ flowchart TD
 | [`packages/storage`](../../packages/storage)         | S3 client, object keys, signed read URLs.                                                                       | [storage.md](storage.md) |
 | [`packages/email`](../../packages/email)             | Resend sender and React Email templates (HTML + plain text).                                                    | [email.md](email.md)     |
 | [`packages/ui`](../../packages/ui)                   | shadcn-style primitives on Base UI, Tailwind v4 theme tokens.                                                   | [ui.md](ui.md)           |
+| [`packages/vision`](../../packages/vision)           | Capture image maths: quad geometry, the perspective warp, receipt-edge detection. No DOM.                       | [vision.md](vision.md)   |
 | `packages/bench/`, `scripts/`, `docker/`, `.github/` | OCR benchmark, load test, dependency checks, images, CI and deploys.                                            | [tooling.md](tooling.md) |
 
 ## Terms used in these pages
@@ -160,7 +163,7 @@ flowchart TD
 - [Receipt dates and Bikram Sambat](dates.md): the stored date, the month table and its yearly update, the resolver
 - [CI, deployment and migrations](flows/deployment.md)
 - [ai.md](ai.md) (model boundary, prices), [db.md](db.md), [storage.md](storage.md), [email.md](email.md),
-  [ui.md](ui.md), [tooling.md](tooling.md)
+  [ui.md](ui.md), [vision.md](vision.md), [tooling.md](tooling.md)
 
 Related documents outside this folder: [STATUS.md](../STATUS.md) (what is shipped and what is next),
 [deployment.md](../deployment.md) (operator steps), [plans](../plans) and [reviews](../reviews).

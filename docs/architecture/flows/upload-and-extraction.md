@@ -61,16 +61,16 @@ flowchart LR
   (plain HTTP, old browsers) or when access is blocked, "Take photos" falls back to the phone's camera app through
   `<input capture>`. The camera is touch-only: "Take photos" and `?capture=1` apply on `(pointer: coarse)` devices and viewports under `md`, never on fine-pointer desktops, even with a webcam.
 - **Review.** Every photo opens here before upload, in two steps like a document scanner, shared by the whole batch
-  (the photo dots move between photos in either step). `detect-quad.ts` finds the receipt on a 256 px greyscale copy
+  (the photo dots move between photos in either step). `detectQuad` ([`packages/vision`](../vision.md)) finds the receipt on a 256 px greyscale copy
   (Otsu threshold, largest component, convex hull, four corners) and places the corners there; when it isn't
   confident, the crop is the whole image.
   - _Step 1, Adjust corners_: the whole photo with the crop outline. Corners drag with pointer events (a circular
     loupe at 2.8x, drawn from the canvas already on screen, shows the exact point above the finger) or move with arrow
     keys. The handle in the middle of each side moves that whole side, its corners sliding along the neighbouring
-    sides so every angle is kept (`slideEdge` in `geometry.ts`); a drag stops at the image border or where corners
+    sides so every angle is kept (`slideEdge` in `lib/capture/edges.ts`); a drag stops at the image border or where corners
     would get too close, rather than freezing. Rotate turns in quarter turns; Reset to detected and Full image restore
     a crop. "Next" opens step 2.
-  - _Step 2, Preview_: the crop warped straight (`geometry.ts` solves the homography and warps on a canvas) at up to
+  - _Step 2, Preview_: the crop warped straight (`packages/vision` solves the homography and warps the pixels) at up to
     1.5 MP, with the four filters (Original, Enhance, Greyscale, B&W; Enhance is the default when a receipt was found,
     and the last choice is remembered for the session) applied after the warp. The filter thumbnails are of the same
     flattened page. About 400 ms after the last change, the edit is rendered once at full size and the real upload

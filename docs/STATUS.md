@@ -452,7 +452,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   prep in `packages/bench/prep.ts` and real long-receipt crops would let the bench measure the size options too.
 - B&W uploads are JPEG. A palette PNG would be smaller where the filter output is pure black and white, but canvas
   `toBlob` writes only 32-bit PNG; it needs a small PNG writer. Not done.
-- Crop detection, known limits (fixtures in `detect-quad.test.ts`): on a crumpled receipt the sides bow inward and the
+- Crop detection, known limits (fixtures in `packages/vision/tests/detect/detect-quad.test.ts`): on a crumpled receipt the sides bow inward and the
   straight quad takes in a strip of table along them; a lighter band of table beside the paper (bounce light) joins
   the paper above the threshold and widens the quad. Both need edge-based line fitting rather than a thresholded
   mask; a mask opening was tried and does not help.
