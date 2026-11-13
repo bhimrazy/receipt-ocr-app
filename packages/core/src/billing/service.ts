@@ -6,6 +6,7 @@ import {
   desc,
   eq,
   inArray,
+  isNull,
   sql,
   user,
   type BillingSubscription,
@@ -440,7 +441,8 @@ export type ApplyOutcome =
  * buyer (`unknown_transaction`) with the customer it put on it
  * (`customer_mismatch`), the buyer still owns the workspace (`owner`), the
  * price is a Pro price (`price`), and, with sandbox keys on the live site, the
- * buyer is a platform admin (`test_mode`). Two are waiting for a link rather
+ * buyer is a platform admin (`test_mode`), and no other subscription has
+ * linked to that checkout (`transaction_used`). Two are waiting for a link rather
  * than refused: `no_transaction`, a subscription event other than the
  * `created` one that names the transaction, and `subscription`, an adjustment
  * for a subscription we don't have yet.
@@ -452,6 +454,7 @@ export type UnmatchedReason =
   | "owner"
   | "price"
   | "test_mode"
+  | "transaction_used"
   | "subscription";
 
 export type ApplyResult = {
@@ -459,6 +462,10 @@ export type ApplyResult = {
   organizationId: string | null;
   planChange?: PlanChange;
   userId?: string;
+  /**
+   * Why it wasn't linked. On an `applied` result, `customer_mismatch`: the
+   * event named another customer than the stored one, which was kept.
+   */
   unmatched?: UnmatchedReason;
   /** The checkout transaction an unmatched subscription named, for finding it in the provider. */
   transactionId?: string;
@@ -621,6 +628,9 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           return finish({ outcome: "stale", organizationId });
         }
 
+        // The customer is fixed at the link: it is the one the checkout recorded.
+        const customerId = stored?.providerCustomerId ?? snapshot.customerId;
+        const customerChanged = current.customerId !== customerId;
         const pastDueSince =
           current.status !== "past_due"
             ? null
@@ -629,7 +639,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
               : current.updatedAt;
         const values = {
           status: current.status,
-          providerCustomerId: current.customerId,
+          providerCustomerId: customerId,
           priceId: current.priceId,
           billingInterval: current.interval,
           currentPeriodStart: current.currentPeriodStart,
@@ -672,6 +682,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           outcome: "applied",
           organizationId,
           ...(orphan ? { orphanCharging: true as const } : {}),
+          ...(customerChanged ? { unmatched: "customer_mismatch" as const } : {}),
           ...(from === to ? {} : { planChange: { from, to } }),
           ...(buyer ? { userId: buyer } : {}),
           ...(cancel ? { cancelSubscriptionId: snapshot.subscriptionId } : {}),
@@ -766,8 +777,8 @@ async function linkNewSubscription(
   if (!transactionId) return { unmatched: "no_transaction" };
   if (!workspaceId || !userId) return { unmatched: "unknown_transaction" };
   const rows = await tx
-    .execute<{ customer_id: string; owner: boolean; admin: boolean }>(
-      sql`select c.provider_customer_id as customer_id,
+    .execute<{ id: string; customer_id: string; owner: boolean; admin: boolean }>(
+      sql`select c.id, c.provider_customer_id as customer_id,
     exists (select 1 from member m where m.organization_id = c.organization_id
       and m.user_id = c.user_id and m.role = 'owner') as owner,
     exists (select 1 from "user" u where u.id = c.user_id
@@ -783,6 +794,15 @@ async function linkNewSubscription(
   if (!checkout.owner) return { unmatched: "owner" };
   if (!snapshot.priceId || !prices.has(snapshot.priceId)) return { unmatched: "price" };
   if (testMode && !checkout.admin) return { unmatched: "test_mode" };
+  // Conditional, so of two subscriptions racing for one checkout only the first claims it.
+  const claimed = await tx
+    .update(billingCheckouts)
+    .set({ providerSubscriptionId: snapshot.subscriptionId })
+    .where(
+      and(eq(billingCheckouts.id, checkout.id), isNull(billingCheckouts.providerSubscriptionId)),
+    )
+    .returning({ id: billingCheckouts.id });
+  if (claimed.length === 0) return { unmatched: "transaction_used" };
   return { organizationId: workspaceId, userId };
 }
 

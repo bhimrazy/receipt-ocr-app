@@ -601,12 +601,18 @@ export const billingCheckouts = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     providerCustomerId: text("provider_customer_id").notNull(),
     priceId: text("price_id").notNull(),
+    /** The subscription this checkout linked; one checkout links at most one. */
+    providerSubscriptionId: text("provider_subscription_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("billing_checkouts_provider_transaction_idx").on(
       table.provider,
       table.providerTransactionId,
+    ),
+    uniqueIndex("billing_checkouts_provider_subscription_idx").on(
+      table.provider,
+      table.providerSubscriptionId,
     ),
     index("billing_checkouts_user_idx").on(table.userId, table.createdAt),
     index("billing_checkouts_org_idx").on(table.organizationId),

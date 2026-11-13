@@ -359,6 +359,7 @@ erDiagram
     text user_id FK
     text provider_customer_id "the customer put on it"
     text price_id
+    text provider_subscription_id UK "the one it linked"
     timestamptz created_at
   }
   billing_events {
@@ -453,6 +454,7 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `billing_subscriptions` | `billing_subscriptions_provider_id_idx` on `(provider, provider_subscription_id)`               | One row per provider subscription; the apply job finds it by this key                                                                                               |
 | `billing_subscriptions` | `billing_subscriptions_status_check`, `billing_subscriptions_interval_check`                    | Only the five stored statuses; interval `month` or `year` or null                                                                                                   |
 | `billing_checkouts`     | `billing_checkouts_provider_transaction_idx` on `(provider, provider_transaction_id)`           | One row per checkout transaction; the apply job matches a new subscription's transaction by this key                                                                |
+| `billing_checkouts`     | `billing_checkouts_provider_subscription_idx` on `(provider, provider_subscription_id)`         | A checkout links at most one subscription                                                                                                                           |
 | `billing_events`        | `billing_events_provider_event_idx` on `(provider, provider_event_id)`                          | A webhook delivered twice is stored once                                                                                                                            |
 | `billing_events`        | `billing_events_outcome_check`                                                                  | Only `applied`, `stale`, `ignored`, `unmatched`, or null before the job runs                                                                                        |
 | `ocr_calls`             | `ocr_calls_receipt_round_attempt_step_idx` on `(receipt_id, round, job_attempt, step)`          | An attempt's calls written twice (a lost commit acknowledgement, then the failure path) are billed once (`onConflictDoNothing`); each automatic retry keeps its own |

@@ -697,6 +697,119 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(await planOf(workspaceId)).toBe("pro");
     });
 
+    it("links one subscription per checkout: a second one on the same transaction stays unmatched", async () => {
+      const workspaceId = await createWorkspace(other.userId, "used-txn");
+      const first = snapshot({ subscriptionId: `sub_${tag}_used_1`, workspaceId });
+      await recordCheckout(first);
+      expect(await applyOnce(event(first, "subscription.created"))).toMatchObject({
+        outcome: "applied",
+      });
+      const second = snapshot({
+        subscriptionId: `sub_${tag}_used_2`,
+        workspaceId,
+        transactionId: first.transactionId,
+      });
+      expect(await applyOnce(event(second, "subscription.created"))).toMatchObject({
+        outcome: "unmatched",
+        unmatched: "transaction_used",
+      });
+      expect(await subscriptionRow(second.subscriptionId)).toBeUndefined();
+      const [checkout] = await db((d) =>
+        d
+          .select()
+          .from(billingCheckouts)
+          .where(eq(billingCheckouts.providerTransactionId, first.transactionId!)),
+      );
+      expect(checkout?.providerSubscriptionId).toBe(first.subscriptionId);
+    });
+
+    it("keeps the checkout's customer when a waiting snapshot names another, and flags it", async () => {
+      const workspaceId = await createWorkspace(other.userId, "waiting-customer");
+      const id = `sub_${tag}_waiting_customer`;
+      const early = event(
+        snapshot({
+          subscriptionId: id,
+          workspaceId,
+          customerId: `ctm_${tag}_other`,
+          cancelAtPeriodEnd: true,
+          updatedAt: new Date(Date.now() + 1_000),
+          transactionId: null,
+        }),
+      );
+      expect(await applyOnce(early)).toMatchObject({ unmatched: "no_transaction" });
+      const created = snapshot({ subscriptionId: id, workspaceId });
+      await recordCheckout(created);
+      expect(await applyOnce(event(created, "subscription.created"))).toMatchObject({
+        outcome: "applied",
+        unmatched: "customer_mismatch",
+      });
+      // The newer state is applied, the customer is not.
+      expect(await subscriptionRow(id)).toMatchObject({
+        providerCustomerId: created.customerId,
+        cancelAtPeriodEnd: true,
+      });
+    });
+
+    it("ends on the newest snapshot whatever order created, activated and updated apply in", async () => {
+      const workspaceId = await createWorkspace(other.userId, "concurrent");
+      const orders = [
+        ["created", "activated", "updated"],
+        ["updated", "activated", "created"],
+        ["activated", "updated", "created"],
+        ["updated", "created", "activated"],
+      ] as const;
+      for (const [n, order] of orders.entries()) {
+        const id = `sub_${tag}_concurrent_${n}`;
+        const base = Date.now();
+        const events = {
+          created: event(
+            snapshot({ subscriptionId: id, workspaceId, updatedAt: new Date(base) }),
+            "subscription.created",
+          ),
+          activated: event(
+            snapshot({
+              subscriptionId: id,
+              workspaceId,
+              updatedAt: new Date(base + 1_000),
+              transactionId: null,
+            }),
+            "subscription.activated",
+          ),
+          updated: event(
+            snapshot({
+              subscriptionId: id,
+              workspaceId,
+              cancelAtPeriodEnd: true,
+              updatedAt: new Date(base + 2_000),
+              transactionId: null,
+            }),
+            "subscription.updated",
+          ),
+        };
+        await recordCheckout(events.created.subscription!);
+        const rows: string[] = [];
+        for (const name of order) {
+          await run(recordBillingEvent(events[name]));
+          const [row] = await db((d) =>
+            d
+              .select({ id: billingEvents.id })
+              .from(billingEvents)
+              .where(eq(billingEvents.providerEventId, events[name].eventId)),
+          );
+          rows.push(row!.id);
+        }
+        await Promise.all(rows.map((rowId) => run(applyBillingEvent(rowId))));
+
+        expect(await subscriptionRow(id)).toMatchObject({
+          organizationId: workspaceId,
+          cancelAtPeriodEnd: true,
+          providerUpdatedAt: new Date(base + 2_000),
+        });
+        const outcomes = await Promise.all(order.map((name) => outcomeOf(events[name].eventId)));
+        expect(outcomes, order.join(", ")).not.toContain("unmatched");
+      }
+    });
+
     it("with sandbox keys on the live site, links only a platform admin's checkout", async () => {
       vi.stubEnv("PADDLE_ENV", "sandbox");
       vi.stubEnv("VERCEL_ENV", "production");
