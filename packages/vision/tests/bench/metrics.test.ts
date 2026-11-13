@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   compareToBaseline,
+  cornerBars,
   cornerError,
+  encodeLevels,
   encodeOutcomes,
   levelAccuracy,
   scoreScene,
   summarise,
   weighted,
+  type CategoryRecord,
   type SceneResult,
 } from "../../bench/metrics";
 import { MASK_HEIGHT, MASK_WIDTH, type Truth } from "../../bench/scene";
@@ -36,6 +39,8 @@ function truthOf(kind: Truth["kind"] = "paper"): Truth {
     kind,
     quad: box(0.2, 0.2, 0.8, 0.8),
     cornersInFrame: true,
+    expected: kind === "digital" ? "none" : "crop",
+    sides: ["visible", "visible", "visible", "visible"],
     paper,
     print,
     variant: "test",
@@ -132,7 +137,11 @@ describe("aggregation", () => {
 });
 
 describe("compareToBaseline", () => {
-  const row = (outcomes: string) => [{ id: "a", weight: 1, outcomes }];
+  const row = (
+    outcomes: string,
+    levels = "n".repeat(outcomes.length),
+    extra: Partial<CategoryRecord> = {},
+  ) => [{ id: "a", weight: 1, fingerprint: "f", outcomes, levels, ...extra }];
 
   it("passes an unchanged or better run", () => {
     expect(compareToBaseline(row("ggghm"), row("ggghm"))).toEqual([]);
@@ -146,19 +155,70 @@ describe("compareToBaseline", () => {
 
   it("flags a category that gains two harmful scenes even when the total is offset elsewhere", () => {
     const base = [
-      { id: "a", weight: 1, outcomes: "gggg" },
-      { id: "b", weight: 100, outcomes: "hhhh" },
+      { id: "a", weight: 1, fingerprint: "f", outcomes: "gggg", levels: "nnnn" },
+      { id: "b", weight: 100, fingerprint: "f", outcomes: "hhhh", levels: "nnnn" },
     ];
     const now = [
-      { id: "a", weight: 1, outcomes: "gghh" },
-      { id: "b", weight: 100, outcomes: "gggg" },
+      { id: "a", weight: 1, fingerprint: "f", outcomes: "gghh", levels: "nnnn" },
+      { id: "b", weight: 100, fingerprint: "f", outcomes: "gggg", levels: "nnnn" },
     ];
     expect(compareToBaseline(base, now).join()).toContain("a: more than one new harmful");
   });
 
+  it("flags a harmful crop that is now applied even when the harmful count is unchanged", () => {
+    const problems = compareToBaseline(row("ggh", "ssa"), row("ggh", "saa"));
+    expect(problems).toEqual([]);
+    const worse = compareToBaseline(row("ghg", "ssn"), row("ghg", "san"));
+    expect(worse).toEqual(["harmful scenes among applied crops rose"]);
+  });
+
+  it("reports a changed generator instead of comparing different scenes", () => {
+    const problems = compareToBaseline(row("gggg"), row("hhhh", "nnnn", { fingerprint: "other" }));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("generator changed");
+  });
+
+  it("throws when the runs cannot be compared", () => {
+    expect(() => compareToBaseline(row("gggg"), row("ggg"))).toThrow(/scenes against/);
+    expect(() => compareToBaseline([], row("gggg"))).toThrow(/not in the baseline/);
+  });
+
   it("encodes one letter per scene", () => {
-    expect(
-      encodeOutcomes([result("good"), result("loose"), result("miss"), result("harmful")]),
-    ).toBe("glmh");
+    const rs = [
+      result("good"),
+      result("loose", { level: "suggest" }),
+      result("miss"),
+      result("harmful", { level: "apply" }),
+    ];
+    expect(encodeOutcomes(rs)).toBe("glmh");
+    expect(encodeLevels(rs)).toBe("nsna");
+  });
+});
+
+describe("cornerBars", () => {
+  const rows = (error: number) => [
+    {
+      id: "table",
+      results: Array.from({ length: 10 }, () => result("good", { cornerError: error })),
+    },
+    { id: "hand", results: [result("good", { cornerError: 0.5 })] },
+  ];
+
+  it("passes tight corners and ignores categories that are not plain", () => {
+    expect(cornerBars(rows(0.005))).toEqual([]);
+  });
+
+  it("flags a median or 90th percentile over the bar on plain categories", () => {
+    expect(cornerBars(rows(0.01))[0]).toContain("median");
+    const mixed = [
+      {
+        id: "a4",
+        results: [
+          ...Array.from({ length: 8 }, () => result("good", { cornerError: 0.004 })),
+          ...Array.from({ length: 2 }, () => result("good", { cornerError: 0.03 })),
+        ],
+      },
+    ];
+    expect(cornerBars(mixed)).toEqual([expect.stringContaining("90th")]);
   });
 });

@@ -159,44 +159,104 @@ export function levelAccuracy(results: SceneResult[]) {
   };
 }
 
-export type CategoryOutcomes = { id: string; weight: number; outcomes: string };
+export type CategoryRecord = {
+  id: string;
+  weight: number;
+  /** Hash of every rendered frame and truth in the category, so a changed generator cannot pass as a detector change. */
+  fingerprint: string;
+  /** One letter per scene: g, l, m or h. */
+  outcomes: string;
+  /** One letter per scene: a (apply), s (suggest) or n (none). */
+  levels: string;
+};
 
-const LETTER: Record<Outcome, string> = { good: "g", loose: "l", miss: "m", harmful: "h" };
+const OUTCOME_LETTER: Record<Outcome, string> = { good: "g", loose: "l", miss: "m", harmful: "h" };
+const LEVEL_LETTER: Record<Detection["level"], string> = { apply: "a", suggest: "s", none: "n" };
 export const encodeOutcomes = (results: SceneResult[]) =>
-  results.map((r) => LETTER[r.outcome]).join("");
+  results.map((r) => OUTCOME_LETTER[r.outcome]).join("");
+export const encodeLevels = (results: SceneResult[]) =>
+  results.map((r) => LEVEL_LETTER[r.level]).join("");
+
+/** Categories whose paper is intact and plainly framed, where the corner-error bars apply. */
+export const PLAIN_CATEGORIES = ["table", "thermal", "crumpled", "folded", "a4"];
+export const MAX_MEDIAN_CORNER_ERROR = 0.007;
+export const MAX_P90_CORNER_ERROR = 0.015;
+
+const count = (s: string, c: string) => [...s].filter((x) => x === c).length;
 
 /**
- * Pass bars against a baseline on the same scenes: weighted harmful does not rise, no category gains more than one
- * harmful scene, weighted good does not fall, no category loses more than two good scenes. Returns the violations.
+ * The pass bars against a baseline on the same scenes: weighted harmful does not rise, no category gains more than
+ * one harmful scene, harmful among applied crops does not rise, weighted good does not fall, no category loses more
+ * than two good scenes. Returns the violations. Throws when the two runs cannot be compared (a category missing from
+ * the baseline, or a different number of scenes); returns one violation when the scenes themselves differ.
  */
-export function compareToBaseline(
-  baseline: CategoryOutcomes[],
-  current: CategoryOutcomes[],
-): string[] {
-  const problems: string[] = [];
-  const rate = (rows: CategoryOutcomes[], letter: string) => {
-    const total = rows.reduce((s, r) => s + r.weight, 0) || 1;
-    return (
-      rows.reduce(
-        (s, r) =>
-          s +
-          (r.weight * [...r.outcomes].filter((c) => c === letter).length) /
-            Math.max(1, r.outcomes.length),
-        0,
-      ) / total
-    );
-  };
-  const eps = 1e-9;
-  if (rate(current, "h") > rate(baseline, "h") + eps) problems.push("weighted harmful rate rose");
-  if (rate(current, "g") < rate(baseline, "g") - eps) problems.push("weighted good rate fell");
-  for (const now of current) {
+export function compareToBaseline(baseline: CategoryRecord[], current: CategoryRecord[]): string[] {
+  const pairs = current.map((now) => {
     const was = baseline.find((b) => b.id === now.id);
-    if (!was) continue;
-    const countOf = (s: string, c: string) => [...s].filter((x) => x === c).length;
-    if (countOf(now.outcomes, "h") - countOf(was.outcomes, "h") > 1)
+    if (!was) throw new Error(`category ${now.id} is not in the baseline`);
+    if (was.outcomes.length !== now.outcomes.length) {
+      throw new Error(
+        `${now.id}: ${now.outcomes.length} scenes against ${was.outcomes.length} in the baseline`,
+      );
+    }
+    return { now, was };
+  });
+  const changed = pairs.filter(({ now, was }) => now.fingerprint !== was.fingerprint);
+  if (changed.length) {
+    return [
+      `scenes differ from the baseline in ${changed.map((c) => c.now.id).join(", ")}: the generator changed, so rewrite the baseline with --write-baseline --force`,
+    ];
+  }
+
+  const problems: string[] = [];
+  const total = pairs.reduce((s, { now }) => s + now.weight, 0) || 1;
+  const rate = (pick: "now" | "was", letter: string) =>
+    pairs.reduce(
+      (s, pair) =>
+        s +
+        (pair.now.weight * count(pair[pick].outcomes, letter)) /
+          Math.max(1, pair[pick].outcomes.length),
+      0,
+    ) / total;
+  const appliedHarmful = (pick: "now" | "was") =>
+    pairs.reduce(
+      (s, pair) =>
+        s +
+        [...pair[pick].outcomes].filter((o, i) => o === "h" && pair[pick].levels[i] === "a").length,
+      0,
+    );
+  const eps = 1e-9;
+  if (rate("now", "h") > rate("was", "h") + eps) problems.push("weighted harmful rate rose");
+  if (rate("now", "g") < rate("was", "g") - eps) problems.push("weighted good rate fell");
+  if (appliedHarmful("now") > appliedHarmful("was")) {
+    problems.push("harmful scenes among applied crops rose");
+  }
+  for (const { now, was } of pairs) {
+    if (count(now.outcomes, "h") - count(was.outcomes, "h") > 1) {
       problems.push(`${now.id}: more than one new harmful scene`);
-    if (countOf(was.outcomes, "g") - countOf(now.outcomes, "g") > 2)
+    }
+    if (count(was.outcomes, "g") - count(now.outcomes, "g") > 2) {
       problems.push(`${now.id}: lost more than two good scenes`);
+    }
+  }
+  return problems;
+}
+
+/** Median and 90th-percentile corner error over the plain categories present in `rows`; empty when within the bars. */
+export function cornerBars(rows: { id: string; results: SceneResult[] }[]): string[] {
+  const stats = summarise(
+    rows.filter((r) => PLAIN_CATEGORIES.includes(r.id)).flatMap((r) => r.results),
+  );
+  const problems: string[] = [];
+  if (stats.cornerMedian !== null && stats.cornerMedian > MAX_MEDIAN_CORNER_ERROR) {
+    problems.push(
+      `median corner error ${(stats.cornerMedian * 100).toFixed(2)}% on plain categories`,
+    );
+  }
+  if (stats.cornerP90 !== null && stats.cornerP90 > MAX_P90_CORNER_ERROR) {
+    problems.push(
+      `90th-percentile corner error ${(stats.cornerP90 * 100).toFixed(2)}% on plain categories`,
+    );
   }
   return problems;
 }

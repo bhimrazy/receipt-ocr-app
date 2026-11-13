@@ -6,82 +6,114 @@
     {
       "id": "table",
       "weight": 18,
-      "outcomes": "gggggggggggggggggggggggggggggggggggggggg"
+      "fingerprint": "4fd39dea",
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg",
+      "levels": "aaaaaaaaaaaaasaaaaaaaaaaaaaaasaaaaaaaaaa"
     },
     {
       "id": "hand",
       "weight": 15,
-      "outcomes": "llgllghgghhlhlhhlllhhllllllghlhlhhlhhhll"
+      "fingerprint": "96de894a",
+      "outcomes": "lllhlhlhhlllghlhlllhllglhhllhlgglhglglll",
+      "levels": "ssssssssssssssssssssssssssssssssssssasss"
     },
     {
       "id": "thumb",
       "weight": 4,
-      "outcomes": "gggghlllmhggllglgggggghlglggghhghhghghlg"
+      "fingerprint": "d82cd426",
+      "outcomes": "ggggmmghhlgghghglghgggghlhggllggghhgghhh",
+      "levels": "ssssnnssssssssssssssssssssssssssssssssss"
     },
     {
       "id": "white",
       "weight": 10,
-      "outcomes": "mgmgmggmmgmgmglgmmgggglmgglmmmmmmmmgmgmm"
+      "fingerprint": "7a89261a",
+      "outcomes": "mmgmmmgmlmggmmggmmglmmgmmmggmmgmmmgmmlgm",
+      "levels": "nnsnnnansnasnnasnnssnnannnasnnannnannsan"
     },
     {
       "id": "clutter",
       "weight": 7,
-      "outcomes": "hmlllggmmglggllmglgmmllmgllgllggglhllggg"
+      "fingerprint": "c67fbb98",
+      "outcomes": "mgmhmlgmlllglhmlglhllgmlllgglmlgglllghlg",
+      "levels": "nansnsansssassnsassssanssssssnsassssasss"
     },
     {
       "id": "patterned",
       "weight": 7,
-      "outcomes": "gggmglgggggggmgggggggggmlgggggggggggghmm"
+      "fingerprint": "0e61cc0e",
+      "outcomes": "gggghgggghgggghmggghmggghgggghmggghlgggh",
+      "levels": "saasssaaassaaasnaaasnaaassaaasnasassaaas"
     },
     {
       "id": "thermal",
       "weight": 6,
-      "outcomes": "gggggggmgggmgggmgggggggggggggggmhggggggg"
+      "fingerprint": "c68f04a0",
+      "outcomes": "ggggggggmggggggggggggggmgmgggggggggmgggg",
+      "levels": "ssssssssnsassssssssssasnsnssssasassnsssa"
     },
     {
       "id": "crumpled",
       "weight": 5,
-      "outcomes": "gggggggggggggggggggggggggggggggggggggggg"
+      "fingerprint": "2b4787c9",
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg",
+      "levels": "sssssssssssssssssssasasasssssssssasasssa"
     },
     {
       "id": "folded",
       "weight": 2,
-      "outcomes": "gggggggggggggggggggggggggggggggggggggggg"
+      "fingerprint": "10913ae6",
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg",
+      "levels": "aaaaasaaaaaaaaaaaaasaaaaaaaaaaaaaasasaaa"
     },
     {
       "id": "shadow",
       "weight": 5,
-      "outcomes": "gggmggmlgggmggggmgggggmgggghgggmghghhggg"
+      "fingerprint": "3232aed9",
+      "outcomes": "gggmhgmghhggghhgggmhgghhmggghhmhghhggghm",
+      "levels": "aasnssnssssaassasanssassnaaassnsssssaasn"
     },
     {
       "id": "lowlight",
       "weight": 4,
-      "outcomes": "gggggggggggggggggggggggggggggggggggggggg"
+      "fingerprint": "5e05dada",
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg",
+      "levels": "saaaaaaaaaaaaaasaaaaaaaaaaassaaaaaaaaaaa"
     },
     {
       "id": "glare",
       "weight": 2,
-      "outcomes": "lgllggglgggggggghggggggglgglglglgggllggl"
+      "fingerprint": "f8e08c1e",
+      "outcomes": "glhlhlggglgggghlghgghgggggglgggggghlglgl",
+      "levels": "sssassaasassassaassasssssssaaaaasssasaaa"
     },
     {
       "id": "partial",
       "weight": 5,
-      "outcomes": "ggghggghghghhgghhhggghhhhggghhgghggghggg"
+      "fingerprint": "9e4462d3",
+      "outcomes": "gggggghggghggghgggggghghghhhghhhghghhggg",
+      "levels": "ssssssssssssssssssssssssssssssssssssssss"
     },
     {
       "id": "several",
       "weight": 2,
-      "outcomes": "hllghlhlgghhlhlhhhghhllhhlhlllhhhllhhhhh"
+      "fingerprint": "0500fd61",
+      "outcomes": "hhllhhhhhlhlglhhgghhhhhlghhhhlhhghhlghhh",
+      "levels": "sssssssssssssassssssssssssssssssssssssss"
     },
     {
       "id": "a4",
       "weight": 4,
-      "outcomes": "ggggglgggggggggggggggggggggggggggggggggg"
+      "fingerprint": "24f1ff15",
+      "outcomes": "ggggggggggggggggggggggggggghgggggggggggg",
+      "levels": "aaaaaaaaaaaaaaaaasaaaaaaaaasaaaaaaaaaaaa"
     },
     {
       "id": "digital",
       "weight": 5,
-      "outcomes": "hgggggggghgggghgghgggggghggggggggghggghg"
+      "fingerprint": "014e1749",
+      "outcomes": "ggggghhhggggghhhggggghhhggggghhhggggghhh",
+      "levels": "nnnnnsasnnnnnsasnnnnnsasnnnnnsssnnnnnsas"
     }
   ]
 }

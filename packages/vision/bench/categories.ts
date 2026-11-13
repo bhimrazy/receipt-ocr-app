@@ -20,7 +20,8 @@ export type Category = {
   label: string;
   /** Share of real captures, assumed (no study publishes this mix); weights are normalised when combined. */
   weight: number;
-  spec: (r: Rng) => SceneSpec;
+  /** `slot` is the scene's seed, so consecutive seeds rotate through a category's variants evenly. */
+  spec: (r: Rng, slot: number) => SceneSpec;
 };
 
 const SKIN: RGB[] = [
@@ -31,6 +32,8 @@ const SKIN: RGB[] = [
   [121, 80, 58],
   [92, 60, 44],
 ];
+
+const variantOf = <T>(slot: number, list: readonly T[]): T => list[slot % list.length]!;
 
 const grey = (v: number): RGB => [v, v, v];
 const tint = (r: Rng, base: RGB, spread: number): RGB => [
@@ -160,23 +163,30 @@ function darkTable(r: Rng): Background {
   };
 }
 
-function lightSurface(r: Rng): Background {
-  const v = between(r, 215, 250);
-  return pick<Background>(r, [
-    { kind: "flat", color: tint(r, [v, v - 2, v - 6], 2) },
-    { kind: "sheet", color: tint(r, [v, v, v + 2], 2) },
-    {
-      kind: "wood",
-      color: tint(r, [206, 170, 126], 8),
-      angle: between(r, 0, Math.PI),
-      freq: between(r, 0.12, 0.3),
-      contrast: between(r, 0.05, 0.12),
-    },
-  ]);
+const LIGHT_SURFACES = ["white desk", "bed sheet", "light wood"] as const;
+
+function lightSurface(
+  r: Rng,
+  kind: (typeof LIGHT_SURFACES)[number] = pick(r, LIGHT_SURFACES),
+): Background {
+  const v = between(r, 225, 250);
+  if (kind === "white desk") return { kind: "flat", color: tint(r, [v, v - 2, v - 6], 2) };
+  if (kind === "bed sheet") return { kind: "sheet", color: tint(r, [v, v, v + 2], 2) };
+  return {
+    kind: "wood",
+    color: tint(r, [206, 170, 126], 8),
+    angle: between(r, 0, Math.PI),
+    freq: between(r, 0.12, 0.3),
+    contrast: between(r, 0.05, 0.12),
+  };
 }
 
-function patternedSurface(r: Rng): { bg: Background; shapes: Shape[]; variant: string } {
-  const kind = pick(r, ["check", "denim", "fabric", "seat"] as const);
+const PATTERNED = ["check", "denim", "fabric", "seat", "dashboard"] as const;
+
+function patternedSurface(
+  r: Rng,
+  kind: (typeof PATTERNED)[number] = pick(r, PATTERNED),
+): { bg: Background; shapes: Shape[]; variant: string } {
   if (kind === "check") {
     const a = tint(
       r,
@@ -207,6 +217,30 @@ function patternedSurface(r: Rng): { bg: Background; shapes: Shape[]; variant: s
       shapes: [],
       variant: "dark fabric",
     };
+  if (kind === "dashboard") {
+    const a = between(r, -0.08, 0.08);
+    return {
+      bg: { kind: "fabric", color: grey(between(r, 24, 38)) },
+      shapes: [
+        {
+          pts: rect(WIDTH / 2, HEIGHT * 0.2, 520, 150, a),
+          color: grey(between(r, 62, 84)),
+          alpha: 1,
+        },
+        {
+          pts: rect(WIDTH / 2, HEIGHT * 0.34, 520, 8, a),
+          color: grey(between(r, 150, 180)),
+          alpha: 1,
+        },
+        {
+          pts: rect(WIDTH / 2, HEIGHT * 0.9, 300, 110, a),
+          color: grey(between(r, 52, 70)),
+          alpha: 1,
+        },
+      ],
+      variant: "dashboard",
+    };
+  }
   const stitches: Shape[] = [];
   const pitch = between(r, 70, 110);
   for (let y = between(r, 0, pitch); y < HEIGHT; y += pitch) {
@@ -264,8 +298,13 @@ function keyboard(r: Rng, lightKeys: boolean): Shape[] {
   return shapes;
 }
 
-function clutter(r: Rng, avoid: Quad): { bg: Background; shapes: Shape[]; variant: string } {
-  const kind = pick(r, ["keyboard light", "keyboard dark", "papers", "laptop", "objects"] as const);
+const CLUTTER = ["keyboard light", "keyboard dark", "papers", "laptop", "objects"] as const;
+
+function clutter(
+  r: Rng,
+  avoid: Quad,
+  kind: (typeof CLUTTER)[number],
+): { bg: Background; shapes: Shape[]; variant: string } {
   const bg: Background = chance(r, 0.5) ? darkTable(r) : lightSurface(r);
   if (kind === "keyboard light" || kind === "keyboard dark") {
     return { bg, shapes: keyboard(r, kind === "keyboard light"), variant: kind };
@@ -451,8 +490,8 @@ export const CATEGORIES: Category[] = [
     id: "hand",
     label: "Hand-held, room behind, fingers on it",
     weight: 15,
-    spec: (r) => {
-      const variant = pick(r, ["room", "room", "white wall", "sleeve"] as const);
+    spec: (r, slot) => {
+      const variant = variantOf(slot, ["room", "white wall", "sleeve"] as const);
       const q = fitInFrame(
         makeQuad(
           r,
@@ -488,8 +527,8 @@ export const CATEGORIES: Category[] = [
     id: "thumb",
     label: "Hand-held, thumb over a corner",
     weight: 4,
-    spec: (r) => {
-      const onTable = chance(r, 0.4);
+    spec: (r, slot) => {
+      const onTable = slot % 5 < 2;
       const q = fitInFrame(
         makeQuad(
           r,
@@ -528,13 +567,12 @@ export const CATEGORIES: Category[] = [
     id: "white",
     label: "White or light surface",
     weight: 10,
-    spec: (r) => {
+    spec: (r, slot) => {
       const q = tableQuad(r);
-      const darker = chance(r, 0.3);
-      const bg = darker
-        ? { kind: "flat" as const, color: grey(between(r, 232, 246)) }
-        : lightSurface(r);
-      const spec = plainSpec(r, darker ? "darker receipt" : "light surface", bg, q);
+      const variant = variantOf(slot, [...LIGHT_SURFACES, "darker receipt"] as const);
+      const darker = variant === "darker receipt";
+      const bg = darker ? lightSurface(r, "white desk") : lightSurface(r, variant);
+      const spec = plainSpec(r, variant, bg, q);
       if (darker)
         spec.papers = [paper(r, q, { tone: grey(between(r, 188, 208)), inkColor: grey(40) })];
       return spec;
@@ -544,9 +582,9 @@ export const CATEGORIES: Category[] = [
     id: "clutter",
     label: "Messy desk, keyboard, clutter",
     weight: 7,
-    spec: (r) => {
+    spec: (r, slot) => {
       const q = tableQuad(r);
-      const { bg, shapes, variant } = clutter(r, q);
+      const { bg, shapes, variant } = clutter(r, q, variantOf(slot, CLUTTER));
       return plainSpec(r, variant, bg, q, { shapes: [...shapes, dropShadow(r, q)] });
     },
   },
@@ -554,9 +592,9 @@ export const CATEGORIES: Category[] = [
     id: "patterned",
     label: "Patterned cloth, lap, car seat",
     weight: 7,
-    spec: (r) => {
+    spec: (r, slot) => {
       const q = tableQuad(r);
-      const { bg, shapes, variant } = patternedSurface(r);
+      const { bg, shapes, variant } = patternedSurface(r, variantOf(slot, PATTERNED));
       return plainSpec(r, variant, bg, q, { shapes: [...shapes, dropShadow(r, q)] });
     },
   },
@@ -564,7 +602,7 @@ export const CATEGORIES: Category[] = [
     id: "thermal",
     label: "Long thermal, 1:3.5 to 1:5.5",
     weight: 6,
-    spec: (r) => {
+    spec: (r, slot) => {
       const q = fitInFrame(
         makeQuad(
           r,
@@ -576,16 +614,22 @@ export const CATEGORIES: Category[] = [
           0.015,
         ),
       );
-      return plainSpec(r, "thermal", chance(r, 0.7) ? darkTable(r) : patternedSurface(r).bg, q);
+      const onPattern = slot % 4 === 3;
+      return plainSpec(
+        r,
+        onPattern ? "thermal on pattern" : "thermal",
+        onPattern ? patternedSurface(r).bg : darkTable(r),
+        q,
+      );
     },
   },
   {
     id: "crumpled",
     label: "Crumpled or curled",
     weight: 5,
-    spec: (r) => {
+    spec: (r, slot) => {
       const q = tableQuad(r);
-      const curled = chance(r, 0.4);
+      const curled = slot % 5 >= 3;
       const bow = () => between(r, 0.005, 0.03);
       const creases = Array.from({ length: Math.floor(between(r, 4, 9)) }, () => {
         const a = between(r, 0, Math.PI);
@@ -627,12 +671,12 @@ export const CATEGORIES: Category[] = [
     id: "shadow",
     label: "Shadow across the paper",
     weight: 5,
-    spec: (r) => {
+    spec: (r, slot) => {
       const q = tableQuad(r);
-      const bg = chance(r, 0.6) ? darkTable(r) : lightSurface(r);
+      const bg = slot % 5 < 3 ? darkTable(r) : lightSurface(r);
       const spec = plainSpec(r, "shadow", bg, q);
       const mid = { x: q.reduce((s, p) => s + p.x, 0) / 4, y: q.reduce((s, p) => s + p.y, 0) / 4 };
-      if (chance(r, 0.6)) {
+      if (slot % 3 !== 2) {
         const a = between(r, 0, Math.PI * 2);
         spec.light.shadow = {
           kind: "half",
@@ -660,7 +704,7 @@ export const CATEGORIES: Category[] = [
     id: "lowlight",
     label: "Low light and noise",
     weight: 4,
-    spec: (r) => {
+    spec: (r, slot) => {
       const q = tableQuad(r);
       const spec = plainSpec(r, "low light", darkTable(r), q);
       spec.light = {
@@ -668,7 +712,7 @@ export const CATEGORIES: Category[] = [
         vignette: between(r, 0.1, 0.4),
         noise: between(r, 5, 11),
       };
-      if (chance(r, 0.35)) {
+      if (slot % 3 === 2) {
         spec.variant = "motion blur";
         spec.camera.motion = motionBlur(r);
       }
@@ -679,10 +723,10 @@ export const CATEGORIES: Category[] = [
     id: "glare",
     label: "Glare, or a light band beside the paper",
     weight: 2,
-    spec: (r) => {
+    spec: (r, slot) => {
       const q = tableQuad(r);
       const spec = plainSpec(r, "glare", darkTable(r), q);
-      if (chance(r, 0.5)) {
+      if (slot % 2 === 0) {
         const mid = onSide(q, 1, 0.5).p;
         spec.light.glare = {
           x: mid.x + gauss(r, 30),
@@ -734,33 +778,33 @@ export const CATEGORIES: Category[] = [
     id: "several",
     label: "Several or overlapping receipts",
     weight: 2,
-    spec: (r) => {
-      const q = fitInFrame(
-        makeQuad(
-          r,
-          between(r, 120, 180),
-          between(r, 220, 300),
-          between(r, 240, 340),
-          between(r, 1.4, 2.1),
-          gauss(r, 10),
-        ),
-        8,
-      );
+    spec: (r, slot) => {
+      const mode = variantOf(slot, ["separate", "close", "under", "over"] as const);
+      const gap =
+        mode === "separate"
+          ? between(r, 30, 50)
+          : mode === "close"
+            ? between(r, 0, 8)
+            : -between(r, 20, 60);
+      const hMain = between(r, 220, 290);
+      const hOther = between(r, 200, 280);
+      const wMain = hMain / 2;
+      const wOther = hOther / 2;
+      const left = (WIDTH - (wMain + wOther + gap)) / 2;
+      const cx = left + wMain / 2;
+      const main = makeQuad(r, cx, between(r, 220, 290), hMain, 2, gauss(r, 6));
       const other = makeQuad(
         r,
-        q[1]!.x + between(r, 60, 110),
-        between(r, 200, 320),
-        between(r, 220, 320),
-        between(r, 1.4, 2.1),
-        gauss(r, 10),
+        cx + wMain / 2 + gap + wOther / 2,
+        between(r, 200, 310),
+        hOther,
+        2,
+        gauss(r, 6),
       );
-      const mode = pick(r, ["beside", "under", "over"] as const);
-      const shift = mode === "beside" ? 0 : -between(r, 20, 60);
-      const moved = other.map((p) => ({ x: p.x + shift, y: p.y })) as Quad;
-      const spec = plainSpec(r, mode, darkTable(r), q);
-      const second = paper(r, moved, { main: false });
+      const spec = plainSpec(r, mode, darkTable(r), main);
+      const second = paper(r, other, { main: false });
       spec.papers = mode === "over" ? [spec.papers[0]!, second] : [second, spec.papers[0]!];
-      spec.shapes = [dropShadow(r, moved), dropShadow(r, q)];
+      spec.shapes = [dropShadow(r, other), dropShadow(r, main)];
       return spec;
     },
   },
@@ -788,17 +832,20 @@ export const CATEGORIES: Category[] = [
     id: "digital",
     label: "Screenshot or PDF render, no edges",
     weight: 5,
-    spec: (r) => {
-      const variant = pick(r, [
+    spec: (r, slot) => {
+      const variant = variantOf(slot, [
         "light",
         "dark mode",
         "status bar",
         "jpeg",
         "card",
         "app bar",
+        "card on dark",
+        "dark bars",
       ] as const);
       const dark = variant === "dark mode";
-      const inset = variant === "card" ? Math.floor(between(r, 16, 40)) : 0;
+      const inset =
+        variant === "card" || variant === "card on dark" ? Math.floor(between(r, 16, 40)) : 0;
       return {
         variant,
         bg: { kind: "flat", color: grey(255) },
@@ -815,8 +862,17 @@ export const CATEGORIES: Category[] = [
           bar:
             variant === "app bar"
               ? { height: Math.floor(between(r, 36, 64)), color: tint(r, [30, 110, 90], 15) }
-              : undefined,
-          card: inset ? { inset, backdrop: grey(between(r, 225, 240)) } : undefined,
+              : variant === "dark bars"
+                ? { height: 24, color: grey(between(r, 16, 30)) }
+                : undefined,
+          navBar:
+            variant === "dark bars" ? { height: 48, color: grey(between(r, 16, 30)) } : undefined,
+          card: inset
+            ? {
+                inset,
+                backdrop: grey(variant === "card" ? between(r, 225, 240) : between(r, 16, 40)),
+              }
+            : undefined,
           seed: Math.floor(r() * 1e6),
         },
       };
@@ -824,15 +880,32 @@ export const CATEGORIES: Category[] = [
   },
 ];
 
-/** Seeds the generator treats as separate pools, so a threshold tuned on one is judged on the other. */
+/**
+ * Seed pools. `tune` is for choosing thresholds, `gate` is the per-PR check, `holdout` is never tuned against and is
+ * run for the detector rewrites and before v2 becomes the default. The pools do not overlap at their caps.
+ */
 export const SEED_SETS = {
-  tune: 1000,
-  gate: 5000,
+  tune: { first: 1000, max: 1000, scenes: 10 },
+  gate: { first: 5000, max: 1000, scenes: 40 },
+  holdout: { first: 9000, max: 1000, scenes: 200 },
 } as const;
 export type SeedSet = keyof typeof SEED_SETS;
 
-export function renderCategoryScene(categoryIndex: number, seed: number): Scene {
-  const category = CATEGORIES[categoryIndex]!;
-  const sceneSeed = Math.floor(hash3(categoryIndex, seed, 0x5eed) * 2 ** 31);
-  return renderScene(category.spec(mulberry32(sceneSeed)), sceneSeed);
+/** The seeds of `count` scenes per category from a pool; throws past the pool's cap. */
+export function seedsFor(set: SeedSet, count: number): number[] {
+  const pool = SEED_SETS[set];
+  if (!Number.isInteger(count) || count < 1 || count > pool.max) {
+    throw new Error(`${set} holds 1 to ${pool.max} scenes per category`);
+  }
+  return Array.from({ length: count }, (_, i) => pool.first + i);
+}
+
+const idHash = (id: string) => [...id].reduce((h, c) => Math.imul(h, 31) + c.charCodeAt(0), 7) | 0;
+
+/** Seeded by the category id, so reordering or adding categories leaves existing scenes alone. */
+export function renderCategoryScene(categoryId: string, seed: number): Scene {
+  const category = CATEGORIES.find((c) => c.id === categoryId);
+  if (!category) throw new Error(`no category ${categoryId}`);
+  const sceneSeed = Math.floor(hash3(idHash(categoryId), seed, 0x5eed) * 2 ** 31);
+  return renderScene(category.spec(mulberry32(sceneSeed), seed), sceneSeed);
 }

@@ -1,34 +1,38 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { detectQuad } from "../src/detect/detect-quad";
 import type { Pixels } from "../src/geometry";
-import { CATEGORIES, SEED_SETS, renderCategoryScene, type SeedSet } from "./categories";
+import { CATEGORIES, SEED_SETS, renderCategoryScene, seedsFor, type SeedSet } from "./categories";
+import { fingerprintScene, hex } from "./fingerprint";
 import {
   compareToBaseline,
+  cornerBars,
+  encodeLevels,
   encodeOutcomes,
   levelAccuracy,
   scoreScene,
   summarise,
   weighted,
-  type CategoryOutcomes,
+  type CategoryRecord,
+  type CategoryStats,
   type SceneResult,
 } from "./metrics";
-import { MASK_HEIGHT, MASK_WIDTH, WIDTH } from "./scene";
+import { MASK_HEIGHT, MASK_WIDTH, pointSample } from "./scene";
 
 const BASELINE = new URL("./baseline.json", import.meta.url);
 
-type Baseline = { set: SeedSet; firstSeed: number; scenes: number; categories: CategoryOutcomes[] };
+type Baseline = { set: SeedSet; firstSeed: number; scenes: number; categories: CategoryRecord[] };
 
 function args() {
   const out = {
     set: "gate" as SeedSet,
-    scenes: 40,
+    scenes: 0,
     category: "",
     write: false,
+    force: false,
     check: false,
     timing: true,
-    verbose: false,
   };
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i++) {
@@ -37,31 +41,30 @@ function args() {
     else if (a === "--scenes") out.scenes = Number(argv[++i]);
     else if (a === "--category") out.category = argv[++i]!;
     else if (a === "--write-baseline") out.write = true;
+    else if (a === "--force") out.force = true;
     else if (a === "--check") out.check = true;
     else if (a === "--no-timing") out.timing = false;
-    else if (a === "--verbose") out.verbose = true;
     else throw new Error(`unknown argument ${a}`);
   }
-  if (!(out.set in SEED_SETS)) throw new Error("--set is tune or gate");
-  if (!Number.isInteger(out.scenes) || out.scenes < 1)
-    throw new Error("--scenes is a positive integer");
+  if (!(out.set in SEED_SETS)) throw new Error("--set is tune, gate or holdout");
+  if (!out.scenes) out.scenes = SEED_SETS[out.set].scenes;
   return out;
 }
 
 const pct = (v: number | null, digits = 0) => (v === null ? "-" : `${(v * 100).toFixed(digits)}%`);
 
-/** The first pixel of each 2x2 block, the size the detector works at. */
-function reduced(p: Pixels): Pixels {
-  if (p.width !== WIDTH) return p;
-  const data = new Uint8ClampedArray(MASK_WIDTH * MASK_HEIGHT * 4);
-  for (let y = 0; y < MASK_HEIGHT; y++) {
-    for (let x = 0; x < MASK_WIDTH; x++) {
-      const s = (y * 2 * p.width + x * 2) * 4;
-      data.set(p.data.subarray(s, s + 4), (y * MASK_WIDTH + x) * 4);
-    }
+function table(lines: string[][]) {
+  const widths = lines[0]!.map((_, i) => Math.max(...lines.map((l) => l[i]!.length)));
+  for (const l of lines) {
+    console.log(
+      l
+        .map((cell, i) => (i === 0 ? cell.padEnd(widths[i]!) : cell.padStart(widths[i]!)))
+        .join("  "),
+    );
   }
-  return { data, width: MASK_WIDTH, height: MASK_HEIGHT };
 }
+
+const rates = (s: CategoryStats) => [pct(s.good), pct(s.loose), pct(s.miss), pct(s.harmful)];
 
 function time(frames: Pixels[]) {
   for (const f of frames.slice(0, 30)) detectQuad(f);
@@ -84,30 +87,42 @@ function bundleSize() {
 
 function main() {
   const opts = args();
-  const firstSeed = SEED_SETS[opts.set];
-  const picked = CATEGORIES.map((c, index) => ({ c, index })).filter(
-    ({ c }) => !opts.category || c.id === opts.category,
-  );
+  const seeds = seedsFor(opts.set, opts.scenes);
+  const picked = CATEGORIES.filter((c) => !opts.category || c.id === opts.category);
   if (!picked.length) throw new Error(`no category ${opts.category}`);
 
   const started = performance.now();
-  const rows: { id: string; label: string; weight: number; results: SceneResult[] }[] = [];
+  const rows: {
+    id: string;
+    label: string;
+    weight: number;
+    results: SceneResult[];
+    variants: string[];
+    fingerprint: number;
+  }[] = [];
   const frames: Pixels[] = [];
-  for (const { c, index } of picked) {
-    const results: SceneResult[] = [];
-    for (let i = 0; i < opts.scenes; i++) {
-      const scene = renderCategoryScene(index, firstSeed + i);
-      const detection = detectQuad(scene.pixels);
-      const result = scoreScene(scene.truth, detection);
-      results.push(result);
-      if (opts.timing) frames.push(reduced(scene.pixels));
-      if (opts.verbose && result.outcome === "harmful") {
-        console.log(`harmful: ${c.id} seed ${firstSeed + i} (${scene.truth.variant})`);
-      }
+  for (const c of picked) {
+    const row = {
+      id: c.id,
+      label: c.label,
+      weight: c.weight,
+      results: [] as SceneResult[],
+      variants: [] as string[],
+      fingerprint: 2166136261,
+    };
+    for (const seed of seeds) {
+      const scene = renderCategoryScene(c.id, seed);
+      row.results.push(scoreScene(scene.truth, detectQuad(scene.pixels)));
+      row.variants.push(scene.truth.variant);
+      row.fingerprint = fingerprintScene(scene, row.fingerprint);
+      if (opts.timing) frames.push(pointSample(scene.pixels));
     }
-    rows.push({ id: c.id, label: c.label, weight: c.weight, results });
+    rows.push(row);
   }
 
+  const stats = rows.map((r) => ({ ...r, stats: summarise(r.results) }));
+  const all = weighted(stats);
+  const every = summarise(rows.flatMap((r) => r.results));
   const header = [
     "Category",
     "Wt",
@@ -119,47 +134,42 @@ function main() {
     "Err med",
     "Err p90",
   ];
-  const lines = [header];
-  const stats = rows.map((r) => ({ ...r, stats: summarise(r.results) }));
-  for (const r of stats) {
-    const s = r.stats;
-    lines.push([
+  table([
+    header,
+    ...stats.map((r) => [
       r.label,
       `${r.weight}%`,
-      pct(s.good),
-      pct(s.loose),
-      pct(s.miss),
-      pct(s.harmful),
-      s.meanIou === null ? "-" : s.meanIou.toFixed(3),
-      pct(s.cornerMedian, 2),
-      pct(s.cornerP90, 2),
-    ]);
-  }
-  const all = weighted(stats);
-  const every = summarise(rows.flatMap((r) => r.results));
-  lines.push([
-    "Weighted",
-    "",
-    pct(all.good, 1),
-    pct(all.loose, 1),
-    pct(all.miss, 1),
-    pct(all.harmful, 1),
-    every.meanIou === null ? "-" : every.meanIou.toFixed(3),
-    pct(every.cornerMedian, 2),
-    pct(every.cornerP90, 2),
+      ...rates(r.stats),
+      r.stats.meanIou === null ? "-" : r.stats.meanIou.toFixed(3),
+      pct(r.stats.cornerMedian, 2),
+      pct(r.stats.cornerP90, 2),
+    ]),
+    [
+      "Weighted",
+      "",
+      pct(all.good, 1),
+      pct(all.loose, 1),
+      pct(all.miss, 1),
+      pct(all.harmful, 1),
+      every.meanIou === null ? "-" : every.meanIou.toFixed(3),
+      pct(every.cornerMedian, 2),
+      pct(every.cornerP90, 2),
+    ],
   ]);
-  const widths = header.map((_, i) => Math.max(...lines.map((l) => l[i]!.length)));
-  for (const l of lines) {
-    console.log(
-      l
-        .map((cell, i) => (i === 0 ? cell.padEnd(widths[i]!) : cell.padStart(widths[i]!)))
-        .join("  "),
-    );
+
+  console.log("\nBy variant");
+  const variantLines = [["Category: variant", "n", "Good", "Loose", "Miss", "Harmful"]];
+  for (const r of rows) {
+    for (const v of [...new Set(r.variants)].sort()) {
+      const s = summarise(r.results.filter((_, i) => r.variants[i] === v));
+      variantLines.push([`${r.id}: ${v}`, String(s.n), ...rates(s)]);
+    }
   }
+  table(variantLines);
 
   const level = levelAccuracy(rows.flatMap((r) => r.results));
   console.log(
-    `\nset ${opts.set} (seeds ${firstSeed}..${firstSeed + opts.scenes - 1}), ${opts.scenes} scenes x ${rows.length} categories` +
+    `\nset ${opts.set} (seeds ${seeds[0]}..${seeds.at(-1)}), ${opts.scenes} scenes x ${rows.length} categories` +
       `\nlevel: ${level.applied} applied (${level.appliedHarmful} harmful), ${level.suggested} suggested (${level.suggestedGood} good)`,
   );
   if (opts.timing) {
@@ -174,26 +184,56 @@ function main() {
   }
   console.log(`run time ${((performance.now() - started) / 1000).toFixed(1)} s`);
 
-  const current: CategoryOutcomes[] = rows.map((r) => ({
+  const current: CategoryRecord[] = rows.map((r) => ({
     id: r.id,
     weight: r.weight,
+    fingerprint: hex(r.fingerprint),
     outcomes: encodeOutcomes(r.results),
+    levels: encodeLevels(r.results),
   }));
+  const baseline = existsSync(BASELINE)
+    ? (JSON.parse(readFileSync(BASELINE, "utf8")) as Baseline)
+    : null;
+
+  if (opts.check || opts.write) {
+    if (opts.set !== "gate") throw new Error("the baseline is on the gate set");
+  }
+  const problems = () => {
+    if (!baseline) throw new Error("there is no baseline.json");
+    return [...compareToBaseline(baseline.categories, current), ...cornerBars(rows)];
+  };
+
   if (opts.write) {
-    if (opts.set !== "gate" || opts.category) throw new Error("the baseline is the full gate set");
-    const baseline: Baseline = { set: "gate", firstSeed, scenes: opts.scenes, categories: current };
-    writeFileSync(BASELINE, `${JSON.stringify(baseline, null, 2)}\n`);
-    console.log("wrote baseline.json");
+    if (opts.category || opts.scenes !== SEED_SETS.gate.scenes) {
+      throw new Error("the baseline is the full gate set");
+    }
+    if (baseline && !opts.force) {
+      let found: string[];
+      try {
+        found = problems();
+      } catch (error) {
+        throw new Error(`${(error as Error).message}; rewrite the baseline with --force`);
+      }
+      if (found.length) {
+        console.log(`\nrefusing to write a baseline that is worse:\n- ${found.join("\n- ")}`);
+        console.log("pass --force to write it anyway");
+        process.exitCode = 1;
+        return;
+      }
+    }
+    const next: Baseline = {
+      set: "gate",
+      firstSeed: SEED_SETS.gate.first,
+      scenes: opts.scenes,
+      categories: current,
+    };
+    writeFileSync(BASELINE, `${JSON.stringify(next, null, 2)}\n`);
+    console.log("\nwrote baseline.json");
   }
   if (opts.check) {
-    const baseline = JSON.parse(readFileSync(BASELINE, "utf8")) as Baseline;
-    if (opts.set !== baseline.set) throw new Error("the baseline is on the gate set");
-    const same = baseline.categories
-      .filter((b) => current.some((c) => c.id === b.id))
-      .map((b) => ({ ...b, outcomes: b.outcomes.slice(0, opts.scenes) }));
-    const problems = compareToBaseline(same, current);
-    if (problems.length) {
-      console.log(`\nversus baseline:\n- ${problems.join("\n- ")}`);
+    const found = problems();
+    if (found.length) {
+      console.log(`\nversus baseline:\n- ${found.join("\n- ")}`);
       process.exitCode = 1;
     } else console.log("\nversus baseline: no regression");
   }

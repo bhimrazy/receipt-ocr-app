@@ -66,6 +66,8 @@ export type DigitalSpec = {
   chrome: number;
   /** An app header band across the top: colour and height in pixels. */
   bar?: { height: number; color: RGB };
+  /** A bar across the bottom, like a phone's navigation bar. */
+  navBar?: { height: number; color: RGB };
   /** The page as a card inset from the frame on a grey backdrop. */
   card?: { inset: number; backdrop: RGB };
   seed: number;
@@ -82,11 +84,17 @@ export type SceneSpec = {
   digital?: DigitalSpec;
 };
 
+export type SideState = "visible" | "covered" | "off-frame";
+
 export type Truth = {
   kind: "paper" | "digital";
   /** The paper's corners in 0..1 of the frame; outside that range when the paper runs off it. */
   quad: Quad;
   cornersInFrame: boolean;
+  /** What a good detector does: crop to the paper, or leave a screenshot alone. */
+  expected: "crop" | "none";
+  /** Per side (top, right, bottom, left): seen, mostly under something, or mostly outside the frame. */
+  sides: [SideState, SideState, SideState, SideState];
   /** Paper pixels, with bowed sides, including the part under a finger. */
   paper: Uint8Array;
   /** Visible print: the paper inset by 5% and not covered by another object. */
@@ -390,6 +398,8 @@ function drawDigital(ctx: Ctx, d: DigitalSpec) {
           : d.card!.backdrop[c]!;
       }
       if (y < d.chrome) ctx.rgb[o] = ctx.rgb[o + 1] = ctx.rgb[o + 2] = 205;
+      if (d.navBar && y >= HEIGHT - d.navBar.height)
+        for (let c = 0; c < 3; c++) ctx.rgb[o + c] = d.navBar.color[c]!;
       if (d.bar && y < d.bar.height) for (let c = 0; c < 3; c++) ctx.rgb[o + c] = d.bar.color[c]!;
     }
   }
@@ -472,6 +482,19 @@ function jpegify(px: Uint8ClampedArray) {
   }
 }
 
+/** The first pixel of each 2x2 block: how a browser that point-samples reduces a frame to the detector's size. */
+export function pointSample(p: Pixels): Pixels {
+  if (p.width !== WIDTH) return p;
+  const data = new Uint8ClampedArray(MASK_WIDTH * MASK_HEIGHT * 4);
+  for (let y = 0; y < MASK_HEIGHT; y++) {
+    for (let x = 0; x < MASK_WIDTH; x++) {
+      const s = (y * 2 * WIDTH + x * 2) * 4;
+      data.set(p.data.subarray(s, s + 4), (y * MASK_WIDTH + x) * 4);
+    }
+  }
+  return { data, width: MASK_WIDTH, height: MASK_HEIGHT };
+}
+
 export function renderScene(spec: SceneSpec, seed: number): Scene {
   const rng = mulberry32(seed ^ 0x9e3779b9);
   const n = WIDTH * HEIGHT;
@@ -518,17 +541,8 @@ export function renderScene(spec: SceneSpec, seed: number): Scene {
   }
   if (cam.jpeg) jpegify(full);
 
-  let pixels: Pixels = { data: full, width: WIDTH, height: HEIGHT };
-  if (cam.sample === "point") {
-    const small = new Uint8ClampedArray(MASK_WIDTH * MASK_HEIGHT * 4);
-    for (let y = 0; y < MASK_HEIGHT; y++) {
-      for (let x = 0; x < MASK_WIDTH; x++) {
-        const s = (y * 2 * WIDTH + x * 2) * 4;
-        small.set(full.subarray(s, s + 4), (y * MASK_WIDTH + x) * 4);
-      }
-    }
-    pixels = { data: small, width: MASK_WIDTH, height: MASK_HEIGHT };
-  }
+  const rendered: Pixels = { data: full, width: WIDTH, height: HEIGHT };
+  const pixels = cam.sample === "point" ? pointSample(rendered) : rendered;
 
   const paper = new Uint8Array(MASK_WIDTH * MASK_HEIGHT);
   const print = new Uint8Array(MASK_WIDTH * MASK_HEIGHT);
@@ -551,6 +565,23 @@ export function renderScene(spec: SceneSpec, seed: number): Scene {
     digital || !main
       ? frame
       : (main.quad.map((p) => ({ x: p.x / WIDTH, y: p.y / HEIGHT })) as Quad);
+  const sides = [0, 1, 2, 3].map((i): SideState => {
+    if (digital || !main) return "visible";
+    const a = main.quad[i]!;
+    const b = main.quad[(i + 1) % 4]!;
+    let inFrame = 0;
+    let covered = 0;
+    for (let k = 1; k <= 9; k++) {
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const x = Math.floor(a.x + ((b.x - a.x) * k) / 10 - ((b.y - a.y) / len) * 3);
+      const y = Math.floor(a.y + ((b.y - a.y) * k) / 10 + ((b.x - a.x) / len) * 3);
+      if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) continue;
+      inFrame++;
+      if (ctx.owner[y * WIDTH + x] !== OWNER_MAIN) covered++;
+    }
+    if (inFrame < 5) return "off-frame";
+    return covered * 2 > inFrame ? "covered" : "visible";
+  }) as Truth["sides"];
   const cornersInFrame = quad.every((p) => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1);
   return {
     pixels,
@@ -558,6 +589,8 @@ export function renderScene(spec: SceneSpec, seed: number): Scene {
       kind: digital ? "digital" : "paper",
       quad,
       cornersInFrame,
+      expected: digital ? "none" : "crop",
+      sides,
       paper,
       print,
       variant: spec.variant,
