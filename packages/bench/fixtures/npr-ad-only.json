@@ -1,0 +1,40 @@
+{
+  "merchant": "Example Hardware Suppliers",
+  "receiptDate": "2026-10-21",
+  "receiptDateCalendar": "gregory",
+  "invoiceNumber": "INV-0388",
+  "merchantTaxId": "999000012",
+  "category": ["Supplies", "Equipment"],
+  "currency": "NPR",
+  "subtotal": 3370,
+  "discount": null,
+  "serviceCharge": null,
+  "tax": 438.1,
+  "tip": null,
+  "total": 3808.1,
+  "items": [
+    {
+      "name": "PVC Pipe 1in",
+      "quantity": 6,
+      "unitPrice": 320,
+      "totalPrice": 1920
+    },
+    {
+      "name": "Wall Putty 20kg",
+      "quantity": 1,
+      "unitPrice": 1450,
+      "totalPrice": 1450
+    }
+  ],
+  "_meta": {
+    "uploadDay": "2026-11-10",
+    "printedDates": [
+      {
+        "text": "21/10/2026",
+        "label": "Date",
+        "calendar": null,
+        "role": "transaction"
+      }
+    ]
+  }
+}

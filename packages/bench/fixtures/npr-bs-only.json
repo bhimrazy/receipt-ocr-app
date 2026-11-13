@@ -1,0 +1,40 @@
+{
+  "merchant": "Example Thakali Kitchen",
+  "receiptDate": "2025-11-01",
+  "receiptDateCalendar": "bikram-sambat",
+  "invoiceNumber": "2041",
+  "merchantTaxId": "999000011",
+  "category": "Meals",
+  "currency": "NPR",
+  "subtotal": 1200,
+  "discount": null,
+  "serviceCharge": null,
+  "tax": 156,
+  "tip": null,
+  "total": 1356,
+  "items": [
+    {
+      "name": "Thakali Khana Set",
+      "quantity": 2,
+      "unitPrice": 450,
+      "totalPrice": 900
+    },
+    {
+      "name": "Sweet Lassi",
+      "quantity": 2,
+      "unitPrice": 150,
+      "totalPrice": 300
+    }
+  ],
+  "_meta": {
+    "uploadDay": "2026-11-10",
+    "printedDates": [
+      {
+        "text": "15/07/2082",
+        "label": "Miti",
+        "calendar": "bikram-sambat",
+        "role": "transaction"
+      }
+    ]
+  }
+}

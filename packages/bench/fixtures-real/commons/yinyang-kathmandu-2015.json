@@ -5,12 +5,17 @@
     "Yin Yang Restaurant"
   ],
   "receiptDate": "2015-03-09",
+  "receiptDateCalendar": "bikram-sambat",
+  "invoiceNumber": "7104",
+  "merchantTaxId": "500004393",
   "category": ["Meals"],
   "currency": "NPR",
   "subtotal": 595,
+  "serviceCharge": 59.5,
   "tax": 85.09,
   "tip": null,
   "total": 739.59,
+  "_meta": { "uploadDay": "2015-03-10" },
   "items": [
     {
       "name": "Kukhura ko Mashu",

@@ -1,0 +1,47 @@
+{
+  "merchant": "Example Bakery Cafe",
+  "receiptDate": "2026-10-26",
+  "receiptDateCalendar": "bikram-sambat",
+  "invoiceNumber": "5521",
+  "merchantTaxId": null,
+  "category": "Meals",
+  "currency": "NPR",
+  "subtotal": 830,
+  "discount": null,
+  "serviceCharge": null,
+  "tax": 107.9,
+  "tip": null,
+  "total": 937.9,
+  "reviewReasons": ["date_conflict"],
+  "items": [
+    {
+      "name": "Chicken Momo",
+      "quantity": 2,
+      "unitPrice": 280,
+      "totalPrice": 560
+    },
+    {
+      "name": "Masala Tea",
+      "quantity": 3,
+      "unitPrice": 90,
+      "totalPrice": 270
+    }
+  ],
+  "_meta": {
+    "uploadDay": "2026-11-10",
+    "printedDates": [
+      {
+        "text": "10/21/2026",
+        "label": "Date",
+        "calendar": null,
+        "role": "transaction"
+      },
+      {
+        "text": "09/07/2083",
+        "label": "Miti",
+        "calendar": "bikram-sambat",
+        "role": "transaction"
+      }
+    ]
+  }
+}

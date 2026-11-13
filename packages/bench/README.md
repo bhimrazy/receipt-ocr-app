@@ -22,17 +22,27 @@ exits with a message. `--dry-run` needs no key and prints an estimate from the f
 test's receipt) are skipped.
 
 - Fixtures: `<dir>/<id>.{png,jpg,jpeg,webp,pdf}` plus `<id>.json` ground truth (same fields as the extraction; omit
-  a field to skip it; `category` and `merchant` may list several acceptable values; `receiptDate` is the AD date, and
-  a printed Bikram Sambat date goes only in `_meta` or `_notes`, which scoring ignores). `--fixtures <dir>` picks the
+  a field to skip it; `category` and `merchant` may list several acceptable values; `receiptDate` is the AD day the app
+  should store, never a Bikram Sambat date; `receiptDateCalendar`, `invoiceNumber`, `merchantTaxId`, `discount`,
+  `serviceCharge` and `reviewReasons` are optional keys for the v3 fields). `_meta` and `_notes` aren't scored;
+  `_meta.uploadDay` fixes the upload day the date is resolved against (default: the run day), and
+  `_meta.printedDates` lists the dates as printed, which a test uses to check the key against a perfect reading. `--fixtures <dir>` picks the
   set (default `packages/bench/fixtures`; relative paths resolve from `packages/bench`); its folder name goes into the result file names, so sets don't overwrite each other.
 - **Real receipts are private and never committed.** The owner's set lives outside the repo
   (`~/receipt-ocr-real-receipts/`; some show customer names). Point `--fixtures` at it; don't copy it in.
   `packages/bench/fixtures-local/` is gitignored as a safety net. Raw results for a private set hold its extracted text and
   stay local (gitignored); summaries hold only scores and sizes. The six starters are synthetic, from `bun run bench:fixtures`: NPR lakh grouping, KWD three decimals, EUR comma
-  decimals, IDR dot thousands, a tip, a 34-line receipt. Add real, PII-free receipts the same way (faded
+  decimals, IDR dot thousands, a tip, a 34-line receipt. Eight synthetic Nepal bills (`npr-*`, invented merchants and
+  `9990000xx` PANs) cover extraction v3: BS only, AD only, AD and Miti agreeing and conflicting, an unmarked
+  ambiguous DMY/MDY date, a PAN beside the bill, table and KOT numbers, service charge plus VAT with a fiscal-year
+  bill number, and a discount with a rounded total. `bun run bench:fixtures <id>...` renders only those ids. The
+  renderer has no Devanagari font, so they are Latin script only. Add real, PII-free receipts the same way (faded
   thermal, skewed phone shots, handwritten totals).
-- Scoring (`score.ts`, unit-tested): exact currency/date; category against the app's canonical list (a fixture may
-  list several acceptable ones, and legacy labels are normalised with `parseCategory`; a test checks every fixture); total/tax/subtotal/tip within 0.01 (a missing
+- Scoring (`score.ts`, unit-tested) is on what the app stores: `storedPrediction` runs the reply through core's
+  `storedExtraction`, so the date is the resolved day, not the model's own reading. Exact currency, date and
+  calendar; bill number and tax id equal after dropping spacing and punctuation (null must match null); review
+  reasons as a set; category against the app's canonical list (a fixture may
+  list several acceptable ones, and legacy labels are normalised with `parseCategory`; a test checks every fixture); total/tax/subtotal/tip/discount/serviceCharge within 0.01 (a missing
   tip equals zero); merchant by edit similarity >= 0.8 after NFC, lower case and dropping everything but letters, marks
   and digits (marks are kept: Devanagari vowel signs are marks); items F1 (name similarity >= 0.7 and the
   same total price).

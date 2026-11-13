@@ -2,7 +2,15 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
 import { describe, expect, it } from "vitest";
-import { itemsF1, percentile, scoreReceipt, similarity, type Receipt } from "./score";
+import type { ReceiptExtraction } from "@receipt-ocr/ai";
+import {
+  itemsF1,
+  percentile,
+  scoreReceipt,
+  similarity,
+  storedPrediction,
+  type Receipt,
+} from "./score";
 
 const truth = {
   merchant: "Warung Makan Bahagia",
@@ -85,6 +93,79 @@ describe("category scoring", () => {
   });
 });
 
+type PrintedDates = NonNullable<ReceiptExtraction["dates"]>;
+type Fixture = Receipt & { _meta?: { uploadDay?: string; printedDates?: PrintedDates } };
+const first = <T>(value: T | readonly T[]) => (Array.isArray(value) ? value[0] : value) as T;
+
+/** What a model that read every printed character right would return for a fixture. */
+function perfectReply(truth: Fixture): ReceiptExtraction {
+  const dates = truth._meta?.printedDates ?? [];
+  return {
+    merchant: first(truth.merchant ?? null),
+    // No AD reading of its own, so the stored date comes from the printed text alone.
+    receiptDate: null,
+    dates,
+    invoiceNumber: truth.invoiceNumber ?? null,
+    merchantTaxId: truth.merchantTaxId ?? null,
+    category: first(truth.category ?? "Other") as ReceiptExtraction["category"],
+    currency: truth.currency ?? null,
+    subtotal: truth.subtotal ?? null,
+    discount: truth.discount ?? null,
+    serviceCharge: truth.serviceCharge ?? null,
+    tax: truth.tax ?? null,
+    tip: truth.tip ?? null,
+    total: truth.total ?? null,
+    confidence: 0.95,
+    items: (truth.items ?? []).map((item) => ({
+      name: item.name,
+      quantity: item.quantity ?? 1,
+      unitPrice: item.unitPrice ?? item.totalPrice ?? 0,
+      totalPrice: item.totalPrice ?? 0,
+      confidence: 0.95,
+    })),
+  };
+}
+
+describe("v3 fields, scored on what the app stores", () => {
+  const uploadDay = "2026-11-10";
+  const reply = (overrides: Partial<ReceiptExtraction>): ReceiptExtraction => ({
+    ...perfectReply({ merchant: "Example Tea House", currency: "NPR", total: 100, items: [] }),
+    ...overrides,
+  });
+
+  it("scores the resolved date, not the model's own conversion of a BS date", () => {
+    const truth = { receiptDate: "2025-11-01", receiptDateCalendar: "bikram-sambat" };
+    const dates: PrintedDates = [
+      { text: "15/07/2082", label: "Miti", calendar: "bikram-sambat", role: "transaction" },
+    ];
+    // Off by two days, as models converting BS themselves were; the stored date ignores it.
+    const got = storedPrediction(reply({ receiptDate: "2025-11-03", dates }), uploadDay);
+    expect(scoreReceipt(truth, got)).toEqual({ receiptDate: 1, receiptDateCalendar: 1 });
+  });
+
+  it("fails a bill number that is really the PAN, and passes one that differs only in spacing", () => {
+    const truth = { invoiceNumber: "7311", merchantTaxId: "999000021" };
+    const pan = storedPrediction(
+      reply({ invoiceNumber: "999000021", merchantTaxId: "999 000 021" }),
+      uploadDay,
+    );
+    expect(scoreReceipt(truth, pan)).toEqual({ invoiceNumber: 0, merchantTaxId: 1 });
+    expect(scoreReceipt({ invoiceNumber: null }, { invoiceNumber: "88" }).invoiceNumber).toBe(0);
+    expect(scoreReceipt({ invoiceNumber: null }, {}).invoiceNumber).toBe(1);
+  });
+
+  it("compares review reasons as a set, so a missing flag fails", () => {
+    const truth = { reviewReasons: ["date_ambiguous"] };
+    expect(scoreReceipt(truth, { reviewReasons: ["date_ambiguous"] }).reviewReasons).toBe(1);
+    expect(scoreReceipt(truth, { reviewReasons: [] }).reviewReasons).toBe(0);
+  });
+
+  it("scores a discount the model signed as the unsigned amount the app stores", () => {
+    expect(scoreReceipt({ discount: 60 }, { discount: -60 }).discount).toBe(1);
+    expect(scoreReceipt({ serviceCharge: 163 }, { serviceCharge: null }).serviceCharge).toBe(0);
+  });
+});
+
 describe("bench fixtures", () => {
   // The synthetic set, plus the committed real sets (packages/bench/fixtures-real/<set>/) once they exist.
   const dirs = ["fixtures", "fixtures-real"]
@@ -113,6 +194,19 @@ describe("bench fixtures", () => {
     expect(accepted.length).toBeGreaterThan(0);
     for (const category of accepted) expect(RECEIPT_CATEGORIES).toContain(category);
   });
+
+  // The answer key must be what the app stores for a perfect reading, or a perfect model would score below 100%.
+  it.each(truths.filter(([, receipt]) => (receipt as Fixture)._meta?.printedDates))(
+    "%s scores 100% for a perfect transcription",
+    (_, receipt) => {
+      const truth = receipt as Fixture;
+      const scores = scoreReceipt(
+        truth,
+        storedPrediction(perfectReply(truth), truth._meta!.uploadDay!),
+      );
+      expect(Object.entries(scores).filter(([, score]) => score !== 1)).toEqual([]);
+    },
+  );
 
   it.each(truths)("%s has a usable merchant and an AD receiptDate", (_, receipt) => {
     if (receipt.merchant != null) {
