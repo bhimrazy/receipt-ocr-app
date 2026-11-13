@@ -27,7 +27,8 @@ import {
   type EditState,
 } from "@/lib/capture/edit-state";
 import { FILTER_LABELS, FILTERS, type Filter } from "@/lib/capture/filters";
-import { EditFailedError, preparePhoto } from "@/lib/capture/prepare-photo";
+import type { CropSource } from "@/lib/capture/crop-outcome";
+import { EditFailedError, encodeOptions, preparePhoto } from "@/lib/capture/prepare-photo";
 import {
   detectOnBitmap,
   dropRenderCache,
@@ -57,7 +58,7 @@ import { Bytes, formatSize, SIZE_LABELS, SizePicker, Slot } from "./size-picker"
 
 type Step = "adjust" | "preview";
 
-export type ReviewImage = { id: string; blob: Blob; name: string };
+export type ReviewImage = { id: string; blob: Blob; name: string; source?: CropSource };
 
 const FILTER_KEY = "receipt-ocr.capture.filter";
 const SIZE_KEY = "receipt-ocr.capture.size";
@@ -248,6 +249,7 @@ export default function ReviewSheet({
     if (missing.length === 0) return;
     const id = current.id;
     const name = current.name;
+    const source = current.source;
     let cancelled = false;
     const record = (sizeId: SizeId, result: File | EncodeFailure, made: UploadPlan) =>
       setEncodes((all) => {
@@ -268,7 +270,11 @@ export default function ReviewSheet({
         for (const sizeId of missing) {
           if (cancelled) return;
           try {
-            const file = await encodeUpload(canvas, name, { size: sizeId, filter: edit.filter });
+            const file = await encodeUpload(
+              canvas,
+              name,
+              encodeOptions(edit, sizeId, { seen: true, source }),
+            );
             if (!cancelled) record(sizeId, file, made);
           } catch (error) {
             if (!cancelled)

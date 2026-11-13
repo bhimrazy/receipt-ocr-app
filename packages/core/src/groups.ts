@@ -30,6 +30,7 @@ import {
   type CreateGroupInput,
   type UpdateGroupInput,
 } from "./group-schemas";
+import { LOCK_NAMESPACES } from "./locks";
 import type { ReceiptScope } from "./repository";
 import { Db } from "./services";
 
@@ -69,9 +70,6 @@ const transact = <A>(body: (tx: Tx) => Promise<A>) =>
     }),
   );
 
-/** First key of the two-key advisory lock; other locks use other namespaces. */
-const GROUPS_LOCK_NAMESPACE = 7_302;
-
 /**
  * Serialises a workspace's group writes, so the per-workspace and per-receipt
  * limits and the name check can't be raced past. Group writes are rare.
@@ -79,7 +77,7 @@ const GROUPS_LOCK_NAMESPACE = 7_302;
 const lockGroups = (tx: Tx, organizationId: string) =>
   tx
     .execute(
-      sql`select pg_advisory_xact_lock(${GROUPS_LOCK_NAMESPACE}, hashtext(${organizationId}))`,
+      sql`select pg_advisory_xact_lock(${LOCK_NAMESPACES.groups}, hashtext(${organizationId}))`,
     )
     .then((r) => r.rows);
 

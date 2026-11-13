@@ -4,6 +4,7 @@ export * from "./billing-apply-job";
 export * from "./definition";
 export * from "./drain";
 export * from "./kinds/contact-reply";
+export { MAINTENANCE_PURGE, scheduleMaintenance } from "./kinds/maintenance-purge";
 export * from "./kinds/receipt-extract";
 export { SUPPORT_NOTIFY, SupportNotifyMailer, type SupportNotice } from "./kinds/support-notify";
 export * from "./kinds/welcome-email";

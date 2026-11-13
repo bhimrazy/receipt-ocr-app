@@ -8,12 +8,14 @@ export function Stat({
   note,
   href,
   tone = "default",
+  className,
 }: {
   label: string;
   value: number | string;
   note?: React.ReactNode;
   href?: string;
   tone?: "default" | "warning" | "destructive";
+  className?: string;
 }) {
   const body = (
     <>
@@ -35,7 +37,7 @@ export function Stat({
       ) : null}
     </>
   );
-  const frame = "block rounded-lg border border-border bg-card p-4";
+  const frame = cn("block rounded-lg border border-border bg-card p-4", className);
   return href ? (
     <Link
       className={cn(

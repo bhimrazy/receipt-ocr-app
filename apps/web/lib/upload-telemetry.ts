@@ -1,4 +1,5 @@
 import { imageSize } from "@receipt-ocr/ai/image-size";
+import { CROP_OUTCOMES, CROP_SOURCES, DETECTION_LEVELS } from "./capture/crop-outcome";
 import { FILTERS } from "./capture/filters";
 import { ENCODING } from "./upload-encoding";
 import { SIZE_IDS, type SizeId, type UploadInfo } from "./upload-prep";
@@ -14,6 +15,10 @@ const FIELDS = {
   attempts: "encode_attempts",
   filter: "encode_filter",
   rescued: "encode_rescued",
+  cropOutcome: "crop_outcome",
+  cropLevel: "crop_level",
+  cropSeen: "crop_seen",
+  cropSource: "crop_source",
 } as const;
 
 /** Puts `info` on an upload form. */
@@ -24,6 +29,12 @@ export function setUploadInfo(form: FormData, info: UploadInfo | undefined) {
   form.set(FIELDS.attempts, String(info.attempts));
   if (info.filter) form.set(FIELDS.filter, info.filter);
   form.set(FIELDS.rescued, info.rescued ? "1" : "0");
+  if (info.crop) {
+    form.set(FIELDS.cropOutcome, info.crop.outcome);
+    form.set(FIELDS.cropLevel, info.crop.level);
+    form.set(FIELDS.cropSeen, info.crop.seen ? "1" : "0");
+    if (info.crop.source) form.set(FIELDS.cropSource, info.crop.source);
+  }
 }
 
 const QUALITIES = new Set<number>([...ENCODING.qualities, ENCODING.rescueQuality]);
@@ -36,6 +47,7 @@ const oneOf = <T extends string>(allowed: readonly T[], value: unknown): T | und
 export function readUploadInfo(form: FormData): {
   size_choice?: SizeId;
   encode?: { quality?: number; attempts?: number; filter?: string; rescued?: boolean };
+  crop?: { outcome: string; level: string; seen: boolean; source?: string };
 } {
   const quality = Number(form.get(FIELDS.quality));
   const attempts = Number(form.get(FIELDS.attempts));
@@ -49,9 +61,16 @@ export function readUploadInfo(form: FormData): {
     ...(rescued === "1" || rescued === "0" ? { rescued: rescued === "1" } : {}),
   };
   const size = oneOf(SIZE_IDS, form.get(FIELDS.size));
+  const outcome = oneOf(CROP_OUTCOMES, form.get(FIELDS.cropOutcome));
+  const level = oneOf(DETECTION_LEVELS, form.get(FIELDS.cropLevel));
+  const seen = form.get(FIELDS.cropSeen);
+  const source = oneOf(CROP_SOURCES, form.get(FIELDS.cropSource));
   return {
     ...(size ? { size_choice: size } : {}),
     ...(Object.keys(encode).length > 0 ? { encode } : {}),
+    ...(outcome && level && (seen === "1" || seen === "0")
+      ? { crop: { outcome, level, seen: seen === "1", ...(source ? { source } : {}) } }
+      : {}),
   };
 }
 

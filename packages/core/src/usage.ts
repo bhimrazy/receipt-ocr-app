@@ -12,6 +12,7 @@ import {
 } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { liveReceiptJob } from "./jobs/live";
+import { LOCK_NAMESPACES } from "./locks";
 import { FREE_FAILED_ROUNDS, type PlanId, type QuotaScope } from "./plans";
 import { isReceiptId } from "./repository";
 import { Db } from "./services";
@@ -152,18 +153,14 @@ export async function countUsage(
  */
 export async function lockQuota(db: Queryable, subject: UsageSubject, pooled: boolean) {
   await db.execute(
-    sql`select pg_advisory_xact_lock(${USER_LOCK_NAMESPACE}, hashtext(${subject.userId}))`,
+    sql`select pg_advisory_xact_lock(${LOCK_NAMESPACES.user}, hashtext(${subject.userId}))`,
   );
   if (pooled) {
     await db.execute(
-      sql`select pg_advisory_xact_lock(${WORKSPACE_LOCK_NAMESPACE}, hashtext(${subject.organizationId}))`,
+      sql`select pg_advisory_xact_lock(${LOCK_NAMESPACES.workspace},hashtext(${subject.organizationId}))`,
     );
   }
 }
-
-/** First keys of the two-key advisory locks, so these locks can't collide with others. */
-const USER_LOCK_NAMESPACE = 7_301;
-const WORKSPACE_LOCK_NAMESPACE = 7_302;
 
 /** Per-user "used today" for admin lists, every plan: the quota's rule without rounds in flight. */
 export const receiptsReadSince = (userColumn: SQL, since: Date) =>

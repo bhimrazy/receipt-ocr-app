@@ -6,16 +6,16 @@ import { contactEmail } from "./contact-mail";
 import { emailContext, isProduction, supportEmail } from "./env";
 
 /**
- * Mails a stored support message to SUPPORT_EMAIL, as `WelcomeMailerLive` does: a template that
- * won't render is "rejected" (no retry), a send error is "failed" (retried). In production a
- * missing SUPPORT_EMAIL is "failed" too, so the job ends dead and visible instead of succeeding.
+ * Tells SUPPORT_EMAIL a support message was stored, with a link to it. As in `WelcomeMailerLive`,
+ * a template that won't render is "rejected" (no retry) and a send error is "failed" (retried). In
+ * production a missing SUPPORT_EMAIL is "failed" too, so the job ends dead and visible.
  */
 export const SupportNotifyMailerLive = Layer.succeed(SupportNotifyMailer, {
-  send: ({ name, email, kind, message, receiptId, jobId }) => {
+  send: ({ name, email, kind, messageId, jobId }) => {
     if (!supportEmail) return Effect.succeed(isProduction ? "failed" : "not_configured");
     const to = supportEmail;
     return Effect.try(() =>
-      contactEmail(emailContext, { to, name, from: email, kind, message, receiptId }),
+      contactEmail(emailContext, { to, name, from: email, kind, messageId }),
     ).pipe(
       Effect.flatMap((content) =>
         Effect.tryPromise(async () => {

@@ -24,8 +24,8 @@ export type SupportNotice = {
   /** The sender's reply address. */
   email: string;
   kind: (typeof SUPPORT_KINDS)[number];
-  message: string;
-  receiptId: string | null;
+  /** The notice names the message and links to it; its text stays in the database. */
+  messageId: string;
   /** Stable across retries of one job, for the provider's idempotency key. */
   jobId: string;
 };
@@ -74,8 +74,7 @@ export const supportNotify: JobDefinition<SupportNotifyPayload, Db | SupportNoti
             name: supportMessages.name,
             email: supportMessages.email,
             kind: supportMessages.kind,
-            message: supportMessages.message,
-            receiptId: supportMessages.receiptId,
+            messageId: supportMessages.id,
           })
           .from(supportMessages)
           .where(eq(supportMessages.id, payload.messageId))
