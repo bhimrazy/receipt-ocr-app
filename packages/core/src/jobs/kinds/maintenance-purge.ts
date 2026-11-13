@@ -1,3 +1,4 @@
+import { sql } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { z } from "zod";
 import { Db } from "../../services";
@@ -20,28 +21,35 @@ const maintenancePurgePayload = z.object({});
 type MaintenancePurgePayload = z.infer<typeof maintenancePurgePayload>;
 
 /**
- * Tomorrow's run, due at 00:00 UTC and keyed by that day. The key dedupes only against a live job,
- * so keying by tomorrow (not today) is what stops a drain from queueing a second run on the day
- * the first one finished.
+ * The run for `day` (`YYYY-MM-DD`, UTC), due at its 00:00 UTC and keyed by it. The key dedupes only
+ * against a live job, so the scheduler keys by tomorrow (not today): that stops a drain from
+ * queueing a second run on the day the first one finished.
  */
-export const maintenancePurgeJob = (now: Date): NewJob => {
-  const runAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-  return {
-    kind: MAINTENANCE_PURGE,
-    payload: {} satisfies MaintenancePurgePayload,
-    maxAttempts: MAINTENANCE_PURGE_MAX_ATTEMPTS,
-    priority: 9,
-    idempotencyKey: `${MAINTENANCE_PURGE}:${runAt.toISOString().slice(0, 10)}`,
-    runAt,
-  };
-};
+export const maintenancePurgeJob = (day: string): NewJob => ({
+  kind: MAINTENANCE_PURGE,
+  payload: {} satisfies MaintenancePurgePayload,
+  maxAttempts: MAINTENANCE_PURGE_MAX_ATTEMPTS,
+  priority: 9,
+  idempotencyKey: `${MAINTENANCE_PURGE}:${day}`,
+  runAt: new Date(`${day}T00:00:00Z`),
+});
 
 /**
- * Queues tomorrow's purge unless it is already queued: one insert that conflicts away on every
- * drain but the first of the day. A failure is logged and never fails the caller's drain.
+ * Queues tomorrow's purge unless it is already queued: an insert that conflicts away on every
+ * drain but the first of the day. Tomorrow is read from the database clock, the one the claim
+ * compares `run_at` with, so a web server's clock can't key a run for a day that has already begun.
+ * A failure is logged and never fails the caller's drain.
  */
-export const scheduleMaintenance = (now: Date = new Date()) =>
-  Effect.flatMap(Db, ({ use }) => use((db) => enqueueJob(db, maintenancePurgeJob(now)))).pipe(
+export const scheduleMaintenance = () =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const { rows } = await db.execute<{ day: string }>(
+        sql`select to_char((now() at time zone 'UTC')::date + 1, 'YYYY-MM-DD') as day`,
+      );
+      const day = rows[0]?.day;
+      if (day) await enqueueJob(db, maintenancePurgeJob(day));
+    }),
+  ).pipe(
     Effect.asVoid,
     Effect.catchAll((error) =>
       Effect.sync(() =>

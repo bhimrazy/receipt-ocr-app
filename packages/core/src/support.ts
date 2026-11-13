@@ -8,7 +8,6 @@ import {
   ilike,
   inArray,
   isNull,
-  lt,
   or,
   organization,
   receipts,
@@ -287,30 +286,27 @@ export const setSupportStatus = (id: string, status: SupportStatus, audit: Audit
     return { previous: before.status };
   });
 
-/** How long a message is kept: after it is closed, or after it was sent if it never is. */
+/** How long a message is kept: after it is closed, or after it was sent or last reopened if it isn't. */
 export const SUPPORT_RETENTION_MONTHS = 12;
 
 /**
- * Deletes up to `limit` messages past the retention period and returns how many. A message's
- * `closed_at` is never before its `created_at`, so a closed one past its period passes both checks.
+ * Deletes up to `limit` messages past the retention period and returns how many. A message that
+ * isn't closed counts from its last change, so reopening an old message restarts its period.
  */
 export const purgeSupportMessages = (limit: number) =>
   Effect.flatMap(Db, ({ use }) =>
     use(async (db) => {
       const cutoff = sql`now() - make_interval(months => ${SUPPORT_RETENTION_MONTHS})`;
+      const isExpired = sql`coalesce(${supportMessages.closedAt}, greatest(${supportMessages.createdAt}, ${supportMessages.updatedAt})) < ${cutoff}`;
       const expired = db
         .select({ id: supportMessages.id })
         .from(supportMessages)
-        .where(
-          and(
-            lt(supportMessages.createdAt, cutoff),
-            or(isNull(supportMessages.closedAt), lt(supportMessages.closedAt, cutoff)),
-          ),
-        )
+        .where(isExpired)
         .limit(limit);
+      // Checked again on the locked row: a reopen that commits between the two reads keeps it.
       const deleted = await db
         .delete(supportMessages)
-        .where(inArray(supportMessages.id, expired))
+        .where(and(inArray(supportMessages.id, expired), isExpired))
         .returning({ id: supportMessages.id });
       return deleted.length;
     }),

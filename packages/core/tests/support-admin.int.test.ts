@@ -58,6 +58,7 @@ const daysAgo = (days: number) => new Date(Date.now() - days * DAY);
 type Seed = {
   status?: SupportStatus;
   createdAt?: Date;
+  updatedAt?: Date;
   closedAt?: Date | null;
   name?: string;
   organizationId?: string | null;
@@ -78,6 +79,7 @@ async function seed(over: Seed = {}) {
         message: "A test question",
         organizationId: over.organizationId ?? null,
         createdAt: over.createdAt ?? new Date(),
+        updatedAt: over.updatedAt ?? over.closedAt ?? over.createdAt ?? new Date(),
         closedAt: over.closedAt ?? null,
       })
       .returning({ id: supportMessages.id }),
@@ -195,19 +197,38 @@ describe.skipIf(!enabled)("support admin and retention against Postgres", () => 
     expect((await run(listSupportMessages({ q: "%" }, page))).rows).toEqual([]);
   });
 
-  it("purges messages 12 months after closing, or after sending when never closed", async () => {
+  it("purges messages 12 months after closing, or after their last change while not closed", async () => {
     const closedLongAgo = await seed({ createdAt: daysAgo(500), closedAt: daysAgo(380) });
     const closedRecently = await seed({ createdAt: daysAgo(500), closedAt: daysAgo(300) });
     const unansweredOld = await seed({ createdAt: daysAgo(380) });
     const openOld = await seed({ status: "open", createdAt: daysAgo(380) });
     const unansweredRecent = await seed({ createdAt: daysAgo(300) });
-    const all = [closedLongAgo, closedRecently, unansweredOld, openOld, unansweredRecent];
+    const openedRecently = await seed({
+      status: "open",
+      createdAt: daysAgo(380),
+      updatedAt: daysAgo(5),
+    });
+    const all = [
+      closedLongAgo,
+      closedRecently,
+      unansweredOld,
+      openOld,
+      unansweredRecent,
+      openedRecently,
+    ];
 
     // In batches: the first takes two of the three expired messages, the next the last one.
     expect(await run(purgeSupportMessages(2))).toBe(2);
     expect(await run(purgeSupportMessages(2))).toBe(1);
     expect(await run(purgeSupportMessages(2))).toBe(0);
-    expect(await remaining(all)).toEqual([closedRecently, unansweredRecent].sort());
+    expect(await remaining(all)).toEqual([closedRecently, unansweredRecent, openedRecently].sort());
+  });
+
+  it("keeps an old message that was closed recently and then reopened", async () => {
+    const id = await seed({ createdAt: daysAgo(400), closedAt: daysAgo(10) });
+    await run(setSupportStatus(id, "open", audit));
+    await run(purgeSupportMessages(500));
+    expect(await remaining([id])).toEqual([id]);
   });
 
   it("runs the purge as a job", async () => {
@@ -230,18 +251,32 @@ describe.skipIf(!enabled)("support admin and retention against Postgres", () => 
     expect(await remaining([expired, kept])).toEqual([kept]);
   });
 
-  it("queues one purge for the next UTC day however many drains ask", async () => {
-    const now = new Date("2026-03-31T23:59:00Z");
-    const key = maintenancePurgeJob(now).idempotencyKey!;
-    expect(key).toBe(`${MAINTENANCE_PURGE}:2026-04-01`);
-    await run(scheduleMaintenance(now));
-    await run(scheduleMaintenance(now));
+  it("queues one purge for the next UTC day by the database clock, however many drains ask", async () => {
+    expect(maintenancePurgeJob("2026-04-01")).toMatchObject({
+      idempotencyKey: `${MAINTENANCE_PURGE}:2026-04-01`,
+      runAt: new Date("2026-04-01T00:00:00Z"),
+    });
+    await run(scheduleMaintenance());
+    await run(scheduleMaintenance());
+    const [clock] = await db((d) =>
+      d
+        .execute<{ day: string }>(
+          sql`select to_char((now() at time zone 'UTC')::date + 1, 'YYYY-MM-DD') as day`,
+        )
+        .then((r) => r.rows),
+    );
     const rows = await db((d) =>
       d
-        .select({ runAt: jobs.runAt, state: jobs.state })
+        .select({ key: jobs.idempotencyKey, runAt: jobs.runAt, state: jobs.state })
         .from(jobs)
-        .where(eq(jobs.idempotencyKey, key)),
+        .where(sql`${jobs.idempotencyKey} like ${`${MAINTENANCE_PURGE}:%`}`),
     );
-    expect(rows).toEqual([{ runAt: new Date("2026-04-01T00:00:00Z"), state: "queued" }]);
+    expect(rows).toEqual([
+      {
+        key: `${MAINTENANCE_PURGE}:${clock!.day}`,
+        runAt: new Date(`${clock!.day}T00:00:00Z`),
+        state: "queued",
+      },
+    ]);
   });
 });
