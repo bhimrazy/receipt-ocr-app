@@ -110,7 +110,14 @@ flowchart LR
   desktop). The ids sent as `size_choice` keep their earlier meaning so history compares: `compact` is Compact (added
   2026-11-09), `smaller` Small, `recommended` Standard, `larger` Sharpest (and every long receipt). The
   upload also carries its quality step, encode count, filter and whether it was rescued, and the server reads the
-  file's pixel size from its header, so the `receipt.upload` wide event has bytes per pixel from real phones.
+  file's pixel size from its header, so the `receipt.upload` wide event has bytes per pixel from real phones. A reviewed
+  photo also carries `crop_outcome` (`kept`, `adjusted`, `full_image`, `manual` for a hand-drawn crop where detection
+  found nothing, or `none`), `crop_level` (the detector's `apply`, `suggest` or `none`), `crop_seen` (the photo was open
+  in the review sheet, so the outcome is a choice and not a default) and `crop_source` (`camera`, `camera_app` for the
+  phone's camera app, or `library`). The server keeps the crop only if outcome, level and seen are all valid, and writes
+  them as `crop.outcome`, `crop.level`, `crop.seen` and `crop.source`; a source outside the list is dropped alone.
+  Enumerations only, never corners. Absent `crop` fields mean an old client, a PDF, or a photo the browser could not
+  decode (the original is sent as it is).
 - A file still over 4 MB (`DEPLOYMENT_BODY_LIMIT_BYTES` in
   [`upload-limits.ts`](../../../packages/core/src/upload-limits.ts)) is refused before upload.
 - **Upload.** One file uses instant mode and opens its receipt. Several upload two at a time in queued mode, each with
