@@ -10,9 +10,8 @@
  * - url: an absolute http(s) URL (buttons and fallback links).
  * - email: one line and shaped like an address, so it is safe after `mailto:`.
  * - line: user or computed text collapsed to one line.
- * - multiline: a contact-form message; keeps line breaks, drops other control characters.
  */
-export type SlotKind = "origin" | "url" | "email" | "line" | "multiline";
+export type SlotKind = "origin" | "url" | "email" | "line";
 
 export const SLOT_KINDS = {
   appOrigin: "origin",
@@ -28,12 +27,11 @@ export const SLOT_KINDS = {
   inviterEmail: "line",
   newEmail: "line",
   currentEmail: "line",
-  from: "line",
   senderName: "line",
   firstName: "line",
   topicPhrase: "line",
   topicLabel: "line",
-  message: "multiline",
+  messageRef: "line",
   code: "line",
   provider: "line",
   passkeyName: "line",
@@ -87,11 +85,6 @@ export function normalizeSlot(kind: SlotKind, value: string): string {
     }
     case "line":
       return oneLine(value);
-    case "multiline":
-      return value
-        .replace(/\r\n?/g, "\n")
-        .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, "")
-        .trim();
   }
 }
 

@@ -111,10 +111,14 @@ export function invitationEmail(
   });
 }
 
-/** A contact-form message to the support inbox; `topicLabel` comes from the app's fixed list. */
+/**
+ * Tells the support inbox a contact-form message arrived, with a link to read it in the admin
+ * panel. Never the message text: it can quote receipt contents. `topicLabel` comes from the app's
+ * fixed list; `url` must be on the app's origin.
+ */
 export function supportMessageEmail(
   ctx: EmailContext,
-  input: { senderName: string; from: string; topicLabel: string; message: string },
+  input: { senderName: string; topicLabel: string; messageRef: string; url: string },
 ): EmailContent {
   return build("supportMessage", `[${BRAND} support] ${input.topicLabel}`, ctx, input);
 }
