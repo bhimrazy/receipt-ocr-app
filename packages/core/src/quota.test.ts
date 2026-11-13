@@ -1,3 +1,4 @@
+import { Cause, Effect, Exit, Logger, LogLevel } from "effect";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PLANS } from "./plans";
 import {
@@ -6,6 +7,7 @@ import {
   nextUtcMonthStart,
   quotaLimits,
   quotaMessage,
+  refuseQuota,
   usageWindow,
   utcDayStart,
   utcMonthStart,
@@ -247,5 +249,39 @@ describe("quotaMessage", () => {
     ).toBe(
       "This workspace has used all 500 scans for this month. They reset on 1 December at 00:00 UTC.",
     );
+  });
+});
+
+describe("refuseQuota", () => {
+  const poolFull = decideQuota(counts({ planDay: 300 }), free, undefined, now);
+  const dayUsed = decideQuota(counts({ day: 20, month: 20 }), free, undefined, now);
+  const warningsFrom = async (verdict: QuotaVerdict, at: Date) => {
+    const logged: unknown[] = [];
+    const logger = Logger.make(({ logLevel, message }) => {
+      if (logLevel === LogLevel.Warning) logged.push([message].flat()[0]);
+    });
+    const exit = await Effect.runPromiseExit(
+      refuseQuota(verdict, at).pipe(Effect.provide(Logger.replace(Logger.defaultLogger, logger))),
+    );
+    expect(Exit.isFailure(exit) && Cause.failureOption(exit.cause)).toMatchObject({
+      value: { _tag: "QuotaExceeded", kind: verdict.window },
+    });
+    return logged;
+  };
+
+  it("warns on the first pool refusal of each UTC day only", async () => {
+    expect(poolFull.window).toBe("pool");
+    expect(await warningsFrom(poolFull, new Date("2031-03-01T08:00:00Z"))).toEqual([
+      "quota.pool_full",
+    ]);
+    expect(await warningsFrom(poolFull, new Date("2031-03-01T23:59:00Z"))).toEqual([]);
+    expect(await warningsFrom(poolFull, new Date("2031-03-02T00:00:00Z"))).toEqual([
+      "quota.pool_full",
+    ]);
+  });
+
+  it("never warns for a person's own limits", async () => {
+    expect(dayUsed.window).toBe("day");
+    expect(await warningsFrom(dayUsed, new Date("2031-04-01T08:00:00Z"))).toEqual([]);
   });
 });

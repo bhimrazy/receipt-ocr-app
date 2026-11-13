@@ -23,7 +23,7 @@ import {
   type ReceiptScope,
 } from "./repository";
 import { Ocr, providerOf, type ProviderCooldowns } from "./ocr";
-import { quotaExceeded, quotaGate, type QuotaLimits } from "./quota";
+import { quotaGate, refuseQuota, type QuotaLimits } from "./quota";
 import { Storage } from "./services";
 import { annotateEvent } from "./telemetry/current";
 import { errorFields, sqlState } from "./telemetry/redact";
@@ -209,9 +209,7 @@ export const ingestUpload = (input: {
       ),
     ).pipe(
       Effect.flatMap((result) =>
-        result.kind === "inserted"
-          ? Effect.succeed(result)
-          : Effect.fail(quotaExceeded(result.verdict)),
+        result.kind === "inserted" ? Effect.succeed(result) : refuseQuota(result.verdict),
       ),
       // No row means nothing would ever delete the object, so it goes unless
       // the insert may have committed (see `mayHaveCommitted`); then it stays
@@ -419,7 +417,7 @@ export const claimRetry = (input: {
       input.scope,
       yield* quotaGate(input.limits),
     );
-    if (claim.kind === "quota") return yield* quotaExceeded(claim.verdict);
+    if (claim.kind === "quota") return yield* refuseQuota(claim.verdict);
     if (claim.kind === "not-found") return yield* new NotFound({ message: "Receipt not found" });
     if (claim.kind === "not-retryable") {
       return yield* new Conflict({ message: "Only receipts that failed can be retried" });
