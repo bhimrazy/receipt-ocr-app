@@ -42,7 +42,7 @@ export const APP_NAV: NavItem[] = [
 
 export const ADMIN_NAV_ITEM: NavItem = { href: "/admin", label: "Admin", icon: ShieldCheck };
 
-/** Opens the camera; depends on `/app/upload` handling `capture=1` (PR #47). */
+/** Opens the camera; depends on `/app/upload` handling `capture=1`. */
 export const SCAN_HREF = "/app/upload?capture=1";
 
 const ADD_HREF = "/app/upload";

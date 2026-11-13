@@ -49,7 +49,7 @@ async function shareFile(page: Page, name: string, type = "image/png") {
   );
 }
 
-// Kept photos open the review sheet (#47) instead of joining the list; nothing uploads until Scan.
+// Kept photos open the review sheet instead of joining the list; nothing uploads until Scan.
 const review = (page: Page) => page.getByRole("dialog", { name: "Review photos" });
 const sharedNotice = (page: Page) => page.getByRole("status", { name: "Shared files" });
 

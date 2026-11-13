@@ -52,7 +52,7 @@ const sentence = (parts: (string | null | false)[]) => {
 
 /**
  * The delete confirmation and the group picker, for the selection or a single row. Deleting
- * is permanent (the owner chose no "Recently deleted"), so the dialog says so.
+ * is permanent (there is no "Recently deleted"), so the dialog says so.
  */
 export function SelectionDialogs({
   pending,

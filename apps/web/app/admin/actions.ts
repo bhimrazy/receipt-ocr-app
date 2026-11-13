@@ -182,8 +182,6 @@ function touchUser(userId: string) {
   revalidatePath(`/admin/users/${userId}`);
 }
 
-// ---------- Users ----------
-
 export async function setRoleAction(input: { userId: string; role: "user" | "admin" }) {
   return run("user.role", async (ctx) => {
     const { userId, role } = z.object({ userId: id, role: z.enum(["user", "admin"]) }).parse(input);
@@ -435,8 +433,6 @@ export async function resetTwoFactorAction(input: { userId: string; reason: stri
   });
 }
 
-// ---------- Workspaces ----------
-
 function touchWorkspace(organizationId: string, userId?: string) {
   revalidatePath("/admin", "layout");
   revalidatePath(`/admin/workspaces/${organizationId}`);
@@ -502,8 +498,6 @@ export async function setSupportStatusAction(input: { messageId: string; status:
     if (previous !== parsed.status) revalidatePath("/admin", "layout");
   });
 }
-
-// ---------- Settings ----------
 
 export async function savePlansAction(value: unknown) {
   return run("settings.plans", async (ctx) => {

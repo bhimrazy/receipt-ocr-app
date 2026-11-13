@@ -31,9 +31,8 @@ export function acceptedType(file: { name: string; type: string }): string | nul
 }
 
 /**
- * Upload sizes, set by the photo's shape and the option alone, never by how well it compresses
- * (docs/reviews/2026-11-09-upload-sizing.md). Each option fits a pixel budget, raised to keep a
- * minimum short edge (a receipt's width: pixels per millimetre of paper), and every option stays
+ * Upload sizes, set by the photo's shape and the option alone, never by how well it compresses.
+ * Each option fits a pixel budget, raised to keep a minimum short edge (a receipt's width: pixels per millimetre of paper), and every option stays
  * within what Claude reads natively: 2,576 px on the long edge and 4,784 patches of 28 x 28 px.
  * Never upscaled. Labels: Compact, Small, Standard, Sharpest. The ids predate those labels and are
  * kept so telemetry still compares: `smaller` is Small, `recommended` Standard, `larger` Sharpest.

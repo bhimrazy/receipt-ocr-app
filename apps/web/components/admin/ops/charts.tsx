@@ -211,8 +211,6 @@ function endLabel(
   return EndLabel;
 }
 
-// ---------- Volume ----------
-
 export type VolumeDatum = {
   t: string;
   ok: number;
@@ -325,8 +323,6 @@ export function VolumeChart({ data, compare }: { data: VolumeDatum[]; compare: b
   );
 }
 
-// ---------- Latency ----------
-
 export type LatencyDatum = { t: string } & Record<string, number | string | null>;
 
 export function LatencyChart({
@@ -396,8 +392,6 @@ export function LatencyChart({
     </ChartFrame>
   );
 }
-
-// ---------- Cost ----------
 
 export type CostDatum = { t: string; previous?: number } & Record<
   string,
@@ -498,8 +492,6 @@ export function CostChart({
     </ChartFrame>
   );
 }
-
-// ---------- Horizontal bars (failure kinds) ----------
 
 export function KindBars({
   title,

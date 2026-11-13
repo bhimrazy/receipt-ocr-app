@@ -161,7 +161,6 @@ export function LandingPage({
       <SiteHeader />
 
       <main>
-        {/* Hero */}
         <section className="relative flex items-center justify-center px-5 pb-28 pt-40 text-center md:pt-44">
           <div className="grid-mask pointer-events-none absolute inset-0 opacity-40">
             <div className="receipt-grid absolute -inset-1" />
@@ -198,14 +197,12 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* Product preview */}
         <section className="relative px-5 sm:pb-8">
           <div className="mx-auto -mt-6 max-w-4xl animate-rise">
             <ProductPreview />
           </div>
         </section>
 
-        {/* Stats band */}
         <section className="mt-8 border-y border-border bg-secondary/30 px-5 py-12 sm:mt-16">
           <div className="mx-auto grid max-w-5xl grid-cols-2 gap-x-8 gap-y-10 text-center md:grid-cols-4">
             {stats.map(([value, label]) => (
@@ -219,7 +216,6 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* Features */}
         <section id="features" className="relative scroll-mt-24 px-5 py-24 md:py-28">
           <div className="glow-orb pointer-events-none absolute left-1/2 top-0 size-[500px] -translate-x-1/2 rounded-full bg-primary/5 blur-[160px]" />
           <div className="relative mx-auto max-w-6xl">
@@ -254,7 +250,6 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* How it works */}
         <section
           id="how"
           className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28"
@@ -270,7 +265,6 @@ export function LandingPage({
               </p>
             </div>
             <div className="relative grid gap-5 md:grid-cols-3">
-              {/* connector line */}
               <div className="pointer-events-none absolute inset-x-[16%] top-[3.25rem] hidden h-px bg-linear-to-r from-transparent via-border to-transparent md:block" />
               {steps(plans.free.batchMax).map((step, index) => (
                 <Card className="relative p-7 text-center" key={step.title}>
@@ -285,7 +279,6 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* Use cases */}
         <section className="border-t border-border px-5 py-24 md:py-28">
           <div className="mx-auto max-w-6xl">
             <div className="mx-auto mb-14 max-w-2xl text-center">
@@ -341,7 +334,6 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* Pricing */}
         <section
           id="pricing"
           className="scroll-mt-24 border-t border-border bg-secondary/20 px-5 py-24 md:py-28"
@@ -407,7 +399,6 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* FAQ */}
         <section id="faq" className="scroll-mt-24 border-t border-border px-5 py-24 md:py-28">
           <div className="mx-auto max-w-3xl">
             <div className="mx-auto mb-12 max-w-2xl text-center">
@@ -437,7 +428,6 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* CTA */}
         <section className="px-5 py-24 md:py-28">
           <div className="relative mx-auto max-w-4xl overflow-hidden rounded-3xl border border-primary/20 bg-primary/6 px-6 py-16 text-center">
             <div className="grid-mask pointer-events-none absolute inset-0 opacity-30">
@@ -465,7 +455,6 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* Product updates */}
         {newsletterEnabled && (
           <section
             aria-labelledby="updates-heading"

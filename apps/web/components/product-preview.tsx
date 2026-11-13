@@ -108,7 +108,6 @@ function DesktopPreview() {
       </div>
 
       <div className="grid gap-px bg-border md:grid-cols-2">
-        {/* Receipt image side */}
         <div className="flex flex-col items-center justify-center gap-4 bg-card p-8">
           <div className="relative w-full max-w-[220px] overflow-hidden rounded-lg border border-dashed border-hairline bg-background/60 p-5 font-mono text-2xs text-muted-foreground">
             <div className="scan-line pointer-events-none absolute inset-x-0 top-0" aria-hidden />
@@ -134,7 +133,6 @@ function DesktopPreview() {
           </span>
         </div>
 
-        {/* Extracted data side */}
         <div className="bg-card">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <p className="text-sm font-medium">Extracted data</p>

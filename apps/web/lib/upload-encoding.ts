@@ -1,6 +1,5 @@
 /**
- * How a photo is encoded for upload, in one place so it can be tuned from telemetry
- * (docs/reviews/2026-11-09-image-compression.md). JPEG from the canvas: Safari can't encode WebP
+ * How a photo is encoded for upload, in one place so it can be tuned from telemetry. JPEG from the canvas: Safari can't encode WebP
  * or AVIF there, and no OCR provider charges less for them.
  *
  * The ladder tries each quality in turn and keeps the first encode at or under the option's

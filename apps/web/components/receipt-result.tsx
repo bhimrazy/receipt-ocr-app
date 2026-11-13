@@ -142,7 +142,7 @@ export function ReceiptResult({
             <p className="text-sm text-muted-foreground">This receipt is a PDF.</p>
           </div>
         ) : receipt.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
+          // eslint-disable-next-line @next/next/no-img-element -- a signed storage URL, not optimizable by next/image
           <img
             alt={`Photo of the receipt${completed && receipt.merchant ? ` from ${receipt.merchant}` : ""}`}
             // On phones only the top of a long receipt shows (merchant and date); "Open full size" has the rest.

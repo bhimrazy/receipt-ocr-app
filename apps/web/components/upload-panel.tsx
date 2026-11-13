@@ -712,7 +712,7 @@ export function UploadPanel({
               return (
                 <li className="flex items-center gap-3 py-2 pr-2 pl-4" key={item.id}>
                   {item.payload.preview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
+                    // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL
                     <img
                       alt=""
                       className="size-11 shrink-0 rounded-md border border-border bg-muted object-cover"

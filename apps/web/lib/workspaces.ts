@@ -17,8 +17,7 @@ export interface WorkspaceAllowance {
 
 /**
  * Counts workspaces the caller owns. Memberships in someone else's workspace
- * do not count against the cap — that mismatch was why the switcher used to
- * lock "Create workspace" after being invited to a second workspace.
+ * do not count against the cap.
  */
 export async function getWorkspaceAllowance(): Promise<WorkspaceAllowance> {
   const [session, { plan, policy }, plans] = await Promise.all([
