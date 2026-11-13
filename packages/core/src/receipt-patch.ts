@@ -28,53 +28,45 @@ const MAX_INTEGER_DIGITS = 10;
 
 /**
  * A typed amount as a `numeric(12,2)` literal (`"1234.50"`), null for an empty field, or an error. Spaces and
- * currency symbols are dropped. One `,` or `.` before 1 or 2 digits is the decimal separator (`12,50`); before 3 it
- * groups thousands (`1,234`), as does any separator that repeats or comes before the other one (`1.234,56`,
- * `1,23,456.78`). Anything else, exponents and more than 2 decimals included, is an error: never a guess.
+ * currency symbols are dropped. A dot is always the decimal mark, with at most 2 decimals. Commas group thousands,
+ * Western or Indian (`1,234,567`, `1,23,456.50`). The one other comma read is a decimal comma that can't be a
+ * grouping (`12,50`). Anything else, exponents included, is an error: never a guess.
  */
 export function parseAmount(input: unknown, { negative = true } = {}): Parsed<string | null> {
   if (input === null || input === undefined) return { value: null };
-  if (typeof input !== "string" && typeof input !== "number") return { error: "invalid" };
-  const text = asciiDigits(String(input)).replace(/[\s\p{Sc}'’]/gu, "");
+  if (typeof input === "number") return fromNumber(input, negative);
+  if (typeof input !== "string") return { error: "invalid" };
+  const text = asciiDigits(input).replace(/[\s\p{Sc}]/gu, "");
   if (text === "") return { value: null };
-  const match = /^(-?)(\d[\d.,]*)$/.exec(text);
+  const match =
+    /^(-?)(\d{1,3}(?:,\d{2,3})*,\d{3}|\d+)(?:\.(\d{1,2}))?$/.exec(text) ??
+    /^(-?)(\d+),(\d{1,2})$/.exec(text);
   if (!match) return { error: "invalid" };
-  const [, sign, body] = match as unknown as [string, string, string];
-  const separators = [...body.matchAll(/[.,]/g)].map((m) => m[0]);
-  let integer = body;
-  let fraction = "";
-  const last = separators.at(-1);
-  if (last) {
-    const lastIndex = body.lastIndexOf(last);
-    const tail = body.slice(lastIndex + 1);
-    const decimal =
-      separators.filter((s) => s === last).length === 1 &&
-      (separators.some((s) => s !== last) || tail.length !== 3);
-    if (decimal) {
-      if (tail.length < 1 || tail.length > 2) return { error: "invalid" };
-      fraction = tail;
-      integer = body.slice(0, lastIndex);
-    }
-    const groups = integer.split(/[.,]/);
-    const grouping = new Set(integer.match(/[.,]/g) ?? []);
-    if (grouping.size > 1 || (decimal && grouping.has(last))) return { error: "invalid" };
-    if (
-      groups.length > 1 &&
-      (groups.at(-1)!.length !== 3 ||
-        groups.slice(1, -1).some((g) => g.length !== 2 && g.length !== 3) ||
-        groups[0]!.length > 3 ||
-        groups[0]!.length === 0)
-    ) {
-      return { error: "invalid" };
-    }
-    integer = groups.join("");
-  }
-  if (!/^\d+$/.test(integer)) return { error: "invalid" };
-  integer = integer.replace(/^0+(?=\d)/, "");
-  if (integer.length > MAX_INTEGER_DIGITS) return { error: "too large" };
+  const [, sign = "", whole = "", fraction = ""] = match;
+  return literal(sign, whole.replaceAll(",", ""), fraction, negative);
+}
+
+/** A JSON number is already a value, never read through the grouping rules. */
+function fromNumber(value: number, negative: boolean): Parsed<string | null> {
+  if (!Number.isFinite(value)) return { error: "invalid" };
+  const cents = Math.round(value * 100);
+  if (Math.abs(value * 100 - cents) > 1e-6) return { error: "invalid" };
+  const digits = String(Math.abs(cents)).padStart(3, "0");
+  return literal(cents < 0 ? "-" : "", digits.slice(0, -2), digits.slice(-2), negative);
+}
+
+function literal(
+  sign: string,
+  integer: string,
+  fraction: string,
+  negative: boolean,
+): Parsed<string | null> {
+  const whole = integer.replace(/^0+(?=\d)/, "");
+  if (whole.length > MAX_INTEGER_DIGITS) return { error: "too large" };
+  const value = `${whole}.${fraction.padEnd(2, "0")}`;
+  if (value === "0.00") return { value };
   if (sign && !negative) return { error: "negative" };
-  const value = `${sign}${integer}.${fraction.padEnd(2, "0")}`;
-  return { value: /^-0\.00$/.test(value) ? "0.00" : value };
+  return { value: `${sign}${value}` };
 }
 
 function text(input: unknown, max: number): Parsed<string | null> {
