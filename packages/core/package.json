@@ -11,7 +11,8 @@
     "./upload-limits": "./src/upload-limits.ts",
     "./group-rules": "./src/group-rules.ts",
     "./receipt-fields": "./src/receipt-fields.ts",
-    "./review-reasons": "./src/review-reasons.ts"
+    "./review-reasons": "./src/review-reasons.ts",
+    "./extraction-fields": "./src/extraction-fields.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
