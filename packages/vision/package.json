@@ -9,7 +9,8 @@
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tests"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p bench && tsc --noEmit -p tests",
+    "bench:edges": "bun bench/run.ts"
   },
   "devDependencies": {
     "@types/node": "25.9.1",

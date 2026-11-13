@@ -97,6 +97,105 @@ Corner error is the largest corner distance as a share of the frame diagonal. Sy
 photos, so read these as an upper bound on real behaviour; the published real-world figures for classical detectors
 are 37–51% hands-off (section 2).
 
+#### Baseline from the repo harness (2026-11-13)
+
+`bun run --filter @receipt-ocr/vision bench:edges` on the gate seeds (5000-5039, 40 scenes per category), detector
+unchanged. The repo generator is a rewrite, so it is not scene-for-scene the scratch one: it renders a different random
+mix, rotates each category through named variants (below) and adds the extra categories from section 4 as variants.
+The scratch baseline above predates #220, which lowered the detector's `MIN_COVER` from 0.2 to 0.1, so it describes a
+slightly different detector as well. This table is the number every later PR is compared with
+(`packages/vision/bench/baseline.json`).
+
+| Category                                     |      Good |     Loose |     Miss |   Harmful | Median corner error |
+| -------------------------------------------- | --------: | --------: | -------: | --------: | ------------------: |
+| Flat on a contrasting table, dark/wood (18%) |      100% |        0% |       0% |        0% |               0.75% |
+| Hand-held, room behind, fingers on it (15%)  |       15% |       57% |       0% |       28% |               6.34% |
+| Hand-held, thumb over a corner (4%)          |       53% |       13% |       5% |       30% |               3.79% |
+| White or light surface (10%)                 |       33% |        8% |      60% |        0% |               0.87% |
+| Messy desk, keyboard, clutter (7%)           |       28% |       45% |      18% |       10% |               0.97% |
+| Patterned cloth, lap, car seat (7%)          |       70% |        3% |       8% |       20% |               0.70% |
+| Long thermal, 1:3.5 to 1:5.5 (6%)            |       90% |        0% |      10% |        0% |               1.14% |
+| Crumpled or curled (5%)                      |      100% |        0% |       0% |        0% |               0.54% |
+| Folded (2%)                                  |      100% |        0% |       0% |        0% |               0.75% |
+| Shadow across the paper (5%)                 |       50% |        0% |      15% |       35% |               0.71% |
+| Low light and noise (4%)                     |      100% |        0% |       0% |        0% |               0.75% |
+| Glare, or a light band beside the paper (2%) |       63% |       23% |       0% |       15% |               7.07% |
+| Partial, runs off the frame (5%)             |       65% |        0% |       0% |       35% |                   - |
+| Several or overlapping receipts (2%)         |       15% |       20% |       0% |       65% |               0.58% |
+| A4 invoice on a desk (4%)                    |       98% |        0% |       0% |        3% |               0.56% |
+| Screenshot or PDF render, no edges (5%)      |       63% |        0% |       0% |       38% |                   - |
+| **Weighted**                                 | **62.5%** | **13.9%** | **9.2%** | **14.4%** |   1.30% (p90 1.30%) |
+
+Where the difference from the scratch table comes from. With `MIN_COVER` put back to 0.2 the repo harness gives 54.8%
+good, 13.9% loose, 17.8% miss and 13.6% harmful, so the detector change explains about 8 points of good and about 9
+points of miss (long thermal goes 13% good against 90% with 0.1, and the table, folded and low-light misses return).
+The remaining gap to the scratch run (about 4.5 points good, 2 points harmful, 1 point miss) is the generator. The
+order of difficulty holds: hand-held, thumb, clutter, several receipts, shadow and screenshots are the harmful ones,
+and table, crumpled, folded, low light and A4 are fine. The generator differences, not measured causes, are in white
+surfaces (the repo scenes give the paper a cast shadow), partial framing (the repo paper runs further off the frame)
+and screenshots. The tuning seeds (1000-1009) are for choosing thresholds, so they are not a check on anything.
+
+The never-tuned holdout set (seeds 9000-9199, 200 scenes per category, `--set holdout`, about 4.5 minutes) gives
+62.8% good, 13.5% loose, 9.3% miss and 14.4% harmful with median corner error 0.45% and p90 1.01%, within a point or two
+of the gate set. Run it at PRs 6-8 and before v2 becomes the default; the 40-scene gate stays the per-PR check, and a
+category moves by a scene or two on 40 scenes, so only the weighted figures and the bars below are meant to be read.
+
+By variant, gate seeds. Variants rotate with the seed, so each has at least 5 scenes; a handful of scenes is a sample,
+not a rate:
+
+| Category: variant           | Scenes | Good | Loose | Miss | Harmful |
+| --------------------------- | -----: | ---: | ----: | ---: | ------: |
+| table: table                |     40 | 100% |    0% |   0% |      0% |
+| hand: room                  |     13 |  23% |   38% |   0% |     38% |
+| hand: sleeve                |     14 |  21% |   50% |   0% |     29% |
+| hand: white wall            |     13 |   0% |   85% |   0% |     15% |
+| thumb: room                 |     24 |  33% |   17% |   4% |     46% |
+| thumb: table                |     16 |  81% |    6% |   6% |      6% |
+| white: bed sheet            |     10 |   0% |   10% |  90% |      0% |
+| white: darker receipt       |     10 |  30% |   10% |  60% |      0% |
+| white: light wood           |     10 | 100% |    0% |   0% |      0% |
+| white: white desk           |     10 |   0% |   10% |  90% |      0% |
+| clutter: keyboard dark      |      8 | 100% |    0% |   0% |      0% |
+| clutter: keyboard light     |      8 |   0% |   88% |  13% |      0% |
+| clutter: laptop             |      8 |   0% |   63% |   0% |     38% |
+| clutter: objects            |      8 |  13% |   50% |  38% |      0% |
+| clutter: papers             |      8 |  25% |   25% |  38% |     13% |
+| patterned: car seat         |      8 | 100% |    0% |   0% |      0% |
+| patterned: check cloth      |      8 |  50% |   13% |  38% |      0% |
+| patterned: dark fabric      |      8 | 100% |    0% |   0% |      0% |
+| patterned: dashboard        |      8 |   0% |    0% |   0% |    100% |
+| patterned: lap              |      8 | 100% |    0% |   0% |      0% |
+| thermal: thermal            |     30 |  93% |    0% |   7% |      0% |
+| thermal: thermal on pattern |     10 |  80% |    0% |  20% |      0% |
+| crumpled: crumpled          |     24 | 100% |    0% |   0% |      0% |
+| crumpled: curled            |     16 | 100% |    0% |   0% |      0% |
+| folded: folded              |     40 | 100% |    0% |   0% |      0% |
+| shadow: phone shadow        |     14 |  43% |    0% |  43% |     14% |
+| shadow: shadow              |     26 |  54% |    0% |   0% |     46% |
+| lowlight: low light         |     26 | 100% |    0% |   0% |      0% |
+| lowlight: motion blur       |     14 | 100% |    0% |   0% |      0% |
+| glare: glare                |     20 |  75% |    0% |   0% |     25% |
+| glare: light band           |     20 |  50% |   45% |   0% |      5% |
+| partial: partial            |     40 |  65% |    0% |   0% |     35% |
+| several: close              |     10 |  10% |   30% |   0% |     60% |
+| several: over               |     10 |   0% |   40% |   0% |     60% |
+| several: separate           |     10 |  50% |    0% |   0% |     50% |
+| several: under              |     10 |   0% |   10% |   0% |     90% |
+| a4: a4                      |     40 |  98% |    0% |   0% |      3% |
+| digital: app bar            |      5 |   0% |    0% |   0% |    100% |
+| digital: card               |      5 | 100% |    0% |   0% |      0% |
+| digital: card on dark       |      5 |   0% |    0% |   0% |    100% |
+| digital: dark bars          |      5 |   0% |    0% |   0% |    100% |
+| digital: dark mode          |      5 | 100% |    0% |   0% |      0% |
+| digital: jpeg               |      5 | 100% |    0% |   0% |      0% |
+| digital: light              |      5 | 100% |    0% |   0% |      0% |
+| digital: status bar         |      5 | 100% |    0% |   0% |      0% |
+
+Of 231 crops the detector would apply, 4 cut print (the screenshots with a header or navigation bar and some shadow
+scenes among them); 338 were only suggested, 172 of them good. Speed is 3.2 ms median, 6.0 ms p95 at 192x256 under
+Bun, and the module is 5.0 kB minified, 2.4 kB gzipped (`bun build` of `detect-quad.ts`; the scratch figure below was
+taken on a different bundle). A full gate run takes about 40-70 s, nearly all of it rendering.
+
 Speed and size, measured on the codespace (AMD EPYC 7763, a noisy shared machine): **about 9 ms median, 26 ms p95**
 per call at 192x256 under Node/V8, and 6–12 ms median under Bun/JavaScriptCore across runs. The module is 4.2 kB
 minified, **1.9 kB gzipped**.
@@ -425,13 +524,18 @@ To make v2 the default (after PR 8):
 
 ### Running it
 
-- `packages/vision/bench/` holds the generator, metrics and runner. `bun run bench:edges` prints the table above and
-  writes `packages/vision/bench/baseline.json` when asked.
-- A `vitest` unit test (`edges.gate.test.ts`) renders the gate seeds, runs the detector and asserts the bars against
-  `baseline.json`. Pure TypeScript on typed arrays: no browser, no canvas, no native module. It runs in the existing
-  "Typecheck, test, build" job. Budget: under 30 seconds for 16 categories of 40 scenes (the scratch version needs
-  about 85 seconds of CPU, so the generator needs the tidy-up above, or the gate uses 20 scenes per category and the
-  bench script the full set).
+- `packages/vision/bench/` holds the generator, metrics and runner. `bun run --filter @receipt-ocr/vision bench:edges`
+  prints the category table, the per-variant table, level accuracy, speed and size. `--check` compares the run with
+  `bench/baseline.json` and exits 1 on a violation: the pass bars below (weighted harmful and good, per-category
+  harmful and good, harmful among applied crops, and the corner-error bars on the plain categories: table, long
+  thermal, crumpled, folded, A4). It refuses to compare runs with different scene counts or a category missing from the
+  baseline, and reports a changed generator (a fingerprint of every rendered frame and its truth) instead of comparing
+  different scenes. `--write-baseline` runs the same comparison first and refuses a worse baseline unless `--force`.
+  `--set tune|gate|holdout` picks the seed pool (10, 40 and 200 scenes per category by default, capped at 1000), and
+  `--category` narrows a run. CI runs `bench:edges --check --no-timing` in the "Typecheck, test, build" job.
+  The per-scene ground truth also records which sides are visible, covered or off the frame, and the expected level.
+- Not built: a `vitest` gate test. The CI step runs the same check as a script, pure TypeScript on typed arrays (no
+  browser, no canvas, no native module), inside the existing "Typecheck, test, build" job.
 - The speed assertion is a ratio against a frozen copy of v1 in the bench folder, with a generous margin in CI and the
   exact number printed by the bench script.
 - The browser path (canvas downscale, real camera) stays covered by the existing Playwright `mobile-camera` project;
@@ -510,6 +614,16 @@ Each PR is small, carries its harness numbers in the description, and updates `d
 | 8   | Line proposer, three-side inference, ambiguity rule                                                                                                                                       | Yes              | The "default" bars in section 4                                                   |
 | 9   | Live camera: tracker with hysteresis and smoothing, last quad as a proposal                                                                                                               | Yes, visible     | Stability metrics; Playwright fake-camera check                                   |
 | 10  | Only if measured: high-resolution side refinement for stills; a worker for the live loop                                                                                                  | Yes              | Corner error or phone timing shows the need                                       |
+
+Before the later PRs, in this order:
+
+- **Before PR 4 (speed):** a frozen copy of today's detector in the bench folder, so the speed ratio and "same quad on
+  every scene" are measured in one process. Not built in PR 2.
+- **Before PR 5:** the CI check on the gate baseline is in place (PR 2). Every PR from here runs `--check`; one that
+  improves the numbers rewrites `baseline.json` in the same PR (`--write-baseline` refuses a worse one).
+- **Before PR 6:** corner labels for the nine real photos in `packages/bench/fixtures-real`, so "no harmful crop on any"
+  can be asserted, and the first holdout run (`--set holdout`).
+- **At PRs 6-8 and before v2 becomes the default:** the holdout run, never tuned against.
 
 PRs 1–4 can start now and do not depend on any decision below. After PR 8, compare production "corrected or discarded"
 with the PR 3 baseline; that is the measurement that says whether real users got a better detector.
