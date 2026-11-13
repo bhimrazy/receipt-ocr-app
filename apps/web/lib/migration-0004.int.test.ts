@@ -1,7 +1,7 @@
 /**
  * Migration 0004 (billing checkouts) against rows written before it, on a scratch database next to DATABASE_URL's:
- * it validates the 0003 CHECKs without rewriting the tables, repeats the `low_confidence` backfill for receipts
- * completed by pre-0003 code, and adds `billing_checkouts`. Skipped unless INTEGRATION=1.
+ * it validates the 0003 CHECKs without rewriting the tables, leaves review reasons alone, and adds
+ * `billing_checkouts`. Skipped unless INTEGRATION=1.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -49,9 +49,9 @@ describe.skipIf(!enabled)("migration 0004 on existing rows", () => {
 
     await db`insert into "user" (id, name, email) values ('u1', 'Test', 'test@example.com')`;
     await db`insert into organization (id, name, slug) values ('o1', 'Test', 'test')`;
-    // `late`: completed by pre-0003 code after 0003 ran, so its review_reasons kept the default.
+    // `lowScore`: completed with a low model score that the deterministic checks passed.
     for (const [key, status, confidence, reasons] of [
-      ["late", "completed", "0.8000", "{}"],
+      ["lowScore", "completed", "0.8500", "{}"],
       ["flagged", "completed", "0.9500", "{total_mismatch}"],
       ["clean", "completed", "0.9500", "{}"],
     ] as const) {
@@ -60,7 +60,7 @@ describe.skipIf(!enabled)("migration 0004 on existing rows", () => {
         values ('o1', 'u1', ${status}, ${confidence}, ${reasons}) returning id`;
       ids[key] = row!.id;
     }
-    await db`insert into receipt_items (receipt_id, name, position) values (${ids.late!}, 'only', 0)`;
+    await db`insert into receipt_items (receipt_id, name, position) values (${ids.lowScore!}, 'only', 0)`;
     fileNodes = await relfilenodes();
 
     await db.begin((tx) => tx.unsafe(sqlOf(target)));
@@ -79,16 +79,16 @@ describe.skipIf(!enabled)("migration 0004 on existing rows", () => {
     expect(await relfilenodes()).toEqual(fileNodes);
   });
 
-  it("flags receipts the old confidence rule flagged, and leaves the rest as they were", async () => {
+  it("leaves every receipt's review reasons as they were, even with a low model score", async () => {
     const rows = await db`select id, review_reasons from receipts`;
     expect(Object.fromEntries(rows.map((r) => [r.id, r.review_reasons]))).toEqual({
-      [ids.late!]: ["low_confidence"],
+      [ids.lowScore!]: [],
       [ids.flagged!]: ["total_mismatch"],
       [ids.clean!]: [],
     });
   });
 
-  it("adds billing_checkouts: one row per transaction, gone with its workspace or buyer", async () => {
+  it("adds billing_checkouts: one row per transaction and per subscription, gone with its workspace or buyer", async () => {
     const [table] =
       await db`select relrowsecurity from pg_class where relname = 'billing_checkouts'`;
     expect(table?.relrowsecurity).toBe(true);
@@ -97,6 +97,11 @@ describe.skipIf(!enabled)("migration 0004 on existing rows", () => {
       values ('paddle', ${txn}, 'o1', 'u1', 'ctm_1', 'pri_1')`;
     await checkout("txn_1");
     await expect(checkout("txn_1")).rejects.toThrow(/billing_checkouts_provider_transaction_idx/);
+    await checkout("txn_2");
+    await db`update billing_checkouts set provider_subscription_id = 'sub_1' where provider_transaction_id = 'txn_1'`;
+    await expect(
+      db`update billing_checkouts set provider_subscription_id = 'sub_1' where provider_transaction_id = 'txn_2'`,
+    ).rejects.toThrow(/billing_checkouts_provider_subscription_idx/);
     await db`delete from receipts`;
     await db`delete from "user" where id = 'u1'`;
     expect(await db`select 1 from billing_checkouts`).toHaveLength(0);

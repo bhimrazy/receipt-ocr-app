@@ -1,5 +1,5 @@
 {
-  "id": "cf414001-e212-4751-b426-adc0c349236c",
+  "id": "31e9ec4a-9c1b-4340-be8c-b07d66086e32",
   "prevId": "58b70cf5-4f8e-4931-aaf3-b1a7d2fd7d73",
   "version": "7",
   "dialect": "postgresql",
@@ -256,6 +256,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "provider_subscription_id": {
+          "name": "provider_subscription_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -276,6 +282,27 @@
             },
             {
               "expression": "provider_transaction_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "billing_checkouts_provider_subscription_idx": {
+          "name": "billing_checkouts_provider_subscription_idx",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider_subscription_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
