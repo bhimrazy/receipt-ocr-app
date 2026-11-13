@@ -1,4 +1,4 @@
-import type { SettingsLink } from "@/components/settings-list";
+import type { SettingsRow } from "@/components/settings-list";
 
 /** The phone Settings list, top to bottom: each row's current value comes from the page's data. */
 export function settingsRows(input: {
@@ -6,7 +6,7 @@ export function settingsRows(input: {
   planSummary: string;
   workspaceName: string;
   protectedAccount: boolean;
-}): (SettingsLink | "appearance")[] {
+}): SettingsRow[] {
   return [
     {
       href: "/app/settings/billing",
@@ -29,5 +29,6 @@ export function settingsRows(input: {
       value: input.protectedAccount ? "Protected" : "Set up",
       icon: "security",
     },
+    "help",
   ];
 }

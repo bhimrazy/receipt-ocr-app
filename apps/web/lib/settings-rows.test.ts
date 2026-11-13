@@ -2,20 +2,21 @@ import { describe, expect, it } from "vitest";
 import { settingsRows } from "./settings-rows";
 
 describe("settingsRows", () => {
-  it("lists Plan and billing, Workspace, Groups, Appearance and Security with their current values", () => {
+  it("lists Plan and billing, Workspace, Groups, Appearance, Security and Help with their current values", () => {
     const rows = settingsRows({
       planSummary: "Free · 85 / 100 scans",
       workspaceName: "Sam's",
       protectedAccount: false,
     });
     expect(
-      rows.map((r) => (r === "appearance" ? r : [r.label, r.detail ?? r.value, r.href])),
+      rows.map((r) => (typeof r === "string" ? r : [r.label, r.detail ?? r.value, r.href])),
     ).toEqual([
       ["Plan and billing", "Free · 85 / 100 scans", "/app/settings/billing"],
       ["Workspace", "Sam's", "/app/settings/members"],
       ["Groups", "", "/app/receipts/groups"],
       "appearance",
       ["Security", "Set up", "/app/settings/security"],
+      "help",
     ]);
   });
 
@@ -25,6 +26,6 @@ describe("settingsRows", () => {
       workspaceName: "W",
       protectedAccount: true,
     });
-    expect(rows.at(-1)).toMatchObject({ label: "Security", value: "Protected" });
+    expect(rows.at(-2)).toMatchObject({ label: "Security", value: "Protected" });
   });
 });

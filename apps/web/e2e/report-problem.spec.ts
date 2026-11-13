@@ -1,6 +1,41 @@
 import { expect, test } from "@playwright/test";
 import { seedReceipts, signUp, uniqueEmail } from "./helpers";
 
+test("Help and feedback opens the support form from Settings and the account menu, with no bubble", async ({
+  page,
+}) => {
+  await signUp(page, uniqueEmail("help"));
+  const dialog = page.getByRole("dialog", { name: "How can we help?" });
+
+  await page.goto("/app/settings");
+  await expect(page.getByRole("button", { name: "Contact support" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Help and feedback" }).click();
+  await expect(dialog.getByRole("button", { name: "Question" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(dialog.getByText("We'll see which receipt this is about.")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Close" }).click();
+
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Help and feedback" }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page
+    .getByRole("navigation", { name: "Settings" })
+    .getByRole("button", { name: "Help and feedback" })
+    .click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Account and workspace" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Help and feedback" }).click();
+  await expect(dialog).toBeVisible();
+});
+
 test("Report a problem opens the support form about that receipt, from the menu and the phone sheet", async ({
   page,
 }) => {
