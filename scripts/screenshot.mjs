@@ -7,7 +7,6 @@
 //
 // --theme stores that choice before each page loads, as the theme toggle does (default: dark).
 // --login signs in through the Better Auth API first, so app routes render as that user.
-// The page is scrolled end to end before capture so lazily mounted charts render.
 // Files are named <path-slug>@<width>-<theme>.png. Console errors and failed requests are printed per page.
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -64,14 +63,6 @@ try {
       page.on("console", onConsole);
       page.on("requestfailed", onFail);
       const res = await page.goto(new URL(p, base).href, { waitUntil: "networkidle" });
-      // Charts mount when they near the viewport (IntersectionObserver), and a full-page capture never scrolls.
-      await page.evaluate(async () => {
-        for (let y = 0; y < document.body.scrollHeight; y += window.innerHeight / 2) {
-          window.scrollTo(0, y);
-          await new Promise((r) => setTimeout(r, 120));
-        }
-        window.scrollTo(0, 0);
-      });
       await page.waitForTimeout(400); // let entrance animations settle
       const slug = p.replace(/^\/|\/$/g, "").replace(/[^a-zA-Z0-9]+/g, "-") || "home";
       const file = path.join(out, `${slug}@${width}-${theme}.png`);

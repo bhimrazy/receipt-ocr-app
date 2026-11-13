@@ -1,5 +1,6 @@
 "use client";
 
+import { detectQuad, DETECT_EDGE, type Quad } from "@receipt-ocr/vision";
 import { Button } from "@receipt-ocr/ui/components/button";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { cn } from "@receipt-ocr/ui/lib/utils";
@@ -17,8 +18,6 @@ import {
   torchSupported,
   type CameraProblem,
 } from "@/lib/capture/camera";
-import { detectQuad, DETECT_EDGE } from "@/lib/capture/detect-quad";
-import type { Quad } from "@/lib/capture/geometry";
 import { FullScreen } from "./full-screen";
 
 type Shot = { id: string; blob: Blob; url: string };

@@ -1,6 +1,6 @@
-import type { Detection } from "./detect-quad";
+import { isConvex, type Detection, type Point, type Quad } from "@receipt-ocr/vision";
+import { edgeNormal, slideEdge } from "./edges";
 import { defaultFilter, type Filter } from "./filters";
-import { edgeNormal, isConvex, slideEdge, type Point, type Quad } from "./geometry";
 
 /**
  * What the reviewer changed on one image. Corners are normalised (0..1) in the frame of the
