@@ -9,5 +9,5 @@ export const SITE_NAME = "ReceiptOCR";
 
 export const authorName = "Bhimraj Yadav";
 export const authorUrl = "https://bhimraj.com.np";
-// The CLI behind the same idea; it will later work with this site.
-export const repoUrl = "https://github.com/bhimrazy/receipt-ocr";
+// Published for viewing only (see LICENSE), so it is "source", never "open source".
+export const repoUrl = "https://github.com/bhimrazy/receipt-ocr-app";

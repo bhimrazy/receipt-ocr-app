@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LandingPage } from "@/components/landing-page";
+import { checkoutOpenToEveryone, getCheckoutConfig } from "@/lib/billing";
 import { getPlanTable } from "@/lib/plan-limits";
 import { homeDescription, homeTitle, pageMetadata } from "@/lib/seo";
 
@@ -14,5 +15,6 @@ export const metadata: Metadata = pageMetadata({
 export const revalidate = 3600;
 
 export default async function Page() {
-  return <LandingPage plans={await getPlanTable()} />;
+  const [plans, checkout] = await Promise.all([getPlanTable(), getCheckoutConfig()]);
+  return <LandingPage checkoutOpen={checkoutOpenToEveryone(checkout)} plans={plans} />;
 }

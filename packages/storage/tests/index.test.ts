@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { probeBucket, receiptObjectKey, s3Client, signedGetUrl } from "./index";
+import { probeBucket, receiptObjectKey, s3Client, signedGetUrl } from "../src/index";
 
 const config = {
   endpoint: "http://localhost:9000",

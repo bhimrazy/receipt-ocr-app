@@ -18,15 +18,7 @@ import {
   DrawerTrigger,
 } from "@receipt-ocr/ui/components/drawer";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import {
-  ChevronsUpDown,
-  Cookie,
-  LogOut,
-  Settings,
-  ShieldCheck,
-  Sparkles,
-  SunMoon,
-} from "lucide-react";
+import { ChevronsUpDown, Cookie, LogOut, Settings, ShieldCheck, SunMoon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -36,9 +28,8 @@ import { InstallAppMenuItem, InstallAppSheetAction } from "@/components/install-
 import { useInstallAction } from "@/components/use-install-action";
 import { ThemeMenuRow, ThemeToggle } from "@/components/theme-toggle";
 import { CreateWorkspaceDialog, WorkspaceList } from "@/components/workspace-switcher";
-import { OPEN_UPGRADE, openUpgradeModal } from "@/components/upgrade/upgrade-trigger";
+import { OPEN_UPGRADE } from "@/components/upgrade/upgrade-trigger";
 import { openConsentSettingsFrom } from "@/lib/consent/store";
-import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import type { WorkspaceOption } from "@/lib/workspaces";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
@@ -74,32 +65,16 @@ function useSignOut() {
 
 /**
  * Desktop account menu at the foot of the sidebar. The server layout passes the user, so
- * there's no loading flash. `upgrade`: a Free workspace's owner, offered Pro above Settings.
+ * there's no loading flash. Pro is offered by the meter above it, never here.
  */
-export function UserMenu({
-  user,
-  showAdmin,
-  upgrade = false,
-}: {
-  user: MenuUser;
-  showAdmin: boolean;
-  upgrade?: boolean;
-}) {
+export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boolean }) {
   const handleSignOut = useSignOut();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const install = useInstallAction("menu", null);
-  // The modal opens once the menu has closed, so focus hands over cleanly.
-  const upgradePending = useRef(false);
 
   return (
     <>
-      <DropdownMenu
-        onOpenChangeComplete={(open) => {
-          if (open || !upgradePending.current) return;
-          upgradePending.current = false;
-          openUpgradeModal("menu", triggerRef.current);
-        }}
-      >
+      <DropdownMenu>
         <DropdownMenuTrigger
           ref={triggerRef}
           aria-label="Account menu"
@@ -120,19 +95,6 @@ export function UserMenu({
             <p className="truncate text-xs text-muted-foreground">{user.email}</p>
           </div>
           <DropdownMenuSeparator />
-          {upgrade ? (
-            <DropdownMenuItem
-              onClick={() => {
-                upgradePending.current = true;
-              }}
-            >
-              <Sparkles aria-hidden="true" className="text-primary" />
-              <span className="flex-1">Upgrade to Pro</span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {PRO_PRICE_LABEL.month}/mo
-              </span>
-            </DropdownMenuItem>
-          ) : null}
           <DropdownMenuItem render={<Link href="/app/settings" />}>
             <Settings aria-hidden="true" />
             Settings
@@ -195,6 +157,7 @@ export function AccountSheet({
     activeId: string;
     canCreate: boolean;
     planNote: string;
+    comparePlans: boolean;
     workspaces: WorkspaceOption[];
   };
   /** The usage meter, rendered by the server layout. */

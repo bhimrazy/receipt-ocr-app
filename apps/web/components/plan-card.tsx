@@ -64,7 +64,7 @@ export function PlanCard({
           </li>
         ))}
       </ul>
-      <div className="mt-7">{cta}</div>
+      {cta ? <div className="mt-7">{cta}</div> : null}
     </Card>
   );
 }

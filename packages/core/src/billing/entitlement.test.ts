@@ -6,6 +6,7 @@ import {
   adjustmentRevokesPro,
   canStillCharge,
   isEntitled,
+  memberLimitMessage,
   PAST_DUE_GRACE_DAYS,
   workspaceLimitMessage,
   type EntitlementFields,
@@ -134,5 +135,15 @@ describe("workspaceLimitMessage", () => {
     expect(workspaceLimitMessage("free", 1)).toContain("Free accounts can own 1 workspace.");
     expect(workspaceLimitMessage("free", 1)).toContain("A new workspace starts on Free.");
     expect(workspaceLimitMessage("pro", 2)).toContain("You own 2 workspaces, the most on Pro");
+  });
+
+  it("never asks for an upgrade: the message is shown without a control", () => {
+    const messages = [
+      workspaceLimitMessage("free", 1),
+      memberLimitMessage("free", 3, 10, "invite"),
+      memberLimitMessage("free", 3, 10, "accept"),
+    ];
+    for (const message of messages) expect(message).not.toMatch(/upgrade/i);
+    expect(messages[1]).toContain("Pro workspaces up to 10");
   });
 });

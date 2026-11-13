@@ -93,3 +93,21 @@ export function parseProPriceIds(
     .filter((id) => id.length > 0);
   return new Set(ids);
 }
+
+/** The deploy settings that say whether this is the live site. */
+export const DEPLOY_ENV_KEYS = ["VERCEL_ENV", "NODE_ENV"] as const;
+
+/**
+ * Sandbox keys on the live site (Vercel production, or NODE_ENV=production off
+ * Vercel, as in the Docker image): a checkout takes no real money, so only
+ * platform admins may check out, and only their subscriptions link.
+ */
+export function sandboxOnProduction(
+  environment: PaddleEnvironment,
+  env: Partial<Record<(typeof DEPLOY_ENV_KEYS)[number], string | undefined>>,
+): boolean {
+  const production = env.VERCEL_ENV
+    ? env.VERCEL_ENV === "production"
+    : env.NODE_ENV === "production";
+  return environment === "sandbox" && production;
+}

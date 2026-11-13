@@ -42,11 +42,11 @@ describe("default plans", () => {
     });
   });
 
-  it("counts Free per person: 20 a day, 100 a month, with a 300 a day pool across every Free user", () => {
+  it("counts Free per person: 20 a day, 30 a month, with a 300 a day pool across every Free user", () => {
     expect(DEFAULT_PLANS.free).toMatchObject({
       scope: "user",
       receiptsPerDay: 20,
-      receiptsPerMonth: 100,
+      receiptsPerMonth: 30,
       poolPerDay: 300,
     });
   });

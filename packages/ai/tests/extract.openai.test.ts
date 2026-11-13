@@ -2,10 +2,10 @@
 // API), through the same extractReceipt path production uses. fetch is mocked: these tests never
 // reach the network.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OcrCallError, retryAfterMs } from "./errors";
-import { extractReceipt } from "./extract";
-import { FIXTURE_RECEIPTS } from "./fixture";
-import { INJECTION_GUARD } from "./prompt";
+import { OcrCallError, retryAfterMs } from "../src/errors";
+import { extractReceipt } from "../src/extract";
+import { FIXTURE_RECEIPTS } from "../src/fixture";
+import { INJECTION_GUARD } from "../src/prompt";
 
 const RECEIPT = FIXTURE_RECEIPTS[0]!;
 const MODEL = "openai:gpt-6-luna" as const;

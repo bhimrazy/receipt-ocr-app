@@ -81,8 +81,9 @@ export default async function MembersPage() {
           </nav>
           <PageHeaderTitle>Workspace members</PageHeaderTitle>
           <PageHeaderDescription>
-            Invite teammates and choose what they can do. Everyone in a workspace shares its
-            receipts.
+            {canManage
+              ? "Invite teammates and choose what they can do. Everyone in a workspace shares its receipts."
+              : "Everyone in a workspace shares its receipts. Only its owners and admins can invite or remove people."}
           </PageHeaderDescription>
         </PageHeaderContent>
       </PageHeader>

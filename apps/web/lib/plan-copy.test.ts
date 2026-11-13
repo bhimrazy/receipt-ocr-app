@@ -1,11 +1,47 @@
 import { DEFAULT_PLANS, type PlanPolicy } from "@receipt-ocr/core/plans";
 import { describe, expect, it } from "vitest";
-import { CUSTOM_PLAN, freeFeatures, proFeatures, scansLine } from "./plan-copy";
+import {
+  CUSTOM_PLAN,
+  earlyAccessLine,
+  freeFeatures,
+  proFeatures,
+  scansLine,
+  welcomePlanLine,
+  workspaceCapNote,
+} from "./plan-copy";
+
+describe("account copy", () => {
+  const until = new Date("2027-03-01T00:00:00Z");
+
+  it("names an early-access allowance and the day it ends", () => {
+    expect(earlyAccessLine(100, until)).toBe("Early access: 100 scans a month until 1 March 2027.");
+    expect(
+      welcomePlanLine(
+        "free",
+        { ...DEFAULT_PLANS.free, receiptsPerMonth: 100 },
+        { until, thenPerMonth: 30 },
+      ),
+    ).toBe(
+      "Your Free plan includes 20 scans a day, up to 100 a month. The 100 a month is an early-access allowance until 1 March 2027; after that it is 30 a month, and 20 a day carries on. Limits reset at 00:00 UTC.",
+    );
+    expect(welcomePlanLine("free", DEFAULT_PLANS.free)).toBe(
+      "Your Free plan includes 20 scans a day, up to 30 a month. Limits reset at 00:00 UTC.",
+    );
+  });
+
+  it("states the workspace cap as a fact, never an instruction to upgrade", () => {
+    expect(workspaceCapNote("free", 1, 2)).toBe(
+      "Free accounts own 1 workspace. Pro owners can have 2.",
+    );
+    expect(workspaceCapNote("free", 2, 2)).toBe("Free accounts own 2 workspaces.");
+    expect(workspaceCapNote("pro", 2, 2)).toBe("You own 2 workspaces, the most on Pro.");
+  });
+});
 
 describe("plan card copy", () => {
   it("words Free from its limits", () => {
     expect(freeFeatures(DEFAULT_PLANS.free).slice(0, 3)).toEqual([
-      "20 scans a day and 100 a month for each member",
+      "20 scans a day and 30 a month for each member",
       "Up to 3 members",
       "1 workspace to own",
     ]);
@@ -18,7 +54,6 @@ describe("plan card copy", () => {
       "500 scans a month shared by the workspace, up to 200 a day",
       "Up to 10 members",
       "Own up to 2 workspaces (each upgraded separately)",
-      "Cancel any time",
     ]);
     expect(pro.filter((line) => /workspaces?\b/.test(line) && /\d/.test(line))).toHaveLength(2);
   });
@@ -36,7 +71,6 @@ describe("plan card copy", () => {
       "800 scans a month shared by the workspace, up to 300 a day",
       "Up to 1 member",
       "Own up to 4 workspaces (each upgraded separately)",
-      "Cancel any time",
     ]);
   });
 
@@ -51,7 +85,7 @@ describe("plan card copy", () => {
 
   it("offers Custom without a price or features we don't have", () => {
     expect(CUSTOM_PLAN.price).toBe("Let's talk");
-    expect(CUSTOM_PLAN.features).toContain("More members and workspaces");
+    expect(CUSTOM_PLAN.features.join(" ")).not.toMatch(/team|roadmap/i);
     const copy = [CUSTOM_PLAN.description, ...CUSTOM_PLAN.features].join(" ");
     expect(copy).not.toMatch(/\$|\d|SLA|SSO|\bAPI\b|unlimited|guarantee/i);
   });

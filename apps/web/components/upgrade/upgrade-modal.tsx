@@ -138,7 +138,7 @@ export function UpgradeModal({ offer, plan }: { offer: UpgradeOffer | null; plan
         type: "info",
         timeout: 0,
         actionProps: {
-          children: "Open Billing",
+          children: "Open Plan and billing",
           onClick: () => router.push("/app/settings/billing"),
         },
       });

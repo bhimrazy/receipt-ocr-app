@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { checkSlots, prerenderAll, renderSource } from "./emails/prerender";
-import { TEMPLATES } from "./generated";
-import { escapeHtml, fill } from "./render";
+import { checkSlots, prerenderAll, renderSource } from "../src/emails/prerender";
+import { TEMPLATES } from "../src/generated";
+import { escapeHtml, fill } from "../src/render";
 import {
   backupCodesRegeneratedEmail,
   contactReplyEmail,
@@ -30,7 +30,7 @@ import {
   type EmailContent,
   type EmailContext,
   type TemplateName,
-} from "./templates";
+} from "../src/templates";
 
 const withSupport = { appUrl: "https://app.example", supportEmail: "help@app.example" };
 const PLAN_LINE =

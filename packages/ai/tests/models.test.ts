@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { costOf, effortFor, OCR_MODELS, priceAt, priceCall, type ExtractionUsage } from "./models";
+import {
+  costOf,
+  effortFor,
+  OCR_MODELS,
+  priceAt,
+  priceCall,
+  type ExtractionUsage,
+} from "../src/models";
 
 const usage = (u: Partial<ExtractionUsage>): ExtractionUsage => ({
   inputTokens: null,

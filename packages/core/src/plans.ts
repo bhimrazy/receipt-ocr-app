@@ -71,12 +71,12 @@ export const MAX_BATCH = 20;
 export const MAX_MEMBERS = 100;
 
 export const DEFAULT_PLANS: PlanTable = {
-  // Per person across all their workspaces: 20 a day, 100 a month (below Pro's 500), and
-  // 300 a day for every Free user together.
+  // Per person across all their workspaces: 20 a day, 30 a month (accounts from before launch
+  // keep EARLY_ACCESS), and 300 a day for every Free user together.
   free: {
     scope: "user",
     receiptsPerDay: 20,
-    receiptsPerMonth: 100,
+    receiptsPerMonth: 30,
     poolPerDay: 300,
     receiptsPerMinute: 10,
     batchMax: DEFAULT_BATCH_MAX,
@@ -95,6 +95,71 @@ export const DEFAULT_PLANS: PlanTable = {
     membersPerWorkspace: 10,
   },
 };
+
+/**
+ * The early-access Free allowance: accounts created before `joinedBefore` get
+ * `receiptsPerMonth` a month on Free until `endsAt` (UTC instants; `endsAt` is a
+ * month start, so no month is split), then the plan's own limit.
+ */
+// TODO(2026-11-30): set `joinedBefore` to the launch date once the owner picks it.
+export const EARLY_ACCESS = {
+  joinedBefore: new Date("2026-12-01T00:00:00Z"),
+  endsAt: new Date("2027-03-01T00:00:00Z"),
+  receiptsPerMonth: 100,
+} as const;
+
+/** The early-access terms, for a saved Free policy: null once over, or when Free already gives as much. */
+export function earlyAccessOffer(
+  free: PlanPolicy,
+  now = new Date(),
+): { receiptsPerMonth: number; thenPerMonth: number; joinedBefore: Date; endsAt: Date } | null {
+  if (now >= EARLY_ACCESS.endsAt) return null;
+  if (free.receiptsPerMonth === null || free.receiptsPerMonth >= EARLY_ACCESS.receiptsPerMonth)
+    return null;
+  return {
+    receiptsPerMonth: EARLY_ACCESS.receiptsPerMonth,
+    thenPerMonth: free.receiptsPerMonth,
+    joinedBefore: EARLY_ACCESS.joinedBefore,
+    endsAt: EARLY_ACCESS.endsAt,
+  };
+}
+
+/** When an account's early-access allowance ends, or null if it has none or it has ended. */
+export function earlyAccessUntil(
+  accountCreatedAt: Date | string | null | undefined,
+  now = new Date(),
+): Date | null {
+  if (!accountCreatedAt) return null;
+  const created = new Date(accountCreatedAt).getTime();
+  if (Number.isNaN(created) || created >= EARLY_ACCESS.joinedBefore.getTime()) return null;
+  return now < EARLY_ACCESS.endsAt ? EARLY_ACCESS.endsAt : null;
+}
+
+/**
+ * A plan's limits for one person: Free's per-person month raised to the early-access
+ * allowance while their account has it. Never lowers a limit; shared (Pro) plans are unchanged.
+ */
+export function personalPolicy(
+  plan: PlanId,
+  policy: PlanPolicy,
+  accountCreatedAt: Date | string | null | undefined,
+  now = new Date(),
+): { policy: PlanPolicy; earlyAccessUntil: Date | null } {
+  const until = earlyAccessUntil(accountCreatedAt, now);
+  if (
+    !until ||
+    plan !== "free" ||
+    policy.scope !== "user" ||
+    policy.receiptsPerMonth === null ||
+    policy.receiptsPerMonth >= EARLY_ACCESS.receiptsPerMonth
+  ) {
+    return { policy, earlyAccessUntil: null };
+  }
+  return {
+    policy: { ...policy, receiptsPerMonth: EARLY_ACCESS.receiptsPerMonth },
+    earlyAccessUntil: until,
+  };
+}
 
 export function isPlanId(value: unknown): value is PlanId {
   return typeof value === "string" && (PLAN_IDS as readonly string[]).includes(value);

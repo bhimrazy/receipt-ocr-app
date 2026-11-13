@@ -1,6 +1,11 @@
 import { Effect } from "effect";
 import { PaddleApiError } from "../../billing/paddle";
-import { applyBillingEvent, Billing, BillingPayloadError } from "../../billing/service";
+import {
+  applyBillingEvent,
+  Billing,
+  BillingPayloadError,
+  type UnmatchedReason,
+} from "../../billing/service";
 import type { DbError } from "../../errors";
 import type { Db } from "../../services";
 import type { Settings } from "../../settings";
@@ -17,6 +22,9 @@ import {
   billingApplyPayload,
   type BillingApplyPayload,
 } from "../billing-apply-job";
+
+/** Unmatched reasons that resolve on their own once the subscription links. */
+const WAITING_FOR_LINK: ReadonlySet<UnmatchedReason> = new Set(["no_transaction", "subscription"]);
 
 /** A stored payload the schema refuses is a bug: dead at once (it shows in the admin jobs list). */
 const applyFailure = (error: DbError): JobFailure =>
@@ -80,6 +88,7 @@ export const billingApply: JobDefinition<BillingApplyPayload, Db | Settings | Bi
           billing: {
             outcome: result.outcome,
             ...(result.unmatched ? { unmatched_reason: result.unmatched } : {}),
+            ...(result.transactionId ? { transaction_id: result.transactionId } : {}),
             ...(result.orphanCharging ? { orphan_charging: true } : {}),
             // The product event `plan_changed { from, to }`, for the upgrade funnel.
             ...(result.planChange
@@ -91,6 +100,12 @@ export const billingApply: JobDefinition<BillingApplyPayload, Db | Settings | Bi
       // Error level, so it reaches Axiom and Sentry alerts.
       Effect.tap((result) =>
         result.orphanCharging ? Effect.logError("billing.orphan_charging") : Effect.void,
+      ),
+      // A refused link: someone may have paid without getting Pro, so warn level, to be seen and fixed by hand.
+      Effect.tap((result) =>
+        result.unmatched && !WAITING_FOR_LINK.has(result.unmatched)
+          ? Effect.logWarning("billing.unmatched")
+          : Effect.void,
       ),
       Effect.tapError((error) => annotateEvent({ error: errorFields(error) })),
       Effect.mapError(applyFailure),

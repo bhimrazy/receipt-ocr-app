@@ -4,7 +4,7 @@ import {
   normalizeCategory,
   parseCategory,
   RECEIPT_CATEGORIES,
-} from "./categories";
+} from "../src/categories";
 
 describe("RECEIPT_CATEGORIES", () => {
   it("has no duplicates and an Other bucket so the model always has a valid answer", () => {

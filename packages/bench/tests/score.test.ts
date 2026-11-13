@@ -10,7 +10,7 @@ import {
   similarity,
   storedPrediction,
   type Receipt,
-} from "./score";
+} from "../score";
 
 const truth = {
   merchant: "Warung Makan Bahagia",
@@ -168,8 +168,9 @@ describe("v3 fields, scored on what the app stores", () => {
 
 describe("bench fixtures", () => {
   // The synthetic set, plus the committed real sets (packages/bench/fixtures-real/<set>/) once they exist.
+  const benchDir = path.join(import.meta.dirname, "..");
   const dirs = ["fixtures", "fixtures-real"]
-    .map((name) => path.join(import.meta.dirname, name))
+    .map((name) => path.join(benchDir, name))
     .filter((dir) => existsSync(dir));
   const truths = dirs.flatMap((dir) =>
     readdirSync(dir, { recursive: true, encoding: "utf8" })
@@ -177,7 +178,7 @@ describe("bench fixtures", () => {
       .map(
         (file) =>
           [
-            path.relative(import.meta.dirname, path.join(dir, file)),
+            path.relative(benchDir, path.join(dir, file)),
             JSON.parse(readFileSync(path.join(dir, file), "utf8")) as Receipt,
           ] as const,
       ),

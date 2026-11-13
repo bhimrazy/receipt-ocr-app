@@ -22,22 +22,36 @@ Not exercised: a real Paddle delivery or checkout (the local server has no API k
 the actions stop at "not open yet"), `billing.int.test.ts` (read, not run), staging and production (not probed).
 Statements about Paddle's own behaviour come from its documentation.
 
-The repository is public, so findings that can be used as written are listed by number only. Their reproduction and
-fix are with the owner and will be added here once the fix has merged.
+Findings S-1 to S-4 were listed by number only until their fix merged; they are fixed by #236 (deployed
+2026-11-13 with migration 0004) and described below. S-5 stays open.
 
-## Blocking
+## Fixed in #236
 
-- **S-1: billing portal and the customer a subscription is stored with. High. Fix pending.** Not reachable while
-  the checkout is closed to the public; it must be fixed before live Paddle keys are set.
+- **S-1: billing portal for a customer the buyer chose. High. Fixed.** A subscription was linked from its
+  `custom_data` alone and stored with whatever Paddle customer the webhook named. A checkout opened with Paddle.js
+  outside our server, with someone else's email, reuses that person's Paddle customer, so "Manage billing" would
+  open a portal session for them (invoices, address, card last four, cancel). Fix: every checkout is recorded in
+  `billing_checkouts` before its id reaches the browser, and a subscription links only when its `transaction_id`
+  is one we recorded for the same workspace, user and customer. The portal opens only for the buyer and only for a
+  customer recorded for that buyer.
+- **S-2: sandbox subscriptions on the live site. Medium. Fixed.** Test mode was enforced only where the client token
+  was shown, so anyone holding the (non-secret) sandbox token could buy Pro with a test card. Fix: the same recorded
+  checkout rule, plus the apply job refuses a sandbox-on-production link unless the buyer is a platform admin.
+- **S-3: buyer named by custom data. Low. Fixed** by the S-1 change: the buyer is the checkout row's user, not
+  `custom_data`, and one checkout links one subscription.
+- **S-4: portal after the buyer's account is deleted. Low. Fixed.** An orphaned subscription row gets no portal
+  session; the page points to support.
+- **L4 (checkout without a verified email)** and **L5 (no test for the buyer-only portal rule)** are closed by the
+  same PR.
 
-## Medium / Low
+Caveat: subscriptions linked before #236 have no checkout row, so their buyers get no portal until one exists.
+Before launch these are test data.
 
-Withheld until fixed:
+## Open
 
-- **S-2: which subscriptions may link to a workspace while sandbox keys are on the live site. Medium. Fix pending.**
-- **S-3: who is recorded as the buyer of a linked subscription. Low. Fix pending** (same change as S-1 and S-2).
-- **S-4: billing portal after the buyer's account is deleted. Low. Fix pending.**
-- **S-5: the Free plan's shared daily pool. Low. Fix pending** (an alert, not a code change).
+- **S-5: the Free plan's shared daily pool. Low.** About 15 accounts at 20 a day fill the 300-a-day pool, counting
+  failed rounds, and close Free scanning for everyone until 00:00 UTC. Fix: alert on the first pool hit; consider
+  weighting by IP or sign-up day.
 
 Open, safe to describe:
 

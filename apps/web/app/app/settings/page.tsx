@@ -11,7 +11,6 @@ import {
   Settings,
   workspacesBlockingDeletion,
 } from "@receipt-ocr/core";
-import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import { Effect } from "effect";
 import { AboutSettings } from "@/components/about-settings";
 import { AccountSettings } from "@/components/account-settings";
@@ -20,18 +19,15 @@ import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsList } from "@/components/settings-list";
 import { SettingsSection } from "@/components/settings-section";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { UsageMeter } from "@/components/usage-meter";
 import { authEnv } from "@/lib/env";
-import { getAccountPlan, getCurrentPlan } from "@/lib/plan-limits";
-import { SEPARATE_UPGRADE } from "@/lib/plan-copy";
-import { planLabel } from "@/lib/plans";
+import { getCurrentPlan } from "@/lib/plan-limits";
 import { settingsRows } from "@/lib/settings-rows";
 import { runtime } from "@/lib/runtime";
 import { requireActiveScope, requireSession } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { ChevronRight, ShieldCheck, Tags } from "lucide-react";
+import { ChevronRight, CreditCard, ShieldCheck, Tags } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getUsageSummary } from "@/lib/receipts";
@@ -64,22 +60,22 @@ export default async function SettingsPage({
     searchParams,
   ]);
   const resumeStep = resume === "delete-account" ? resume : undefined;
-  const [{ plan, policy }, account, usage, workspace, readers, blocking, protectedAccount] =
-    await Promise.all([
-      getCurrentPlan(),
-      getAccountPlan(),
-      getUsageSummary(),
-      loadWorkspace(scope.organizationId),
-      runtime.runPromise(
-        Effect.zipWith(
-          Effect.flatMap(Settings, (settings) => settings.ocr),
-          providerAvailability,
-          receiptReaders,
-        ),
+  const [{ plan }, usage, workspace, readers, blocking, protectedAccount] = await Promise.all([
+    getCurrentPlan(),
+    getUsageSummary(),
+    loadWorkspace(scope.organizationId),
+    runtime.runPromise(
+      Effect.zipWith(
+        Effect.flatMap(Settings, (settings) => settings.ocr),
+        providerAvailability,
+        receiptReaders,
       ),
-      runtime.runPromise(workspacesBlockingDeletion(session.user.id)),
-      runtime.runPromise(hasStrongFactor(session.user.id)),
-    ]);
+    ),
+    runtime.runPromise(workspacesBlockingDeletion(session.user.id)),
+    runtime.runPromise(hasStrongFactor(session.user.id)),
+  ]);
+
+  const planSummary = `${plan === "pro" ? "Pro" : "Free"} · ${usage.used} / ${usage.limit} scans`;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -96,7 +92,7 @@ export default async function SettingsPage({
       <SettingsList
         className="mb-8"
         rows={settingsRows({
-          planLabel: planLabel(plan),
+          planSummary,
           workspaceName: workspace.name,
           protectedAccount,
         })}
@@ -104,56 +100,29 @@ export default async function SettingsPage({
 
       <SettingsSection
         className="max-md:hidden"
-        description={
-          policy.scope === "workspace"
-            ? `This workspace's scans are shared by its members. Limits reset at 00:00 UTC: daily, and on the 1st of each month. The first ${FREE_FAILED_ROUNDS} failed scans don't count.`
-            : `Your scans count across every Free workspace you use. Limits reset at 00:00 UTC: daily, and on the 1st of each month. Your first ${FREE_FAILED_ROUNDS} failed scans don't count.`
-        }
+        description="Your plan, how many scans are left, and the subscription."
         id="plan-heading"
-        title="Plan and usage"
+        title="Plan and billing"
       >
-        <div className="flex flex-col gap-3">
-          <UsageMeter className="p-5" planLabel={planLabel(plan)} usage={usage} />
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Card className="p-4">
-              <dt className="text-xs text-muted-foreground">
-                Scans a day{policy.scope === "workspace" ? ", this workspace" : ", you"}
-              </dt>
-              <dd className="mt-1 font-mono text-lg tabular-nums">{policy.receiptsPerDay}</dd>
-            </Card>
-            {policy.receiptsPerMonth !== null ? (
-              <Card className="p-4">
-                <dt className="text-xs text-muted-foreground">
-                  Scans a month{policy.scope === "workspace" ? ", this workspace" : ", you"}
-                </dt>
-                <dd className="mt-1 font-mono text-lg tabular-nums">{policy.receiptsPerMonth}</dd>
-              </Card>
-            ) : null}
-            <Card className="p-4">
-              <dt className="text-xs text-muted-foreground">Workspaces you can own</dt>
-              <dd className="mt-1 font-mono text-lg tabular-nums">{account.policy.workspaces}</dd>
-            </Card>
-          </dl>
-          <Card className="flex flex-wrap items-center gap-3 p-4">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium select-none">Billing</p>
-              <p className="text-xs text-muted-foreground">
-                {plan === "pro"
-                  ? "This workspace is on Pro."
-                  : scope.role === "owner" && account.plan === "pro"
-                    ? SEPARATE_UPGRADE
-                    : "Upgrade this workspace to Pro for more scans, shared by its members."}
-              </p>
-            </div>
-            <Link
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-              href="/app/settings/billing"
-            >
-              {plan === "pro" ? "Manage" : "See plans"}
-              <ChevronRight aria-hidden="true" />
-            </Link>
-          </Card>
-        </div>
+        <Card className="flex flex-wrap items-center gap-3 p-4">
+          <span
+            aria-hidden="true"
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"
+          >
+            <CreditCard className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium select-none">Plan and billing</p>
+            <p className="font-mono text-xs text-muted-foreground tabular-nums">{planSummary}</p>
+          </div>
+          <Link
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+            href="/app/settings/billing"
+          >
+            {scope.role === "owner" ? "Manage" : "View"}
+            <ChevronRight aria-hidden="true" />
+          </Link>
+        </Card>
       </SettingsSection>
 
       <SettingsSection

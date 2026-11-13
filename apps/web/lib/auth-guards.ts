@@ -111,7 +111,8 @@ export async function assertBuyerStays(
 export async function assertNoLiveSubscription(organizationId: string): Promise<void> {
   if (await runtime.runPromise(workspaceHasChargingSubscription(organizationId))) {
     throw new APIError("BAD_REQUEST", {
-      message: "Cancel this workspace's Pro subscription in Settings, Billing before deleting it.",
+      message:
+        "Cancel this workspace's Pro subscription in Settings, Plan and billing before deleting it.",
     });
   }
 }

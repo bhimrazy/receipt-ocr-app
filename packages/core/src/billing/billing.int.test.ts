@@ -5,6 +5,7 @@
  * produces (its parsing and signatures are unit-tested in paddle.test.ts).
  */
 import {
+  billingCheckouts,
   billingEvents,
   billingSubscriptions,
   eq,
@@ -18,7 +19,7 @@ import {
   user,
 } from "@receipt-ocr/db";
 import { Effect, Exit, ManagedRuntime } from "effect";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppLayer, type AppServices } from "../index";
 import { JOB_REGISTRY, tick } from "../jobs";
 import { ingestUpload, purgeReceiptFiles } from "../pipeline";
@@ -32,6 +33,9 @@ import type { AdjustmentSnapshot, BillingEvent, SubscriptionSnapshot } from "./p
 import {
   accountPlan,
   applyBillingEvent,
+  Billing,
+  BUYER_GONE,
+  UNVERIFIED_EMAIL,
   memberLimitCheck,
   recordBillingEvent,
   userPaysForWorkspace,
@@ -100,22 +104,51 @@ async function addMember(organizationId: string, userId: string) {
   return { organizationId, userId, role: "member" };
 }
 
-/** A snapshot whose custom data names the workspace's owner as the buyer, unless `userId` is given. */
-const snapshot = (fields: Partial<SubscriptionSnapshot>): SubscriptionSnapshot => ({
-  subscriptionId: `sub_${tag}`,
-  customerId: `ctm_${tag}`,
-  status: "active",
-  priceId: "pri_month",
-  interval: "month",
-  currentPeriodStart: new Date(Date.now() - 86_400_000),
-  currentPeriodEnd: new Date(Date.now() + 29 * 86_400_000),
-  cancelAtPeriodEnd: false,
-  canceledAt: null,
-  updatedAt: new Date(),
-  workspaceId: null,
-  userId: (fields.workspaceId && owners.get(fields.workspaceId)) || null,
-  ...fields,
-});
+/**
+ * A snapshot whose custom data names the workspace's owner as the buyer, unless `userId` is given,
+ * and whose checkout transaction is `txn_<subscription id>` unless `transactionId` is given.
+ */
+const snapshot = (fields: Partial<SubscriptionSnapshot>): SubscriptionSnapshot => {
+  const subscriptionId = fields.subscriptionId ?? `sub_${tag}`;
+  return {
+    subscriptionId,
+    customerId: `ctm_${tag}`,
+    status: "active",
+    priceId: "pri_month",
+    interval: "month",
+    currentPeriodStart: new Date(Date.now() - 86_400_000),
+    currentPeriodEnd: new Date(Date.now() + 29 * 86_400_000),
+    cancelAtPeriodEnd: false,
+    canceledAt: null,
+    updatedAt: new Date(),
+    workspaceId: null,
+    userId: (fields.workspaceId && owners.get(fields.workspaceId)) || null,
+    transactionId: `txn_${subscriptionId}`,
+    ...fields,
+  };
+};
+
+/**
+ * Records the checkout the server would have created for this snapshot: its transaction, workspace,
+ * buyer and customer. Skipped when the workspace or buyer doesn't exist (no checkout could be made).
+ */
+async function recordCheckout(
+  s: SubscriptionSnapshot,
+  fields: { customerId?: string; organizationId?: string; userId?: string } = {},
+) {
+  const organizationId = fields.organizationId ?? s.workspaceId;
+  const userId = fields.userId ?? s.userId;
+  if (!s.transactionId || !organizationId || !userId) return;
+  await db((d) =>
+    d.execute(sql`insert into billing_checkouts
+      (provider, provider_transaction_id, organization_id, user_id, provider_customer_id, price_id)
+      select 'paddle', ${s.transactionId}, ${organizationId}, ${userId},
+        ${fields.customerId ?? s.customerId}, 'pri_month'
+      where exists (select 1 from organization where id = ${organizationId})
+        and exists (select 1 from "user" where id = ${userId})
+      on conflict do nothing`),
+  );
+}
 
 const event = (
   subscription: SubscriptionSnapshot | null,
@@ -159,8 +192,12 @@ const jobOf = async (eventId: string) => {
   return job;
 };
 
-/** Records an event and runs its job through the queue, as the webhook route and drain do. */
-async function deliver(e: BillingEvent) {
+/**
+ * Records an event and runs its job through the queue, as the webhook route and drain do. Its
+ * checkout is recorded first unless `checkout` is false.
+ */
+async function deliver(e: BillingEvent, { checkout = true } = {}) {
+  if (checkout && e.subscription) await recordCheckout(e.subscription);
   const result = await run(recordBillingEvent(e));
   if (result.kind !== "recorded") return result;
   await run(
@@ -196,6 +233,19 @@ const reapply = async (eventId: string) => {
   return run(applyBillingEvent(row!.id));
 };
 
+/** Records an event and applies it directly, returning the apply result (with any unmatched reason). */
+const applyOnce = async (e: BillingEvent) => {
+  const recorded = await run(recordBillingEvent(e));
+  if (recorded.kind !== "recorded") throw new Error("not recorded");
+  const [row] = await db((d) =>
+    d
+      .select({ id: billingEvents.id })
+      .from(billingEvents)
+      .where(eq(billingEvents.providerEventId, e.eventId)),
+  );
+  return run(applyBillingEvent(row!.id));
+};
+
 const planOf = async (organizationId: string) => (await run(workspacePlan(organizationId))).plan;
 
 describe.skipIf(!enabled)("billing against Postgres", () => {
@@ -222,6 +272,9 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       await d
         .delete(billingSubscriptions)
         .where(sql`${billingSubscriptions.providerSubscriptionId} like ${`sub_${tag}%`}`);
+      await d
+        .delete(billingCheckouts)
+        .where(sql`${billingCheckouts.providerTransactionId} like ${`txn_%${tag}%`}`);
       await d.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
       await d.delete(user).where(sql`${user.id} like ${`${tag}%`}`);
     });
@@ -232,6 +285,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
     it("stores an event once: a redelivery is a no-op and enqueues nothing", async () => {
       const workspaceId = await createWorkspace(other.userId, "dup");
       const e = event(snapshot({ subscriptionId: `sub_${tag}_dup`, workspaceId }));
+      await recordCheckout(e.subscription!);
       const first = await run(recordBillingEvent(e));
       const second = await run(recordBillingEvent(e));
       expect(first.kind).toBe("recorded");
@@ -258,17 +312,30 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const t0 = new Date(Date.now() - 60_000);
       const t1 = new Date(Date.now() - 30_000);
       const canceled = event(
-        snapshot({ subscriptionId: id, workspaceId, status: "canceled", updatedAt: t1 }),
+        snapshot({
+          subscriptionId: id,
+          workspaceId,
+          status: "canceled",
+          updatedAt: t1,
+          transactionId: null,
+        }),
         "subscription.canceled",
       );
       const created = event(
         snapshot({ subscriptionId: id, workspaceId, updatedAt: t0 }),
         "subscription.created",
       );
+      // Only `created` names the transaction: the earlier event waits, and the link catches up to it.
       await deliver(canceled);
+      expect(await outcomeOf(canceled.eventId)).toBe("unmatched");
       await deliver(created);
       expect(await outcomeOf(canceled.eventId)).toBe("applied");
-      expect(await outcomeOf(created.eventId)).toBe("stale");
+      expect(await outcomeOf(created.eventId)).toBe("applied");
+      const late = event(
+        snapshot({ subscriptionId: id, workspaceId, updatedAt: t0, transactionId: null }),
+      );
+      await deliver(late);
+      expect(await outcomeOf(late.eventId)).toBe("stale");
       const [row] = await db((d) =>
         d
           .select()
@@ -449,7 +516,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
     const check = (organizationId: string, email = `${tag}-next@example.com`) =>
       run(memberLimitCheck(organizationId, { kind: "invite", email }));
 
-    it("refuses a 4th on Free, counting pending invitations, and names the upgrade", async () => {
+    it("refuses a 4th on Free, counting pending invitations, and names the Pro limit", async () => {
       const boss = await createUser("seats-free");
       const mate = await createUser("seats-mate");
       await addMember(boss.organizationId, mate.userId);
@@ -459,7 +526,9 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const full = await check(boss.organizationId);
       expect(full).toMatchObject({ allowed: false, used: 3, limit: 3, plan: "free" });
       expect(full.message).toContain("Free workspaces have up to 3 members");
-      expect(full.message).toContain(`Pro for up to ${DEFAULT_PLANS.pro.membersPerWorkspace}`);
+      expect(full.message).toContain(
+        `Pro workspaces up to ${DEFAULT_PLANS.pro.membersPerWorkspace}`,
+      );
 
       // Re-inviting the same address replaces its invitation, so it isn't refused.
       expect(await check(boss.organizationId, `${tag}-THIRD@example.com`)).toMatchObject({
@@ -508,7 +577,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       );
       const free = await run(memberLimitCheck(boss.organizationId, { kind: "accept" }));
       expect(free).toMatchObject({ allowed: false, used: 9, limit: 3, plan: "free" });
-      expect(free.message).toContain("Ask its owner to upgrade it to Pro");
+      expect(free.message).toContain("Ask its owner to make room.");
       const members = await db((d) =>
         d.select().from(member).where(eq(member.organizationId, boss.organizationId)),
       );
@@ -576,6 +645,337 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       );
       expect(await planOf(workspaceId)).toBe("free");
       expect((await run(workspaceBilling(workspaceId)))?.entitled).toBe(false);
+    });
+  });
+
+  describe("linking needs the checkout the server created", () => {
+    it("leaves a subscription from a transaction we didn't create unmatched", async () => {
+      const workspaceId = await createWorkspace(other.userId, "foreign-txn");
+      const s = snapshot({ subscriptionId: `sub_${tag}_foreign`, workspaceId });
+      expect(await applyOnce(event(s, "subscription.created"))).toMatchObject({
+        outcome: "unmatched",
+        unmatched: "unknown_transaction",
+        transactionId: s.transactionId,
+      });
+      // A transaction we created for another workspace doesn't count either.
+      await recordCheckout(s, { organizationId: await createWorkspace(other.userId, "foreign-2") });
+      expect(await applyOnce(event(s, "subscription.created"))).toMatchObject({
+        unmatched: "unknown_transaction",
+      });
+      expect(await subscriptionRow(s.subscriptionId)).toBeUndefined();
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
+    it("leaves a subscription whose customer isn't the one on our checkout unmatched", async () => {
+      const workspaceId = await createWorkspace(other.userId, "other-customer");
+      const s = snapshot({
+        subscriptionId: `sub_${tag}_customer`,
+        workspaceId,
+        customerId: `ctm_${tag}_theirs`,
+      });
+      await recordCheckout(s, { customerId: `ctm_${tag}_ours` });
+      expect(await applyOnce(event(s, "subscription.created"))).toMatchObject({
+        outcome: "unmatched",
+        unmatched: "customer_mismatch",
+      });
+      expect(await subscriptionRow(s.subscriptionId)).toBeUndefined();
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
+    it("links a subscription from our checkout, with our customer, to its workspace and buyer", async () => {
+      const workspaceId = await createWorkspace(other.userId, "our-checkout");
+      const s = snapshot({ subscriptionId: `sub_${tag}_ours`, workspaceId });
+      await recordCheckout(s);
+      expect(await applyOnce(event(s, "subscription.created"))).toMatchObject({
+        outcome: "applied",
+        organizationId: workspaceId,
+        userId: other.userId,
+      });
+      expect(await subscriptionRow(s.subscriptionId)).toMatchObject({
+        organizationId: workspaceId,
+        userId: other.userId,
+        providerCustomerId: s.customerId,
+      });
+      expect(await planOf(workspaceId)).toBe("pro");
+    });
+
+    it("links one subscription per checkout: a second one on the same transaction stays unmatched", async () => {
+      const workspaceId = await createWorkspace(other.userId, "used-txn");
+      const first = snapshot({ subscriptionId: `sub_${tag}_used_1`, workspaceId });
+      await recordCheckout(first);
+      expect(await applyOnce(event(first, "subscription.created"))).toMatchObject({
+        outcome: "applied",
+      });
+      const second = snapshot({
+        subscriptionId: `sub_${tag}_used_2`,
+        workspaceId,
+        transactionId: first.transactionId,
+      });
+      expect(await applyOnce(event(second, "subscription.created"))).toMatchObject({
+        outcome: "unmatched",
+        unmatched: "transaction_used",
+      });
+      expect(await subscriptionRow(second.subscriptionId)).toBeUndefined();
+      const [checkout] = await db((d) =>
+        d
+          .select()
+          .from(billingCheckouts)
+          .where(eq(billingCheckouts.providerTransactionId, first.transactionId!)),
+      );
+      expect(checkout?.providerSubscriptionId).toBe(first.subscriptionId);
+    });
+
+    it("keeps the checkout's customer when a waiting snapshot names another, and flags it", async () => {
+      const workspaceId = await createWorkspace(other.userId, "waiting-customer");
+      const id = `sub_${tag}_waiting_customer`;
+      const early = event(
+        snapshot({
+          subscriptionId: id,
+          workspaceId,
+          customerId: `ctm_${tag}_other`,
+          cancelAtPeriodEnd: true,
+          updatedAt: new Date(Date.now() + 1_000),
+          transactionId: null,
+        }),
+      );
+      expect(await applyOnce(early)).toMatchObject({ unmatched: "no_transaction" });
+      const created = snapshot({ subscriptionId: id, workspaceId });
+      await recordCheckout(created);
+      expect(await applyOnce(event(created, "subscription.created"))).toMatchObject({
+        outcome: "applied",
+        unmatched: "customer_mismatch",
+      });
+      // The newer state is applied, the customer is not.
+      expect(await subscriptionRow(id)).toMatchObject({
+        providerCustomerId: created.customerId,
+        cancelAtPeriodEnd: true,
+      });
+    });
+
+    it("ends on the newest snapshot whatever order created, activated and updated apply in", async () => {
+      const workspaceId = await createWorkspace(other.userId, "concurrent");
+      const orders = [
+        ["created", "activated", "updated"],
+        ["updated", "activated", "created"],
+        ["activated", "updated", "created"],
+        ["updated", "created", "activated"],
+      ] as const;
+      for (const [n, order] of orders.entries()) {
+        const id = `sub_${tag}_concurrent_${n}`;
+        const base = Date.now();
+        const events = {
+          created: event(
+            snapshot({ subscriptionId: id, workspaceId, updatedAt: new Date(base) }),
+            "subscription.created",
+          ),
+          activated: event(
+            snapshot({
+              subscriptionId: id,
+              workspaceId,
+              updatedAt: new Date(base + 1_000),
+              transactionId: null,
+            }),
+            "subscription.activated",
+          ),
+          updated: event(
+            snapshot({
+              subscriptionId: id,
+              workspaceId,
+              cancelAtPeriodEnd: true,
+              updatedAt: new Date(base + 2_000),
+              transactionId: null,
+            }),
+            "subscription.updated",
+          ),
+        };
+        await recordCheckout(events.created.subscription!);
+        const rows: string[] = [];
+        for (const name of order) {
+          await run(recordBillingEvent(events[name]));
+          const [row] = await db((d) =>
+            d
+              .select({ id: billingEvents.id })
+              .from(billingEvents)
+              .where(eq(billingEvents.providerEventId, events[name].eventId)),
+          );
+          rows.push(row!.id);
+        }
+        await Promise.all(rows.map((rowId) => run(applyBillingEvent(rowId))));
+
+        expect(await subscriptionRow(id)).toMatchObject({
+          organizationId: workspaceId,
+          cancelAtPeriodEnd: true,
+          providerUpdatedAt: new Date(base + 2_000),
+        });
+        const outcomes = await Promise.all(order.map((name) => outcomeOf(events[name].eventId)));
+        expect(outcomes, order.join(", ")).not.toContain("unmatched");
+      }
+    });
+
+    it("with sandbox keys on the live site, links only a platform admin's checkout", async () => {
+      vi.stubEnv("PADDLE_ENV", "sandbox");
+      vi.stubEnv("VERCEL_ENV", "production");
+      try {
+        const buyer = await createUser("sandbox-buyer");
+        const s = snapshot({
+          subscriptionId: `sub_${tag}_sandbox`,
+          workspaceId: buyer.organizationId,
+        });
+        await recordCheckout(s);
+        expect(await applyOnce(event(s, "subscription.created"))).toMatchObject({
+          outcome: "unmatched",
+          unmatched: "test_mode",
+        });
+        expect(await planOf(buyer.organizationId)).toBe("free");
+
+        const admin = await createUser("sandbox-admin");
+        await db((d) => d.update(user).set({ role: "admin" }).where(eq(user.id, admin.userId)));
+        const t = snapshot({
+          subscriptionId: `sub_${tag}_sandbox_admin`,
+          workspaceId: admin.organizationId,
+        });
+        await recordCheckout(t);
+        expect(await applyOnce(event(t, "subscription.created"))).toMatchObject({
+          outcome: "applied",
+        });
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+  });
+
+  describe("checkout and portal with Paddle configured", () => {
+    let calls: { method: string; url: string; body: unknown }[] = [];
+    const created = (id: string) => Response.json({ data: { id } }, { status: 201 });
+
+    beforeEach(() => {
+      vi.stubEnv("PADDLE_ENV", "sandbox");
+      vi.stubEnv("PADDLE_API_KEY", "pdl_sdbx_apikey_test");
+      vi.stubEnv("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN", "test_token");
+      vi.stubEnv("PADDLE_WEBHOOK_SECRET", "pdl_ntfset_test");
+      calls = [];
+      // Paddle's API, scripted: no network.
+      vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        calls.push({ method, url: input, body: init?.body ? JSON.parse(String(init.body)) : null });
+        const path = new URL(input).pathname;
+        if (path.endsWith("/portal-sessions")) {
+          return Response.json({
+            data: { urls: { general: { overview: "https://portal.example.com/o" } } },
+          });
+        }
+        if (path === "/customers") {
+          return method === "GET" ? Response.json({ data: [] }) : created(`ctm_${tag}_new`);
+        }
+        if (path === "/transactions") return created(`txn_${tag}_checkout_${calls.length}`);
+        return new Response("{}", { status: 404 });
+      });
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    });
+
+    const withBilling = <A, E>(f: (billing: typeof Billing.Service) => Effect.Effect<A, E>) =>
+      runExit(Effect.flatMap(Billing, f).pipe(Effect.provide(Billing.Live)));
+    const failureOf = (exit: Exit.Exit<unknown, unknown>) =>
+      Exit.isFailure(exit) ? exit.cause.toJSON() : null;
+
+    it("refuses the checkout while the buyer's email isn't verified", async () => {
+      const buyer = await createUser("unverified");
+      await db((d) =>
+        d.update(user).set({ emailVerified: false }).where(eq(user.id, buyer.userId)),
+      );
+      const exit = await withBilling((b) =>
+        b.createCheckout({
+          organizationId: buyer.organizationId,
+          userId: buyer.userId,
+          interval: "month",
+        }),
+      );
+      expect(failureOf(exit)).toMatchObject({
+        error: { _tag: "Forbidden", message: UNVERIFIED_EMAIL },
+      });
+      expect(calls).toEqual([]);
+    });
+
+    it("records each checkout it creates and reuses the buyer's customer next time", async () => {
+      const buyer = await createUser("records");
+      const checkout = (interval: "month" | "year") =>
+        withBilling((b) =>
+          b.createCheckout({
+            organizationId: buyer.organizationId,
+            userId: buyer.userId,
+            interval,
+          }),
+        );
+      const first = await checkout("month");
+      if (!Exit.isSuccess(first)) throw new Error("checkout failed");
+      expect(calls.map((c) => c.method)).toEqual(["GET", "POST", "POST"]);
+      const rows = await db((d) =>
+        d.select().from(billingCheckouts).where(eq(billingCheckouts.userId, buyer.userId)),
+      );
+      expect(rows).toMatchObject([
+        {
+          provider: "paddle",
+          providerTransactionId: first.value.transactionId,
+          organizationId: buyer.organizationId,
+          providerCustomerId: `ctm_${tag}_new`,
+          priceId: "pri_month",
+        },
+      ]);
+
+      calls = [];
+      expect(Exit.isSuccess(await checkout("year"))).toBe(true);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({
+        url: expect.stringMatching(/\/transactions$/),
+        body: { customer_id: `ctm_${tag}_new`, items: [{ price_id: "pri_year" }] },
+      });
+    });
+
+    it("opens the portal only for the buyer's own customer, and never once the buyer is gone", async () => {
+      const buyer = await createUser("portal-buyer");
+      const coOwner = await createUser("portal-co-owner");
+      await db((d) =>
+        d.insert(member).values({
+          id: crypto.randomUUID(),
+          organizationId: buyer.organizationId,
+          userId: coOwner.userId,
+          role: "owner",
+          createdAt: new Date(),
+        }),
+      );
+      const id = `sub_${tag}_portal`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId: buyer.organizationId })));
+      const portal = (userId: string) =>
+        withBilling((b) => b.portalLinks(buyer.organizationId, userId));
+
+      expect(Exit.isSuccess(await portal(buyer.userId))).toBe(true);
+      expect(failureOf(await portal(coOwner.userId))).toMatchObject({
+        error: { _tag: "Forbidden" },
+      });
+
+      // A customer the server never put on a checkout for this buyer.
+      const setRow = (fields: Partial<typeof billingSubscriptions.$inferInsert>) =>
+        db((d) =>
+          d
+            .update(billingSubscriptions)
+            .set(fields)
+            .where(eq(billingSubscriptions.providerSubscriptionId, id)),
+        );
+      await setRow({ providerCustomerId: `ctm_${tag}_elsewhere` });
+      calls = [];
+      expect(failureOf(await portal(buyer.userId))).toMatchObject({
+        error: { _tag: "Forbidden" },
+      });
+
+      // Orphaned: no portal for any remaining owner.
+      await setRow({ userId: null, providerCustomerId: `ctm_${tag}` });
+      expect(failureOf(await portal(coOwner.userId))).toMatchObject({
+        error: { _tag: "Forbidden", message: BUYER_GONE },
+      });
+      expect(calls).toEqual([]);
     });
   });
 
@@ -907,6 +1307,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const e = event(
         snapshot({ subscriptionId: id, updatedAt: new Date(Date.now() + offsetMs), ...fields }),
       );
+      await recordCheckout(e.subscription!);
       const recorded = await run(recordBillingEvent(e));
       if (recorded.kind !== "recorded") throw new Error("not recorded");
       const [row] = await db((d) =>
@@ -1008,7 +1409,8 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const message = Exit.isFailure(refused) ? JSON.stringify(refused.cause) : "";
       expect(message).toContain("QuotaExceeded");
       expect(message).toContain("You've used all 3 scans on the Free plan this month.");
-      expect(message).toContain("at 00:00 UTC. Upgrade a workspace to Pro for more scans.");
+      expect(message).toContain("They reset on");
+      expect(message).not.toMatch(/upgrade/i);
       expect(await verdict(u, free)).toMatchObject({
         window: "month",
         used: 3,

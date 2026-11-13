@@ -12,6 +12,8 @@ This repo is a Bun/Turborepo Receipt OCR MVP.
 - `packages/bench`: OCR benchmark and k6 load test.
 - `packages/core`: Effect TS services and receipt processing workflow.
 
+Tests: in each package, `tests/` mirrors `src/` (`src/lib/x.ts` is tested by `tests/lib/x.test.ts`).
+
 ## Status and Plans
 
 Start with `docs/STATUS.md`: what has shipped, what is in flight, open owner decisions and the roadmap. Dated plans

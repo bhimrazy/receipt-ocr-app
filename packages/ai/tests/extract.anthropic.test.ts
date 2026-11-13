@@ -2,11 +2,11 @@
 // reads them, through the same extractReceipt path production uses. fetch is mocked:
 // these tests never reach the network.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OcrCallError, retryAfterMs } from "./errors";
-import { extractReceipt, type ModelId } from "./extract";
-import { FIXTURE_RECEIPTS } from "./fixture";
-import { FIELD_DESCRIPTIONS, V3_FIELD_DESCRIPTIONS } from "./schema";
-import { INJECTION_GUARD } from "./prompt";
+import { OcrCallError, retryAfterMs } from "../src/errors";
+import { extractReceipt, type ModelId } from "../src/extract";
+import { FIXTURE_RECEIPTS } from "../src/fixture";
+import { FIELD_DESCRIPTIONS, V3_FIELD_DESCRIPTIONS } from "../src/schema";
+import { INJECTION_GUARD } from "../src/prompt";
 
 const RECEIPT = FIXTURE_RECEIPTS[0]!;
 const keys = { anthropic: "test-key-not-real" };

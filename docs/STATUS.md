@@ -199,12 +199,14 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                                |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| #219 | Receipts list: sorting, page size, range, selection across pages, bulk delete (`storage.delete` job), export and Add to group       |
-| #229 | Navigation PR 1: History becomes Receipts (`/app/receipts`), Groups moves to `/app/receipts/groups`; no redirects                   |
-| #230 | Navigation PR 3: Spending page (`/app/spending`) holds the dashboard from Home; tab bar is Home, Receipts, Scan, Spending, Settings |
-| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                           |
+| PR   | Work                                                                                                                                                                     |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #236 | Billing: subscriptions and portal sessions bound to the checkout the server created (`billing_checkouts`; migration 0004 also validates the 0003 CHECKs); warn log level |
+| #219 | Receipts list: sorting, page size, range, selection across pages, bulk delete (`storage.delete` job), export and Add to group                                            |
+| #229 | Navigation PR 1: History becomes Receipts (`/app/receipts`), Groups moves to `/app/receipts/groups`; no redirects                                                        |
+| #230 | Navigation PR 3: Spending page (`/app/spending`) holds the dashboard from Home; tab bar is Home, Receipts, Scan, Spending, Settings                                      |
+| #238 | Free at 30 a month with dated early access, one Plan and billing page, upgrade ladder from 80%, marketing claims fixed                                                   |
+| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                                                                |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -219,6 +221,12 @@ derived and shown only for receipts printed in BS; BS wins over a disagreeing AD
 `invoice_number`, `merchant_tax_id`, `discount`, `service_charge`, `review_reasons`, `receipt_items.position`.
 "Needs review" comes from deterministic checks, not model scores; the model may leave merchant, total and currency
 empty. Edge detection: auto-crop only when confident, then the benchmarked redesign.
+
+Owner decisions (2026-11-13, from the [billing review round](reviews/2026-11-13-billing-design.md)): Free is 30 scans a
+month per person (20 a day stays); accounts created before launch keep 100 a month until a dated end
+(`EARLY_ACCESS` in `packages/core/src/plans.ts`). Upgrade surfaces only from 80% used, none in the account menu, one
+"Plan and billing" page, subscription state before checkout state, members of a Pro workspace see plan and usage only.
+Every wrong marketing claim from the CEO review is fixed.
 
 ## Brand decisions (owner, 2026-11-07)
 
@@ -261,6 +269,12 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 14. ~~Light and System themes~~ Decided 2026-11-08 (owner took every recommendation in the [spec](plans/2026-11-08-light-theme.md)): System as the default for everyone,
     per-device storage (no account sync), toggle in Settings, account menu and footer (not the header), a light iOS
     splash set, emails out of scope.
+
+15. Early-access dates: accounts created before `EARLY_ACCESS.joinedBefore` (placeholder 1 December 2026) keep 100
+    a month until `EARLY_ACCESS.endsAt` (placeholder 1 March 2027). Set the cutoff to the launch date. If Admin →
+    Settings has a saved plan table, its Free month (likely 100) wins over the new default of 30.
+    **Deploy step for #238:** on production, open Admin → Settings → Plan limits and set the Free month to 30 (or clear
+    the saved row). Until then Free stays at the saved value and the early-access lines are hidden.
 
 ## Roadmap (order)
 

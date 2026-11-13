@@ -25,7 +25,7 @@ export type MemberRoom = {
   plan: "free" | "pro";
   used: number;
   limit: number;
-  /** Only an owner can upgrade the workspace. */
+  /** An owner: the note links the plans on Billing, where Pro is bought (or marked opening soon). */
   canUpgrade: boolean;
 };
 
@@ -119,22 +119,21 @@ export function InviteForm({ organizationId, room }: { organizationId: string; r
                   This workspace has reached Pro&apos;s {room.limit} members. Cancel a pending
                   invite or remove a member to invite someone else.
                 </>
-              ) : room.canUpgrade ? (
-                <>
-                  Free workspaces have up to {room.limit} members. Cancel a pending invite, remove a
-                  member, or{" "}
-                  <Link
-                    className="text-foreground underline underline-offset-4"
-                    href="/app/settings/billing"
-                  >
-                    upgrade to Pro
-                  </Link>{" "}
-                  for more.
-                </>
               ) : (
                 <>
-                  Free workspaces have up to {room.limit} members. Ask the owner to upgrade this
-                  workspace to Pro, or cancel a pending invite.
+                  Free workspaces have up to {room.limit} members. Cancel a pending invite or remove
+                  a member to invite someone else.
+                  {room.canUpgrade ? (
+                    <>
+                      {" "}
+                      <Link
+                        className="text-foreground underline underline-offset-4"
+                        href="/app/settings/billing"
+                      >
+                        Compare plans
+                      </Link>
+                    </>
+                  ) : null}
                 </>
               )}
             </p>

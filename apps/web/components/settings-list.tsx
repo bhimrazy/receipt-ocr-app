@@ -25,6 +25,8 @@ export type SettingsLink = {
   href: string;
   label: string;
   value: string;
+  /** A second line under the label, for a value too long to sit beside it at 390px. */
+  detail?: string;
   icon: "plan" | "workspace" | "groups" | "security";
 };
 
@@ -42,10 +44,12 @@ function RowBody({
   icon: Icon,
   label,
   value,
+  detail,
 }: {
   icon: LucideIcon;
   label: string;
   value: React.ReactNode;
+  detail?: string;
 }) {
   return (
     <>
@@ -55,7 +59,14 @@ function RowBody({
       >
         <Icon className="size-4" />
       </span>
-      <span className="text-base font-medium">{label}</span>
+      {detail ? (
+        <span className="flex min-w-0 flex-col">
+          <span className="text-base font-medium">{label}</span>
+          <span className="font-mono text-xs text-muted-foreground tabular-nums">{detail}</span>
+        </span>
+      ) : (
+        <span className="text-base font-medium">{label}</span>
+      )}
       <span className="ml-auto min-w-0 truncate pl-2 text-sm text-muted-foreground">{value}</span>
       <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
     </>
@@ -86,7 +97,12 @@ export function SettingsList({
           ) : (
             <li key={row.href}>
               <Link className={rowClass} data-touch-row="" href={row.href}>
-                <RowBody icon={ICONS[row.icon]} label={row.label} value={row.value} />
+                <RowBody
+                  detail={row.detail}
+                  icon={ICONS[row.icon]}
+                  label={row.label}
+                  value={row.value}
+                />
               </Link>
             </li>
           ),

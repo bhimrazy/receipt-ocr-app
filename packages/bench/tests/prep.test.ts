@@ -1,7 +1,7 @@
 import sharp, { type Sharp } from "sharp";
 import { describe, expect, it } from "vitest";
-import { imageSize } from "../ai/src/image-size";
-import { imageTokens, parsePrep, prepare, prepLabel, scaleFor } from "./prep";
+import { imageSize } from "../../ai/src/image-size";
+import { imageTokens, parsePrep, prepare, prepLabel, scaleFor } from "../prep";
 
 const image = async (width: number, height: number, format: "png" | "webp" = "png") =>
   new Uint8Array(

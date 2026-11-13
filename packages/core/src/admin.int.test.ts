@@ -336,8 +336,8 @@ describe.skipIf(!enabled)("admin audit rows commit with the change", () => {
     );
     try {
       const pro = { ...DEFAULT_PLANS.pro };
-      const first = { free: { ...DEFAULT_PLANS.free, receiptsPerDay: 41 }, pro };
-      const second = { free: { ...DEFAULT_PLANS.free, receiptsPerDay: 42 }, pro };
+      const first = { free: { ...DEFAULT_PLANS.free, receiptsPerDay: 21 }, pro };
+      const second = { free: { ...DEFAULT_PLANS.free, receiptsPerDay: 22 }, pro };
       await run(Effect.flatMap(Settings, (s) => s.plans)); // warm the cache
       await run(Effect.flatMap(Settings, (s) => s.save("plans", first, auditor)));
       // Another process writes behind this one's cache.
@@ -346,7 +346,7 @@ describe.skipIf(!enabled)("admin audit rows commit with the change", () => {
           use((d) =>
             d
               .update(appSettings)
-              .set({ value: { ...first, free: { ...first.free, receiptsPerDay: 43 } } })
+              .set({ value: { ...first, free: { ...first.free, receiptsPerDay: 23 } } })
               .where(eq(appSettings.key, "plans")),
           ),
         ),
@@ -355,7 +355,7 @@ describe.skipIf(!enabled)("admin audit rows commit with the change", () => {
       const { previous } = await run(
         Effect.flatMap(Settings, (s) => s.save("plans", second, auditor)),
       );
-      expect(previous.free.receiptsPerDay).toBe(43);
+      expect(previous.free.receiptsPerDay).toBe(23);
     } finally {
       await run(
         Effect.flatMap(Db, ({ use }) =>

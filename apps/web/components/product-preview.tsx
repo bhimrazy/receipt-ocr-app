@@ -34,7 +34,7 @@ function ConfidencePill({ className }: { className?: string }) {
         className,
       )}
     >
-      <Check aria-hidden className="size-3" /> 98% confidence
+      <Check aria-hidden className="size-3" /> Totals match
     </span>
   );
 }

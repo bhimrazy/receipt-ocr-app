@@ -15,34 +15,27 @@ export const resetDay = (date: Date) =>
 
 const span = (usage: Pick<Usage, "period">) => (usage.period === "month" ? "this month" : "today");
 
-/** What a member sees at the limit, and next to an amber meter, instead of an offer. */
-export const ASK_OWNER = "Ask the workspace owner to upgrade this workspace to Pro.";
+/** What a member sees beside an amber meter and at the limit, instead of an offer. */
+export const ASK_OWNER = "Ask the owner for Pro.";
 
-/** "Pro gives this workspace 500 scans a month, up to 200 a day, shared by its members" */
-const proGives = (pro: PlanPolicy) =>
-  `Pro gives this workspace ${allowance(pro)}, shared by its members`;
+/** "500 scans a month", Pro's headline allowance. */
+export const proScans = (pro: PlanPolicy) =>
+  pro.receiptsPerMonth === null ? allowance(pro) : `${pro.receiptsPerMonth} scans a month`;
+
+/** The line that replaces every upgrade action while checkout is closed. */
+export const proOpensSoon = (pro: PlanPolicy) => `Pro, with ${proScans(pro)}, opens soon.`;
 
 export type HomeCardCopy = { badge: string; title: string; body: string; action: string };
 
-/** The Home card: calm below NEAR_RATIO, specific from it. */
-export function homeCardCopy(level: "quiet" | "near", usage: Usage, pro: PlanPolicy): HomeCardCopy {
-  const { used, limit } = usage;
-  if (level === "quiet") {
-    return {
-      badge: "Free plan",
-      title: "Pro for this workspace",
-      body: `${used} of ${limit} Free scans used ${span(usage)}. ${proGives(pro)}.`,
-      action: `See Pro, ${PRO_PRICE_LABEL.month} a month`,
-    };
-  }
+/** The Home card, from NEAR_RATIO used: what is left, when it resets, and what Pro gives. */
+export function homeCardCopy(usage: Usage, pro: PlanPolicy): HomeCardCopy {
+  const left = Math.max(0, usage.limit - usage.used);
   const reset =
-    usage.period === "month"
-      ? `They reset on ${resetDay(usage.resetsAt)} at 00:00 UTC.`
-      : "They reset at 00:00 UTC.";
+    usage.period === "month" ? `Resets ${resetDay(usage.resetsAt)}.` : "Resets at 00:00 UTC.";
   return {
-    badge: `${used} of ${limit} used`,
-    title: `You've used ${used} of ${limit} Free scans ${span(usage)}`,
-    body: `${reset} ${proGives(pro)}, for ${PRO_PRICE_LABEL.month} a month.`,
+    badge: `${usage.used} / ${usage.limit} scans`,
+    title: `${left} free ${left === 1 ? "scan" : "scans"} left ${span(usage)}`,
+    body: `${reset} Pro gives this workspace ${proScans(pro)} for ${PRO_PRICE_LABEL.month}.`,
     action: "Upgrade to Pro",
   };
 }
@@ -72,9 +65,10 @@ export function bannerCopy(usage: Usage, pro: PlanPolicy): { body: string; opens
   return null;
 }
 
-/** The sentence the upload panel's limit state adds for an owner (the pool's body already names Pro). */
+/** What Pro would change, for an owner who can buy it from the upload panel's limit state. */
 export function limitUpgradeLine(usage: Usage, pro: PlanPolicy): string | null {
-  if (usage.blocked === "month") return `Or upgrade this workspace to Pro for ${allowance(pro)}.`;
+  if (usage.blocked === "month")
+    return `Pro gives this workspace ${proScans(pro)} for ${PRO_PRICE_LABEL.month}.`;
   if (usage.blocked === "day")
     return `Pro allows up to ${pro.receiptsPerDay} a day in this workspace.`;
   return null;

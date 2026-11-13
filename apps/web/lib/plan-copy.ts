@@ -58,7 +58,6 @@ export function proFeatures(pro: PlanPolicy): string[] {
     scansLine(pro),
     membersLine(pro),
     `Own up to ${n(pro.workspaces, "workspace")} (each upgraded separately)`,
-    "Cancel any time",
   ];
 }
 
@@ -69,14 +68,8 @@ export function proFeatures(pro: PlanPolicy): string[] {
 export const CUSTOM_PLAN = {
   name: "Custom",
   price: "Let's talk",
-  description: "For higher volume, bigger teams and tailored setups.",
-  features: [
-    "Everything in Pro",
-    "Higher monthly and daily limits",
-    "More members and workspaces",
-    "A direct line to the team",
-    "Shape the roadmap with your feedback",
-  ],
+  description: "Need more than Pro? Tell us what you need and we'll say what we can do.",
+  features: ["Everything in Pro", "More scans, members or workspaces, if we can arrange it"],
   cta: "Contact us",
 } as const;
 
@@ -84,19 +77,54 @@ export const CUSTOM_PLAN = {
 export const SEPARATE_UPGRADE =
   "This workspace is on Free. Your Pro subscription covers one workspace; each workspace is upgraded separately.";
 
+/** The pricing headline on /pricing and the landing page; it promises an upgrade only once one can be bought. */
+export const pricingHeadline = (checkoutOpen: boolean) =>
+  checkoutOpen
+    ? "Start free. Upgrade a workspace when it needs more."
+    : "Start free. Pro opens soon for workspaces that need more.";
+
+/** "1 March 2027", in UTC like every plan window. */
+export const longDate = (date: Date) =>
+  date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+/** "Early access: 100 scans a month until 1 March 2027." */
+export const earlyAccessLine = (limit: number, until: Date) =>
+  `Early access: ${n(limit, "scan")} a month until ${longDate(until)}.`;
+
 /**
- * The welcome email's plan line: "Your Free plan includes 20 scans a day, up to 100 a month. …".
- * A shared Pro allowance still says so; a Free one is the reader's own.
+ * The welcome email's plan line: "Your Free plan includes 20 scans a day, up to 30 a month. …".
+ * A shared Pro allowance still says so; a Free one is the reader's own. With early access it says
+ * which part ends (the month) and which carries on (the day).
  */
-export function welcomePlanLine(plan: "free" | "pro", policy: PlanPolicy): string {
+export function welcomePlanLine(
+  plan: "free" | "pro",
+  policy: PlanPolicy,
+  earlyAccess: { until: Date; thenPerMonth: number | null } | null = null,
+): string {
   const name = plan === "pro" ? "Pro" : "Free";
   const owner = policy.scope === "workspace" ? `, ${allowanceOwner(policy)}` : "";
-  return `Your ${name} plan includes ${allowance(policy)}${owner}. Limits reset at 00:00 UTC.`;
+  const line = `Your ${name} plan includes ${allowance(policy)}${owner}.`;
+  if (!earlyAccess || policy.receiptsPerMonth === null) {
+    return `${line} Limits reset at 00:00 UTC.`;
+  }
+  const then =
+    earlyAccess.thenPerMonth === null
+      ? "there is no monthly limit"
+      : `it is ${earlyAccess.thenPerMonth} a month`;
+  return `${line} The ${policy.receiptsPerMonth} a month is an early-access allowance until ${longDate(earlyAccess.until)}; after that ${then}, and ${policy.receiptsPerDay} a day carries on. Limits reset at 00:00 UTC.`;
 }
 
-/** Under the workspace switcher when the user can't create another workspace. */
-export function workspaceCapNote(plan: "free" | "pro", limit: number): string {
-  return plan === "pro"
-    ? `You own ${n(limit, "workspace")}, the most on Pro.`
-    : `Free accounts own ${n(limit, "workspace")}. Upgrade a workspace to Pro to create another.`;
+/**
+ * Under the workspace switcher when the user can't create another workspace. States the Pro
+ * allowance as a fact, never as an instruction, since the switcher has no upgrade control.
+ */
+export function workspaceCapNote(plan: "free" | "pro", limit: number, proLimit: number): string {
+  if (plan === "pro") return `You own ${n(limit, "workspace")}, the most on Pro.`;
+  const free = `Free accounts own ${n(limit, "workspace")}.`;
+  return proLimit > limit ? `${free} Pro owners can have ${proLimit}.` : free;
 }

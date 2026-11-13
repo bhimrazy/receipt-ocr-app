@@ -73,9 +73,9 @@ export function pageMetadata({
 /** Dates shown on the legal pages, also used as the sitemap's lastModified. */
 export const LEGAL_UPDATED = {
   privacy: "2026-11-08",
-  terms: "2026-11-08",
+  terms: "2026-11-13",
   refunds: "2026-11-08",
-  pricing: "2026-11-08",
+  pricing: "2026-11-13",
   cookies: "2026-11-09",
 } as const;
 
@@ -87,7 +87,7 @@ export const OWNER = {
   url: "https://bhimraj.com.np",
   github: "https://github.com/bhimrazy",
 } as const;
-export const REPO_URL = "https://github.com/bhimrazy/receipt-ocr";
+export const REPO_URL = "https://github.com/bhimrazy/receipt-ocr-app";
 
 export function formatLegalDate(isoDate: string): string {
   return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("en-US", {
