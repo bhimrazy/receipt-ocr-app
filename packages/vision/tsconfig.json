@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No DOM and no Node, so the detector provably runs in a browser, a worker, Node and Bun.
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src"]
+}

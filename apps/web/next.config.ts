@@ -79,6 +79,7 @@ const nextConfig: NextConfig = {
     "@receipt-ocr/email",
     "@receipt-ocr/storage",
     "@receipt-ocr/ui",
+    "@receipt-ocr/vision",
   ],
   poweredByHeader: false,
   productionBrowserSourceMaps: emitSourceMaps,

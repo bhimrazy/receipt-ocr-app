@@ -1,3 +1,4 @@
+import type { Pixels } from "@receipt-ocr/vision";
 import { describe, expect, it } from "vitest";
 import {
   applyFilter,
@@ -7,7 +8,6 @@ import {
   greyscale,
   percentile,
 } from "./filters";
-import type { Pixels } from "./geometry";
 
 function image(width: number, height: number, fill: (x: number, y: number) => number[]): Pixels {
   const data = new Uint8ClampedArray(width * height * 4);

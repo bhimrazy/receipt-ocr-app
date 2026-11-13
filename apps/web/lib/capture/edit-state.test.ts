@@ -1,3 +1,4 @@
+import { isConvex, type Point, type Quad } from "@receipt-ocr/vision";
 import { describe, expect, it } from "vitest";
 import {
   arrowDelta,
@@ -18,7 +19,6 @@ import {
   rotatedSize,
   fullImage,
 } from "./edit-state";
-import { isConvex, type Point, type Quad } from "./geometry";
 
 const detected: Quad = [
   { x: 0.1, y: 0.2 },
