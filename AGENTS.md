@@ -13,6 +13,8 @@ This repo is a Bun/Turborepo Receipt OCR MVP.
 - `packages/core`: Effect TS services and receipt processing workflow.
 - `packages/vision`: pure capture image maths (quad geometry, warp, receipt-edge detection); no DOM, no dependencies.
 
+Tests: in each package, `tests/` mirrors `src/` (`src/lib/x.ts` is tested by `tests/lib/x.test.ts`).
+
 ## Status and Plans
 
 Start with `docs/STATUS.md`: what has shipped, what is in flight, open owner decisions and the roadmap. Dated plans

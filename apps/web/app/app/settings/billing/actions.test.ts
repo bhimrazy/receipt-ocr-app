@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type FakeSession = {
-  user: { id: string; email: string; role: string };
+  user: { id: string; email: string; emailVerified: boolean; role: string };
   session: { impersonatedBy?: string };
 };
 
@@ -53,7 +53,10 @@ beforeEach(() => {
   createCheckout.mockClear();
   logError.mockClear();
   checkoutFailure = null;
-  session = { user: { id: "u_1", email: "owner@example.com", role: "user" }, session: {} };
+  session = {
+    user: { id: "u_1", email: "owner@example.com", emailVerified: true, role: "user" },
+    session: {},
+  };
   scope = { organizationId: ORG, userId: "u_1", role: "owner" };
   // Paddle's public settings, live keys, off Vercel: the checkout is open to everyone.
   vi.stubEnv("PADDLE_ENV", "production");
@@ -79,7 +82,6 @@ describe("startCheckoutAction", () => {
     expect(createCheckout).toHaveBeenCalledWith({
       organizationId: ORG,
       userId: "u_1",
-      email: "owner@example.com",
       interval: "year",
     });
   });
@@ -107,6 +109,11 @@ describe("startCheckoutAction", () => {
       "a non-admin on sandbox keys on the live site",
       sandboxOnProduction,
       "Paid plans aren't open yet.",
+    ],
+    [
+      "an owner whose email isn't verified",
+      () => (session.user.emailVerified = false),
+      "Verify your email address before upgrading.",
     ],
   ])("refuses %s without calling Paddle", async (_who, arrange, error) => {
     arrange();

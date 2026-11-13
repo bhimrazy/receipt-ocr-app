@@ -30,11 +30,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
-import { getCurrentPlan } from "@/lib/plan-limits";
+import { getCurrentPlan, getPlanTable } from "@/lib/plan-limits";
 import { getReceiptCounts, getUsageSummary, listRecentReceipts } from "@/lib/receipts";
 import { logPageRender } from "@/lib/page-event";
 import { getUpgradeOffer } from "@/lib/upgrade-offer";
-import { usageRatio, WARM_RATIO } from "@/lib/upgrade-level";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -186,32 +185,32 @@ async function HomeTitle() {
 }
 
 async function UploadSection() {
-  const [usage, { policy }, offer] = await Promise.all([
+  const [usage, { plan, policy }, offer, plans] = await Promise.all([
     getUsageSummary(),
     getCurrentPlan(),
     getUpgradeOffer(),
+    getPlanTable(),
   ]);
   return (
     <UploadPanel
       batchMax={policy.batchMax}
+      plan={{ pro: plan === "free" ? plans.pro : null, offer: offer?.audience ?? null }}
       resetsIn={formatTimeUntil(usage.opensAt)}
-      upgrade={offer ? { audience: offer.audience, pro: offer.pro } : null}
       usage={usage}
     />
   );
 }
 
 /**
- * The owner's upgrade card, from WARM_RATIO used: earlier, a card would get snoozed long before
- * it mattered. None at the limit, where the upload panel carries the button.
+ * The owner's upgrade card, from NEAR_RATIO used and only while they can buy. None at the
+ * limit, where the upload panel carries the button.
  */
 async function UpgradeCard() {
   const offer = await getUpgradeOffer();
-  if (!offer || offer.audience !== "owner" || offer.dismissed.home || offer.level === "at") {
+  if (!offer || offer.audience !== "owner" || offer.dismissed.home || offer.level !== "near") {
     return null;
   }
-  if (offer.level === "quiet" && usageRatio(offer.usage) < WARM_RATIO) return null;
-  return <UpgradeHomeCard level={offer.level} offer={offer} />;
+  return <UpgradeHomeCard offer={offer} />;
 }
 
 async function CheckSection() {

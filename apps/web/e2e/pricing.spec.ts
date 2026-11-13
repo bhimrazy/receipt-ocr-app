@@ -29,7 +29,7 @@ test("pricing shows Free, Pro and Custom with a monthly/yearly switch, and the F
   // Custom has no price; its button opens the support form on "Plans & limits".
   await expect(page.getByRole("heading", { name: "Custom", exact: true })).toBeVisible();
   await expect(page.getByText("Let's talk", { exact: true })).toBeVisible();
-  await expect(page.getByText("More members and workspaces", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^More scans, members or workspaces/)).toBeVisible();
   await page.getByRole("button", { name: "Contact us" }).first().click();
   const form = page.getByRole("dialog");
   await expect(form).toBeVisible();
@@ -48,9 +48,10 @@ test("pricing shows Free, Pro and Custom with a monthly/yearly switch, and the F
   await expect(page.getByRole("radio", { name: /Yearly/ })).toBeChecked();
   await expect(page.getByText("$90", { exact: true })).toBeVisible();
 
-  // Pro is not open to everyone in this stack: no checkout link, no Paddle script.
+  // Pro is not open to everyone in this stack: no checkout link, no Paddle script, Free leads.
   await expect(page.getByRole("link", { name: /Get Pro/ })).toHaveCount(0);
-  await expect(page.getByText("Pro checkout opens soon.")).toBeVisible();
+  await expect(page.getByText("Opens soon", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your plan", { exact: true })).toHaveCount(0);
   expect(await page.locator('script[src*="paddle.com"]').count()).toBe(0);
 
   const faq = page.getByText("Plans are per workspace. What does that mean?");
@@ -78,8 +79,24 @@ test("billing settings show the plan without a checkout while Pro is closed to t
 }) => {
   await signUp(page, uniqueEmail("billing"));
   await page.goto("/app/settings/billing");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Billing");
-  await expect(page.getByText(/Paid plans aren.t open yet/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Upgrade to Pro/ })).toHaveCount(0);
-  await expect(page.locator("#main-content").getByText("/ 100 this month")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Plan and billing");
+  const main = page.locator("#main-content");
+  await expect(main.getByText("Opens soon", { exact: true })).toBeVisible();
+  await expect(main.getByText("Your plan", { exact: true })).toBeVisible();
+  await expect(main.getByRole("button", { name: /Upgrade to Pro/ })).toHaveCount(0);
+  await expect(main.getByText(/^\d+ \/ \d+ scans$/)).toBeVisible();
+  await expect(main.getByRole("link", { name: "Compare plans" })).toHaveAttribute(
+    "href",
+    "/pricing",
+  );
+});
+
+test("a signed-in visitor sees their plan marked on pricing", async ({ page }) => {
+  await signUp(page, uniqueEmail("pricing-signed-in"));
+  await page.goto("/pricing");
+  const free = page.locator("div", {
+    has: page.getByRole("heading", { name: "Free", exact: true }),
+  });
+  await expect(free.getByText("Your plan", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open the app" }).first()).toBeVisible();
 });

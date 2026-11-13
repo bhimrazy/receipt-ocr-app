@@ -18,7 +18,24 @@ it here in the same session, with the date. `product-reviewer` checks every line
 - Copy is plain and literal for an international reader: no idioms or regional references that need explaining
   ("shoebox", "tax season", "April"). (2026-11-04)
 
+- A screen never asks for an action it can't offer: "Upgrade" appears only beside a control that starts it. While
+  checkout is closed the copy says Pro opens soon. (2026-11-13)
+- Server error messages follow the same rule: they are shown without a control, so they state the limit and what the
+  reader can do now, never "upgrade". (2026-11-13)
+- A page has one name everywhere it is mentioned, legal pages and server messages included ("Plan and billing", not
+  "Billing" or "Settings, Billing"). (2026-11-13)
+
+## Billing
+
+- A subscriber's billing page is decided by the subscription first and the checkout state second: anyone who pays can
+  always reach status, renewal, cancel and invoices, or is told on that page how. (2026-11-13)
+- When a role can't do something, the page says who can. No button for an action the viewer can't take. (2026-11-13)
+- A usage warning shows from 80% used on the pages where scanning starts, at every width; nothing pitches Pro below
+  that. (2026-11-13)
+
 ## Data display
+
+- Waits over 48 hours are given in days with the date ("1 December, in 18 days"), never in hours. (2026-11-13)
 
 - Every page works at 390px with no horizontal scroll and a way to reach every section of the app. (2026-11-04)
 - Amounts show the currency symbol consistently, with numeric columns right-aligned in monospace. (2026-11-04)

@@ -27,6 +27,9 @@ vi.mock("@/lib/runtime", () => ({
   },
 }));
 vi.mock("@/lib/email-limits", () => ({ allowContactReply }));
+const RECEIPT = "0f8fad5b-d9cb-469f-a165-70867728950e";
+const senderReceipt = vi.fn<(value: unknown) => Promise<string | null>>();
+vi.mock("@/lib/support-receipt", () => ({ senderReceipt }));
 vi.mock("@/lib/mailer", () => ({ mailer: { replyTo: "help@example.com" } }));
 const specs = vi.hoisted(() => [] as unknown[]);
 vi.mock("@/lib/http", () => ({
@@ -77,6 +80,8 @@ beforeEach(() => {
   env.isProduction = false;
   env.supportEmail = "help@example.com";
   env.turnstile = { ok: true };
+  senderReceipt.mockReset();
+  senderReceipt.mockImplementation(async (value) => (value === RECEIPT ? RECEIPT : null));
 });
 
 describe("POST /api/contact", () => {
@@ -222,5 +227,27 @@ describe("POST /api/contact", () => {
     expect(res.status).toBe(200);
     expect(sendEmail).not.toHaveBeenCalled();
     expect(enqueued).toEqual([]);
+  });
+
+  it("links a problem report to the sender's receipt", async () => {
+    sendEmail.mockResolvedValue({ delivered: true });
+    const res = await post({ ...valid, topic: "problem", receiptId: RECEIPT });
+    expect(res.status).toBe(200);
+    expect(senderReceipt).toHaveBeenCalledWith(RECEIPT, expect.anything());
+    const input = sendEmail.mock.calls[0][1];
+    expect(input.subject).toContain("Problem report");
+    expect(input.text).toContain(`Receipt ${RECEIPT}`);
+    expect(input.text).toContain(`https://app.test/app/receipts/${RECEIPT}`);
+  });
+
+  it("leaves out a receipt the sender can't see, and ignores one on another topic", async () => {
+    sendEmail.mockResolvedValue({ delivered: true });
+    const other = "1f8fad5b-d9cb-469f-a165-70867728950e";
+    await post({ ...valid, topic: "problem", receiptId: other });
+    expect(sendEmail.mock.calls[0][1].text).not.toContain(other);
+
+    await post({ ...valid, topic: "feature", receiptId: RECEIPT });
+    expect(senderReceipt).toHaveBeenCalledTimes(1);
+    expect(sendEmail.mock.calls[1][1].text).not.toContain(RECEIPT);
   });
 });

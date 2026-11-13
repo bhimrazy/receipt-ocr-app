@@ -2,7 +2,7 @@ import { asc, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { cache } from "react";
 import { authEnv } from "./env";
 import { workspaceCapNote } from "./plan-copy";
-import { getAccountPlan } from "./plan-limits";
+import { getAccountPlan, getPlanTable } from "./plan-limits";
 import { getSession } from "./session";
 
 export interface WorkspaceAllowance {
@@ -11,6 +11,8 @@ export interface WorkspaceAllowance {
   canCreate: boolean;
   /** Why "Create workspace" is missing, for the account's plan. */
   planNote: string;
+  /** Free: the cap note links the plans. */
+  comparePlans: boolean;
 }
 
 /**
@@ -19,16 +21,21 @@ export interface WorkspaceAllowance {
  * lock "Create workspace" after being invited to a second workspace.
  */
 export async function getWorkspaceAllowance(): Promise<WorkspaceAllowance> {
-  const [session, { plan, policy }] = await Promise.all([getSession(), getAccountPlan()]);
+  const [session, { plan, policy }, plans] = await Promise.all([
+    getSession(),
+    getAccountPlan(),
+    getPlanTable(),
+  ]);
   const limit = policy.workspaces;
-  const planNote = workspaceCapNote(plan, limit);
+  const planNote = workspaceCapNote(plan, limit, plans.pro.workspaces);
+  const comparePlans = plan === "free";
   if (!session || !authEnv.databaseUrl) {
-    return { owned: 0, limit, canCreate: false, planNote };
+    return { owned: 0, limit, canCreate: false, planNote, comparePlans };
   }
 
   // From the switcher's list (per-request cached), not a query of its own.
   const owned = (await listWorkspaces()).filter((w) => w.role === "owner").length;
-  return { owned, limit, canCreate: owned < limit, planNote };
+  return { owned, limit, canCreate: owned < limit, planNote, comparePlans };
 }
 
 export interface WorkspaceOption {

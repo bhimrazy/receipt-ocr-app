@@ -20,11 +20,11 @@ import {
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   ChevronsUpDown,
+  CircleHelp,
   Cookie,
   LogOut,
   Settings,
   ShieldCheck,
-  Sparkles,
   SunMoon,
 } from "lucide-react";
 import Link from "next/link";
@@ -36,9 +36,9 @@ import { InstallAppMenuItem, InstallAppSheetAction } from "@/components/install-
 import { useInstallAction } from "@/components/use-install-action";
 import { ThemeMenuRow, ThemeToggle } from "@/components/theme-toggle";
 import { CreateWorkspaceDialog, WorkspaceList } from "@/components/workspace-switcher";
-import { OPEN_UPGRADE, openUpgradeModal } from "@/components/upgrade/upgrade-trigger";
+import { OPEN_UPGRADE } from "@/components/upgrade/upgrade-trigger";
 import { openConsentSettingsFrom } from "@/lib/consent/store";
-import { PRO_PRICE_LABEL } from "@/lib/pricing";
+import { openSupportWidget } from "@/lib/support-widget";
 import type { WorkspaceOption } from "@/lib/workspaces";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
@@ -63,6 +63,10 @@ function Avatar({ user, className }: { user: MenuUser; className?: string }) {
   );
 }
 
+/** After the menu or sheet has closed, so it doesn't take focus back from the form. */
+const openHelp = (returnFocus: HTMLElement | null) =>
+  setTimeout(() => openSupportWidget("getting-started", { returnFocus }), 0);
+
 function useSignOut() {
   const router = useRouter();
   return async () => {
@@ -74,32 +78,25 @@ function useSignOut() {
 
 /**
  * Desktop account menu at the foot of the sidebar. The server layout passes the user, so
- * there's no loading flash. `upgrade`: a Free workspace's owner, offered Pro above Settings.
+ * there's no loading flash. Pro is offered by the meter above it, never here. `showHelp` needs
+ * `SupportWidget` on the page.
  */
 export function UserMenu({
   user,
   showAdmin,
-  upgrade = false,
+  showHelp = false,
 }: {
   user: MenuUser;
   showAdmin: boolean;
-  upgrade?: boolean;
+  showHelp?: boolean;
 }) {
   const handleSignOut = useSignOut();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const install = useInstallAction("menu", null);
-  // The modal opens once the menu has closed, so focus hands over cleanly.
-  const upgradePending = useRef(false);
 
   return (
     <>
-      <DropdownMenu
-        onOpenChangeComplete={(open) => {
-          if (open || !upgradePending.current) return;
-          upgradePending.current = false;
-          openUpgradeModal("menu", triggerRef.current);
-        }}
-      >
+      <DropdownMenu>
         <DropdownMenuTrigger
           ref={triggerRef}
           aria-label="Account menu"
@@ -120,19 +117,6 @@ export function UserMenu({
             <p className="truncate text-xs text-muted-foreground">{user.email}</p>
           </div>
           <DropdownMenuSeparator />
-          {upgrade ? (
-            <DropdownMenuItem
-              onClick={() => {
-                upgradePending.current = true;
-              }}
-            >
-              <Sparkles aria-hidden="true" className="text-primary" />
-              <span className="flex-1">Upgrade to Pro</span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {PRO_PRICE_LABEL.month}/mo
-              </span>
-            </DropdownMenuItem>
-          ) : null}
           <DropdownMenuItem render={<Link href="/app/settings" />}>
             <Settings aria-hidden="true" />
             Settings
@@ -149,6 +133,12 @@ export function UserMenu({
             <Cookie aria-hidden="true" />
             Cookie settings
           </DropdownMenuItem>
+          {showHelp ? (
+            <DropdownMenuItem onClick={() => openHelp(triggerRef.current)}>
+              <CircleHelp aria-hidden="true" />
+              Help and feedback
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleSignOut}>
             <LogOut aria-hidden="true" />
@@ -185,16 +175,20 @@ export function WorkspaceNameButton({ children }: { children: React.ReactNode })
 export function AccountSheet({
   user,
   showAdmin,
+  showHelp = false,
   workspace,
   usage,
 }: {
   user: MenuUser;
   showAdmin: boolean;
+  /** Needs `SupportWidget` on the page. */
+  showHelp?: boolean;
   /** Omitted in the admin shell, which has no active workspace of its own. */
   workspace?: {
     activeId: string;
     canCreate: boolean;
     planNote: string;
+    comparePlans: boolean;
     workspaces: WorkspaceOption[];
   };
   /** The usage meter, rendered by the server layout. */
@@ -290,6 +284,17 @@ export function AccountSheet({
               <Cookie aria-hidden="true" />
               Cookie settings
             </DrawerAction>
+            {showHelp ? (
+              <DrawerAction
+                onClick={() => {
+                  close();
+                  openHelp(triggerRef.current);
+                }}
+              >
+                <CircleHelp aria-hidden="true" />
+                Help and feedback
+              </DrawerAction>
+            ) : null}
             <DrawerAction onClick={handleSignOut}>
               <LogOut aria-hidden="true" />
               Sign out

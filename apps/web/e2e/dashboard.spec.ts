@@ -15,7 +15,7 @@ async function seed(email: string) {
     if (!owner) throw new Error(`no workspace for ${email}`);
     const rows: [string, string | null, string, string, string, string][] = [
       ["Tesco", day(1), "Groceries", "GBP", "42.10", "3.50"],
-      ["tesco ", day(3), "Groceries", "GBP", "18.40", "1.20"],
+      ["Tes-co ", day(3), "Groceries", "GBP", "18.40", "1.20"],
       ["Shell", day(5), "Fuel", "GBP", "61.00", "10.17"],
       ["Pret", day(8), "Meals", "GBP", "9.80", "0.00"],
       ["Pret", day(40), "Meals", "GBP", "12.30", "0.00"],
@@ -97,6 +97,14 @@ test.describe("Spending page", () => {
     await categories.getByRole("link", { name: /Fuel/ }).click();
     await expect(page).toHaveURL(/\/app\/receipts\?.*category=Fuel/);
     await expect(page.getByText("Shell").filter({ visible: true }).first()).toBeVisible();
+
+    // Two spellings are one merchant, named by the latest, and its link finds both.
+    await page.goto("/app/spending?range=3m");
+    const merchants = page.getByRole("list", { name: "Spend by merchant" });
+    await expect(merchants.getByRole("link", { name: /Tes-co/ })).toHaveCount(0);
+    await merchants.getByRole("link", { name: /Tesco/ }).click();
+    await expect(page).toHaveURL(/\/app\/receipts\?.*q=Tesco/);
+    await expect(page.getByText("Tes-co").filter({ visible: true }).first()).toBeVisible();
   });
 
   test("only unread receipts: says spending appears once one is read", async ({ page }) => {

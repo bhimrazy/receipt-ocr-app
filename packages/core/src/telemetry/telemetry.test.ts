@@ -426,6 +426,25 @@ describe("annotateEvent and the Effect logger", () => {
     expect(error).not.toHaveBeenCalled();
   });
 
+  it("raises the event to warn on a warning, never lowering an error", async () => {
+    const warned: WideEvent = { event: "job.attempt" };
+    await runtime.runPromise(Effect.logWarning("billing.unmatched").pipe(withWideEvent(warned)));
+    expect(warned).toMatchObject({ notices: ["billing.unmatched"], level: "warn" });
+
+    const failed: WideEvent = { event: "job.attempt" };
+    await runtime.runPromise(
+      Effect.logError("billing.orphan_charging").pipe(
+        Effect.zipRight(Effect.logWarning("billing.unmatched")),
+        withWideEvent(failed),
+      ),
+    );
+    expect(failed.level).toBe("error");
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    logger.emit(warned);
+    expect(JSON.parse(String(warn.mock.calls[0]![0]))).toMatchObject({ level: "warn" });
+  });
+
   it("is a no-op outside an event, where Effect.log becomes a scrubbed standalone line", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     await runtime.runPromise(

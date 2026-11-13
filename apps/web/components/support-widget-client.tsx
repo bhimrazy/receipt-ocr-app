@@ -16,22 +16,34 @@ type PanelComponent = ComponentType<
   React.ComponentProps<typeof import("@/components/support-panel").default>
 >;
 
-/** Opens only when the visitor asks (the launcher or `openSupportWidget`); it never opens itself. */
-export function SupportWidgetClient({ email }: { email?: string }) {
+/**
+ * Opens only when the visitor asks (the launcher or `openSupportWidget`); it never opens itself.
+ * Without `launcher`, only `openSupportWidget` opens it, from the page's own Help rows.
+ */
+export function SupportWidgetClient({
+  email,
+  launcher = true,
+}: {
+  email?: string;
+  launcher?: boolean;
+}) {
   const [Panel, setPanel] = useState<PanelComponent | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState(false);
   const [topic, setTopic] = useState<SupportTopic>("getting-started");
+  const [receiptId, setReceiptId] = useState<string | undefined>();
   const launcherRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   // An open panel keeps the install sheet away.
   useHoldBottom("support", open);
 
-  const openWidget = useCallback((nextTopic?: SupportTopic) => {
-    if (nextTopic) setTopic(nextTopic);
-    returnFocusRef.current = (document.activeElement as HTMLElement | null) ?? launcherRef.current;
+  const openWidget = useCallback((detail: SupportOpenDetail = {}) => {
+    if (detail.topic) setTopic(detail.topic);
+    setReceiptId(detail.receiptId);
+    returnFocusRef.current =
+      detail.returnFocus ?? (document.activeElement as HTMLElement | null) ?? launcherRef.current;
     setOpened(true);
     setOpen(true);
   }, []);
@@ -55,14 +67,13 @@ export function SupportWidgetClient({ email }: { email?: string }) {
   }, [opened, attempt]);
 
   useEffect(() => {
-    const onOpen = (event: Event) =>
-      openWidget((event as CustomEvent<SupportOpenDetail>).detail?.topic);
+    const onOpen = (event: Event) => openWidget((event as CustomEvent<SupportOpenDetail>).detail);
     window.addEventListener(SUPPORT_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(SUPPORT_OPEN_EVENT, onOpen);
   }, [openWidget]);
 
   return (
-    <div className="fixed right-[max(0.5rem,env(safe-area-inset-right))] bottom-[calc(var(--site-bottom-inset,0px)+max(0.5rem,env(safe-area-inset-bottom)))] z-40 flex flex-col items-end gap-3 sm:right-5 sm:bottom-[calc(var(--site-bottom-inset,0px)+1.25rem)]">
+    <div className="fixed right-[max(0.5rem,env(safe-area-inset-right))] bottom-[calc(var(--site-bottom-inset,0px)+max(0.5rem+var(--app-bottom-inset,0px),env(safe-area-inset-bottom)))] z-40 flex flex-col items-end gap-3 sm:right-5 sm:bottom-[calc(var(--site-bottom-inset,0px)+1.25rem)]">
       {opened ? (
         failed ? (
           <div
@@ -83,27 +94,35 @@ export function SupportWidgetClient({ email }: { email?: string }) {
             </button>
           </div>
         ) : Panel ? (
-          <Panel onClose={close} onTopicChange={setTopic} open={open} topic={topic} />
+          <Panel
+            onClose={close}
+            onTopicChange={setTopic}
+            open={open}
+            receiptId={receiptId}
+            topic={topic}
+          />
         ) : null
       ) : null}
 
-      <button
-        ref={launcherRef}
-        type="button"
-        onClick={() => (open ? close() : openWidget())}
-        onFocus={() => void loadPanel().catch(() => {})}
-        onPointerEnter={() => void loadPanel().catch(() => {})}
-        aria-label={open ? "Close support" : "Contact support"}
-        aria-expanded={open}
-        // The cta tokens keep white text legible over any page background.
-        className="flex size-11 items-center justify-center rounded-full bg-cta text-cta-foreground shadow-lg shadow-black/40 light:shadow-float ring-2 ring-cta-foreground/80 transition hover:bg-cta-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring sm:size-12 motion-safe:hover:-translate-y-0.5"
-      >
-        {open ? (
-          <X aria-hidden className="size-5" />
-        ) : (
-          <MessageCircle aria-hidden className="size-5" />
-        )}
-      </button>
+      {launcher ? (
+        <button
+          ref={launcherRef}
+          type="button"
+          onClick={() => (open ? close() : openWidget())}
+          onFocus={() => void loadPanel().catch(() => {})}
+          onPointerEnter={() => void loadPanel().catch(() => {})}
+          aria-label={open ? "Close support" : "Contact support"}
+          aria-expanded={open}
+          // The cta tokens keep white text legible over any page background.
+          className="flex size-11 items-center justify-center rounded-full bg-cta text-cta-foreground shadow-lg shadow-black/40 light:shadow-float ring-2 ring-cta-foreground/80 transition hover:bg-cta-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring sm:size-12 motion-safe:hover:-translate-y-0.5"
+        >
+          {open ? (
+            <X aria-hidden className="size-5" />
+          ) : (
+            <MessageCircle aria-hidden className="size-5" />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }

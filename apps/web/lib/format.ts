@@ -149,10 +149,14 @@ export function formatConfidence(value: string | number | null | undefined): str
   return score === null ? null : `${Math.round(score * 100)}%`;
 }
 
-/** "in 6 hours", "in 45 minutes": how long until `target`, rounded down to something readable. */
+/**
+ * "in 45 minutes", "in 6 hours", "in 18 days": how long until `target`. Hours up to 48, then
+ * whole days, rounded up so the wait is never understated.
+ */
 export function formatTimeUntil(target: Date, now = new Date()): string {
   const minutes = Math.max(1, Math.ceil((target.getTime() - now.getTime()) / 60_000));
   if (minutes < 60) return `in ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
   const hours = Math.floor(minutes / 60);
-  return `in ${hours} ${hours === 1 ? "hour" : "hours"}`;
+  if (hours <= 48) return `in ${hours} ${hours === 1 ? "hour" : "hours"}`;
+  return `in ${Math.ceil(minutes / (24 * 60))} days`;
 }

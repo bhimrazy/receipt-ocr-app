@@ -66,7 +66,12 @@ export function toLogRecord(record: EventRecord) {
   for (const key of Object.keys(RESOURCE_KEYS)) delete rest[key];
   return {
     timestamp: new Date(timestamp),
-    severityNumber: level === "error" ? SeverityNumber.ERROR : SeverityNumber.INFO,
+    severityNumber:
+      level === "error"
+        ? SeverityNumber.ERROR
+        : level === "warn"
+          ? SeverityNumber.WARN
+          : SeverityNumber.INFO,
     severityText: level,
     eventName: event,
     body: event,

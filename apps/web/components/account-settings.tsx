@@ -319,9 +319,9 @@ function DangerCard({
           <Alert variant="warning">
             {cancelSubscriptionFirst(subscribedWorkspaces)}, in that workspace&apos;s{" "}
             <Link className="font-medium underline underline-offset-4" href="/app/settings/billing">
-              Billing
+              Plan and billing
             </Link>{" "}
-            settings, then come back here.
+            page, then come back here.
           </Alert>
         ) : null}
         {notice ? (

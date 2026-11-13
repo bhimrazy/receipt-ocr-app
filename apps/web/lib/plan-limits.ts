@@ -3,8 +3,11 @@ import {
   accountPlan,
   DEFAULT_PLAN,
   DEFAULT_PLANS,
+  personalPolicy,
   Settings,
   workspacePlan,
+  type PlanId,
+  type PlanPolicy,
   type PlanTable,
 } from "@receipt-ocr/core";
 import { Effect } from "effect";
@@ -17,9 +20,9 @@ import { getActiveScope, getSession } from "./session";
 
 /**
  * The plan limits an admin saved, or the code defaults when they can't be
- * read (no database at build time, or a database error).
+ * read (no database at build time, or a database error). Deduplicated per request.
  */
-export async function getPlanTable(): Promise<PlanTable> {
+export const getPlanTable = cache(async (): Promise<PlanTable> => {
   if (!authEnv.databaseUrl) return DEFAULT_PLANS;
   try {
     return await runtime.runPromise(
@@ -29,17 +32,27 @@ export async function getPlanTable(): Promise<PlanTable> {
     logger.error({ event: "plans.read_failed", error: errorFields(error) });
     return DEFAULT_PLANS;
   }
-}
+});
+
+export type CurrentPlan = {
+  plan: PlanId;
+  policy: PlanPolicy;
+  /** Set while the signed-in person's Free month is the early-access allowance. */
+  earlyAccessUntil: Date | null;
+};
 
 /**
- * The active workspace's plan and limits, read from the database on each
- * request so a webhook or an admin's change applies at once. Deduplicated per
- * request.
+ * The active workspace's plan and the signed-in person's limits on it, read from
+ * the database on each request so a webhook or an admin's change applies at once.
+ * Deduplicated per request.
  */
-export const getCurrentPlan = cache(async () => {
-  const scope = await getActiveScope();
-  if (!scope) return { plan: DEFAULT_PLAN, policy: DEFAULT_PLANS[DEFAULT_PLAN] };
-  return runtime.runPromise(workspacePlan(scope.organizationId));
+export const getCurrentPlan = cache(async (): Promise<CurrentPlan> => {
+  const [session, scope] = await Promise.all([getSession(), getActiveScope()]);
+  if (!session || !scope) {
+    return { plan: DEFAULT_PLAN, policy: DEFAULT_PLANS[DEFAULT_PLAN], earlyAccessUntil: null };
+  }
+  const { plan, policy } = await runtime.runPromise(workspacePlan(scope.organizationId));
+  return { plan, ...personalPolicy(plan, policy, session.user.createdAt) };
 });
 
 /**

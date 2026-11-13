@@ -8,7 +8,8 @@ import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
 import { checkoutOpenToEveryone, getCheckoutConfig } from "@/lib/billing";
 import { getPlanTable } from "@/lib/plan-limits";
-import { allowance } from "@/lib/plan-copy";
+import { earlyAccessOffer, FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
+import { allowance, longDate, pricingHeadline } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL, REFUND_DAYS } from "@/lib/pricing";
 import { pageMetadata } from "@/lib/seo";
 
@@ -31,6 +32,7 @@ const links = [
 export default async function PricingPage() {
   const [plans, checkout] = await Promise.all([getPlanTable(), getCheckoutConfig()]);
   const { free, pro } = plans;
+  const early = earlyAccessOffer(free);
   const faqs: { q: string; a: React.ReactNode }[] = [
     {
       q: "Plans are per workspace. What does that mean?",
@@ -60,6 +62,14 @@ export default async function PricingPage() {
         </>
       ),
     },
+    ...(early
+      ? [
+          {
+            q: "I signed up during early access. What do I get?",
+            a: `Accounts created before ${longDate(early.joinedBefore)} get ${early.receiptsPerMonth} scans a month on Free, instead of ${early.thenPerMonth}, until ${longDate(early.endsAt)}. The daily limit stays the same. Your usage meter shows it while it lasts.`,
+          },
+        ]
+      : []),
     {
       q: "What if we need more than Pro?",
       a: (
@@ -78,7 +88,7 @@ export default async function PricingPage() {
     },
     {
       q: "Can I cancel any time?",
-      a: "Yes. Cancel from Settings, Billing. Nothing more is charged, and Pro stays on until the end of the period you've paid for. Then the workspace moves to Free and keeps all its receipts.",
+      a: "Yes. Cancel from Settings, Plan and billing. Nothing more is charged, and Pro stays on until the end of the period you've paid for. Then the workspace moves to Free and keeps all its receipts.",
     },
     {
       q: "Can I get a refund?",
@@ -99,7 +109,7 @@ export default async function PricingPage() {
     },
     {
       q: "What counts as a scan?",
-      a: "Each receipt read successfully, and each one still being read. A few failed reads don't count, so a blurry photo doesn't use up your allowance.",
+      a: `Each receipt scanned successfully, and each one still being scanned. Your first ${FREE_FAILED_ROUNDS} failed scans each day and each month don't count, so a blurry photo doesn't use up your allowance.`,
     },
     {
       q: "What happens when I reach a limit?",
@@ -116,7 +126,7 @@ export default async function PricingPage() {
             <div className="mx-auto mb-10 max-w-2xl text-center">
               <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">Pricing</p>
               <h1 className="mt-3 text-3xl font-bold tracking-tight md:text-5xl">
-                Start free. Upgrade a workspace when it needs more.
+                {pricingHeadline(checkoutOpenToEveryone(checkout))}
               </h1>
               <p className="mt-4 text-pretty text-muted-foreground">
                 Pro is {PRO_PRICE_LABEL.month} a month or {PRO_PRICE_LABEL.year} a year for one

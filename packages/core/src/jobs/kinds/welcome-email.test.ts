@@ -1,6 +1,6 @@
 import { Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PLANS } from "../../plans";
+import { DEFAULT_PLANS, EARLY_ACCESS, personalPolicy } from "../../plans";
 import { Db } from "../../services";
 import { Settings } from "../../settings";
 import type { Job } from "../definition";
@@ -60,9 +60,22 @@ describe("welcome email job", () => {
         sent,
       );
       expect(Exit.isSuccess(exit)).toBe(true);
-      expect(sent).toEqual([{ to: "a@example.com", plan, policy: DEFAULT_PLANS[plan] }]);
+      expect(sent).toEqual([
+        { to: "a@example.com", plan, policy: DEFAULT_PLANS[plan], earlyAccess: null },
+      ]);
     }
     expect(DEFAULT_PLANS.free.receiptsPerDay).not.toBe(DEFAULT_PLANS.pro.receiptsPerDay);
+  });
+
+  it("states the early-access allowance for an account created before the cutoff", async () => {
+    const createdAt = new Date(EARLY_ACCESS.joinedBefore.getTime() - 86_400_000);
+    const sent: unknown[] = [];
+    await run([[{ email: "a@example.com", createdAt }], [{ pro: false }]], () => "delivered", sent);
+    const { policy, earlyAccessUntil } = personalPolicy("free", DEFAULT_PLANS.free, createdAt);
+    const earlyAccess = earlyAccessUntil
+      ? { until: earlyAccessUntil, thenPerMonth: DEFAULT_PLANS.free.receiptsPerMonth }
+      : null;
+    expect(sent).toEqual([{ to: "a@example.com", plan: "free", policy, earlyAccess }]);
   });
 
   it("skips a user who has been deleted", async () => {

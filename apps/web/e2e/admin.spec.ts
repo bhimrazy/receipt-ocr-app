@@ -95,7 +95,7 @@ test("admin finds a user, bans them with a reason, and the audit log shows it", 
   await admin.context.close();
 });
 
-test("plan limits saved by an admin show on the customer's settings page", async ({ browser }) => {
+test("plan limits saved by an admin show on the customer's billing page", async ({ browser }) => {
   const target = await customer(browser, "limits");
   const admin = await adminPage(browser);
   const { page } = admin;
@@ -115,8 +115,8 @@ test("plan limits saved by an admin show on the customer's settings page", async
     await expect(page.getByText(/Free: \d+ → 17 a day/).first()).toBeVisible();
 
     await signIn(target.page, target.email);
-    await target.page.goto("/app/settings");
-    await expect(target.page.getByText("17", { exact: true }).first()).toBeVisible();
+    await target.page.goto("/app/settings/billing");
+    await expect(target.page.getByText(/^17 a day · up to \d+ members$/)).toBeVisible();
   } finally {
     // Other tests expect the defaults: put back whatever was there.
     await sql((db) =>

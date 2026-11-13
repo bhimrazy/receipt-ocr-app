@@ -7,7 +7,7 @@ test("the landing header offers the app to signed-in visitors and sign-in to oth
   page,
 }) => {
   await page.goto("/");
-  await expect(header(page).getByRole("link", { name: "Get started free" })).toBeVisible();
+  await expect(header(page).getByRole("link", { name: "Start free" })).toBeVisible();
   await expect(header(page).getByRole("link", { name: "Open the app" })).toHaveCount(0);
 
   await signUp(page, uniqueEmail("landing"));
@@ -23,7 +23,6 @@ test.describe("on a phone", () => {
     const signIn = header(page).getByRole("link", { name: "Sign in", exact: true });
     await expect(signIn).toBeVisible();
     await expect(header(page).getByRole("link", { name: "Start free" })).toBeVisible();
-    await expect(header(page).getByRole("link", { name: "Get started free" })).toHaveCount(0);
     expect((await signIn.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     // The header is fixed, so an overflow wouldn't scroll the page: check the last control instead.
     const bar = (await header(page).locator("> div").boundingBox())!;

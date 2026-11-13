@@ -10,8 +10,10 @@ import { welcomePlanLine } from "./plan-copy";
  * (retrying can't fix it); a send error is "failed" (retried).
  */
 export const WelcomeMailerLive = Layer.succeed(WelcomeMailer, {
-  send: ({ to, plan, policy }) =>
-    Effect.try(() => welcomeEmail(emailContext, { planLine: welcomePlanLine(plan, policy) })).pipe(
+  send: ({ to, plan, policy, earlyAccess }) =>
+    Effect.try(() =>
+      welcomeEmail(emailContext, { planLine: welcomePlanLine(plan, policy, earlyAccess) }),
+    ).pipe(
       Effect.flatMap((content) =>
         Effect.tryPromise(async () => {
           // Loaded on first send: importing the mailer reads email env, which the runtime's importers needn't.

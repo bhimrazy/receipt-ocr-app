@@ -3,6 +3,7 @@ import {
   checkQuota,
   enforceQuota,
   nextUtcMidnight,
+  personalPolicy,
   quotaLimits,
   workspacePlan,
   type UsageSubject,
@@ -17,12 +18,13 @@ import { requireActiveScope } from "./session";
 /**
  * Effect for routes: fails with QuotaExceeded when the user, the workspace or
  * the service is out of room, before anything is stored. Reads the
- * workspace's plan fresh from the database; returns its id for logs and the
- * limits that ingest and retry enforce again under the quota lock.
+ * workspace's plan fresh from the database, with the uploader's early-access
+ * allowance applied (`accountCreatedAt`: the session user's); returns its id for
+ * logs and the limits that ingest and retry enforce again under the quota lock.
  */
-export const enforceUploadQuota = (subject: UsageSubject) =>
+export const enforceUploadQuota = (subject: UsageSubject, accountCreatedAt: Date | string) =>
   Effect.flatMap(workspacePlan(subject.organizationId), ({ plan, policy }) => {
-    const limits = quotaLimits(plan, policy);
+    const limits = quotaLimits(plan, personalPolicy(plan, policy, accountCreatedAt).policy);
     return enforceQuota(subject, limits).pipe(Effect.as({ plan, limits }));
   });
 
@@ -34,7 +36,7 @@ export type UsageSummary = Usage;
  */
 export const getUsageSummary = cache(async (): Promise<UsageSummary> => {
   const scope = await requireActiveScope();
-  const { plan, policy } = await getCurrentPlan();
+  const { plan, policy, earlyAccessUntil } = await getCurrentPlan();
   const verdict = await runtime.runPromise(checkQuota(scope, quotaLimits(plan, policy)));
   const window = verdict.allowed || verdict.window === "minute" ? null : (verdict.window ?? "day");
   const opensAt = window === "month" ? verdict.resetsAt : nextUtcMidnight(new Date());
@@ -47,5 +49,6 @@ export const getUsageSummary = cache(async (): Promise<UsageSummary> => {
     ...(verdict.day ? { day: verdict.day } : {}),
     blocked: window,
     opensAt: window === null ? verdict.resetsAt : opensAt,
+    ...(earlyAccessUntil ? { earlyAccessUntil } : {}),
   };
 });

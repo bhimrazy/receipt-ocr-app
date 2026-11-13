@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { Usage } from "@/components/usage-meter";
 import { DEFAULT_PLANS, type PlanTable } from "./plans";
 import {
+  ASK_OWNER,
   bannerCopy,
   comparisonRows,
   homeCardCopy,
   limitUpgradeLine,
+  proOpensSoon,
   usedLine,
 } from "./upgrade-copy";
 
@@ -53,21 +55,19 @@ describe("upgrade copy", () => {
     expect(rows[4]).toEqual({ label: "Busy-day pauses", free: "Never", pro: "Never" });
   });
 
-  it("keeps the quiet card calm and the near card specific, shared by its members", () => {
-    const quiet = homeCardCopy("quiet", usage(30), edited.pro);
-    expect(quiet).toEqual({
-      badge: "Free plan",
-      title: "Pro for this workspace",
-      body: "30 of 100 Free scans used this month. Pro gives this workspace 750 scans a month, up to 150 a day, shared by its members.",
-      action: "See Pro, $9 a month",
+  it("tells the near card what is left, when it resets and what Pro gives", () => {
+    expect(homeCardCopy(usage(85), edited.pro)).toEqual({
+      badge: "85 / 100 scans",
+      title: "15 free scans left this month",
+      body: "Resets 1 December. Pro gives this workspace 750 scans a month for $9.",
+      action: "Upgrade to Pro",
     });
-    const near = homeCardCopy("near", usage(84), edited.pro);
-    expect(near.badge).toBe("84 of 100 used");
-    expect(near.title).toBe("You've used 84 of 100 Free scans this month");
-    expect(near.body).toBe(
-      "They reset on 1 December at 00:00 UTC. Pro gives this workspace 750 scans a month, up to 150 a day, shared by its members, for $9 a month.",
-    );
-    expect(near.action).toBe("Upgrade to Pro");
+    expect(homeCardCopy(usage(99), edited.pro).title).toBe("1 free scan left this month");
+  });
+
+  it("says Pro opens soon, with its allowance, while checkout is closed", () => {
+    expect(proOpensSoon(edited.pro)).toBe("Pro, with 750 scans a month, opens soon.");
+    expect(ASK_OWNER).not.toMatch(/upgrade/i);
   });
 
   it("names the window and when uploads open in the banner", () => {
@@ -94,7 +94,7 @@ describe("upgrade copy", () => {
 
   it("adds the owner's line to the upload panel's limit state", () => {
     expect(limitUpgradeLine(usage(100, { blocked: "month" }), edited.pro)).toBe(
-      "Or upgrade this workspace to Pro for 750 scans a month, up to 150 a day.",
+      "Pro gives this workspace 750 scans a month for $9.",
     );
     expect(limitUpgradeLine(usage(40, { blocked: "day" }), edited.pro)).toBe(
       "Pro allows up to 150 a day in this workspace.",

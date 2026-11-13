@@ -19,6 +19,7 @@ const TOPICS: Array<{ id: SupportTopic; label: string; prompt: string }> = [
     prompt: "How many receipts a month, and what do you need?",
   },
   { id: "feature", label: "Feature request", prompt: "What would you like us to build?" },
+  { id: "problem", label: "Problem", prompt: "What went wrong?" },
 ];
 
 // Ring, not border: coloured border utilities lose to the theme's global border-color today.
@@ -37,11 +38,14 @@ const MAX_NAME = 80;
 export default function SupportPanel({
   open,
   topic,
+  receiptId,
   onTopicChange,
   onClose,
 }: {
   open: boolean;
   topic: SupportTopic;
+  /** Sent with a Problem message, so support can open the receipt. */
+  receiptId?: string;
   onTopicChange: (topic: SupportTopic) => void;
   onClose: () => void;
 }) {
@@ -113,7 +117,14 @@ export default function SupportPanel({
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...turnstile.fetchOptions?.headers },
-        body: JSON.stringify({ name, email, message, topic, company }),
+        body: JSON.stringify({
+          name,
+          email,
+          message,
+          topic,
+          company,
+          ...(aboutReceipt ? { receiptId } : {}),
+        }),
       });
       turnstile.reset();
       if (!res.ok) {
@@ -131,6 +142,7 @@ export default function SupportPanel({
     }
   };
 
+  const aboutReceipt = topic === "problem" && Boolean(receiptId);
   const firstName = name.trim().split(/\s+/)[0] ?? "";
 
   const sendAnother = () => {
@@ -147,7 +159,7 @@ export default function SupportPanel({
     <div
       role="dialog"
       aria-labelledby={`${ids}-title`}
-      className="flex max-h-[calc(100dvh-5.5rem)] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl bg-card/95 shadow-2xl shadow-black/50 light:shadow-float ring-1 ring-hairline backdrop-blur-xl motion-safe:animate-fade-up"
+      className="flex max-h-[calc(100dvh-5.5rem-var(--app-bottom-inset,0px))] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl bg-card/95 shadow-2xl shadow-black/50 light:shadow-float ring-1 ring-hairline backdrop-blur-xl motion-safe:animate-fade-up"
     >
       <div className="relative shrink-0 border-b border-border bg-secondary/30 p-4 pr-14">
         <p className="text-sm font-semibold" id={`${ids}-title`}>
@@ -203,6 +215,11 @@ export default function SupportPanel({
                   </button>
                 ))}
               </div>
+              {aboutReceipt ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  We&apos;ll see which receipt this is about.
+                </p>
+              ) : null}
             </fieldset>
 
             <Field>
