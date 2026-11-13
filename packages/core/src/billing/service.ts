@@ -49,6 +49,7 @@ import {
   PAST_DUE_GRACE_DAYS,
   PAST_DUE_GRACE_MS,
   paysNewerPeriod,
+  planForPrice,
   workspaceLimitMessage,
 } from "./entitlement";
 import {
@@ -159,9 +160,9 @@ export const entitledSql = (now: Date) => sql`(
 
 /** `blocksCheckout` over `billing_subscriptions` aliased `s`. */
 export const checkoutBlockingSql = (now: Date) => sql`(
-  (s.status in ('active', 'trialing') and (not s.cancel_at_period_end or s.current_period_end is null or s.current_period_end > ${ts(now)}))
+  ${entitledSql(now)}
+  or (s.status in ('active', 'trialing') and s.revoked_at is not null)
   or s.status in ('past_due', 'paused')
-  or (s.status = 'canceled' and s.revoked_at is null and s.current_period_end > ${ts(now)})
 )`;
 
 /** `canStillCharge` over `billing_subscriptions` aliased `s`. */
@@ -370,13 +371,21 @@ export const workspaceCheckoutBlocked = (organizationId: string, now = new Date(
   Effect.flatMap(Db, ({ use }) => use((db) => checkoutBlocked(db, organizationId, now)));
 
 async function checkoutBlocked(db: Queryable, organizationId: string, now: Date) {
+  return (await subscriptionState(db, organizationId, now)).blocked;
+}
+
+/** Whether any subscription of the workspace blocks a checkout, and whether any grants Pro. */
+async function subscriptionState(db: Queryable, organizationId: string, now: Date) {
   const rows = await db
-    .execute<{ blocked: boolean }>(
-      sql`select exists (select 1 from billing_subscriptions s
-        where s.organization_id = ${organizationId} and ${checkoutBlockingSql(now)}) as blocked`,
+    .execute<{ blocked: boolean; entitled: boolean }>(
+      sql`select
+        exists (select 1 from billing_subscriptions s
+          where s.organization_id = ${organizationId} and ${checkoutBlockingSql(now)}) as blocked,
+        exists (select 1 from billing_subscriptions s
+          where s.organization_id = ${organizationId} and ${entitledSql(now)}) as entitled`,
     )
     .then((r) => r.rows);
-  return rows[0]?.blocked === true;
+  return { blocked: rows[0]?.blocked === true, entitled: rows[0]?.entitled === true };
 }
 
 /** The checkout refusal while the workspace already has a subscription that can charge. */
@@ -464,10 +473,11 @@ export type ApplyOutcome =
  * (`customer_mismatch`), the buyer still owns the workspace (`owner`), the
  * price is a Pro price (`price`), and, with sandbox keys on the live site, the
  * buyer is a platform admin (`test_mode`), and no other subscription has
- * linked to that checkout (`transaction_used`). Two are waiting for a link rather
- * than refused: `no_transaction`, a subscription event other than the
- * `created` one that names the transaction, and `subscription`, an adjustment
- * for a subscription we don't have yet.
+ * linked to that checkout (`transaction_used`). Three are waiting rather than
+ * refused: `no_transaction`, a subscription event other than the `created`
+ * one that names the transaction; `subscription`, an adjustment for a
+ * subscription we don't have yet; and `transaction`, a full refund of a
+ * transaction whose `transaction.completed` hasn't arrived yet.
  */
 export type UnmatchedReason =
   | "no_transaction"
@@ -477,7 +487,8 @@ export type UnmatchedReason =
   | "price"
   | "test_mode"
   | "transaction_used"
-  | "subscription";
+  | "subscription"
+  | "transaction";
 
 export type ApplyResult = {
   outcome: ApplyOutcome;
@@ -498,6 +509,8 @@ export type ApplyResult = {
    * buyer may be paying twice. Linked anyway, so it can be refunded and cancelled.
    */
   duplicate?: true;
+  /** The subscription moved to a price this deploy doesn't map to a plan: its plan was kept. */
+  unknownPrice?: true;
   /**
    * The provider subscription still needs cancelling: a chargeback or full
    * refund revoked Pro, or its workspace or buyer is gone and it could charge again.
@@ -598,9 +611,20 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           await lockSubscription(tx, event.provider, transaction.subscriptionId);
           const stored = await storedSubscription(tx, event.provider, transaction.subscriptionId);
           // Before the link there is nothing to record: the link takes the checkout's transaction.
-          if (!stored || !paysNewerPeriod(transaction, stored.paidPeriodStart)) {
-            return finish({ outcome: "ignored", organizationId: stored?.organizationId ?? null });
+          if (!stored) return finish({ outcome: "ignored", organizationId: null });
+          const newer = paysNewerPeriod(transaction, stored.paidPeriodStart);
+          // Full refunds of this transaction that arrived before it.
+          const waiting = await waitingRefunds(tx, event.provider, transaction.transactionId);
+          if (waiting.length > 0) {
+            await tx
+              .update(billingEvents)
+              .set({
+                outcome: newer ? "applied" : "ignored",
+                organizationId: stored.organizationId,
+              })
+              .where(inArray(billingEvents.id, waiting));
           }
+          if (!newer) return finish({ outcome: "ignored", organizationId: stored.organizationId });
           await tx
             .update(billingSubscriptions)
             .set({
@@ -609,7 +633,10 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
               updatedAt: now,
             })
             .where(eq(billingSubscriptions.id, stored.id));
-          return finish({ outcome: "applied", organizationId: stored.organizationId });
+          if (waiting.length === 0) {
+            return finish({ outcome: "applied", organizationId: stored.organizationId });
+          }
+          return finish(await revoke(tx, stored, now));
         }
 
         if (event.adjustment) {
@@ -626,25 +653,20 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
               unmatched: "subscription",
             });
           }
-          if (!adjustmentRevokesPro(adjustment, stored.paidTransactionId)) {
-            return finish({ outcome: "ignored", organizationId: stored.organizationId });
+          if (adjustmentRevokesPro(adjustment, stored.paidTransactionId)) {
+            return finish(await revoke(tx, stored, now));
           }
-          const wasPro = isEntitled(entitlementOf(stored), now);
-          if (!stored.revokedAt) {
-            await tx
-              .update(billingSubscriptions)
-              .set({ revokedAt: now, updatedAt: now })
-              .where(eq(billingSubscriptions.id, stored.id));
+          // A refund of a renewal Paddle hasn't reported as completed yet: kept until it is.
+          const refunded = adjustment.transactionId;
+          if (refunded && !(await transactionKnown(tx, event.provider, refunded))) {
+            return finish({
+              outcome: "unmatched",
+              organizationId: stored.organizationId,
+              unmatched: "transaction",
+              transactionId: refunded,
+            });
           }
-          return finish({
-            outcome: "applied",
-            organizationId: stored.organizationId,
-            ...(wasPro ? { planChange: { from: "pro", to: "free" } } : {}),
-            ...(stored.userId ? { userId: stored.userId } : {}),
-            ...(stored.status !== "canceled"
-              ? { cancelSubscriptionId: stored.providerSubscriptionId }
-              : {}),
-          });
+          return finish({ outcome: "ignored", organizationId: stored.organizationId });
         }
 
         const snapshot = event.subscription;
@@ -659,6 +681,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
         let current = snapshot;
         let caughtUp: string[] = [];
         let duplicate = false;
+        let otherEntitled = false;
         if (!stored) {
           const link = await linkNewSubscription(tx, event.provider, snapshot, prices, testMode);
           if ("unmatched" in link) {
@@ -672,7 +695,9 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           organizationId = link.organizationId;
           buyer = link.userId;
           // Checked before this row exists, so it sees only the workspace's other subscriptions.
-          duplicate = await checkoutBlocked(tx, link.organizationId, now);
+          const others = await subscriptionState(tx, link.organizationId, now);
+          duplicate = others.blocked;
+          otherEntitled = others.entitled;
           pending = await pendingRevocations(
             tx,
             event.provider,
@@ -692,6 +717,10 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
         // The customer is fixed at the link: it is the one the checkout recorded.
         const customerId = stored?.providerCustomerId ?? snapshot.customerId;
         const customerChanged = current.customerId !== customerId;
+        // The plan follows the price only for a price this deploy knows; an unknown one keeps it.
+        const pricedPlan = planForPrice(current.priceId, prices);
+        const plan = pricedPlan ?? stored?.plan ?? "pro";
+        const unknownPrice = stored !== null && current.priceId !== null && pricedPlan === null;
         const pastDueSince =
           current.status !== "past_due"
             ? null
@@ -708,6 +737,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           cancelAtPeriodEnd: current.cancelAtPeriodEnd,
           canceledAt: current.canceledAt,
           pastDueSince,
+          plan,
           providerUpdatedAt: current.updatedAt,
           updatedAt: new Date(),
         };
@@ -723,7 +753,6 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
             userId: buyer,
             provider: event.provider,
             providerSubscriptionId: snapshot.subscriptionId,
-            plan: "pro",
             paidTransactionId: snapshot.transactionId,
             paidPeriodStart: snapshot.currentPeriodStart,
             revokedAt: pending.length > 0 ? now : null,
@@ -739,24 +768,81 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
         // What this subscription grants, before and after: the product event "plan changed".
         const revokedAt = stored?.revokedAt ?? (pending.length > 0 ? now : null);
         const orphan = orphanCanCharge({ organizationId, userId: buyer, ...values });
-        const cancel = (pending.length > 0 && values.status !== "canceled") || orphan;
+        // Every later event of a revoked subscription asks again, in case an earlier cancel job died.
+        const cancel = (revokedAt !== null && values.status !== "canceled") || orphan;
         const from = stored && isEntitled(entitlementOf(stored), now) ? "pro" : "free";
-        const plan = stored?.plan ?? "pro";
-        const to = isEntitled({ ...values, plan, revokedAt }, now) ? "pro" : "free";
+        const to = isEntitled({ ...values, revokedAt }, now) ? "pro" : "free";
         return finish({
           outcome: "applied",
           organizationId,
           ...(orphan ? { orphanCharging: true as const } : {}),
           ...(duplicate ? { duplicate: true as const } : {}),
+          ...(unknownPrice ? { unknownPrice: true as const } : {}),
           ...(customerChanged ? { unmatched: "customer_mismatch" as const } : {}),
-          // A duplicate's workspace was on Pro already: no plan change to report.
-          ...(from === to || duplicate ? {} : { planChange: { from, to } }),
+          // Beside another subscription that grants Pro, the workspace's plan didn't change.
+          ...(from === to || otherEntitled ? {} : { planChange: { from, to } }),
           ...(buyer ? { userId: buyer } : {}),
           ...(cancel ? { cancelSubscriptionId: snapshot.subscriptionId } : {}),
         });
       }),
     );
   });
+
+/**
+ * Revokes Pro on a stored subscription (an approved chargeback, or a full
+ * refund of the current period's payment) and asks for the provider cancel.
+ */
+async function revoke(tx: Tx, stored: BillingSubscription, now: Date): Promise<ApplyResult> {
+  const wasPro = isEntitled(entitlementOf(stored), now);
+  if (!stored.revokedAt) {
+    await tx
+      .update(billingSubscriptions)
+      .set({ revokedAt: now, updatedAt: now })
+      .where(eq(billingSubscriptions.id, stored.id));
+  }
+  return {
+    outcome: "applied",
+    organizationId: stored.organizationId,
+    ...(wasPro ? { planChange: { from: "pro", to: "free" } } : {}),
+    ...(stored.userId ? { userId: stored.userId } : {}),
+    ...(stored.status !== "canceled"
+      ? { cancelSubscriptionId: stored.providerSubscriptionId }
+      : {}),
+  };
+}
+
+/** Whether a transaction has been reported (`transaction.completed`) or is one of our checkouts. */
+async function transactionKnown(tx: Tx, provider: string, transactionId: string) {
+  const rows = await tx
+    .execute<{ known: boolean }>(
+      sql`select exists (select 1 from billing_events e where e.provider = ${provider}
+          and e.payload->'transaction'->>'transactionId' = ${transactionId})
+        or exists (select 1 from billing_checkouts c where c.provider = ${provider}
+          and c.provider_transaction_id = ${transactionId}) as known`,
+    )
+    .then((r) => r.rows);
+  return rows[0]?.known === true;
+}
+
+/** Full refunds kept `unmatched` until their transaction was reported. Returns their event ids. */
+async function waitingRefunds(tx: Tx, provider: string, transactionId: string) {
+  const rows = await tx
+    .select({ id: billingEvents.id, payload: billingEvents.payload })
+    .from(billingEvents)
+    .where(
+      and(
+        eq(billingEvents.provider, provider),
+        eq(billingEvents.outcome, "unmatched"),
+        sql`${billingEvents.payload}->'adjustment'->>'transactionId' = ${transactionId}`,
+      ),
+    );
+  return rows
+    .filter((row) => {
+      const adjustment = billingEventSchema.safeParse(row.payload).data?.adjustment;
+      return adjustment ? adjustmentRevokesPro(adjustment, transactionId) : false;
+    })
+    .map((row) => row.id);
+}
 
 type ChargeFields = {
   organizationId: string | null;
@@ -889,7 +975,7 @@ async function cancelOwed(tx: Tx, event: BillingEvent): Promise<string | null> {
     ? adjustmentMayRevoke(adjustment)
       ? adjustment.subscriptionId
       : null
-    : (event.subscription?.subscriptionId ?? null);
+    : (event.subscription?.subscriptionId ?? event.transaction?.subscriptionId ?? null);
   if (!subscriptionId) return null;
   const stored = await storedSubscription(tx, event.provider, subscriptionId);
   if (!stored || stored.status === "canceled") return null;

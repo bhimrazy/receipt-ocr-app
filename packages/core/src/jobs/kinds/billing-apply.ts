@@ -23,8 +23,20 @@ import {
   type BillingApplyPayload,
 } from "../billing-apply-job";
 
-/** Unmatched reasons that resolve on their own once the subscription links. */
-const WAITING_FOR_LINK: ReadonlySet<UnmatchedReason> = new Set(["no_transaction", "subscription"]);
+/** Unmatched reasons that resolve on their own once the subscription or its transaction arrives. */
+const WAITING: ReadonlySet<UnmatchedReason> = new Set([
+  "no_transaction",
+  "subscription",
+  "transaction",
+]);
+
+/**
+ * How long each retry waits at least while Paddle has the subscription locked:
+ * with `maxAttempts` 8 the cancel is tried for about two hours, past a renewal's
+ * processing. A dead job is not the last chance: every later event of a
+ * revoked subscription asks for the cancel again.
+ */
+export const LOCKED_RETRY_MS = 15 * 60_000;
 
 /** A stored payload the schema refuses is a bug: dead at once (it shows in the admin jobs list). */
 const applyFailure = (error: DbError): JobFailure =>
@@ -65,7 +77,11 @@ export const cancelRevoked = (subscriptionId: string) =>
       }
       if (status === 409 || LOCKED_CODES.has(error.providerCode ?? "")) {
         return code.pipe(
-          Effect.zipRight(Effect.fail(new RetryableJobError({ kind: "provider-locked" }))),
+          Effect.zipRight(
+            Effect.fail(
+              new RetryableJobError({ kind: "provider-locked", retryAfterMs: LOCKED_RETRY_MS }),
+            ),
+          ),
         );
       }
       if (status !== null && status >= 400 && status < 500 && status !== 429) {
@@ -92,7 +108,8 @@ export const billingApply: JobDefinition<BillingApplyPayload, Db | Settings | Bi
   payload: billingApplyPayload,
   maxAttempts: 8,
   leaseSeconds: 30,
-  backoff: { baseMs: 5_000, capMs: 10 * 60_000 },
+  // The cap is also the most `LOCKED_RETRY_MS` can ask for.
+  backoff: { baseMs: 5_000, capMs: 30 * 60_000 },
 
   run: (payload) =>
     applyBillingEvent(payload.eventId).pipe(
@@ -122,9 +139,13 @@ export const billingApply: JobDefinition<BillingApplyPayload, Db | Settings | Bi
       Effect.tap((result) =>
         result.duplicate ? Effect.logWarning("billing.duplicate_subscription") : Effect.void,
       ),
+      // The plan was kept: the price settings may be missing a price subscribers pay.
+      Effect.tap((result) =>
+        result.unknownPrice ? Effect.logWarning("billing.unknown_price") : Effect.void,
+      ),
       // A refused link: someone may have paid without getting Pro, so warn level, to be seen and fixed by hand.
       Effect.tap((result) =>
-        result.unmatched && !WAITING_FOR_LINK.has(result.unmatched)
+        result.unmatched && !WAITING.has(result.unmatched)
           ? Effect.logWarning("billing.unmatched")
           : Effect.void,
       ),

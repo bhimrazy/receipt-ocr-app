@@ -10,6 +10,7 @@ import {
   memberLimitMessage,
   PAST_DUE_GRACE_DAYS,
   paysNewerPeriod,
+  planForPrice,
   workspaceLimitMessage,
   type EntitlementFields,
 } from "./entitlement";
@@ -107,21 +108,39 @@ describe("canStillCharge (deletion guard)", () => {
 
 describe("blocksCheckout (no second subscription)", () => {
   const blocks = (fields: Partial<EntitlementFields>) => blocksCheckout(sub(fields), now);
-  it("blocks while a subscription can still charge or still grants Pro", () => {
-    expect(blocks({})).toBe(true);
-    expect(blocks({ status: "trialing" })).toBe(true);
-    expect(blocks({ cancelAtPeriodEnd: true, currentPeriodEnd: at(3) })).toBe(true);
-    // Past due after the grace: Free, but Paddle can still recover the payment.
+  it("blocks wherever the subscription grants Pro", () => {
+    for (const fields of [
+      {},
+      { status: "trialing" as const },
+      { cancelAtPeriodEnd: true, currentPeriodEnd: at(3) },
+      { status: "past_due" as const, pastDueSince: at(-1) },
+      { status: "canceled" as const, cancelAtPeriodEnd: true, currentPeriodEnd: at(3) },
+    ]) {
+      expect(isEntitled(sub(fields), now)).toBe(true);
+      expect(blocks(fields)).toBe(true);
+    }
+  });
+  it("blocks three Free states that can still charge, each explained on the page", () => {
+    // Past due after the grace: Paddle can still recover the payment.
     expect(blocks({ status: "past_due", pastDueSince: at(-40) })).toBe(true);
     expect(blocks({ status: "paused" })).toBe(true);
-    expect(blocks({ status: "canceled", currentPeriodEnd: at(3) })).toBe(true);
-    // Revoked but not yet canceled with the provider: the cancel is still owed.
+    // Revoked, with the provider cancel still owed.
     expect(blocks({ revokedAt: at(-1) })).toBe(true);
+    expect(blocks({ status: "trialing", revokedAt: at(-1) })).toBe(true);
   });
   it("opens once it can't charge or grant any more", () => {
+    // Canceled at once: nothing more is charged, so it never blocks.
+    expect(blocks({ status: "canceled", currentPeriodEnd: at(3) })).toBe(false);
     expect(blocks({ status: "canceled", currentPeriodEnd: at(-1) })).toBe(false);
     expect(blocks({ status: "canceled", currentPeriodEnd: null })).toBe(false);
-    expect(blocks({ status: "canceled", currentPeriodEnd: at(3), revokedAt: at(-1) })).toBe(false);
+    expect(
+      blocks({
+        status: "canceled",
+        cancelAtPeriodEnd: true,
+        currentPeriodEnd: at(3),
+        revokedAt: at(-1),
+      }),
+    ).toBe(false);
     // A scheduled cancel whose period ended, with the final event late.
     expect(blocks({ cancelAtPeriodEnd: true, currentPeriodEnd: at(-1) })).toBe(false);
   });
@@ -168,16 +187,29 @@ describe("paysNewerPeriod", () => {
     expect(paysNewerPeriod(txn("web", at(0)), null)).toBe(true);
     expect(paysNewerPeriod(txn("api", at(0)), null)).toBe(true);
   });
+  it("takes a plan or interval change only when it starts a newer period", () => {
+    expect(paysNewerPeriod(txn("subscription_update", at(10)), at(0))).toBe(true);
+    expect(paysNewerPeriod(txn("subscription_update", at(0)), at(0))).toBe(false);
+    expect(paysNewerPeriod(txn("subscription_update", at(10)), null)).toBe(false);
+  });
   it("keeps the first payment for a period: a duplicate or an older period doesn't replace it", () => {
     expect(paysNewerPeriod(txn("subscription_recurring", at(0)), at(0))).toBe(false);
     expect(paysNewerPeriod(txn("subscription_recurring", at(-30)), at(0))).toBe(false);
   });
-  it("ignores one-off charges, prorations, card checks and transactions without a period", () => {
+  it("ignores one-off charges, card checks and transactions without a period", () => {
     expect(paysNewerPeriod(txn("subscription_charge", at(30)), at(0))).toBe(false);
-    expect(paysNewerPeriod(txn("subscription_update", at(30)), at(0))).toBe(false);
     expect(paysNewerPeriod(txn("subscription_payment_method_change", at(30)), at(0))).toBe(false);
     expect(paysNewerPeriod(txn("subscription_recurring", null), at(0))).toBe(false);
     expect(paysNewerPeriod(txn(null, at(30)), at(0))).toBe(false);
+  });
+});
+
+describe("planForPrice", () => {
+  it("maps the configured Pro prices to Pro and anything else to no plan", () => {
+    const prices = new Set(["pri_month", "pri_year"]);
+    expect(planForPrice("pri_year", prices)).toBe("pro");
+    expect(planForPrice("pri_other", prices)).toBeNull();
+    expect(planForPrice(null, prices)).toBeNull();
   });
 });
 

@@ -679,6 +679,32 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         vi.unstubAllEnvs();
       }
     });
+    it("keeps the plan and warns when a subscription moves to a price this deploy doesn't know", async () => {
+      const workspaceId = await createWorkspace(other.userId, "unknown-price");
+      const id = `sub_${tag}_unknown_price`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+      const move = (priceId: string, offsetMs: number) =>
+        applyOnce(
+          event(
+            snapshot({
+              subscriptionId: id,
+              workspaceId,
+              priceId,
+              transactionId: null,
+              updatedAt: new Date(Date.now() + offsetMs),
+            }),
+          ),
+        );
+      expect(await move("pri_unlisted", 1000)).toMatchObject({
+        outcome: "applied",
+        unknownPrice: true,
+      });
+      expect((await subscriptionRow(id))?.plan).toBe("pro");
+      expect(await planOf(workspaceId)).toBe("pro");
+      // Monthly to yearly: a known price, no warning.
+      expect(await move("pri_year", 2000)).not.toHaveProperty("unknownPrice");
+      expect((await subscriptionRow(id))?.plan).toBe("pro");
+    });
   });
 
   describe("linking needs the checkout the server created", () => {
@@ -983,13 +1009,20 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         ),
       );
       expect(await planOf(buyer.organizationId)).toBe("free");
-      const checkout = () =>
+      // Another owner, who didn't subscribe, is refused the same way.
+      const coOwner = await createUser("blocked-co-owner");
+      await db((d) =>
+        d.insert(member).values({
+          id: crypto.randomUUID(),
+          organizationId: buyer.organizationId,
+          userId: coOwner.userId,
+          role: "owner",
+          createdAt: new Date(),
+        }),
+      );
+      const checkout = (userId = buyer.userId) =>
         withBilling((b) =>
-          b.createCheckout({
-            organizationId: buyer.organizationId,
-            userId: buyer.userId,
-            interval: "month",
-          }),
+          b.createCheckout({ organizationId: buyer.organizationId, userId, interval: "month" }),
         );
       const setRow = (fields: Partial<typeof billingSubscriptions.$inferInsert>) =>
         db((d) =>
@@ -1003,13 +1036,14 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       for (const fields of [
         {},
         { status: "paused" },
-        { status: "canceled", currentPeriodEnd: ahead },
         { status: "active", revokedAt: new Date() },
       ] satisfies Partial<typeof billingSubscriptions.$inferInsert>[]) {
         await setRow({ cancelAtPeriodEnd: false, revokedAt: null, ...fields });
-        expect(failureOf(await checkout())).toMatchObject({
-          error: { _tag: "Conflict", message: ALREADY_SUBSCRIBED },
-        });
+        for (const userId of [buyer.userId, coOwner.userId]) {
+          expect(failureOf(await checkout(userId))).toMatchObject({
+            error: { _tag: "Conflict", message: ALREADY_SUBSCRIBED },
+          });
+        }
         expect(await run(workspaceBilling(buyer.organizationId))).toMatchObject({
           checkoutBlocked: true,
         });
@@ -1021,10 +1055,20 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         { status: "active", currentPeriodEnd: null },
         { status: "active", cancelAtPeriodEnd: true, currentPeriodEnd: behind },
         { status: "canceled", currentPeriodEnd: behind },
-        { status: "canceled", currentPeriodEnd: ahead, revokedAt: new Date() },
+        { status: "canceled", currentPeriodEnd: ahead },
+        { status: "canceled", cancelAtPeriodEnd: true, currentPeriodEnd: ahead },
+        {
+          status: "canceled",
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: ahead,
+          revokedAt: new Date(),
+        },
         { status: "canceled", currentPeriodEnd: null },
         { status: "trialing", currentPeriodEnd: ahead },
+        { status: "trialing", revokedAt: new Date() },
         { status: "past_due", currentPeriodEnd: behind },
+        { status: "past_due", pastDueSince: new Date() },
+        { status: "paused" },
       ] satisfies Partial<typeof billingSubscriptions.$inferInsert>[]) {
         await setRow({ cancelAtPeriodEnd: false, revokedAt: null, ...fields });
         const row = await subscriptionRow(id);
@@ -1035,11 +1079,75 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         expect(await run(workspaceCheckoutBlocked(buyer.organizationId))).toBe(expected);
       }
 
-      await setRow({ status: "canceled", cancelAtPeriodEnd: false, currentPeriodEnd: behind });
+      await setRow({ status: "canceled", cancelAtPeriodEnd: false, currentPeriodEnd: ahead });
       expect(Exit.isSuccess(await checkout())).toBe(true);
       expect(await run(workspaceBilling(buyer.organizationId))).toMatchObject({
         checkoutBlocked: false,
       });
+    });
+
+    it("retries a cancel Paddle refuses as locked for over an hour, then the next event asks again", async () => {
+      vi.stubGlobal("fetch", async (input: string) => {
+        if (new URL(input).pathname.endsWith("/cancel")) {
+          return Response.json({ error: { code: "subscription_locked_renewal" } }, { status: 409 });
+        }
+        return new Response("{}", { status: 404 });
+      });
+      // A runtime built with Paddle configured, so the job's cancel reaches the stubbed API.
+      const configured = ManagedRuntime.make(AppLayer);
+      try {
+        const workspaceId = await createWorkspace(other.userId, "locked");
+        const id = `sub_${tag}_locked`;
+        await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+        const chargeback = event(null, "adjustment.created", {
+          adjustmentId: `adj_${tag}_locked`,
+          action: "chargeback",
+          type: "full",
+          status: "approved",
+          subscriptionId: id,
+          transactionId: `txn_${id}`,
+        });
+        const recorded = await run(recordBillingEvent(chargeback));
+        if (recorded.kind !== "recorded") throw new Error("not recorded");
+        const runJob = () =>
+          configured.runPromise(
+            tick({
+              worker: `${tag}-worker`,
+              registry: JOB_REGISTRY,
+              budgetMs: 30_000,
+              ids: [recorded.jobId],
+              waitForRetries: false,
+            }),
+          );
+        const job = () => jobOf(chargeback.eventId);
+        await runJob();
+        const first = await job();
+        expect(first).toMatchObject({ state: "queued", lastErrorKind: "provider-locked" });
+        expect(first!.runAt.getTime() - Date.now()).toBeGreaterThanOrEqual(14 * 60_000);
+        for (let attempt = 2; attempt <= 8; attempt += 1) {
+          await db((d) =>
+            d.update(jobs).set({ runAt: new Date() }).where(eq(jobs.id, recorded.jobId)),
+          );
+          await runJob();
+        }
+        expect(await job()).toMatchObject({
+          state: "dead",
+          attempts: 8,
+          lastErrorKind: "provider-locked",
+        });
+        // The dead job isn't the last chance: the next event of the subscription asks again.
+        const renewal = event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId,
+            transactionId: null,
+            updatedAt: new Date(Date.now() + 1000),
+          }),
+        );
+        expect(await applyOnce(renewal)).toMatchObject({ cancelSubscriptionId: id });
+      } finally {
+        await configured.dispose();
+      }
     });
 
     it("opens the portal only for the buyer's own customer, and never once the buyer is gone", async () => {
@@ -1272,6 +1380,100 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(await planOf(workspaceId)).toBe("free");
     });
 
+    it("asks for the cancel again on every later event of a revoked subscription", async () => {
+      const workspaceId = await createWorkspace(other.userId, "revoked-renews");
+      const id = `sub_${tag}_revoked_renews`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+      // The cancel job dies here (no API key); the subscription stays active in Paddle.
+      await deliver(event(null, "adjustment.created", adjustment({ subscriptionId: id })));
+      expect((await subscriptionRow(id))?.revokedAt).toBeInstanceOf(Date);
+      const renewal = event(
+        snapshot({
+          subscriptionId: id,
+          workspaceId,
+          transactionId: null,
+          updatedAt: new Date(Date.now() + 1000),
+        }),
+      );
+      expect(await applyOnce(renewal)).toMatchObject({
+        outcome: "applied",
+        cancelSubscriptionId: id,
+      });
+      expect(await planOf(workspaceId)).toBe("free");
+      const canceled = event(
+        snapshot({
+          subscriptionId: id,
+          workspaceId,
+          status: "canceled",
+          transactionId: null,
+          updatedAt: new Date(Date.now() + 2000),
+        }),
+      );
+      expect(await applyOnce(canceled)).not.toHaveProperty("cancelSubscriptionId");
+    });
+
+    it("keeps a full refund of a renewal not yet reported, and applies it when the renewal arrives", async () => {
+      const workspaceId = await createWorkspace(other.userId, "refund-first");
+      const id = `sub_${tag}_refund_first`;
+      const firstStart = new Date(Date.now() - 31 * 86_400_000);
+      await deliver(
+        event(
+          snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: firstStart }),
+          "subscription.created",
+        ),
+      );
+      const refund = (transactionId: string) =>
+        event(
+          null,
+          "adjustment.updated",
+          adjustment({ action: "refund", type: "full", subscriptionId: id, transactionId }),
+        );
+      const early = refund(`txn_${tag}_renewal_late`);
+      expect(await applyOnce(early)).toMatchObject({
+        outcome: "unmatched",
+        unmatched: "transaction",
+        transactionId: `txn_${tag}_renewal_late`,
+      });
+      expect(await planOf(workspaceId)).toBe("pro");
+
+      const renewal = paid(id, `txn_${tag}_renewal_late`, new Date(Date.now() - 86_400_000));
+      expect(await applyOnce(renewal)).toMatchObject({
+        outcome: "applied",
+        planChange: { from: "pro", to: "free" },
+        cancelSubscriptionId: id,
+      });
+      expect(await outcomeOf(early.eventId)).toBe("applied");
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
+    it("drops a waiting refund when its transaction turns out to be a duplicate", async () => {
+      const workspaceId = await createWorkspace(other.userId, "refund-duplicate");
+      const id = `sub_${tag}_refund_duplicate`;
+      const start = new Date(Date.now() - 86_400_000);
+      await deliver(
+        event(
+          snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: start }),
+          "subscription.created",
+        ),
+      );
+      const early = event(
+        null,
+        "adjustment.updated",
+        adjustment({
+          action: "refund",
+          type: "full",
+          subscriptionId: id,
+          transactionId: `txn_${tag}_same_period`,
+        }),
+      );
+      await deliver(early);
+      expect(await outcomeOf(early.eventId)).toBe("unmatched");
+      // A second charge for the period the checkout already paid.
+      await deliver(paid(id, `txn_${tag}_same_period`, start));
+      expect(await outcomeOf(early.eventId)).toBe("ignored");
+      expect(await planOf(workspaceId)).toBe("pro");
+    });
+
     it("applies an early full refund on link only when it refunds the checkout's payment", async () => {
       const refundBeforeLink = async (name: string, refunded: (id: string) => string) => {
         const workspaceId = await createWorkspace(other.userId, name);
@@ -1302,6 +1504,27 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
   });
 
   describe("a second subscription for one workspace", () => {
+    it("reports Free to Pro for a duplicate beside a paused subscription, and flags it", async () => {
+      const workspaceId = await createWorkspace(other.userId, "beside-paused");
+      await deliver(
+        event(
+          snapshot({ subscriptionId: `sub_${tag}_paused_1`, workspaceId, status: "paused" }),
+          "subscription.created",
+        ),
+      );
+      expect(await planOf(workspaceId)).toBe("free");
+      const next = event(
+        snapshot({ subscriptionId: `sub_${tag}_paused_2`, workspaceId }),
+        "subscription.created",
+      );
+      await recordCheckout(next.subscription!);
+      expect(await applyOnce(next)).toMatchObject({
+        outcome: "applied",
+        duplicate: true,
+        planChange: { from: "free", to: "pro" },
+      });
+      expect(await planOf(workspaceId)).toBe("pro");
+    });
     it("links it but flags it, with no plan change to report", async () => {
       const workspaceId = await createWorkspace(other.userId, "twice");
       const first = event(

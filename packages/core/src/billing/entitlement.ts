@@ -67,26 +67,25 @@ export function canStillCharge(s: Pick<EntitlementFields, "status" | "cancelAtPe
 }
 
 /**
- * Whether a subscription blocks a new checkout for its workspace: it can still
- * charge or still grants Pro, so a second one would charge twice. Active or
- * trialing (until a scheduled cancel's period end has passed), past_due,
- * paused, or canceled with its period end ahead (unless revoked).
+ * Whether a subscription blocks a new checkout for its workspace, so a second
+ * one can't charge alongside it. Every entitling row blocks, and so do three
+ * that grant nothing but can still charge, each explained on Plan and billing:
+ * past_due after the grace (Paddle may still recover the payment), paused, and
+ * an active or trialing row revoked by a refund or chargeback whose cancel is
+ * still owed. A canceled row blocks only while it still grants Pro.
  * `checkoutBlockingSql` in service.ts is the same rule.
  */
-export function blocksCheckout(
-  s: Pick<EntitlementFields, "status" | "cancelAtPeriodEnd" | "currentPeriodEnd" | "revokedAt">,
-  now: Date,
-): boolean {
-  const periodAhead = s.currentPeriodEnd !== null && s.currentPeriodEnd > now;
+export function blocksCheckout(s: EntitlementFields, now: Date): boolean {
+  if (isEntitled(s, now)) return true;
   switch (s.status) {
     case "active":
     case "trialing":
-      return !s.cancelAtPeriodEnd || s.currentPeriodEnd === null || periodAhead;
+      return s.revokedAt !== null;
     case "past_due":
     case "paused":
       return true;
     case "canceled":
-      return s.revokedAt === null && periodAhead;
+      return false;
   }
 }
 
@@ -116,8 +115,7 @@ export function adjustmentRevokesPro(
 
 /**
  * Transaction origins that pay for a billing period. Not `subscription_charge`
- * (a one-off charge), `subscription_update` (a proration) or
- * `subscription_payment_method_change` (a card check).
+ * (a one-off charge) or `subscription_payment_method_change` (a card check).
  */
 const PERIOD_ORIGINS: ReadonlySet<string> = new Set(["web", "api", "subscription_recurring"]);
 
@@ -125,14 +123,28 @@ const PERIOD_ORIGINS: ReadonlySet<string> = new Set(["web", "api", "subscription
  * Whether a completed transaction now pays for its subscription's current
  * period: it pays for a period, and that period starts after the recorded
  * one. A second transaction for the same period (a duplicate charge) doesn't
- * replace the first.
+ * replace the first. A `subscription_update` (a plan or interval change)
+ * counts only when it starts a new period after a recorded one; a proration
+ * inside the current period doesn't.
  */
 export function paysNewerPeriod(
   t: { origin: string | null; billingPeriodStart: Date | null },
   recordedStart: Date | null,
 ): boolean {
-  if (!t.origin || !PERIOD_ORIGINS.has(t.origin) || !t.billingPeriodStart) return false;
+  if (!t.origin || !t.billingPeriodStart) return false;
+  if (t.origin === "subscription_update") {
+    return recordedStart !== null && t.billingPeriodStart > recordedStart;
+  }
+  if (!PERIOD_ORIGINS.has(t.origin)) return false;
   return recordedStart === null || t.billingPeriodStart > recordedStart;
+}
+
+/**
+ * The plan a price buys: Pro for the configured Pro prices (`prices`), else
+ * null for a price this deploy doesn't know. Only Pro is sold today.
+ */
+export function planForPrice(priceId: string | null, prices: ReadonlySet<string>): "pro" | null {
+  return priceId !== null && prices.has(priceId) ? "pro" : null;
 }
 
 /**

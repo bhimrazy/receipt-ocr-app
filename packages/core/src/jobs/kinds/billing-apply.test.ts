@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { PaddleApiError, type PaddleErrorCode } from "../../billing/paddle";
 import { Billing, providerFailure } from "../../billing/service";
 import { NotConfigured } from "../../errors";
-import { cancelRevoked } from "./billing-apply";
+import { backoffMs } from "../backoff";
+import { billingApply, cancelRevoked, LOCKED_RETRY_MS } from "./billing-apply";
 
 const unused = () => Effect.die("not used");
 
@@ -46,8 +47,19 @@ describe("cancelRevoked", () => {
       expect(failure(await cancelWith(answer))).toMatchObject({
         _tag: "RetryableJobError",
         kind: "provider-locked",
+        retryAfterMs: LOCKED_RETRY_MS,
       });
     }
+  });
+
+  it("keeps retrying a locked subscription for over an hour before the job gives up", () => {
+    const { maxAttempts, backoff } = billingApply;
+    expect(backoff.capMs).toBeGreaterThanOrEqual(LOCKED_RETRY_MS);
+    // Each of the retries waits at least the floor, whatever the jitter.
+    const shortest = Array.from({ length: maxAttempts - 1 }, (_, i) =>
+      backoffMs(i + 1, backoff, LOCKED_RETRY_MS, () => 0),
+    ).reduce((a, b) => a + b, 0);
+    expect(shortest).toBeGreaterThanOrEqual(60 * 60_000);
   });
 
   it("stops on a refused key or billing off, and is done on another 4xx about the subscription", async () => {
