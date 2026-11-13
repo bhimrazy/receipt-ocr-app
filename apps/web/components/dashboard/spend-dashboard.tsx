@@ -181,11 +181,15 @@ export function ThisMonthCard({
   month,
   currency,
   footer,
+  slimOnPhone = false,
 }: {
   month: CurrencySpend["thisMonth"];
   currency: string;
   footer?: ReactNode;
+  /** Below md, only the total and its comparison: no summary, projection, chart or table. */
+  slimOnPhone?: boolean;
 }) {
+  const phoneHidden = slimOnPhone ? "max-md:hidden" : undefined;
   const money = (v: number) => formatMoney(v, currency);
   const lastName = formatMonth(month.lastMonth).split(" ")[0]!;
   const thisName = formatMonth(month.month);
@@ -209,24 +213,27 @@ export function ThisMonthCard({
             : `Nothing in ${lastName}.`}
         </>
       }
+      summaryClassName={phoneHidden}
       table={
-        <DataTable
-          caption={`Running total by day, ${thisName} and ${lastName}`}
-          columns={[
-            { header: "Day", cell: (p: TimePoint) => p.label },
-            {
-              header: thisName,
-              cell: (p) => (p.value == null ? "" : money(p.value)),
-              numeric: true,
-            },
-            {
-              header: lastName,
-              cell: (p) => (p.previous == null ? "" : money(p.previous)),
-              numeric: true,
-            },
-          ]}
-          rows={points}
-        />
+        <div className={phoneHidden}>
+          <DataTable
+            caption={`Running total by day, ${thisName} and ${lastName}`}
+            columns={[
+              { header: "Day", cell: (p: TimePoint) => p.label },
+              {
+                header: thisName,
+                cell: (p) => (p.value == null ? "" : money(p.value)),
+                numeric: true,
+              },
+              {
+                header: lastName,
+                cell: (p) => (p.previous == null ? "" : money(p.previous)),
+                numeric: true,
+              },
+            ]}
+            rows={points}
+          />
+        </div>
       }
       footer={footer}
       title="This month"
@@ -237,20 +244,22 @@ export function ThisMonthCard({
           <Delta against={`${lastName} by this day`} fraction={vs} />
         </p>
         {month.projected != null ? (
-          <p className="text-sm text-muted-foreground">
+          <p className={cn("text-sm text-muted-foreground", phoneHidden)}>
             At this pace, {thisName.split(" ")[0]} ends near{" "}
             <span className="font-mono text-foreground tabular-nums">{money(month.projected)}</span>
             . A straight line from the days so far, not a forecast.
           </p>
         ) : null}
       </div>
-      <LazyTimeChart
-        format={{ kind: "money", currency }}
-        height={160}
-        kind="line"
-        labels={{ value: thisName.split(" ")[0]!, previous: lastName }}
-        points={points}
-      />
+      <div className={phoneHidden}>
+        <LazyTimeChart
+          format={{ kind: "money", currency }}
+          height={160}
+          kind="line"
+          labels={{ value: thisName.split(" ")[0]!, previous: lastName }}
+          points={points}
+        />
+      </div>
     </ChartCard>
   );
 }

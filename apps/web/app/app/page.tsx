@@ -9,7 +9,7 @@ import { selectCurrency, ThisMonthCard } from "@/components/dashboard/spend-dash
 import { SectionBoundary } from "@/components/section-error";
 import { ListPoller } from "@/components/processing-poller";
 import { ReceiptList } from "@/components/receipt-list";
-import { UploadPanel } from "@/components/upload-panel";
+import { PlanState, UploadPanel } from "@/components/upload-panel";
 import { UpgradeHomeCard } from "@/components/upgrade/upgrade-home-card";
 import { formatTimeUntil } from "@/lib/format";
 import { errorFields, logger } from "@/lib/log";
@@ -209,17 +209,26 @@ async function UploadSection() {
     getPlanTable(),
     getReceiptCounts(),
   ]);
+  const limitPlan = { pro: plan === "free" ? plans.pro : null, offer: offer?.audience ?? null };
+  const resetsIn = formatTimeUntil(usage.opensAt);
   return (
-    <section aria-label="Upload" className={cn("order-1", counts.total > 0 && "max-md:hidden")}>
-      <SectionBoundary label="Upload">
-        <UploadPanel
-          batchMax={policy.batchMax}
-          plan={{ pro: plan === "free" ? plans.pro : null, offer: offer?.audience ?? null }}
-          resetsIn={formatTimeUntil(usage.opensAt)}
-          usage={usage}
-        />
-      </SectionBoundary>
-    </section>
+    <>
+      <section aria-label="Upload" className={cn("order-1", counts.total > 0 && "max-md:hidden")}>
+        <SectionBoundary label="Upload">
+          <UploadPanel
+            batchMax={policy.batchMax}
+            plan={limitPlan}
+            resetsIn={resetsIn}
+            usage={usage}
+          />
+        </SectionBoundary>
+      </section>
+      {counts.total > 0 ? (
+        <div className="order-1 empty:hidden md:hidden" data-testid="phone-plan">
+          <PlanState plan={limitPlan} resetsIn={resetsIn} usage={usage} />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -240,6 +249,7 @@ async function MonthSection() {
   return (
     <ThisMonthCard
       currency={spend.currency}
+      slimOnPhone
       footer={
         <Link
           className="inline-flex items-center gap-1 self-start rounded-md text-sm font-medium text-primary outline-none select-none hover:underline active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
