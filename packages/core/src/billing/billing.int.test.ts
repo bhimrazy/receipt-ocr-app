@@ -21,7 +21,10 @@ import {
 import { Effect, Exit, ManagedRuntime } from "effect";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppLayer, type AppServices } from "../index";
-import { JOB_REGISTRY, tick } from "../jobs";
+import { JOB_REGISTRY, REFUND_WAIT_ALERT_MS, tick, type JobContext } from "../jobs";
+import { billingRefundCheck } from "../jobs/kinds/billing-refund-check";
+import { withWideEvent } from "../telemetry/current";
+import type { WideEvent } from "../telemetry/schema";
 import { ingestUpload, purgeReceiptFiles } from "../pipeline";
 import { DEFAULT_PLANS } from "../plans";
 import { checkQuota, quotaLimits, type QuotaLimits } from "../quota";
@@ -189,6 +192,16 @@ const paid = (
     origin,
     billingPeriodStart: start,
   });
+
+const adjustment = (fields: Partial<AdjustmentSnapshot>): AdjustmentSnapshot => ({
+  adjustmentId: `adj_${tag}_${seq}`,
+  action: "chargeback",
+  type: "full",
+  status: "approved",
+  subscriptionId: null,
+  transactionId: `txn_${tag}`,
+  ...fields,
+});
 
 const subscriptionRow = async (providerSubscriptionId: string) =>
   (
@@ -1196,16 +1209,6 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
   });
 
   describe("refunds and chargebacks", () => {
-    const adjustment = (fields: Partial<AdjustmentSnapshot>): AdjustmentSnapshot => ({
-      adjustmentId: `adj_${tag}_${seq}`,
-      action: "chargeback",
-      type: "full",
-      status: "approved",
-      subscriptionId: null,
-      transactionId: `txn_${tag}`,
-      ...fields,
-    });
-
     it("ends Pro at once on an approved chargeback and asks for the provider cancel", async () => {
       const workspaceId = await createWorkspace(other.userId, "charged-back");
       const id = `sub_${tag}_chargeback`;
@@ -1541,6 +1544,166 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const another = await refundBeforeLink("early-other-refund", () => `txn_${tag}_elsewhere`);
       expect(await planOf(another.workspaceId)).toBe("pro");
       expect((await subscriptionRow(another.id))?.revokedAt).toBeNull();
+    });
+  });
+
+  describe("waiting refunds, legacy rows and revoked subscriptions", () => {
+    const fullRefund = (subscriptionId: string, transactionId: string) =>
+      event(
+        null,
+        "adjustment.updated",
+        adjustment({ action: "refund", type: "full", subscriptionId, transactionId }),
+      );
+    const eventRowId = async (eventId: string) =>
+      (
+        await db((d) =>
+          d
+            .select({ id: billingEvents.id })
+            .from(billingEvents)
+            .where(eq(billingEvents.providerEventId, eventId)),
+        )
+      )[0]!.id;
+    /** Runs the refund's wait check now, returning its wide event. */
+    const checkWaiting = async (eventId: string) => {
+      const wide: WideEvent = { event: "job.attempt" };
+      await run(
+        billingRefundCheck
+          .run({ eventId: await eventRowId(eventId) }, {} as JobContext)
+          .pipe(withWideEvent(wide)),
+      );
+      return wide;
+    };
+
+    it("schedules a check for a waiting refund, which warns only while it is still waiting", async () => {
+      const workspaceId = await createWorkspace(other.userId, "refund-wait-check");
+      const id = `sub_${tag}_refund_wait_check`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId }), "subscription.created"));
+      const early = fullRefund(id, `txn_${tag}_never_reported`);
+      const before = Date.now();
+      await deliver(early);
+      expect(await outcomeOf(early.eventId)).toBe("unmatched");
+
+      const rowId = await eventRowId(early.eventId);
+      const checksOf = () =>
+        db((d) =>
+          d.select().from(jobs).where(sql`${jobs.payload}->>'eventId' = ${rowId}
+          and ${jobs.kind} = 'billing.refund_wait_check'`),
+        );
+      const [check] = await checksOf();
+      expect(check).toMatchObject({
+        state: "queued",
+        idempotencyKey: `billing:refund-wait:${rowId}`,
+      });
+      expect(check!.runAt.getTime()).toBeGreaterThanOrEqual(before + REFUND_WAIT_ALERT_MS);
+      // A retried apply enqueues no second check.
+      await reapply(early.eventId);
+      expect(await checksOf()).toHaveLength(1);
+
+      expect(await checkWaiting(early.eventId)).toMatchObject({
+        organization_id: workspaceId,
+        billing: {
+          refund_unresolved: true,
+          unmatched_reason: "transaction",
+          subscription_id: id,
+          transaction_id: `txn_${tag}_never_reported`,
+        },
+        notices: ["billing.refund_unresolved"],
+        level: "warn",
+      });
+
+      // Once the transaction arrives the refund settles, and the check stays quiet.
+      await deliver(paid(id, `txn_${tag}_never_reported`, new Date()));
+      expect(await outcomeOf(early.eventId)).toBe("applied");
+      const quiet = await checkWaiting(early.eventId);
+      expect(quiet).not.toHaveProperty("billing");
+      expect(quiet).not.toHaveProperty("notices");
+    });
+
+    it("revokes on a full refund of an interval change's payment on a row linked before paid_period_start", async () => {
+      const legacy = async (name: string) => {
+        const workspaceId = await createWorkspace(other.userId, name);
+        const id = `sub_${tag}_${name}`;
+        const start = new Date(Date.now() - 10 * 86_400_000);
+        await deliver(
+          event(
+            snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: start }),
+            "subscription.created",
+          ),
+        );
+        await db((d) =>
+          d
+            .update(billingSubscriptions)
+            .set({ paidPeriodStart: null })
+            .where(eq(billingSubscriptions.providerSubscriptionId, id)),
+        );
+        // A proration inside the current period doesn't pay a new one.
+        const proration = paid(id, `txn_${tag}_${name}_proration`, start, "subscription_update");
+        await deliver(proration);
+        expect(await outcomeOf(proration.eventId)).toBe("ignored");
+        return { workspaceId, id };
+      };
+      const yearStart = new Date(Date.now() - 3_600_000);
+      const toYearly = (workspaceId: string, id: string) =>
+        event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId,
+            priceId: "pri_year",
+            interval: "year",
+            currentPeriodStart: yearStart,
+            currentPeriodEnd: new Date(Date.now() + 364 * 86_400_000),
+            transactionId: null,
+            updatedAt: new Date(Date.now() + 1000),
+          }),
+        );
+
+      for (const order of ["update-first", "payment-first"] as const) {
+        const { workspaceId, id } = await legacy(`legacy-${order}`);
+        const payment = paid(id, `txn_${tag}_${order}_yearly`, yearStart, "subscription_update");
+        if (order === "update-first") await deliver(toYearly(workspaceId, id));
+        await deliver(payment);
+        if (order === "payment-first") await deliver(toYearly(workspaceId, id));
+        expect(await outcomeOf(payment.eventId)).toBe("applied");
+        expect((await subscriptionRow(id))?.paidTransactionId).toBe(`txn_${tag}_${order}_yearly`);
+
+        await deliver(fullRefund(id, `txn_${tag}_${order}_yearly`));
+        expect(await planOf(workspaceId)).toBe("free");
+      }
+    });
+
+    it("asks for the cancel again when a revoked subscription's transaction completes", async () => {
+      const workspaceId = await createWorkspace(other.userId, "revoked-pays");
+      const id = `sub_${tag}_revoked_pays`;
+      const start = new Date(Date.now() - 86_400_000);
+      await deliver(
+        event(
+          snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: start }),
+          "subscription.created",
+        ),
+      );
+      // The cancel job dies here (no API key); the subscription keeps charging in Paddle.
+      await deliver(event(null, "adjustment.created", adjustment({ subscriptionId: id })));
+      expect((await subscriptionRow(id))?.revokedAt).toBeInstanceOf(Date);
+
+      const renewalStart = new Date(Date.now() + 1000);
+      expect(await applyOnce(paid(id, `txn_${tag}_revoked_renewal`, renewalStart))).toMatchObject({
+        outcome: "applied",
+        cancelSubscriptionId: id,
+      });
+      // A second charge for the same period is ignored, and still asks.
+      expect(await applyOnce(paid(id, `txn_${tag}_revoked_duplicate`, renewalStart))).toMatchObject(
+        { outcome: "ignored", cancelSubscriptionId: id },
+      );
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
+    it("asks for no cancel when a subscription in good standing renews", async () => {
+      const workspaceId = await createWorkspace(other.userId, "good-renews");
+      const id = `sub_${tag}_good_renews`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId }), "subscription.created"));
+      expect(
+        await applyOnce(paid(id, `txn_${tag}_good_renewal`, new Date(Date.now() + 1000))),
+      ).not.toHaveProperty("cancelSubscriptionId");
     });
   });
 

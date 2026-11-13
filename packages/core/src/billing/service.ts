@@ -21,7 +21,7 @@ import {
   NotFound,
   type DbError,
 } from "../errors";
-import { billingApplyJob } from "../jobs/billing-apply-job";
+import { billingApplyJob, refundWaitCheckJob } from "../jobs/billing-apply-job";
 import { enqueueJob } from "../jobs/queue";
 import { DEFAULT_PLAN, policyFor, type PlanId, type PlanPolicy } from "../plans";
 import { Db } from "../services";
@@ -612,7 +612,9 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           const stored = await storedSubscription(tx, event.provider, transaction.subscriptionId);
           // Before the link there is nothing to record: the link takes the checkout's transaction.
           if (!stored) return finish({ outcome: "ignored", organizationId: null });
-          const newer = paysNewerPeriod(transaction, stored.paidPeriodStart);
+          // A row linked before `paid_period_start` existed: its paid transaction pays at most the stored period.
+          const recordedStart = stored.paidPeriodStart ?? stored.currentPeriodStart;
+          const newer = paysNewerPeriod(transaction, recordedStart);
           // Full refunds of this transaction that arrived before it.
           const waiting = await waitingRefunds(tx, event.provider, transaction.transactionId);
           if (waiting.length > 0) {
@@ -624,7 +626,13 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
               })
               .where(inArray(billingEvents.id, waiting));
           }
-          if (!newer) return finish({ outcome: "ignored", organizationId: stored.organizationId });
+          if (!newer) {
+            return finish({
+              outcome: "ignored",
+              organizationId: stored.organizationId,
+              ...cancelStillOwed(stored),
+            });
+          }
           await tx
             .update(billingSubscriptions)
             .set({
@@ -634,7 +642,11 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
             })
             .where(eq(billingSubscriptions.id, stored.id));
           if (waiting.length === 0) {
-            return finish({ outcome: "applied", organizationId: stored.organizationId });
+            return finish({
+              outcome: "applied",
+              organizationId: stored.organizationId,
+              ...cancelStillOwed(stored),
+            });
           }
           return finish(await revoke(tx, stored, now));
         }
@@ -659,6 +671,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           // A refund of a renewal Paddle hasn't reported as completed yet: kept until it is.
           const refunded = adjustment.transactionId;
           if (refunded && !(await transactionKnown(tx, event.provider, refunded))) {
+            await enqueueJob(tx, refundWaitCheckJob({ eventId }, now));
             return finish({
               outcome: "unmatched",
               organizationId: stored.organizationId,
@@ -742,9 +755,18 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           updatedAt: new Date(),
         };
         if (stored) {
+          // A row linked before `paid_period_start` existed: its paid transaction is taken to pay
+          // the period this update leaves, so the one paying the new period counts as newer.
+          const leftPeriod =
+            stored.paidPeriodStart === null &&
+            stored.currentPeriodStart !== null &&
+            current.currentPeriodStart !== null &&
+            current.currentPeriodStart > stored.currentPeriodStart
+              ? { paidPeriodStart: stored.currentPeriodStart }
+              : {};
           await tx
             .update(billingSubscriptions)
-            .set(values)
+            .set({ ...values, ...leftPeriod })
             .where(eq(billingSubscriptions.id, stored.id));
         } else {
           await tx.insert(billingSubscriptions).values({
@@ -810,6 +832,12 @@ async function revoke(tx: Tx, stored: BillingSubscription, now: Date): Promise<A
       : {}),
   };
 }
+
+/** A revoked subscription not yet `canceled` in the provider: every later event asks for the cancel again. */
+const cancelStillOwed = (stored: BillingSubscription) =>
+  stored.revokedAt !== null && stored.status !== "canceled"
+    ? { cancelSubscriptionId: stored.providerSubscriptionId }
+    : {};
 
 /**
  * Whether a transaction has been applied (`transaction.completed`) or is one of our checkouts. A report still
@@ -986,6 +1014,32 @@ async function cancelOwed(tx: Tx, event: BillingEvent): Promise<string | null> {
   if (stored.revokedAt || orphanCanCharge(stored)) return stored.providerSubscriptionId;
   return null;
 }
+
+/**
+ * A full refund still kept waiting for its transaction (outcome `unmatched`), with what an
+ * operator needs to find it in the provider; null once it was applied or dropped.
+ */
+export const waitingRefund = (eventId: string) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const [row] = await db
+        .select({
+          outcome: billingEvents.outcome,
+          organizationId: billingEvents.organizationId,
+          payload: billingEvents.payload,
+        })
+        .from(billingEvents)
+        .where(eq(billingEvents.id, eventId))
+        .limit(1);
+      const adjustment = row && billingEventSchema.safeParse(row.payload).data?.adjustment;
+      if (row?.outcome !== "unmatched" || !adjustment?.transactionId) return null;
+      return {
+        organizationId: row.organizationId,
+        subscriptionId: adjustment.subscriptionId,
+        transactionId: adjustment.transactionId,
+      };
+    }),
+  );
 
 /** What the billing page shows about a workspace's subscription. */
 export type WorkspaceBilling = {
