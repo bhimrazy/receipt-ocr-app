@@ -39,7 +39,7 @@ export default async function AdminOverviewPage() {
         title="Overview"
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat
           href="/admin/users"
           label="Users"
@@ -67,6 +67,20 @@ export default async function AdminOverviewPage() {
           note={`${data.receipts.failedWeek} failed (${Math.round(failedShare * 100)}%)`}
           tone={failedShare >= 0.1 ? "warning" : "default"}
           value={data.receipts.week}
+        />
+        <Stat
+          className="col-span-2 lg:col-span-1"
+          href="/admin/support"
+          label="Support, waiting"
+          note={
+            data.support.new > 0
+              ? `${data.support.new} new, ${data.support.open} open`
+              : data.support.open > 0
+                ? `${data.support.open} open, none new`
+                : "Nothing waiting"
+          }
+          tone={data.support.new > 0 ? "warning" : "default"}
+          value={data.support.new + data.support.open}
         />
       </div>
 

@@ -151,9 +151,10 @@ const invitation: EmailDefinition = {
 
 /** A contact-form message to the support inbox. The visitor is the Reply-To, so the footer says so. */
 const supportMessage: EmailDefinition = {
-  slots: ["senderName", "from", "topicLabel", "message"],
+  slots: ["senderName", "topicLabel", "messageRef", "url", "urlLabel"],
   render(v, shared) {
     const heading = `${v.topicLabel} from the contact form`;
+    const body = `Message ${v.messageRef} from ${v.senderName}. Read it in the admin panel; the message itself isn't sent by email.`;
     const reason = `Sent by the contact form on ${shared.appHost}.`;
     const replyNote = `Reply to this email to answer ${v.senderName} directly.`;
     return {
@@ -166,16 +167,16 @@ const supportMessage: EmailDefinition = {
           replyNote={replyNote}
         >
           <P>
-            From <Strong>{v.senderName}</Strong> ({v.from})
+            Message <Strong>{v.messageRef}</Strong> from <Strong>{v.senderName}</Strong>. Read it in
+            the admin panel; the message itself isn&apos;t sent by email.
           </P>
-          <Note>
-            <span className="whitespace-pre-wrap">{v.message}</span>
-          </Note>
+          <Action label="Open support messages" url={v.url} urlLabel={v.urlLabel} />
         </Layout>
       ),
       text: plainText(shared, {
         heading,
-        body: [`From ${v.senderName} (${v.from})`, v.message],
+        body: [body],
+        action: { label: "Open support messages", url: v.url },
         reason,
         replyNote,
       }),

@@ -16,7 +16,7 @@ export default async function AdminAuditPage({ searchParams }: { searchParams: S
   await requireAdmin();
   const params = await searchParams;
   const q = one(params.q);
-  const type = pick(params.type, ["user", "workspace", "settings"] as const);
+  const type = pick(params.type, ["user", "workspace", "settings", "support"] as const);
   const page = pageOf(params.page);
   const { rows, total } = await runtime.runPromise(
     listAudit({ q, targetType: type }, { page, pageSize: PAGE_SIZE }),
@@ -40,6 +40,7 @@ export default async function AdminAuditPage({ searchParams }: { searchParams: S
               { value: "user", label: "Users" },
               { value: "workspace", label: "Workspaces" },
               { value: "settings", label: "Settings" },
+              { value: "support", label: "Support messages" },
             ],
           },
         ]}

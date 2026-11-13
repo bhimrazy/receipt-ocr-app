@@ -6,6 +6,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   invitation,
   member,
   or,
@@ -13,10 +14,12 @@ import {
   passkey,
   receipts,
   sql,
+  supportMessages,
   user,
   type SQL,
 } from "@receipt-ocr/db";
 import { Effect } from "effect";
+import type { AuditTarget } from "./audit";
 import { policyFor, type PlanId, type PlanTable } from "./plans";
 import { utcDayStart } from "./quota";
 import { Db } from "./services";
@@ -64,6 +67,8 @@ export type AdminOverview = {
   daily: { day: string; completed: number; failed: number }[];
   /** Provider calls today (uploads + retries), the number OCR_DAILY_CAP is checked against. */
   readsToday: number;
+  /** Support messages still waiting on a reply. */
+  support: { new: number; open: number };
   nearLimit: NearLimitUser[];
   recentSignups: {
     id: string;
@@ -111,6 +116,14 @@ export const adminOverview = (plans: PlanTable, now = new Date()) =>
       const [reads] = await db
         .execute<{ value: number }>(sql`select ${roundsSince(today)} as value`)
         .then((r) => r.rows);
+
+      const [support] = await db
+        .select({
+          new: sql<number>`(count(*) filter (where ${supportMessages.status} = 'new'))::int`,
+          open: sql<number>`(count(*) filter (where ${supportMessages.status} = 'open'))::int`,
+        })
+        .from(supportMessages)
+        .where(inArray(supportMessages.status, ["new", "open"]));
 
       // Anyone at 80% of the smallest daily limit is a candidate; their own plan decides.
       const threshold = Math.ceil(
@@ -179,6 +192,7 @@ export const adminOverview = (plans: PlanTable, now = new Date()) =>
         },
         daily: days,
         readsToday: reads?.value ?? 0,
+        support: support ?? { new: 0, open: 0 },
         nearLimit,
         recentSignups,
       };
@@ -538,7 +552,7 @@ export const workspaceDetail = (id: string, now = new Date()) =>
 // ---------- Audit log ----------
 
 export type AuditFilters = {
-  targetType?: "user" | "workspace" | "settings" | "job";
+  targetType?: AuditTarget;
   targetId?: string;
   q?: string;
 };

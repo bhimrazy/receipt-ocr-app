@@ -119,8 +119,6 @@ reset. **From the first real user onward we never squash again.** Details:
 
 ## Launch blockers
 
-- Support messages retention: a `maintenance.purge` job for `support_messages` before launch. It covers closed messages
-  and unanswered public ones (anyone can store a message today), and the privacy page states the period.
 - Turnstile keys required in production for `/api/contact`: without them, `checkTurnstile` lets every request through
   (`apps/web/lib/turnstile.ts`), so a script that rotates IPs can fill `support_messages`.
 
@@ -209,20 +207,21 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                                                                                                                    |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #236 | Billing: subscriptions and portal sessions bound to the checkout the server created (`billing_checkouts`; migration 0004 also validates the 0003 CHECKs); warn log level                                                |
-| #241 | Billing: one charging subscription per workspace, refunds revoke only the current period, plan recorded at link (migration 0005), cancel retried on lock, Free pool alert                                               |
-| #219 | Receipts list: sorting, page size, range, selection across pages, bulk delete (`storage.delete` job), export and Add to group                                                                                           |
-| #229 | Navigation PR 1: History becomes Receipts (`/app/receipts`), Groups moves to `/app/receipts/groups`; no redirects                                                                                                       |
-| #230 | Navigation PR 3: Spending page (`/app/spending`) holds the dashboard from Home; tab bar is Home, Receipts, Scan, Spending, Settings                                                                                     |
-| #238 | Free at 30 a month, one Plan and billing page, upgrade ladder from 80%, marketing claims fixed                                                                                                                          |
-| #242 | Edge detection PR 1: `packages/vision` holds the capture geometry and the detector, moved with their tests; no behaviour change                                                                                         |
-| #245 | Edge detection PR 2: measurement harness in `packages/vision/bench` (synthetic scenes for the 16 categories, metrics, per-variant table, `baseline.json`, CI check), baseline recorded in the plan; no behaviour change |
-| #249 | Edge detection PR 3: `crop.outcome` (kept, adjusted, full_image, manual, none), `crop.level`, `crop.seen` and `crop.source` on the `receipt.upload` event, enumerations only; no behaviour change                       |
-| #246 | Support messages stored in `support_messages` (migration 0006); `/api/contact` answers 200 and an `email.support-notify` job mails the inbox; per-user cap, deletion by user and address                                |
-| #240 | Navigation PR 4: slim Home with a This month card; the upload panel is hidden on phones, which keep the usage line and limit card                                                                                       |
-| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                                                                                                               |
+| PR   | Work                                                                                                                                                                                                                                                                                                                                                 |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #236 | Billing: subscriptions and portal sessions bound to the checkout the server created (`billing_checkouts`; migration 0004 also validates the 0003 CHECKs); warn log level                                                                                                                                                                             |
+| #241 | Billing: one charging subscription per workspace, refunds revoke only the current period, plan recorded at link (migration 0005), cancel retried on lock, Free pool alert                                                                                                                                                                            |
+| #219 | Receipts list: sorting, page size, range, selection across pages, bulk delete (`storage.delete` job), export and Add to group                                                                                                                                                                                                                        |
+| #229 | Navigation PR 1: History becomes Receipts (`/app/receipts`), Groups moves to `/app/receipts/groups`; no redirects                                                                                                                                                                                                                                    |
+| #230 | Navigation PR 3: Spending page (`/app/spending`) holds the dashboard from Home; tab bar is Home, Receipts, Scan, Spending, Settings                                                                                                                                                                                                                  |
+| #238 | Free at 30 a month, one Plan and billing page, upgrade ladder from 80%, marketing claims fixed                                                                                                                                                                                                                                                       |
+| #242 | Edge detection PR 1: `packages/vision` holds the capture geometry and the detector, moved with their tests; no behaviour change                                                                                                                                                                                                                      |
+| #245 | Edge detection PR 2: measurement harness in `packages/vision/bench` (synthetic scenes for the 16 categories, metrics, per-variant table, `baseline.json`, CI check), baseline recorded in the plan; no behaviour change                                                                                                                              |
+| #249 | Edge detection PR 3: `crop.outcome` (kept, adjusted, full_image, manual, none), `crop.level`, `crop.seen` and `crop.source` on the `receipt.upload` event, enumerations only; no behaviour change                                                                                                                                                    |
+| #246 | Support messages stored in `support_messages` (migration 0006); `/api/contact` answers 200 and an `email.support-notify` job mails the inbox; per-user cap, deletion by user and address                                                                                                                                                             |
+| #250 | Support: `/admin/support` (status filter, replies, audited status changes, waiting count on the overview); daily `maintenance.purge` deletes messages 12 months after closing (or after the last change, while open); notification mail is a link only; privacy text updated; advisory lock namespaces in one registry (groups no longer share 7302) |
+| #240 | Navigation PR 4: slim Home with a This month card; the upload panel is hidden on phones, which keep the usage line and limit card                                                                                                                                                                                                                    |
+| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                                                                                                                                                                                                                                            |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -453,18 +452,19 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   session. The password step clears the session cookie first, so the earlier token has to be carried through the
   challenge to find it.
 - Database review items not done in the schema-fixes PR (#127): backups and a restore drill (H1), the
-  `maintenance.purge` retention job and its `step_up_codes (expires_at)` index (H2, M5), revoking `anon` and
+  retention for `step_up_codes`, `step_up_events` and finished `jobs` in the `maintenance.purge` job (which only purges
+  `support_messages` so far) and the `step_up_codes (expires_at)` index (H2, M5), revoking `anon` and
   `authenticated` grants and checking the Data API is off (H4), pool on `globalThis` and role-level timeouts (M3), the
   quota statement profile (M4), an `ocr_call_status` lookup table (M1), dropping `user_credentials` and
   `storage_source` with BYOK (M6, L5), trigram search and admin indexes when they slow down (L2, L3), lock ordering
   between admin re-run and user retry (L4).
-- Support messages (from the [support data review](reviews/2026-11-13-support-data-cto.md)): `support_messages` is
-  stored; still to do are `/admin/support` (PR 3), the Resend bounce webhook and suppression table (PR 4, owner: later),
-  and the `maintenance.purge` job deleting closed messages 12 months after `closed_at` (PR 5, owner decision), then a
-  retention line on the privacy page. The notification mail carries the full message until the admin list lands (owner).
-  Once `sendEmail` takes an idempotency key, `SupportNotifyMailerLive` passes `job:{id}` (`SupportNotice.jobId`).
+- Support messages (from the [support data review](reviews/2026-11-13-support-data-cto.md)): stored, triaged in
+  `/admin/support` and deleted by the daily `maintenance.purge` job 12 months after closing (or after sending or the
+  last reopen, while not closed); the notification mail carries only a link. Still to do: the Resend bounce webhook and
+  suppression table (PR 4, owner: later), and an index for the purge's scan (`coalesce(closed_at, greatest(created_at,
+updated_at))`; it needs a migration, and the table is small until then).
 - Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
-  rows older than 90 days with a job kind in `packages/core/src/jobs` (there is no retention job yet), keeping the last
+  rows older than 90 days in the daily `maintenance.purge` job, keeping the last
   pass and recent failures that the lockout reads; then update the privacy policy.
 
 - Share target: a cross-site form can plant a share in a visitor's cache (the referrer can be hidden). The Keep and

@@ -17,6 +17,7 @@ import {
   removeMember,
   resetSecondFactor,
   setMemberRole,
+  setSupportStatus,
   setUserPlan,
   Settings,
   withWideEvent,
@@ -26,6 +27,7 @@ import {
   type ConnectionRow,
   type WideEvent,
 } from "@receipt-ocr/core";
+import { SUPPORT_STATUSES } from "@receipt-ocr/db";
 import { APIError } from "better-auth/api";
 import { Cause, Effect, Exit } from "effect";
 import { revalidatePath } from "next/cache";
@@ -489,6 +491,16 @@ export async function deleteWorkspaceAction(input: { organizationId: string; con
   });
   if (result.ok) redirect("/admin/workspaces");
   return result;
+}
+
+export async function setSupportStatusAction(input: { messageId: string; status: string }) {
+  return run("support.status", async (ctx) => {
+    const parsed = z
+      .object({ messageId: z.uuid("That isn't a message id."), status: z.enum(SUPPORT_STATUSES) })
+      .parse(input);
+    const { previous } = await core(setSupportStatus(parsed.messageId, parsed.status, ctx.audit));
+    if (previous !== parsed.status) revalidatePath("/admin", "layout");
+  });
 }
 
 // ---------- Settings ----------

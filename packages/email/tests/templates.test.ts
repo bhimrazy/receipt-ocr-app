@@ -79,15 +79,15 @@ const cases: Record<
     make: (ctx) =>
       supportMessageEmail(ctx, {
         senderName: hostile,
-        from: 'x"><img src=x onerror=alert(1)>@example.com',
         topicLabel: "Question",
-        message: `Line one\r\n\r\n${hostile}\u0007`,
+        messageRef: "0f8fad5b",
+        url: "https://app.example/admin/support",
       }),
     input: {
       senderName: hostile,
-      from: 'x"><img src=x onerror=alert(1)>@example.com',
       topicLabel: "Question",
-      message: `Line one\r\n\r\n${hostile}\u0007`,
+      messageRef: "0f8fad5b",
+      url: "https://app.example/admin/support",
     },
   },
   newsletterConfirm: {
@@ -370,12 +370,23 @@ describe("invitationEmail", () => {
 });
 
 describe("supportMessageEmail", () => {
-  it("keeps the visitor's line breaks but no other control characters", () => {
+  it("names the message and links to the admin list", () => {
     const { text, html, subject } = cases.supportMessage.make(withSupport);
     expect(subject).toBe("[ReceiptOCR support] Question");
-    expect(text).toContain("Line one\n\nAcme");
-    expect(html).toContain("Line one\n\nAcme");
-    expect(text).not.toContain("\u0007");
+    expect(text).toContain("Message 0f8fad5b from");
+    expect(text).toContain("https://app.example/admin/support");
+    expect(html).toContain('href="https://app.example/admin/support"');
+  });
+
+  it("refuses a link off the app's origin", () => {
+    expect(() =>
+      supportMessageEmail(withSupport, {
+        senderName: "Ada",
+        topicLabel: "Question",
+        messageRef: "0f8fad5b",
+        url: "https://evil.example/admin/support",
+      }),
+    ).toThrow(/must be on/);
   });
 });
 

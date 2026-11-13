@@ -63,6 +63,14 @@ const calls: [string, () => Promise<unknown>][] = [
     "deleteWorkspaceAction",
     () => actions.deleteWorkspaceAction({ organizationId: "o", confirm: "Acme" }),
   ],
+  [
+    "setSupportStatusAction",
+    () =>
+      actions.setSupportStatusAction({
+        messageId: "00000000-0000-4000-8000-000000000000",
+        status: "closed",
+      }),
+  ],
   ["savePlansAction", () => actions.savePlansAction({})],
   ["saveOcrAction", () => actions.saveOcrAction({})],
   ["checkConnectionsAction", () => actions.checkConnectionsAction()],
@@ -153,6 +161,27 @@ describe("admin server actions for an admin", () => {
     const result = await actions.setRoleAction({ userId: "u", role: "admin" });
     expect(result).toEqual({ ok: false, error: expect.any(String) });
     expect(order).toEqual(["lookup", "audit", "setRole", "audit"]);
+  });
+
+  it("refuses an unknown support status without touching the database", async () => {
+    const result = await actions.setSupportStatusAction({
+      messageId: "00000000-0000-4000-8000-000000000000",
+      status: "deleted",
+    });
+    expect(result).toEqual({ ok: false, error: expect.any(String) });
+    expect(runPromiseExit).not.toHaveBeenCalled();
+  });
+
+  it("shows a missing support message as a plain error", async () => {
+    const { NotFound } = await import("@receipt-ocr/core");
+    runPromiseExit.mockResolvedValue(
+      Exit.fail(new NotFound({ message: "That message no longer exists." })),
+    );
+    const result = await actions.setSupportStatusAction({
+      messageId: "00000000-0000-4000-8000-000000000000",
+      status: "open",
+    });
+    expect(result).toEqual({ ok: false, error: "That message no longer exists." });
   });
 });
 

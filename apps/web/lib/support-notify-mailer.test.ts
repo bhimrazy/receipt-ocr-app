@@ -28,8 +28,7 @@ const notice = {
   name: "Ada",
   email: "me@example.com",
   kind: "question" as const,
-  message: "Hello there",
-  receiptId: null,
+  messageId: "0f8fad5b-d9cb-469f-a165-70867728950e",
   jobId: "job-1",
 };
 const send = () =>
@@ -54,6 +53,7 @@ describe("SupportNotifyMailerLive", () => {
       replyTo: "me@example.com",
       idempotencyKey: "job:job-1",
     });
+    expect(JSON.stringify(sendEmail.mock.calls[0][1])).toContain("/admin/support");
   });
 
   it("reports a send error as failed, so the job retries", async () => {

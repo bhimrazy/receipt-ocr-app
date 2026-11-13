@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { Conflict, DbError, InvalidInput, NotFound } from "./errors";
 import { Db } from "./services";
 
-export type AuditTarget = "user" | "workspace" | "settings" | "job";
+export type AuditTarget = "user" | "workspace" | "settings" | "job" | "support";
 
 /** Who made an admin change, and from where. */
 export type AuditActor = {

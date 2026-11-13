@@ -215,9 +215,8 @@ describe.skipIf(!enabled)("support messages against Postgres", () => {
       }),
     );
     expect(stats.runs.map((r) => r.outcome).sort()).toEqual(["succeeded", "succeeded"]);
-    expect(notices).toEqual([
-      expect.objectContaining({ message: "Please call me back", jobId: keptJob!.id }),
-    ]);
+    expect(notices).toEqual([expect.objectContaining({ messageId: kept.id, jobId: keptJob!.id })]);
+    expect(JSON.stringify(notices)).not.toContain("Please call me back");
   });
 
   it("deletes the account's messages by user id and by address, and nobody else's", async () => {

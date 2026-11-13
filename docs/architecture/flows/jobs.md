@@ -192,13 +192,27 @@ already cleaned by `greetingName` and the topic id, never the message. It is sen
 (`lib/contact-reply-mailer.ts`), 3 attempts. The kind sets `scrubPayload`, so `settle` replaces the payload with `{}` when the job
 succeeds or dies (a retry keeps it); the address and name are not kept in the `jobs` row.
 
-`email.support-notify` ([`kinds/support-notify.ts`](../../../packages/core/src/jobs/kinds/support-notify.ts)) mails a
+`email.support-notify` ([`kinds/support-notify.ts`](../../../packages/core/src/jobs/kinds/support-notify.ts)) mails a notice (kind, sender name, short id and a link to `/admin/support`, never the text) of a
 stored support message to `SUPPORT_EMAIL`, reply-to the sender. `submitSupportMessage` enqueues it in the transaction
 that inserts the `support_messages` row, so every stored message is notified. The payload is the row id only; the job
-reads the message at send time and succeeds without sending if the row is gone (the account was deleted). It is sent
+reads the row at send time and succeeds without sending if the row is gone (the account was deleted). It is sent
 through `SupportNotifyMailer` (`lib/support-notify-mailer.ts`), 10 attempts with backoff from 1 minute doubling to 1
 hour (about four hours of a provider outage). In production a missing `SUPPORT_EMAIL` counts as a failed send, so the
 job ends dead and shows in the jobs admin.
+
+`maintenance.purge` ([`kinds/maintenance-purge.ts`](../../../packages/core/src/jobs/kinds/maintenance-purge.ts))
+deletes data past its retention period: today `support_messages` 12 months after `closed_at`, or, while a message isn't
+closed, 12 months after the later of `created_at` and `updated_at`, so a reopened old message restarts its period
+(`purgeSupportMessages` in `support.ts`; the delete repeats the predicate, so a reopen committed meanwhile keeps the row).
+It runs once a day. The app has no scheduler of its own, so `drainQueue` (the drain route) first inserts the next day's
+run, due 00:00 UTC by the database clock and keyed `maintenance.purge:<that day>`; the key dedupes against the queued
+job, so every later drain's insert is a no-op, and keying by the next day stops a second run on the day one finished.
+Deletes go 500 rows per statement, at most 20 statements a run; the rest waits for the next day. Priority 9, 5
+attempts, payload `{}`.
+
+Cancelling a queued `maintenance.purge` doesn't stick: the key is free again, so the next drain queues it again. To stop
+it, pause the kind in `/admin/jobs`. After a rollback to a release without the kind, a due `maintenance.purge` job is
+never claimed (the old registry doesn't run it) and waits, queued, until the roll-forward.
 
 ## Tables
 

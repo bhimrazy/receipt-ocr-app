@@ -36,28 +36,18 @@ export const topicPhrase = (topic: string) =>
   isTopic(topic) ? TOPIC_PHRASES[topic] : TOPIC_PHRASES["getting-started"];
 
 /**
- * Support-inbox message; replies go to the sender. The subject uses a fixed label, never user
- * text. A receipt id is one the sender's workspace holds, linked so support can open it.
+ * Support-inbox notice with a link to the admin list; replies go to the sender. The subject uses a
+ * fixed label, never user text, and the message text stays in the database.
  */
 export function contactEmail(
   ctx: EmailContext,
-  input: {
-    to: string;
-    name: string;
-    from: string;
-    kind: SupportKind;
-    message: string;
-    receiptId: string | null;
-  },
+  input: { to: string; name: string; from: string; kind: SupportKind; messageId: string },
 ): SendEmailInput {
-  const message = input.receiptId
-    ? `${input.message}\n\nReceipt ${input.receiptId}\n${new URL(`/app/receipts/${input.receiptId}`, ctx.appUrl)}`
-    : input.message;
   const mail = supportMessageEmail(ctx, {
     senderName: input.name,
-    from: input.from,
     topicLabel: KIND_LABELS[input.kind],
-    message,
+    messageRef: input.messageId.slice(0, 8),
+    url: new URL("/admin/support", ctx.appUrl).toString(),
   });
   return { to: input.to, replyTo: input.from, ...mail };
 }
