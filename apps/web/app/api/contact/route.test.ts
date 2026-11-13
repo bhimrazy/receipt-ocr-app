@@ -1,37 +1,60 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const sendEmail = vi.fn();
 const env = vi.hoisted(() => ({
-  isProduction: false,
-  supportEmail: "help@example.com" as string | undefined,
   turnstile: { ok: true } as
     { ok: true } | { ok: false; reason: "missing" | "rejected" | "unavailable" },
 }));
 
-vi.mock("@receipt-ocr/email", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
-  sendEmail,
+type Submission = {
+  submissionId: string;
+  kind: string;
+  name: string;
+  email: string;
+  message: string;
+  sender: { userId: string; organizationId: string } | null;
+  receiptId: string | null;
+};
+const submitted = vi.hoisted(() => [] as Submission[]);
+const store = vi.hoisted(() => ({
+  result: null as unknown,
+  fail: false,
 }));
 const enqueued = vi.hoisted(() => [] as unknown[]);
 const allowContactReply = vi.fn<(email: string, ip: string | null) => Promise<boolean>>();
 vi.mock("@receipt-ocr/core", () => ({
   hitRateLimit: () => ({ limit: true }),
   enqueueContactReply: (payload: unknown) => ({ enqueue: payload }),
+  submitSupportMessage: (input: Submission) => ({ submit: input }),
 }));
 vi.mock("@/lib/runtime", () => ({
   runtime: {
-    runPromise: async (effect: { enqueue?: unknown }) => {
+    runPromise: async (effect: { enqueue?: unknown; submit?: Submission }) => {
       if (effect.enqueue) enqueued.push(effect.enqueue);
+      if (effect.submit) {
+        if (store.fail) throw new Error("db down");
+        submitted.push(effect.submit);
+        return (
+          store.result ?? {
+            kind: "stored",
+            id: "m1",
+            source: effect.submit.sender ? "help" : "public",
+            receiptId: null,
+          }
+        );
+      }
       return { allowed: true, retryAfterSeconds: 0 };
     },
   },
 }));
 vi.mock("@/lib/email-limits", () => ({ allowContactReply }));
 const RECEIPT = "0f8fad5b-d9cb-469f-a165-70867728950e";
-const senderReceipt = vi.fn<(value: unknown) => Promise<string | null>>();
-vi.mock("@/lib/support-receipt", () => ({ senderReceipt }));
-vi.mock("@/lib/mailer", () => ({ mailer: { replyTo: "help@example.com" } }));
+const SUBMISSION = "6f1c2b9e-1d1a-4c7e-9a43-1b2f0a7c5d10";
+const sender = vi.hoisted(() => ({
+  current: null as { userId: string; organizationId: string } | null,
+}));
+vi.mock("@/lib/support-sender", () => ({ supportSender: async () => sender.current }));
 const specs = vi.hoisted(() => [] as unknown[]);
+const events = vi.hoisted(() => [] as Record<string, unknown>[]);
 vi.mock("@/lib/http", () => ({
   clientIp: () => "1.1.1.1",
   crossOriginResponse: () => null,
@@ -41,24 +64,17 @@ vi.mock("@/lib/http", () => ({
     handler: (r: Request, c: unknown, e: Record<string, unknown>) => unknown,
   ) => {
     specs.push(spec);
-    return (request: Request, context?: unknown) => handler(request, context, { event: "test" });
+    return (request: Request, context?: unknown) => {
+      const event: Record<string, unknown> = { event: "test" };
+      events.push(event);
+      return handler(request, context, event);
+    };
   },
 }));
 vi.mock("@/lib/turnstile", () => ({ checkTurnstile: async () => env.turnstile }));
 vi.mock("@/lib/log", () => ({
   logger: { info: vi.fn(), error: vi.fn() },
-  errorFields: () => ({}),
-}));
-vi.mock("@/lib/env", () => ({
-  emailEnv: { resendApiKey: "key", from: "x <noreply@example.com>", replyTo: "help@example.com" },
-  emailContext: { appUrl: "https://app.test", supportEmail: "help@example.com" },
-  logUndeliveredMail: () => false,
-  get isProduction() {
-    return env.isProduction;
-  },
-  get supportEmail() {
-    return env.supportEmail;
-  },
+  errorFields: () => ({ type: "Error" }),
 }));
 
 const { POST } = await import("./route");
@@ -70,18 +86,20 @@ const valid = {
   email: "me@example.com",
   message: "Hello there, a question",
   topic: "feature",
+  submissionId: SUBMISSION,
 };
+const lastEvent = () => events.at(-1) ?? {};
 
 beforeEach(() => {
-  sendEmail.mockReset();
+  submitted.length = 0;
   enqueued.length = 0;
+  events.length = 0;
+  store.result = null;
+  store.fail = false;
+  sender.current = null;
   allowContactReply.mockReset();
   allowContactReply.mockResolvedValue(true);
-  env.isProduction = false;
-  env.supportEmail = "help@example.com";
   env.turnstile = { ok: true };
-  senderReceipt.mockReset();
-  senderReceipt.mockImplementation(async (value) => (value === RECEIPT ? RECEIPT : null));
 });
 
 describe("POST /api/contact", () => {
@@ -89,11 +107,11 @@ describe("POST /api/contact", () => {
     ["missing", 400],
     ["rejected", 403],
     ["unavailable", 503],
-  ] as const)("sends nothing when the Turnstile check is %s", async (reason, status) => {
+  ] as const)("stores nothing when the Turnstile check is %s", async (reason, status) => {
     env.turnstile = { ok: false, reason };
     const res = await post(valid);
     expect(res.status).toBe(status);
-    expect(sendEmail).not.toHaveBeenCalled();
+    expect(submitted).toEqual([]);
     expect(allowContactReply).not.toHaveBeenCalled();
     expect(enqueued).toEqual([]);
   });
@@ -122,7 +140,7 @@ describe("POST /api/contact", () => {
       }),
     );
     expect(streamed.status).toBe(413);
-    expect(sendEmail).not.toHaveBeenCalled();
+    expect(submitted).toEqual([]);
   });
 
   it("rejects a body that is not a JSON object", async () => {
@@ -133,121 +151,127 @@ describe("POST /api/contact", () => {
     expect(specs).toEqual([expect.objectContaining({ keepRateLimited: true })]);
   });
 
-  it("sends to the support inbox with the sender as reply-to", async () => {
-    sendEmail.mockResolvedValue({ delivered: true });
+  it("stores a visitor's message with its kind and submission id, unlinked", async () => {
     const res = await post(valid);
     expect(res.status).toBe(200);
-    const input = sendEmail.mock.calls[0][1];
-    expect(input).toMatchObject({ to: "help@example.com", replyTo: "me@example.com" });
-    expect(sendEmail.mock.calls[0][0]).toMatchObject({ replyTo: "help@example.com" });
-    expect(input.subject).toBe("[ReceiptOCR support] Feature request");
+    expect(submitted).toEqual([
+      {
+        submissionId: SUBMISSION,
+        kind: "feedback",
+        name: "Ada Lovelace",
+        email: "me@example.com",
+        message: "Hello there, a question",
+        sender: null,
+        receiptId: null,
+      },
+    ]);
+    expect(lastEvent()).toMatchObject({
+      outcome: "success",
+      kind: "feedback",
+      support_source: "public",
+    });
   });
 
-  it("names the sender in the support mail", async () => {
-    sendEmail.mockResolvedValue({ delivered: true });
-    await post(valid);
-    const input = sendEmail.mock.calls[0][1];
-    expect(input.text).toContain("From Ada Lovelace (me@example.com)");
+  it("gives a submission without a usable id a fresh one", async () => {
+    await post({ ...valid, submissionId: "not-a-uuid" });
+    await post({ ...valid, submissionId: undefined });
+    const [a, b] = submitted.map((s) => s.submissionId);
+    expect(a).toMatch(/^[0-9a-f-]{36}$/);
+    expect(b).toMatch(/^[0-9a-f-]{36}$/);
+    expect(a).not.toBe(b);
+  });
+
+  it("links a signed-in sender and passes a problem report's receipt for checking", async () => {
+    sender.current = { userId: "u1", organizationId: "o1" };
+    store.result = { kind: "stored", id: "m1", source: "receipt", receiptId: RECEIPT };
+    expect((await post({ ...valid, topic: "problem", receiptId: RECEIPT })).status).toBe(200);
+    expect(submitted[0]).toMatchObject({
+      kind: "problem",
+      sender: { userId: "u1", organizationId: "o1" },
+      receiptId: RECEIPT,
+    });
+    expect(lastEvent()).toMatchObject({ has_receipt: true, receipt_id: RECEIPT });
+  });
+
+  it("ignores a receipt sent with another topic", async () => {
+    sender.current = { userId: "u1", organizationId: "o1" };
+    await post({ ...valid, topic: "feature", receiptId: RECEIPT });
+    expect(submitted[0]?.receiptId).toBeNull();
+  });
+
+  it("answers a retried submission with 200 and queues no second auto-reply", async () => {
+    store.result = { kind: "duplicate" };
+    expect((await post(valid)).status).toBe(200);
+    expect(enqueued).toEqual([]);
+    expect(lastEvent()).toMatchObject({ outcome: "duplicate" });
+  });
+
+  it("refuses a signed-in sender over the daily cap with 429", async () => {
+    sender.current = { userId: "u1", organizationId: "o1" };
+    store.result = { kind: "rate-limited" };
+    const res = await post(valid);
+    expect(res.status).toBe(429);
+    expect(enqueued).toEqual([]);
+  });
+
+  it("asks for a retry when the message can't be stored", async () => {
+    store.fail = true;
+    const res = await post(valid);
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toMatch(/couldn't save/);
+    expect(enqueued).toEqual([]);
   });
 
   it.each([
     ["missing", { name: undefined }],
     ["blank", { name: " \n\t " }],
     ["too long", { name: "x".repeat(81) }],
-  ])("rejects a %s name and sends nothing", async (_label, override) => {
+  ])("rejects a %s name and stores nothing", async (_label, override) => {
     const res = await post({ ...valid, ...override });
     expect(res.status).toBe(400);
-    expect(sendEmail).not.toHaveBeenCalled();
+    expect(submitted).toEqual([]);
     expect(enqueued).toEqual([]);
   });
 
+  it.each([
+    ["an invalid email", { email: "nope" }],
+    ["an over-long email", { email: `${"a".repeat(320)}@example.com` }],
+    ["a display-name address", { email: "a<x@example.com>" }],
+    ["a quoted address", { email: '"x"@example.com' }],
+    ["an address with a query", { email: "x@example.com?cc=y" }],
+    ["a message under five characters", { message: "😀😀😀" }],
+  ])("rejects %s and stores nothing", async (_label, override) => {
+    expect((await post({ ...valid, ...override })).status).toBe(400);
+    expect(submitted).toEqual([]);
+  });
+
+  it("stores the address lowercased", async () => {
+    await post({ ...valid, email: "Me@Example.COM" });
+    expect(submitted[0]?.email).toBe("me@example.com");
+  });
+
   it("queues an auto-reply with the cleaned first name and no message text", async () => {
-    sendEmail.mockResolvedValue({ delivered: true });
     expect((await post({ ...valid, name: "Ada\u0007 Lovelace" })).status).toBe(200);
     expect(allowContactReply).toHaveBeenCalledWith("me@example.com", "1.1.1.1");
     expect(enqueued).toEqual([{ to: "me@example.com", name: "Ada", topic: "feature" }]);
   });
 
   it("greets a link-like name as 'there'", async () => {
-    sendEmail.mockResolvedValue({ delivered: true });
     await post({ ...valid, name: "https://evil.example/win" });
     expect(enqueued).toEqual([expect.objectContaining({ name: "there" })]);
   });
 
   it("still accepts the message when the auto-reply is over its cap, without queueing one", async () => {
-    sendEmail.mockResolvedValue({ delivered: true });
     allowContactReply.mockResolvedValue(false);
     expect((await post(valid)).status).toBe(200);
-    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(submitted).toHaveLength(1);
     expect(enqueued).toEqual([]);
   });
 
-  it("sends no auto-reply when the support mail failed in production", async () => {
-    env.isProduction = true;
-    sendEmail.mockResolvedValue({ delivered: false, reason: "failed" });
-    expect((await post(valid)).status).toBe(503);
-    expect(enqueued).toEqual([]);
-  });
-
-  it("escapes HTML in the message", async () => {
-    sendEmail.mockResolvedValue({ delivered: true });
-    await post({ ...valid, message: "<script>alert(1)</script>" });
-    expect(sendEmail.mock.calls[0][1].html).not.toContain("<script>");
-  });
-
-  it("returns an error in production when delivery fails", async () => {
-    env.isProduction = true;
-    sendEmail.mockResolvedValue({ delivered: false, reason: "failed" });
-    const res = await post(valid);
-    expect(res.status).toBe(503);
-    expect((await res.json()).error).toMatch(/couldn't send/);
-  });
-
-  it("returns an error in production when SUPPORT_EMAIL is unset", async () => {
-    env.isProduction = true;
-    env.supportEmail = undefined;
-    const res = await post(valid);
-    expect(res.status).toBe(503);
-    expect(sendEmail).not.toHaveBeenCalled();
-  });
-
-  it("simulates success outside production when no mailer delivers", async () => {
-    sendEmail.mockResolvedValue({ delivered: false, reason: "not_configured" });
-    expect((await post(valid)).status).toBe(200);
-  });
-
-  it("rejects an invalid email and sends nothing", async () => {
-    const res = await post({ ...valid, email: "nope" });
-    expect(res.status).toBe(400);
-    expect(sendEmail).not.toHaveBeenCalled();
-  });
-
-  it("drops honeypot submissions without sending", async () => {
+  it("drops honeypot submissions without storing", async () => {
     const res = await post({ ...valid, company: "Acme" });
     expect(res.status).toBe(200);
-    expect(sendEmail).not.toHaveBeenCalled();
+    expect(submitted).toEqual([]);
     expect(enqueued).toEqual([]);
-  });
-
-  it("links a problem report to the sender's receipt", async () => {
-    sendEmail.mockResolvedValue({ delivered: true });
-    const res = await post({ ...valid, topic: "problem", receiptId: RECEIPT });
-    expect(res.status).toBe(200);
-    expect(senderReceipt).toHaveBeenCalledWith(RECEIPT, expect.anything());
-    const input = sendEmail.mock.calls[0][1];
-    expect(input.subject).toContain("Problem report");
-    expect(input.text).toContain(`Receipt ${RECEIPT}`);
-    expect(input.text).toContain(`https://app.test/app/receipts/${RECEIPT}`);
-  });
-
-  it("leaves out a receipt the sender can't see, and ignores one on another topic", async () => {
-    sendEmail.mockResolvedValue({ delivered: true });
-    const other = "1f8fad5b-d9cb-469f-a165-70867728950e";
-    await post({ ...valid, topic: "problem", receiptId: other });
-    expect(sendEmail.mock.calls[0][1].text).not.toContain(other);
-
-    await post({ ...valid, topic: "feature", receiptId: RECEIPT });
-    expect(senderReceipt).toHaveBeenCalledTimes(1);
-    expect(sendEmail.mock.calls[1][1].text).not.toContain(RECEIPT);
   });
 });

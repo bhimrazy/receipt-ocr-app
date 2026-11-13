@@ -117,6 +117,13 @@ old files' on Postgres 17 and 18 apart from column order in two tables. Both dat
 reset. **From the first real user onward we never squash again.** Details:
 [data layer](architecture/db.md#migrations).
 
+## Launch blockers
+
+- Support messages retention: a `maintenance.purge` job for `support_messages` before launch. It covers closed messages
+  and unanswered public ones (anyone can store a message today), and the privacy page states the period.
+- Turnstile keys required in production for `/api/contact`: without them, `checkTurnstile` lets every request through
+  (`apps/web/lib/turnstile.ts`), so a script that rotates IPs can fill `support_messages`.
+
 ## Production to-dos (owner)
 
 Steps are in [deployment.md](deployment.md).
@@ -212,6 +219,7 @@ Open pull requests only.
 | #238 | Free at 30 a month, one Plan and billing page, upgrade ladder from 80%, marketing claims fixed                                                                                                                          |
 | #242 | Edge detection PR 1: `packages/vision` holds the capture geometry and the detector, moved with their tests; no behaviour change                                                                                         |
 | #245 | Edge detection PR 2: measurement harness in `packages/vision/bench` (synthetic scenes for the 16 categories, metrics, per-variant table, `baseline.json`, CI check), baseline recorded in the plan; no behaviour change |
+| #246 | Support messages stored in `support_messages` (migration 0006); `/api/contact` answers 200 and an `email.support-notify` job mails the inbox; per-user cap, deletion by user and address                                |
 | #240 | Navigation PR 4: slim Home with a This month card; the upload panel is hidden on phones, which keep the usage line and limit card                                                                                       |
 | #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                                                                                                               |
 
@@ -449,6 +457,11 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   quota statement profile (M4), an `ocr_call_status` lookup table (M1), dropping `user_credentials` and
   `storage_source` with BYOK (M6, L5), trigram search and admin indexes when they slow down (L2, L3), lock ordering
   between admin re-run and user retry (L4).
+- Support messages (from the [support data review](reviews/2026-11-13-support-data-cto.md)): `support_messages` is
+  stored; still to do are `/admin/support` (PR 3), the Resend bounce webhook and suppression table (PR 4, owner: later),
+  and the `maintenance.purge` job deleting closed messages 12 months after `closed_at` (PR 5, owner decision), then a
+  retention line on the privacy page. The notification mail carries the full message until the admin list lands (owner).
+  Once `sendEmail` takes an idempotency key, `SupportNotifyMailerLive` passes `job:{id}` (`SupportNotice.jobId`).
 - Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
   rows older than 90 days with a job kind in `packages/core/src/jobs` (there is no retention job yet), keeping the last
   pass and recent failures that the lockout reads; then update the privacy policy.

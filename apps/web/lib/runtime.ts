@@ -2,6 +2,7 @@ import "server-only";
 import { makeAppLayer } from "@receipt-ocr/core";
 import { Layer, ManagedRuntime } from "effect";
 import { ContactReplyMailerLive } from "./contact-reply-mailer";
+import { SupportNotifyMailerLive } from "./support-notify-mailer";
 import { WelcomeMailerLive } from "./welcome-mailer";
 
 /**
@@ -9,5 +10,5 @@ import { WelcomeMailerLive } from "./welcome-mailer";
  * on first use and shared by every request, instead of per call.
  */
 export const runtime = ManagedRuntime.make(
-  makeAppLayer(Layer.merge(WelcomeMailerLive, ContactReplyMailerLive)),
+  makeAppLayer(Layer.mergeAll(WelcomeMailerLive, ContactReplyMailerLive, SupportNotifyMailerLive)),
 );

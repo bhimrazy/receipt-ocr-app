@@ -663,6 +663,57 @@ export const billingEvents = pgTable(
   ],
 ).enableRLS();
 
+export const SUPPORT_KINDS = ["question", "problem", "feedback", "sales"] as const;
+export const SUPPORT_SOURCES = ["help", "receipt", "public"] as const;
+export const SUPPORT_STATUSES = ["new", "open", "closed"] as const;
+
+/**
+ * Every message sent through the support form, stored before any mail goes out. `email` is the
+ * reply address the sender typed; `message` is plain text that may quote receipt contents, so it
+ * never goes to logs or analytics. A retried submission reuses its `submission_id` and inserts
+ * nothing.
+ */
+export const supportMessages = pgTable(
+  "support_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id").notNull(),
+    kind: text("kind", { enum: SUPPORT_KINDS }).notNull(),
+    source: text("source", { enum: SUPPORT_SOURCES }).notNull(),
+    status: text("status", { enum: SUPPORT_STATUSES }).notNull().default("new"),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "set null",
+    }),
+    receiptId: uuid("receipt_id").references(() => receipts.id, { onDelete: "set null" }),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("support_messages_submission_idx").on(table.submissionId),
+    index("support_messages_status_created_idx").on(table.status, table.createdAt.desc()),
+    index("support_messages_user_created_idx")
+      .on(table.userId, table.createdAt)
+      .where(sql`${table.userId} is not null`),
+    // The set-nulls when a workspace or receipt is deleted.
+    index("support_messages_org_idx").on(table.organizationId),
+    index("support_messages_receipt_idx").on(table.receiptId),
+    // Account deletion also removes the signed-out messages sent from the account's address.
+    index("support_messages_email_idx").on(sql`lower(${table.email})`),
+    check("support_messages_kind_check", sql`kind in ('question', 'problem', 'feedback', 'sales')`),
+    check("support_messages_source_check", sql`source in ('help', 'receipt', 'public')`),
+    check("support_messages_status_check", sql`status in ('new', 'open', 'closed')`),
+    check("support_messages_name_check", sql`char_length(name) between 1 and 80`),
+    check("support_messages_email_check", sql`char_length(email) between 3 and 320`),
+    check("support_messages_message_check", sql`char_length(message) between 5 and 2000`),
+    check("support_messages_closed_check", sql`(status = 'closed') = (closed_at is not null)`),
+  ],
+).enableRLS();
+
 export const receiptsRelations = relations(receipts, ({ many, one }) => ({
   items: many(receiptItems),
   reviewer: one(user, { fields: [receipts.reviewedBy], references: [user.id] }),
@@ -752,6 +803,7 @@ export const schema = {
   billingSubscriptions,
   billingCheckouts,
   billingEvents,
+  supportMessages,
   receiptsRelations,
   receiptItemsRelations,
   // Better Auth tables (core + organization + admin plugins).

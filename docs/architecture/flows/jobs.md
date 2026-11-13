@@ -180,11 +180,19 @@ index and the stale rule ignore it.
 
 `email.contact-reply` ([`kinds/contact-reply.ts`](../../../packages/core/src/jobs/kinds/contact-reply.ts)) sends the
 "we got your message" reply to a contact-form sender. `/api/contact` queues it only after Turnstile passes and the
-support mail is sent, and only within `allowContactReply` in `lib/email-limits.ts`: 1 reply per address and 3 per IP a
+message is stored, and only within `allowContactReply` in `lib/email-limits.ts`: 1 reply per address and 3 per IP a
 day (hashed keys in `rate_limits`; a limiter failure skips the reply). The payload is the typed address, a first name
 already cleaned by `greetingName` and the topic id, never the message. It is sent through `ContactReplyMailer`
 (`lib/contact-reply-mailer.ts`), 3 attempts. The kind sets `scrubPayload`, so `settle` replaces the payload with `{}` when the job
 succeeds or dies (a retry keeps it); the address and name are not kept in the `jobs` row.
+
+`email.support-notify` ([`kinds/support-notify.ts`](../../../packages/core/src/jobs/kinds/support-notify.ts)) mails a
+stored support message to `SUPPORT_EMAIL`, reply-to the sender. `submitSupportMessage` enqueues it in the transaction
+that inserts the `support_messages` row, so every stored message is notified. The payload is the row id only; the job
+reads the message at send time and succeeds without sending if the row is gone (the account was deleted). It is sent
+through `SupportNotifyMailer` (`lib/support-notify-mailer.ts`), 10 attempts with backoff from 1 minute doubling to 1
+hour (about four hours of a provider outage). In production a missing `SUPPORT_EMAIL` counts as a failed send, so the
+job ends dead and shows in the jobs admin.
 
 ## Tables
 

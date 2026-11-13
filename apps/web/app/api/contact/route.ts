@@ -1,16 +1,15 @@
-import { enqueueContactReply, hitRateLimit } from "@receipt-ocr/core";
-import { greetingName, sendEmail } from "@receipt-ocr/email";
+import { randomUUID } from "node:crypto";
+import { enqueueContactReply, hitRateLimit, submitSupportMessage } from "@receipt-ocr/core";
+import { greetingName, isEmailAddress } from "@receipt-ocr/email";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { contactEmail, isTopic } from "@/lib/contact-mail";
+import { isTopic, topicKind } from "@/lib/contact-mail";
 import { allowContactReply } from "@/lib/email-limits";
-import { emailContext, isProduction, supportEmail } from "@/lib/env";
 import { clientIp, crossOriginResponse, withRequestEvent } from "@/lib/http";
 import { MAX_FORM_JSON_BYTES, readJson } from "@/lib/json-body";
 import { errorFields, logger, type WideEvent } from "@/lib/log";
-import { mailer } from "@/lib/mailer";
 import { runtime } from "@/lib/runtime";
-import { senderReceipt } from "@/lib/support-receipt";
+import { supportSender } from "@/lib/support-sender";
 import { checkTurnstile } from "@/lib/turnstile";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -26,7 +25,13 @@ type ContactPayload = {
   topic?: unknown;
   company?: unknown; // honeypot — humans never see or fill this
   receiptId?: unknown;
+  /** Client-generated per message, so a retried send stores it once. */
+  submissionId?: unknown;
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (value: unknown): value is string =>
+  typeof value === "string" && UUID_RE.test(value);
 
 export const POST = withRequestEvent(
   { event: "contact.submit", route: "/api/contact", keepRateLimited: true },
@@ -70,7 +75,7 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
 
   // One line: the name goes into the support mail's body and footer.
   const name = typeof data.name === "string" ? data.name.replace(/[\p{Cc}\s]+/gu, " ").trim() : "";
-  const email = typeof data.email === "string" ? data.email.trim() : "";
+  const email = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
   const message = typeof data.message === "string" ? data.message.trim() : "";
   const rawTopic = typeof data.topic === "string" ? data.topic.trim() : "";
   const topic = isTopic(rawTopic) ? rawTopic : "getting-started";
@@ -87,12 +92,14 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
     event.outcome = "name_too_long";
     return NextResponse.json({ error: "Name is too long" }, { status: 400 });
   }
-  if (!EMAIL_RE.test(email)) {
+  // isEmailAddress also refuses display-name forms (`a<x@y>`), which the templates would reject.
+  if (email.length > 320 || !EMAIL_RE.test(email) || !isEmailAddress(email)) {
     event.status_code = 400;
     event.outcome = "invalid_email";
     return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });
   }
-  if (message.length < 5) {
+  // In code points, as the table's check counts them.
+  if (Array.from(message).length < 5) {
     event.status_code = 400;
     event.outcome = "message_too_short";
     return NextResponse.json({ error: "Tell us a little more" }, { status: 400 });
@@ -117,30 +124,49 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
     return NextResponse.json({ error }, { status });
   }
 
-  const receiptId = topic === "problem" ? await senderReceipt(data.receiptId, event) : null;
-  const body = receiptId
-    ? `${message}\n\nReceipt ${receiptId}\n${new URL(`/app/receipts/${receiptId}`, emailContext.appUrl)}`
-    : message;
-
-  // Like auth mail: without a mailer, dev and CI simulate (and log) delivery, but production
-  // must not tell a visitor their message arrived when it didn't.
-  const delivered = supportEmail
-    ? (
-        await sendEmail(
-          mailer,
-          contactEmail(emailContext, { to: supportEmail, name, from: email, topic, message: body }),
-        )
-      ).delivered
-    : false;
-  if (!delivered && isProduction) {
+  const submissionId = isUuid(data.submissionId) ? data.submissionId : randomUUID();
+  const kind = topicKind(topic);
+  event.kind = kind;
+  const sender = await supportSender(event);
+  let stored;
+  try {
+    stored = await runtime.runPromise(
+      submitSupportMessage({
+        submissionId,
+        kind,
+        name,
+        email,
+        message,
+        sender,
+        receiptId:
+          topic === "problem" && typeof data.receiptId === "string" ? data.receiptId : null,
+      }),
+    );
+  } catch (error) {
     event.status_code = 503;
-    event.outcome = supportEmail ? "delivery_failed" : "support_email_not_configured";
+    event.outcome = "store_failed";
+    event.error = errorFields(error);
     return NextResponse.json(
-      { error: "We couldn't send your message right now. Please try again in a few minutes." },
+      { error: "We couldn't save your message right now. Please try again in a moment." },
       { status: 503 },
     );
   }
-  event.delivered = delivered;
+  if (stored.kind === "rate-limited") {
+    event.status_code = 429;
+    event.outcome = "user_rate_limited";
+    return NextResponse.json(
+      { error: "You've sent a lot of messages today. Try again tomorrow." },
+      { status: 429 },
+    );
+  }
+  if (stored.kind === "duplicate") {
+    event.status_code = 200;
+    event.outcome = "duplicate";
+    return NextResponse.json({ ok: true });
+  }
+  event.support_source = stored.source;
+  event.has_receipt = stored.receiptId !== null;
+  if (stored.receiptId) event.receipt_id = stored.receiptId;
   event.auto_reply = await queueAutoReply(email, name, topic, clientIp(request));
   event.status_code = 200;
   event.outcome = "success";

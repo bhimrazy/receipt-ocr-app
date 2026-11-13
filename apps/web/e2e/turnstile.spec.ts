@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import postgres from "postgres";
 import { PASSWORD, uniqueEmail } from "./helpers";
 
 // Needs a build with NEXT_PUBLIC_TURNSTILE_SITE_KEY set and a server with TURNSTILE_SECRET_KEY:
@@ -44,15 +45,22 @@ test.describe("with Turnstile on and a passing secret", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByLabel("Name", { exact: true })).toBeFocused();
     await dialog.getByLabel("Name", { exact: true }).fill("E2E Visitor");
-    await dialog.getByLabel("Email", { exact: true }).fill(uniqueEmail("turnstile-contact"));
+    const email = uniqueEmail("turnstile-contact");
+    await dialog.getByLabel("Email", { exact: true }).fill(email);
     await dialog.getByLabel("Message").fill("Does the contact form pass the check?");
     await expect(dialog.locator('[data-turnstile="ready"]')).toBeAttached({ timeout: 30_000 });
     const reply = page.waitForResponse("**/api/contact");
     await dialog.getByRole("button", { name: "Send message" }).click();
-    // No mailer here, and a production build won't pretend delivery: 503 means the check passed
-    // and only sending failed (a missing or rejected token would be 400 or 403).
-    expect((await reply).status()).toBe(503);
-    await expect(dialog.getByRole("alert")).not.toContainText("security check");
+    // A missing or rejected token is a 400 or 403 and stores nothing.
+    expect((await reply).status()).toBe(200);
+    await expect(dialog.getByRole("status")).toContainText("Your message is on its way");
+    const sql = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
+    try {
+      const rows = await sql`select kind, source from support_messages where email = ${email}`;
+      expect(rows).toEqual([{ kind: "question", source: "public" }]);
+    } finally {
+      await sql.end();
+    }
   });
 
   test("the product updates form passes the check and asks the visitor to check their inbox", async ({

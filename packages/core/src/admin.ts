@@ -16,6 +16,7 @@ import { Conflict, NotFound } from "./errors";
 import { clearGroupCreator } from "./groups";
 import type { PlanId } from "./plans";
 import { Db, Storage } from "./services";
+import { deleteSupportMessagesFrom } from "./support";
 import { errorFields } from "./telemetry/redact";
 
 /**
@@ -205,12 +206,14 @@ export const prepareUserDeletion = (userId: string, audit?: AuditActor) =>
 
       const keys = solo.length > 0 ? await objectKeysOf(tx, solo) : [];
       if (solo.length > 0) await tx.delete(organization).where(inArray(organization.id, solo));
+      const [target] = await tx
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1);
+      // Rows with this user_id go with the user (cascade); these are the ones sent signed out.
+      if (target) await deleteSupportMessagesFrom(tx, { userId, email: target.email });
       if (audit) {
-        const [target] = await tx
-          .select({ email: user.email })
-          .from(user)
-          .where(eq(user.id, userId))
-          .limit(1);
         await insertAudit(tx, {
           ...audit,
           action: "user.delete",

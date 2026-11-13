@@ -36,6 +36,7 @@ const tables = [
   "session",
   "step_up_codes",
   "step_up_events",
+  "support_messages",
   "two_factor",
   "user",
   "user_credentials",
@@ -65,7 +66,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is the baseline, billing, receipt review, receipt fields, billing checkouts and billing plan", () => {
+  it("is the baseline, billing, receipt review, receipt fields, billing checkouts, billing plan and support messages", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
     expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
       "0000_baseline",
@@ -74,6 +75,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "0003_receipt_fields",
       "0004_billing_checkouts",
       "0005_billing_plan",
+      "0006_support_messages",
     ]);
   });
 
@@ -118,6 +120,13 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "receipts_service_charge_check",
       "step_up_events_method_check",
       "step_up_events_outcome_check",
+      "support_messages_closed_check",
+      "support_messages_email_check",
+      "support_messages_kind_check",
+      "support_messages_message_check",
+      "support_messages_name_check",
+      "support_messages_source_check",
+      "support_messages_status_check",
     ]);
   });
 
@@ -141,6 +150,8 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     expect(def("billing_checkouts_provider_transaction_idx")).toMatch(
       /UNIQUE.*\(provider, provider_transaction_id\)/,
     );
+    // A retried support form submission stores one message.
+    expect(def("support_messages_submission_idx")).toMatch(/UNIQUE.*\(submission_id\)/);
   });
 
   it("types receipt_date as a date with a workspace index, and indexes the foreign keys deletes walk", async () => {
@@ -155,6 +166,8 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       ["jobs_user_id_idx", "user_id"],
       ["invitation_inviter_id_idx", "inviter_id"],
       ["admin_audit_log_actor_id_idx", "actor_id"],
+      ["support_messages_org_idx", "organization_id"],
+      ["support_messages_receipt_idx", "receipt_id"],
     ]) {
       expect(def(index!)).toMatch(new RegExp(`\\(${column}\\)$`));
     }

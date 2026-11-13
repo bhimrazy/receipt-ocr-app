@@ -5,6 +5,7 @@ export * from "./definition";
 export * from "./drain";
 export * from "./kinds/contact-reply";
 export * from "./kinds/receipt-extract";
+export { SUPPORT_NOTIFY, SupportNotifyMailer, type SupportNotice } from "./kinds/support-notify";
 export * from "./kinds/welcome-email";
 export * from "./queue";
 export * from "./receipt-extract-job";

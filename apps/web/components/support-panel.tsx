@@ -54,6 +54,8 @@ export default function SupportPanel({
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  // Kept across resends of an unchanged message, so a resend after a lost response stores it once.
+  const submissionId = useRef<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const ids = useId();
@@ -111,6 +113,7 @@ export default function SupportPanel({
       return;
     }
     setStatus("sending");
+    submissionId.current ??= crypto.randomUUID();
     const company =
       (event.currentTarget.elements.namedItem("company") as HTMLInputElement | null)?.value ?? "";
     try {
@@ -123,6 +126,7 @@ export default function SupportPanel({
           message,
           topic,
           company,
+          submissionId: submissionId.current,
           ...(aboutReceipt ? { receiptId } : {}),
         }),
       });
@@ -133,6 +137,7 @@ export default function SupportPanel({
       }
       setStatus("sent");
       setMessage("");
+      submissionId.current = null;
     } catch (err) {
       turnstile.reset();
       setStatus("error");
@@ -265,7 +270,10 @@ export default function SupportPanel({
                 rows={3}
                 placeholder={activeTopic.prompt}
                 value={message}
-                onChange={(event) => setMessage(event.target.value)}
+                onChange={(event) => {
+                  setMessage(event.target.value);
+                  submissionId.current = null;
+                }}
                 className={cn(
                   "w-full resize-none rounded-lg bg-background/60 px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground",
                   fieldClass,

@@ -9,7 +9,8 @@ vi.mock("./plan-copy", () => ({ welcomePlanLine: () => "plan line" }));
 
 const sendEmail = vi.fn();
 const content = { subject: "s", html: "<p>h</p>", text: "t" };
-vi.mock("@receipt-ocr/email", () => ({
+vi.mock("@receipt-ocr/email", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@receipt-ocr/email")>()),
   sendEmail: (...args: unknown[]) => sendEmail(...args),
   welcomeEmail: () => content,
   contactReplyEmail: () => content,
