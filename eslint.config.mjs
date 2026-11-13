@@ -27,7 +27,7 @@ const config = [
   },
   {
     // Server packages have no React; Effect's `Service.use(...)` is not a hook.
-    files: ["packages/{ai,bench,core,db,email,storage}/**"],
+    files: ["packages/{ai,bench,calendar,core,db,email,storage}/**"],
     rules: { "react-hooks/rules-of-hooks": "off" },
   },
 ];

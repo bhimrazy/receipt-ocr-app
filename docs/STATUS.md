@@ -125,7 +125,7 @@ Steps are in [deployment.md](deployment.md).
   `staging-db`, then `production-db`, then deploy production by hand straight away. The window between migration and
   deploy is in the [rollout notes](architecture/dates.md#migration-0003-rollout).
 - **By 2027-04-14: update the Bikram Sambat table for 2084.** That day the guard test in
-  `packages/core/src/calendar/bs.test.ts` turns CI red. Do the update once the 2084 almanac is approved
+  `packages/calendar/tests/bs.test.ts` turns CI red. Do the update once the 2084 almanac is approved
   ([runbook](architecture/dates.md#yearly-table-update-runbook)).
 - Migration `0002_receipt_review` (reviewed receipts): run **Database Migration** on `staging-db`, then
   `production-db`, before deploying the release that contains it. It adds two nullable columns, a foreign key and a
@@ -319,7 +319,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 13. In-app feedback: "Send feedback" in the account menu and Settings, "Your feedback" list, admin inbox with email
     replies; public board later ([feedback and requests](plans/2026-11-07-feedback-and-requests.md)).
 14. Dual-calendar dates and receipt fields. Track 1 (in review): migration `0003_receipt_fields` (new columns,
-    CHECKs `NOT VALID`, backfills), the vendored BS table and resolver in `@receipt-ocr/core/calendar`,
+    CHECKs `NOT VALID`, backfills), the vendored BS table and resolver in `@receipt-ocr/calendar`,
     `reviewReasons()` as the Needs review rule, BS-first display for BS receipts, the editor's AD/BS date and new
     fields, zod PATCH parsing, CSV `receipt_date_bs` and the new columns. Next: extraction v3 (`dates[]`, bill
     number, tax id, discount, service charge in the prompt and schema, benchmarked), migration `0004` validating

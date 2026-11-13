@@ -10,14 +10,14 @@ import {
   formatBs,
   isoToDayNumber,
   parseBsInput,
-} from "./bs";
+} from "../src/bs";
 import {
   BS_ANCHOR_AD,
   BS_FIRST_YEAR,
   BS_LAST_YEAR,
   BS_MONTH_DAYS,
   BS_OFFICIAL_THROUGH,
-} from "./bs-table";
+} from "../src/bs-table";
 
 const bs = (text: string) => {
   const [year, month, day] = text.split("-").map(Number) as [number, number, number];

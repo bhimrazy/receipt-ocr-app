@@ -1,7 +1,7 @@
 # Receipt dates and Bikram Sambat
 
 How a receipt's date is decided, stored and shown, and how the Bikram Sambat (BS) month table is kept current.
-The code is in [`packages/core/src/calendar`](../../packages/core/src/calendar); the columns are in the
+The code is in [`packages/calendar`](../../packages/calendar); the columns are in the
 [data model](data-model.md). Background and the decisions behind it:
 [dates and fields research](../reviews/2026-11-12-dates-and-fields-research.md) and the
 [extraction review](../reviews/2026-11-12-extraction-review.md#decision-table-resolver-packagescore-pure).
@@ -26,7 +26,7 @@ The code is in [`packages/core/src/calendar`](../../packages/core/src/calendar);
 ## The month table
 
 BS has no formula. Each year's month lengths (29 to 32 days) come from the almanac that the Nepal Panchang
-Nirnayak Bikas Samiti approves, one year ahead. [`bs-table.ts`](../../packages/core/src/calendar/bs-table.ts)
+Nirnayak Bikas Samiti approves, one year ahead. [`bs-table.ts`](../../packages/calendar/src/bs-table.ts)
 covers BS 2056 to 2090. Receipts can't be dated before 2000-01-01 (Poush 2056), so earlier years are left out.
 
 **Provenance, checked 2026-11-12.** Month lengths are facts. These three tables were compared year by year:
@@ -45,7 +45,7 @@ projected year gets `date_ambiguous`.
 
 ## Yearly table update (runbook)
 
-Due before 2027-04-14, when BS 2084 begins. From that day the guard test in `bs.test.ts` fails, because today is
+Due before 2027-04-14, when BS 2084 begins. From that day the guard test in `packages/calendar/tests/bs.test.ts` fails, because today is
 past the last day of `BS_OFFICIAL_THROUGH`.
 
 1. Once the Samiti approves year N+1, take its month lengths from two published almanacs (Hamro Patro, Nepali

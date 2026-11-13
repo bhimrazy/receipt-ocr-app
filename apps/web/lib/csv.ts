@@ -1,5 +1,5 @@
 import type { ReceiptExportRow, ReceiptWithItems } from "@receipt-ocr/core";
-import { bsDotted, printedBsDate } from "@receipt-ocr/core/calendar";
+import { bsDotted, printedBsDate } from "@receipt-ocr/calendar";
 
 const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
 

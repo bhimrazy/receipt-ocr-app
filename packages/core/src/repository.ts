@@ -44,8 +44,7 @@ import {
   type UsageWindow,
 } from "./usage";
 import { isUuid } from "./ids";
-import { asciiDigits } from "./calendar/bs";
-import { resolveReceiptDate, type PrintedDate } from "./calendar/resolve";
+import { asciiDigits, resolveReceiptDate, type PrintedDate } from "@receipt-ocr/calendar";
 import {
   isIsoDay,
   latestReceiptDate as latestReceiptDay,

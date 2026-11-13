@@ -2,13 +2,7 @@
 
 import { RECEIPT_CATEGORIES } from "@receipt-ocr/ai/categories";
 import type { ReceiptWithItems } from "@receipt-ocr/core";
-import {
-  adToBs,
-  bsIso,
-  bsToAd,
-  parseBsInput,
-  type ReceiptCalendar,
-} from "@receipt-ocr/core/calendar";
+import { adToBs, bsIso, bsToAd, parseBsInput, type ReceiptCalendar } from "@receipt-ocr/calendar";
 import { EARLIEST_RECEIPT_DATE, latestReceiptDate } from "@receipt-ocr/core/receipt-fields";
 import { Button } from "@receipt-ocr/ui/components/button";
 import {

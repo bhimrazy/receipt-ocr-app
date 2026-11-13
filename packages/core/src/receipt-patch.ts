@@ -1,7 +1,6 @@
 import { parseCategory } from "@receipt-ocr/ai/categories";
 import { z } from "zod";
-import { asciiDigits } from "./calendar/bs";
-import { RECEIPT_CALENDARS, type ReceiptCalendar } from "./calendar/resolve";
+import { asciiDigits, RECEIPT_CALENDARS, type ReceiptCalendar } from "@receipt-ocr/calendar";
 import { parseReceiptDate } from "./receipt-fields";
 
 /** Fields a user may correct on an extracted receipt. Amounts are `numeric(12,2)` literals; null clears a field. */

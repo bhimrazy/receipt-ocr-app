@@ -13,6 +13,7 @@ FROM base AS builder
 COPY package.json bun.lock bunfig.toml ./
 COPY apps/web/package.json apps/web/
 COPY packages/ai/package.json packages/ai/
+COPY packages/calendar/package.json packages/calendar/
 COPY packages/bench/package.json packages/bench/
 COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/

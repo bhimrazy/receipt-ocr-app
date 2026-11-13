@@ -24,7 +24,6 @@ export * from "./newsletter";
 export * from "./ocr";
 export * from "./pipeline";
 export * from "./quota";
-export * from "./calendar/index";
 export * from "./receipt-fields";
 export * from "./receipt-patch";
 export * from "./repository";
