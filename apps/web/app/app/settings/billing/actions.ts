@@ -5,6 +5,7 @@ import {
   hitRateLimit,
   providerErrorCode,
   UNVERIFIED_EMAIL,
+  type Conflict,
   type Forbidden,
 } from "@receipt-ocr/core";
 import { Cause, Effect, Exit, Option } from "effect";
@@ -142,7 +143,7 @@ export async function startCheckoutAction(
   if (Exit.isFailure(exit)) {
     const failure = failureOf(exit.cause);
     if (failure.tag === "Conflict")
-      return { ok: false, error: "This workspace is already on Pro." };
+      return { ok: false, error: (failure.error as Conflict).message };
     if (failure.tag === "NotConfigured") return { ok: false, error: "Paid plans aren't open yet." };
     if (failure.tag === "Forbidden") {
       return { ok: false, error: (failure.error as Forbidden).message };

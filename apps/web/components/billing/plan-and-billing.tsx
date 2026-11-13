@@ -40,7 +40,7 @@ function subscriptionNote(subscription: WorkspaceBilling): string | null {
     return until ? `Renews on ${until}.` : null;
   }
   if (subscription.status === "paused") {
-    return "This subscription is paused in Paddle; resume it from the portal or start a new one.";
+    return "This subscription is paused in Paddle, so Pro is off and nothing is charged. A new subscription can't start while it exists. Cancel it below, or use the support button to resume it.";
   }
   if (subscription.status === "past_due" && !subscription.revoked) {
     return `Pro ended on ${ended} because the payment didn't go through. Update the payment method to turn it back on.`;
@@ -129,7 +129,7 @@ export function PlanAndBilling(props: PlanAndBillingProps) {
 }
 
 function Subscription(props: PlanAndBillingProps & { subscription: WorkspaceBilling }) {
-  const { subscription, isBuyer, impersonating, portalAvailable, checkout } = props;
+  const { subscription, isBuyer, impersonating, portalAvailable } = props;
   const entitled = subscription.entitled;
   const portalOpen =
     entitled || subscription.status === "past_due" || subscription.status === "paused";
@@ -165,19 +165,7 @@ function Subscription(props: PlanAndBillingProps & { subscription: WorkspaceBill
       </div>
     ) : null;
   } else if (portalOpen) {
-    actions = (
-      <>
-        <PortalButtons canceling={subscription.cancelAtPeriodEnd} />
-        {subscription.status === "paused" && checkout ? (
-          <CheckoutButton
-            initialInterval={props.interval}
-            settings={checkout.settings}
-            testMode={checkout.testMode}
-            workspaceId={props.workspaceId}
-          />
-        ) : null}
-      </>
-    );
+    actions = <PortalButtons canceling={subscription.cancelAtPeriodEnd} />;
   } else {
     actions = <PortalButtons canceling />;
   }
@@ -230,6 +218,14 @@ function Plans(props: PlanAndBillingProps) {
     proAction = (
       <p className="text-sm text-muted-foreground">
         Billing is hidden while you are signed in as another user.
+      </p>
+    );
+  } else if (subscription?.checkoutBlocked) {
+    // A second subscription would charge alongside the one that still can.
+    proAction = (
+      <p className="text-sm text-muted-foreground">
+        This workspace still has a subscription in Paddle. Manage it under Subscription above
+        instead of starting another.
       </p>
     );
   } else if (checkout) {

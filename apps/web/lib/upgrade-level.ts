@@ -50,6 +50,8 @@ export type OfferInput = {
   checkout: { settings: CheckoutSettings; testMode: boolean } | null;
   /** Whether anyone may buy Pro now (`checkoutOpenToEveryone`); decides whether members hear about it. */
   openToEveryone: boolean;
+  /** The workspace has a subscription that can still charge (`workspaceCheckoutBlocked`): checkout is refused. */
+  checkoutBlocked: boolean;
   plans: PlanTable;
   workspaceId: string;
   workspaceName: string;
@@ -60,10 +62,12 @@ export type OfferInput = {
 /**
  * The one gate for every upgrade surface. Null for a workspace that isn't Free (comps
  * included), while an admin is signed in as someone, when the viewer can't buy (billing off,
- * or sandbox keys on the live site for a non-admin), and when every plan is paused.
+ * or sandbox keys on the live site for a non-admin), while the workspace has a subscription
+ * that can still charge (past due after grace, or paused), and when every plan is paused.
  */
 export function decideUpgradeOffer(input: OfferInput): UpgradeOffer | null {
   if (input.plan !== "free" || input.impersonating || !input.usage) return null;
+  if (input.checkoutBlocked) return null;
   const level = upgradeLevel(input.usage);
   if (!level) return null;
   if (input.owner ? !input.checkout : !input.openToEveryone) return null;
