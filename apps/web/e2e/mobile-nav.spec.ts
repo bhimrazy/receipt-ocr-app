@@ -41,6 +41,7 @@ test("tab bar moves between sections and marks the active one", async ({ page })
   await expect(tabs).toBeVisible();
   // The desktop sidebar's account menu is not shown on a phone.
   await expect(page.getByRole("button", { name: "Account menu" })).toBeHidden();
+  await expect(page.getByRole("link", { name: "Add receipts" })).toBeHidden();
 
   await expect(tabs.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
   await expect(tabs.getByRole("link", { name: "Scan" })).toHaveAttribute(

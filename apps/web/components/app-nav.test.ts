@@ -66,4 +66,8 @@ describe("phone navigation", () => {
     expect(backFor("/app/groups", "three")).toEqual({ href: "/app/history", label: "History" });
     expect(isActive("/app/groups", history, "three")).toBe(true);
   });
+
+  it("highlights no sidebar row on the upload page", () => {
+    expect(APP_NAV.some((item) => isActive("/app/upload", item))).toBe(false);
+  });
 });

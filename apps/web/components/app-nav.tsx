@@ -10,6 +10,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@receipt-ocr/ui/components/drawer";
+import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   ChevronLeft,
@@ -17,6 +18,7 @@ import {
   History,
   House,
   Loader2,
+  Plus,
   ScanLine,
   Settings,
   Tags,
@@ -51,7 +53,9 @@ export const ADMIN_NAV_ITEM: NavItem = { href: "/admin", label: "Admin", icon: S
 /** Opens the camera; depends on `/app/upload` handling `capture=1` (PR #47). */
 export const SCAN_HREF = "/app/upload?capture=1";
 
-const SCAN_ITEM: NavItem = { href: "/app/upload", label: "Scan", icon: ScanLine };
+const ADD_HREF = "/app/upload";
+
+const SCAN_ITEM: NavItem = { href: ADD_HREF, label: "Scan", icon: ScanLine };
 
 /**
  * The tab's icon, swapped for a spinner from the click until the next page is ready, so a
@@ -215,9 +219,28 @@ export function BottomTabBar({
   );
 }
 
+/** Desktop's way into `/app/upload`; phones have the Scan tab. Kept outside the nav so its list stays navigation. */
+export function AddReceiptsLink() {
+  const pathname = usePathname();
+  return (
+    <Link
+      aria-current={pathname === ADD_HREF ? "page" : undefined}
+      className={cn(
+        buttonVariants({ variant: "default" }),
+        "h-10 w-full justify-center gap-2 focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+      href={ADD_HREF}
+    >
+      <Plus aria-hidden="true" className="size-4" />
+      Add receipts
+    </Link>
+  );
+}
+
 export function AppSidebarNav({ showAdmin }: { showAdmin: boolean }) {
   return (
     <div className="flex flex-col gap-5">
+      <AddReceiptsLink />
       <SidebarNav items={APP_NAV} />
       {/* Platform tools sit apart, so a customer's own pages read as one group. */}
       {showAdmin ? (
