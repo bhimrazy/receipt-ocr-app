@@ -427,9 +427,10 @@ test("the full-size view zooms, pans and resets on a phone", async ({ page }) =>
   await touch("touchStart", [first, second]);
   await touch("touchStart", [first, second, third]);
   const held = (await placement(full)).scale;
-  await touch("touchEnd", [second, third]);
+  await touch("touchEnd", [first]);
   await touch("touchMove", [second, { ...third, y: third.y + 1 }]);
-  expect((await placement(full)).scale).toBeCloseTo(held, 2);
+  // A 1 px move changes the new pair's spread by about 1%; measuring from the old pair would jump 35%.
+  expect(Math.abs((await placement(full)).scale / held - 1)).toBeLessThan(0.02);
   await touch("touchEnd", []);
 
   // One finger drags; the edge can't come past the viewer's edge.
