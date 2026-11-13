@@ -135,7 +135,7 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   - In the logs, SQLSTATE `57014` is the statement timeout and `25P03` the idle-in-transaction one.
 - **Optional on Vercel:** `@vercel/functions`' `attachDatabasePool(pool)` keeps a Fluid instance alive until idle
   clients close. It isn't used; the timeouts above bound what a suspended socket can cost.
-- **Tests:** `src/pg.int.test.ts` runs the pool through a TCP proxy that models a transaction-mode pooler's backend
+- **Tests:** `tests/pg.int.test.ts` runs the pool through a TCP proxy that models a transaction-mode pooler's backend
   release and a dead socket (CI's integration job runs it). A CI job against a real PgBouncer in transaction mode is
   a possible follow-up.
 - **One `drizzle-orm` instance.** Consumers import operators from `@receipt-ocr/db`, not `drizzle-orm`, to avoid
@@ -150,7 +150,7 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   `authenticated`, and with RLS on and no policy they read and write no rows even if someone later grants them access.
   `service_role` bypasses RLS by design, so only removing `public` from the Data API's exposed schemas protects
   against a leaked service-role key. Do not add `FORCE ROW LEVEL SECURITY` (it would apply RLS to the owner the app
-  uses) and do not add policies unless the app starts using the Data API. `rls.test.ts` fails when a table lacks
+  uses) and do not add policies unless the app starts using the Data API. `tests/rls.test.ts` fails when a table lacks
   `.enableRLS()`, and `rls.int.test.ts` checks the migrated database, including that the app role owns every table.
 - **`user_credentials` and `receipts.storage_source` are unused.** Reserved for bring-your-own-key; nothing reads or
   writes them, and no encryption exists for the ciphertext column (see [byok-key-management.md](../byok-key-management.md)
