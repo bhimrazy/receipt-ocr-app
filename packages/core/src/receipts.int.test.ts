@@ -555,6 +555,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect((await list("Bhatbhateni Super Market")).total).toBe(2);
     expect((await list("bhat-bhateni supermarket")).total).toBe(2);
     expect((await list("भाटभटेनी")).total).toBe(1);
+    // A query of only punctuation has no key, so it matches the plain text alone, not every row.
+    for (const q of ["&", " & ", "&&"]) expect((await list(q)).total).toBe(0);
     await db((d) =>
       d.delete(receipts).where(
         inArray(
