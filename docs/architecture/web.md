@@ -299,9 +299,9 @@ To add a collection, such as guides at `/guides/<slug>`:
 2. Add `app/guides/page.tsx` (`ContentHubView`, `collectionMetadata`) and `app/guides/[slug]/page.tsx`
    (`generateStaticParams` from `pagesIn("guides")`, `dynamicParams = false`, `contentPageAt`, `contentMetadata`,
    `ContentPageView`). Copy the use-case routes.
-3. Add the paths to `CONTENT` in `e2e/seo.spec.ts` and to the sitemap list in `lib/seo-routes.test.ts`.
+3. Add the paths to `CONTENT` in `e2e/seo.spec.ts` and to the sitemap list in `tests/lib/seo-routes.test.ts`.
 
-Rules, checked by [`lib/content/content.test.ts`](../../apps/web/lib/content/content.test.ts):
+Rules, checked by [`tests/lib/content/content.test.ts`](../../apps/web/tests/lib/content/content.test.ts):
 
 - Full title at most 60 characters, description 120 to 155, both unique across the site; one unique h1.
 - `updated` is the page's own `YYYY-MM-DD` date (no time), used for the sitemap's `lastModified` and the
