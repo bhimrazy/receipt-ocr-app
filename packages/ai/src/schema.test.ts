@@ -22,8 +22,12 @@ const v3Reply = {
   items: [],
 };
 
-const v2Reply = (({ dates, invoiceNumber, merchantTaxId, discount, serviceCharge, ...rest }) =>
-  rest)(FIXTURE_RECEIPTS[0]!);
+const v2Reply = Object.fromEntries(
+  Object.entries(FIXTURE_RECEIPTS[0]!).filter(
+    ([key]) =>
+      !["dates", "invoiceNumber", "merchantTaxId", "discount", "serviceCharge"].includes(key),
+  ),
+);
 
 async function validate(version: "v2" | "v3", value: unknown, mode?: "no-bounds") {
   const schema = receiptRequestSchema(version, mode);
