@@ -645,7 +645,7 @@ function PillButton({
       aria-disabled={disabled || undefined}
       aria-label={label}
       className={cn(
-        "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-foreground outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-disabled:cursor-default aria-disabled:text-muted-foreground aria-disabled:hover:bg-transparent",
+        "inline-flex touch-manipulation min-h-11 min-w-11 items-center justify-center rounded-full text-foreground outline-none hover:bg-wash focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-disabled:cursor-default aria-disabled:text-muted-foreground aria-disabled:hover:bg-transparent",
         className,
       )}
       data-testid={testId}
