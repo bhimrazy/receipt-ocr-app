@@ -51,7 +51,7 @@ import {
 } from "@/lib/upload-prep";
 import { CropEditor } from "./crop-editor";
 import { FullScreen } from "./full-screen";
-import { FullSizeView, type FullSizeMode } from "./full-size-view";
+import { FullSizeView } from "./full-size-view";
 import { ResultPreview } from "./result-preview";
 import { Bytes, formatSize, SIZE_LABELS, SizePicker, Slot } from "./size-picker";
 
@@ -177,8 +177,8 @@ export default function ReviewSheet({
   const [size, setSize] = useState<SizeId>(() => remembered(SIZE_KEY, SIZE_IDS) ?? "recommended");
   const [sizeOpen, setSizeOpen] = useState(false);
   const [fullSize, setFullSize] = useState(false);
-  // Kept while the sheet is open, so reopening the full-size view shows the last zoom.
-  const [fullSizeMode, setFullSizeMode] = useState<FullSizeMode>("actual");
+  const inspectRef = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
   const primaryRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const job = useRef<{ token: string; cancel: () => void } | null>(null);
@@ -192,6 +192,13 @@ export default function ReviewSheet({
     [bitmap, edit],
   );
   const chosen = plan ? chosenOption(plan, size) : null;
+
+  // After the viewer closes, once the preview is no longer inert: focus can't land before that.
+  useEffect(() => {
+    if (fullSize || !returnFocus.current) return;
+    returnFocus.current = false;
+    inspectRef.current?.focus();
+  }, [fullSize]);
 
   // Decode the current image (one at a time: ten 12 MP bitmaps would not fit on a phone).
   useEffect(() => {
@@ -350,9 +357,14 @@ export default function ReviewSheet({
     setIndex((i) => Math.min(i, rest.length - 1));
   }
 
+  function closeFullSize() {
+    setFullSize(false);
+    returnFocus.current = true;
+  }
+
   /** Back one step, then close: the header arrow and Escape do the same. */
   function back() {
-    if (fullSize) setFullSize(false);
+    if (fullSize) closeFullSize();
     else if (step === "preview") setStep("adjust");
     else setConfirmClose(true);
   }
@@ -460,7 +472,12 @@ export default function ReviewSheet({
       <p aria-live="polite" className="sr-only">
         {adjusting ? "Crop" : "Preview"}
       </p>
-      <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-2 md:hidden">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2 border-b border-border px-2 py-2 md:hidden",
+          fullSize && "hidden",
+        )}
+      >
         <Button
           aria-label={adjusting ? "Back without uploading" : "Back to adjust corners"}
           onClick={back}
@@ -487,7 +504,11 @@ export default function ReviewSheet({
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div
-          className="relative h-[clamp(12rem,40svh,34rem)] shrink-0 bg-muted/40 md:h-auto md:min-w-0 md:flex-1"
+          className={cn(
+            "relative shrink-0 bg-muted/40 md:h-auto md:min-w-0 md:flex-1",
+            // On a phone the full-size view takes the whole screen; on desktop the stage.
+            fullSize ? "max-md:flex-1" : "h-[clamp(12rem,40svh,34rem)]",
+          )}
           data-testid="stage"
         >
           <div className="absolute inset-0 flex flex-col">
@@ -498,22 +519,26 @@ export default function ReviewSheet({
             ) : bitmap && edit ? (
               adjusting ? (
                 <CropEditor bitmap={bitmap} edit={edit} onChange={update} />
-              ) : fullSize ? (
-                <FullSizeView
-                  failed={chosenFailure !== undefined}
-                  file={chosenFile}
-                  mode={fullSizeMode}
-                  onDone={() => setFullSize(false)}
-                  onModeChange={setFullSizeMode}
-                  url={uploadUrl}
-                />
               ) : (
-                <ResultPreview
-                  bitmap={bitmap}
-                  edit={edit}
-                  onInspect={() => setFullSize(true)}
-                  upload={uploadUrl}
-                />
+                <>
+                  <div className="size-full" inert={fullSize}>
+                    <ResultPreview
+                      bitmap={bitmap}
+                      edit={edit}
+                      inspectRef={inspectRef}
+                      onInspect={() => setFullSize(true)}
+                      upload={uploadUrl}
+                    />
+                  </div>
+                  {fullSize ? (
+                    <FullSizeView
+                      failed={chosenFailure !== undefined}
+                      file={chosenFile}
+                      onDone={closeFullSize}
+                      url={uploadUrl}
+                    />
+                  ) : null}
+                </>
               )
             ) : (
               <p className="m-auto flex items-center gap-2 text-sm text-muted-foreground">
@@ -528,7 +553,12 @@ export default function ReviewSheet({
           </div>
         </div>
 
-        <div className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col overflow-y-auto gap-3 px-3 pt-3 pb-3 md:max-w-none md:flex-none md:basis-88 md:border-l md:border-border md:p-5">
+        <div
+          className={cn(
+            "mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col overflow-y-auto gap-3 px-3 pt-3 pb-3 md:max-w-none md:flex-none md:basis-88 md:border-l md:border-border md:p-5",
+            fullSize && "max-md:hidden",
+          )}
+        >
           <div className="hidden items-start gap-2 md:flex">
             <Button
               aria-label={adjusting ? "Back without uploading" : "Back to adjust corners"}
@@ -680,11 +710,7 @@ export default function ReviewSheet({
                 ) : null}
                 <p className="h-12">
                   {plan?.long ? "Long receipt: sent at the highest size the model reads. " : null}
-                  {!fullSize
-                    ? "Tap the preview to see exactly what uploads."
-                    : fullSizeMode === "actual"
-                      ? "One pixel of the upload per screen pixel. Drag to look around."
-                      : "The whole upload, as it will be sent. Actual pixels shows the detail."}
+                  {fullSize ? null : "Tap the preview to see exactly what uploads."}
                   {edit?.filter === "bw"
                     ? chosen?.id === "compact" || chosen?.id === "smaller"
                       ? ` At ${SIZE_LABELS[chosen.id]}, B&W can lose light print.`
