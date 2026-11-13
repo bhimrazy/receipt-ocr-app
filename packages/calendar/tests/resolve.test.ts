@@ -19,7 +19,7 @@ const result = (
   reasons: ResolvedDate["reasons"] = [],
 ): ResolvedDate => ({ date: value, calendar, reasons });
 
-// Rows of the decision table in docs/reviews/2026-11-12-extraction-review.md, section 2.
+// One row per case of the resolver's decision table.
 describe("resolveReceiptDate", () => {
   it.each<[string, Partial<DateEvidence>, ResolvedDate]>([
     [

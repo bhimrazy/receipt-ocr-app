@@ -83,7 +83,7 @@ const shared: Pair[] = [
   ]),
 ];
 
-// Light also clears the tinted chips and rows, and the gradient stops, as the spec's table lists.
+// Light also clears the tinted chips and rows, and the gradient stops.
 const lightOnly: Pair[] = [
   ["primary", "background", TEXT],
   ["primary", "primary/10", TEXT],

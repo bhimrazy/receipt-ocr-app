@@ -455,9 +455,9 @@ describe("detectQuad on bench receipts", () => {
 });
 
 /**
- * A crumpled light receipt on a dark table, the shape the owner hit: the crop spilled past the
+ * A crumpled light receipt on a dark table, where the crop spills past the
  * paper in a strip on the left and bottom. Two causes reproduce it, and both are known limits of
- * a four-corner detector on a thresholded mask (see docs/STATUS.md):
+ * a four-corner detector on a thresholded mask:
  *
  * - Crumpled sides bow inward between the corners. The detector keeps the true corners, so the
  *   straight sides of the quad cut across the bow and take in a strip of table. No quad can

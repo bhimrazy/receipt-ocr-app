@@ -416,8 +416,8 @@ export const jobControls = pgTable("job_controls", {
 
 /**
  * Reserved for user-provided BYOK credentials. Nothing reads or writes this
- * table yet, and no encryption for `ciphertext` exists: implement it (see
- * docs/byok-key-management.md) before storing any secret here.
+ * table, and `ciphertext` has no encryption: add it (see docs/byok-key-management.md)
+ * before storing any secret here.
  */
 export const userCredentials = pgTable(
   "user_credentials",

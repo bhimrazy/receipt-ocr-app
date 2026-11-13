@@ -70,7 +70,7 @@ describe("bsToAd and adToBs", () => {
   });
 
   it.each([
-    // The owner's receipts (dual-calendar plan, section 7.3).
+    // Dates from receipts that print both calendars.
     ["2080-06-20", "2023-10-07"],
     ["2080-10-15", "2024-01-29"],
     ["2080-04-09", "2023-07-25"],

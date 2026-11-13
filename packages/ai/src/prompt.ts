@@ -32,7 +32,7 @@ export type Prompt = {
   fileFirst: boolean;
 };
 
-// Field-tested: an IDR receipt reading 31.000 (31 thousand) came back as 31.00. Three-decimal currencies are the exception.
+// Without this rule an IDR receipt reading 31.000 (31 thousand) comes back as 31.00. Three-decimal currencies are the exception.
 const NUMBER_RULE =
   "Numbers use locale-specific separators. Decide from the receipt's own locale and currency whether '.' or ',' is the decimal mark, and emit every amount as a plain number with a '.' decimal point and no grouping separators. A trailing group of exactly three digits after a separator is almost always thousands, not cents (IDR \"25.000\" is 25000), unless the currency has three minor-unit digits: for KWD, BHD, OMR, JOD, TND and LYD (judge by symbol, code such as KD, BD, RO, JD or DT, or country), three digits after the decimal mark are the fraction (KWD \"1.250\" is 1.25, \"1,250.500 KD\" is 1250.5).";
 

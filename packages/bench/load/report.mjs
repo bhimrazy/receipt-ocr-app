@@ -281,7 +281,6 @@ const result = {
 };
 writeFileSync(`${prefix}.json`, JSON.stringify(result, null, 2));
 
-// ---- Markdown ----
 const ms = (v) => (v === null || v === undefined ? "n/a" : `${v}`);
 const line = (cells) => `| ${cells.join(" | ")} |`;
 const md = [];
