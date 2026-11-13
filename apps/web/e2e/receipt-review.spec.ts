@@ -82,7 +82,7 @@ test("saving a correction marks the receipt checked and clears its line warnings
   const lineNote = page.getByText("Marked lines were hard to read.");
 
   await page.goto("/app/receipts?status=needs-review");
-  await expect(page.getByText("Edit Review Shop")).toBeVisible();
+  await expect(page.getByText("Edit Review Shop").filter({ visible: true }).first()).toBeVisible();
   await page.goto(`/app/receipts/${id}`);
   await expect(card).toContainText("No date was found.");
   await expect(lineWarning).toBeVisible();
