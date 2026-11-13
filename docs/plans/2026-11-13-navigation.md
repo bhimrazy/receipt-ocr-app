@@ -2,12 +2,12 @@
 
 Status: spec, not built. Implements the navigation target the owner approved on 2026-11-12 (finding 4 of
 `docs/reviews/2026-11-12-design-critique.md`, with findings 3 and 7 where they touch navigation). Written from the code
-on `main` at `a911a84`; no screenshots were taken for it.
+on `main` at `a911a84`; no screenshots were taken for it. Owner decisions recorded 2026-11-13 (end of file).
 
 ## Goal
 
 People find their receipts under **Receipts**, their totals under **Spending**, and on Home only what needs them and
-what happened lately. Every old URL keeps working. Nothing new is stored: Spending reuses `getSpendView()` and
+what happened lately. Nothing new is stored: Spending reuses `getSpendView()` and
 `SpendDashboardView` as they are.
 
 Out of scope: the list, row and header badges and BS/AD dates (PR #224 owns them), the phone filter sheet (finding 7),
@@ -73,26 +73,41 @@ group totals (finding 8), the Settings split (finding 9).
 Tab bar: Home · Receipts · Scan (raised, centre) · Spending · Settings, five slots of 78 px by 64 px at 390. Groups
 leaves the bar. Admin stays in the account sheet.
 
-## Route changes and redirects
+## Route changes (no redirects)
 
-All redirects are in `next.config.ts` `redirects()`, which keeps the query string. Use `permanent: false` (307) until
-launch, so the change stays reversible without browsers caching a 308; switch to `true` after launch (decision 3).
+Decided 2026-11-13: there are no users yet, so the old URLs are removed outright. No `next.config.ts` redirects and no
+forwarding of old `/app?range=…` dashboard links. `/app/history` and `/app/groups` return the app's 404 after PR 1, and
+`/app?range=…` simply shows Home after PR 4. Old bookmarks, sign-in `?redirect=` links and installed-PWA shortcuts
+("History", `/app/history`) break until the browser refreshes the manifest, which can take days. This is accepted
+before launch.
 
-| Old URL                       | New URL                      | Why it must keep working                                 |
-| ----------------------------- | ---------------------------- | -------------------------------------------------------- |
-| `/app/history` (any query)    | `/app/receipts` (same query) | Bookmarks, installed PWA shortcuts, sign-in `?redirect=` |
-| `/app/groups` (any query)     | `/app/receipts/groups`       | Bookmarks; `?upgrade=1&via=email` links                  |
-| `/app?range=…` (dashboard qs) | `/app/spending?…`            | Bookmarked dashboard ranges                              |
+| Old URL                 | New URL                | Done in |
+| ----------------------- | ---------------------- | ------- |
+| `/app/history`          | `/app/receipts`        | PR 1    |
+| `/app/groups`           | `/app/receipts/groups` | PR 1    |
+| `/app?range=…` (and co) | `/app/spending?…`      | PR 3    |
 
-- The third one goes in the Home page itself: if any of `range`, `from`, `to`, `compare`, `currency` is present, call
-  `redirect()` to `/app/spending` with those params. `next.config` can't match "any of" without five rules.
-- Installed PWAs keep the old manifest shortcut ("History", `/app/history`) until the browser refreshes the manifest,
-  which can take days. Keep the `/app/history` redirect indefinitely; it costs nothing.
-- Update in the same PR: `historyHref`/`exportHref` (`components/history/history-href.ts`), `groups/hrefs.ts`, the
-  ToCheck links on Home, `receipt-actions.tsx`, `receipt-result.tsx`, `upload-panel.tsx`, `empty-states.tsx`,
-  `group-filter.tsx`, `app/manifest.ts` (shortcut name "Receipts"), `logPageRender` route names, the `/app/groups/:id`
-  pattern in `lib/telemetry/scrub.ts`, and the e2e specs. Old route names stop appearing in telemetry; note it in the PR.
-- `components/dashboard/links.ts`: rename `homeHref` to `spendingHref` and point it at `/app/spending`.
+So each build PR updates every internal reference in the same change:
+
+- Nav and links: `app-nav.tsx` (`APP_NAV`, `isActive`, `backFor`, `labelFor`), `historyHref`/`exportHref`
+  (`components/history/history-href.ts`), `groups/hrefs.ts`, the ToCheck and Recent links on Home,
+  `receipt-actions.tsx`, `receipt-result.tsx`, `upload-panel.tsx`, `dashboard/empty-states.tsx`, `group-filter.tsx`.
+- `components/dashboard/links.ts`: rename `homeHref` to `spendingHref` and point it at `/app/spending` (PR 3).
+- `app/manifest.ts`: the shortcut becomes "Receipts", `/app/receipts`. The share target (`/share-target`, sending to
+  `/app/upload?shared=1` in `public/sw.js`) and the email templates (`/app/upload`) don't name the old paths; check
+  again in the PR.
+- `logPageRender` route names and the `/app/groups/:id` pattern in `lib/telemetry/scrub.ts`. Old route names stop
+  appearing in telemetry; say so in the PR.
+- Tests: the e2e specs (`smoke`, `mobile-nav`, `app-shell-phone`, `groups`, `history-bulk`, `pwa`, `seo`, `upgrade`,
+  `receipt-review`) and unit tests (`app-nav`, `list-view`, `receipts`, `proxy`, `redirect`, `pwa`, `use-online`,
+  `empty-states`; the last few use the path only as sample input but should match the app).
+- Living docs: `docs/architecture/web.md` and `docs/STATUS.md`. Dated plans and reviews stay as written.
+- PR checklist: these must print nothing, the first from PR 1 on and the second from PR 3 on.
+
+  ```bash
+  git grep -nE '/app/(history|groups)' -- apps packages docs/architecture docs/STATUS.md
+  git grep -nE 'homeHref|"/app\?' -- apps/web
+  ```
 
 ## Navigation components (`components/app-nav.tsx`)
 
@@ -198,35 +213,32 @@ picks files. Status text stays "Scanning".
 - Tap targets: tabs 78×64 px at 390; the Groups back link and "See spending" use `max-md:min-h-11`.
 - Contrast: the button uses `bg-primary text-primary-foreground`, already AA in both themes. Check light mode on the
   sidebar's `bg-sidebar`.
-- A 307 to `/app/receipts` keeps the history entry single: Back from Receipts does not bounce through `/app/history`.
 
 ## Build: PRs that merge independently
 
-Each PR is screenshot at 390 (light, dark) and 1440 (where it differs), and each keeps every old URL working.
+Each PR is screenshot at 390 (light, dark) and 1440 (where it differs), and leaves no link to a removed URL.
 
 1. **Rename History to Receipts and move Groups under it** (S–M). Move `history/` to `receipts/page.tsx` and `groups/`
-   to `receipts/groups/`; redirects 1 and 2; `APP_NAV` without Groups (Home, Receipts, Settings; still four slots
-   with Scan); remove the "three" layout; `isActive`, `backFor`, `labelFor`; every href in the list above; manifest;
-   Settings "Groups" row; Groups back link; e2e specs. Rebase after #224 merges, since both touch
+   to `receipts/groups/`; `APP_NAV` without Groups (Home, Receipts, Settings; still four slots
+   with Scan); remove the "three" layout; `isActive`, `backFor`, `labelFor`; every reference in the list above, then the grep check;
+   Settings "Groups" row; Groups back link. Rebase after #224 merges, since both touch
    `history-results.tsx`, `mobile-nav.spec.ts` and `receipt-review.spec.ts`.
 2. **Add receipts in the sidebar, one verb** (S). The sidebar button; upload page title "Add receipts". Independent
    of 1.
 3. **Spending page** (M, after 1, which frees the tab slot). `app/app/spending/{page,loading}.tsx`, `spendingHref`,
-   the no-receipts empty state, redirect 3 from `/app?range=…`, and Spending in `APP_NAV` (five slots with Scan). Home
+   the no-receipts empty state, and Spending in `APP_NAV` (five slots with Scan). Home
    still shows its dashboard until PR 4, so Spending can ship and be checked on its own.
 4. **Slim Home** (M, after 3). Remove the dashboard from Home, add the This month card and the two-column layout, hide
    the upload panel below `md` in a non-empty workspace, one-line empty-state description. Touches `app/app/page.tsx`,
    so it rebases after #224 (ToCheck copy).
 
-## Owner decisions
+## Decided (owner, 2026-11-13)
 
-1. **Desktop Home keeps a compact upload panel**, beside the sidebar button. Recommended: yes. Dragging files onto
-   Home is the fastest desktop path, and the panel carries the at-limit and upgrade state. Without it, Home is the
-   to-do list only.
-2. **Groups URL becomes `/app/receipts/groups`**, with a redirect from `/app/groups`. Recommended: yes, so the URL
-   matches where the nav puts it. The alternative keeps `/app/groups` and only changes which tab lights up: less churn,
-   but a page under Receipts with a URL outside it.
-3. **Redirects stay temporary (307) until launch**, then become permanent. Recommended: yes; it keeps the rename
-   reversible while the nav is still settling. The app is `noindex`, so search ranking is not a factor.
-4. **Spending v1 is the existing dashboard, moved unchanged.** Recommended: yes. "By day of the week" is the weakest
-   card and could go, but cutting it is a separate call once Spending has its own page.
+1. **Desktop Home keeps a compact upload panel** beside the sidebar button: dragging files onto Home is the fastest
+   desktop path, and the panel carries the at-limit and upgrade state. Hidden below `md`.
+2. **Groups lives at `/app/receipts/groups`**, so the URL matches where the nav puts it.
+3. **No redirects.** There are no users yet, so `/app/history` and `/app/groups` are dropped outright and every internal
+   reference moves with them (see "Route changes").
+4. **Spending v1 is the existing dashboard, moved unchanged.** Whether to cut "By day of the week" is a later call.
+
+No open owner decisions remain for this spec.
