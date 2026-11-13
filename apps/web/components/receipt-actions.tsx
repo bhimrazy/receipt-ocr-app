@@ -123,9 +123,12 @@ export function ReceiptActions({
   const confirmAfterSheet = useRef(false);
   const reportAfterSheet = useRef(false);
   const completed = receipt.status === "completed";
-  // After the menu or sheet has returned focus to its trigger, so closing the form goes back there.
-  const reportProblem = () =>
-    setTimeout(() => openSupportWidget("problem", { receiptId: receipt.id }), 0);
+  const sheetTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  // Opens once the menu or sheet has closed, so it doesn't take focus back from the form; closing
+  // the form returns focus to that trigger.
+  const reportProblem = (returnFocus: HTMLElement | null) =>
+    setTimeout(() => openSupportWidget("problem", { receiptId: receipt.id, returnFocus }), 0);
 
   async function copyJson() {
     try {
@@ -169,7 +172,16 @@ export function ReceiptActions({
   const sheet = (
     <Drawer onOpenChange={setSheetOpen} open={sheetOpen}>
       <AppBarActions>
-        <DrawerTrigger render={<Button aria-label="Receipt actions" size="icon" variant="ghost" />}>
+        <DrawerTrigger
+          render={
+            <Button
+              aria-label="Receipt actions"
+              ref={sheetTriggerRef}
+              size="icon"
+              variant="ghost"
+            />
+          }
+        >
           <MoreHorizontal aria-hidden="true" className="size-5" />
         </DrawerTrigger>
       </AppBarActions>
@@ -182,7 +194,7 @@ export function ReceiptActions({
           }
           if (reportAfterSheet.current) {
             reportAfterSheet.current = false;
-            reportProblem();
+            reportProblem(sheetTriggerRef.current);
             return true;
           }
           if (!focusForm.current) return true;
@@ -260,7 +272,7 @@ export function ReceiptActions({
   );
 
   const reportItem = (
-    <DropdownMenuItem onClick={reportProblem}>
+    <DropdownMenuItem onClick={() => reportProblem(menuTriggerRef.current)}>
       <LifeBuoy aria-hidden="true" />
       Report a problem
     </DropdownMenuItem>
@@ -274,7 +286,13 @@ export function ReceiptActions({
   const moreTrigger = (
     <DropdownMenuTrigger
       render={
-        <Button aria-label="More actions" className="max-md:hidden" size="icon" variant="outline" />
+        <Button
+          aria-label="More actions"
+          className="max-md:hidden"
+          ref={menuTriggerRef}
+          size="icon"
+          variant="outline"
+        />
       }
     >
       <MoreHorizontal aria-hidden="true" />

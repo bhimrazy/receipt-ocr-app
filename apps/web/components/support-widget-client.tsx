@@ -39,10 +39,11 @@ export function SupportWidgetClient({
   // An open panel keeps the install sheet away.
   useHoldBottom("support", open);
 
-  const openWidget = useCallback((nextTopic?: SupportTopic, nextReceiptId?: string) => {
-    if (nextTopic) setTopic(nextTopic);
-    setReceiptId(nextReceiptId);
-    returnFocusRef.current = (document.activeElement as HTMLElement | null) ?? launcherRef.current;
+  const openWidget = useCallback((detail: SupportOpenDetail = {}) => {
+    if (detail.topic) setTopic(detail.topic);
+    setReceiptId(detail.receiptId);
+    returnFocusRef.current =
+      detail.returnFocus ?? (document.activeElement as HTMLElement | null) ?? launcherRef.current;
     setOpened(true);
     setOpen(true);
   }, []);
@@ -66,10 +67,7 @@ export function SupportWidgetClient({
   }, [opened, attempt]);
 
   useEffect(() => {
-    const onOpen = (event: Event) => {
-      const detail = (event as CustomEvent<SupportOpenDetail>).detail;
-      openWidget(detail?.topic, detail?.receiptId);
-    };
+    const onOpen = (event: Event) => openWidget((event as CustomEvent<SupportOpenDetail>).detail);
     window.addEventListener(SUPPORT_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(SUPPORT_OPEN_EVENT, onOpen);
   }, [openWidget]);
