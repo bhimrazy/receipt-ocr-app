@@ -38,12 +38,13 @@ From `@receipt-ocr/db` ([`src/index.ts`](../../packages/db/src/index.ts)):
 
 ## Migrations
 
-| File                                                                              | What it holds                                                                                                                                                               |
-| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`0000_baseline.sql`](../../apps/web/drizzle/0000_baseline.sql)                   | Every table, enum, index, `CHECK` and foreign key, `ENABLE ROW LEVEL SECURITY` on all 23 tables; hand-written: `lock_timeout` first and the `jobs` storage parameters last  |
-| [`0001_billing.sql`](../../apps/web/drizzle/0001_billing.sql)                     | `billing_events` and `billing_subscriptions`, `ocr_rounds.plan`, and `ocr_rounds_org_created_at_idx` in place of `ocr_rounds_organization_id_idx`                           |
-| [`0002_receipt_review.sql`](../../apps/web/drizzle/0002_receipt_review.sql)       | `receipts.reviewed_at`, `reviewed_by` (foreign key to `user`, set null) and the partial `receipts_reviewed_by_idx`; `lock_timeout` first                                    |
-| [`0004_billing_checkouts.sql`](../../apps/web/drizzle/0004_billing_checkouts.sql) | `billing_checkouts` (foreign keys to `organization` and `user`, cascade; unique transaction and linked subscription); validates the six 0003 `CHECK`s; `lock_timeout` first |
+| File                                                                              | What it holds                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`0000_baseline.sql`](../../apps/web/drizzle/0000_baseline.sql)                   | Every table, enum, index, `CHECK` and foreign key, `ENABLE ROW LEVEL SECURITY` on all 23 tables; hand-written: `lock_timeout` first and the `jobs` storage parameters last                          |
+| [`0001_billing.sql`](../../apps/web/drizzle/0001_billing.sql)                     | `billing_events` and `billing_subscriptions`, `ocr_rounds.plan`, and `ocr_rounds_org_created_at_idx` in place of `ocr_rounds_organization_id_idx`                                                   |
+| [`0002_receipt_review.sql`](../../apps/web/drizzle/0002_receipt_review.sql)       | `receipts.reviewed_at`, `reviewed_by` (foreign key to `user`, set null) and the partial `receipts_reviewed_by_idx`; `lock_timeout` first                                                            |
+| [`0004_billing_checkouts.sql`](../../apps/web/drizzle/0004_billing_checkouts.sql) | `billing_checkouts` (foreign keys to `organization` and `user`, cascade; unique transaction and linked subscription); validates the six 0003 `CHECK`s; `lock_timeout` first                         |
+| [`0006_support_messages.sql`](../../apps/web/drizzle/0006_support_messages.sql)   | `support_messages` (foreign keys to `user` cascade, `organization` and `receipts` set null; unique `submission_id`, value and length checks); `lock_timeout` first, indexes before the foreign keys |
 
 The migrations were **squashed into this one baseline again on 2026-11-08, before launch**, when both databases held
 only test data and were reset. The first squash (2026-11-07) was followed by three migrations: the `refused` and

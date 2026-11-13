@@ -448,6 +448,11 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   quota statement profile (M4), an `ocr_call_status` lookup table (M1), dropping `user_credentials` and
   `storage_source` with BYOK (M6, L5), trigram search and admin indexes when they slow down (L2, L3), lock ordering
   between admin re-run and user retry (L4).
+- Support messages (from the [support data review](reviews/2026-11-13-support-data-cto.md)): `support_messages` is
+  stored; still to do are `/admin/support` (PR 3), the Resend bounce webhook and suppression table (PR 4, owner: later),
+  and the `maintenance.purge` job deleting closed messages 12 months after `closed_at` (PR 5, owner decision), then a
+  retention line on the privacy page. The notification mail carries the full message until the admin list lands (owner).
+  Once `sendEmail` takes an idempotency key, `SupportNotifyMailerLive` passes `job:{id}` (`SupportNotice.jobId`).
 - Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
   rows older than 90 days with a job kind in `packages/core/src/jobs` (there is no retention job yet), keeping the last
   pass and recent failures that the lockout reads; then update the privacy policy.
