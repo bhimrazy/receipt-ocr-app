@@ -28,6 +28,7 @@ const LABELS: Record<string, string> = {
   "settings.ocr": "Changed OCR models",
   "connections.check": "Checked connections",
   "connections.test_email": "Sent test email",
+  "support.status": "Changed support message status",
 };
 
 /** `<action>_failed` rows record a Better Auth call that failed after its audit row was written. */
@@ -78,6 +79,7 @@ function details(entry: AdminAuditEntry): string | null {
   switch (entry.action) {
     case "user.role":
     case "user.plan":
+    case "support.status":
       return `${cap(meta.from)} → ${cap(meta.to)}`;
     case "user.ban":
       return meta.days ? `For ${meta.days} ${meta.days === 1 ? "day" : "days"}` : "Permanent";
@@ -123,6 +125,7 @@ function targetHref(entry: AdminAuditEntry): string | null {
   if (entry.targetType === "user") return `/admin/users/${entry.targetId}`;
   if (entry.targetType === "workspace") return `/admin/workspaces/${entry.targetId}`;
   if (entry.targetType === "settings") return "/admin/settings";
+  if (entry.targetType === "support") return "/admin/support?status=all";
   if (entry.targetType === "job")
     return entry.action === "job.rerun" || entry.action === "job.cancel"
       ? `/admin/jobs/${entry.targetId}`

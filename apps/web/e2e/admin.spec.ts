@@ -129,6 +129,48 @@ test("plan limits saved by an admin show on the customer's billing page", async 
   }
 });
 
+test("admin closes a support message, finds it under Closed, and the audit log shows it", async ({
+  browser,
+}) => {
+  const sender = `E2E Sender ${Date.now()}`;
+  await sql(
+    (db) => db`insert into support_messages (submission_id, kind, source, name, email, message)
+      values (gen_random_uuid(), 'question', 'public', ${sender}, ${uniqueEmail("support")}, 'How do I export to CSV?')`,
+  );
+  const admin = await adminPage(browser);
+  const { page } = admin;
+  try {
+    await expect(page.getByRole("link", { name: /Support, waiting/ })).toBeVisible();
+
+    await page.goto("/admin/support");
+    await page.getByRole("searchbox", { name: /Search support messages/ }).fill(sender);
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const message = page.getByRole("article", { name: sender });
+    await expect(message.getByText("How do I export to CSV?")).toBeVisible();
+    await expect(message.getByRole("link", { name: "Reply by email" })).toHaveAttribute(
+      "href",
+      /^mailto:/,
+    );
+
+    await message.getByRole("button", { name: `Close: message from ${sender}` }).click();
+    await expect(message).toBeHidden();
+
+    await page.goto(`/admin/support?status=closed&q=${encodeURIComponent(sender)}`);
+    await expect(
+      page
+        .getByRole("article", { name: sender })
+        .getByRole("button", { name: `Reopen: message from ${sender}` }),
+    ).toBeVisible();
+
+    await page.goto("/admin/audit?type=support");
+    await expect(page.getByText("Changed support message status").first()).toBeVisible();
+    await expect(page.getByText("New → Closed").first()).toBeVisible();
+  } finally {
+    await sql((db) => db`delete from support_messages where name = ${sender}`);
+    await admin.context.close();
+  }
+});
+
 test("an admin without two-step sign-in is sent to Security first", async ({ page }) => {
   const email = uniqueEmail("admin-no-2fa");
   await signUp(page, email);

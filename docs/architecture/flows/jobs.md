@@ -200,6 +200,14 @@ through `SupportNotifyMailer` (`lib/support-notify-mailer.ts`), 10 attempts with
 hour (about four hours of a provider outage). In production a missing `SUPPORT_EMAIL` counts as a failed send, so the
 job ends dead and shows in the jobs admin.
 
+`maintenance.purge` ([`kinds/maintenance-purge.ts`](../../../packages/core/src/jobs/kinds/maintenance-purge.ts))
+deletes data past its retention period: today `support_messages` 12 months after `closed_at`, or after `created_at`
+for a message never closed (`purgeSupportMessages` in `support.ts`). It runs once a day. The app has no scheduler of its
+own, so `drainQueue` (the drain route) first inserts the next day's run, due 00:00 UTC and keyed
+`maintenance.purge:<that day>`; the key dedupes against the queued job, so every later drain's insert is a no-op, and
+keying by the next day stops a second run on the day one finished. Deletes go 500 rows per statement, at most 20
+statements a run; the rest waits for the next day. Priority 9, 5 attempts, payload `{}`.
+
 ## Tables
 
 `jobs` and `job_controls` come from migration

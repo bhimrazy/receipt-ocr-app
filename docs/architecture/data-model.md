@@ -463,6 +463,10 @@ erDiagram
   `support_source`, `has_receipt` and `message_length`.
 - Account deletion: `user_id` cascades, and `prepareUserDeletion` also deletes rows whose `email` matches the
   account's address, ignoring case (signed-out messages). The copy in the support mailbox is outside both.
+- Triaged in `/admin/support`: `setSupportStatus` moves `new`, `open` and `closed` with an audit row, setting
+  `closed_at` on close and clearing it on reopen.
+- Retention: the daily `maintenance.purge` job deletes a message 12 months after `closed_at`, or 12 months after
+  `created_at` if it is never closed (`SUPPORT_RETENTION_MONTHS`); the privacy page states the period.
 - No retention purge yet: closed messages are to be deleted 12 months after `closed_at` by a `maintenance.purge` job.
 
 ## What happens on delete
