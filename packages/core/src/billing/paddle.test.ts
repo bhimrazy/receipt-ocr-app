@@ -135,16 +135,53 @@ describe("parsePaddleEvent", () => {
     });
   });
 
-  it("keeps a completed transaction without subscription state", () => {
-    const event = parsePaddleEvent(
+  it("keeps a completed transaction's id, subscription, origin and period start, nothing else", () => {
+    const body = (data: unknown) =>
       JSON.stringify({
         event_id: "evt_2",
         event_type: "transaction.completed",
         occurred_at: "2026-11-08T12:00:00Z",
-        data: { id: "txn_1" },
-      }),
-    );
-    expect(event).toMatchObject({ type: "transaction.completed", subscription: null });
+        data,
+      });
+    expect(
+      parsePaddleEvent(
+        body({
+          id: "txn_1",
+          subscription_id: "sub_1",
+          origin: "subscription_recurring",
+          billing_period: { starts_at: "2026-12-08T12:00:00Z", ends_at: "2027-01-08T12:00:00Z" },
+          customer_id: "ctm_1",
+          details: { totals: { total: "900" } },
+        }),
+      ),
+    ).toEqual({
+      provider: "paddle",
+      eventId: "evt_2",
+      type: "transaction.completed",
+      occurredAt: new Date("2026-11-08T12:00:00Z"),
+      subscription: null,
+      adjustment: null,
+      transaction: {
+        transactionId: "txn_1",
+        subscriptionId: "sub_1",
+        origin: "subscription_recurring",
+        billingPeriodStart: new Date("2026-12-08T12:00:00Z"),
+      },
+    });
+    expect(parsePaddleEvent(body({ id: "txn_2" }))).toMatchObject({
+      transaction: {
+        transactionId: "txn_2",
+        subscriptionId: null,
+        origin: null,
+        billingPeriodStart: null,
+      },
+    });
+    // Unreadable details are kept as an event with nothing to apply, not refused.
+    expect(parsePaddleEvent(body({}))).toMatchObject({
+      type: "transaction.completed",
+      subscription: null,
+      transaction: null,
+    });
   });
 
   it("keeps an adjustment's ids, action, type and status, nothing else", () => {
@@ -173,6 +210,7 @@ describe("parsePaddleEvent", () => {
       type: "adjustment.updated",
       occurredAt: new Date("2026-11-08T12:00:00Z"),
       subscription: null,
+      transaction: null,
       adjustment: {
         adjustmentId: "adj_1",
         action: "chargeback",

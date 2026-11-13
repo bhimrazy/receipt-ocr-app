@@ -65,7 +65,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is the baseline, billing, receipt review, receipt fields and billing checkouts", () => {
+  it("is the baseline, billing, receipt review, receipt fields, billing checkouts and billing plan", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
     expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
       "0000_baseline",
@@ -73,6 +73,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "0002_receipt_review",
       "0003_receipt_fields",
       "0004_billing_checkouts",
+      "0005_billing_plan",
     ]);
   });
 

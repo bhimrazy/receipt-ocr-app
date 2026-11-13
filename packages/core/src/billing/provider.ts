@@ -57,6 +57,18 @@ export const adjustmentSnapshotSchema = z.object({
 
 export type AdjustmentSnapshot = z.output<typeof adjustmentSnapshotSchema>;
 
+/** A completed transaction, kept to know which one pays for a subscription's current period. */
+export const transactionSnapshotSchema = z.object({
+  transactionId: z.string().min(1).max(100),
+  subscriptionId: z.string().max(100).nullable(),
+  /** The provider's origin: `web`, `api`, `subscription_recurring`, `subscription_charge`, … */
+  origin: z.string().max(60).nullable(),
+  /** The start of the billing period it pays for; null for a one-off charge. */
+  billingPeriodStart: isoDate.nullable(),
+});
+
+export type TransactionSnapshot = z.output<typeof transactionSnapshotSchema>;
+
 export const billingEventSchema = z.object({
   provider: z.string().min(1).max(20),
   eventId: z.string().min(1).max(100),
@@ -66,6 +78,8 @@ export const billingEventSchema = z.object({
   subscription: subscriptionSnapshotSchema.nullable(),
   /** Set on refund and chargeback events. */
   adjustment: adjustmentSnapshotSchema.nullable().default(null),
+  /** Set on `transaction.completed`. Absent from older stored payloads. */
+  transaction: transactionSnapshotSchema.nullable().default(null),
 });
 
 export type BillingEvent = z.output<typeof billingEventSchema>;

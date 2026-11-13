@@ -221,6 +221,8 @@ export const EVENT_SCHEMA = {
       transaction_id: "id",
       /** A subscription whose workspace or buyer is gone can still charge, so the job cancels it. Set from the stored row's workspace and buyer links and the event's status; no personal data. */
       orphan_charging: "bool",
+      /** A new subscription linked to a workspace that already had one able to charge (logged as `billing.duplicate_subscription` at warn level). Set from our own rows; no personal data. */
+      duplicate_subscription: "bool",
       /** An adjustment's action: `refund`, `chargeback`, `credit` and their reversals. */
       adjustment_action: "token",
       /** Set when an applied event moved its workspace between plans (`free`, `pro`): the `plan_changed` product event. */

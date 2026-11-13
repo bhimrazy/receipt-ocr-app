@@ -107,6 +107,13 @@ const adjustmentData = z.object({
   transaction_id: z.string().nullish(),
 });
 
+const transactionData = z.object({
+  id: z.string().min(1),
+  subscription_id: z.string().nullish(),
+  origin: z.string().nullish(),
+  billing_period: z.object({ starts_at: z.string() }).nullish(),
+});
+
 const envelope = z.object({
   event_id: z.string().min(1),
   event_type: z.string().min(1),
@@ -118,8 +125,9 @@ const envelope = z.object({
  * Parses a verified body into a `BillingEvent`. Null for an event type we
  * don't subscribe to, "bad-body" for a shape we can't read (Paddle retries it,
  * and the failure shows in the logs). `transaction.completed` carries no
- * subscription state: its subscription's own events follow. An adjustment
- * (refund, chargeback) keeps only its ids, action, type and status.
+ * subscription state (its subscription's own events follow), only its id,
+ * subscription, origin and billing period. An adjustment (refund,
+ * chargeback) keeps only its ids, action, type and status.
  */
 export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-body" {
   let json: unknown;
@@ -146,6 +154,7 @@ export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-bo
     return {
       ...base,
       subscription: null,
+      transaction: null,
       adjustment: {
         adjustmentId: a.id,
         action: a.action,
@@ -157,7 +166,7 @@ export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-bo
     };
   }
   if (!event_type.startsWith("subscription.")) {
-    return { ...base, subscription: null, adjustment: null };
+    return { ...base, subscription: null, adjustment: null, transaction: transactionOf(data) };
   }
 
   const parsed = subscriptionData.safeParse(data);
@@ -170,6 +179,7 @@ export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-bo
   return {
     ...base,
     adjustment: null,
+    transaction: null,
     subscription: {
       subscriptionId: s.id,
       customerId: s.customer_id,
@@ -185,6 +195,20 @@ export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-bo
       userId: s.custom_data.userId,
       transactionId: s.transaction_id ?? null,
     },
+  };
+}
+
+/** A transaction we can't read is kept without its details rather than refused: it never grants anything. */
+function transactionOf(data: unknown): BillingEvent["transaction"] {
+  const parsed = transactionData.safeParse(data);
+  if (!parsed.success) return null;
+  const t = parsed.data;
+  const start = t.billing_period ? new Date(t.billing_period.starts_at) : null;
+  return {
+    transactionId: t.id,
+    subscriptionId: t.subscription_id ?? null,
+    origin: t.origin ?? null,
+    billingPeriodStart: start && !Number.isNaN(start.getTime()) ? start : null,
   };
 }
 

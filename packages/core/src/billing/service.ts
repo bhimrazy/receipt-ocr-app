@@ -40,12 +40,15 @@ import {
   type PaddleConfig,
 } from "./config";
 import {
+  adjustmentMayRevoke,
   adjustmentRevokesPro,
+  blocksCheckout,
   canStillCharge,
   memberLimitMessage,
   isEntitled,
   PAST_DUE_GRACE_DAYS,
   PAST_DUE_GRACE_MS,
+  paysNewerPeriod,
   workspaceLimitMessage,
 } from "./entitlement";
 import {
@@ -112,7 +115,7 @@ const PRICE_KEYS = [
   PADDLE_LEGACY_PRICES_KEY,
 ] as const;
 
-/** The price ids that grant Pro (`parseProPriceIds`), from the environment. */
+/** The price ids a new subscription must pay to link as Pro (`parseProPriceIds`), from the environment. */
 export const loadProPriceIds: Effect.Effect<ReadonlySet<string>> = Config.all(
   PRICE_KEYS.map((key) => Config.option(Config.string(key))),
 ).pipe(
@@ -145,21 +148,20 @@ export const loadSandboxOnProduction: Effect.Effect<boolean> = Config.all(
 
 const ts = (date: Date) => sql`${date.toISOString()}::timestamptz`;
 
-const priceIn = (prices: ReadonlySet<string>) =>
-  prices.size === 0
-    ? sql`false`
-    : sql`s.price_id in (${sql.join(
-        [...prices].map((id) => sql`${id}`),
-        sql`, `,
-      )})`;
-
 /** `isEntitled` over `billing_subscriptions` aliased `s`. */
-export const entitledSql = (now: Date, prices: ReadonlySet<string>) => sql`(
-  s.revoked_at is null and ${priceIn(prices)} and (
+export const entitledSql = (now: Date) => sql`(
+  s.revoked_at is null and s.plan = 'pro' and (
     (s.status in ('active', 'trialing') and (not s.cancel_at_period_end or s.current_period_end is null or s.current_period_end > ${ts(now)}))
     or (s.status = 'past_due' and s.past_due_since > ${ts(new Date(now.getTime() - PAST_DUE_GRACE_MS))})
     or (s.status = 'canceled' and s.cancel_at_period_end and s.current_period_end > ${ts(now)})
   )
+)`;
+
+/** `blocksCheckout` over `billing_subscriptions` aliased `s`. */
+export const checkoutBlockingSql = (now: Date) => sql`(
+  (s.status in ('active', 'trialing') and (not s.cancel_at_period_end or s.current_period_end is null or s.current_period_end > ${ts(now)}))
+  or s.status in ('past_due', 'paused')
+  or (s.status = 'canceled' and s.revoked_at is null and s.current_period_end > ${ts(now)})
 )`;
 
 /** `canStillCharge` over `billing_subscriptions` aliased `s`. */
@@ -187,13 +189,12 @@ const resolve = (pro: boolean) =>
 export const workspacePlan = (organizationId: string, now = new Date()) =>
   Effect.gen(function* () {
     const { use } = yield* Db;
-    const prices = yield* loadProPriceIds;
     const rows = yield* use((db) =>
       db
         .execute<{ pro: boolean }>(
           sql`select (
         exists (select 1 from billing_subscriptions s
-          where s.organization_id = ${organizationId} and ${entitledSql(now, prices)})
+          where s.organization_id = ${organizationId} and ${entitledSql(now)})
         or exists (select 1 from member m join "user" u on u.id = m.user_id
           where m.organization_id = ${organizationId} and m.role = 'owner' and u.plan = 'pro')
       ) as pro`,
@@ -211,14 +212,13 @@ export const workspacePlan = (organizationId: string, now = new Date()) =>
 export const accountPlan = (userId: string, now = new Date()) =>
   Effect.gen(function* () {
     const { use } = yield* Db;
-    const prices = yield* loadProPriceIds;
     const rows = yield* use((db) =>
       db
         .execute<{ pro: boolean }>(
           sql`select (
         exists (select 1 from "user" u where u.id = ${userId} and u.plan = 'pro')
         or exists (select 1 from member m join billing_subscriptions s on s.organization_id = m.organization_id
-          where m.user_id = ${userId} and m.role = 'owner' and ${entitledSql(now, prices)})
+          where m.user_id = ${userId} and m.role = 'owner' and ${entitledSql(now)})
       ) as pro`,
         )
         .then((r) => r.rows),
@@ -362,6 +362,28 @@ export const workspaceHasChargingSubscription = (organizationId: string) =>
   Effect.flatMap(Db, ({ use }) => use((db) => hasChargingSubscription(db, organizationId)));
 
 /**
+ * Whether the workspace has a subscription that blocks a new checkout
+ * (`blocksCheckout`): one that can still charge or still grants Pro. Checkout
+ * is refused and no upgrade is offered while it does.
+ */
+export const workspaceCheckoutBlocked = (organizationId: string, now = new Date()) =>
+  Effect.flatMap(Db, ({ use }) => use((db) => checkoutBlocked(db, organizationId, now)));
+
+async function checkoutBlocked(db: Queryable, organizationId: string, now: Date) {
+  const rows = await db
+    .execute<{ blocked: boolean }>(
+      sql`select exists (select 1 from billing_subscriptions s
+        where s.organization_id = ${organizationId} and ${checkoutBlockingSql(now)}) as blocked`,
+    )
+    .then((r) => r.rows);
+  return rows[0]?.blocked === true;
+}
+
+/** The checkout refusal while the workspace already has a subscription that can charge. */
+export const ALREADY_SUBSCRIBED =
+  "This workspace already has a subscription. Manage it on Plan and billing instead of starting another.";
+
+/**
  * Whether `userId` is the buyer (`billing_subscriptions.user_id`) of a
  * subscription on this workspace that can still charge. Only the buyer can
  * cancel in the app, so they can't be removed, demoted or leave meanwhile.
@@ -430,7 +452,7 @@ export type ApplyOutcome =
   | "applied"
   /** Older than the stored snapshot of its subscription: kept in the log, not applied. */
   | "stale"
-  /** Carries no subscription state, or an adjustment that doesn't end Pro. */
+  /** Carries nothing to apply: no subscription state, an adjustment that doesn't end Pro, or a transaction that doesn't pay a newer period. */
   | "ignored"
   /** Can't be linked: see `UnmatchedReason`. */
   | "unmatched";
@@ -471,6 +493,11 @@ export type ApplyResult = {
   transactionId?: string;
   /** Its workspace or buyer was deleted but it can still charge: someone is paying for nothing (it is also cancelled). */
   orphanCharging?: true;
+  /**
+   * A new subscription linked to a workspace whose other subscription blocks a checkout: the
+   * buyer may be paying twice. Linked anyway, so it can be refunded and cancelled.
+   */
+  duplicate?: true;
   /**
    * The provider subscription still needs cancelling: a chargeback or full
    * refund revoked Pro, or its workspace or buyer is gone and it could charge again.
@@ -516,10 +543,12 @@ const storedSubscription = async (tx: Tx, provider: string, subscriptionId: stri
  * is skipped. The workspace comes from the stored row once there is one; the
  * checkout's custom data only links a new subscription, and only when the
  * workspace exists, the buyer named in it is an owner of it, and the price is
- * a Pro price. An approved chargeback or full refund revokes Pro on its
- * subscription and asks the caller to cancel it with the provider; one that
- * arrives before its subscription is linked is kept `unmatched` in the event
- * log and applied when the subscription links. A subscription whose workspace
+ * a Pro price. An approved chargeback, or a full refund of the transaction
+ * paying for the current period, revokes Pro on its subscription and asks the
+ * caller to cancel it with the provider; one that arrives before its
+ * subscription is linked is kept `unmatched` in the event log and applied
+ * when the subscription links. A completed transaction records which one pays
+ * for the current period. A subscription whose workspace
  * or buyer was deleted (allowed only once its cancel was scheduled) is
  * cancelled too if an update makes it able to charge again.
  */
@@ -562,9 +591,30 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           return result;
         };
 
+        if (event.transaction) {
+          const transaction = event.transaction;
+          if (!transaction.subscriptionId)
+            return finish({ outcome: "ignored", organizationId: null });
+          await lockSubscription(tx, event.provider, transaction.subscriptionId);
+          const stored = await storedSubscription(tx, event.provider, transaction.subscriptionId);
+          // Before the link there is nothing to record: the link takes the checkout's transaction.
+          if (!stored || !paysNewerPeriod(transaction, stored.paidPeriodStart)) {
+            return finish({ outcome: "ignored", organizationId: stored?.organizationId ?? null });
+          }
+          await tx
+            .update(billingSubscriptions)
+            .set({
+              paidTransactionId: transaction.transactionId,
+              paidPeriodStart: transaction.billingPeriodStart,
+              updatedAt: now,
+            })
+            .where(eq(billingSubscriptions.id, stored.id));
+          return finish({ outcome: "applied", organizationId: stored.organizationId });
+        }
+
         if (event.adjustment) {
           const adjustment = event.adjustment;
-          if (!adjustmentRevokesPro(adjustment) || !adjustment.subscriptionId) {
+          if (!adjustmentMayRevoke(adjustment) || !adjustment.subscriptionId) {
             return finish({ outcome: "ignored", organizationId: null });
           }
           await lockSubscription(tx, event.provider, adjustment.subscriptionId);
@@ -576,7 +626,10 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
               unmatched: "subscription",
             });
           }
-          const wasPro = isEntitled(entitlementOf(stored), now, prices);
+          if (!adjustmentRevokesPro(adjustment, stored.paidTransactionId)) {
+            return finish({ outcome: "ignored", organizationId: stored.organizationId });
+          }
+          const wasPro = isEntitled(entitlementOf(stored), now);
           if (!stored.revokedAt) {
             await tx
               .update(billingSubscriptions)
@@ -605,6 +658,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
         let pending: string[] = [];
         let current = snapshot;
         let caughtUp: string[] = [];
+        let duplicate = false;
         if (!stored) {
           const link = await linkNewSubscription(tx, event.provider, snapshot, prices, testMode);
           if ("unmatched" in link) {
@@ -617,7 +671,14 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           }
           organizationId = link.organizationId;
           buyer = link.userId;
-          pending = await pendingRevocations(tx, event.provider, snapshot.subscriptionId);
+          // Checked before this row exists, so it sees only the workspace's other subscriptions.
+          duplicate = await checkoutBlocked(tx, link.organizationId, now);
+          pending = await pendingRevocations(
+            tx,
+            event.provider,
+            snapshot.subscriptionId,
+            snapshot.transactionId,
+          );
           const earlier = await earlierSnapshots(tx, event.provider, snapshot.subscriptionId);
           caughtUp = earlier.ids;
           if (earlier.latest && earlier.latest.updatedAt > snapshot.updatedAt) {
@@ -662,6 +723,9 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
             userId: buyer,
             provider: event.provider,
             providerSubscriptionId: snapshot.subscriptionId,
+            plan: "pro",
+            paidTransactionId: snapshot.transactionId,
+            paidPeriodStart: snapshot.currentPeriodStart,
             revokedAt: pending.length > 0 ? now : null,
           });
           const settled = [...pending, ...caughtUp];
@@ -676,14 +740,17 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
         const revokedAt = stored?.revokedAt ?? (pending.length > 0 ? now : null);
         const orphan = orphanCanCharge({ organizationId, userId: buyer, ...values });
         const cancel = (pending.length > 0 && values.status !== "canceled") || orphan;
-        const from = stored && isEntitled(entitlementOf(stored), now, prices) ? "pro" : "free";
-        const to = isEntitled({ ...values, revokedAt }, now, prices) ? "pro" : "free";
+        const from = stored && isEntitled(entitlementOf(stored), now) ? "pro" : "free";
+        const plan = stored?.plan ?? "pro";
+        const to = isEntitled({ ...values, plan, revokedAt }, now) ? "pro" : "free";
         return finish({
           outcome: "applied",
           organizationId,
           ...(orphan ? { orphanCharging: true as const } : {}),
+          ...(duplicate ? { duplicate: true as const } : {}),
           ...(customerChanged ? { unmatched: "customer_mismatch" as const } : {}),
-          ...(from === to ? {} : { planChange: { from, to } }),
+          // A duplicate's workspace was on Pro already: no plan change to report.
+          ...(from === to || duplicate ? {} : { planChange: { from, to } }),
           ...(buyer ? { userId: buyer } : {}),
           ...(cancel ? { cancelSubscriptionId: snapshot.subscriptionId } : {}),
         });
@@ -708,12 +775,18 @@ const orphanCanCharge = (row: ChargeFields) =>
   canStillCharge({ status: row.status as BillingStatus, cancelAtPeriodEnd: row.cancelAtPeriodEnd });
 
 /**
- * Revoking adjustments (approved chargeback or full refund) stored `unmatched`
- * because they arrived before their subscription was linked: the event log is
- * the pending record, so one is never lost however late `subscription.created`
- * comes. Returns their event ids.
+ * Revoking adjustments stored `unmatched` because they arrived before their
+ * subscription was linked: an approved chargeback, or a full refund of the
+ * checkout transaction (`paidTransactionId`), which pays the first period.
+ * The event log is the pending record, so one is never lost however late
+ * `subscription.created` comes. Returns their event ids.
  */
-async function pendingRevocations(tx: Tx, provider: string, subscriptionId: string) {
+async function pendingRevocations(
+  tx: Tx,
+  provider: string,
+  subscriptionId: string,
+  paidTransactionId: string | null,
+) {
   const rows = await tx
     .select({ id: billingEvents.id, payload: billingEvents.payload })
     .from(billingEvents)
@@ -727,7 +800,7 @@ async function pendingRevocations(tx: Tx, provider: string, subscriptionId: stri
   return rows
     .filter((row) => {
       const adjustment = billingEventSchema.safeParse(row.payload).data?.adjustment;
-      return adjustment ? adjustmentRevokesPro(adjustment) : false;
+      return adjustment ? adjustmentRevokesPro(adjustment, paidTransactionId) : false;
     })
     .map((row) => row.id);
 }
@@ -813,7 +886,7 @@ async function linkNewSubscription(
 async function cancelOwed(tx: Tx, event: BillingEvent): Promise<string | null> {
   const adjustment = event.adjustment;
   const subscriptionId = adjustment
-    ? adjustmentRevokesPro(adjustment)
+    ? adjustmentMayRevoke(adjustment)
       ? adjustment.subscriptionId
       : null
     : (event.subscription?.subscriptionId ?? null);
@@ -839,9 +912,18 @@ export type WorkspaceBilling = {
   revoked: boolean;
   /** Who subscribed; only they can open the portal. Null once they're gone. */
   buyer: { id: string; email: string } | null;
+  /**
+   * A subscription of this workspace (this one or another) can still charge or grant Pro
+   * (`blocksCheckout`), so no new checkout is offered or accepted.
+   */
+  checkoutBlocked: boolean;
 };
 
-const pickRow = (organizationId: string, now: Date, prices: ReadonlySet<string>) =>
+/**
+ * The subscription to show and manage: an entitling one, else one that can
+ * still charge, else the latest. With `checkoutBlocked` from every row.
+ */
+const pickRow = (organizationId: string, now: Date) =>
   Effect.flatMap(Db, ({ use }) =>
     use(async (db) => {
       // A workspace has one subscription, or a few after a cancel and a re-subscribe.
@@ -852,29 +934,31 @@ const pickRow = (organizationId: string, now: Date, prices: ReadonlySet<string>)
         .where(eq(billingSubscriptions.organizationId, organizationId))
         .orderBy(desc(billingSubscriptions.providerUpdatedAt))
         .limit(20);
-      return rows.find(({ row }) => isEntitled(entitlementOf(row), now, prices)) ?? rows[0] ?? null;
+      const blocking = rows.filter(({ row }) => blocksCheckout(entitlementOf(row), now));
+      const picked =
+        rows.find(({ row }) => isEntitled(entitlementOf(row), now)) ?? blocking[0] ?? rows[0];
+      return picked ? { ...picked, checkoutBlocked: blocking.length > 0 } : null;
     }),
   );
 
 const entitlementOf = (row: BillingSubscription) => ({
   status: row.status as BillingStatus,
-  priceId: row.priceId,
+  plan: row.plan,
   cancelAtPeriodEnd: row.cancelAtPeriodEnd,
   currentPeriodEnd: row.currentPeriodEnd,
   pastDueSince: row.pastDueSince,
   revokedAt: row.revokedAt,
 });
 
-/** The workspace's current subscription (an entitling one first, else the latest), or null. */
+/** The workspace's current subscription (an entitling one, else one that can still charge, else the latest), or null. */
 export const workspaceBilling = (organizationId: string, now = new Date()) =>
   Effect.gen(function* () {
-    const prices = yield* loadProPriceIds;
-    const picked = yield* pickRow(organizationId, now, prices);
+    const picked = yield* pickRow(organizationId, now);
     if (!picked) return null;
     const { row, buyerEmail } = picked;
     const fields = entitlementOf(row);
     const status = fields.status;
-    const entitled = isEntitled(fields, now, prices);
+    const entitled = isEntitled(fields, now);
     const graceEndsAt =
       status === "past_due" && row.pastDueSince
         ? new Date(row.pastDueSince.getTime() + PAST_DUE_GRACE_DAYS * 86_400_000)
@@ -898,6 +982,7 @@ export const workspaceBilling = (organizationId: string, now = new Date()) =>
       endedAt,
       revoked: row.revokedAt !== null,
       buyer: row.userId && buyerEmail ? { id: row.userId, email: buyerEmail } : null,
+      checkoutBlocked: picked.checkoutBlocked,
     } satisfies WorkspaceBilling;
   });
 
@@ -996,7 +1081,8 @@ export class Billing extends Context.Tag("@receipt-ocr/core/Billing")<
      * and records it in `billing_checkouts` before returning its id. The
      * customer is the one on the buyer's last checkout, else found or created
      * by their email, which must be verified. The caller has checked the user
-     * is an owner; this checks again.
+     * is an owner; this checks again. Conflict while the workspace is on Pro
+     * or has a subscription that can still charge (`blocksCheckout`).
      */
     readonly createCheckout: (
       request: CheckoutRequest,
@@ -1051,8 +1137,7 @@ export class Billing extends Context.Tag("@receipt-ocr/core/Billing")<
         portalLinks: (organizationId, userId) => {
           if (!config) return Effect.fail(off);
           return Effect.gen(function* () {
-            const prices = yield* loadProPriceIds;
-            const picked = yield* pickRow(organizationId, new Date(), prices).pipe(
+            const picked = yield* pickRow(organizationId, new Date()).pipe(
               Effect.provideService(Db, db),
             );
             const row = picked?.row;
@@ -1120,10 +1205,17 @@ export class Billing extends Context.Tag("@receipt-ocr/core/Billing")<
               return yield* new Forbidden({ message: UNVERIFIED_EMAIL });
             }
             const email = buyer.email;
-            const { plan } = yield* withDeps(workspacePlan(request.organizationId));
+            const [{ plan }, blocked] = yield* Effect.all(
+              [
+                withDeps(workspacePlan(request.organizationId)),
+                withDeps(workspaceCheckoutBlocked(request.organizationId)),
+              ],
+              { concurrency: "unbounded" },
+            );
             if (plan === "pro") {
               return yield* new Conflict({ message: "This workspace is already on Pro." });
             }
+            if (blocked) return yield* new Conflict({ message: ALREADY_SUBSCRIBED });
             const [last] = yield* use((d) =>
               d
                 .select({ customerId: billingCheckouts.providerCustomerId })

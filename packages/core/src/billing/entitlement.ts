@@ -15,7 +15,8 @@ export const PAST_DUE_GRACE_MS = PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000;
 
 export type EntitlementFields = {
   status: BillingStatus;
-  priceId: string | null;
+  /** Recorded when the subscription linked; see `billing_subscriptions.plan`. */
+  plan: string;
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: Date | null;
   pastDueSince: Date | null;
@@ -24,8 +25,10 @@ export type EntitlementFields = {
 };
 
 /**
- * Whether a stored subscription grants Pro at `now`. Only for a Pro price
- * (`proPrices`, from config) and never once revoked; then by status:
+ * Whether a stored subscription grants Pro at `now`. Only for a subscription
+ * linked as Pro (the price is checked once, at the link, so a change to the
+ * configured prices never moves a paying workspace) and never once revoked;
+ * then by status:
  * - active or trialing, unless a cancellation scheduled for the period end has passed
  *   (in case the final `canceled` event is late or lost);
  * - past_due, for `PAST_DUE_GRACE_DAYS` from when it first failed;
@@ -33,12 +36,8 @@ export type EntitlementFields = {
  * - never paused.
  * `entitledSql` in service.ts is the same rule for queries; billing.int.test.ts keeps them in step.
  */
-export function isEntitled(
-  s: EntitlementFields,
-  now: Date,
-  proPrices: ReadonlySet<string>,
-): boolean {
-  if (s.revokedAt !== null || s.priceId === null || !proPrices.has(s.priceId)) return false;
+export function isEntitled(s: EntitlementFields, now: Date): boolean {
+  if (s.revokedAt !== null || s.plan !== "pro") return false;
   const periodAhead = s.currentPeriodEnd !== null && s.currentPeriodEnd > now;
   switch (s.status) {
     case "active":
@@ -68,12 +67,72 @@ export function canStillCharge(s: Pick<EntitlementFields, "status" | "cancelAtPe
 }
 
 /**
- * Whether an adjustment ends Pro for its subscription: an approved chargeback,
- * or an approved refund of a whole transaction. Partial refunds and credits don't.
+ * Whether a subscription blocks a new checkout for its workspace: it can still
+ * charge or still grants Pro, so a second one would charge twice. Active or
+ * trialing (until a scheduled cancel's period end has passed), past_due,
+ * paused, or canceled with its period end ahead (unless revoked).
+ * `checkoutBlockingSql` in service.ts is the same rule.
  */
-export function adjustmentRevokesPro(a: AdjustmentSnapshot): boolean {
+export function blocksCheckout(
+  s: Pick<EntitlementFields, "status" | "cancelAtPeriodEnd" | "currentPeriodEnd" | "revokedAt">,
+  now: Date,
+): boolean {
+  const periodAhead = s.currentPeriodEnd !== null && s.currentPeriodEnd > now;
+  switch (s.status) {
+    case "active":
+    case "trialing":
+      return !s.cancelAtPeriodEnd || s.currentPeriodEnd === null || periodAhead;
+    case "past_due":
+    case "paused":
+      return true;
+    case "canceled":
+      return s.revokedAt === null && periodAhead;
+  }
+}
+
+/**
+ * Whether an adjustment can end Pro: an approved chargeback, or an approved
+ * refund of a whole transaction. Partial refunds and credits never do.
+ */
+export function adjustmentMayRevoke(a: AdjustmentSnapshot): boolean {
   if (a.status !== "approved" || !a.subscriptionId) return false;
   return a.action === "chargeback" || (a.action === "refund" && a.type === "full");
+}
+
+/**
+ * Whether an adjustment ends Pro for its subscription, given the transaction
+ * paying for its current period: any approved chargeback, or a full refund
+ * of that transaction. A full refund of another one (an earlier period, a
+ * duplicate charge, a one-off) leaves Pro and the subscription alone.
+ */
+export function adjustmentRevokesPro(
+  a: AdjustmentSnapshot,
+  paidTransactionId: string | null,
+): boolean {
+  if (!adjustmentMayRevoke(a)) return false;
+  if (a.action === "chargeback") return true;
+  return a.transactionId !== null && a.transactionId === paidTransactionId;
+}
+
+/**
+ * Transaction origins that pay for a billing period. Not `subscription_charge`
+ * (a one-off charge), `subscription_update` (a proration) or
+ * `subscription_payment_method_change` (a card check).
+ */
+const PERIOD_ORIGINS: ReadonlySet<string> = new Set(["web", "api", "subscription_recurring"]);
+
+/**
+ * Whether a completed transaction now pays for its subscription's current
+ * period: it pays for a period, and that period starts after the recorded
+ * one. A second transaction for the same period (a duplicate charge) doesn't
+ * replace the first.
+ */
+export function paysNewerPeriod(
+  t: { origin: string | null; billingPeriodStart: Date | null },
+  recordedStart: Date | null,
+): boolean {
+  if (!t.origin || !PERIOD_ORIGINS.has(t.origin) || !t.billingPeriodStart) return false;
+  return recordedStart === null || t.billingPeriodStart > recordedStart;
 }
 
 /**
