@@ -10,7 +10,7 @@ const SAMPLE_IDS = [
 ];
 const SAMPLE_CREATED = new Date("2026-10-29T09:12:00Z");
 
-/** The example as History CSV rows: the receipt shown, then `historyRows`. */
+/** The example as Receipts CSV rows: the receipt shown, then `historyRows`. */
 export function exampleCsv(example: ContentExample): string {
   const { items, ...head } = example.extraction;
   const rows = [

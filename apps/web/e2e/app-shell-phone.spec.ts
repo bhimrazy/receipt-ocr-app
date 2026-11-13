@@ -19,7 +19,7 @@ test.beforeAll(async ({ browser }, testInfo) => {
   const page = await context.newPage();
   await signUp(page, email);
   await seedReceipts(email, ["Corner Shop"]);
-  await page.goto("/app/groups");
+  await page.goto("/app/receipts/groups");
   await page.getByLabel("Name").fill("Trip");
   await page.getByRole("button", { name: "Create group" }).click();
   await expect(page.getByRole("button", { name: "Edit Trip" })).toBeVisible();
@@ -47,7 +47,7 @@ async function openKeyboard(page: Page, visibleHeight: number) {
 test("a dialog with a text field opens as a bottom sheet and rises above the keyboard", async ({
   page,
 }) => {
-  await page.goto("/app/groups");
+  await page.goto("/app/receipts/groups");
   await page.getByRole("button", { name: "Edit Trip" }).click();
   const sheet = page.getByRole("dialog", { name: "Edit group" });
   await expect(sheet).toBeVisible();
@@ -74,7 +74,7 @@ test("a dialog with a text field opens as a bottom sheet and rises above the key
 
 test("on a desktop the same dialog stays centred", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto("/app/groups");
+  await page.goto("/app/receipts/groups");
   await page.getByRole("button", { name: "Edit Trip" }).click();
   await expect(page.getByRole("dialog", { name: "Edit group" })).toBeVisible();
   await expect
@@ -117,7 +117,7 @@ test("offline, the screen stays, a bar says so, and links wait for the connectio
   // A tab tap keeps this screen instead of loading offline.html.
   await page
     .getByRole("navigation", { name: "Main" })
-    .getByRole("link", { name: "History" })
+    .getByRole("link", { name: "Receipts" })
     .click();
   await expect(bar).toContainText("that page can't open");
   await expect(page).toHaveURL(/\/app$/);
@@ -128,9 +128,9 @@ test("offline, the screen stays, a bar says so, and links wait for the connectio
   await expect(page.getByRole("button", { name: "Scan receipt" })).toBeEnabled();
   await page
     .getByRole("navigation", { name: "Main" })
-    .getByRole("link", { name: "History" })
+    .getByRole("link", { name: "Receipts" })
     .click();
-  await expect(page).toHaveURL(/\/app\/history$/);
+  await expect(page).toHaveURL(/\/app\/receipts$/);
 });
 
 async function setHidden(page: Page, hidden: boolean) {
@@ -151,7 +151,7 @@ test.describe("installed app", () => {
     page,
   }) => {
     await page.clock.install();
-    await page.goto("/app/history");
+    await page.goto("/app/receipts");
     const search = page.getByRole("searchbox", { name: "Search receipts" });
     await search.fill("Corner");
     await expect(page).toHaveURL(/q=Corner/);
@@ -176,7 +176,7 @@ test.describe("installed app", () => {
     const refreshed = page.waitForResponse(
       (response) =>
         response.request().headers().rsc === "1" &&
-        new URL(response.url()).pathname === "/app/history",
+        new URL(response.url()).pathname === "/app/receipts",
     );
     await setHidden(page, false);
     await refreshed;

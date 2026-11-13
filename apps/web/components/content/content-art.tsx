@@ -297,7 +297,7 @@ function TeamArt() {
       })}
       <rect className={BOX} height="150" rx="10" strokeWidth="1.25" width="126" x="182" y="35" />
       <text className="fill-primary font-mono" fontSize="9" x="194" y="54">
-        History
+        Receipts
       </text>
       <line className={STROKE} strokeOpacity="0.4" x1="182" x2="308" y1="62" y2="62" />
       {HISTORY.map(([name, amount], i) => (

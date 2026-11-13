@@ -77,7 +77,7 @@ test("the manifest is installable and every icon resolves at its declared size",
     background_color: "#0a0a0b",
     shortcuts: [
       { name: "Add receipt", url: "/app/upload?capture=1" },
-      { name: "History", url: "/app/history" },
+      { name: "Receipts", url: "/app/receipts" },
     ],
     launch_handler: { client_mode: ["navigate-existing", "auto"] },
     share_target: { action: "/share-target", method: "POST", enctype: "multipart/form-data" },
@@ -148,7 +148,7 @@ test("the worker registers in the app, never stores API or page responses, and s
   await page.evaluate(() => fetch("/api/receipts/status"));
   expect((await api).fromServiceWorker()).toBe(false);
 
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   const stored = await page.evaluate(async () => {
     const urls: string[] = [];
     for (const name of await caches.keys()) {
@@ -160,12 +160,12 @@ test("the worker registers in the app, never stores API or page responses, and s
   expect(stored).toEqual(["/icon.svg", "/icons/icon-192.png", "/offline.html", "/offline.js"]);
 
   await context.setOffline(true);
-  await page.goto("/app/history").catch(() => null);
+  await page.goto("/app/receipts").catch(() => null);
   await expect(page.getByRole("heading", { name: "You're offline" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   // Back online, the fallback reloads itself into the page that was asked for.
   await context.setOffline(false);
-  await expect(page.getByRole("heading", { level: 1, name: "History" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Receipts" })).toBeVisible();
 });
 
 test("a shared receipt waits for Keep, then for Upload in the review sheet, and is never uploaded on its own", async ({

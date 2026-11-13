@@ -55,7 +55,7 @@ export const useCasePages: ContentPage[] = [
           {
             icon: "file-spreadsheet",
             title: "Export the trip",
-            body: "Filter History by the group and export one CSV: date, merchant, category, currency, subtotal, tax, tip, total and confidence per receipt.",
+            body: "Filter Receipts by the group and export one CSV: date, merchant, category, currency, subtotal, tax, tip, total and confidence per receipt.",
           },
         ],
       },
@@ -143,7 +143,7 @@ export const useCasePages: ContentPage[] = [
     faqs: [
       {
         q: "Can I keep receipts from different trips apart?",
-        a: "Yes. Make a group for each trip or project and add receipts to it. In History you can filter by one or more groups and export only those receipts as one CSV, and the CSV has a groups column so the rows stay labelled.",
+        a: "Yes. Make a group for each trip or project and add receipts to it. In Receipts you can filter by one or more groups and export only those receipts as one CSV, and the CSV has a groups column so the rows stay labelled.",
       },
       {
         q: "My receipts are in a different currency from my salary. What happens?",
@@ -195,7 +195,7 @@ export const useCasePages: ContentPage[] = [
           {
             icon: "tags",
             title: "Your workspace, one group per client",
-            body: "You upload what clients send and filter History by the client's group when you export.",
+            body: "You upload what clients send and filter Receipts by the client's group when you export.",
             diagram: ["You", "Group", "CSV"],
           },
         ],
@@ -234,7 +234,7 @@ export const useCasePages: ContentPage[] = [
       {
         heading: "Checking before it reaches the books",
         paragraphs: [
-          'The History list has a Needs review filter for receipts with something to check: a missing merchant, date, total or currency, amounts that do not add up, or a date that can be read more than one way. On the receipt page, lines that were hard to read are marked, and a note says when the amounts disagree, for example "The amounts add up to €104.20, but the total says €104.75". You correct the header fields (merchant, date, category, currency, bill number, seller tax ID, subtotal, discount, service charge, tax, tip and total) and the corrected values are what gets exported. Line items cannot be edited yet.',
+          'The Receipts list has a Needs review filter for receipts with something to check: a missing merchant, date, total or currency, amounts that do not add up, or a date that can be read more than one way. On the receipt page, lines that were hard to read are marked, and a note says when the amounts disagree, for example "The amounts add up to €104.20, but the total says €104.75". You correct the header fields (merchant, date, category, currency, bill number, seller tax ID, subtotal, discount, service charge, tax, tip and total) and the corrected values are what gets exported. Line items cannot be edited yet.',
           "The confidence column is in the export too, so you can sort by it in a spreadsheet and look at the lowest first.",
         ],
       },
@@ -262,7 +262,7 @@ export const useCasePages: ContentPage[] = [
     example: {
       heading: "An office supplies receipt with VAT included",
       caption:
-        "The receipt above as the receipt page shows it: the net subtotal and the VAT are printed, so subtotal plus tax equals the total. Below, the client's receipts for the month as a History CSV.",
+        "The receipt above as the receipt page shows it: the net subtotal and the VAT are printed, so subtotal plus tax equals the total. Below, the client's receipts for the month as a Receipts CSV.",
       fileName: "client_buerowelt.pdf",
       extraction: {
         merchant: "Bürowelt",
@@ -348,7 +348,7 @@ export const useCasePages: ContentPage[] = [
       },
       {
         q: "How do I know which receipts to check?",
-        a: "Use the Needs review filter in History, which lists receipts with a missing field, totals that do not add up or an unclear date. Each receipt and each line has its own score, the confidence column is in the CSV, and each receipt's page points out lines that were hard to read and totals that do not add up.",
+        a: "Use the Needs review filter in Receipts, which lists receipts with a missing field, totals that do not add up or an unclear date. Each receipt and each line has its own score, the confidence column is in the CSV, and each receipt's page points out lines that were hard to read and totals that do not add up.",
       },
     ],
     related: ["/use-cases/small-businesses", "/use-cases/freelancers-taxes"],
@@ -392,7 +392,7 @@ export const useCasePages: ContentPage[] = [
           {
             icon: "calendar-range",
             title: "Filter by your tax year",
-            body: "Tax years start on different dates in different countries, so choose the first and last day of yours in History.",
+            body: "Tax years start on different dates in different countries, so choose the first and last day of yours in Receipts.",
           },
           {
             icon: "file-spreadsheet",
@@ -464,7 +464,7 @@ export const useCasePages: ContentPage[] = [
     faqs: [
       {
         q: "My tax year does not start in January. Can I still export one year?",
-        a: "Yes. History filters by receipt date with any start and end date, so you pick the dates of your own tax year and export only those receipts as one CSV.",
+        a: "Yes. The Receipts list filters by receipt date with any start and end date, so you pick the dates of your own tax year and export only those receipts as one CSV.",
       },
       {
         q: "Will ReceiptOCR tell me what I can deduct?",
@@ -538,7 +538,7 @@ export const useCasePages: ContentPage[] = [
         heading: "What the person doing the books gets",
         paragraphs: [
           "Every receipt arrives with merchant, date, category, line items, tax and total, and a confidence score for the receipt and each line. The Needs review filter collects receipts with a missing field, totals that do not add up or an unclear date; each receipt's page also marks lines that were hard to read and amounts that do not add up to the total. Corrections to the header fields are what gets exported.",
-          "The app's home screen shows the workspace's spending this month and over time, per currency. When it is time to update the books, History exports any filtered set (a month, a category, a job) as one CSV.",
+          "The app's home screen shows the workspace's spending this month and over time, per currency. When it is time to update the books, the Receipts list exports any filtered set (a month, a category, a job) as one CSV.",
         ],
       },
       {
@@ -564,7 +564,7 @@ export const useCasePages: ContentPage[] = [
     example: {
       heading: "A hardware store receipt with one line to check",
       caption:
-        "A supplies receipt where one line was hard to read: it is marked so the person checking compares it with the photo. Below, the job's receipts as a History CSV.",
+        "A supplies receipt where one line was hard to read: it is marked so the person checking compares it with the photo. Below, the job's receipts as a Receipts CSV.",
       fileName: "IMG_4471.jpg",
       extraction: {
         merchant: "Northside Hardware",
@@ -653,7 +653,7 @@ export const useCasePages: ContentPage[] = [
       },
       {
         q: "Can I see the cost of one job or site?",
-        a: "Yes. Put the job's receipts in a group, filter History by that group and export them as one CSV. The CSV includes the groups column, so the label stays on every row.",
+        a: "Yes. Put the job's receipts in a group, filter Receipts by that group and export them as one CSV. The CSV includes the groups column, so the label stays on every row.",
       },
     ],
     related: ["/use-cases/bookkeeping", "/use-cases/expense-reports"],

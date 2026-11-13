@@ -1,8 +1,8 @@
 import { PageHeaderSkeleton, RowsSkeleton } from "@/components/app-skeletons";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 
-/** History: title, search, filters, then the receipt list. */
-export default function HistoryLoading() {
+/** Receipts: title, search, filters, then the receipt list. */
+export default function ReceiptsLoading() {
   return (
     <div aria-busy="true" aria-live="polite" className="mx-auto max-w-6xl">
       <span className="sr-only">Loading…</span>

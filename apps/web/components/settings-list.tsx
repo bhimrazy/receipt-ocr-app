@@ -14,6 +14,7 @@ import {
   CreditCard,
   Palette,
   ShieldCheck,
+  Tags,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -24,12 +25,13 @@ export type SettingsLink = {
   href: string;
   label: string;
   value: string;
-  icon: "plan" | "workspace" | "security";
+  icon: "plan" | "workspace" | "groups" | "security";
 };
 
 const ICONS: Record<SettingsLink["icon"], LucideIcon> = {
   plan: CreditCard,
   workspace: Users,
+  groups: Tags,
   security: ShieldCheck,
 };
 

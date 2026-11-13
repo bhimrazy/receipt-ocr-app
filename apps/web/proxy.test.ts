@@ -7,9 +7,9 @@ const location = (url: string, cookie?: string) =>
 
 describe("proxy", () => {
   it("sends signed-out visitors to sign-in with the page they wanted", () => {
-    const to = new URL(location("http://localhost/app/history?status=failed&q=shell")!);
+    const to = new URL(location("http://localhost/app/receipts?status=failed&q=shell")!);
     expect(to.pathname).toBe("/sign-in");
-    expect(to.searchParams.get("redirect")).toBe("/app/history?status=failed&q=shell");
+    expect(to.searchParams.get("redirect")).toBe("/app/receipts?status=failed&q=shell");
     expect(new URL(location("http://localhost/admin")!).searchParams.get("redirect")).toBe(
       "/admin",
     );
@@ -21,12 +21,12 @@ describe("proxy", () => {
 
   it("hands the requested path to server components, ignoring a spoofed header", () => {
     const res = proxy(
-      new NextRequest("http://localhost/app/history?status=failed", {
+      new NextRequest("http://localhost/app/receipts?status=failed", {
         headers: { cookie: "better-auth.session_token=abc", "x-requested-path": "//evil.example" },
       }),
     );
     expect(res.headers.get("x-middleware-request-x-requested-path")).toBe(
-      "/app/history?status=failed",
+      "/app/receipts?status=failed",
     );
   });
 
@@ -79,7 +79,9 @@ describe("proxy", () => {
 
     expect(new URL(location("http://localhost/app")!).pathname).toBe("/sign-in");
     // Only the start URL itself: a deep link that happens to carry the query is a normal visit.
-    expect(new URL(location("http://localhost/app/history?source=pwa")!).pathname).toBe("/sign-in");
+    expect(new URL(location("http://localhost/app/receipts?source=pwa")!).pathname).toBe(
+      "/sign-in",
+    );
   });
 
   it("remembers for a year, through sign-out, that this browser has an account", () => {

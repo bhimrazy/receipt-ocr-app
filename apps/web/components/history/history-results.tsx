@@ -581,7 +581,7 @@ function EmptyState({ filtered, firstPage }: { filtered: boolean; firstPage: str
       ) : filtered ? (
         <Link
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-1")}
-          href="/app/history"
+          href="/app/receipts"
         >
           Clear filters
         </Link>

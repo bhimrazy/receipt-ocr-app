@@ -13,7 +13,7 @@ test("sort, page size, select across pages and delete in bulk on desktop", async
   const merchants = Array.from({ length: 27 }, (_, i) => `Shop ${String(i + 1).padStart(2, "0")}`);
   await seedReceipts(email, merchants);
 
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   const pagination = page.getByRole("navigation", { name: "Pagination" });
   await expect(pagination).toContainText("1–25 of 27");
 
@@ -57,7 +57,7 @@ test("the row menu, then delete all that match a filter across pages", async ({ 
   const email = uniqueEmail("bulk-all");
   await signUp(page, email);
   await seedReceipts(email, [...Array.from({ length: 30 }, (_, i) => `Cafe ${i + 1}`), "Hardware"]);
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
 
   // One row's menu deletes just that receipt.
   await page.getByRole("button", { name: "Actions for Cafe 30" }).click();
@@ -70,7 +70,7 @@ test("the row menu, then delete all that match a filter across pages", async ({ 
   await expect(page.getByText("30 receipts in this workspace")).toBeVisible();
 
   // 29 cafes match the search, over two pages: select them all and delete them.
-  await page.goto("/app/history?q=Cafe");
+  await page.goto("/app/receipts?q=Cafe");
   await expect(page.getByRole("navigation", { name: "Pagination" })).toContainText("1–25 of 29");
   await page.getByRole("checkbox", { name: "Select all on this page" }).check();
   await page.getByRole("button", { name: "Select all 29 receipts that match" }).click();
@@ -86,7 +86,7 @@ test("the row menu, then delete all that match a filter across pages", async ({ 
   await expect(page.getByText("No receipts match")).toBeVisible();
 
   // Only what matched went.
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await expect(page.getByText("1 receipt in this workspace")).toBeVisible();
   await expect(page.getByRole("table").getByRole("link", { name: "Hardware" })).toBeVisible();
 });
@@ -98,7 +98,7 @@ test("on a phone, Select turns rows into checkboxes with actions over the tab ba
   const email = uniqueEmail("bulk-phone");
   await signUp(page, email);
   await seedReceipts(email, ["Bakery", "Bookshop", "Bike repair"]);
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await page.getByRole("button", { name: "Select", exact: true }).click();
   await page.getByRole("checkbox", { name: "Select Bakery" }).check();
   await page.getByRole("checkbox", { name: "Select Bookshop" }).check();

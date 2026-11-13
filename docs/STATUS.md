@@ -202,6 +202,7 @@ Open pull requests only.
 | PR   | Work                                                                                                                          |
 | ---- | ----------------------------------------------------------------------------------------------------------------------------- |
 | #219 | Receipts list: sorting, page size, range, selection across pages, bulk delete (`storage.delete` job), export and Add to group |
+| #229 | Navigation PR 1: History becomes Receipts (`/app/receipts`), Groups moves to `/app/receipts/groups`; no redirects             |
 | #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                     |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
