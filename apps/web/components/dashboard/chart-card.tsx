@@ -12,14 +12,18 @@ export function ChartCard({
   title,
   description,
   summary,
+  summaryClassName,
   table,
+  footer,
   className,
   children,
 }: {
   title: string;
   description?: ReactNode;
   summary?: ReactNode;
+  summaryClassName?: string;
   table?: ReactNode;
+  footer?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
@@ -29,9 +33,12 @@ export function ChartCard({
         <h3 className="text-sm font-medium">{title}</h3>
         {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
       </div>
-      {summary ? <p className="text-sm text-muted-foreground">{summary}</p> : null}
+      {summary ? (
+        <p className={cn("text-sm text-muted-foreground", summaryClassName)}>{summary}</p>
+      ) : null}
       {children}
       {table}
+      {footer}
     </Card>
   );
 }
