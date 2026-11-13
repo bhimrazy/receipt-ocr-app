@@ -295,11 +295,14 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(await needsReview()).toEqual({ count: 1, listed: 1 });
 
     // An edit that leaves the date keeps the date reason, and adds what the edit breaks.
+    // Saving marks the receipt reviewed, so it leaves needs-review with reasons still listed.
     expect(await repo((r) => r.update(id, d, { total: "999.00" }))).toBe(true);
-    expect((await repo((r) => r.get(id, d)))?.reviewReasons).toEqual([
-      "totals_mismatch",
-      "date_conflict",
-    ]);
+    const edited = await repo((r) => r.get(id, d));
+    expect(edited?.reviewReasons).toEqual(["totals_mismatch", "date_conflict"]);
+    expect([edited?.reviewedBy, edited?.reviewedAt]).toEqual([d.userId, expect.any(Date)]);
+    expect(await needsReview()).toEqual({ count: 0, listed: 0 });
+    expect(await repo((r) => r.setReviewed(id, d, false))).toBe(true);
+    expect(await needsReview()).toEqual({ count: 1, listed: 1 });
     // Re-sending the same date is not a change; setting it is, and clears the date reason.
     await repo((r) => r.update(id, d, { receiptDate: "2025-07-17", total: "1118.70" }));
     expect((await repo((r) => r.get(id, d)))?.reviewReasons).toEqual(["date_conflict"]);
@@ -311,8 +314,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       receiptDateCalendar: "gregory",
       reviewReasons: [],
     });
-    expect(await needsReview()).toEqual({ count: 0, listed: 0 });
-    // Clearing the date clears its calendar, and the receipt needs review again.
+    // Clearing the date clears its calendar and brings back its reason.
     await repo((r) => r.update(id, d, { receiptDate: null }));
     expect(await repo((r) => r.get(id, d))).toMatchObject({
       receiptDate: null,
@@ -532,6 +534,37 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(counts.total).toBe((await list({})).total);
   });
 
+  it("a search finds every spelling of a merchant, ignoring spaces and punctuation", async () => {
+    const list = (q: string) =>
+      run(Effect.flatMap(ReceiptRepo, (r) => r.list(b, { q }, { limit: 50, offset: 0 })));
+    const spellings = ["Bhatbhateni Super Market", "Bhat-Bhateni Super Market", "भाट-भटेनी"];
+    const ids = await db((d) =>
+      d
+        .insert(receipts)
+        .values(
+          spellings.map((merchant) => ({
+            organizationId: b.organizationId,
+            userId: b.userId,
+            fileName: "spelling.jpg",
+            status: "completed" as const,
+            merchant,
+          })),
+        )
+        .returning({ id: receipts.id }),
+    );
+    expect((await list("Bhatbhateni Super Market")).total).toBe(2);
+    expect((await list("bhat-bhateni supermarket")).total).toBe(2);
+    expect((await list("भाटभटेनी")).total).toBe(1);
+    await db((d) =>
+      d.delete(receipts).where(
+        inArray(
+          receipts.id,
+          ids.map((r) => r.id),
+        ),
+      ),
+    );
+  });
+
   it("a review takes a receipt out of needs-review until it is read again; only editors can review", async () => {
     const repo = <A>(f: (r: typeof ReceiptRepo.Service) => Effect.Effect<A, unknown>) =>
       run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
@@ -566,13 +599,21 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(reviewed?.reviewedAt).toBeInstanceOf(Date);
     expect(reviewed?.reviewer?.name).toBe("alice");
 
-    // An edit keeps the review; undo clears it.
-    expect(await repo((r) => r.update(id, a, { category: "Other" }))).toBe(true);
-    expect((await repo((r) => r.get(id, a)))?.reviewedAt).toBeInstanceOf(Date);
+    // Undo clears the review.
     expect(await repo((r) => r.setReviewed(id, a, false))).toBe(true);
     const undone = await repo((r) => r.get(id, a));
     expect([undone?.reviewedAt, undone?.reviewedBy, undone?.reviewer]).toEqual([null, null, null]);
     expect(await needsReview()).toEqual(low);
+
+    // Saving an edit reviews it too, even when a reason stays; others' edits still can't.
+    expect(await repo((r) => r.update(id, member, { category: "Other" }))).toBe(false);
+    expect(await needsReview()).toEqual(low);
+    expect(await repo((r) => r.update(id, a, { category: "Other" }))).toBe(true);
+    const saved = await repo((r) => r.get(id, a));
+    expect(saved?.reviewReasons).toEqual(["no_merchant"]);
+    expect(saved?.reviewedBy).toBe(a.userId);
+    expect(await needsReview()).toEqual(before);
+    expect(await repo((r) => r.setReviewed(id, a, false))).toBe(true);
 
     // A new extraction clears the review.
     expect(await repo((r) => r.setReviewed(id, a, true))).toBe(true);
@@ -597,6 +638,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
 
     // Still processing: even its uploader can't review it yet.
     expect(await repo((r) => r.setReviewed(id, member, true))).toBe(false);
+    expect(await repo((r) => r.update(id, member, { category: "Other" }))).toBe(true);
+    expect((await repo((r) => r.get(id, a)))?.reviewedAt).toBeNull();
     await extract(id);
 
     expect(await repo((r) => r.setReviewed(id, admin, true))).toBe(true);
@@ -610,6 +653,11 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect(impersonated?.reviewer?.name).toBe("alice");
     expect(await repo((r) => r.setReviewed(id, member, true))).toBe(true);
     expect((await repo((r) => r.get(id, a)))?.reviewedBy).toBe(b.userId);
+
+    // Saving an edit records the same reviewer as "Looks right".
+    const impersonating = { ...member, impersonatedBy: a.userId };
+    expect(await repo((r) => r.update(id, impersonating, { category: "Other" }))).toBe(true);
+    expect((await repo((r) => r.get(id, a)))?.reviewedBy).toBe(a.userId);
 
     await run(deleteReceipt({ receiptId: id, scope: admin }));
   });
