@@ -493,8 +493,6 @@ export async function deleteWorkspaceAction(input: { organizationId: string; con
   return result;
 }
 
-// ---------- Support ----------
-
 export async function setSupportStatusAction(input: { messageId: string; status: string }) {
   return run("support.status", async (ctx) => {
     const parsed = z

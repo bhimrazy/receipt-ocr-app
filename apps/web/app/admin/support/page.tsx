@@ -40,7 +40,7 @@ const link =
   "rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
 
 const replyHref = (row: AdminSupportRow) =>
-  `mailto:${row.email}?subject=${encodeURIComponent(`Re: your message to ${SITE_NAME}`)}`;
+  `mailto:${encodeURIComponent(row.email)}?subject=${encodeURIComponent(`Re: your message to ${SITE_NAME}`)}`;
 
 function Message({ row }: { row: AdminSupportRow }) {
   const headingId = `message-${row.id}`;
@@ -52,7 +52,10 @@ function Message({ row }: { row: AdminSupportRow }) {
             <h2 className="text-sm font-medium break-words" id={headingId}>
               {row.name}
             </h2>
-            <a className={`${link} text-sm break-all`} href={`mailto:${row.email}`}>
+            <a
+              className={`${link} text-sm break-all`}
+              href={`mailto:${encodeURIComponent(row.email)}`}
+            >
               {row.email}
             </a>
           </div>
@@ -68,6 +71,8 @@ function Message({ row }: { row: AdminSupportRow }) {
           </time>
           {" · "}
           {SOURCE_LABELS[row.source]}
+          {" · "}
+          <span className="font-mono">{row.id.slice(0, 8)}</span>
           {row.closedAt ? ` · closed ${formatDateTime(row.closedAt)}` : null}
         </p>
 
@@ -142,7 +147,7 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
   return (
     <>
       <AdminPageHeader
-        description={`Messages sent through the support button, newest first. Messages are deleted ${SUPPORT_RETENTION_MONTHS} months after they are closed, or after they were sent if they never are.`}
+        description={`Messages sent through the support button, newest first. Messages are deleted ${SUPPORT_RETENTION_MONTHS} months after they are closed; one that isn't closed counts from when it was sent or last reopened.`}
         title="Support"
       />
       <ListToolbar
