@@ -11,6 +11,7 @@ import {
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   ChevronRight,
+  CircleHelp,
   CreditCard,
   Palette,
   ShieldCheck,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { ThemeChoiceLabel, ThemeToggle } from "@/components/theme-toggle";
+import { openSupportWidget } from "@/lib/support-widget";
 
 export type SettingsLink = {
   href: string;
@@ -29,6 +31,9 @@ export type SettingsLink = {
   detail?: string;
   icon: "plan" | "workspace" | "groups" | "security";
 };
+
+/** A link row, or "appearance" (a sheet) or "help" (the support form, which must be on the page). */
+export type SettingsRow = SettingsLink | "appearance" | "help";
 
 const ICONS: Record<SettingsLink["icon"], LucideIcon> = {
   plan: CreditCard,
@@ -78,14 +83,7 @@ function RowBody({
  * sub-page, or a sheet for Appearance, as native settings do. Hidden from md up, where the
  * sections show in full.
  */
-export function SettingsList({
-  rows,
-  className,
-}: {
-  /** In order; "appearance" is the theme row, which opens a sheet. */
-  rows: (SettingsLink | "appearance")[];
-  className?: string;
-}) {
+export function SettingsList({ rows, className }: { rows: SettingsRow[]; className?: string }) {
   return (
     <nav aria-label="Settings" className={cn("md:hidden", className)}>
       <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
@@ -93,6 +91,20 @@ export function SettingsList({
           row === "appearance" ? (
             <li key={row}>
               <AppearanceRow />
+            </li>
+          ) : row === "help" ? (
+            <li key={row}>
+              <button
+                aria-haspopup="dialog"
+                className={rowClass}
+                data-touch-row=""
+                onClick={(event) =>
+                  openSupportWidget("getting-started", { returnFocus: event.currentTarget })
+                }
+                type="button"
+              >
+                <RowBody icon={CircleHelp} label="Help and feedback" value="" />
+              </button>
             </li>
           ) : (
             <li key={row.href}>

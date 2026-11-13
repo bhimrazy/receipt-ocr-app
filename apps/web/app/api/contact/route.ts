@@ -10,6 +10,7 @@ import { MAX_FORM_JSON_BYTES, readJson } from "@/lib/json-body";
 import { errorFields, logger, type WideEvent } from "@/lib/log";
 import { mailer } from "@/lib/mailer";
 import { runtime } from "@/lib/runtime";
+import { senderReceipt } from "@/lib/support-receipt";
 import { checkTurnstile } from "@/lib/turnstile";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,6 +25,7 @@ type ContactPayload = {
   message?: unknown;
   topic?: unknown;
   company?: unknown; // honeypot — humans never see or fill this
+  receiptId?: unknown;
 };
 
 export const POST = withRequestEvent(
@@ -115,13 +117,18 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
     return NextResponse.json({ error }, { status });
   }
 
+  const receiptId = topic === "problem" ? await senderReceipt(data.receiptId, event) : null;
+  const body = receiptId
+    ? `${message}\n\nReceipt ${receiptId}\n${new URL(`/app/receipts/${receiptId}`, emailContext.appUrl)}`
+    : message;
+
   // Like auth mail: without a mailer, dev and CI simulate (and log) delivery, but production
   // must not tell a visitor their message arrived when it didn't.
   const delivered = supportEmail
     ? (
         await sendEmail(
           mailer,
-          contactEmail(emailContext, { to: supportEmail, name, from: email, topic, message }),
+          contactEmail(emailContext, { to: supportEmail, name, from: email, topic, message: body }),
         )
       ).delivered
     : false;

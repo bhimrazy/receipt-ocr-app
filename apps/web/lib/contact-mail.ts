@@ -4,6 +4,7 @@ const TOPIC_LABELS = {
   "getting-started": "Question",
   "use-case": "Plans & limits",
   feature: "Feature request",
+  problem: "Problem report",
 } as const;
 
 /** How the auto-reply names the topic: "We've received {phrase}". */
@@ -11,6 +12,7 @@ const TOPIC_PHRASES: Record<keyof typeof TOPIC_LABELS, string> = {
   "getting-started": "your question",
   "use-case": "your question about plans and limits",
   feature: "your feature request",
+  problem: "your problem report",
 };
 
 export function isTopic(value: string): value is keyof typeof TOPIC_LABELS {

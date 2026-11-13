@@ -18,7 +18,15 @@ import {
   DrawerTrigger,
 } from "@receipt-ocr/ui/components/drawer";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { ChevronsUpDown, Cookie, LogOut, Settings, ShieldCheck, SunMoon } from "lucide-react";
+import {
+  ChevronsUpDown,
+  CircleHelp,
+  Cookie,
+  LogOut,
+  Settings,
+  ShieldCheck,
+  SunMoon,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -30,6 +38,7 @@ import { ThemeMenuRow, ThemeToggle } from "@/components/theme-toggle";
 import { CreateWorkspaceDialog, WorkspaceList } from "@/components/workspace-switcher";
 import { OPEN_UPGRADE } from "@/components/upgrade/upgrade-trigger";
 import { openConsentSettingsFrom } from "@/lib/consent/store";
+import { openSupportWidget } from "@/lib/support-widget";
 import type { WorkspaceOption } from "@/lib/workspaces";
 
 export type MenuUser = { name: string | null; email: string; image: string | null };
@@ -54,6 +63,10 @@ function Avatar({ user, className }: { user: MenuUser; className?: string }) {
   );
 }
 
+/** After the menu or sheet has closed, so it doesn't take focus back from the form. */
+const openHelp = (returnFocus: HTMLElement | null) =>
+  setTimeout(() => openSupportWidget("getting-started", { returnFocus }), 0);
+
 function useSignOut() {
   const router = useRouter();
   return async () => {
@@ -65,9 +78,18 @@ function useSignOut() {
 
 /**
  * Desktop account menu at the foot of the sidebar. The server layout passes the user, so
- * there's no loading flash. Pro is offered by the meter above it, never here.
+ * there's no loading flash. Pro is offered by the meter above it, never here. `showHelp` needs
+ * `SupportWidget` on the page.
  */
-export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boolean }) {
+export function UserMenu({
+  user,
+  showAdmin,
+  showHelp = false,
+}: {
+  user: MenuUser;
+  showAdmin: boolean;
+  showHelp?: boolean;
+}) {
   const handleSignOut = useSignOut();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const install = useInstallAction("menu", null);
@@ -111,6 +133,12 @@ export function UserMenu({ user, showAdmin }: { user: MenuUser; showAdmin: boole
             <Cookie aria-hidden="true" />
             Cookie settings
           </DropdownMenuItem>
+          {showHelp ? (
+            <DropdownMenuItem onClick={() => openHelp(triggerRef.current)}>
+              <CircleHelp aria-hidden="true" />
+              Help and feedback
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleSignOut}>
             <LogOut aria-hidden="true" />
@@ -147,11 +175,14 @@ export function WorkspaceNameButton({ children }: { children: React.ReactNode })
 export function AccountSheet({
   user,
   showAdmin,
+  showHelp = false,
   workspace,
   usage,
 }: {
   user: MenuUser;
   showAdmin: boolean;
+  /** Needs `SupportWidget` on the page. */
+  showHelp?: boolean;
   /** Omitted in the admin shell, which has no active workspace of its own. */
   workspace?: {
     activeId: string;
@@ -253,6 +284,17 @@ export function AccountSheet({
               <Cookie aria-hidden="true" />
               Cookie settings
             </DrawerAction>
+            {showHelp ? (
+              <DrawerAction
+                onClick={() => {
+                  close();
+                  openHelp(triggerRef.current);
+                }}
+              >
+                <CircleHelp aria-hidden="true" />
+                Help and feedback
+              </DrawerAction>
+            ) : null}
             <DrawerAction onClick={handleSignOut}>
               <LogOut aria-hidden="true" />
               Sign out

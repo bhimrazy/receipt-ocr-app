@@ -14,6 +14,7 @@ import {
 import { Effect } from "effect";
 import { AboutSettings } from "@/components/about-settings";
 import { AccountSettings } from "@/components/account-settings";
+import { ContactButton } from "@/components/contact-button";
 import { InstallAppSettings } from "@/components/install-offer";
 import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsList } from "@/components/settings-list";
@@ -27,7 +28,7 @@ import { requireActiveScope, requireSession } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { ChevronRight, CreditCard, ShieldCheck, Tags } from "lucide-react";
+import { ChevronRight, CircleHelp, CreditCard, ShieldCheck, Tags } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getUsageSummary } from "@/lib/receipts";
@@ -232,6 +233,29 @@ export default async function SettingsPage({
         name={session.user.name ?? ""}
         resume={resumeStep}
       />
+
+      <SettingsSection
+        className="max-md:hidden"
+        description="Ask a question, report a problem or suggest a feature."
+        id="help-heading"
+        title="Help and feedback"
+      >
+        <Card className="flex flex-wrap items-center gap-3 p-4">
+          <span
+            aria-hidden="true"
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"
+          >
+            <CircleHelp className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium select-none">Write to us</p>
+            <p className="text-xs text-muted-foreground">We reply by email.</p>
+          </div>
+          <ContactButton size="sm" variant="outline">
+            Help and feedback
+          </ContactButton>
+        </Card>
+      </SettingsSection>
 
       <AboutSettings />
 

@@ -12,6 +12,7 @@ import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { SecurityNudge } from "@/components/security/security-nudge";
 import { SecurityPrompt } from "@/components/security/security-prompt";
 import { StepUpProvider } from "@/components/step-up/step-up";
+import { SupportWidget } from "@/components/support-widget";
 import { UpgradeBanner } from "@/components/upgrade/upgrade-banner";
 import { UpgradeModal } from "@/components/upgrade/upgrade-modal";
 import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
@@ -175,7 +176,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <AppSidebarNav showAdmin={showAdmin} />
               <div className="mt-auto flex flex-col gap-3">
                 {meter}
-                <UserMenu showAdmin={showAdmin} user={user} />
+                <UserMenu showAdmin={showAdmin} showHelp user={user} />
               </div>
             </aside>
           </div>
@@ -193,6 +194,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               trailing={
                 <AccountSheet
                   showAdmin={showAdmin}
+                  showHelp
                   usage={meter}
                   user={user}
                   workspace={workspace}
@@ -220,6 +222,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       <StepUpProvider />
       <RefreshOnReturn />
+      {/* Opened by Help and feedback and Report a problem; no floating launcher in the app. */}
+      <SupportWidget launcher={false} />
       <UpgradeModal offer={ownerOffer} plan={plan} />
     </Toaster>
   );
