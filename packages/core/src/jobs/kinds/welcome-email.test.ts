@@ -60,7 +60,9 @@ describe("welcome email job", () => {
         sent,
       );
       expect(Exit.isSuccess(exit)).toBe(true);
-      expect(sent).toEqual([{ to: "a@example.com", plan, policy: DEFAULT_PLANS[plan] }]);
+      expect(sent).toEqual([
+        { to: "a@example.com", plan, policy: DEFAULT_PLANS[plan], idempotencyKey: "job:j" },
+      ]);
     }
     expect(DEFAULT_PLANS.free.receiptsPerDay).not.toBe(DEFAULT_PLANS.pro.receiptsPerDay);
   });

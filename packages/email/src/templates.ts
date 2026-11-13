@@ -26,6 +26,8 @@ export interface EmailContext {
 }
 
 export interface EmailContent {
+  /** Which template made this message; `sendEmail` logs it as `email_kind`. */
+  kind: TemplateName;
   subject: string;
   html: string;
   text: string;
@@ -68,6 +70,7 @@ function build(
   const values = emailSlots(ctx, input);
   const template = TEMPLATES[name][values.supportEmail ? "support" : "nosupport"];
   return {
+    kind: name,
     subject,
     html: fill(template.html, values, "html"),
     text: fill(template.text, values, "text"),

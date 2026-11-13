@@ -36,7 +36,7 @@ describe("contact auto-reply job", () => {
     const sent: unknown[] = [];
     const exit = await run("delivered", sent);
     expect(Exit.isSuccess(exit) && exit.value).toEqual({ delivered: true });
-    expect(sent).toEqual([payload]);
+    expect(sent).toEqual([{ ...payload, idempotencyKey: "job:j" }]);
   });
 
   it("succeeds without a mailer, retries a failed send and gives up on a bad render", async () => {

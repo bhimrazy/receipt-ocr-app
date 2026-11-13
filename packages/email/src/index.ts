@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 
+import type { TemplateName } from "./templates";
+
 export * from "./templates";
 
 export interface SendEmailInput {
@@ -9,6 +11,15 @@ export interface SendEmailInput {
   text: string;
   /** Where replies go, e.g. the sender of a contact-form message. */
   replyTo?: string;
+  /** The template that made the message; logged as `email_kind`. */
+  kind?: TemplateName;
+  /**
+   * Resend's `Idempotency-Key`: a repeat of the same key and payload within 24 hours returns
+   * the first send instead of mailing again; the same key with a different payload fails (409).
+   * Set it from a retried job (`job:{id}`), whose earlier attempt may have been accepted
+   * before the response was lost.
+   */
+  idempotencyKey?: string;
 }
 
 export type SendEmailResult =
@@ -27,6 +38,9 @@ export type EmailLogEvent = {
   event: "email.sent" | "email.send_failed" | "email.not_configured" | "email.contact_failed";
   unit: "log";
   level: "info" | "error";
+  email_kind?: TemplateName;
+  /** Resend's id for an accepted message, to find it in the provider's logs. */
+  provider_message_id?: string;
   error?: { type: string; kind?: string };
 };
 
@@ -46,6 +60,8 @@ const consoleLog = (event: EmailLogEvent) => {
   if (event.level === "error") console.error(line);
   else console.info(line);
 };
+
+const kindOf = (input: SendEmailInput) => (input.kind ? { email_kind: input.kind } : {});
 
 function resend(apiKey: string): Resend {
   if (!client) client = new Resend(apiKey);
@@ -85,29 +101,50 @@ export async function sendEmail(
         JSON.stringify({ event: "email.not_configured", to: input.to, text: input.text }),
       );
     } else {
-      log({ event: "email.not_configured", unit: "log", level: "error" });
+      log({ event: "email.not_configured", unit: "log", level: "error", ...kindOf(input) });
     }
     return { delivered: false, reason: "not_configured" };
   }
 
   const replyTo = input.replyTo ?? config.replyTo;
   try {
-    const { data, error } = await resend(config.apiKey).emails.send({
-      from: config.from,
-      to: input.to,
-      subject: input.subject,
-      html: input.html,
-      text: input.text,
-      ...(replyTo ? { replyTo } : {}),
-    });
+    const { data, error } = await resend(config.apiKey).emails.send(
+      {
+        from: config.from,
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+        text: input.text,
+        ...(replyTo ? { replyTo } : {}),
+      },
+      input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined,
+    );
     if (error) {
-      log({ event: "email.send_failed", unit: "log", level: "error", error: errorOf(error) });
+      log({
+        event: "email.send_failed",
+        unit: "log",
+        level: "error",
+        ...kindOf(input),
+        error: errorOf(error),
+      });
       return { delivered: false, reason: "failed", error: error.message };
     }
-    log({ event: "email.sent", unit: "log", level: "info" });
+    log({
+      event: "email.sent",
+      unit: "log",
+      level: "info",
+      ...kindOf(input),
+      ...(data?.id ? { provider_message_id: data.id } : {}),
+    });
     return { delivered: true, id: data?.id };
   } catch (cause) {
-    log({ event: "email.send_failed", unit: "log", level: "error", error: errorOf(cause) });
+    log({
+      event: "email.send_failed",
+      unit: "log",
+      level: "error",
+      ...kindOf(input),
+      error: errorOf(cause),
+    });
     return {
       delivered: false,
       reason: "failed",

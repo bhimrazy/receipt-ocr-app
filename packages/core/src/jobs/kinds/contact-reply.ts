@@ -38,7 +38,10 @@ export class ContactReplyMailer extends Context.Tag("@receipt-ocr/core/ContactRe
   ContactReplyMailer,
   {
     readonly send: (
-      input: ContactReplyPayload,
+      input: ContactReplyPayload & {
+        /** Stable across a job's attempts, so a retry after an accepted send doesn't mail twice. */
+        idempotencyKey: string;
+      },
     ) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected">;
   }
 >() {
@@ -76,10 +79,10 @@ export const contactReply: JobDefinition<ContactReplyPayload, ContactReplyMailer
   scrubPayload: true,
   backoff: { baseMs: 30_000, capMs: 10 * 60_000 },
 
-  run: (payload) =>
+  run: (payload, { job }) =>
     Effect.gen(function* () {
       const mailer = yield* ContactReplyMailer;
-      const outcome = yield* mailer.send(payload);
+      const outcome = yield* mailer.send({ ...payload, idempotencyKey: `job:${job.id}` });
       yield* annotateEvent({
         kind: "contact_reply",
         topic: payload.topic,
