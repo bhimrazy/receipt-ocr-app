@@ -119,8 +119,6 @@ reset. **From the first real user onward we never squash again.** Details:
 
 ## Launch blockers
 
-- Support messages retention: a `maintenance.purge` job for `support_messages` before launch. It covers closed messages
-  and unanswered public ones (anyone can store a message today), and the privacy page states the period.
 - Turnstile keys required in production for `/api/contact`: without them, `checkTurnstile` lets every request through
   (`apps/web/lib/turnstile.ts`), so a script that rotates IPs can fill `support_messages`.
 
@@ -452,18 +450,20 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   session. The password step clears the session cookie first, so the earlier token has to be carried through the
   challenge to find it.
 - Database review items not done in the schema-fixes PR (#127): backups and a restore drill (H1), the
-  `maintenance.purge` retention job and its `step_up_codes (expires_at)` index (H2, M5), revoking `anon` and
+  retention for `step_up_codes`, `step_up_events` and finished `jobs` in the `maintenance.purge` job (which only purges
+  `support_messages` so far) and the `step_up_codes (expires_at)` index (H2, M5), revoking `anon` and
   `authenticated` grants and checking the Data API is off (H4), pool on `globalThis` and role-level timeouts (M3), the
   quota statement profile (M4), an `ocr_call_status` lookup table (M1), dropping `user_credentials` and
   `storage_source` with BYOK (M6, L5), trigram search and admin indexes when they slow down (L2, L3), lock ordering
   between admin re-run and user retry (L4).
-- Support messages (from the [support data review](reviews/2026-11-13-support-data-cto.md)): `support_messages` is
-  stored; still to do are `/admin/support` (PR 3), the Resend bounce webhook and suppression table (PR 4, owner: later),
-  and the `maintenance.purge` job deleting closed messages 12 months after `closed_at` (PR 5, owner decision), then a
-  retention line on the privacy page. The notification mail carries the full message until the admin list lands (owner).
+- Support messages (from the [support data review](reviews/2026-11-13-support-data-cto.md)): stored, triaged in
+  `/admin/support` and deleted by the daily `maintenance.purge` job 12 months after closing (or after sending, if never
+  closed). Still to do: the Resend bounce webhook and suppression table (PR 4, owner: later), and the notification mail,
+  which still carries the full message: the owner kept it only until the admin list landed, so it should now link to
+  `/admin/support` instead.
   Once `sendEmail` takes an idempotency key, `SupportNotifyMailerLive` passes `job:{id}` (`SupportNotice.jobId`).
 - Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
-  rows older than 90 days with a job kind in `packages/core/src/jobs` (there is no retention job yet), keeping the last
+  rows older than 90 days in the daily `maintenance.purge` job, keeping the last
   pass and recent failures that the lockout reads; then update the privacy policy.
 
 - Share target: a cross-site form can plant a share in a visitor's cache (the referrer can be hidden). The Keep and
