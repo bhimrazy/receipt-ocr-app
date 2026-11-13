@@ -699,6 +699,9 @@ export const supportMessages = pgTable(
     index("support_messages_user_created_idx")
       .on(table.userId, table.createdAt)
       .where(sql`${table.userId} is not null`),
+    // The set-nulls when a workspace or receipt is deleted.
+    index("support_messages_org_idx").on(table.organizationId),
+    index("support_messages_receipt_idx").on(table.receiptId),
     // Account deletion also removes the signed-out messages sent from the account's address.
     index("support_messages_email_idx").on(sql`lower(${table.email})`),
     check("support_messages_kind_check", sql`kind in ('question', 'problem', 'feedback', 'sales')`),

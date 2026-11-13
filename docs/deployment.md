@@ -482,8 +482,9 @@ Steps specific to one release, newest first.
   ```
 
   From migration `0001_billing` on, the list also needs `public.billing_events, public.billing_subscriptions` (before
-  `public.organization` and `public."user"`, which `billing_subscriptions` references), and from `0004_billing_checkouts`
-  on `public.billing_checkouts` as well (it references both).
+  `public.organization` and `public."user"`, which `billing_subscriptions` references), from `0004_billing_checkouts`
+  on `public.billing_checkouts` as well (it references both), and from `0006_support_messages` on
+  `public.support_messages` (before `public.receipts`, `public.organization` and `public."user"`).
 
   Post-check: `pg_tables` for `public` returns no rows, no enum types are left, `select count(*) from pg_class c join
 pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'` is 0, the `drizzle` schema is gone, and

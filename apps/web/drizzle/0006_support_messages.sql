@@ -29,6 +29,8 @@ ALTER TABLE "support_messages" ENABLE ROW LEVEL SECURITY;--> statement-breakpoin
 CREATE UNIQUE INDEX "support_messages_submission_idx" ON "support_messages" USING btree ("submission_id");--> statement-breakpoint
 CREATE INDEX "support_messages_status_created_idx" ON "support_messages" USING btree ("status","created_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "support_messages_user_created_idx" ON "support_messages" USING btree ("user_id","created_at") WHERE "support_messages"."user_id" is not null;--> statement-breakpoint
+CREATE INDEX "support_messages_org_idx" ON "support_messages" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX "support_messages_receipt_idx" ON "support_messages" USING btree ("receipt_id");--> statement-breakpoint
 CREATE INDEX "support_messages_email_idx" ON "support_messages" USING btree (lower("email"));--> statement-breakpoint
 -- The table is empty, so each FK validates at once; SHARE ROW EXCLUSIVE on the parent until commit.
 ALTER TABLE "support_messages" ADD CONSTRAINT "support_messages_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

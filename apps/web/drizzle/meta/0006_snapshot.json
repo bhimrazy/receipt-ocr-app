@@ -1,5 +1,5 @@
 {
-  "id": "20795966-61c2-427b-aefa-1b033b113311",
+  "id": "386d3451-9d26-4c87-89f4-13308357ea90",
   "prevId": "39b32dd9-dbe8-409f-856b-3dfe5f627419",
   "version": "7",
   "dialect": "postgresql",
@@ -2596,6 +2596,36 @@
           ],
           "isUnique": false,
           "where": "\"support_messages\".\"user_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "support_messages_org_idx": {
+          "name": "support_messages_org_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "support_messages_receipt_idx": {
+          "name": "support_messages_receipt_idx",
+          "columns": [
+            {
+              "expression": "receipt_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
