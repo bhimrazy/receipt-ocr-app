@@ -11,7 +11,8 @@ export function settingsRows(input: {
     {
       href: "/app/settings/billing",
       label: "Plan and billing",
-      value: input.planSummary,
+      value: "",
+      detail: input.planSummary,
       icon: "plan",
     },
     {

@@ -8,7 +8,9 @@ describe("settingsRows", () => {
       workspaceName: "Sam's",
       protectedAccount: false,
     });
-    expect(rows.map((r) => (r === "appearance" ? r : [r.label, r.value, r.href]))).toEqual([
+    expect(
+      rows.map((r) => (r === "appearance" ? r : [r.label, r.detail ?? r.value, r.href])),
+    ).toEqual([
       ["Plan and billing", "Free · 85 / 100 scans", "/app/settings/billing"],
       ["Workspace", "Sam's", "/app/settings/members"],
       ["Groups", "", "/app/receipts/groups"],

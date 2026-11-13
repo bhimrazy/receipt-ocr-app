@@ -81,14 +81,12 @@ const meterButton = (page: Page) =>
 const homeCard = (page: Page) =>
   page.getByRole("heading", { name: /free scans? left this month$/ });
 
-/** The month's limit the meter shows: 30 on Free, or the early-access allowance before launch. */
+/**
+ * The month's limit the meter shows: 30 on Free, or the early-access allowance before launch.
+ * By selector, not role: on a phone the sidebar meter is in the DOM but hidden.
+ */
 const monthLimit = async (page: Page) =>
-  Number(
-    await page
-      .getByRole("meter", { name: /Scans used/ })
-      .first()
-      .getAttribute("aria-valuemax"),
-  );
+  Number(await page.locator('[role="meter"]').first().getAttribute("aria-valuemax"));
 
 /** Scans this month up to `ratio` of the limit, so the meter reaches that level. */
 async function spendShare(page: Page, email: string, ratio: number) {
