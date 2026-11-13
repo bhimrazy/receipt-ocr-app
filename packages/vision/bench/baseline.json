@@ -1,0 +1,87 @@
+{
+  "set": "gate",
+  "firstSeed": 5000,
+  "scenes": 40,
+  "categories": [
+    {
+      "id": "table",
+      "weight": 18,
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg"
+    },
+    {
+      "id": "hand",
+      "weight": 15,
+      "outcomes": "llgllghgghhlhlhhlllhhllllllghlhlhhlhhhll"
+    },
+    {
+      "id": "thumb",
+      "weight": 4,
+      "outcomes": "gggghlllmhggllglgggggghlglggghhghhghghlg"
+    },
+    {
+      "id": "white",
+      "weight": 10,
+      "outcomes": "mgmgmggmmgmgmglgmmgggglmgglmmmmmmmmgmgmm"
+    },
+    {
+      "id": "clutter",
+      "weight": 7,
+      "outcomes": "hmlllggmmglggllmglgmmllmgllgllggglhllggg"
+    },
+    {
+      "id": "patterned",
+      "weight": 7,
+      "outcomes": "gggmglgggggggmgggggggggmlgggggggggggghmm"
+    },
+    {
+      "id": "thermal",
+      "weight": 6,
+      "outcomes": "gggggggmgggmgggmgggggggggggggggmhggggggg"
+    },
+    {
+      "id": "crumpled",
+      "weight": 5,
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg"
+    },
+    {
+      "id": "folded",
+      "weight": 2,
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg"
+    },
+    {
+      "id": "shadow",
+      "weight": 5,
+      "outcomes": "gggmggmlgggmggggmgggggmgggghgggmghghhggg"
+    },
+    {
+      "id": "lowlight",
+      "weight": 4,
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg"
+    },
+    {
+      "id": "glare",
+      "weight": 2,
+      "outcomes": "lgllggglgggggggghggggggglgglglglgggllggl"
+    },
+    {
+      "id": "partial",
+      "weight": 5,
+      "outcomes": "ggghggghghghhgghhhggghhhhggghhgghggghggg"
+    },
+    {
+      "id": "several",
+      "weight": 2,
+      "outcomes": "hllghlhlgghhlhlhhhghhllhhlhlllhhhllhhhhh"
+    },
+    {
+      "id": "a4",
+      "weight": 4,
+      "outcomes": "ggggglgggggggggggggggggggggggggggggggggg"
+    },
+    {
+      "id": "digital",
+      "weight": 5,
+      "outcomes": "hgggggggghgggghgghgggggghggggggggghggghg"
+    }
+  ]
+}

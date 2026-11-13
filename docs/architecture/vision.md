@@ -58,6 +58,15 @@ project (`bun run test`). The detector tests draw synthetic scenes and also plac
 (bowed sides, a lighter band of table); see the [edge-detection plan](../plans/2026-11-12-edge-detection.md).
 `bun run --filter @receipt-ocr/vision typecheck` checks `src` without the DOM and the tests with Node types.
 
+## Measurement harness
+
+[`packages/vision/bench`](../../packages/vision/bench) renders synthetic scenes with known corners (a pure function
+of category and seed, at 384x512, nothing committed as an image), runs `detectQuad` and reports good, loose, miss and
+harmful rates per category and weighted. It is not part of the package's public API and never ships to the browser.
+`bun run --filter @receipt-ocr/vision bench:edges` runs the 40 gate scenes per category (about 40 s); `--set tune`
+uses the separate tuning seeds. `bench/baseline.json` holds the per-scene outcomes the pass bars compare with
+(`--check`); see the [edge-detection plan](../plans/2026-11-12-edge-detection.md#4-measurement-harness).
+
 ## Common changes
 
 - **A new export**: add it to `src/index.ts`. The package has one entry point, so no Vitest alias or `exports` line

@@ -97,6 +97,45 @@ Corner error is the largest corner distance as a share of the frame diagonal. Sy
 photos, so read these as an upper bound on real behaviour; the published real-world figures for classical detectors
 are 37–51% hands-off (section 2).
 
+#### Baseline from the repo harness (2026-11-13)
+
+`bun run --filter @receipt-ocr/vision bench:edges` on the gate seeds (5000–5039, 40 scenes per category), detector
+unchanged. The repo generator is a rewrite, so it is not scene-for-scene the scratch one: it adds the extra categories
+as variants (white wall, sleeve, curved paper, laptop, motion blur, a darker receipt on a light table, JPEG and card
+screenshots) and renders a different random mix. Read the table above as the original estimate and this one as the
+number every later PR is compared with (`packages/vision/bench/baseline.json`).
+
+| Category                                     |      Good |     Loose |     Miss |   Harmful | Median corner error |
+| -------------------------------------------- | --------: | --------: | -------: | --------: | ------------------: |
+| Flat on a contrasting table, dark/wood (18%) |      100% |        0% |       0% |        0% |               0.41% |
+| Hand-held, room behind, fingers on it (15%)  |       13% |       50% |       0% |       38% |               0.40% |
+| Hand-held, thumb over a corner (4%)          |       53% |       23% |       3% |       23% |               3.15% |
+| White or light surface (10%)                 |       40% |        8% |      53% |        0% |               0.55% |
+| Messy desk, keyboard, clutter (7%)           |       38% |       40% |      18% |        5% |               0.42% |
+| Patterned cloth, lap, car seat (7%)          |       80% |        5% |      13% |        3% |               0.42% |
+| Long thermal, 1:3.5 to 1:5.5 (6%)            |       88% |        0% |      10% |        3% |               0.49% |
+| Crumpled or curled (5%)                      |      100% |        0% |       0% |        0% |               0.37% |
+| Folded (2%)                                  |      100% |        0% |       0% |        0% |               0.44% |
+| Shadow across the paper (5%)                 |       73% |        3% |      15% |       10% |               0.42% |
+| Low light and noise (4%)                     |      100% |        0% |       0% |        0% |               0.48% |
+| Glare, or a light band beside the paper (2%) |       70% |       28% |       0% |        3% |               0.64% |
+| Partial, runs off the frame (5%)             |       60% |        0% |       0% |       40% |                   – |
+| Several or overlapping receipts (2%)         |       10% |       35% |       0% |       55% |               0.46% |
+| A4 invoice on a desk (4%)                    |       98% |        3% |       0% |        0% |               0.43% |
+| Screenshot or PDF render, no edges (5%)      |       83% |        0% |       0% |       18% |                   – |
+| **Weighted**                                 | **66.0%** | **13.6%** | **8.7%** | **11.6%** |   0.45% (p90 2.43%) |
+
+Against the scratch run: the order of difficulty holds (hand-held, thumb, clutter, several receipts and screenshots are
+the harmful ones; table, crumpled, folded, low light and A4 are fine) and the thumb category is almost the same, but
+the weighted result is kinder (good 66% against 50%, harmful 11.6% against 15.4%). The gaps are in the white surface
+(40% good against 0%; the repo scenes give the paper a cast shadow and include a darker-receipt variant), partial (40%
+harmful against 0%; the repo paper runs further off the frame), screenshots (83% good against 45%) and several
+receipts. These are generator differences, not measured causes. The held-out tuning seeds (1000–1009) give 64.4 / 9.7 / 12.2 /
+13.8, so the two seed sets agree to within the sampling noise of 10 scenes. Of 254 crops the detector would apply, none
+cut print; 309 were only suggested, 164 of them good. Speed is 3.3 ms median, 6.3 ms p95 at 192x256 under Bun, and the
+module is 5.0 kB minified, 2.4 kB gzipped (`bun build` of `detect-quad.ts`; the scratch figure below was taken on a
+different bundle).
+
 Speed and size, measured on the codespace (AMD EPYC 7763, a noisy shared machine): **about 9 ms median, 26 ms p95**
 per call at 192x256 under Node/V8, and 6–12 ms median under Bun/JavaScriptCore across runs. The module is 4.2 kB
 minified, **1.9 kB gzipped**.
@@ -425,8 +464,11 @@ To make v2 the default (after PR 8):
 
 ### Running it
 
-- `packages/vision/bench/` holds the generator, metrics and runner. `bun run bench:edges` prints the table above and
-  writes `packages/vision/bench/baseline.json` when asked.
+- `packages/vision/bench/` holds the generator, metrics and runner. `bun run --filter @receipt-ocr/vision bench:edges`
+  prints the table above; `--write-baseline` writes `bench/baseline.json`, `--check` compares with it (the pass bars
+  on the same scenes, exit 1 on a violation), `--set tune` runs the tuning seeds, and `--scenes` and `--category`
+  narrow a run. Built in PR 2: the generator and metrics, the baseline and the check. Not yet built: the gate test,
+  the frozen v1 for the speed ratio and the labelled real photos.
 - A `vitest` unit test (`edges.gate.test.ts`) renders the gate seeds, runs the detector and asserts the bars against
   `baseline.json`. Pure TypeScript on typed arrays: no browser, no canvas, no native module. It runs in the existing
   "Typecheck, test, build" job. Budget: under 30 seconds for 16 categories of 40 scenes (the scratch version needs
