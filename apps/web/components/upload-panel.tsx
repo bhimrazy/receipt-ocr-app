@@ -198,6 +198,27 @@ function nearLimitLine(usage: Usage): string | null {
   return `${plural(left, "scan")} left ${span}`;
 }
 
+/** The plan state without the drop zone, for Home on a phone: the limit card, or the usage line from NEAR_RATIO. */
+export function PlanState({
+  usage,
+  resetsIn,
+  plan,
+}: {
+  usage: Usage;
+  resetsIn: string;
+  plan: LimitPlan;
+}) {
+  if (usage.blocked) return <LimitReached plan={plan} resetsIn={resetsIn} usage={usage} />;
+  const line = nearLimitLine(usage);
+  if (!line) return null;
+  return (
+    <p className="flex items-center justify-center gap-1.5 text-sm">
+      <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
+      {line}
+    </p>
+  );
+}
+
 /** Seconds until `until`, ticking while it's set. */
 function useCountdown(until: number | null) {
   const [now, setNow] = useState(() => Date.now());

@@ -339,3 +339,42 @@ test.describe("on a phone", () => {
     await expect(sheet).toBeHidden();
   });
 });
+
+test.describe("on a phone, Home keeps the plan state outside the upload panel", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  const addReceipt = (email: string) =>
+    db(
+      (sql) => sql`
+        insert into receipts (organization_id, user_id, merchant, receipt_date, currency, total, tax,
+          confidence, status)
+        select m.organization_id, u.id, 'Corner Cafe', current_date, 'GBP', 8.40, 0, 0.95, 'completed'
+        from "user" u join member m on m.user_id = u.id where u.email = ${email}`,
+    );
+
+  test("under 80% neither shows; at 85% the line; at the limit the card", async ({ page }) => {
+    test.skip(firstOfMonth(), "needs earlier days this month");
+    const email = await adminOwner(page, "upgrade-phone");
+    await addReceipt(email);
+    const plan = page.getByTestId("phone-plan");
+    const upload = page.getByRole("region", { name: "Upload" });
+
+    await spendShare(page, email, 0.5);
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+    await expect(plan).toBeEmpty();
+    await expect(upload).toBeHidden();
+
+    await spendShare(page, email, 0.35);
+    await page.reload();
+    await expect(plan.getByText(/^\d+ scans? left this month$/)).toBeVisible();
+    await expect(plan.getByRole("button")).toHaveCount(0);
+    await expect(upload).toBeHidden();
+
+    await addScans(email, 20, "month");
+    await page.reload();
+    await expect(plan.getByRole("heading", { level: 2 })).toContainText(/free scans|limit/);
+    await expect(plan.getByRole("link", { name: "Review receipts" })).toBeVisible();
+    await expect(page.getByText("Drop receipt photos or PDFs here")).toBeHidden();
+  });
+});
