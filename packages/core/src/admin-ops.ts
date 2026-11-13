@@ -62,8 +62,6 @@ const iso = (value: string | Date) => new Date(value).toISOString();
 const num = (value: unknown) => (value == null ? 0 : Number(value));
 const numOrNull = (value: unknown) => (value == null ? null : Number(value));
 
-// ---------- Volume ----------
-
 export type VolumePoint = { t: string; ok: number; failed: number; inFlight: number };
 export type OpsVolume = {
   points: VolumePoint[];
@@ -130,8 +128,6 @@ export async function volumeQuery(db: Queryable, w: OpsWindow): Promise<OpsVolum
   return { points, totals, successRate: settled > 0 ? totals.ok / settled : null };
 }
 
-// ---------- Latency ----------
-
 export type LatencyStats = { p50: number; p95: number; calls: number };
 export type OpsLatency = {
   models: string[];
@@ -187,8 +183,6 @@ export async function latencyQuery(db: Queryable, w: OpsWindow): Promise<OpsLate
     overall: total && num(total.calls) > 0 ? stats(total) : null,
   };
 }
-
-// ---------- Tokens and cost ----------
 
 export type CostStats = {
   calls: number;
@@ -275,8 +269,6 @@ export async function costQuery(db: Queryable, w: OpsWindow): Promise<OpsCost> {
   };
 }
 
-// ---------- Top workspaces ----------
-
 export type WorkspaceCost = {
   /** Null for a deleted workspace (its ledger rows stay, unlinked) and for "Other". */
   organizationId: string | null;
@@ -335,8 +327,6 @@ export async function topWorkspacesQuery(
   }));
 }
 
-// ---------- Failures ----------
-
 export type FailureKind = { kind: string; count: number };
 export type OpsFailures = {
   /** Model calls that didn't return a reading, by `ocr_calls.status`. */
@@ -363,8 +353,6 @@ export async function failuresQuery(db: Queryable, w: OpsWindow): Promise<OpsFai
     rows.filter((r) => r.source === source).map((r) => ({ kind: r.kind, count: num(r.n) }));
   return { calls: of("call"), deadJobs: of("job") };
 }
-
-// ---------- Queue now ----------
 
 export type QueueControl = {
   scope: string;
@@ -456,8 +444,6 @@ export async function queueQuery(db: Queryable): Promise<OpsQueue> {
   };
 }
 
-// ---------- Sign-ups and active users ----------
-
 export type OpsPeople = {
   points: { t: string; signups: number; active: number }[];
   signups: number;
@@ -505,8 +491,6 @@ export async function peopleQuery(db: Queryable, w: OpsWindow): Promise<OpsPeopl
     active: num(total?.active),
   };
 }
-
-// ---------- Month projection and storage ----------
 
 export type OpsMonth = {
   /** UTC calendar month, `YYYY-MM`. */
@@ -601,8 +585,6 @@ export async function storageQuery(db: Queryable): Promise<OpsStorage> {
   }
 }
 
-// ---------- The page ----------
-
 /** The same figures for the period just before, for the dashed comparison and deltas. */
 export type OpsPrevious = {
   window: OpsWindow;
@@ -679,8 +661,6 @@ export const operationsOverview = (
       Effect.map((parts): OpsOverview => ({ window: w, generatedAt: now.toISOString(), ...parts })),
     );
   });
-
-// ---------- Jobs list and detail ----------
 
 export const JOB_STATES = ["queued", "running", "succeeded", "dead", "cancelled"] as const;
 export type JobStateFilter = (typeof JOB_STATES)[number];

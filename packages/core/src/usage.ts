@@ -180,8 +180,6 @@ export const roundsSince = (since: Date) =>
     + (select count(*) from (select distinct c.receipt_id, c.round, c.job_attempt from ocr_calls c
         where c.created_at >= ${ts(since)} and c.job_attempt > 1 and c.model is not null) retries))::int`;
 
-// ---------- Rollups for usage pages ----------
-
 /**
  * Which calls a rollup covers. A workspace page passes the caller's active
  * workspace; only platform admins may ask for "all".

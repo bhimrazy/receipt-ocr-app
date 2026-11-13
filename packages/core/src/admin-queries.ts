@@ -48,8 +48,6 @@ const usedSince = receiptsReadSince;
 export type Page = { page: number; pageSize: number };
 const offsetOf = ({ page, pageSize }: Page) => (Math.max(1, page) - 1) * pageSize;
 
-// ---------- Overview ----------
-
 export type NearLimitUser = {
   id: string;
   name: string;
@@ -198,8 +196,6 @@ export const adminOverview = (plans: PlanTable, now = new Date()) =>
       };
     }),
   );
-
-// ---------- Users ----------
 
 export type UserSort = "joined" | "name" | "usage";
 export type UserFilters = {
@@ -380,8 +376,6 @@ export const userDetail = (id: string, now = new Date()) =>
     }),
   );
 
-// ---------- Workspaces ----------
-
 export type WorkspaceSort = "created" | "name" | "receipts";
 
 export type AdminWorkspaceRow = {
@@ -549,8 +543,6 @@ export const workspaceDetail = (id: string, now = new Date()) =>
     }),
   );
 
-// ---------- Audit log ----------
-
 export type AuditFilters = {
   targetType?: AuditTarget;
   targetId?: string;
@@ -587,8 +579,6 @@ export const listAudit = (filters: AuditFilters, page: Page) =>
       return { rows, total: Number(total?.value ?? 0) };
     }),
   );
-
-// ---------- Action targets ----------
 
 export type AdminTargetUser = {
   id: string;

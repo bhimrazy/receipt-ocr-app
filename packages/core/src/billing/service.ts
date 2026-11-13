@@ -147,8 +147,6 @@ export const loadSandboxOnProduction: Effect.Effect<boolean> = Config.all(
   Effect.orElseSucceed(() => false),
 );
 
-// ---------- Plan resolution ----------
-
 const ts = (date: Date) => sql`${date.toISOString()}::timestamptz`;
 
 /** `isEntitled` over `billing_subscriptions` aliased `s`. */
@@ -316,8 +314,6 @@ export const memberLimitCheck = (
     };
   });
 
-// ---------- Deletion guards ----------
-
 /**
  * Workspaces whose subscription can still charge (`canStillCharge`) and would
  * be orphaned by deleting this user: ones only they belong to (deleted with
@@ -413,8 +409,6 @@ export const userPaysForWorkspace = (organizationId: string, userId: string) =>
       return rows[0]?.pays === true;
     }),
   );
-
-// ---------- Webhooks ----------
 
 export type WebhookResult =
   | { kind: "rejected"; reason: WebhookRejection }

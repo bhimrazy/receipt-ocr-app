@@ -82,8 +82,8 @@ export type SpendDashboard = {
 };
 
 /**
- * Converts amounts between currencies. Not implemented yet: FX conversion is
- * planned separately, and until it lands every total stays per currency.
+ * Converts amounts between currencies. No implementation is wired in, so every
+ * total stays per currency.
  */
 export interface CurrencyConverter {
   /** Multiplier from `from` to `to` on the day `on` (YYYY-MM-DD). */

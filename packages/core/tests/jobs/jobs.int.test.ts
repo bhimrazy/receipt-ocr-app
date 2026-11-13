@@ -54,8 +54,6 @@ const tag = `jobs-${Date.now()}`;
 const limits = { perMinute: 1000, perDay: 1000 };
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new TextEncoder().encode(tag)]);
 
-// ---------- A scriptable OCR provider ----------
-
 type Step = "ok" | { kind: OcrFailureKind; retryAfterMs?: number };
 /** What each successive model call does; past the end, it succeeds. */
 let script: Step[] = [];
@@ -226,8 +224,6 @@ async function runToEnd(jobId: string, on: "scripted" | "fixture" = "scripted") 
   }
   throw new Error(`job ${jobId} never finished`);
 }
-
-// ---------- Test-only kinds ----------
 
 const counts = new Map<string, number>();
 const COUNT = `test.count.${tag}`;

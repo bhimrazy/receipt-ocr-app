@@ -86,8 +86,7 @@ export type JobDefinition<P, R> = {
   ) => Effect.Effect<void, never, R>;
 };
 
-// The registry holds definitions of different payload types.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the registry mixes payload types
 export type AnyJobDefinition<R> = JobDefinition<any, R>;
 
 export type JobRegistry<R> = Readonly<Record<string, AnyJobDefinition<R>>>;
