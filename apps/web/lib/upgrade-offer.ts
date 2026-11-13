@@ -25,7 +25,7 @@ export const getUpgradeOffer = cache(async (): Promise<UpgradeOffer | null> => {
   try {
     const [session, scope] = await Promise.all([getSession(), getActiveScope()]);
     if (!session || !scope) return null;
-    const [{ plan, policy }, usage, plans, config, checkout, workspaces, jar] = await Promise.all([
+    const [{ plan }, usage, plans, config, checkout, workspaces, jar] = await Promise.all([
       getCurrentPlan(),
       getUsageSummary(),
       getPlanTable(),
@@ -49,8 +49,7 @@ export const getUpgradeOffer = cache(async (): Promise<UpgradeOffer | null> => {
           }
         : null,
       openToEveryone: checkoutOpenToEveryone(config),
-      // The modal compares the viewer's own Free allowance (early access included) with Pro.
-      plans: plan === "free" ? { ...plans, free: policy } : plans,
+      plans,
       workspaceId: scope.organizationId,
       workspaceName:
         workspaces.find((w) => w.id === scope.organizationId)?.name ?? "this workspace",

@@ -34,20 +34,8 @@ import { checkQuota, quotaGate, usageWindow } from "../quota";
 import { EXTRACTION_FAILED_MESSAGE, ReceiptRepo } from "../repository";
 import { Db, Storage } from "../services";
 import { Settings } from "../settings";
-import { DEFAULT_PLANS, personalPolicy, type PlanPolicy } from "../plans";
+import { DEFAULT_PLANS } from "../plans";
 
-const welcomed = ({
-  policy,
-  earlyAccessUntil,
-}: {
-  policy: PlanPolicy;
-  earlyAccessUntil: Date | null;
-}) => ({
-  policy,
-  earlyAccess: earlyAccessUntil
-    ? { until: earlyAccessUntil, thenPerMonth: DEFAULT_PLANS.free.receiptsPerMonth }
-    : null,
-});
 import { ensurePersonalWorkspace } from "../workspace";
 import { NonRetryableJobError, type JobDefinition } from "./definition";
 import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
@@ -1313,8 +1301,7 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       {
         to: expect.stringContaining("@"),
         plan: "free",
-        // Created just now: early access applies until its cutoff passes.
-        ...welcomed(personalPolicy("free", DEFAULT_PLANS.free, new Date())),
+        policy: DEFAULT_PLANS.free,
       },
     ]);
     expect((await welcomeJobs()).map((j) => j.state)).toEqual(["succeeded"]);

@@ -8,8 +8,8 @@ import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
 import { checkoutOpenToEveryone, getCheckoutConfig } from "@/lib/billing";
 import { getPlanTable } from "@/lib/plan-limits";
-import { earlyAccessOffer, FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
-import { allowance, longDate, pricingHeadline } from "@/lib/plan-copy";
+import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
+import { allowance, pricingHeadline } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL, REFUND_DAYS } from "@/lib/pricing";
 import { pageMetadata } from "@/lib/seo";
 
@@ -32,7 +32,6 @@ const links = [
 export default async function PricingPage() {
   const [plans, checkout] = await Promise.all([getPlanTable(), getCheckoutConfig()]);
   const { free, pro } = plans;
-  const early = earlyAccessOffer(free);
   const faqs: { q: string; a: React.ReactNode }[] = [
     {
       q: "Plans are per workspace. What does that mean?",
@@ -62,14 +61,6 @@ export default async function PricingPage() {
         </>
       ),
     },
-    ...(early
-      ? [
-          {
-            q: "I signed up during early access. What do I get?",
-            a: `Accounts created before ${longDate(early.joinedBefore)} get ${early.receiptsPerMonth} scans a month on Free, instead of ${early.thenPerMonth}, until ${longDate(early.endsAt)}. The daily limit stays the same. Your usage meter shows it while it lasts.`,
-          },
-        ]
-      : []),
     {
       q: "What if we need more than Pro?",
       a: (
