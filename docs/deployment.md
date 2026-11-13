@@ -414,9 +414,12 @@ Steps specific to one release, newest first.
 ### Billing plan default dropped (migration 0007)
 
 - **`0007_billing_plan_default`** drops the `'pro'` default on `billing_subscriptions.plan`, which 0005 added only for
-  its backfill. Catalog-only (no rewrite, no scan); `lock_timeout` 3 s. Every insert since the 0005 release sets `plan`,
-  so it can run before or after this deploy, as long as no code from before 0005 still runs. Run **Database
-  Migration** on `staging-db`, then `production-db`.
+  its backfill (catalog-only, no rewrite). It also sets `paid_period_start` to `current_period_start` on rows linked
+  before 0005 that have none (one row on `production-db`, none on `staging-db`), so a plan or interval change's payment
+  counts on them. `lock_timeout` 3 s, `statement_timeout` 10 s. Every insert since the 0005 release sets `plan`, and the
+  code before this release reads `paid_period_start` the same way, so run **Database Migration** on `staging-db`, then
+  `production-db`, **then** deploy. It must run after `0006`: drizzle silently skips a migration older than the last
+  one applied.
 - The release also adds the `billing.refund_wait_check` job kind. Code from before it doesn't claim that kind, so after
   a rollback those jobs wait in the queue until the next deploy runs them.
 

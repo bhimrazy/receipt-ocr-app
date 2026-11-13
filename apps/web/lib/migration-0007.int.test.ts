@@ -1,6 +1,7 @@
 /**
- * Migration 0007 (no default on billing_subscriptions.plan) on a scratch database next to DATABASE_URL's: no table
- * rewrite, existing rows keep their plan, and a row inserted without one is refused. Skipped unless INTEGRATION=1.
+ * Migration 0007 (no default on billing_subscriptions.plan, and paid_period_start for rows linked before 0005) on a
+ * scratch database next to DATABASE_URL's: no table rewrite, existing rows keep their plan and get the stored period's
+ * start, and a row inserted without a plan is refused. Skipped unless INTEGRATION=1.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -29,6 +30,7 @@ describe.skipIf(!enabled)("migration 0007 on existing rows", () => {
       (await db`select relfilenode from pg_class where relname = 'billing_subscriptions'`)[0]!
         .relfilenode,
     );
+  const periodStart = new Date("2026-11-01T00:00:00Z");
   const insertWithoutPlan = (id: string) =>
     db`insert into billing_subscriptions (organization_id, user_id, provider,
       provider_subscription_id, provider_customer_id, status, price_id, provider_updated_at)
@@ -42,6 +44,9 @@ describe.skipIf(!enabled)("migration 0007 on existing rows", () => {
     await db`insert into "user" (id, name, email) values ('u1', 'Test', 'test@example.com')`;
     await db`insert into organization (id, name, slug) values ('o1', 'Test', 'test')`;
     await insertWithoutPlan("sub_before");
+    await insertWithoutPlan("sub_no_period");
+    await db`update billing_subscriptions set current_period_start = ${periodStart}
+      where provider_subscription_id = 'sub_before'`;
     fileNode = await relfilenode();
 
     await db.begin((tx) => tx.unsafe(sqlOf(target)));
@@ -58,6 +63,15 @@ describe.skipIf(!enabled)("migration 0007 on existing rows", () => {
     const [row] =
       await db`select plan from billing_subscriptions where provider_subscription_id = 'sub_before'`;
     expect(row?.plan).toBe("pro");
+  });
+
+  it("records the stored period's start as paid where it was missing", async () => {
+    const rows = await db`select provider_subscription_id as id, paid_period_start
+      from billing_subscriptions order by provider_subscription_id`;
+    expect(rows.map((r) => ({ ...r }))).toEqual([
+      { id: "sub_before", paid_period_start: periodStart },
+      { id: "sub_no_period", paid_period_start: null },
+    ]);
   });
 
   it("refuses a row that doesn't set its plan", async () => {
