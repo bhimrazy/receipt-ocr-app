@@ -69,6 +69,18 @@ test.describe("Spending page", () => {
       { width: 1440, height: 900 },
     ]) {
       await page.setViewportSize(viewport);
+
+      await page.goto("/app");
+      await expect(page.getByRole("heading", { name: "This month" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Top merchants" })).toHaveCount(0);
+      // Two currencies are scanned, so the link says so.
+      const seeSpending = page.getByRole("link", { name: /^See spending \(2 currencies\)/ });
+      await expect(seeSpending).toBeVisible();
+      const upload = page.getByRole("region", { name: "Upload" });
+      if (viewport.width >= 768) await expect(upload).toBeVisible();
+      else await expect(upload).toBeHidden();
+      await noSidewaysScroll(page);
+
       await page.goto("/app/spending");
       const spending = page.getByRole("region", { name: "Spending" });
       await expect(spending).toBeVisible();
@@ -91,6 +103,10 @@ test.describe("Spending page", () => {
       await expect(spending.getByText("¥1,580").first()).toBeVisible();
       await noSidewaysScroll(page);
     }
+
+    await page.goto("/app");
+    await page.getByRole("link", { name: /^See spending/ }).click();
+    await expect(page).toHaveURL(/\/app\/spending$/);
 
     await page.goto("/app/spending?range=3m");
     const categories = page.getByRole("list", { name: "Spend by category" });
