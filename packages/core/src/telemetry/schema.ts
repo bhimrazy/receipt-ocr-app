@@ -209,8 +209,14 @@ export const EVENT_SCHEMA = {
       outcome: "token",
       /** Why a webhook was refused: `missing-signature`, `bad-signature`, `stale-signature`, `bad-body`. */
       rejection: "token",
-      /** Why a new subscription wasn't linked: `workspace`, `owner`, `price`, or `subscription` (an adjustment for one we don't have). */
+      /**
+       * Why an event wasn't linked (`UnmatchedReason`): refused as `unknown_transaction`,
+       * `customer_mismatch`, `owner`, `price` or `test_mode` (the job then logs `billing.unmatched` at
+       * warn level), or waiting for the link as `no_transaction` or `subscription`.
+       */
       unmatched_reason: "token",
+      /** The provider's checkout transaction id (`txn_…`) an unmatched subscription named. An opaque id; no personal data. */
+      transaction_id: "id",
       /** A subscription whose workspace or buyer is gone can still charge, so the job cancels it. Set from the stored row's workspace and buyer links and the event's status; no personal data. */
       orphan_charging: "bool",
       /** An adjustment's action: `refund`, `chargeback`, `credit` and their reversals. */

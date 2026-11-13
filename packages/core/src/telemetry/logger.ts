@@ -7,7 +7,7 @@ import type { WideEvent } from "./schema";
 /**
  * The one logger. Writes each wide event as one JSON line to stdout (stderr
  * for errors), which is what Vercel and Docker collect, with stable keys:
- * `timestamp` (ISO 8601), `level` (`info` or `error`), `event`, the
+ * `timestamp` (ISO 8601), `level` (`info`, `warn` or `error`), `event`, the
  * deployment fields, then the event's own fields after the allowlist.
  * Registered sinks (the OTLP exporter in `otlp.ts`, when configured) get the
  * same sampled, sanitised object; see docs/plans/2026-11-06-observability.md.
@@ -39,9 +39,14 @@ export function deploymentFields(): Environment {
 
 const ERROR_OUTCOMES = new Set(["error", "dead", "lost"]);
 
+/** How serious an event is; `warn` is work that finished but needs a person to look. */
+export type LogLevelName = "info" | "warn" | "error";
+
 /** `error` for server failures and jobs that died or lost their lease; `info` otherwise. */
-export function levelOf(event: WideEvent): "info" | "error" {
-  if (event.level === "error" || event.level === "info") return event.level;
+export function levelOf(event: WideEvent): LogLevelName {
+  if (event.level === "error" || event.level === "warn" || event.level === "info") {
+    return event.level;
+  }
   if (typeof event.status_code === "number" && event.status_code >= 500) return "error";
   if (event.outcome && ERROR_OUTCOMES.has(event.outcome)) return "error";
   return "info";
@@ -56,7 +61,7 @@ export type LogInput = WideEvent & Record<string, unknown>;
 export type EmitOptions = {
   /** Fast, successful, frequent work (page renders, polls): subject to LOG_SAMPLE_RATE. */
   routine?: boolean;
-  level?: "info" | "error";
+  level?: LogLevelName;
   /** Stdout only, never the sinks: for a sink reporting its own failure. */
   localOnly?: boolean;
 };
@@ -64,7 +69,7 @@ export type EmitOptions = {
 /** An event as written: the sanitised fields with timestamp, level, name and deployment. */
 export type EventRecord = {
   timestamp: string;
-  level: "info" | "error";
+  level: LogLevelName;
   event: string;
 } & Record<string, unknown>;
 
@@ -158,7 +163,7 @@ export function formatEvent(
   event: LogInput,
   options: EmitOptions = {},
   random: () => number = Math.random,
-): { level: "info" | "error"; line: string; record: EventRecord } | null {
+): { level: LogLevelName; line: string; record: EventRecord } | null {
   const level = options.level ?? levelOf(event);
   const decision = sampleDecision(
     { ...event, level },
@@ -190,6 +195,7 @@ function emit(event: LogInput, options?: EmitOptions) {
     const formatted = formatEvent(event, options);
     if (!formatted) return;
     if (formatted.level === "error") console.error(formatted.line);
+    else if (formatted.level === "warn") console.warn(formatted.line);
     else console.info(formatted.line);
     if (options?.localOnly) return;
     for (const sink of sinks) {
@@ -219,6 +225,7 @@ export const logger = {
   /** Emits a finished unit of work, its level derived from the outcome. */
   emit,
   info: (event: LogInput) => emit(event, { level: "info" }),
+  warn: (event: LogInput) => emit(event, { level: "warn" }),
   error: (event: LogInput) => emit(event, { level: "error" }),
 };
 
@@ -232,24 +239,30 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 /**
  * Routes `Effect.log*` calls into wide events. Inside a unit of work the
  * message (by convention a code like `receipt.calls_not_recorded`) is added
- * to that event's `notices`, and an error raises its level, so the unit still
+ * to that event's `notices`, and a warning or error raises its level, so the unit still
  * writes one line. Outside one it becomes a standalone `unit: "log"` event,
  * with its fields put through the same allowlist.
  */
 export const wideEventLogger = Logger.make(({ logLevel, message, context, annotations }) => {
   const parts = Array.isArray(message) ? message : [message];
   const name = typeof parts[0] === "string" ? parts[0] : "effect.log";
-  const isError = LogLevel.greaterThanEqual(logLevel, LogLevel.Error);
+  const level: LogLevelName = LogLevel.greaterThanEqual(logLevel, LogLevel.Error)
+    ? "error"
+    : LogLevel.greaterThanEqual(logLevel, LogLevel.Warning)
+      ? "warn"
+      : "info";
   const current = FiberRefs.getOrDefault(context, CurrentWideEvent);
   if (current) {
     current.notices = [...(current.notices ?? []), name];
-    if (isError) current.level = "error";
+    if (level === "error" || (level === "warn" && current.level !== "error")) {
+      current.level = level;
+    }
     return;
   }
   const fields: Record<string, unknown> = {};
   for (const [key, value] of annotations) fields[key] = value;
   for (const part of parts.slice(1)) if (isRecord(part)) Object.assign(fields, part);
-  emit({ ...fields, event: name, unit: "log" }, { level: isError ? "error" : "info" });
+  emit({ ...fields, event: name, unit: "log" }, { level });
 });
 
 /** Replaces Effect's default (logfmt) logger with `wideEventLogger`. */
