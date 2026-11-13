@@ -1585,21 +1585,38 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       await deliver(early);
       expect(await outcomeOf(early.eventId)).toBe("unmatched");
 
-      const rowId = await eventRowId(early.eventId);
+      const adjustmentId = early.adjustment!.adjustmentId;
       const checksOf = () =>
         db((d) =>
-          d.select().from(jobs).where(sql`${jobs.payload}->>'eventId' = ${rowId}
-          and ${jobs.kind} = 'billing.refund_wait_check'`),
+          d
+            .select()
+            .from(jobs)
+            .where(eq(jobs.idempotencyKey, `billing:refund-wait:${adjustmentId}`)),
         );
       const [check] = await checksOf();
       expect(check).toMatchObject({
+        kind: "billing.refund_wait_check",
         state: "queued",
-        idempotencyKey: `billing:refund-wait:${rowId}`,
+        payload: { eventId: await eventRowId(early.eventId) },
       });
       expect(check!.runAt.getTime()).toBeGreaterThanOrEqual(before + REFUND_WAIT_ALERT_MS);
-      // A retried apply enqueues no second check.
+      // A retried apply, or the same refund reported by a second event, enqueues no second check.
       await reapply(early.eventId);
+      const again = event(null, "adjustment.created", early.adjustment);
+      await deliver(again);
+      expect(await outcomeOf(again.eventId)).toBe("unmatched");
       expect(await checksOf()).toHaveLength(1);
+      const rowIds = [await eventRowId(early.eventId), await eventRowId(again.eventId)];
+      const allChecks = await db((d) =>
+        d
+          .select({ id: jobs.id })
+          .from(jobs)
+          .where(
+            sql`${jobs.kind} = 'billing.refund_wait_check'
+              and ${jobs.payload}->>'eventId' in (${rowIds[0]}, ${rowIds[1]})`,
+          ),
+      );
+      expect(allChecks).toHaveLength(1);
 
       expect(await checkWaiting(early.eventId)).toMatchObject({
         organization_id: workspaceId,

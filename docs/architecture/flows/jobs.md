@@ -172,7 +172,7 @@ error retries; the outcome (`applied`, `stale`, `ignored`, `unmatched`) is logge
 
 `billing.refund_wait_check` ([`kinds/billing-refund-check.ts`](../../../packages/core/src/jobs/kinds/billing-refund-check.ts))
 is enqueued by `billing.apply_event` when it keeps a full refund waiting for its transaction, keyed
-`billing:refund-wait:<event id>` and due three days later (`REFUND_WAIT_ALERT_MS`, past Paddle's two-day redelivery
+`billing:refund-wait:<adjustment id>` (one check per refund, however many events report it) and due three days later (`REFUND_WAIT_ALERT_MS`, past Paddle's two-day redelivery
 window). If the refund is still `unmatched` it logs `billing.refund_unresolved` at warn level, once; otherwise nothing.
 Priority 9, read-only.
 

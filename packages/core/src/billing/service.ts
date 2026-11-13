@@ -688,7 +688,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           // A refund of a renewal Paddle hasn't reported as completed yet: kept until it is.
           const refunded = adjustment.transactionId;
           if (refunded && !(await transactionKnown(tx, event.provider, refunded))) {
-            await enqueueJob(tx, refundWaitCheckJob({ eventId }, now));
+            await enqueueJob(tx, refundWaitCheckJob({ eventId }, adjustment.adjustmentId, now));
             return finish({
               outcome: "unmatched",
               organizationId: stored.organizationId,
