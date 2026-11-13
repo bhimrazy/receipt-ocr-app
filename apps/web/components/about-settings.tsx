@@ -42,7 +42,7 @@ export function AboutSettings() {
               target="_blank"
             >
               <GitHubIcon className="size-3.5" />
-              Open source on GitHub
+              Source on GitHub
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
           </li>

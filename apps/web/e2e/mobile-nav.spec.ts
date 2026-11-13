@@ -200,7 +200,7 @@ test("a pressed button changes colour; chrome is unselectable, receipt data is n
   page,
 }) => {
   await page.goto("/app/settings");
-  const seePlans = page.getByRole("link", { name: /^Plan/ });
+  const seePlans = page.getByRole("link", { name: /^Plan and billing/ });
   const bg = () => seePlans.evaluate((el) => getComputedStyle(el).backgroundColor);
   const resting = await bg();
   const box = (await seePlans.boundingBox())!;
@@ -222,11 +222,13 @@ test("a pressed button changes colour; chrome is unselectable, receipt data is n
 test("Settings is a grouped list of rows that open their page or a sheet", async ({ page }) => {
   await page.goto("/app/settings");
   const list = page.getByRole("navigation", { name: "Settings" });
-  await expect(list.getByRole("link", { name: "Plan Free" })).toBeVisible();
+  await expect(
+    list.getByRole("link", { name: /^Plan and billing Free · \d+ \/ \d+ scans$/ }),
+  ).toBeVisible();
   await expect(list.getByRole("link", { name: /^Workspace / })).toBeVisible();
   await expect(list.getByRole("link", { name: "Security Set up" })).toBeVisible();
   // The long sections those rows replace are desktop-only; the rest stay.
-  await expect(page.getByRole("heading", { name: "Plan and usage" })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Plan and billing" })).toBeHidden();
   await expect(page.getByRole("heading", { name: "Receipt scanning" })).toBeVisible();
   await expectNoSideScroll(page);
   for (const row of await list.getByRole("listitem").all()) {

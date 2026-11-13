@@ -13,7 +13,7 @@ import {
   storedPlanTableSchema,
 } from "./settings";
 
-const policy = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10, batchMax: 10 };
+const policy = { workspaces: 3, receiptsPerDay: 20, receiptsPerMinute: 10, batchMax: 10 };
 
 describe("planTableSchema", () => {
   it("accepts the defaults", () => {
@@ -22,7 +22,7 @@ describe("planTableSchema", () => {
 
   it("rejects a per-minute limit above the daily one", () => {
     const result = planTableSchema.safeParse({
-      free: { ...policy, receiptsPerMinute: 101 },
+      free: { ...policy, receiptsPerMinute: 21 },
       pro: policy,
     });
     expect(result.success).toBe(false);
@@ -42,7 +42,7 @@ describe("planTableSchema", () => {
 
 describe("planTableSchema batchMax", () => {
   it("defaults a row saved before batchMax existed to 10", () => {
-    const old = { workspaces: 3, receiptsPerDay: 100, receiptsPerMinute: 10 };
+    const old = { workspaces: 3, receiptsPerDay: 20, receiptsPerMinute: 10 };
     const result = planTableSchema.parse({ free: old, pro: old });
     expect(result.free.batchMax).toBe(10);
     expect(result.pro.batchMax).toBe(10);
@@ -66,14 +66,14 @@ describe("planTableSchema batchMax", () => {
 describe("storedPlanTableSchema", () => {
   it("clamps a stored batchMax over the cap and keeps the other limits", () => {
     const stored = {
-      free: { ...policy, receiptsPerDay: 42, batchMax: 50 },
+      free: { ...policy, receiptsPerDay: 12, batchMax: 50 },
       pro: { ...policy, batchMax: 15 },
     };
     expect(planTableSchema.safeParse(stored).success).toBe(false);
     const read = storedPlanTableSchema.parse(stored);
     expect(read.free).toEqual({
       ...policy,
-      receiptsPerDay: 42,
+      receiptsPerDay: 12,
       batchMax: MAX_BATCH,
       scope: "user",
       receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
@@ -85,7 +85,7 @@ describe("storedPlanTableSchema", () => {
 
   it("gives a row saved before the monthly and pool limits each plan's own defaults", () => {
     const read = storedPlanTableSchema.parse({ free: policy, pro: policy });
-    expect(read.free).toMatchObject({ scope: "user", receiptsPerMonth: 100, poolPerDay: 300 });
+    expect(read.free).toMatchObject({ scope: "user", receiptsPerMonth: 30, poolPerDay: 300 });
     expect(read.pro).toMatchObject({ scope: "workspace", receiptsPerMonth: 500, poolPerDay: null });
   });
 
@@ -377,7 +377,7 @@ describe("Settings", () => {
   it("reads a saved row with batchMax over the cap as the cap, keeping its other limits", async () => {
     const saved = {
       key: "plans",
-      value: { free: { ...policy, receiptsPerDay: 42, batchMax: 50 }, pro: policy },
+      value: { free: { ...policy, receiptsPerDay: 12, batchMax: 50 }, pro: policy },
       updatedAt: new Date(),
       updatedBy: "a",
     };
@@ -385,7 +385,7 @@ describe("Settings", () => {
     const exit = await run(Effect.flatMap(Settings, (s) => s.plans));
     expect(Exit.isSuccess(exit) && exit.value.free).toEqual({
       ...policy,
-      receiptsPerDay: 42,
+      receiptsPerDay: 12,
       batchMax: MAX_BATCH,
       scope: "user",
       receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,

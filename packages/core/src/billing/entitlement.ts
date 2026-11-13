@@ -76,12 +76,16 @@ export function adjustmentRevokesPro(a: AdjustmentSnapshot): boolean {
   return a.action === "chargeback" || (a.action === "refund" && a.type === "full");
 }
 
-/** Why a new workspace is refused, for the account plan the creator is on. */
+/**
+ * Why a new workspace is refused, for the account plan the creator is on. These messages state
+ * the limits and what the reader can do now; they never ask for an upgrade, since they are shown
+ * without a control and whatever the checkout state.
+ */
 export function workspaceLimitMessage(plan: "free" | "pro", limit: number): string {
   const workspaces = `${limit} ${limit === 1 ? "workspace" : "workspaces"}`;
   return plan === "pro"
     ? `You own ${workspaces}, the most on Pro. Delete one, or use the support button if you need more.`
-    : `Free accounts can own ${workspaces}. Upgrade a workspace you own to Pro to create another. A new workspace starts on Free.`;
+    : `Free accounts can own ${workspaces}. A new workspace starts on Free.`;
 }
 
 /**
@@ -98,9 +102,9 @@ export function memberLimitMessage(
   if (when === "accept") {
     return plan === "pro"
       ? `This workspace already has ${members}, the most on Pro. Ask its owner to make room.`
-      : `This workspace already has ${members}, the most on Free. Ask its owner to upgrade it to Pro, or to make room.`;
+      : `This workspace already has ${members}, the most on Free. Ask its owner to make room.`;
   }
   return plan === "pro"
     ? `Pro workspaces have up to ${members}, counting pending invitations. Cancel an invitation or remove a member, or use the support button if you need more.`
-    : `Free workspaces have up to ${members}, counting pending invitations. Upgrade this workspace to Pro for up to ${proLimit}, or cancel an invitation or remove a member.`;
+    : `Free workspaces have up to ${members}, counting pending invitations, and Pro workspaces up to ${proLimit}. Cancel an invitation or remove a member to make room.`;
 }

@@ -102,7 +102,7 @@ test("content pages carry breadcrumbs and FAQ structured data that match what is
     expect(crumbs, path).toBeTruthy();
     expect(new URL(crumbs!.itemListElement.at(-1)!.item).pathname, path).toBe(path);
     await expect(page.getByRole("navigation", { name: "Breadcrumb" }), path).toBeVisible();
-    await expect(page.getByRole("link", { name: /get started free/i }).first(), path).toBeVisible();
+    await expect(page.getByRole("link", { name: /^start free/i }).first(), path).toBeVisible();
 
     const faq = graph.find((n) => n["@type"] === "FAQPage") as
       { mainEntity: Array<{ name: string }> } | undefined;

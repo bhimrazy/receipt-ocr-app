@@ -26,7 +26,7 @@ export default function RefundsPage() {
         {
           heading: "Cancel any time",
           body: [
-            "You can cancel a subscription at any time from Settings, Billing, in the workspace it pays for. Nothing more is charged after that. Pro stays on until the end of the period you've already paid for, then the workspace moves to the Free plan. Your receipts stay where they are.",
+            "You can cancel a subscription at any time from Settings, Plan and billing, in the workspace it pays for. Nothing more is charged after that. Pro stays on until the end of the period you've already paid for, then the workspace moves to the Free plan. Your receipts stay where they are.",
           ],
         },
         {

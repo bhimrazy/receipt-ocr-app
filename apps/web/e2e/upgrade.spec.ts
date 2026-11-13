@@ -23,7 +23,7 @@ const makeAdmin = (email: string) =>
  * Free scans used, written to the usage ledger. `month`: at the start of this UTC month, so
  * neither the day limit nor the shared Free pool sees them. `today`: now.
  */
-const useScans = (email: string, count: number, when: "month" | "today") =>
+const addScans = (email: string, count: number, when: "month" | "today") =>
   db(async (sql) => {
     const [owner] = await sql<{ user_id: string; organization_id: string }[]>`
       select u.id as user_id, m.organization_id
@@ -77,27 +77,52 @@ async function adminOwner(page: Page, tag: string) {
 
 const modal = (page: Page) => page.getByRole("dialog", { name: /^Pro for / });
 const meterButton = (page: Page) =>
-  page.getByRole("complementary").getByRole("link", { name: "Upgrade to Pro" });
-const homeCard = (page: Page) => page.getByRole("heading", { name: "Pro for this workspace" });
+  page.getByRole("complementary").getByRole("link", { name: /^Upgrade/ });
+const homeCard = (page: Page) =>
+  page.getByRole("heading", { name: /free scans? left this month$/ });
 
-test("below 20% only the meter offers Pro; from 20% Home shows the card", async ({ page }) => {
+/**
+ * The month's limit the meter shows: 30 on Free, or the early-access allowance before launch.
+ * By selector, not role: on a phone the sidebar meter is in the DOM but hidden.
+ */
+const monthLimit = async (page: Page) =>
+  Number(await page.locator('[role="meter"]').first().getAttribute("aria-valuemax"));
+
+/** Scans this month up to `ratio` of the limit, so the meter reaches that level. */
+async function spendShare(page: Page, email: string, ratio: number) {
+  const limit = await monthLimit(page);
+  const count = Math.ceil(limit * ratio);
+  await addScans(email, count, "month");
+  return { limit, count };
+}
+
+test("below 80% nothing offers Pro; from 80% the meter links it and Home shows the card", async ({
+  page,
+}) => {
   test.skip(firstOfMonth(), "needs earlier days this month");
-  const email = await adminOwner(page, "upgrade-warm");
-  await useScans(email, 10, "month");
-  await page.goto("/app");
-  await expect(meterButton(page)).toBeVisible();
+  const email = await adminOwner(page, "upgrade-near");
+  await spendShare(page, email, 0.5);
+  await page.reload();
+  await expect(page.getByRole("meter", { name: /Scans used/ }).first()).toBeVisible();
+  await expect(meterButton(page)).toHaveCount(0);
   await expect(homeCard(page)).toHaveCount(0);
 
-  await useScans(email, 10, "month");
+  const { limit } = await spendShare(page, email, 0.35);
   await page.reload();
+  await expect(meterButton(page)).toHaveText("Upgrade");
   await expect(homeCard(page)).toBeVisible();
-  await expect(page.getByText(/^20 of 100 Free scans used this month\./)).toBeVisible();
-  await expect(page.getByRole("link", { name: "See Pro, $9 a month" })).toBeVisible();
+  await expect(
+    page.getByText(/^Resets \d+ \w+\. Pro gives this workspace \d+ scans a month for \$9\.$/),
+  ).toBeVisible();
+  await expect(page.getByRole("complementary").getByText(/ left · resets \d+ \w+$/)).toBeVisible();
+  expect(limit).toBeGreaterThan(0);
 });
 
 test("the meter button opens the modal, Escape closes it and focus returns", async ({ page }) => {
+  test.skip(firstOfMonth(), "needs earlier days this month");
   const paddle = await stubPaddle(page);
-  await adminOwner(page, "upgrade-meter");
+  const email = await adminOwner(page, "upgrade-meter");
+  await spendShare(page, email, 0.85);
   await page.goto("/app/receipts");
   // Paddle.js loads only once the modal opens.
   expect(paddle.requested()).toBe(0);
@@ -127,8 +152,10 @@ test("the meter button opens the modal, Escape closes it and focus returns", asy
 test("the primary button asks the server for the checkout and shows its error in place", async ({
   page,
 }) => {
+  test.skip(firstOfMonth(), "needs earlier days this month");
   await stubPaddle(page);
-  await adminOwner(page, "upgrade-start");
+  const email = await adminOwner(page, "upgrade-start");
+  await spendShare(page, email, 0.85);
   await page.goto("/app");
   await meterButton(page).click();
   const dialog = modal(page);
@@ -139,16 +166,15 @@ test("the primary button asks the server for the checkout and shows its error in
   expect(await page.evaluate(() => "__paddleOpened" in window)).toBe(false);
 });
 
-test("the account menu offers Pro above Settings and opens the modal", async ({ page }) => {
-  await stubPaddle(page);
-  await adminOwner(page, "upgrade-menu");
+test("the account menu never offers Pro; the meter above it does", async ({ page }) => {
+  test.skip(firstOfMonth(), "needs earlier days this month");
+  const email = await adminOwner(page, "upgrade-menu");
+  await spendShare(page, email, 0.85);
+  await page.reload();
+  await expect(meterButton(page)).toBeVisible();
   await page.getByRole("button", { name: "Account menu" }).click();
-  const items = page.getByRole("menuitem");
-  await expect(items.first()).toHaveText(/^Upgrade to Pro\$9\/mo$/);
-  await items.first().click();
-  await expect(modal(page)).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Account menu" })).toBeFocused();
+  await expect(page.getByRole("menuitem").first()).toHaveText("Settings");
+  await expect(page.getByRole("menuitem", { name: /Upgrade/ })).toHaveCount(0);
 });
 
 test("?upgrade=1 opens the modal once and leaves a plain URL", async ({ page }) => {
@@ -166,9 +192,9 @@ test("closing the modal keeps the Home card; its Not now survives a reload", asy
   test.skip(firstOfMonth(), "needs earlier days this month");
   await stubPaddle(page);
   const email = await adminOwner(page, "upgrade-dismiss");
-  await useScans(email, 84, "month");
+  const { limit, count } = await spendShare(page, email, 0.84);
   await page.goto("/app");
-  const near = page.getByRole("heading", { name: "You've used 84 of 100 Free scans this month" });
+  const near = page.getByRole("heading", { name: `${limit - count} free scans left this month` });
   await expect(near).toBeVisible();
 
   await page.locator("main").getByRole("link", { name: "Upgrade to Pro" }).click();
@@ -181,7 +207,7 @@ test("closing the modal keeps the Home card; its Not now survives a reload", asy
   await expect(page.locator("#main-content")).toBeFocused();
   // The server leaves it out, so it never renders, not even for a frame.
   const html = await (await page.request.get("/app")).text();
-  expect(html).not.toContain("Free scans this month</h2>");
+  expect(html).not.toContain("free scans left this month</h2>");
   await page.reload();
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(near).toHaveCount(0);
@@ -191,7 +217,7 @@ test("closing the modal keeps the Home card; its Not now survives a reload", asy
 
 test("at the limit the banner shows on Receipts, not on Home or Upload", async ({ page }) => {
   const email = await adminOwner(page, "upgrade-limit");
-  await useScans(email, 20, "today");
+  await addScans(email, 20, "today");
   const banner = page.getByRole("complementary", { name: "Plan limit" });
 
   await page.goto("/app");
@@ -234,8 +260,34 @@ test("no offer without checkout for the viewer, or on Pro", async ({ page }) => 
   await makeAdmin(email);
   await db((sql) => sql`update "user" set plan = 'pro' where email = ${email}`);
   await page.goto("/app");
-  await expect(page.getByText("Pro plan", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("complementary").getByText("Pro", { exact: true })).toBeVisible();
   await expect(meterButton(page)).toHaveCount(0);
+});
+
+test("at the monthly limit with checkout closed: when uploads open, in days, and no upgrade", async ({
+  page,
+}) => {
+  test.skip(firstOfMonth(), "needs earlier days this month");
+  const email = uniqueEmail("upgrade-closed-limit");
+  await signUp(page, email);
+  await spendShare(page, email, 1);
+  await page.goto("/app");
+  const main = page.locator("main");
+  await expect(
+    main.getByRole("heading", { name: /^You've used this month's \d+ free scans$/ }),
+  ).toBeVisible();
+  await expect(main.getByText(/^Uploads open again on 1 \w+, in \d+ (days|hours)\./)).toBeVisible();
+  await expect(main.getByText(/Pro, with \d+ scans a month, opens soon\./)).toBeVisible();
+  await expect(main.getByRole("link", { name: "Compare plans" })).toHaveAttribute(
+    "href",
+    "/pricing",
+  );
+  await expect(main.getByRole("link", { name: "Review receipts" })).toBeVisible();
+  await expect(main.getByText(/upgrade/i)).toHaveCount(0);
+  await expect(
+    page.getByRole("complementary").getByText(/^Limit reached · opens 1 \w+$/),
+  ).toBeVisible();
+  await expect(page.getByText(/^Pro, with \d+ scans a month, opens soon\./).first()).toBeVisible();
 });
 
 test("Billing's own checkout button runs on the shared checkout", async ({ page }) => {
@@ -253,11 +305,23 @@ test("Billing's own checkout button runs on the shared checkout", async ({ page 
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
+  test("from 80% Home says what is left under the upload buttons", async ({ page }) => {
+    test.skip(firstOfMonth(), "needs earlier days this month");
+    const email = uniqueEmail("upgrade-phone-near");
+    await signUp(page, email);
+    const { limit, count } = await spendShare(page, email, 0.85);
+    await page.goto("/app");
+    await expect(page.getByText(`${limit - count} scans left this month`)).toBeVisible();
+  });
+
   test("the account sheet's meter opens the modal as a bottom sheet", async ({ page }) => {
+    test.skip(firstOfMonth(), "needs earlier days this month");
     await stubPaddle(page);
-    await adminOwner(page, "upgrade-phone");
+    const email = await adminOwner(page, "upgrade-phone");
+    await spendShare(page, email, 0.85);
+    await page.reload();
     await page.getByRole("button", { name: "Account and workspace" }).click();
-    await page.getByRole("dialog").getByRole("link", { name: "Upgrade to Pro" }).click();
+    await page.getByRole("dialog").getByRole("link", { name: "Upgrade" }).click();
     const sheet = modal(page);
     await expect(sheet).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
