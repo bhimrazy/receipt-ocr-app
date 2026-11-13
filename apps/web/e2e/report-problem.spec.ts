@@ -24,12 +24,15 @@ test("Report a problem opens the support form about that receipt, from the menu 
   await expect(dialog.getByLabel("Email", { exact: true })).toHaveValue(email);
 
   await dialog.getByLabel("Message").fill("The total on this receipt is wrong.");
-  const sent = page.waitForRequest(
-    (request) => request.url().endsWith("/api/contact") && request.method() === "POST",
-  );
+  // The e2e server has no support inbox, so the route would answer 503; only the request is under test here.
+  let sent: unknown;
+  await page.route("**/api/contact", (route) => {
+    sent = route.request().postDataJSON();
+    return route.fulfill({ json: { ok: true } });
+  });
   await dialog.getByRole("button", { name: /Send message/ }).click();
-  expect((await sent).postDataJSON()).toMatchObject({ topic: "problem", receiptId: id });
   await expect(dialog.getByText("Your message is on its way.")).toBeVisible();
+  expect(sent).toMatchObject({ topic: "problem", receiptId: id });
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("button", { name: "More actions" })).toBeFocused();
 
