@@ -38,7 +38,7 @@ flowchart LR
 ## Design principles and invariants
 
 - **Tokens, not literals.** App code uses token classes (`bg-primary`, `text-muted-foreground`, `bg-wash`), not hex
-  values or raw Tailwind palette colours. [`components/design-tokens.test.ts`](../../apps/web/components/design-tokens.test.ts)
+  values or raw Tailwind palette colours. [`tests/components/design-tokens.test.ts`](../../apps/web/tests/components/design-tokens.test.ts)
   fails the test run when a literal colour appears in app UI.
 - **Touch targets.** Buttons grow to 44 px below the `md` breakpoint (WCAG 2.5.5), see
   [`button.tsx`](../../packages/ui/src/components/button.tsx).

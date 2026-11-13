@@ -13,7 +13,7 @@ This repo is a Bun/Turborepo Receipt OCR MVP.
 - `packages/core`: Effect TS services and receipt processing workflow.
 - `packages/vision`: pure capture image maths (quad geometry, warp, receipt-edge detection); no DOM, no dependencies.
 
-Tests: in each package, `tests/` mirrors `src/` (`src/lib/x.ts` is tested by `tests/lib/x.test.ts`).
+Tests: in each package and in `apps/web`, `tests/` mirrors `src/` (`apps/web` has no `src`: `lib/x.ts` is tested by `tests/lib/x.test.ts`). Playwright specs stay in `apps/web/e2e`.
 
 ## Status and Plans
 

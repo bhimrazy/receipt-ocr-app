@@ -148,5 +148,5 @@ sequenceDiagram
 3. Pick a dotted action name (`target.verb`) and add a label for it in
    [`components/admin/audit-list.tsx`](../../../apps/web/components/admin/audit-list.tsx) if the list needs one.
 4. `revalidatePath` the pages that show the change.
-5. Test: a unit test in [`actions.test.ts`](../../../apps/web/app/admin/actions.test.ts) for input and guards, and
+5. Test: a unit test in [`actions.test.ts`](../../../apps/web/tests/app/admin/actions.test.ts) for input and guards, and
    [`admin.int.test.ts`](../../../packages/core/src/admin.int.test.ts) for the transaction.
