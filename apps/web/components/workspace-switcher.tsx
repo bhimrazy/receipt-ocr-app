@@ -21,7 +21,8 @@ import {
 import { DrawerAction, DrawerGroup, DrawerLabel } from "@receipt-ocr/ui/components/drawer";
 import { Input } from "@receipt-ocr/ui/components/input";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@receipt-ocr/ui/components/field";
-import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import { ArrowRight, Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
@@ -176,11 +177,15 @@ export function CreateWorkspaceDialog({
   );
 }
 
+const PLANS_HREF = "/app/settings/billing";
+
 type SwitcherProps = {
   activeId: string;
   canCreate: boolean;
   /** Shown instead of "Create workspace" at the ownership cap (lib/workspaces.ts). */
   planNote: string;
+  /** A Free account at its cap: link the plans, so the note has somewhere to go. */
+  comparePlans: boolean;
   workspaces: WorkspaceOption[];
 };
 
@@ -190,7 +195,13 @@ type SwitcherProps = {
  * `canCreate` comes from the server (lib/workspaces.ts) and counts only the workspaces the
  * user OWNS, so memberships elsewhere don't lock creation.
  */
-export function WorkspaceSwitcher({ activeId, canCreate, planNote, workspaces }: SwitcherProps) {
+export function WorkspaceSwitcher({
+  activeId,
+  canCreate,
+  planNote,
+  comparePlans,
+  workspaces,
+}: SwitcherProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const current = workspaces.find((org) => org.id === activeId) ?? workspaces[0];
@@ -251,7 +262,15 @@ export function WorkspaceSwitcher({ activeId, canCreate, planNote, workspaces }:
               Create workspace
             </DropdownMenuItem>
           ) : (
-            <p className="px-2.5 py-2 text-xs leading-5 text-muted-foreground">{planNote}</p>
+            <>
+              <p className="px-2.5 py-2 text-xs leading-5 text-muted-foreground">{planNote}</p>
+              {comparePlans ? (
+                <DropdownMenuItem render={<Link href={PLANS_HREF} />}>
+                  <ArrowRight aria-hidden="true" />
+                  Compare plans
+                </DropdownMenuItem>
+              ) : null}
+            </>
           )}
           {error ? (
             <p className="px-2.5 py-1.5 text-xs text-destructive" role="alert">
@@ -273,6 +292,7 @@ export function WorkspaceList({
   activeId,
   canCreate,
   planNote,
+  comparePlans,
   workspaces,
   onSwitched,
   onCreate,
@@ -312,7 +332,15 @@ export function WorkspaceList({
           Create workspace
         </DrawerAction>
       ) : (
-        <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">{planNote}</p>
+        <>
+          <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">{planNote}</p>
+          {comparePlans ? (
+            <DrawerAction onClick={onSwitched} render={<Link href={PLANS_HREF} />}>
+              <ArrowRight aria-hidden="true" />
+              Compare plans
+            </DrawerAction>
+          ) : null}
+        </>
       )}
       {error ? (
         <p className="px-3 py-1.5 text-xs text-destructive" role="alert">

@@ -38,6 +38,11 @@ describe("formatTimeUntil", () => {
     expect(formatTimeUntil(new Date("2026-11-04T18:15:00Z"), now)).toBe("in 45 minutes");
     expect(formatTimeUntil(new Date("2026-11-05T00:00:00Z"), now)).toBe("in 6 hours");
   });
+  it("switches to days past 48 hours, rounding up", () => {
+    expect(formatTimeUntil(new Date("2026-11-06T17:30:00Z"), now)).toBe("in 48 hours");
+    expect(formatTimeUntil(new Date("2026-11-06T18:30:00Z"), now)).toBe("in 3 days");
+    expect(formatTimeUntil(new Date("2026-12-01T00:00:00Z"), now)).toBe("in 27 days");
+  });
   it("never says zero or a past time", () => {
     expect(formatTimeUntil(new Date("2026-11-04T17:00:00Z"), now)).toBe("in 1 minute");
   });

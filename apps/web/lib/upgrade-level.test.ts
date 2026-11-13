@@ -6,7 +6,6 @@ import {
   NEAR_RATIO,
   upgradeLevel,
   usageRatio,
-  WARM_RATIO,
   type OfferInput,
 } from "./upgrade-level";
 
@@ -44,10 +43,7 @@ describe("upgradeLevel", () => {
     expect(upgradeLevel(usage(5, { blocked: "global" }))).toBeNull();
   });
 
-  it("puts the Home card's warm threshold at 20 of 100", () => {
-    expect(WARM_RATIO).toBe(0.2);
-    expect(usageRatio(usage(19)) < WARM_RATIO).toBe(true);
-    expect(usageRatio(usage(20)) >= WARM_RATIO).toBe(true);
+  it("treats a zero limit as nothing used", () => {
     expect(usageRatio({ used: 5, limit: 0 })).toBe(0);
   });
 });

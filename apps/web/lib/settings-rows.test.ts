@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { settingsRows } from "./settings-rows";
 
 describe("settingsRows", () => {
-  it("lists Plan, Workspace, Groups, Appearance and Security with their current values", () => {
+  it("lists Plan and billing, Workspace, Groups, Appearance and Security with their current values", () => {
     const rows = settingsRows({
-      planLabel: "Free",
+      planSummary: "Free · 85 / 100 scans",
       workspaceName: "Sam's",
       protectedAccount: false,
     });
     expect(rows.map((r) => (r === "appearance" ? r : [r.label, r.value, r.href]))).toEqual([
-      ["Plan", "Free", "/app/settings/billing"],
+      ["Plan and billing", "Free · 85 / 100 scans", "/app/settings/billing"],
       ["Workspace", "Sam's", "/app/settings/members"],
       ["Groups", "", "/app/receipts/groups"],
       "appearance",
@@ -18,7 +18,11 @@ describe("settingsRows", () => {
   });
 
   it("says Protected once a second check is set up", () => {
-    const rows = settingsRows({ planLabel: "Pro", workspaceName: "W", protectedAccount: true });
+    const rows = settingsRows({
+      planSummary: "Pro · 1 / 500 scans",
+      workspaceName: "W",
+      protectedAccount: true,
+    });
     expect(rows.at(-1)).toMatchObject({ label: "Security", value: "Protected" });
   });
 });

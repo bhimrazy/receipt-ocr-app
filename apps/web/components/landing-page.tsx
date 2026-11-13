@@ -80,10 +80,10 @@ const stats: Array<[string, string]> = [
   ["$0", "To start, no card required"],
 ];
 
-const steps = [
+const steps = (batchMax: number) => [
   {
     title: "Upload a receipt",
-    desc: "Take a photo or drop in photos or PDFs, up to 20 at a time. Large phone photos are shrunk before they upload.",
+    desc: `Take a photo or drop in photos or PDFs, up to ${batchMax} at a time. Large phone photos are shrunk before they upload.`,
   },
   {
     title: "Get structured data",
@@ -138,7 +138,14 @@ function SectionLabel({ children }: { children: string }) {
   return <p className="font-mono text-xs uppercase tracking-[0.22em] text-primary">{children}</p>;
 }
 
-export function LandingPage({ plans }: { plans: PlanTable }) {
+export function LandingPage({
+  plans,
+  checkoutOpen,
+}: {
+  plans: PlanTable;
+  /** Anyone may buy Pro now; until then Free is featured and Pro marked "Opens soon". */
+  checkoutOpen: boolean;
+}) {
   return (
     // Hidden in the installed app, which StandaloneHome sends on to /app or /sign-in.
     <div className="min-h-screen overflow-hidden bg-background text-foreground standalone:invisible">
@@ -178,7 +185,7 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
             <div className="mt-9 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">
                 <Link href="/sign-up">
-                  Get started free <ArrowRight className="size-4" />
+                  Start free <ArrowRight className="size-4" />
                 </Link>
               </Button>
               <Button asChild variant="outline" size="lg">
@@ -186,7 +193,7 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
               </Button>
             </div>
             <p className="mt-5 font-mono text-xs text-muted-foreground">
-              No card required · Photos and PDFs
+              No card needed · Photos and PDFs
             </p>
           </div>
         </section>
@@ -265,7 +272,7 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
             <div className="relative grid gap-5 md:grid-cols-3">
               {/* connector line */}
               <div className="pointer-events-none absolute inset-x-[16%] top-[3.25rem] hidden h-px bg-linear-to-r from-transparent via-border to-transparent md:block" />
-              {steps.map((step, index) => (
+              {steps(plans.free.batchMax).map((step, index) => (
                 <Card className="relative p-7 text-center" key={step.title}>
                   <div className="relative z-10 mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl border border-primary/20 bg-background font-mono text-lg font-bold text-primary shadow-[0_0_24px_color-mix(in_oklab,var(--primary)_18%,transparent)]">
                     {String(index + 1).padStart(2, "0")}
@@ -343,16 +350,15 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
             <div className="mx-auto mb-14 max-w-2xl text-center">
               <SectionLabel>Pricing</SectionLabel>
               <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
-                Start free, scale when you need
+                Start free. Upgrade a workspace when it needs more.
               </h2>
               <p className="mt-4 text-pretty text-muted-foreground">
-                No credit card to begin. When a workspace needs more, Pro is {PRO_PRICE_LABEL.month}{" "}
-                a month or {PRO_PRICE_LABEL.year} a year.
+                No card needed. When a workspace needs more, Pro is {PRO_PRICE_LABEL.month} a month
+                or {PRO_PRICE_LABEL.year} a year{checkoutOpen ? "" : ", once it opens"}.
               </p>
             </div>
             {/* One filled button per row, on the featured card, as on /pricing. Pro links to
-                /pricing rather than sign-up: that page has the monthly/yearly choice and knows
-                whether the checkout is open. */}
+                /pricing rather than sign-up: that page has the monthly/yearly choice. */}
             <div className="mx-auto grid max-w-md items-stretch gap-5 lg:max-w-none lg:grid-cols-3">
               <PlanCard
                 name="Free"
@@ -361,8 +367,9 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 badge="Start here"
                 description="Everything you need to start turning receipts into structured data."
                 features={freeFeatures(plans.free)}
+                featured={!checkoutOpen}
                 cta={
-                  <Button asChild className="w-full" variant="outline">
+                  <Button asChild className="w-full" variant={checkoutOpen ? "outline" : "default"}>
                     <Link href="/sign-up">Start free</Link>
                   </Button>
                 }
@@ -371,11 +378,12 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 name="Pro"
                 price={PRO_PRICE_LABEL.month}
                 cadence="a month per workspace"
-                description={`Or ${PRO_PRICE_LABEL.year} a year. Plus sales tax or VAT where it applies.`}
+                badge={checkoutOpen ? undefined : "Opens soon"}
+                description={`Or ${PRO_PRICE_LABEL.year} a year. Plus sales tax or VAT where it applies. Cancel any time.`}
                 features={proFeatures(plans.pro)}
-                featured
+                featured={checkoutOpen}
                 cta={
-                  <Button asChild className="w-full">
+                  <Button asChild className="w-full" variant={checkoutOpen ? "default" : "outline"}>
                     <Link href="/pricing">
                       See pricing <ArrowRight className="size-4" />
                     </Link>
@@ -441,12 +449,12 @@ export function LandingPage({ plans }: { plans: PlanTable }) {
                 Start turning receipts into data
               </h2>
               <p className="mx-auto mt-4 max-w-md text-pretty text-muted-foreground">
-                Free to start, no card required. Export everything, any time.
+                Free to start, no card needed. Export everything, any time.
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
                 <Button asChild size="lg">
                   <Link href="/sign-up">
-                    Get started free <ArrowRight className="size-4" />
+                    Start free <ArrowRight className="size-4" />
                   </Link>
                 </Button>
                 <Button asChild variant="outline" size="lg">

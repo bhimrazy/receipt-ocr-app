@@ -221,6 +221,12 @@ derived and shown only for receipts printed in BS; BS wins over a disagreeing AD
 "Needs review" comes from deterministic checks, not model scores; the model may leave merchant, total and currency
 empty. Edge detection: auto-crop only when confident, then the benchmarked redesign.
 
+Owner decisions (2026-11-13, from the [billing review round](reviews/2026-11-13-billing-design.md)): Free is 30 scans a
+month per person (20 a day stays); accounts created before launch keep 100 a month until a dated end
+(`EARLY_ACCESS` in `packages/core/src/plans.ts`). Upgrade surfaces only from 80% used, none in the account menu, one
+"Plan and billing" page, subscription state before checkout state, members of a Pro workspace see plan and usage only.
+Every wrong marketing claim from the CEO review is fixed.
+
 ## Brand decisions (owner, 2026-11-07)
 
 Logo: "Scan line" (receipt crossed by a bar that overshoots both edges; keep the overshoot in every drawing). Palette:
@@ -262,6 +268,10 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 14. ~~Light and System themes~~ Decided 2026-11-08 (owner took every recommendation in the [spec](plans/2026-11-08-light-theme.md)): System as the default for everyone,
     per-device storage (no account sync), toggle in Settings, account menu and footer (not the header), a light iOS
     splash set, emails out of scope.
+
+15. Early-access dates: accounts created before `EARLY_ACCESS.joinedBefore` (placeholder 1 December 2026) keep 100
+    a month until `EARLY_ACCESS.endsAt` (placeholder 1 March 2027). Set the cutoff to the launch date. If Admin →
+    Settings has a saved plan table, its Free month (likely 100) wins over the new default of 30: lower it there.
 
 ## Roadmap (order)
 

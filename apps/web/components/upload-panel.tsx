@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@receipt-ocr/ui/components/button";
+import { Button, buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { cn } from "@receipt-ocr/ui/lib/utils";
@@ -35,7 +35,8 @@ import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upl
 import { SharedFilesNotice } from "@/components/shared-files-notice";
 import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
 import type { PlanPolicy } from "@/lib/plans";
-import { ASK_OWNER, limitUpgradeLine } from "@/lib/upgrade-copy";
+import { ASK_OWNER, limitUpgradeLine, proOpensSoon } from "@/lib/upgrade-copy";
+import { NEAR_RATIO, usageRatio } from "@/lib/upgrade-level";
 
 // Loaded on first use, so the camera and editor don't weigh on the upload page.
 const loadCamera = () => import("@/components/capture/camera-sheet");
@@ -73,22 +74,29 @@ function plural(n: number, word: string) {
 }
 
 /**
- * Who may be offered Pro at the limit: the owner gets the upgrade button, anyone else the
- * line asking the owner. Absent while Pro can't be bought (or for a Pro workspace).
+ * What the limit state may say about Pro. `offer`: who can act on it now, the owner (the
+ * upgrade button) or a member (ask the owner); null while checkout is closed to this viewer,
+ * when the card says Pro opens soon instead. `pro` is null on a Pro workspace.
  */
-export type LimitUpgrade = { audience: "owner" | "member"; pro: PlanPolicy };
+export type LimitPlan = { pro: PlanPolicy | null; offer: "owner" | "member" | null };
+
+const linkClass =
+  "font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:inline-flex max-md:min-h-11 max-md:items-center";
 
 /** Shown instead of the drop zone when a limit, the Free plan's shared pool, or the service-wide cap is reached. */
 function LimitReached({
   usage,
   resetsIn,
-  upgrade,
+  plan,
 }: {
   usage: Usage;
   resetsIn: string;
-  upgrade: LimitUpgrade | null;
+  plan: LimitPlan;
 }) {
-  const { title, body } = limitCopy(usage, formatTime(usage.opensAt), resetsIn, upgrade);
+  const { title, body, scope } = limitCopy(usage, formatTime(usage.opensAt), resetsIn);
+  const pro = usage.blocked === "global" || usage.scope === "workspace" ? null : plan.pro;
+  const canBuy = pro !== null && plan.offer === "owner";
+  const upgradeLine = pro ? limitUpgradeLine(usage, pro) : null;
   return (
     <Card className="flex flex-col items-center gap-4 border-warning/30 px-6 py-10 text-center sm:py-14">
       <span className="flex size-12 items-center justify-center rounded-full border border-warning/30 bg-warning/10 text-warning">
@@ -97,34 +105,50 @@ function LimitReached({
       <div className="max-w-md">
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">{body}</p>
+        {scope ? <p className="mt-2 text-xs text-muted-foreground">{scope}</p> : null}
+        {pro && plan.offer === null ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            {proOpensSoon(pro)}{" "}
+            <Link className={linkClass} href="/pricing">
+              Compare plans
+            </Link>
+          </p>
+        ) : pro && plan.offer === "member" ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Only the workspace owner can upgrade this workspace. {ASK_OWNER}
+          </p>
+        ) : canBuy && upgradeLine ? (
+          <p className="mt-3 text-sm text-muted-foreground">{upgradeLine}</p>
+        ) : null}
       </div>
-      {upgrade?.audience === "owner" && usage.blocked !== "global" ? (
-        <UpgradeTrigger surface="limit">Upgrade to Pro</UpgradeTrigger>
-      ) : null}
-      <Link
-        className="text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring max-md:inline-flex max-md:min-h-11 max-md:items-center"
-        href="/app/receipts"
-      >
-        Review the receipts you already have
-      </Link>
+      <div className="flex w-full max-w-xs flex-col gap-2">
+        {canBuy ? (
+          <UpgradeTrigger className="w-full" surface="limit">
+            Upgrade to Pro
+          </UpgradeTrigger>
+        ) : null}
+        <Link
+          className={cn(buttonVariants({ variant: canBuy ? "outline" : "default" }), "w-full")}
+          href="/app/receipts"
+        >
+          Review receipts
+        </Link>
+      </div>
     </Card>
   );
 }
 
-function limitCopy(usage: Usage, opens: string, resetsIn: string, upgrade: LimitUpgrade | null) {
-  const copy = baseLimitCopy(usage, opens, resetsIn, upgrade?.audience ?? null);
-  if (!upgrade || usage.blocked === "global") return copy;
-  const extra = upgrade.audience === "member" ? ASK_OWNER : limitUpgradeLine(usage, upgrade.pro);
-  return extra ? { ...copy, body: `${copy.body} ${extra}` } : copy;
-}
+/** "1 December", the day a month reopens. */
+const monthDay = (date: Date) =>
+  date.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
 
-/** The limit state's words. `offered`: who limitCopy adds an upgrade sentence for, if anyone. */
-function baseLimitCopy(
+/** The limit state's words: what happened, when uploads open, and whose scans they were. */
+function limitCopy(
   usage: Usage,
   opens: string,
   resetsIn: string,
-  offered: LimitUpgrade["audience"] | null,
-) {
+): { title: string; body: string; scope?: string } {
+  const keep = "Your receipts are still here to check and export.";
   switch (usage.blocked) {
     case "global":
       return {
@@ -134,33 +158,44 @@ function baseLimitCopy(
     case "pool":
       return {
         title: "Free scanning is busy today",
-        body: `The Free plan's shared daily capacity is used up for today. Try again after ${opens}, ${resetsIn}${offered === "member" ? "" : ", or upgrade this workspace to Pro"}.`,
+        body: `The Free plan's shared daily capacity is used up for today. Uploads open again at ${opens}, ${resetsIn}. ${keep}`,
       };
     case "month":
       return usage.scope === "workspace"
         ? {
             title: "This workspace has reached its monthly limit",
-            body: `Pro includes ${plural(usage.limit, "scan")} a month for each workspace, shared by its members, and they're all used. Uploads open again on the 1st at ${opens}, ${resetsIn}.`,
+            body: `Its ${plural(usage.limit, "scan")} for this month are used. Uploads open again on ${monthDay(usage.opensAt)}, ${resetsIn}. ${keep}`,
           }
         : {
-            title: "You've used this month's free scans",
-            body: `The Free plan includes ${plural(usage.limit, "scan")} a month per person, across every workspace you use, and you've used all of them. Uploads open again on the 1st at ${opens}, ${resetsIn}.${offered ? "" : " Upgrade a workspace to Pro for more scans."}`,
+            title: `You've used this month's ${usage.limit} free scans`,
+            body: `Uploads open again on ${monthDay(usage.opensAt)}, ${resetsIn}. ${keep}`,
+            scope: "Free scans are counted per person, across every Free workspace you use.",
           };
     default: {
       const perDay = usage.day?.limit ?? usage.limit;
       const monthLeft = usage.period === "month" ? Math.max(0, usage.limit - usage.used) : null;
+      const left = monthLeft === null ? "" : ` ${monthLeft} of ${usage.limit} are left this month.`;
       if (usage.scope === "workspace") {
         return {
           title: "Daily limit reached",
-          body: `This workspace has used its ${plural(perDay, "scan")} for today. Uploads open at ${opens}, ${resetsIn}; ${monthLeft ?? 0} of ${plural(usage.limit, "scan")} are left this month.`,
+          body: `This workspace has used its ${plural(perDay, "scan")} for today. Uploads open again at ${opens}, ${resetsIn}.${left}`,
         };
       }
       return {
         title: "You've reached today's limit",
-        body: `You've used all ${plural(perDay, "scan")} your plan includes today. You can upload again at ${opens}, ${resetsIn}.${monthLeft === null ? "" : ` ${monthLeft} of ${usage.limit} left this month.`} Your first ${FREE_FAILED_ROUNDS} failed scans don't count.`,
+        body: `You've used all ${plural(perDay, "scan")} your plan includes today. Uploads open again at ${opens}, ${resetsIn}.${left} Your first ${FREE_FAILED_ROUNDS} failed scans don't count.`,
       };
     }
   }
+}
+
+/** From NEAR_RATIO used: the room left, under the phone's upload buttons. */
+function nearLimitLine(usage: Usage): string | null {
+  if (usage.blocked || usageRatio(usage) < NEAR_RATIO) return null;
+  const monthLeft = Math.max(0, usage.limit - usage.used);
+  const left = usageRemaining(usage);
+  const span = usage.period === "month" && left === monthLeft ? "this month" : "today";
+  return `${plural(left, "scan")} left ${span}`;
 }
 
 /** Seconds until `until`, ticking while it's set. */
@@ -236,10 +271,10 @@ export function UploadPanel({
   usage,
   resetsIn,
   batchMax,
-  upgrade = null,
+  plan = { pro: null, offer: null },
 }: {
   usage: Usage | null;
-  upgrade?: LimitUpgrade | null;
+  plan?: LimitPlan;
   /** "in 6 hours", computed on the server so it matches what was rendered. */
   resetsIn: string;
   /** Images in one batch (camera plus picked files), from the plan. */
@@ -330,10 +365,11 @@ export function UploadPanel({
     [queue, router, release],
   );
 
-  if (usage?.blocked) return <LimitReached resetsIn={resetsIn} upgrade={upgrade} usage={usage} />;
+  if (usage?.blocked) return <LimitReached plan={plan} resetsIn={resetsIn} usage={usage} />;
 
   const busy = snapshot.running;
   const remaining = usage ? usageRemaining(usage) : null;
+  const nearLine = usage ? nearLimitLine(usage) : null;
   const inBatch = items.length + reviewing.length;
   const room = Math.max(0, batchMax - inBatch);
   /** What the batch holds right now, including adds not yet rendered. */
@@ -592,6 +628,12 @@ export function UploadPanel({
           <ImageUp aria-hidden="true" />
           Choose files
         </Button>
+        {nearLine ? (
+          <p className="flex items-center justify-center gap-1.5 text-sm">
+            <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
+            {nearLine}
+          </p>
+        ) : null}
       </div>
 
       <SharedFilesNotice input={inputRef} />
