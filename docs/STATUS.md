@@ -206,6 +206,7 @@ Open pull requests only.
 | #229 | Navigation PR 1: History becomes Receipts (`/app/receipts`), Groups moves to `/app/receipts/groups`; no redirects                                                        |
 | #230 | Navigation PR 3: Spending page (`/app/spending`) holds the dashboard from Home; tab bar is Home, Receipts, Scan, Spending, Settings                                      |
 | #238 | Free at 30 a month with dated early access, one Plan and billing page, upgrade ladder from 80%, marketing claims fixed                                                   |
+| #242 | Edge detection PR 1: `packages/vision` holds the capture geometry and the detector, moved with their tests; no behaviour change                                          |
 | #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                                                                |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
