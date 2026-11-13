@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyInput, applyPaste, boxAt, overwriteDigit, sanitizeOtp } from "./otp";
+import { applyInput, applyPaste, boxAt, overwriteDigit, sanitizeOtp } from "../../src/lib/otp";
 
 describe("sanitizeOtp", () => {
   it("strips spaces, dashes and letters and caps at six", () => {

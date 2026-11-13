@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buttonVariants } from "./components/button";
+import { buttonVariants } from "../src/components/button";
 
-const css = readFileSync(path.join(import.meta.dirname, "styles.css"), "utf8");
+const css = readFileSync(path.join(import.meta.dirname, "../src/styles.css"), "utf8");
 
 describe("touch feedback", () => {
   it.each(["default", "destructive", "secondary", "ghost", "outline", "link"] as const)(

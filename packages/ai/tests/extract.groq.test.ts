@@ -1,10 +1,10 @@
 // The Groq request and response as the installed @ai-sdk/groq builds and reads them, through
 // the same extractReceipt path production uses. fetch is mocked: these tests never reach the network.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OcrCallError, retryAfterMs } from "./errors";
-import { extractReceipt } from "./extract";
-import { FIXTURE_RECEIPTS } from "./fixture";
-import { INJECTION_GUARD } from "./prompt";
+import { OcrCallError, retryAfterMs } from "../src/errors";
+import { extractReceipt } from "../src/extract";
+import { FIXTURE_RECEIPTS } from "../src/fixture";
+import { INJECTION_GUARD } from "../src/prompt";
 
 const RECEIPT = FIXTURE_RECEIPTS[0]!;
 const MODEL = "groq:qwen/qwen3.8-27b" as const;
