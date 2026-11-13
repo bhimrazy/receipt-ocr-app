@@ -10,7 +10,7 @@ import type { WideEvent } from "./schema";
  * `timestamp` (ISO 8601), `level` (`info`, `warn` or `error`), `event`, the
  * deployment fields, then the event's own fields after the allowlist.
  * Registered sinks (the OTLP exporter in `otlp.ts`, when configured) get the
- * same sampled, sanitised object; see docs/plans/2026-11-06-observability.md.
+ * same sampled, sanitised object; see docs/architecture/flows/observability.md.
  */
 
 type Environment = {
