@@ -553,7 +553,7 @@ export const billingSubscriptions = pgTable(
      * Entitlement reads this, not the price, so changing the configured prices never moves a
      * paying workspace.
      */
-    plan: text("plan").notNull().default("pro"),
+    plan: text("plan").notNull(),
     /**
      * The transaction paying for the latest billing period, and that period's start. A full
      * refund of this transaction ends Pro; a refund of any other (an earlier period, a duplicate

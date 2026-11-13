@@ -434,6 +434,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       providerSubscriptionId: subscriptionId,
       providerCustomerId: `ctm_${tag}`,
       status: "active",
+      plan: "pro",
       providerUpdatedAt: new Date(),
     });
 
