@@ -73,6 +73,7 @@ const nextConfig: NextConfig = {
   turbopack: { resolveAlias: { "@react-email/render": "./lib/no-react-email.ts" } },
   transpilePackages: [
     "@receipt-ocr/ai",
+    "@receipt-ocr/calendar",
     "@receipt-ocr/core",
     "@receipt-ocr/db",
     "@receipt-ocr/email",

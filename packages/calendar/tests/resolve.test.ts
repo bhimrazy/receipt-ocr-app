@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { printedBsDate, resolveReceiptDate, type DateEvidence, type ResolvedDate } from "./resolve";
+import {
+  printedBsDate,
+  resolveReceiptDate,
+  type DateEvidence,
+  type ResolvedDate,
+} from "../src/resolve";
 
 const uploadDay = "2026-11-12";
 const resolve = (evidence: Partial<DateEvidence>) => resolveReceiptDate({ uploadDay, ...evidence });

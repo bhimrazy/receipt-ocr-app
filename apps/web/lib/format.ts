@@ -1,4 +1,4 @@
-import { formatBs, printedBsDate } from "@receipt-ocr/core/calendar";
+import { formatBs, printedBsDate } from "@receipt-ocr/calendar";
 
 // Fixed locale and time zone so server and client render identical strings
 // (a runtime-default locale causes hydration mismatches).

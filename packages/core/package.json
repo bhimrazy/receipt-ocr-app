@@ -11,7 +11,6 @@
     "./upload-limits": "./src/upload-limits.ts",
     "./group-rules": "./src/group-rules.ts",
     "./receipt-fields": "./src/receipt-fields.ts",
-    "./calendar": "./src/calendar/index.ts",
     "./review-reasons": "./src/review-reasons.ts"
   },
   "scripts": {
@@ -26,6 +25,7 @@
     "@opentelemetry/resources": "3.0.0",
     "@opentelemetry/sdk-logs": "3.0.0",
     "@receipt-ocr/ai": "workspace:0.0.0",
+    "@receipt-ocr/calendar": "workspace:0.0.0",
     "@receipt-ocr/db": "workspace:0.0.0",
     "@receipt-ocr/storage": "workspace:0.0.0",
     "effect": "3.22.4",

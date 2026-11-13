@@ -17,6 +17,7 @@
   "dependencies": {
     "@better-auth/passkey": "1.7.18",
     "@receipt-ocr/ai": "workspace:*",
+    "@receipt-ocr/calendar": "workspace:0.0.0",
     "@receipt-ocr/core": "workspace:0.0.0",
     "@receipt-ocr/db": "workspace:*",
     "@receipt-ocr/email": "workspace:*",

@@ -24,6 +24,7 @@
       "dependencies": {
         "@better-auth/passkey": "1.7.18",
         "@receipt-ocr/ai": "workspace:*",
+        "@receipt-ocr/calendar": "workspace:0.0.0",
         "@receipt-ocr/core": "workspace:0.0.0",
         "@receipt-ocr/db": "workspace:*",
         "@receipt-ocr/email": "workspace:*",
@@ -80,6 +81,13 @@
         "typescript": "6.0.3",
       },
     },
+    "packages/calendar": {
+      "name": "@receipt-ocr/calendar",
+      "version": "0.0.0",
+      "devDependencies": {
+        "typescript": "6.0.3",
+      },
+    },
     "packages/core": {
       "name": "@receipt-ocr/core",
       "version": "0.0.0",
@@ -90,6 +98,7 @@
         "@opentelemetry/resources": "3.0.0",
         "@opentelemetry/sdk-logs": "3.0.0",
         "@receipt-ocr/ai": "workspace:0.0.0",
+        "@receipt-ocr/calendar": "workspace:0.0.0",
         "@receipt-ocr/db": "workspace:0.0.0",
         "@receipt-ocr/storage": "workspace:0.0.0",
         "effect": "3.22.4",
@@ -625,6 +634,8 @@
     "@receipt-ocr/ai": ["@receipt-ocr/ai@workspace:packages/ai"],
 
     "@receipt-ocr/bench": ["@receipt-ocr/bench@workspace:packages/bench"],
+
+    "@receipt-ocr/calendar": ["@receipt-ocr/calendar@workspace:packages/calendar"],
 
     "@receipt-ocr/core": ["@receipt-ocr/core@workspace:packages/core"],
 

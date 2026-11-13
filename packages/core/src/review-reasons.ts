@@ -3,7 +3,7 @@
  * `status = 'completed' AND review_reasons <> '{}' AND reviewed_at IS NULL`. Client-safe: no server imports.
  */
 
-import type { DateReason } from "./calendar/resolve";
+import type { DateReason } from "@receipt-ocr/calendar";
 
 export const REVIEW_REASONS = [
   "no_merchant",

@@ -218,7 +218,7 @@ How the ledger is used:
 dashboard and the CSV's `receipt_date` all use it. `receipt_date_calendar` records the calendar the receipt printed
 (`gregory`, or `bikram-sambat` when a BS date was printed, alone or beside an AD one; Unicode `u-ca` identifiers).
 Null means unknown (no date, or read before printed dates were kept) and reads as `gregory`. Bikram Sambat is never
-stored: it is `adToBs(receipt_date)` from the vendored month table in `@receipt-ocr/core/calendar`, shown BS-first
+stored: it is `adToBs(receipt_date)` from the vendored month table in `@receipt-ocr/calendar`, shown BS-first
 ("9 Shrawan 2080 · 25 Jul 2023") and exported as `receipt_date_bs` (`2080.04.09`) only for BS receipts. At
 completion the date resolver (`resolveReceiptDate`) turns what was printed into that one day, bounded by the
 2000-01-01 to upload day + 1 window the CHECK enforces

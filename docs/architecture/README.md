@@ -89,13 +89,16 @@ flowchart TD
   storage[packages/storage<br/>S3 helpers]
   email[packages/email<br/>Resend]
   ui[packages/ui<br/>primitives]
+  calendar[packages/calendar<br/>BS dates, no dependencies]
 
   web --> core
   web --> ui
+  web --> calendar
   web --> email
   web -. "auth adapter, counts" .-> db
   web -. "categories, model list" .-> ai
   core --> ai
+  core --> calendar
   core --> db
   core --> storage
 ```
@@ -110,6 +113,7 @@ flowchart TD
 | [`apps/web`](../../apps/web)                         | Pages, route handlers, server actions, Better Auth config. Thin adapters over core.                             | [web.md](web.md)         |
 | [`packages/core`](../../packages/core)               | The receipt workflow, receipt groups, quota, usage ledger, billing, settings, admin writes. Effect TS services. | [core.md](core.md)       |
 | [`packages/ai`](../../packages/ai)                   | One model call: schema, prompt, error kinds, usage, the model list and its prices.                              | [ai.md](ai.md)           |
+| [`packages/calendar`](../../packages/calendar)       | Bikram Sambat month table, AD and BS conversion, and the printed-date resolver. Pure, no dependencies.          | [dates.md](dates.md)     |
 | [`packages/db`](../../packages/db)                   | Drizzle schema for every table and the shared connection pool.                                                  | [db.md](db.md)           |
 | [`packages/storage`](../../packages/storage)         | S3 client, object keys, signed read URLs.                                                                       | [storage.md](storage.md) |
 | [`packages/email`](../../packages/email)             | Resend sender and React Email templates (HTML + plain text).                                                    | [email.md](email.md)     |
