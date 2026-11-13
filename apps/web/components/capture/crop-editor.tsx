@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@receipt-ocr/ui/lib/utils";
+import type { Point, Quad } from "@receipt-ocr/vision";
 import { Fragment, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   arrowDelta,
@@ -18,9 +19,7 @@ import {
   edgeLength,
   edgeMidpoint,
   nearestOnEdge,
-  type Point,
-  type Quad,
-} from "@/lib/capture/geometry";
+} from "@/lib/capture/edges";
 import {
   clipLoupe,
   LOUPE,

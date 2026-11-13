@@ -29,6 +29,7 @@
         "@receipt-ocr/db": "workspace:*",
         "@receipt-ocr/email": "workspace:*",
         "@receipt-ocr/ui": "workspace:0.0.0",
+        "@receipt-ocr/vision": "workspace:*",
         "@sentry/browser": "11.10.0",
         "@sentry/node": "11.10.0",
         "@vercel/analytics": "2.0.1",
@@ -173,6 +174,14 @@
       },
       "peerDependencies": {
         "react": "19.3.1",
+      },
+    },
+    "packages/vision": {
+      "name": "@receipt-ocr/vision",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/node": "25.9.1",
+        "typescript": "6.0.3",
       },
     },
   },
@@ -647,6 +656,8 @@
     "@receipt-ocr/storage": ["@receipt-ocr/storage@workspace:packages/storage"],
 
     "@receipt-ocr/ui": ["@receipt-ocr/ui@workspace:packages/ui"],
+
+    "@receipt-ocr/vision": ["@receipt-ocr/vision@workspace:packages/vision"],
 
     "@receipt-ocr/web": ["@receipt-ocr/web@workspace:apps/web"],
 

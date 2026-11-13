@@ -11,6 +11,7 @@ This repo is a Bun/Turborepo Receipt OCR MVP.
 - `packages/ai`: AI SDK OCR extraction. Gemini is the first provider, but do not hard-code orchestration to Gemini-only concepts.
 - `packages/bench`: OCR benchmark and k6 load test.
 - `packages/core`: Effect TS services and receipt processing workflow.
+- `packages/vision`: pure capture image maths (quad geometry, warp, receipt-edge detection); no DOM, no dependencies.
 
 Tests: in each package, `tests/` mirrors `src/` (`src/lib/x.ts` is tested by `tests/lib/x.test.ts`).
 

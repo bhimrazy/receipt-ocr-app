@@ -12,7 +12,8 @@
       "@receipt-ocr/core": ["../../packages/core/src/index.ts"],
       "@receipt-ocr/db": ["../../packages/db/src/index.ts"],
       "@receipt-ocr/storage": ["../../packages/storage/src/index.ts"],
-      "@receipt-ocr/ui/*": ["../../packages/ui/src/*"]
+      "@receipt-ocr/ui/*": ["../../packages/ui/src/*"],
+      "@receipt-ocr/vision": ["../../packages/vision/src/index.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

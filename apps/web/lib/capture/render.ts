@@ -1,4 +1,12 @@
-import { detectQuad, DETECT_EDGE, type Detection } from "./detect-quad";
+import {
+  detectQuad,
+  DETECT_EDGE,
+  straightenedSize,
+  warpQuad,
+  type Detection,
+  type Pixels,
+  type Quad,
+} from "@receipt-ocr/vision";
 import {
   editKey,
   isFullFrame,
@@ -8,7 +16,6 @@ import {
   type Rotation,
 } from "./edit-state";
 import { applyFilter } from "./filters";
-import { straightenedSize, warpQuad, type Pixels, type Quad } from "./geometry";
 
 /** Canvas rendering of an edit. Browser only; the maths lives in the pure modules beside it. */
 
