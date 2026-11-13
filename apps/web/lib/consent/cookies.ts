@@ -201,6 +201,14 @@ export const storageEntries: StorageEntry[] = [
     duration: "Until you close the tab",
   },
   {
+    name: "receipt-ocr.capture.zoom-hint",
+    kind: "sessionStorage",
+    setBy: "ReceiptOCR",
+    category: "necessary",
+    purpose: "Notes that you have used zoom in the full-size photo view, so its tip shows once.",
+    duration: "Until you close the tab",
+  },
+  {
     name: "receiptocr.navigated",
     kind: "sessionStorage",
     setBy: "ReceiptOCR",

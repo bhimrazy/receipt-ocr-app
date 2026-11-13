@@ -39,7 +39,7 @@ import { formatSize } from "./size-picker";
 /** "JPEG" from "image/jpeg". */
 const formatName = (type: string) => type.replace(/^image\//, "").toUpperCase() || "file";
 
-const HINT_KEY = "receipt-ocr:zoom-hint-seen";
+const HINT_KEY = "receipt-ocr.capture.zoom-hint";
 /** A pointer that moves further than this is dragging, not clicking. */
 const CLICK_SLOP = 4;
 const TAP_SLOP = 10;
@@ -500,7 +500,7 @@ export function FullSizeView({
               <p
                 aria-hidden={hintUsed}
                 className={cn(
-                  "pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-full border border-border bg-background/95 px-3 py-1.5 text-xs whitespace-nowrap text-foreground shadow-sm transition-opacity duration-500 motion-reduce:transition-none",
+                  "pointer-events-none absolute bottom-17 left-1/2 -translate-x-1/2 rounded-full border border-border bg-background/95 px-3 py-1.5 text-xs whitespace-nowrap text-foreground shadow-sm transition-opacity duration-500 motion-reduce:transition-none",
                   hintUsed && "opacity-0",
                 )}
               >
