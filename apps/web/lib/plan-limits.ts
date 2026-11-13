@@ -3,7 +3,6 @@ import {
   accountPlan,
   DEFAULT_PLAN,
   DEFAULT_PLANS,
-  personalPolicy,
   Settings,
   workspacePlan,
   type PlanId,
@@ -37,22 +36,19 @@ export const getPlanTable = cache(async (): Promise<PlanTable> => {
 export type CurrentPlan = {
   plan: PlanId;
   policy: PlanPolicy;
-  /** Set while the signed-in person's Free month is the early-access allowance. */
-  earlyAccessUntil: Date | null;
 };
 
 /**
- * The active workspace's plan and the signed-in person's limits on it, read from
+ * The active workspace's plan and its limits, read from
  * the database on each request so a webhook or an admin's change applies at once.
  * Deduplicated per request.
  */
 export const getCurrentPlan = cache(async (): Promise<CurrentPlan> => {
   const [session, scope] = await Promise.all([getSession(), getActiveScope()]);
   if (!session || !scope) {
-    return { plan: DEFAULT_PLAN, policy: DEFAULT_PLANS[DEFAULT_PLAN], earlyAccessUntil: null };
+    return { plan: DEFAULT_PLAN, policy: DEFAULT_PLANS[DEFAULT_PLAN] };
   }
-  const { plan, policy } = await runtime.runPromise(workspacePlan(scope.organizationId));
-  return { plan, ...personalPolicy(plan, policy, session.user.createdAt) };
+  return runtime.runPromise(workspacePlan(scope.organizationId));
 });
 
 /**

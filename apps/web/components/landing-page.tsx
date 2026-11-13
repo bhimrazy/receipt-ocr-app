@@ -172,7 +172,7 @@ export function LandingPage({
           <div className="relative z-10 mx-auto max-w-3xl animate-rise">
             <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-hairline bg-wash-subtle px-4 py-1.5 font-mono text-xs text-muted-foreground">
               <span className="size-1.5 rounded-full bg-primary shadow-[0_0_10px_var(--primary)]" />
-              Early access · Free to start
+              Free to start
             </div>
             <h1 className="text-balance text-5xl font-bold leading-[1.05] tracking-tight md:text-7xl">
               <span className="block">Receipts to</span>

@@ -11,7 +11,7 @@ import { ContactButton } from "@/components/contact-button";
 import { SettingsSection } from "@/components/settings-section";
 import { PlanBadge, UsageMeter, type Usage } from "@/components/usage-meter";
 import { formatDate } from "@/lib/format";
-import { freeFeatures, longDate, membersLine, scansLine, SEPARATE_UPGRADE } from "@/lib/plan-copy";
+import { freeFeatures, membersLine, scansLine, SEPARATE_UPGRADE } from "@/lib/plan-copy";
 import type { PlanId, PlanPolicy, PlanTable } from "@/lib/plans";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 
@@ -216,8 +216,7 @@ function Subscription(props: PlanAndBillingProps & { subscription: WorkspaceBill
 
 function Plans(props: PlanAndBillingProps) {
   const { plans, owner, impersonating, checkout, ownsPro, subscription } = props;
-  const free = { ...plans.free, receiptsPerMonth: props.policy.receiptsPerMonth };
-  const earlyUntil = props.usage.earlyAccessUntil;
+  const { free } = plans;
 
   let proAction: React.ReactNode;
   if (!owner) {
@@ -262,12 +261,7 @@ function Plans(props: PlanAndBillingProps) {
               <Badge variant="secondary">Your plan</Badge>
             </div>
             <p className="font-mono text-2xl font-bold">$0</p>
-            <FeatureList
-              features={[
-                ...freeFeatures(free).slice(0, 2),
-                ...(earlyUntil ? [`Early access until ${longDate(earlyUntil)}`] : []),
-              ]}
-            />
+            <FeatureList features={freeFeatures(free).slice(0, 2)} />
           </Card>
           <Card className="flex flex-col gap-3 border-primary/30 p-5">
             <div className="flex items-center justify-between gap-2">

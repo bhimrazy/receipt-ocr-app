@@ -68,7 +68,7 @@ async function upload(request: Request, _context: unknown, event: WideEvent) {
     ...imageFields(body),
   };
   // Check quota and OCR config first, so nothing is stored for an upload that can't be scanned.
-  const ingest = enforceUploadQuota(scope, session.user.createdAt).pipe(
+  const ingest = enforceUploadQuota(scope).pipe(
     Effect.tap(({ plan }) => void (event.plan = plan)),
     Effect.tap(() => Effect.flatMap(Ocr, (ocr) => ocr.ready)),
     Effect.flatMap(({ limits }) =>

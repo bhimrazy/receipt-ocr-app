@@ -2,7 +2,6 @@ import { Badge } from "@receipt-ocr/ui/components/badge";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { CircleAlert } from "lucide-react";
 import { formatTime } from "@/lib/format";
-import { earlyAccessLine, longDate } from "@/lib/plan-copy";
 import { NEAR_RATIO, usageRatio } from "@/lib/upgrade-level";
 
 export type Usage = {
@@ -23,8 +22,6 @@ export type Usage = {
   blocked: "day" | "month" | "pool" | "global" | null;
   /** When uploads open again while blocked: midnight UTC, or the month's reset. */
   opensAt: Date;
-  /** Set while `limit` is the early-access Free allowance: when it ends. */
-  earlyAccessUntil?: Date;
 };
 
 /** Scans the next upload batch can still use: the tighter of the month and the day. */
@@ -93,7 +90,7 @@ export function meterNote(usage: Usage): string {
 /**
  * Scans used against the plan limit: plan badge, count, bar and one line. Amber on the bar and
  * icon only, from NEAR_RATIO, and the words say it too. `detail` (Billing) gives the full
- * sentence and the early-access terms; `action` goes under the note.
+ * sentence; `action` goes under the note.
  */
 export function UsageMeter({
   usage,
@@ -146,13 +143,6 @@ export function UsageMeter({
         ) : null}
         <span>{detail ? usageNote(usage) : meterNote(usage)}</span>
       </p>
-      {usage.earlyAccessUntil ? (
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          {detail
-            ? earlyAccessLine(limit, usage.earlyAccessUntil)
-            : `Early access until ${longDate(usage.earlyAccessUntil)}`}
-        </p>
-      ) : null}
       {action ? <div className="mt-3 flex flex-col">{action}</div> : null}
     </div>
   );

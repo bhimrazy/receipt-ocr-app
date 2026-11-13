@@ -2,7 +2,6 @@ import { DEFAULT_PLANS, type PlanPolicy } from "@receipt-ocr/core/plans";
 import { describe, expect, it } from "vitest";
 import {
   CUSTOM_PLAN,
-  earlyAccessLine,
   freeFeatures,
   proFeatures,
   scansLine,
@@ -11,19 +10,7 @@ import {
 } from "./plan-copy";
 
 describe("account copy", () => {
-  const until = new Date("2027-03-01T00:00:00Z");
-
-  it("names an early-access allowance and the day it ends", () => {
-    expect(earlyAccessLine(100, until)).toBe("Early access: 100 scans a month until 1 March 2027.");
-    expect(
-      welcomePlanLine(
-        "free",
-        { ...DEFAULT_PLANS.free, receiptsPerMonth: 100 },
-        { until, thenPerMonth: 30 },
-      ),
-    ).toBe(
-      "Your Free plan includes 20 scans a day, up to 100 a month. The 100 a month is an early-access allowance until 1 March 2027; after that it is 30 a month, and 20 a day carries on. Limits reset at 00:00 UTC.",
-    );
+  it("words the welcome email's plan line", () => {
     expect(welcomePlanLine("free", DEFAULT_PLANS.free)).toBe(
       "Your Free plan includes 20 scans a day, up to 30 a month. Limits reset at 00:00 UTC.",
     );
