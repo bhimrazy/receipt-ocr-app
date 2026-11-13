@@ -140,12 +140,12 @@ test("signed-in pages send noindex, and signed-out visits redirect with it too",
   page,
   request,
 }) => {
-  const redirect = await request.get("/app/history", { maxRedirects: 0 });
+  const redirect = await request.get("/app/receipts", { maxRedirects: 0 });
   expect(redirect.status()).toBe(307);
   expect(redirect.headers()["x-robots-tag"]).toContain("noindex");
 
   await signUp(page, uniqueEmail("seo"));
-  for (const path of ["/app", "/app/history", "/app/settings"]) {
+  for (const path of ["/app", "/app/receipts", "/app/settings"]) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(200);
     expect(res?.headers()["x-robots-tag"], path).toContain("noindex");

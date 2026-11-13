@@ -98,7 +98,7 @@ test("below 20% only the meter offers Pro; from 20% Home shows the card", async 
 test("the meter button opens the modal, Escape closes it and focus returns", async ({ page }) => {
   const paddle = await stubPaddle(page);
   await adminOwner(page, "upgrade-meter");
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   // Paddle.js loads only once the modal opens.
   expect(paddle.requested()).toBe(0);
 
@@ -121,7 +121,7 @@ test("the meter button opens the modal, Escape closes it and focus returns", asy
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(meterButton(page)).toBeFocused();
-  expect(page.url()).toMatch(/\/app\/history$/);
+  expect(page.url()).toMatch(/\/app\/receipts$/);
 });
 
 test("the primary button asks the server for the checkout and shows its error in place", async ({
@@ -154,9 +154,9 @@ test("the account menu offers Pro above Settings and opens the modal", async ({ 
 test("?upgrade=1 opens the modal once and leaves a plain URL", async ({ page }) => {
   await stubPaddle(page);
   await adminOwner(page, "upgrade-link");
-  await page.goto("/app/groups?upgrade=1&via=email");
+  await page.goto("/app/receipts/groups?upgrade=1&via=email");
   await expect(modal(page)).toBeVisible();
-  await expect(page).toHaveURL(/\/app\/groups$/);
+  await expect(page).toHaveURL(/\/app\/receipts\/groups$/);
   await page.reload();
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(modal(page)).toHaveCount(0);
@@ -189,7 +189,7 @@ test("closing the modal keeps the Home card; its Not now survives a reload", asy
   await expect(meterButton(page)).toBeVisible();
 });
 
-test("at the limit the banner shows on History, not on Home or Upload", async ({ page }) => {
+test("at the limit the banner shows on Receipts, not on Home or Upload", async ({ page }) => {
   const email = await adminOwner(page, "upgrade-limit");
   await useScans(email, 20, "today");
   const banner = page.getByRole("complementary", { name: "Plan limit" });
@@ -205,7 +205,7 @@ test("at the limit the banner shows on History, not on Home or Upload", async ({
   await expect(page.getByRole("heading", { name: "You've reached today's limit" })).toBeVisible();
   await expect(banner).toHaveCount(0);
 
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await expect(banner).toBeVisible();
   await expect(banner).toContainText("You've used today's 20 Free scans.");
   await dismissWith(page, banner.getByRole("button", { name: /^Hide until / }));

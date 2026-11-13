@@ -36,7 +36,7 @@ test("marking a receipt reviewed replaces its checks with who reviewed it, and U
   await page.reload();
   await expect(page.getByText("Reviewed by E2E User")).toBeVisible();
   await expect(checked).toBeAttached();
-  await page.goto("/app/history?status=needs-review");
+  await page.goto("/app/receipts?status=needs-review");
   await expect(page.getByText("Review Test Shop")).toHaveCount(0);
 
   await page.goto(`/app/receipts/${id}`);

@@ -51,7 +51,7 @@ test.describe("Home spending dashboard", () => {
   });
 
   // One seeded account for both widths and the link check: sign-ups are rate-limited per client.
-  test("shows per-currency spending at 390 px and on desktop, and links into History", async ({
+  test("shows per-currency spending at 390 px and on desktop, and links into Receipts", async ({
     page,
   }) => {
     const email = uniqueEmail("dash-data");
@@ -89,7 +89,7 @@ test.describe("Home spending dashboard", () => {
     await page.goto("/app?range=3m");
     const categories = page.getByRole("list", { name: "Spend by category" });
     await categories.getByRole("link", { name: /Fuel/ }).click();
-    await expect(page).toHaveURL(/\/app\/history\?.*category=Fuel/);
+    await expect(page).toHaveURL(/\/app\/receipts\?.*category=Fuel/);
     await expect(page.getByText("Shell").filter({ visible: true }).first()).toBeVisible();
   });
 

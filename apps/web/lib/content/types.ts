@@ -85,9 +85,9 @@ export type ContentExample = {
   extraction: ExampleExtraction;
   /** What the export panel shows: Copy JSON, or the History CSV with `historyRows` as extra rows. */
   exportView: "json" | "history-csv";
-  /** Other receipts in the History CSV, after the example one. */
+  /** Other receipts in the Receipts CSV, after the example one. */
   historyRows?: Array<Omit<ExampleExtraction, "items"> & { itemCount: number; fileName: string }>;
-  /** Group names on every row of the History CSV. */
+  /** Group names on every row of the Receipts CSV. */
   groups?: string[];
 };
 

@@ -188,7 +188,7 @@ describe("content pages", () => {
     }
   });
 
-  it("the History CSV example is what the real exporter writes", () => {
+  it("the Receipts CSV example is what the real exporter writes", () => {
     const page = contentPages.find((p) => p.example?.exportView === "history-csv")!;
     const lines = exampleCsv(page.example!).trimEnd().split("\n");
     expect(lines[0]).toMatch(

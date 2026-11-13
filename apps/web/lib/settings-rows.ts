@@ -14,6 +14,7 @@ export function settingsRows(input: {
       value: input.workspaceName,
       icon: "workspace",
     },
+    { href: "/app/receipts/groups", label: "Groups", value: "", icon: "groups" },
     "appearance",
     {
       href: "/app/settings/security",

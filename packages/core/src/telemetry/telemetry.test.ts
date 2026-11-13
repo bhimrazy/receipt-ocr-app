@@ -38,8 +38,8 @@ describe("sanitize (the allowlist)", () => {
   });
 
   it("cuts the query string and hash off routes", () => {
-    const { fields } = sanitize({ event: "x", route: "/app/history?q=pharmacy#top" });
-    expect(fields.route).toBe("/app/history");
+    const { fields } = sanitize({ event: "x", route: "/app/receipts?q=pharmacy#top" });
+    expect(fields.route).toBe("/app/receipts");
   });
 
   it("filters map entries and list items by their own schema", () => {
@@ -512,9 +512,9 @@ describe("secret denylist", () => {
   it("does not replace a route whole for a secret in its query string", () => {
     const { fields, redacted } = sanitize({
       event: "x",
-      route: `/app/history?k=${SECRETS.gemini}`,
+      route: `/app/receipts?k=${SECRETS.gemini}`,
     });
-    expect(fields.route).toBe("/app/history");
+    expect(fields.route).toBe("/app/receipts");
     expect(redacted).toBe(0);
   });
 

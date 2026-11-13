@@ -7,7 +7,7 @@ test.beforeEach(async ({ context }) => {
   await context.setExtraHTTPHeaders({ "x-forwarded-for": `10.${octet()}.${octet()}.${octet()}` });
 });
 
-test("create a group from a selection, filter History by it, export it, then manage it", async ({
+test("create a group from a selection, filter Receipts by it, export it, then manage it", async ({
   page,
 }) => {
   const email = uniqueEmail("groups");
@@ -15,7 +15,7 @@ test("create a group from a selection, filter History by it, export it, then man
   await seedReceipts(email, ["Café Berlin", "Hotel Berlin", "Office Depot"]);
 
   // Tick two receipts and add them to a new group from the picker.
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await page.getByRole("checkbox", { name: "Select Café Berlin" }).check();
   await page.getByRole("checkbox", { name: "Select Hotel Berlin" }).check();
   const bar = page.getByRole("toolbar", { name: "Selected receipts" });
@@ -47,7 +47,7 @@ test("create a group from a selection, filter History by it, export it, then man
   expect(csv).not.toContain("Office Depot");
 
   // Add the third receipt from its detail page.
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await page.getByRole("table").getByRole("link", { name: "Office Depot" }).click();
   await page.getByRole("button", { name: "Add to group" }).click();
   await page.getByRole("checkbox", { name: "Berlin trip" }).check();
@@ -58,7 +58,7 @@ test("create a group from a selection, filter History by it, export it, then man
   await expect(chips.getByRole("link", { name: "Berlin trip" })).toHaveCount(0);
 
   // Rename, then delete: the receipts stay.
-  await page.goto("/app/groups");
+  await page.goto("/app/receipts/groups");
   await page.getByRole("button", { name: "Edit Berlin trip" }).click();
   const edit = page.getByRole("dialog", { name: "Edit group" });
   await edit.getByLabel("Name").fill("Berlin 2026");
@@ -72,16 +72,16 @@ test("create a group from a selection, filter History by it, export it, then man
 
   await page.getByRole("button", { name: "Delete Berlin 2026" }).click();
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog).toContainText("2 receipts stay in History");
+  await expect(dialog).toContainText("2 receipts are kept");
   await dialog.getByRole("button", { name: "Delete group" }).click();
   await expect(page.getByText("No groups yet")).toBeVisible();
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await expect(page.getByText("3 receipts in this workspace")).toBeVisible();
 });
 
 test("group names are unique per workspace ignoring case", async ({ page }) => {
   await signUp(page, uniqueEmail("groups-dup"));
-  await page.goto("/app/groups");
+  await page.goto("/app/receipts/groups");
   await page.getByLabel("Name").fill("Taxes 2026");
   await page.getByRole("button", { name: "Create group" }).click();
   await expect(

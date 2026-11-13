@@ -10,9 +10,10 @@ const PATH_RULES: [RegExp, string][] = [
   [/^\/api\/auth\/reset-password\/[^/]+/, "/api/auth/reset-password/:token"],
   [/^\/reset-password\/[^/]+/, "/reset-password/:token"],
   [/^\/accept-invitation\/[^/]+/, "/accept-invitation/:id"],
-  [/^\/app\/receipts\/[^/]+/, "/app/receipts/:id"],
+  [/^\/app\/receipts\/groups\/[^/]+/, "/app/receipts/groups/:id"],
+  // Groups is a named page beside the receipt ids, so it keeps its name.
+  [/^\/app\/receipts\/(?!groups(?:\/|$))[^/]+/, "/app/receipts/:id"],
   [/^\/api\/receipts\/[^/]+/, "/api/receipts/:id"],
-  [/^\/app\/groups\/[^/]+/, "/app/groups/:id"],
 ];
 
 const scrubPath = (path: string) => {

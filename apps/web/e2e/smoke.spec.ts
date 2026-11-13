@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { seedReceipts, signIn, signOut, signUp, uniqueEmail } from "./helpers";
 
 test("signed-out visitors are redirected from /app to sign-in", async ({ page }) => {
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await expect(page).toHaveURL(/\/sign-in/);
 });
 
@@ -18,7 +18,7 @@ test("sign up, history, receipt detail, CSV export, sign out and back in", async
   const merchant = `Corner Store ${Date.now()}`;
   const [receiptId] = await seedReceipts(email, [merchant, "Second Market"]);
 
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await expect(page.getByRole("cell", { name: merchant, exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Second Market", exact: true })).toBeVisible();
 
@@ -31,16 +31,16 @@ test("sign up, history, receipt detail, CSV export, sign out and back in", async
 
   await page.goto("/app");
   await expect(page.getByRole("heading", { name: "Recent receipts" })).toBeVisible();
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await page.getByRole("link", { name: merchant }).click();
   await expect(page).toHaveURL(new RegExp(`/app/receipts/${receiptId}`));
   await expect(page.getByRole("heading", { level: 1, name: merchant })).toBeVisible();
 
   await signOut(page);
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await expect(page).toHaveURL(/\/sign-in/);
 
   await signIn(page, email);
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await expect(page.getByRole("cell", { name: merchant, exact: true })).toBeVisible();
 });

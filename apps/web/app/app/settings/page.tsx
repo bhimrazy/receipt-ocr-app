@@ -31,7 +31,7 @@ import { requireActiveScope, requireSession } from "@/lib/session";
 import { count, createDb, eq, member, organization } from "@receipt-ocr/db";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card } from "@receipt-ocr/ui/components/card";
-import { ChevronRight, ShieldCheck } from "lucide-react";
+import { ChevronRight, ShieldCheck, Tags } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getUsageSummary } from "@/lib/receipts";
@@ -182,6 +182,28 @@ export default async function SettingsPage({
             href="/app/settings/members"
           >
             Members
+            <ChevronRight aria-hidden="true" />
+          </Link>
+        </Card>
+        <Card className="mt-3 flex flex-wrap items-center gap-3 p-4">
+          <span
+            aria-hidden="true"
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"
+          >
+            <Tags className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium select-none">Groups</p>
+            <p className="text-xs text-muted-foreground">
+              Collect receipts by trip, client or year
+            </p>
+          </div>
+          <Link
+            aria-label="Manage groups"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+            href="/app/receipts/groups"
+          >
+            Manage
             <ChevronRight aria-hidden="true" />
           </Link>
         </Card>

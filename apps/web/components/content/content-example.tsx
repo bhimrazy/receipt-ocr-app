@@ -50,7 +50,7 @@ export function ContentExampleView({ example }: { example: ContentExample }) {
     n === null ? "—" : (formatMoney(n, receipt.currency) ?? "—");
   const noun = example.fileName.toLowerCase().endsWith(".pdf") ? "PDF" : "photo";
   const checks = exampleChecks(receipt, example.fileName);
-  const exportLabel = example.exportView === "json" ? "Copy JSON" : "History CSV export";
+  const exportLabel = example.exportView === "json" ? "Copy JSON" : "Receipts CSV export";
   const exportText =
     example.exportView === "json" ? JSON.stringify(receipt, null, 2) : exampleCsv(example);
 

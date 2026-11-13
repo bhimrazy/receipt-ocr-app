@@ -21,6 +21,11 @@ describe("scrubUrl", () => {
       "/app/receipts/:id/edit",
     );
   });
+
+  it("keeps the Groups page under Receipts by name", () => {
+    expect(scrubUrl("/app/receipts/groups?upgrade=1")).toBe("/app/receipts/groups");
+    expect(scrubUrl("/app/receipts/groupsx")).toBe("/app/receipts/:id");
+  });
 });
 
 describe("scrubMessage", () => {

@@ -43,12 +43,12 @@ describe("list view params", () => {
     });
   });
 
-  it("keeps size and sort in History links but leaves defaults out", () => {
+  it("keeps size and sort in Receipts links but leaves defaults out", () => {
     const view = { size: 50, sort: { by: "total" as const, dir: "desc" as const } };
     expect(historyHref({ status: "failed" }, 2, view)).toBe(
-      "/app/history?status=failed&size=50&sort=total&dir=desc&page=2",
+      "/app/receipts?status=failed&size=50&sort=total&dir=desc&page=2",
     );
-    expect(historyHref({}, 1, { size: 25 })).toBe("/app/history");
+    expect(historyHref({}, 1, { size: 25 })).toBe("/app/receipts");
     expect(exportHref({ q: "cafe" }, view)).toBe("/api/receipts/export?q=cafe&sort=total&dir=desc");
   });
 });

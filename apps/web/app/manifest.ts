@@ -53,9 +53,9 @@ export default function manifest(): MetadataRoute.Manifest {
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
       },
       {
-        name: "History",
+        name: "Receipts",
         description: "Your scanned receipts",
-        url: "/app/history",
+        url: "/app/receipts",
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
       },
     ],
