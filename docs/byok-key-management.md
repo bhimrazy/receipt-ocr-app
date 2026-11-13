@@ -45,7 +45,7 @@ user submits key ──TLS──▶ API route (Clerk-authed)
   of the app runtime if avoidable. Options, best-first:
   1. Cloud KMS (AWS KMS / GCP KMS / Cloudflare) — HSM-backed, rotation and audit built in.
   2. A libsodium sealed-box master key held only in the deployment platform's encrypted env
-     (acceptable for early access; document the upgrade path).
+     (acceptable for now; document the upgrade path).
 - **Key rotation:** rotating the KEK re-wraps DEKs (cheap, no secret re-entry). Users can
   rotate their own credentials any time; keep the old row `revoked_at`-stamped rather than
   hard-deleted for 30 days of audit, then purge.

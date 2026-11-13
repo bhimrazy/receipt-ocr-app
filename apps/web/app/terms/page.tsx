@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { getPlanTable } from "@/lib/plan-limits";
-import { earlyAccessOffer } from "@receipt-ocr/core/plans";
-import { allowance, longDate } from "@/lib/plan-copy";
+import { allowance } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { authorName } from "@/lib/site";
 import { formatLegalDate, LEGAL_UPDATED, pageMetadata } from "@/lib/seo";
@@ -19,14 +18,13 @@ export const revalidate = 3600;
 
 export default async function TermsPage() {
   const { free, pro } = await getPlanTable();
-  const early = earlyAccessOffer(free);
   const owned = (n: number) => (n === 1 ? "1 workspace" : `${n} workspaces`);
   const workspaces = owned(free.workspaces);
   return (
     <LegalPage
       title="Terms of service"
       updated={formatLegalDate(LEGAL_UPDATED.terms)}
-      intro={`These terms apply when you use ReceiptOCR, a service run by ${authorName}. By creating an account or using the service, you agree to them. ReceiptOCR is in early access, so some features may change.`}
+      intro={`These terms apply when you use ReceiptOCR, a service run by ${authorName}. By creating an account or using the service, you agree to them. Some features may change.`}
       sections={[
         {
           heading: "The service",
@@ -54,11 +52,6 @@ export default async function TermsPage() {
           heading: "Plans and limits",
           body: [
             `The free plan currently includes ${allowance(free)} per person, counted across every workspace they use, up to ${free.membersPerWorkspace} members in a workspace, and ${workspaces} to own, with no card required.`,
-            ...(early
-              ? [
-                  `Accounts created before ${longDate(early.joinedBefore)} get ${early.receiptsPerMonth} scans a month on the free plan instead of ${early.thenPerMonth}, as an early-access offer, until ${longDate(early.endsAt)}. The daily limit is unchanged.`,
-                ]
-              : []),
             `Pro is a subscription for one workspace, at ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year, plus any sales tax or VAT. It currently includes ${allowance(pro)} for that workspace, shared by its members, up to ${pro.membersPerWorkspace} members, and lets its owner own up to ${owned(pro.workspaces)}. Each workspace needs its own subscription to be on Pro.`,
             "Daily limits reset at 00:00 UTC and monthly limits on the 1st of each month at 00:00 UTC. Unused scans don't carry over.",
             "We may change these limits or prices. A price change applies from your next billing period, and we'll tell you by email before it does.",
@@ -87,10 +80,10 @@ export default async function TermsPage() {
           ],
         },
         {
-          heading: "Early access and availability",
+          heading: "Availability",
           body: [
             "The service is provided as it is and as available. We work to keep it running and accurate, but we don't promise it will be uninterrupted, error-free or that extraction will be correct.",
-            "Export anything you need to keep. We may change or stop features during early access.",
+            "Export anything you need to keep. We may change or stop features.",
           ],
         },
         {

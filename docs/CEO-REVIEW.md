@@ -4,7 +4,7 @@ _Prepared July 2026 · Working document, revisit quarterly_
 
 ## 1. Executive summary
 
-receiptOCR is a technically solid, honestly positioned early-access product in a large and
+receiptOCR is a technically solid, honestly positioned pre-launch product in a large and
 growing market. Its differentiators — **bring-your-own-keys (BYOK), no lock-in, per-field
 confidence scores, and data portability** — are real and increasingly what the market wants.
 The biggest risks are not technical: they are **distribution** (nobody knows it exists) and

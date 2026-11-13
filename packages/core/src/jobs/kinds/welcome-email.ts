@@ -4,7 +4,7 @@ import { Context, Effect, Layer } from "effect";
 import { z } from "zod";
 import type { DbError } from "../../errors";
 import { accountPlan } from "../../billing/service";
-import { personalPolicy, type PlanId, type PlanPolicy } from "../../plans";
+import { type PlanId, type PlanPolicy } from "../../plans";
 import { Db } from "../../services";
 import type { Settings } from "../../settings";
 import { annotateEvent } from "../../telemetry/current";
@@ -36,8 +36,6 @@ export class WelcomeMailer extends Context.Tag("@receipt-ocr/core/WelcomeMailer"
       /** The account's plan when sending; the mail states its limits. */
       plan: PlanId;
       policy: PlanPolicy;
-      /** Set while the Free month is the early-access allowance: when it ends, and the month after. */
-      earlyAccess: { until: Date; thenPerMonth: number | null } | null;
     }) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected">;
   }
 >() {
@@ -91,22 +89,13 @@ export const welcomeEmail: JobDefinition<WelcomeEmailPayload, Db | Settings | We
       const { use } = yield* Db;
       const mailer = yield* WelcomeMailer;
       const rows = yield* use((db) =>
-        db
-          .select({ email: user.email, createdAt: user.createdAt })
-          .from(user)
-          .where(eq(user.id, payload.userId))
-          .limit(1),
+        db.select({ email: user.email }).from(user).where(eq(user.id, payload.userId)).limit(1),
       );
       const row = rows[0];
       if (!row) return { kind: "skipped", reason: "user-gone" } satisfies WelcomeEmailResult;
       // Read now, not at enqueue: the plan may have changed since.
-      const account = yield* accountPlan(payload.userId);
-      const { plan } = account;
-      const { policy, earlyAccessUntil } = personalPolicy(plan, account.policy, row.createdAt);
-      const earlyAccess = earlyAccessUntil
-        ? { until: earlyAccessUntil, thenPerMonth: account.policy.receiptsPerMonth }
-        : null;
-      const outcome = yield* mailer.send({ to: row.email, plan, policy, earlyAccess });
+      const { plan, policy } = yield* accountPlan(payload.userId);
+      const outcome = yield* mailer.send({ to: row.email, plan, policy });
       yield* annotateEvent({ kind: "welcome", plan, delivered: outcome === "delivered" });
       if (outcome === "rejected")
         return yield* new NonRetryableJobError({ kind: "email-render-failed" });
