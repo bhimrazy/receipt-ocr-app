@@ -150,7 +150,8 @@ workspace names and addresses are user input, and the inbox list is where a phis
   `email.not_configured` and returns `delivered: false`. In development (`logUndelivered`) it also logs the recipient
   and text, so reset and invite links stay usable locally. Elsewhere it logs the event only, because those links are
   credentials.
-- **Logs carry no address, subject or body.**
+- **Logs carry no address, subject or body.** `email.*` events carry `email_kind` (the template) and, for an accepted send, `provider_message_id` (Resend's id); a failure carries the error's name only.
+- **Job sends are idempotent.** The welcome and contact-reply jobs pass `job:{id}` as the `Idempotency-Key`, so a retry after an accepted send whose response was lost returns the first send instead of mailing again. Resend's `invalid_idempotent_request` (same key, changed content) is a permanent failure and the job goes dead without retrying; `concurrent_idempotent_requests` is retried.
 - **Interpolated values are normalized and escaped** (above). Workspace names are also restricted to plain text by
   [`parseWorkspaceName`](../../packages/core/src/workspace-name.ts).
 - **No tracking pixels or remote fonts.** The only remote resource is the logo.

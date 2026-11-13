@@ -42,7 +42,7 @@ export class ContactReplyMailer extends Context.Tag("@receipt-ocr/core/ContactRe
         /** Stable across a job's attempts, so a retry after an accepted send doesn't mail twice. */
         idempotencyKey: string;
       },
-    ) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected">;
+    ) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected" | "conflict">;
   }
 >() {
   static readonly Disabled = Layer.succeed(ContactReplyMailer, {
@@ -90,6 +90,8 @@ export const contactReply: JobDefinition<ContactReplyPayload, ContactReplyMailer
       });
       if (outcome === "rejected")
         return yield* new NonRetryableJobError({ kind: "email-render-failed" });
+      if (outcome === "conflict")
+        return yield* new NonRetryableJobError({ kind: "email-idempotency-conflict" });
       if (outcome === "failed") return yield* new RetryableJobError({ kind: "email-send-failed" });
       logger.info({
         event: "email.contact_reply_sent",

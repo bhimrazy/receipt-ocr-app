@@ -7,7 +7,7 @@ import { contactReply, ContactReplyMailer, contactReplyPayload } from "./contact
 const payload = { to: "a@example.com", name: "Ada", topic: "feature" };
 
 const run = (
-  outcome: "delivered" | "not_configured" | "failed" | "rejected",
+  outcome: "delivered" | "not_configured" | "failed" | "rejected" | "conflict",
   sent: unknown[] = [],
 ) =>
   Effect.runPromiseExit(
@@ -45,5 +45,8 @@ describe("contact auto-reply job", () => {
     expect(JSON.stringify(failed)).toContain("email-send-failed");
     expect(JSON.stringify(failed)).toContain("RetryableJobError");
     expect(JSON.stringify(await run("rejected"))).toContain("NonRetryableJobError");
+    const conflict = JSON.stringify(await run("conflict"));
+    expect(conflict).toContain("NonRetryableJobError");
+    expect(conflict).toContain("email-idempotency-conflict");
   });
 });

@@ -98,6 +98,23 @@ describe("sendEmail idempotency", () => {
     expect(send.mock.calls[0][1]).toEqual({ idempotencyKey: "job:abc" });
   });
 
+  it("surfaces only the idempotency error names, never the message", async () => {
+    send.mockClear();
+    for (const name of ["invalid_idempotent_request", "concurrent_idempotent_requests"]) {
+      send.mockResolvedValueOnce({
+        data: null,
+        error: { name, message: "to a@example.com", statusCode: 409 },
+      });
+      const result = await sendEmail(config, input);
+      expect(result).toMatchObject({ delivered: false, errorName: name });
+    }
+    send.mockResolvedValueOnce({
+      data: null,
+      error: { name: "rate_limit_exceeded", message: "m", statusCode: 429 },
+    });
+    expect(await sendEmail(config, input)).not.toHaveProperty("errorName");
+  });
+
   it("sends no options without a key", async () => {
     send.mockClear();
     send.mockResolvedValue({ data: { id: "1" }, error: null });

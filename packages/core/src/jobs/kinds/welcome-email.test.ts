@@ -23,7 +23,7 @@ const run = (
   send: (input: {
     to: string;
     plan: string;
-  }) => "delivered" | "not_configured" | "failed" | "rejected",
+  }) => "delivered" | "not_configured" | "failed" | "rejected" | "conflict",
   sent: unknown[] = [],
 ) =>
   Effect.runPromiseExit(
@@ -83,5 +83,8 @@ describe("welcome email job", () => {
     expect(JSON.stringify(failed)).toContain("email-send-failed");
     const rejected = await run(rows(), () => "rejected");
     expect(JSON.stringify(rejected)).toContain("NonRetryableJobError");
+    const conflict = JSON.stringify(await run(rows(), () => "conflict"));
+    expect(conflict).toContain("NonRetryableJobError");
+    expect(conflict).toContain("email-idempotency-conflict");
   });
 });
