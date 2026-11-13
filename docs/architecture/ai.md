@@ -114,8 +114,10 @@ v3 is v2 (below) with these changes; each version has its own wire schema (`rece
   positive) and `serviceCharge`, so the totals check balances on Nepali restaurant bills.
 - **Null instead of invented:** `merchant`, `total` and `currency` are nullable; core adds `no_merchant`,
   `no_total` and `no_currency` review reasons.
-- **Cost:** about 3,000 more characters of rules and definitions than v2 (roughly +900 input tokens) and a few dozen
-  output tokens for `dates[]`. Not yet benchmarked against v2 with real models.
+- **Measured against v2** (2026-11-13; Haiku 5.5 and Gemini 3.5 Flash-Lite, two runs each; the table is in the PR
+  that added v3). No loss on merchant, total, currency or items. The stored date on the owner's Nepal set rose from
+  67% to 100% (Haiku) and from 17% to 100% (Flash-Lite). It costs about 1,600 more input tokens per Haiku call (+30% per
+  receipt) and about 110 more per Flash-Lite call.
 
 v2, the request both providers get:
 

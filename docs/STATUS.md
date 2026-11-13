@@ -322,8 +322,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
     CHECKs `NOT VALID`, backfills), the vendored BS table and resolver in `@receipt-ocr/calendar`,
     `reviewReasons()` as the Needs review rule, BS-first display for BS receipts, the editor's AD/BS date and new
     fields, zod PATCH parsing, CSV `receipt_date_bs` and the new columns. Extraction v3 (in review: `dates[]`, bill
-    number, tax id, discount, service charge, nullable merchant/total/currency; synthetic Nepal bench fixtures;
-    the paid v2-vs-v3 benchmark awaits the owner's approval). Next: migration `0004` validating
+    number, tax id, discount, service charge, nullable merchant/total/currency; synthetic Nepal bench fixtures.
+    Benchmarked 2026-11-13: no loss on the core fields, Nepal stored date 67% → 100% on Haiku and 17% → 100% on
+    Flash-Lite, Haiku +30% cost per receipt). Next: migration `0004` validating
     the `0003` CHECKs, "Copy JSON" from the row, list badges from `review_reasons`, then Nepal fiscal-year and
     BS-month presets ([research](reviews/2026-11-12-dates-and-fields-research.md),
     [dual-calendar dates](plans/2026-11-07-dual-calendar-dates.md)).
