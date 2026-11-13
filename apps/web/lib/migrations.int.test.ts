@@ -17,6 +17,7 @@ const tables = [
   "account",
   "admin_audit_log",
   "app_settings",
+  "billing_checkouts",
   "billing_events",
   "billing_subscriptions",
   "invitation",
@@ -64,13 +65,14 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is the baseline, billing, receipt review and receipt fields", () => {
+  it("is the baseline, billing, receipt review, receipt fields and billing checkouts", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
     expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
       "0000_baseline",
       "0001_billing",
       "0002_receipt_review",
       "0003_receipt_fields",
+      "0004_billing_checkouts",
     ]);
   });
 
@@ -134,6 +136,9 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     );
     expect(def("billing_subscriptions_provider_id_idx")).toMatch(
       /UNIQUE.*\(provider, provider_subscription_id\)/,
+    );
+    expect(def("billing_checkouts_provider_transaction_idx")).toMatch(
+      /UNIQUE.*\(provider, provider_transaction_id\)/,
     );
   });
 

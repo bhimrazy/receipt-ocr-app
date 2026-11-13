@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { Card } from "@receipt-ocr/ui/components/card";
-import type { WorkspaceBilling } from "@receipt-ocr/core";
+import { BUYER_GONE, type WorkspaceBilling } from "@receipt-ocr/core";
 import { CheckoutButton } from "@/components/billing/checkout-button";
 import { PortalButtons } from "@/components/billing/portal-buttons";
 import {
@@ -83,18 +83,16 @@ export default async function BillingPage({
   // A comp: Pro without a subscription of its own (an admin set the owner's plan).
   const comped = plan === "pro" && !entitled;
   const interval = params.interval === "year" ? "year" : "month";
-  // Only the buyer sees their card and invoices; any owner once the buyer is gone.
+  // Only the buyer sees their card and invoices; nobody once the buyer's account is gone.
   const buyer = subscription?.buyer ?? null;
-  const isBuyer = buyer === null || buyer.id === session.user.id;
+  const isBuyer = buyer !== null && buyer.id === session.user.id;
   const portalOpen =
     subscription !== null &&
     (entitled || subscription.status === "past_due" || subscription.status === "paused");
   const note = subscription ? subscriptionNote(subscription) : null;
 
   const managedElsewhere = (
-    <Alert>
-      Billing for this workspace is managed by {buyer?.email ?? "the person who subscribed"}.
-    </Alert>
+    <Alert>{buyer ? `Billing for this workspace is managed by ${buyer.email}.` : BUYER_GONE}</Alert>
   );
   const checkoutButton = checkout ? (
     <CheckoutButton

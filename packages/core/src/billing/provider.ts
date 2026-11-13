@@ -36,6 +36,8 @@ export const subscriptionSnapshotSchema = z.object({
   /** From the checkout's custom data; trusted only to link a new subscription. */
   workspaceId: z.string().max(100).nullable(),
   userId: z.string().max(100).nullable(),
+  /** The checkout transaction that created it, on `subscription.created` only. Absent from older stored payloads. */
+  transactionId: z.string().max(100).nullable().default(null),
 });
 
 export type SubscriptionSnapshot = z.output<typeof subscriptionSnapshotSchema>;

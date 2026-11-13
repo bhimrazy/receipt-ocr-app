@@ -4,8 +4,8 @@ import { signUp, uniqueEmail } from "./helpers";
 
 // The e2e stack runs Paddle's sandbox keys under `next start` (NODE_ENV=production), the live
 // site's state today: checkout is open to platform admins only, so only they see the upgrade
-// surfaces. These tests make their owner an admin. No API key is set, so starting a checkout
-// fails on the server; Paddle.js is stubbed and never fetched.
+// surfaces. These tests make their owner an admin with a verified email (checkout needs one). No
+// API key is set, so starting a checkout fails on the server; Paddle.js is stubbed and never fetched.
 
 const db = async <T>(fn: (sql: postgres.Sql) => Promise<T>) => {
   const sql = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
@@ -17,7 +17,7 @@ const db = async <T>(fn: (sql: postgres.Sql) => Promise<T>) => {
 };
 
 const makeAdmin = (email: string) =>
-  db((sql) => sql`update "user" set role = 'admin' where email = ${email}`);
+  db((sql) => sql`update "user" set role = 'admin', email_verified = true where email = ${email}`);
 
 /**
  * Free scans used, written to the usage ledger. `month`: at the start of this UTC month, so

@@ -95,6 +95,7 @@ const subscriptionData = z.object({
   scheduled_change: z.object({ action: z.string() }).nullish(),
   canceled_at: z.string().nullish(),
   updated_at: z.string(),
+  transaction_id: z.string().min(1).nullish(),
 });
 
 const adjustmentData = z.object({
@@ -182,6 +183,7 @@ export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-bo
       updatedAt,
       workspaceId: s.custom_data.workspaceId,
       userId: s.custom_data.userId,
+      transactionId: s.transaction_id ?? null,
     },
   };
 }
@@ -339,29 +341,33 @@ const created = z.object({ data: z.object({ id: z.string().min(1) }) });
 
 /**
  * Creates the checkout's transaction on the server (`POST /transactions`), so
- * the price and the custom data are ours, not the browser's. The customer is
+ * the price, the customer and the custom data are ours, not the browser's.
+ * The customer is `customerId` when the buyer already has one on record, else
  * found by email (`GET /customers?email=`) or created (`POST /customers`), so
  * the checkout opens with the address filled in. Paddle.js opens the returned
- * `txn_…` id; the subscription it creates copies `custom_data`.
+ * `txn_…` id; the subscription it creates copies `custom_data` and the customer.
  */
 export async function createPaddleCheckoutTransaction(
   options: PaddleApiOptions & {
     priceId: string;
     email: string;
+    customerId: string | null;
     customData: { workspaceId: string; userId: string };
   },
   fetchImpl: typeof fetch = fetch,
-): Promise<{ transactionId: string }> {
-  const found = await paddleRequest(
-    options,
-    "GET",
-    `/customers?email=${encodeURIComponent(options.email)}`,
-    undefined,
-    customerList,
-    fetchImpl,
-  );
+): Promise<{ transactionId: string; customerId: string }> {
   const customerId =
-    found.data[0]?.id ??
+    options.customerId ??
+    (
+      await paddleRequest(
+        options,
+        "GET",
+        `/customers?email=${encodeURIComponent(options.email)}`,
+        undefined,
+        customerList,
+        fetchImpl,
+      )
+    ).data[0]?.id ??
     (
       await paddleRequest(
         options,
@@ -384,7 +390,7 @@ export async function createPaddleCheckoutTransaction(
     created,
     fetchImpl,
   );
-  return { transactionId: transaction.data.id };
+  return { transactionId: transaction.data.id, customerId };
 }
 
 /**

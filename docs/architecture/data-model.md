@@ -321,13 +321,15 @@ reads or writes them.
 
 ## Billing
 
-Written only by the `billing.apply_event` job (subscriptions) and the webhook route (events). Both tables have row-level
-security on and no policies, like every table. The flow is in [Billing](flows/billing.md).
+Written only by the `billing.apply_event` job (subscriptions), the webhook route (events) and `createCheckout`
+(checkouts). All three tables have row-level security on and no policies, like every table. The flow is in [Billing](flows/billing.md).
 
 ```mermaid
 erDiagram
   organization |o--o{ billing_subscriptions : "organization_id, set null"
   user |o--o{ billing_subscriptions : "user_id (buyer), set null"
+  organization ||--o{ billing_checkouts : "organization_id, cascade"
+  user ||--o{ billing_checkouts : "user_id (buyer), cascade"
   billing_events }o..o| organization : "organization_id, no FK"
   billing_events ||..o| jobs : "billing.apply_event, payload.eventId"
 
@@ -348,6 +350,17 @@ erDiagram
     timestamptz canceled_at
     timestamptz revoked_at "chargeback or full refund: no Pro"
     timestamptz provider_updated_at "orders events"
+  }
+  billing_checkouts {
+    uuid id PK
+    text provider UK
+    text provider_transaction_id UK "txn_ the server created"
+    text organization_id FK
+    text user_id FK
+    text provider_customer_id "the customer put on it"
+    text price_id
+    text provider_subscription_id UK "the one it linked"
+    timestamptz created_at
   }
   billing_events {
     uuid id PK
@@ -370,6 +383,9 @@ erDiagram
 - `billing_events` is the webhook log. The unique index on `(provider, provider_event_id)` makes a redelivery a no-op.
   `payload` is the provider-neutral event the job applies; the raw body is never stored. `outcome` and `processed_at`
   are null until the job has run. `organization_id` has no foreign key, so the log outlives a deleted workspace.
+- `billing_checkouts` holds every checkout transaction the server created. A new subscription links only to one of
+  these, for the same workspace, buyer and customer, and the portal opens only for a customer recorded here for the
+  buyer. The rows go with their workspace or buyer.
 - An admin comp is not a row here: it is `user.plan = 'pro'`.
 
 ## Background jobs
@@ -409,11 +425,11 @@ erDiagram
 
 ## What happens on delete
 
-| When this is deleted | Rows that cascade (are deleted)                                                                                                        | Rows that stay with the id set to null                                                                                                                                                                                                                       |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `passkey`, `step_up_events`, `step_up_codes` | `receipts.user_id`, `receipts.reviewed_by`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by`, `billing_subscriptions.user_id` |
-| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`                                                | `ocr_rounds.organization_id`, `ocr_calls.organization_id`, `billing_subscriptions.organization_id`                                                                                                                                                           |
-| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                      | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                                                                                      |
+| When this is deleted | Rows that cascade (are deleted)                                                                                                                             | Rows that stay with the id set to null                                                                                                                                                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `passkey`, `step_up_events`, `step_up_codes`, `billing_checkouts` | `receipts.user_id`, `receipts.reviewed_by`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by`, `billing_subscriptions.user_id` |
+| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`, `billing_checkouts`                                                | `ocr_rounds.organization_id`, `ocr_calls.organization_id`, `billing_subscriptions.organization_id`                                                                                                                                                           |
+| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                                           | Nothing: the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                                                                                      |
 
 Two rules sit on top of the cascades, in [packages/core](core.md):
 
@@ -437,6 +453,8 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `ocr_rounds`            | `ocr_rounds_plan_check`: `plan in ('free', 'pro')`                                              | Only known plans; `plan` defaults to `free` (migration `0001_billing`)                                                                                              |
 | `billing_subscriptions` | `billing_subscriptions_provider_id_idx` on `(provider, provider_subscription_id)`               | One row per provider subscription; the apply job finds it by this key                                                                                               |
 | `billing_subscriptions` | `billing_subscriptions_status_check`, `billing_subscriptions_interval_check`                    | Only the five stored statuses; interval `month` or `year` or null                                                                                                   |
+| `billing_checkouts`     | `billing_checkouts_provider_transaction_idx` on `(provider, provider_transaction_id)`           | One row per checkout transaction; the apply job matches a new subscription's transaction by this key                                                                |
+| `billing_checkouts`     | `billing_checkouts_provider_subscription_idx` on `(provider, provider_subscription_id)`         | A checkout links at most one subscription                                                                                                                           |
 | `billing_events`        | `billing_events_provider_event_idx` on `(provider, provider_event_id)`                          | A webhook delivered twice is stored once                                                                                                                            |
 | `billing_events`        | `billing_events_outcome_check`                                                                  | Only `applied`, `stale`, `ignored`, `unmatched`, or null before the job runs                                                                                        |
 | `ocr_calls`             | `ocr_calls_receipt_round_attempt_step_idx` on `(receipt_id, round, job_attempt, step)`          | An attempt's calls written twice (a lost commit acknowledgement, then the failure path) are billed once (`onConflictDoNothing`); each automatic retry keeps its own |
@@ -470,6 +488,7 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `ocr_rounds_org_created_at_idx` (`organization_id, created_at`)                            | A Pro workspace's day and month counts; also the set-null when a workspace is deleted (replaces `ocr_rounds_organization_id_idx`, migration `0001_billing`) |
 | `ocr_rounds_created_at_idx`                                                                | Global daily cap                                                                                                                                            |
 | `ocr_calls_user_id_idx`, `jobs_user_id_idx`                                                | The set-null when an account is deleted                                                                                                                     |
+| `billing_checkouts_user_idx` (`user_id, created_at`), `billing_checkouts_org_idx`          | A buyer's last customer and the portal check; the cascades on account and workspace delete                                                                  |
 | `billing_subscriptions_org_idx`, `billing_events_org_idx` (`organization_id, received_at`) | A workspace's subscriptions and events; the set-null on workspace delete                                                                                    |
 | `invitation_inviter_id_idx`, `admin_audit_log_actor_id_idx`                                | The cascade or set-null when a user is deleted                                                                                                              |
 | `ocr_calls_org_created_at_idx`                                                             | Workspace usage rollups                                                                                                                                     |
