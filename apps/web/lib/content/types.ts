@@ -71,6 +71,9 @@ export type ContentSection = {
   };
 };
 
+/** Sample receipts are legible: merchant, total and currency, which a real reply may leave null, are set. */
+type ExampleExtraction = ReceiptExtraction & { merchant: string; total: number; currency: string };
+
 /**
  * A sample receipt, shown the way the receipt page shows it. `extraction` has the shape the OCR
  * model returns, so the JSON view is what Copy JSON gives.
@@ -79,11 +82,11 @@ export type ContentExample = {
   heading: string;
   caption: string;
   fileName: string;
-  extraction: ReceiptExtraction;
+  extraction: ExampleExtraction;
   /** What the export panel shows: Copy JSON, or the History CSV with `historyRows` as extra rows. */
   exportView: "json" | "history-csv";
   /** Other receipts in the History CSV, after the example one. */
-  historyRows?: Array<Omit<ReceiptExtraction, "items"> & { itemCount: number; fileName: string }>;
+  historyRows?: Array<Omit<ExampleExtraction, "items"> & { itemCount: number; fileName: string }>;
   /** Group names on every row of the History CSV. */
   groups?: string[];
 };
