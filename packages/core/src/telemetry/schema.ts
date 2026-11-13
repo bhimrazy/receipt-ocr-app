@@ -221,10 +221,12 @@ export const EVENT_SCHEMA = {
        * the stored one, which was kept (also a warning).
        */
       unmatched_reason: "token",
-      /** The provider's transaction id (`txn_…`) an unmatched subscription or waiting refund named. An opaque id; no personal data. */
+      /** The provider's transaction id (`txn_…`) an unmatched subscription or waiting refund named, or that charged a revoked subscription. An opaque id; no personal data. */
       transaction_id: "id",
       /** A full refund still waiting for its transaction three days on (the `billing.refund_wait_check` job, logged as `billing.refund_unresolved` at warn level). Set from our own event log; no personal data. */
       refund_unresolved: "bool",
+      /** A revoked subscription was charged for a period (logged as `billing.revoked_charged` at warn level, with `transaction_id` and `subscription_id`, to refund by hand). Set from our own row and the event's origin and billing period; no personal data. */
+      revoked_charged: "bool",
       /** A subscription whose workspace or buyer is gone can still charge, so the job cancels it. Set from the stored row's workspace and buyer links and the event's status; no personal data. */
       orphan_charging: "bool",
       /** A new subscription linked to a workspace that already had one able to charge (logged as `billing.duplicate_subscription` at warn level). Set from our own rows; no personal data. */

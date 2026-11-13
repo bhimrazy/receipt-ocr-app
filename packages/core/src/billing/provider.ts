@@ -65,6 +65,8 @@ export const transactionSnapshotSchema = z.object({
   origin: z.string().max(60).nullable(),
   /** The start of the billing period it pays for; null for a one-off charge. */
   billingPeriodStart: isoDate.nullable(),
+  /** Its end. Absent on events stored before it was kept. */
+  billingPeriodEnd: isoDate.nullish().transform((value) => value ?? null),
 });
 
 export type TransactionSnapshot = z.output<typeof transactionSnapshotSchema>;

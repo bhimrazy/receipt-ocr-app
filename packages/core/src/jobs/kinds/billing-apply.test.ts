@@ -3,15 +3,23 @@ import { describe, expect, it } from "vitest";
 import { PaddleApiError, type PaddleErrorCode } from "../../billing/paddle";
 import { Billing, providerFailure } from "../../billing/service";
 import { NotConfigured } from "../../errors";
+import { withWideEvent } from "../../telemetry/current";
+import { WideEventLoggerLive } from "../../telemetry/logger";
+import type { WideEvent } from "../../telemetry/schema";
 import { backoffMs } from "../backoff";
 import { billingApply, cancelRevoked, LOCKED_RETRY_MS } from "./billing-apply";
 
 const unused = () => Effect.die("not used");
 
 /** Runs the cancel against a provider that answers `status` with `code`, or succeeds. */
-const cancelWith = (answer: { status: number; code?: PaddleErrorCode } | "ok" | "off") =>
+const cancelWith = (
+  answer: { status: number; code?: PaddleErrorCode } | "ok" | "off",
+  wide: WideEvent = { event: "job.attempt" },
+) =>
   Effect.runPromiseExit(
     cancelRevoked("sub_1").pipe(
+      withWideEvent(wide),
+      Effect.provide(WideEventLoggerLive),
       Effect.provide(
         Layer.succeed(Billing, {
           receiveWebhook: unused,
@@ -77,6 +85,17 @@ describe("cancelRevoked", () => {
     });
     expect(Exit.isSuccess(canceled)).toBe(true);
     expect(Exit.isSuccess(await cancelWith("ok"))).toBe(true);
+  });
+
+  it("notes an already canceled subscription at info, and another refusal at error", async () => {
+    const canceled: WideEvent = { event: "job.attempt" };
+    await cancelWith({ status: 400, code: "subscription_is_canceled_action_invalid" }, canceled);
+    expect(canceled.notices).toEqual(["billing.cancel_already_canceled"]);
+    expect(canceled.level).toBeUndefined();
+
+    const refused: WideEvent = { event: "job.attempt" };
+    await cancelWith({ status: 404, code: "not_found" }, refused);
+    expect(refused).toMatchObject({ notices: ["billing.cancel_refused"], level: "error" });
   });
 
   it("retries a rate limit or a server error", async () => {

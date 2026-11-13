@@ -49,6 +49,7 @@ import {
   PAST_DUE_GRACE_DAYS,
   PAST_DUE_GRACE_MS,
   paysNewerPeriod,
+  paysPeriod,
   planForPrice,
   workspaceLimitMessage,
 } from "./entitlement";
@@ -500,8 +501,12 @@ export type ApplyResult = {
    * event named another customer than the stored one, which was kept.
    */
   unmatched?: UnmatchedReason;
-  /** The checkout transaction an unmatched subscription named, for finding it in the provider. */
+  /** The checkout transaction an unmatched subscription named, or the one that charged a revoked subscription. */
   transactionId?: string;
+  /** A revoked subscription was charged for a period (`transactionId`): someone must refund it by hand. */
+  revokedCharged?: true;
+  /** The provider subscription, set with `revokedCharged`. */
+  subscriptionId?: string;
   /** Its workspace or buyer was deleted but it can still charge: someone is paying for nothing (it is also cancelled). */
   orphanCharging?: true;
   /**
@@ -612,9 +617,19 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           const stored = await storedSubscription(tx, event.provider, transaction.subscriptionId);
           // Before the link there is nothing to record: the link takes the checkout's transaction.
           if (!stored) return finish({ outcome: "ignored", organizationId: null });
-          // A row linked before `paid_period_start` existed: its paid transaction pays at most the stored period.
-          const recordedStart = stored.paidPeriodStart ?? stored.currentPeriodStart;
-          const newer = paysNewerPeriod(transaction, recordedStart);
+          const period = { start: stored.currentPeriodStart, end: stored.currentPeriodEnd };
+          const newer = paysNewerPeriod(transaction, stored.paidPeriodStart, period);
+          // Charged for a period after Pro was revoked (not the revoked payment itself): refunded by hand.
+          const after =
+            stored.revokedAt !== null &&
+            transaction.transactionId !== stored.paidTransactionId &&
+            paysPeriod(transaction, period)
+              ? {
+                  revokedCharged: true as const,
+                  subscriptionId: stored.providerSubscriptionId,
+                  transactionId: transaction.transactionId,
+                }
+              : {};
           // Full refunds of this transaction that arrived before it.
           const waiting = await waitingRefunds(tx, event.provider, transaction.transactionId);
           if (waiting.length > 0) {
@@ -631,6 +646,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
               outcome: "ignored",
               organizationId: stored.organizationId,
               ...cancelStillOwed(stored),
+              ...after,
             });
           }
           await tx
@@ -646,9 +662,10 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
               outcome: "applied",
               organizationId: stored.organizationId,
               ...cancelStillOwed(stored),
+              ...after,
             });
           }
-          return finish(await revoke(tx, stored, now));
+          return finish({ ...(await revoke(tx, stored, now)), ...after });
         }
 
         if (event.adjustment) {
@@ -755,18 +772,9 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           updatedAt: new Date(),
         };
         if (stored) {
-          // A row linked before `paid_period_start` existed: its paid transaction is taken to pay
-          // the period this update leaves, so the one paying the new period counts as newer.
-          const leftPeriod =
-            stored.paidPeriodStart === null &&
-            stored.currentPeriodStart !== null &&
-            current.currentPeriodStart !== null &&
-            current.currentPeriodStart > stored.currentPeriodStart
-              ? { paidPeriodStart: stored.currentPeriodStart }
-              : {};
           await tx
             .update(billingSubscriptions)
-            .set({ ...values, ...leftPeriod })
+            .set(values)
             .where(eq(billingSubscriptions.id, stored.id));
         } else {
           await tx.insert(billingSubscriptions).values({

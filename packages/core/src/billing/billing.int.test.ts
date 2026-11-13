@@ -185,12 +185,14 @@ const paid = (
   transactionId: string,
   start: Date | null,
   origin = "subscription_recurring",
+  end: Date | null = null,
 ) =>
   event(null, "transaction.completed", null, {
     transactionId,
     subscriptionId,
     origin,
     billingPeriodStart: start,
+    billingPeriodEnd: end,
   });
 
 const adjustment = (fields: Partial<AdjustmentSnapshot>): AdjustmentSnapshot => ({
@@ -1619,30 +1621,42 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(quiet).not.toHaveProperty("notices");
     });
 
-    it("revokes on a full refund of an interval change's payment on a row linked before paid_period_start", async () => {
-      const legacy = async (name: string) => {
+    it("takes an interval change's payment in either order, but not a mid-period proration", async () => {
+      const periodStart = new Date(Date.now() - 10 * 86_400_000);
+      const periodEnd = new Date(Date.now() + 20 * 86_400_000);
+      const linked = async (name: string) => {
         const workspaceId = await createWorkspace(other.userId, name);
         const id = `sub_${tag}_${name}`;
-        const start = new Date(Date.now() - 10 * 86_400_000);
         await deliver(
           event(
-            snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: start }),
+            snapshot({
+              subscriptionId: id,
+              workspaceId,
+              currentPeriodStart: periodStart,
+              currentPeriodEnd: periodEnd,
+            }),
             "subscription.created",
           ),
         );
-        await db((d) =>
-          d
-            .update(billingSubscriptions)
-            .set({ paidPeriodStart: null })
-            .where(eq(billingSubscriptions.providerSubscriptionId, id)),
-        );
-        // A proration inside the current period doesn't pay a new one.
-        const proration = paid(id, `txn_${tag}_${name}_proration`, start, "subscription_update");
-        await deliver(proration);
-        expect(await outcomeOf(proration.eventId)).toBe("ignored");
         return { workspaceId, id };
       };
-      const yearStart = new Date(Date.now() - 3_600_000);
+
+      // Paddle bills a proration from the change to the current period's end.
+      const prorated = await linked("prorated");
+      const changedAt = new Date(Date.now() - 3_600_000);
+      const proration = paid(
+        prorated.id,
+        `txn_${tag}_proration`,
+        changedAt,
+        "subscription_update",
+        periodEnd,
+      );
+      await deliver(proration);
+      expect(await outcomeOf(proration.eventId)).toBe("ignored");
+      await deliver(fullRefund(prorated.id, `txn_${tag}_proration`));
+      expect(await planOf(prorated.workspaceId)).toBe("pro");
+
+      const yearEnd = new Date(changedAt.getTime() + 365 * 86_400_000);
       const toYearly = (workspaceId: string, id: string) =>
         event(
           snapshot({
@@ -1650,16 +1664,21 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
             workspaceId,
             priceId: "pri_year",
             interval: "year",
-            currentPeriodStart: yearStart,
-            currentPeriodEnd: new Date(Date.now() + 364 * 86_400_000),
+            currentPeriodStart: changedAt,
+            currentPeriodEnd: yearEnd,
             transactionId: null,
             updatedAt: new Date(Date.now() + 1000),
           }),
         );
-
       for (const order of ["update-first", "payment-first"] as const) {
-        const { workspaceId, id } = await legacy(`legacy-${order}`);
-        const payment = paid(id, `txn_${tag}_${order}_yearly`, yearStart, "subscription_update");
+        const { workspaceId, id } = await linked(`yearly-${order}`);
+        const payment = paid(
+          id,
+          `txn_${tag}_${order}_yearly`,
+          changedAt,
+          "subscription_update",
+          yearEnd,
+        );
         if (order === "update-first") await deliver(toYearly(workspaceId, id));
         await deliver(payment);
         if (order === "payment-first") await deliver(toYearly(workspaceId, id));
@@ -1685,15 +1704,26 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       await deliver(event(null, "adjustment.created", adjustment({ subscriptionId: id })));
       expect((await subscriptionRow(id))?.revokedAt).toBeInstanceOf(Date);
 
+      // The revoked payment's own report isn't a new charge.
+      expect(await applyOnce(paid(id, `txn_${id}`, start, "web"))).not.toHaveProperty(
+        "revokedCharged",
+      );
       const renewalStart = new Date(Date.now() + 1000);
       expect(await applyOnce(paid(id, `txn_${tag}_revoked_renewal`, renewalStart))).toMatchObject({
         outcome: "applied",
         cancelSubscriptionId: id,
+        revokedCharged: true,
+        subscriptionId: id,
+        transactionId: `txn_${tag}_revoked_renewal`,
       });
-      // A second charge for the same period is ignored, and still asks.
+      // A second charge for the same period is ignored, still asks, and is flagged too.
       expect(await applyOnce(paid(id, `txn_${tag}_revoked_duplicate`, renewalStart))).toMatchObject(
-        { outcome: "ignored", cancelSubscriptionId: id },
+        { outcome: "ignored", cancelSubscriptionId: id, revokedCharged: true },
       );
+      // A one-off charge pays no period.
+      expect(
+        await applyOnce(paid(id, `txn_${tag}_revoked_one_off`, null, "subscription_charge")),
+      ).not.toHaveProperty("revokedCharged");
       expect(await planOf(workspaceId)).toBe("free");
     });
 

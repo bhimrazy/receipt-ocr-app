@@ -166,6 +166,7 @@ describe("parsePaddleEvent", () => {
         subscriptionId: "sub_1",
         origin: "subscription_recurring",
         billingPeriodStart: new Date("2026-12-08T12:00:00Z"),
+        billingPeriodEnd: new Date("2027-01-08T12:00:00Z"),
       },
     });
     expect(parsePaddleEvent(body({ id: "txn_2" }))).toMatchObject({
@@ -174,6 +175,7 @@ describe("parsePaddleEvent", () => {
         subscriptionId: null,
         origin: null,
         billingPeriodStart: null,
+        billingPeriodEnd: null,
       },
     });
     // Unreadable details are kept as an event with nothing to apply, not refused.
