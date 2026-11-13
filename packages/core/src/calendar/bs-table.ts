@@ -1,20 +1,4 @@
-/**
- * Bikram Sambat month lengths, BS 2056 to 2090. BS has no formula: each year's months (29 to 32 days) come from
- * the almanac the Nepal Panchang Nirnayak Bikas Samiti approves, one year ahead. Receipts are dated from 2000-01-01
- * (Poush 2056) on, so earlier years are left out.
- *
- * Provenance, checked 2026-11-12. Month lengths are facts; these three tables were diffed year by year:
- * - subeshb1/Nepali-Date `src/date-config.ts` at f14e039 (MIT, npm `nepali-date-converter`)
- * - medic/bikram-sambat `test-data/daysInMonth.json` at aeaa7b8 (Apache-2.0)
- * - amitgaru/nepali-datetime `nepali_datetime/data/calendar_bs.csv` at 83bb3b2 (PyPI `nepali-datetime`)
- * All three agree on every row except 2062 and 2087, where amitgaru is the outlier; those rows take the other two.
- * All three put 1 Baisakh 2056 on 1999-04-14, the anchor below. medic's 10,227 BS-to-AD reference pairs for 2056 to
- * 2083 match this table (the tests carry a sample).
- *
- * Rows after `BS_OFFICIAL_THROUGH` are projections and have changed after release before (2081 to 2083 were each
- * corrected in libraries). Yearly update: when the Samiti approves year N+1, diff its row against two published
- * almanacs, replace the row and bump `BS_OFFICIAL_THROUGH`. A test fails once today is past that year.
- */
+// Bikram Sambat month lengths, BS 2056 to 2090. Sources and the yearly update: docs/architecture/dates.md.
 
 export const BS_FIRST_YEAR = 2056;
 /** The last year whose months the Samiti has approved. Later rows are projections. */

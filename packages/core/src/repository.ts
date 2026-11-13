@@ -55,7 +55,7 @@ import {
   storableQuantity,
 } from "./receipt-fields";
 import type { ReceiptPatch } from "./receipt-patch";
-import { isDateReason, reviewReasons } from "./review-reasons";
+import { editedReasons, reviewReasons } from "./review-reasons";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -369,7 +369,8 @@ const toSummary = (row: SummaryRow): ReceiptSummary => ({
   confidence: row.confidence == null ? null : Number(row.confidence),
 });
 
-/** Fields extraction v3 adds, read when present so the schema can gain them without a change here. */
+/** Optional extraction fields, read only when the model returned them. */
+// TODO(2026-12-15): fold into `ReceiptExtraction` once packages/ai's schema declares these fields.
 type ExtractionExtras = {
   dates?: readonly PrintedDate[] | null;
   invoiceNumber?: string | null;
@@ -505,10 +506,10 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       sort?: ReceiptSort,
     ) => Effect.Effect<ReceiptExportRow[], DbError>;
     /**
-     * Applies user corrections and recomputes the review reasons from the result; false when nothing matched or
-     * the caller may not edit it. Date reasons are kept unless the patch changes the date or its calendar; clearing
-     * the date clears the calendar. Fails InvalidInput for a date that isn't a real day from 2000 on, or is after
-     * the day the receipt was uploaded.
+     * Applies user corrections and rechecks only the review reasons the changed fields affect (`editedReasons`);
+     * false when nothing matched or the caller may not edit it. Clearing the date clears the calendar. Fails
+     * InvalidInput for a date that isn't a real day from 2000 on or is after the day the receipt was uploaded, and
+     * for a calendar on a receipt with no date.
      */
     readonly update: (
       id: string,
@@ -783,7 +784,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           const row = await db.query.receipts.findFirst({
             where: inScope(id, scope),
             with: {
-              items: { orderBy: [asc(receiptItems.position), asc(receiptItems.id)] },
+              // Then insertion order (items are never updated): a receipt completed by code that wrote no
+              // position has every line at 0.
+              items: { orderBy: [asc(receiptItems.position), sql`ctid`] },
               reviewer: { columns: { name: true } },
             },
           });
@@ -903,27 +906,29 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 Object.entries(patch).filter(([, v]) => v !== undefined),
               );
               if (changes.receiptDate === null) changes.receiptDateCalendar = null;
-              // A person changed the date, so the resolver's doubts about the printed one no longer apply.
-              const dateSet =
-                (changes.receiptDate !== undefined && changes.receiptDate !== row.receiptDate) ||
-                (changes.receiptDateCalendar !== undefined &&
-                  changes.receiptDateCalendar !== row.receiptDateCalendar);
+              const nextDate =
+                changes.receiptDate === undefined ? row.receiptDate : changes.receiptDate;
+              if (changes.receiptDateCalendar && nextDate === null) return "calendar-without-date";
+              const changed = new Set(
+                (Object.keys(changes) as (keyof ReceiptPatch)[]).filter(
+                  (key) => changes[key] !== row[key],
+                ),
+              );
               const items = await tx
                 .select({ totalPrice: receiptItems.totalPrice })
                 .from(receiptItems)
                 .where(eq(receiptItems.receiptId, id));
-              const next = { ...row, ...changes, items };
               await tx
                 .update(receipts)
                 .set({
                   ...changes,
                   reviewReasons:
                     row.status === "completed"
-                      ? reviewReasons(next, dateSet ? [] : row.reviewReasons.filter(isDateReason))
+                      ? editedReasons(row.reviewReasons, { ...row, ...changes, items }, changed)
                       : row.reviewReasons,
                   updatedAt: new Date(),
                 })
-                .where(eq(receipts.id, id));
+                .where(and(eq(receipts.id, id), eq(receipts.organizationId, scope.organizationId)));
               return true;
             });
           }),
@@ -934,7 +939,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                     message: "The date can't be after the day the receipt was uploaded.",
                   }),
                 )
-              : Effect.succeed(result),
+              : result === "calendar-without-date"
+                ? Effect.fail(new InvalidInput({ message: "Set the date before its calendar." }))
+                : Effect.succeed(result),
         );
       },
 

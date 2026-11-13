@@ -189,6 +189,26 @@ describe("resolveReceiptDate", () => {
     );
   });
 
+  it("reads a date printed after or before a time", () => {
+    for (const text of ["10:30 05/06/2024", "05/06/2024 10:30", "05/06/2024 10:30:15 PM"]) {
+      expect(resolve({ dates: [date(text)], uploadDay: "2024-06-10" })).toEqual(
+        result("2024-06-05", "gregory", ["date_ambiguous"]),
+      );
+    }
+    expect(resolve({ dates: [date("10:30 2080-04-09")], uploadDay: "2023-07-26" })).toEqual(
+      result("2023-07-25", "bikram-sambat"),
+    );
+  });
+
+  it("flags a BS receipt whose date is past the end of the table, without converting it", () => {
+    expect(
+      resolve({
+        dates: [date("05/01/2034", "Date"), date("01/01/2091", "Miti")],
+        uploadDay: "2034-01-06",
+      }),
+    ).toEqual(result("2034-01-05", "bikram-sambat", ["date_ambiguous", "date_conflict"]));
+  });
+
   it("never throws on junk text", () => {
     for (const text of ["", "////", "99/99/99", "३२ फागुन", "Date:", "1".repeat(40), "a/b/c"]) {
       expect(() => resolve({ dates: [date(text)] })).not.toThrow();

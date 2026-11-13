@@ -228,16 +228,19 @@ completion the date resolver (`resolveReceiptDate`) turns what was printed into 
 **Fields.** `invoice_number` (EN 16931 BT-1) and `merchant_tax_id` (BT-31) are kept as printed, not unique, and
 never logged (a sole trader's PAN is personal data). `discount` (BT-107) and `service_charge` (BT-108) are positive
 document-level amounts the totals check uses: `subtotal − discount + service_charge + tax + tip = total`.
-`receipt_items.position` is the printed order; items are read `ORDER BY position, id`. Extraction v3 fills these;
+`receipt_items.position` is the printed order; items are read `ORDER BY position, ctid`. Extraction v3 fills these;
 before it, they stay null.
 
 **Needs review** is `status = 'completed' AND review_reasons <> '{}' AND reviewed_at IS NULL` (History filter and
-the Home count). `review_reasons` holds the codes of the deterministic checks that failed, computed by one function,
-`reviewReasons()` in `packages/core/src/review-reasons.ts`, at completion and on every edit: `no_merchant`,
-`no_date`, `no_total`, `no_currency`, `totals_mismatch`, and the resolver's `date_ambiguous`, `date_conflict`,
-`date_implausible`. An edit keeps the date reasons unless it changes the date or its calendar. `low_confidence` exists
-only on rows migration `0003_receipt_fields` backfilled from the old `confidence < 0.9` rule; the model's
-`confidence` is now a hint only. No CHECK on the values: readers show a generic line for a code they don't know.
+the Home count, and every warning badge). `review_reasons` holds the codes of the deterministic checks that failed,
+decided in `packages/core/src/review-reasons.ts`: `reviewReasons()` at completion, `editedReasons()` on an edit. The
+codes are `no_merchant`, `no_date`, `no_total`, `no_currency`, `totals_mismatch`, and the resolver's
+`date_ambiguous`, `date_conflict` and `date_implausible`. The totals check is exact to the cent, except that a
+whole-number total may be up to 0.99 off (bills rounded to the unit). An edit rechecks only the reasons that read a
+changed field; a changed date or calendar drops the date reasons. `low_confidence` is set only by migration
+`0003_receipt_fields`, on receipts below 0.9 confidence, and edits keep it; reviewing the receipt is what clears it
+from Needs review. The model's `confidence` is a hint only. There is no CHECK on the values: readers show a generic
+line for a code they don't know.
 
 `receipts.reviewed_at` and `reviewed_by` record that someone who may edit the receipt confirmed it looks right
 (`PATCH /api/receipts/[id]` with `{ reviewed }`, migration `0002_receipt_review`). A reviewed receipt leaves "Needs

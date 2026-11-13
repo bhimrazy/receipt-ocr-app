@@ -20,7 +20,7 @@ export function printedBsDate(date: string | null, calendar: string | null): BsD
 
 export type DateReason = "date_ambiguous" | "date_conflict" | "date_implausible";
 
-/** A date as the model transcribed it (extraction v3 `dates[]`). Every field but `text` is a hint. */
+/** A date as the model transcribed it (`dates[]` in the extraction). Every field but `text` is a hint. */
 export type PrintedDate = {
   text: string;
   label?: string | null;
@@ -30,7 +30,7 @@ export type PrintedDate = {
 };
 
 export type DateEvidence = {
-  /** Every printed date; absent before extraction v3, when only `modelReading` exists. */
+  /** Every printed date; absent when the extraction carries only `modelReading`. */
   dates?: readonly PrintedDate[] | null;
   /** The model's own AD reading, `YYYY-MM-DD`: a tie-break for day/month order, and the whole evidence before v3. */
   modelReading?: string | null;
@@ -170,7 +170,8 @@ const valid = (readings: (Reading | null)[]) => readings.filter((r): r is Readin
  * MDY in AD and DMY in BS (no BS receipt we have prints MDY). A month name settles its calendar and the order.
  */
 function parsePrinted(text: string, label: string | null | undefined, bounds: Bounds): Parsed {
-  const normalised = normalise(text);
+  // Times (10:30, 10:30:15 pm) go first, so their digits are never read as a day or a year.
+  const normalised = normalise(text).replace(/\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]\.?m\.?)?/g, " ");
   const named = words(text);
   const bsMonth = named.map((word) => BS_MONTHS[word]).find((month) => month !== undefined);
   const adMonth = named.map((word) => ENGLISH_MONTHS[word]).find((month) => month !== undefined);
@@ -191,7 +192,7 @@ function parsePrinted(text: string, label: string | null | undefined, bounds: Bo
       ]);
     }
   } else {
-    const match = /(\d{1,4})\s*[/\-.\s]\s*(\d{1,2})\s*[/\-.\s]\s*(\d{1,4})/.exec(normalised);
+    const match = /(?<!\d)(\d{1,4})\s*[/\-.\s]\s*(\d{1,2})\s*[/\-.\s]\s*(\d{1,4})(?!\d)/.exec(normalised);
     if (match) {
       const [a, b, c] = [match[1]!, match[2]!, match[3]!];
       const [na, nb, nc] = [Number(a), Number(b), Number(c)];
@@ -238,18 +239,8 @@ function shiftYears(iso: string, years: number): string {
 }
 
 /**
- * Decides a receipt's date from what it printed, as the extraction review's decision table sets out: the model
- * copies dates and this resolves them. Pure; the same input always gives the same answer.
- *
- * - A BS date is converted with the vendored table; the calendar is `bikram-sambat` whenever one was printed.
- * - An AD date with both day/month orders valid keeps the model's reading (else day first) and is `date_ambiguous`.
- * - A printed AD and BS that disagree are `date_conflict`; on an NPR bill the BS date wins, otherwise (or when the
- *   BS date isn't a valid day) the AD.
- * - A label that contradicts the year (`मिति 2024-…`) and a date outside a printed fiscal year are `date_conflict`.
- * - Nothing between 2000-01-01 and the upload day + 1 gives a null date and `date_implausible`.
- * - A date more than 3 years before the upload, or in a projected (not yet approved) BS year, is `date_ambiguous`.
- * - Without `dates` (before extraction v3), the model's reading is resolved the same way, with a null calendar
- *   unless its year shows it is BS.
+ * One AD day, its calendar and the date review reasons from what a receipt printed. Pure. Never throws except on a
+ * malformed `uploadDay`. The rules: docs/architecture/dates.md#resolving-a-printed-date.
  */
 export function resolveReceiptDate(evidence: DateEvidence): ResolvedDate {
   const latestDay = isoToDayNumber(evidence.uploadDay);
@@ -311,7 +302,9 @@ export function resolveReceiptDate(evidence: DateEvidence): ResolvedDate {
   };
   if (fiscal.length > 0 && !fiscal.some(inFiscalYear)) reasons.add("date_conflict");
   if (chosen < shiftYears(evidence.uploadDay, -OLD_AFTER_YEARS)) reasons.add("date_ambiguous");
-  if (printedBs && adToBs(chosen)!.year > BS_OFFICIAL_THROUGH) reasons.add("date_ambiguous");
+  // Past the table there is no BS day to show (display and CSV fall back to AD): flag it like a projected year.
+  const bsDay = adToBs(chosen);
+  if (printedBs && (bsDay === null || bsDay.year > BS_OFFICIAL_THROUGH)) reasons.add("date_ambiguous");
 
   const calendar: ReceiptCalendar | null = printedBs
     ? "bikram-sambat"

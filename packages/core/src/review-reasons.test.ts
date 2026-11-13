@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isDateReason, reviewReasons, totalsMismatch, type CheckedFields } from "./review-reasons";
+import {
+  editedReasons,
+  isDateReason,
+  reviewReasons,
+  totalsMismatch,
+  type CheckedFields,
+} from "./review-reasons";
 
 const fields = ({ lines = [], ...rest }: Partial<CheckedFields> & { lines?: string[] }) => ({
   merchant: "Test Shop",
@@ -107,5 +113,53 @@ describe("reviewReasons", () => {
     expect(["date_conflict", "no_date", "low_confidence"].filter(isDateReason)).toEqual([
       "date_conflict",
     ]);
+  });
+});
+
+describe("totalsMismatch rounding", () => {
+  it("accepts a whole-number total rounded to the unit, as NPR bills are", () => {
+    // 1000 + 13% VAT 130.45 = 1130.45, printed as 1130 or 1131.
+    const bill = { subtotal: "1000.00", tax: "130.45" };
+    expect(totalsMismatch(fields({ ...bill, total: "1130.00" }))).toBe(null);
+    expect(totalsMismatch(fields({ ...bill, total: "1131.00" }))).toBe(null);
+  });
+
+  it("still flags a gap of a whole unit, or any gap on a total with cents", () => {
+    expect(totalsMismatch(fields({ subtotal: "1000.00", tax: "130.00", total: "1131.00" }))).toBe(
+      1130,
+    );
+    expect(totalsMismatch(fields({ subtotal: "1000.00", tax: "130.45", total: "1130.40" }))).toBe(
+      1130.45,
+    );
+  });
+});
+
+describe("editedReasons", () => {
+  const base = fields({ lines: ["10.00"], total: "10.00" });
+
+  it("rechecks only the reasons that read a changed field", () => {
+    expect(editedReasons(["no_merchant"], { ...base, total: "12.00" }, new Set(["total"]))).toEqual(
+      ["no_merchant", "totals_mismatch"],
+    );
+    expect(editedReasons(["no_merchant"], base, new Set(["merchant"]))).toEqual([]);
+  });
+
+  it("adds nothing for fields the edit didn't touch, so an old receipt isn't newly flagged", () => {
+    expect(editedReasons([], { ...base, merchant: null, total: "12.00" }, new Set())).toEqual([]);
+  });
+
+  it("keeps low_confidence and codes it doesn't know", () => {
+    expect(editedReasons(["low_confidence", "something_new"], base, new Set(["total"]))).toEqual([
+      "low_confidence",
+      "something_new",
+    ]);
+  });
+
+  it("drops the date reasons when the date or its calendar changed", () => {
+    expect(editedReasons(["date_conflict"], base, new Set(["tax"]))).toEqual(["date_conflict"]);
+    expect(editedReasons(["date_conflict"], base, new Set(["receiptDateCalendar"]))).toEqual([]);
+    expect(
+      editedReasons(["date_implausible"], { ...base, receiptDate: null }, new Set(["receiptDate"])),
+    ).toEqual(["no_date"]);
   });
 });

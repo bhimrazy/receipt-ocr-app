@@ -101,15 +101,15 @@ export const receipts = pgTable(
     /** Document-level charges such as a restaurant service charge (BT-108). */
     serviceCharge: numeric("service_charge", { precision: 12, scale: 2 }),
     total: numeric("total", { precision: 12, scale: 2 }),
-    /** The seller's bill or invoice number as printed (BT-1). Not unique: duplicates are flagged, never refused. */
+    /** The seller's bill or invoice number as printed (BT-1). Not unique: two bills may share one. */
     invoiceNumber: text("invoice_number"),
     /** The seller's tax registration number as printed: PAN, VAT, GSTIN (BT-31). Can be personal data. */
     merchantTaxId: text("merchant_tax_id"),
-    /** Model's own overall score: a hint, no longer the "needs review" rule. */
+    /** The model's own overall score. A hint only: "needs review" reads `review_reasons`. */
     confidence: numeric("confidence", { precision: 5, scale: 4 }),
     /**
      * Codes of the checks that failed (`REVIEW_REASONS` in core). Needs review =
-     * completed, non-empty and not reviewed. No CHECK on the values: readers ignore codes they don't know.
+     * completed, non-empty and not reviewed. No CHECK on the values, so a new code needs no migration.
      */
     reviewReasons: text("review_reasons")
       .array()
@@ -182,7 +182,7 @@ export const receiptItems = pgTable(
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }),
     totalPrice: numeric("total_price", { precision: 12, scale: 2 }),
     confidence: numeric("confidence", { precision: 5, scale: 4 }),
-    /** Printed order, from 0. Items are read `ORDER BY position, id`. */
+    /** Printed order, from 0. Items are read `ORDER BY position, ctid`: insertion order breaks ties. */
     position: smallint("position").notNull().default(0),
   },
   (table) => [

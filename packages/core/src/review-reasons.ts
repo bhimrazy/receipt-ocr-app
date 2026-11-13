@@ -14,7 +14,7 @@ export const REVIEW_REASONS = [
   "date_ambiguous",
   "date_conflict",
   "date_implausible",
-  // Only from migration 0003, for receipts the old confidence rule flagged; nothing writes it now.
+  // Set only by migration 0003 on receipts below 0.9 confidence; completions don't add it, and edits keep it.
   "low_confidence",
 ] as const;
 
@@ -65,9 +65,11 @@ export function totalsMismatch(fields: CheckedFields): number | null {
   const service = cents(fields.serviceCharge) ?? 0;
   const tax = cents(fields.tax) ?? 0;
   const tip = cents(fields.tip) ?? 0;
+  // A whole-number total may be rounded to the unit (NPR bills round to the rupee): any gap under 1.00 passes.
+  const slack = total % 100 === 0 ? 99 : 0;
   const matches = bases.some((base) =>
     [base - discount, base].some((net) =>
-      [net, net + tip, net + tax + tip].some((sum) => sum + service === total),
+      [net, net + tip, net + tax + tip].some((sum) => Math.abs(sum + service - total) <= slack),
     ),
   );
   if (matches) return null;
@@ -75,9 +77,8 @@ export function totalsMismatch(fields: CheckedFields): number | null {
 }
 
 /**
- * Every reason a receipt needs review, in `REVIEW_REASONS` order. `dateReasons` come from the date resolver, which
- * needs the printed text; the rest are recomputed from the fields. The one place these checks are decided: at
- * completion and on every edit.
+ * Every reason a completed receipt needs review, in `REVIEW_REASONS` order. `dateReasons` come from the date
+ * resolver, which needs the printed text; the rest are computed from the fields. Edits go through `editedReasons`.
  */
 export function reviewReasons(
   fields: CheckedFields,
@@ -90,4 +91,44 @@ export function reviewReasons(
   if (!fields.currency) found.add("no_currency");
   if (totalsMismatch(fields) !== null) found.add("totals_mismatch");
   return REVIEW_REASONS.filter((reason) => found.has(reason));
+}
+
+type EditableField = Exclude<keyof CheckedFields, "items"> | "receiptDateCalendar";
+
+const AMOUNTS: EditableField[] = ["subtotal", "tax", "tip", "discount", "serviceCharge", "total"];
+
+/** The fields each check reads. A reason whose fields an edit didn't change is kept as it was. */
+const DEPENDS_ON: Partial<Record<ReviewReason, readonly EditableField[]>> = {
+  no_merchant: ["merchant"],
+  no_date: ["receiptDate"],
+  no_total: ["total"],
+  no_currency: ["currency"],
+  totals_mismatch: AMOUNTS,
+};
+
+/**
+ * The reasons after an edit. Only checks that read a changed field are recomputed; the rest, `low_confidence`
+ * and codes this version doesn't know included, are kept. A changed date or calendar was set by a person, so the
+ * resolver's date reasons go.
+ */
+export function editedReasons(
+  previous: readonly string[],
+  fields: CheckedFields,
+  changed: ReadonlySet<string>,
+): string[] {
+  const dateSet = changed.has("receiptDate") || changed.has("receiptDateCalendar");
+  const now = new Set<string>(reviewReasons(fields));
+  const keep = (reason: string) => {
+    if (isDateReason(reason)) return !dateSet;
+    const fieldsRead = DEPENDS_ON[reason as ReviewReason];
+    return fieldsRead ? !fieldsRead.some((field) => changed.has(field)) : true;
+  };
+  const kept = previous.filter(keep);
+  const added = [...now].filter((reason) => {
+    const fieldsRead = DEPENDS_ON[reason as ReviewReason];
+    return fieldsRead?.some((field) => changed.has(field)) ?? false;
+  });
+  const result = new Set([...kept, ...added]);
+  const known = REVIEW_REASONS.filter((reason) => result.has(reason));
+  return [...known, ...[...result].filter((reason) => !(REVIEW_REASONS as readonly string[]).includes(reason))];
 }
