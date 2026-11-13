@@ -10,14 +10,14 @@ import { emailContext } from "./env";
  * that won't render is "rejected" (no retry), a send error is "failed" (retried).
  */
 export const ContactReplyMailerLive = Layer.succeed(ContactReplyMailer, {
-  send: ({ to, name, topic }) =>
+  send: ({ to, name, topic, idempotencyKey }) =>
     Effect.try(() =>
       contactReplyEmail(emailContext, { name, topicPhrase: topicPhrase(topic) }),
     ).pipe(
       Effect.flatMap((content) =>
         Effect.tryPromise(async () => {
           const { mailer } = await import("./mailer");
-          const result = await sendEmail(mailer, { to, ...content });
+          const result = await sendEmail(mailer, { to, idempotencyKey, ...content });
           if (result.delivered) return "delivered" as const;
           return result.reason === "not_configured"
             ? ("not_configured" as const)
