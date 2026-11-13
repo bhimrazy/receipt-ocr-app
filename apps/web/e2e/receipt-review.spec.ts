@@ -19,10 +19,10 @@ test("marking a receipt reviewed replaces its checks with who reviewed it, and U
   await page.goto(`/app/receipts/${id}`);
   const card = page.getByRole("region", { name: "Check before you use this" });
   await expect(card).toContainText("Overall confidence is 60%");
-  // The header's confidence badge, and the Checked badge that replaces it.
-  const score = page.getByText("60%", { exact: true });
+  // The header badge: Needs review, and the Checked badge that replaces it.
+  const flag = page.getByText("Needs review", { exact: true });
   const checked = page.getByText("Checked by E2E User");
-  await expect(score).toBeVisible();
+  await expect(flag).toBeVisible();
   await expect(checked).toHaveCount(0);
 
   await card.getByRole("button", { name: "Mark as reviewed" }).click();
@@ -30,7 +30,7 @@ test("marking a receipt reviewed replaces its checks with who reviewed it, and U
   await expect(page.getByText("Reviewed by E2E User")).toBeVisible();
   await expect(page.getByRole("button", { name: "Undo review" })).toBeFocused();
   await expect(checked).toBeAttached();
-  await expect(score).toHaveCount(0);
+  await expect(flag).toHaveCount(0);
 
   // Saved: still reviewed after a reload, and out of Needs review.
   await page.reload();
@@ -43,7 +43,7 @@ test("marking a receipt reviewed replaces its checks with who reviewed it, and U
   await page.getByRole("button", { name: "Undo review" }).click();
   await expect(card).toBeVisible();
   await expect(card.getByRole("button", { name: "Looks right" })).toBeFocused();
-  await expect(score).toBeVisible();
+  await expect(flag).toBeVisible();
   await expect(checked).toHaveCount(0);
   await page.reload();
   await expect(card).toBeVisible();
@@ -61,5 +61,5 @@ test("marking a receipt reviewed replaces its checks with who reviewed it, and U
   await expect(card).toBeVisible();
   await expect(card.getByRole("button", { name: "Looks right" })).toBeFocused();
   await expect(page.getByText("Reviewed by E2E User")).toHaveCount(0);
-  await expect(score).toBeVisible();
+  await expect(flag).toBeVisible();
 });

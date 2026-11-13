@@ -153,6 +153,7 @@ flowchart TD
 - [Admin actions and the audit log](flows/admin-actions.md)
 - [Admin operations and jobs](flows/admin-operations.md): charts, their sources, and the job actions
 - [Settings cache](flows/settings-cache.md)
+- [Receipt dates and Bikram Sambat](dates.md): the stored date, the month table and its yearly update, the resolver
 - [CI, deployment and migrations](flows/deployment.md)
 - [ai.md](ai.md) (model boundary, prices), [db.md](db.md), [storage.md](storage.md), [email.md](email.md),
   [ui.md](ui.md), [tooling.md](tooling.md)

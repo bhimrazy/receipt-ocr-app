@@ -37,7 +37,7 @@ import { historyHref, isFiltered } from "@/components/history/history-href";
 import { ReceiptRowContent, receiptTitle, ReviewBadge, ROW_LINK } from "@/components/receipt-list";
 import { StatusBadge } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
-import { confidenceLevel, formatMoney } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { ReceiptDate } from "@/components/receipt-date";
 import { canEditReceipt } from "@/lib/receipt-permissions";
 import type { HistoryFilters, ReceiptSummary } from "@/lib/receipts";
@@ -68,11 +68,13 @@ function Missing() {
   );
 }
 
-/** A low-confidence read, a failed one or one still scanning; a receipt that is fine shows nothing. */
+/** In Needs review, reviewed, failed or still scanning; a receipt that passed its checks shows nothing. */
 function hasStatus(receipt: ReceiptSummary) {
-  if (receipt.status !== "completed" || receipt.reviewedAt) return true;
-  const level = confidenceLevel(receipt.confidence);
-  return level !== null && level !== "high";
+  return (
+    receipt.status !== "completed" ||
+    receipt.reviewedAt !== null ||
+    receipt.reviewReasons.length > 0
+  );
 }
 
 /** The status column: Checked, what needs attention (with Try again on a failed read), or nothing. */

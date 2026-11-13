@@ -72,7 +72,8 @@ function draftFrom(receipt: ReceiptWithItems): Draft {
     receiptDateCalendar:
       receipt.receiptDateCalendar === "bikram-sambat" ? "bikram-sambat" : "gregory",
     category: receipt.category ?? "Other",
-    currency: receipt.currency ?? "USD",
+    // Empty, not USD, when none was read: typing USD is then a change that saves and clears no_currency.
+    currency: receipt.currency ?? "",
     invoiceNumber: receipt.invoiceNumber ?? "",
     merchantTaxId: receipt.merchantTaxId ?? "",
     subtotal: receipt.subtotal ?? "",
@@ -225,10 +226,11 @@ export function ReceiptEditor({
       return;
     }
     const final = { ...draft, receiptDate: entry ? (entry.ad ?? "") : draft.receiptDate };
-    // Only what changed: an untouched field is never re-validated or re-saved.
+    // Only what changed: an untouched field is never re-validated or re-saved. A calendar needs a date.
     const changes = Object.fromEntries(
       (Object.keys(final) as (keyof Draft)[])
         .filter((key) => key !== "receiptDateBs" && final[key] !== initial[key])
+        .filter((key) => key !== "receiptDateCalendar" || final.receiptDate !== "")
         .map((key) => [key, final[key]]),
     );
     if (Object.keys(changes).length === 0) {

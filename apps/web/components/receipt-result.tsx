@@ -39,7 +39,7 @@ import {
   ReceiptWorkspace,
 } from "@/components/receipt-actions";
 import { receiptTitle } from "@/components/receipt-list";
-import { ReceiptReviewProvider, ReviewedConfidenceBadge } from "@/components/receipt-review";
+import { ReceiptReviewProvider, ReviewStateBadge } from "@/components/receipt-review";
 import { StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 
@@ -122,7 +122,7 @@ export function ReceiptResult({
                 />
               </span>
               {receipt.category ? <Badge variant="secondary">{receipt.category}</Badge> : null}
-              <ReviewedConfidenceBadge value={receipt.confidence} />
+              <ReviewStateBadge needsReview={receipt.reviewReasons.length > 0} />
             </>
           ) : (
             <>

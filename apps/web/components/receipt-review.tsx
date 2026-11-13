@@ -8,7 +8,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import { Check, CircleCheck, Pencil, TriangleAlert, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { CheckedBadge, ConfidenceBadge } from "@/components/receipt-status";
+import { CheckedBadge, NeedsReviewBadge } from "@/components/receipt-status";
 import { formatDate } from "@/lib/format";
 
 type Review = { at: Date | string; name: string | null } | null;
@@ -111,10 +111,11 @@ export function ReceiptReviewProvider({
   );
 }
 
-/** The header's confidence badge, or "Checked" once the receipt is reviewed. */
-export function ReviewedConfidenceBadge({ value }: { value: string | null }) {
+/** The header's badge: Checked once reviewed, Needs review while it has reasons, else nothing. */
+export function ReviewStateBadge({ needsReview }: { needsReview: boolean }) {
   const { review } = useReview();
-  return review ? <CheckedBadge by={review.name} /> : <ConfidenceBadge value={value} />;
+  if (review) return <CheckedBadge by={review.name} />;
+  return needsReview ? <NeedsReviewBadge /> : null;
 }
 
 /**

@@ -130,5 +130,8 @@ export function editedReasons(
   });
   const result = new Set([...kept, ...added]);
   const known = REVIEW_REASONS.filter((reason) => result.has(reason));
-  return [...known, ...[...result].filter((reason) => !(REVIEW_REASONS as readonly string[]).includes(reason))];
+  return [
+    ...known,
+    ...[...result].filter((reason) => !(REVIEW_REASONS as readonly string[]).includes(reason)),
+  ];
 }

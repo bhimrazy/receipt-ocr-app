@@ -318,6 +318,24 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       receiptDateCalendar: null,
       reviewReasons: ["no_date"],
     });
+    // A calendar needs a date.
+    const calendarOnly = await runExit(
+      Effect.flatMap(ReceiptRepo, (r) => r.update(id, d, { receiptDateCalendar: "gregory" })),
+    );
+    expect(Exit.isFailure(calendarOnly) && JSON.stringify(calendarOnly.cause)).toContain(
+      "InvalidInput",
+    );
+
+    // An old receipt flagged by the confidence rule keeps the flag through edits, and an edit
+    // doesn't flag what it didn't touch (the date is still missing, but no_date wasn't there).
+    await db((dbc) =>
+      dbc
+        .update(receipts)
+        .set({ reviewReasons: ["low_confidence"] })
+        .where(eq(receipts.id, id)),
+    );
+    await repo((r) => r.update(id, d, { merchant: "Renamed Kitchen" }));
+    expect((await repo((r) => r.get(id, d)))?.reviewReasons).toEqual(["low_confidence"]);
 
     // The model took the PAN for the bill number: it is dropped. Over-long text is not stored.
     const other = await ingest();

@@ -5,12 +5,12 @@ import type { ReactNode } from "react";
 import type { ReceiptSummary } from "@/lib/receipts";
 import {
   CheckedBadge,
-  ConfidenceBadge,
+  NeedsReviewBadge,
   StatusBadge,
   isInFlight,
 } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
-import { confidenceLevel, formatMoney, formatReceiptDate } from "@/lib/format";
+import { formatMoney, formatReceiptDate } from "@/lib/format";
 
 /** What a row is called: the merchant once read, the uploaded file name until then. */
 export function receiptTitle(receipt: Pick<ReceiptSummary, "status" | "merchant" | "fileName">) {
@@ -21,21 +21,18 @@ export function receiptTitle(receipt: Pick<ReceiptSummary, "status" | "merchant"
 }
 
 /**
- * A completed receipt's badge: Checked once someone reviewed it, else the confidence tier when
- * it is worth a look; null for a confident read nobody had to check.
+ * A completed receipt's badge: Checked once someone reviewed it, Needs review while it has review
+ * reasons, else nothing. It always agrees with the Needs review filter.
  */
 export function ReviewBadge({
   receipt,
   className,
 }: {
-  receipt: Pick<ReceiptSummary, "confidence" | "reviewedAt" | "reviewerName">;
+  receipt: Pick<ReceiptSummary, "reviewReasons" | "reviewedAt" | "reviewerName">;
   className?: string;
 }) {
   if (receipt.reviewedAt) return <CheckedBadge by={receipt.reviewerName} className={className} />;
-  const level = confidenceLevel(receipt.confidence);
-  return level && level !== "high" ? (
-    <ConfidenceBadge className={className} value={receipt.confidence} />
-  ) : null;
+  return receipt.reviewReasons.length > 0 ? <NeedsReviewBadge className={className} /> : null;
 }
 
 /** The row's title as a link that covers the whole row. */

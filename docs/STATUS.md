@@ -121,6 +121,12 @@ reset. **From the first real user onward we never squash again.** Details:
 
 Steps are in [deployment.md](deployment.md).
 
+- Migration `0003_receipt_fields` (#224, receipt fields and review reasons): run **Database Migration** on
+  `staging-db`, then `production-db`, then deploy production by hand straight away. The window between migration and
+  deploy is in the [rollout notes](architecture/dates.md#migration-0003-rollout).
+- **By 2027-04-14: update the Bikram Sambat table for 2084.** That day the guard test in
+  `packages/core/src/calendar/bs.test.ts` turns CI red. Do the update once the 2084 almanac is approved
+  ([runbook](architecture/dates.md#yearly-table-update-runbook)).
 - Migration `0002_receipt_review` (reviewed receipts): run **Database Migration** on `staging-db`, then
   `production-db`, before deploying the release that contains it. It adds two nullable columns, a foreign key and a
   partial index to `receipts`, with `lock_timeout = '3s'`.

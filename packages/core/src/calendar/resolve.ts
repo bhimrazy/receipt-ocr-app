@@ -192,7 +192,9 @@ function parsePrinted(text: string, label: string | null | undefined, bounds: Bo
       ]);
     }
   } else {
-    const match = /(?<!\d)(\d{1,4})\s*[/\-.\s]\s*(\d{1,2})\s*[/\-.\s]\s*(\d{1,4})(?!\d)/.exec(normalised);
+    const match = /(?<!\d)(\d{1,4})\s*[/\-.\s]\s*(\d{1,2})\s*[/\-.\s]\s*(\d{1,4})(?!\d)/.exec(
+      normalised,
+    );
     if (match) {
       const [a, b, c] = [match[1]!, match[2]!, match[3]!];
       const [na, nb, nc] = [Number(a), Number(b), Number(c)];
@@ -304,7 +306,8 @@ export function resolveReceiptDate(evidence: DateEvidence): ResolvedDate {
   if (chosen < shiftYears(evidence.uploadDay, -OLD_AFTER_YEARS)) reasons.add("date_ambiguous");
   // Past the table there is no BS day to show (display and CSV fall back to AD): flag it like a projected year.
   const bsDay = adToBs(chosen);
-  if (printedBs && (bsDay === null || bsDay.year > BS_OFFICIAL_THROUGH)) reasons.add("date_ambiguous");
+  if (printedBs && (bsDay === null || bsDay.year > BS_OFFICIAL_THROUGH))
+    reasons.add("date_ambiguous");
 
   const calendar: ReceiptCalendar | null = printedBs
     ? "bikram-sambat"
