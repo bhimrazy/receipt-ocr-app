@@ -5,6 +5,7 @@ import { cache } from "react";
 import {
   canManageBilling,
   checkoutOpenToEveryone,
+  getCheckoutBlocked,
   getCheckoutConfig,
   getCheckoutFor,
 } from "./billing";
@@ -34,7 +35,7 @@ export const getUpgradeOffer = cache(async (): Promise<UpgradeOffer | null> => {
       listWorkspaces(),
       cookies(),
     ]);
-    return decideUpgradeOffer({
+    const input = {
       plan,
       impersonating: Boolean(session.session.impersonatedBy),
       owner: canManageBilling(scope.role),
@@ -55,7 +56,11 @@ export const getUpgradeOffer = cache(async (): Promise<UpgradeOffer | null> => {
         workspaces.find((w) => w.id === scope.organizationId)?.name ?? "this workspace",
       dismissals: parseDismissals(jar.get(UPGRADE_COOKIE)?.value),
       now: Date.now(),
-    });
+    };
+    // Read only when an offer would show, so pages without one make no extra query.
+    if (!decideUpgradeOffer({ ...input, checkoutBlocked: false })) return null;
+    const checkoutBlocked = await getCheckoutBlocked(scope.organizationId);
+    return decideUpgradeOffer({ ...input, checkoutBlocked });
   } catch (error) {
     // Next's own signals (a prerender bailing out on cookies(), redirects) must pass through.
     unstable_rethrow(error);

@@ -346,6 +346,9 @@ erDiagram
     text provider_customer_id
     text status "CHECK: active, trialing, past_due, paused, canceled"
     text price_id
+    text plan "recorded at the link; entitlement reads it"
+    text paid_transaction_id "pays the latest period"
+    timestamptz paid_period_start
     text billing_interval "CHECK: month or year"
     timestamptz current_period_start
     timestamptz current_period_end
@@ -382,8 +385,9 @@ erDiagram
 
 - `billing_subscriptions` has one row per provider subscription. A workspace is Pro while it has an entitled row (see
   [entitlement](flows/billing.md#entitlement)). A workspace can have several rows after a cancel and a new subscribe.
-  It holds ids, status and dates only: no card, address or tax data. A row grants Pro only for a configured Pro
-  `price_id` and while `revoked_at` is null.
+  It holds ids, status and dates only: no card, address or tax data. A row grants Pro only while its `plan` (recorded
+  when it links at a Pro price) is `pro` and `revoked_at` is null. `paid_transaction_id` is the transaction paying for
+  the latest period: only a full refund of that one revokes.
 - `billing_events` is the webhook log. The unique index on `(provider, provider_event_id)` makes a redelivery a no-op.
   `payload` is the provider-neutral event the job applies; the raw body is never stored. `outcome` and `processed_at`
   are null until the job has run. `organization_id` has no foreign key, so the log outlives a deleted workspace.

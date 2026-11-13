@@ -156,12 +156,29 @@ export const checkQuota = (subject: UsageSubject, limits: QuotaLimits, now = new
     return gate.decide(yield* repo.usage(subject, gate.window));
   });
 
-export const quotaExceeded = (verdict: QuotaVerdict) =>
+const quotaExceeded = (verdict: QuotaVerdict) =>
   new QuotaExceeded({
     message: quotaMessage(verdict),
     retryAfterSeconds: verdict.retryAfterSeconds ?? 60,
     kind: verdict.window,
   });
+
+/** The UTC day (its start, in ms) this process last reported a full pool. */
+let poolReportedDay: number | null = null;
+
+/**
+ * Fails with QuotaExceeded for a refused verdict. The first refusal by a
+ * plan's shared daily pool (Free) each UTC day also logs `quota.pool_full` at
+ * warn level, so an alert fires when the pool closes scanning for everyone on
+ * that plan. Once per process a day: with several instances, once per instance.
+ */
+export const refuseQuota = (verdict: QuotaVerdict, now = new Date()) =>
+  Effect.suspend(() => {
+    const day = utcDayStart(now).getTime();
+    if (verdict.window !== "pool" || poolReportedDay === day) return Effect.void;
+    poolReportedDay = day;
+    return Effect.logWarning("quota.pool_full");
+  }).pipe(Effect.zipRight(Effect.fail(quotaExceeded(verdict))));
 
 const scans = (n: number) => `${n} ${n === 1 ? "scan" : "scans"}`;
 
@@ -200,5 +217,5 @@ export function quotaMessage(verdict: QuotaVerdict): string {
 /** Fails with QuotaExceeded when the user, the workspace or the service is out of room. */
 export const enforceQuota = (subject: UsageSubject, limits: QuotaLimits) =>
   Effect.flatMap(checkQuota(subject, limits), (verdict) =>
-    verdict.allowed ? Effect.succeed(verdict) : Effect.fail(quotaExceeded(verdict)),
+    verdict.allowed ? Effect.succeed(verdict) : refuseQuota(verdict),
   );

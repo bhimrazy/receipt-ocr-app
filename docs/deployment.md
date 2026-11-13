@@ -411,6 +411,32 @@ codes sent in the last 10 minutes.
 
 Steps specific to one release, newest first.
 
+### Billing plan column (migration 0005)
+
+- **`0005_billing_plan`** adds `plan` (`text not null default 'pro'`), `paid_transaction_id` and `paid_period_start`
+  to `billing_subscriptions`, and sets `paid_transaction_id` from `billing_checkouts` for rows that have a checkout.
+  No table rewrite (a constant default is stored in the catalog); `lock_timeout` 3 s. The code before this release
+  keeps working: it never reads the columns, and a row it inserts defaults to `pro`, which is right because it links
+  only at a Pro price. Run **Database Migration** on `staging-db`, then `production-db`, then deploy.
+- **After the deploy**, on each database, re-run the backfill for subscriptions the old code linked between the
+  migration and the deploy (it never set `paid_transaction_id`). It is idempotent and touches only null rows:
+
+  ```sql
+  begin;
+  set local lock_timeout = '3s';
+  update billing_subscriptions s set paid_transaction_id = c.provider_transaction_id
+  from billing_checkouts c
+  where c.provider = s.provider and c.provider_subscription_id = s.provider_subscription_id
+    and s.paid_transaction_id is null;
+  commit;
+  ```
+
+  Expect `UPDATE 0` unless a checkout completed during the release. A row left null can still be revoked by a
+  chargeback; a full refund revokes it once a renewal records its paid transaction.
+
+- **Follow-up release:** drop the column default (`alter table billing_subscriptions alter column plan drop default`)
+  once no code from before this release runs, so a row can't be Pro without the link setting it.
+
 ### Squashed baseline again (2026-11-08)
 
 - **`0000_baseline` through `0003_schema_fixes` were squashed into a new `0000_baseline`**, before launch. A database

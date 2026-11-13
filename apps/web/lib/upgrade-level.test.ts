@@ -60,6 +60,7 @@ const input = (over: Partial<OfferInput> = {}): OfferInput => ({
   usage: usage(40),
   checkout,
   openToEveryone: true,
+  checkoutBlocked: false,
   plans: DEFAULT_PLANS,
   workspaceId: "org_1",
   workspaceName: "Acme Books",
@@ -85,6 +86,12 @@ describe("decideUpgradeOffer", () => {
 
   it("offers nothing on Pro, including an admin's comp, which also reads as Pro", () => {
     expect(decideUpgradeOffer(input({ plan: "pro" }))).toBeNull();
+  });
+
+  it("offers nothing to anyone while a subscription can still charge, even on Free", () => {
+    const blocked = { checkoutBlocked: true, usage: usage(100, { blocked: "month" }) };
+    expect(decideUpgradeOffer(input(blocked))).toBeNull();
+    expect(decideUpgradeOffer(input({ ...blocked, owner: false }))).toBeNull();
   });
 
   it("offers nothing while an admin is signed in as the user", () => {

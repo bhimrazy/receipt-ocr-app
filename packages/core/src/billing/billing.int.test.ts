@@ -28,18 +28,26 @@ import { checkQuota, quotaLimits, type QuotaLimits } from "../quota";
 import { Db } from "../services";
 import { ensurePersonalWorkspace } from "../workspace";
 import { deleteWorkspace, prepareUserDeletion, workspacesBlockingDeletion } from "../admin";
-import { PAST_DUE_GRACE_DAYS } from "./entitlement";
-import type { AdjustmentSnapshot, BillingEvent, SubscriptionSnapshot } from "./provider";
+import { blocksCheckout, PAST_DUE_GRACE_DAYS } from "./entitlement";
+import type {
+  AdjustmentSnapshot,
+  BillingEvent,
+  BillingStatus,
+  SubscriptionSnapshot,
+  TransactionSnapshot,
+} from "./provider";
 import {
   accountPlan,
   applyBillingEvent,
   Billing,
   BUYER_GONE,
   UNVERIFIED_EMAIL,
+  ALREADY_SUBSCRIBED,
   memberLimitCheck,
   recordBillingEvent,
   userPaysForWorkspace,
   workspaceBilling,
+  workspaceCheckoutBlocked,
   workspaceCreationCheck,
   workspaceHasChargingSubscription,
   workspacePlan,
@@ -154,6 +162,7 @@ const event = (
   subscription: SubscriptionSnapshot | null,
   type = "subscription.updated",
   adjustment: AdjustmentSnapshot | null = null,
+  transaction: TransactionSnapshot | null = null,
 ) => {
   seq += 1;
   return {
@@ -163,8 +172,23 @@ const event = (
     occurredAt: new Date(),
     subscription,
     adjustment,
+    transaction,
   } satisfies BillingEvent;
 };
+
+/** A completed transaction of `subscriptionId` paying for the period starting `start`. */
+const paid = (
+  subscriptionId: string,
+  transactionId: string,
+  start: Date | null,
+  origin = "subscription_recurring",
+) =>
+  event(null, "transaction.completed", null, {
+    transactionId,
+    subscriptionId,
+    origin,
+    billingPeriodStart: start,
+  });
 
 const subscriptionRow = async (providerSubscriptionId: string) =>
   (
@@ -628,23 +652,58 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect((await subscriptionRow(`sub_${tag}_byowner`))?.userId).toBe(boss.userId);
     });
 
-    it("stops granting Pro when a linked subscription moves to a price that isn't Pro", async () => {
+    it("keeps Pro through a change of the configured prices: the plan is fixed at the link", async () => {
       const workspaceId = await createWorkspace(other.userId, "reprice");
       const id = `sub_${tag}_reprice`;
       await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+      expect((await subscriptionRow(id))?.plan).toBe("pro");
       expect(await planOf(workspaceId)).toBe("pro");
-      await deliver(
-        event(
-          snapshot({
-            subscriptionId: id,
-            workspaceId,
-            priceId: "pri_other",
-            updatedAt: new Date(Date.now() + 1000),
-          }),
-        ),
-      );
-      expect(await planOf(workspaceId)).toBe("free");
-      expect((await run(workspaceBilling(workspaceId)))?.entitled).toBe(false);
+      // The monthly price is replaced without listing the old one as legacy.
+      vi.stubEnv("PADDLE_PRICE_PRO_MONTHLY", "pri_month_v2");
+      try {
+        expect(await planOf(workspaceId)).toBe("pro");
+        expect((await run(workspaceBilling(workspaceId)))?.entitled).toBe(true);
+        await deliver(
+          event(
+            snapshot({
+              subscriptionId: id,
+              workspaceId,
+              priceId: "pri_other",
+              updatedAt: new Date(Date.now() + 1000),
+            }),
+          ),
+        );
+        expect(await planOf(workspaceId)).toBe("pro");
+        expect((await run(accountPlan(other.userId))).plan).toBe("pro");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+    it("keeps the plan and warns when a subscription moves to a price this deploy doesn't know", async () => {
+      const workspaceId = await createWorkspace(other.userId, "unknown-price");
+      const id = `sub_${tag}_unknown_price`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+      const move = (priceId: string, offsetMs: number) =>
+        applyOnce(
+          event(
+            snapshot({
+              subscriptionId: id,
+              workspaceId,
+              priceId,
+              transactionId: null,
+              updatedAt: new Date(Date.now() + offsetMs),
+            }),
+          ),
+        );
+      expect(await move("pri_unlisted", 1000)).toMatchObject({
+        outcome: "applied",
+        unknownPrice: true,
+      });
+      expect((await subscriptionRow(id))?.plan).toBe("pro");
+      expect(await planOf(workspaceId)).toBe("pro");
+      // Monthly to yearly: a known price, no warning.
+      expect(await move("pri_year", 2000)).not.toHaveProperty("unknownPrice");
+      expect((await subscriptionRow(id))?.plan).toBe("pro");
     });
   });
 
@@ -867,7 +926,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         if (path === "/customers") {
           return method === "GET" ? Response.json({ data: [] }) : created(`ctm_${tag}_new`);
         }
-        if (path === "/transactions") return created(`txn_${tag}_checkout_${calls.length}`);
+        if (path === "/transactions") return created(`txn_${tag}_checkout_${++seq}`);
         return new Response("{}", { status: 404 });
       });
     });
@@ -932,6 +991,163 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         url: expect.stringMatching(/\/transactions$/),
         body: { customer_id: `ctm_${tag}_new`, items: [{ price_id: "pri_year" }] },
       });
+    });
+
+    it("refuses a checkout while a subscription can still charge, and allows it once none can", async () => {
+      const buyer = await createUser("blocked");
+      const id = `sub_${tag}_blocked`;
+      // Past due for longer than the grace: Free, while Paddle may still recover the payment.
+      await deliver(
+        event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId: buyer.organizationId,
+            status: "past_due",
+            updatedAt: new Date(Date.now() - (PAST_DUE_GRACE_DAYS + 5) * 86_400_000),
+          }),
+          "subscription.created",
+        ),
+      );
+      expect(await planOf(buyer.organizationId)).toBe("free");
+      // Another owner, who didn't subscribe, is refused the same way.
+      const coOwner = await createUser("blocked-co-owner");
+      await db((d) =>
+        d.insert(member).values({
+          id: crypto.randomUUID(),
+          organizationId: buyer.organizationId,
+          userId: coOwner.userId,
+          role: "owner",
+          createdAt: new Date(),
+        }),
+      );
+      const checkout = (userId = buyer.userId) =>
+        withBilling((b) =>
+          b.createCheckout({ organizationId: buyer.organizationId, userId, interval: "month" }),
+        );
+      const setRow = (fields: Partial<typeof billingSubscriptions.$inferInsert>) =>
+        db((d) =>
+          d
+            .update(billingSubscriptions)
+            .set(fields)
+            .where(eq(billingSubscriptions.providerSubscriptionId, id)),
+        );
+      const ahead = new Date(Date.now() + 5 * 86_400_000);
+      const behind = new Date(Date.now() - 86_400_000);
+      for (const fields of [
+        {},
+        { status: "paused" },
+        { status: "active", revokedAt: new Date() },
+      ] satisfies Partial<typeof billingSubscriptions.$inferInsert>[]) {
+        await setRow({ cancelAtPeriodEnd: false, revokedAt: null, ...fields });
+        for (const userId of [buyer.userId, coOwner.userId]) {
+          expect(failureOf(await checkout(userId))).toMatchObject({
+            error: { _tag: "Conflict", message: ALREADY_SUBSCRIBED },
+          });
+        }
+        expect(await run(workspaceBilling(buyer.organizationId))).toMatchObject({
+          checkoutBlocked: true,
+        });
+      }
+      expect(calls).toEqual([]);
+
+      // The SQL and `blocksCheckout` agree on every state, blocked or not.
+      for (const fields of [
+        { status: "active", currentPeriodEnd: null },
+        { status: "active", cancelAtPeriodEnd: true, currentPeriodEnd: behind },
+        { status: "canceled", currentPeriodEnd: behind },
+        { status: "canceled", currentPeriodEnd: ahead },
+        { status: "canceled", cancelAtPeriodEnd: true, currentPeriodEnd: ahead },
+        {
+          status: "canceled",
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: ahead,
+          revokedAt: new Date(),
+        },
+        { status: "canceled", currentPeriodEnd: null },
+        { status: "trialing", currentPeriodEnd: ahead },
+        { status: "trialing", revokedAt: new Date() },
+        { status: "past_due", currentPeriodEnd: behind },
+        { status: "past_due", pastDueSince: new Date() },
+        { status: "paused" },
+      ] satisfies Partial<typeof billingSubscriptions.$inferInsert>[]) {
+        await setRow({ cancelAtPeriodEnd: false, revokedAt: null, ...fields });
+        const row = await subscriptionRow(id);
+        const expected = blocksCheckout(
+          { ...row!, status: row!.status as BillingStatus },
+          new Date(),
+        );
+        expect(await run(workspaceCheckoutBlocked(buyer.organizationId))).toBe(expected);
+      }
+
+      await setRow({ status: "canceled", cancelAtPeriodEnd: false, currentPeriodEnd: ahead });
+      expect(Exit.isSuccess(await checkout())).toBe(true);
+      expect(await run(workspaceBilling(buyer.organizationId))).toMatchObject({
+        checkoutBlocked: false,
+      });
+    });
+
+    it("retries a cancel Paddle refuses as locked for over an hour, then the next event asks again", async () => {
+      vi.stubGlobal("fetch", async (input: string) => {
+        if (new URL(input).pathname.endsWith("/cancel")) {
+          return Response.json({ error: { code: "subscription_locked_renewal" } }, { status: 409 });
+        }
+        return new Response("{}", { status: 404 });
+      });
+      // A runtime built with Paddle configured, so the job's cancel reaches the stubbed API.
+      const configured = ManagedRuntime.make(AppLayer);
+      try {
+        const workspaceId = await createWorkspace(other.userId, "locked");
+        const id = `sub_${tag}_locked`;
+        await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+        const chargeback = event(null, "adjustment.created", {
+          adjustmentId: `adj_${tag}_locked`,
+          action: "chargeback",
+          type: "full",
+          status: "approved",
+          subscriptionId: id,
+          transactionId: `txn_${id}`,
+        });
+        const recorded = await run(recordBillingEvent(chargeback));
+        if (recorded.kind !== "recorded") throw new Error("not recorded");
+        const runJob = () =>
+          configured.runPromise(
+            tick({
+              worker: `${tag}-worker`,
+              registry: JOB_REGISTRY,
+              budgetMs: 30_000,
+              ids: [recorded.jobId],
+              waitForRetries: false,
+            }),
+          );
+        const job = () => jobOf(chargeback.eventId);
+        await runJob();
+        const first = await job();
+        expect(first).toMatchObject({ state: "queued", lastErrorKind: "provider-locked" });
+        expect(first!.runAt.getTime() - Date.now()).toBeGreaterThanOrEqual(14 * 60_000);
+        for (let attempt = 2; attempt <= 8; attempt += 1) {
+          await db((d) =>
+            d.update(jobs).set({ runAt: new Date() }).where(eq(jobs.id, recorded.jobId)),
+          );
+          await runJob();
+        }
+        expect(await job()).toMatchObject({
+          state: "dead",
+          attempts: 8,
+          lastErrorKind: "provider-locked",
+        });
+        // The dead job isn't the last chance: the next event of the subscription asks again.
+        const renewal = event(
+          snapshot({
+            subscriptionId: id,
+            workspaceId,
+            transactionId: null,
+            updatedAt: new Date(Date.now() + 1000),
+          }),
+        );
+        expect(await applyOnce(renewal)).toMatchObject({ cancelSubscriptionId: id });
+      } finally {
+        await configured.dispose();
+      }
     });
 
     it("opens the portal only for the buyer's own customer, and never once the buyer is gone", async () => {
@@ -1055,7 +1271,12 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       const full = event(
         null,
         "adjustment.updated",
-        adjustment({ action: "refund", type: "full", subscriptionId: id }),
+        adjustment({
+          action: "refund",
+          type: "full",
+          subscriptionId: id,
+          transactionId: `txn_${id}`,
+        }),
       );
       await deliver(full);
       expect(await outcomeOf(full.eventId)).toBe("applied");
@@ -1105,6 +1326,290 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(await planOf(workspaceId)).toBe("pro");
       expect(await outcomeOf(early.eventId)).toBe("unmatched");
       expect(await jobOf(created.eventId)).toMatchObject({ state: "succeeded" });
+    });
+
+    it("keeps Pro on a full refund of an earlier period or a duplicate charge, and ends it on the current period's", async () => {
+      const workspaceId = await createWorkspace(other.userId, "renewed");
+      const id = `sub_${tag}_renewed`;
+      const firstStart = new Date(Date.now() - 31 * 86_400_000);
+      const renewalStart = new Date(Date.now() - 86_400_000);
+      await deliver(
+        event(
+          snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: firstStart }),
+          "subscription.created",
+        ),
+      );
+      expect(await subscriptionRow(id)).toMatchObject({
+        paidTransactionId: `txn_${id}`,
+        paidPeriodStart: firstStart,
+      });
+      // The checkout's own transaction arrives after the link: nothing changes.
+      const first = paid(id, `txn_${id}`, firstStart, "api");
+      await deliver(first);
+      expect(await outcomeOf(first.eventId)).toBe("ignored");
+
+      const renewal = paid(id, `txn_${tag}_renewal`, renewalStart);
+      await deliver(renewal);
+      expect(await outcomeOf(renewal.eventId)).toBe("applied");
+      // Paddle charged the same period twice, and a one-off charge.
+      const duplicate = paid(id, `txn_${tag}_duplicate`, renewalStart);
+      const oneOff = paid(id, `txn_${tag}_one_off`, null, "subscription_charge");
+      await deliver(duplicate);
+      await deliver(oneOff);
+      expect(await outcomeOf(duplicate.eventId)).toBe("ignored");
+      expect((await subscriptionRow(id))?.paidTransactionId).toBe(`txn_${tag}_renewal`);
+
+      const refund = (transactionId: string) =>
+        event(
+          null,
+          "adjustment.updated",
+          adjustment({ action: "refund", type: "full", subscriptionId: id, transactionId }),
+        );
+      for (const transactionId of [`txn_${id}`, `txn_${tag}_duplicate`, `txn_${tag}_one_off`]) {
+        const e = refund(transactionId);
+        await deliver(e);
+        expect(await outcomeOf(e.eventId)).toBe("ignored");
+        expect(await jobOf(e.eventId)).toMatchObject({ state: "succeeded" });
+      }
+      expect(await planOf(workspaceId)).toBe("pro");
+      expect((await subscriptionRow(id))?.revokedAt).toBeNull();
+
+      const current = refund(`txn_${tag}_renewal`);
+      await deliver(current);
+      expect(await outcomeOf(current.eventId)).toBe("applied");
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
+    it("asks for the cancel again on every later event of a revoked subscription", async () => {
+      const workspaceId = await createWorkspace(other.userId, "revoked-renews");
+      const id = `sub_${tag}_revoked_renews`;
+      await deliver(event(snapshot({ subscriptionId: id, workspaceId })));
+      // The cancel job dies here (no API key); the subscription stays active in Paddle.
+      await deliver(event(null, "adjustment.created", adjustment({ subscriptionId: id })));
+      expect((await subscriptionRow(id))?.revokedAt).toBeInstanceOf(Date);
+      const renewal = event(
+        snapshot({
+          subscriptionId: id,
+          workspaceId,
+          transactionId: null,
+          updatedAt: new Date(Date.now() + 1000),
+        }),
+      );
+      expect(await applyOnce(renewal)).toMatchObject({
+        outcome: "applied",
+        cancelSubscriptionId: id,
+      });
+      expect(await planOf(workspaceId)).toBe("free");
+      const canceled = event(
+        snapshot({
+          subscriptionId: id,
+          workspaceId,
+          status: "canceled",
+          transactionId: null,
+          updatedAt: new Date(Date.now() + 2000),
+        }),
+      );
+      expect(await applyOnce(canceled)).not.toHaveProperty("cancelSubscriptionId");
+    });
+
+    it("keeps a full refund of a renewal not yet reported, and applies it when the renewal arrives", async () => {
+      const workspaceId = await createWorkspace(other.userId, "refund-first");
+      const id = `sub_${tag}_refund_first`;
+      const firstStart = new Date(Date.now() - 31 * 86_400_000);
+      await deliver(
+        event(
+          snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: firstStart }),
+          "subscription.created",
+        ),
+      );
+      const refund = (transactionId: string) =>
+        event(
+          null,
+          "adjustment.updated",
+          adjustment({ action: "refund", type: "full", subscriptionId: id, transactionId }),
+        );
+      const early = refund(`txn_${tag}_renewal_late`);
+      expect(await applyOnce(early)).toMatchObject({
+        outcome: "unmatched",
+        unmatched: "transaction",
+        transactionId: `txn_${tag}_renewal_late`,
+      });
+      expect(await planOf(workspaceId)).toBe("pro");
+
+      const renewal = paid(id, `txn_${tag}_renewal_late`, new Date(Date.now() - 86_400_000));
+      expect(await applyOnce(renewal)).toMatchObject({
+        outcome: "applied",
+        planChange: { from: "pro", to: "free" },
+        cancelSubscriptionId: id,
+      });
+      expect(await outcomeOf(early.eventId)).toBe("applied");
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
+    it("keeps a refund waiting while its renewal's report is stored but not yet applied", async () => {
+      const workspaceId = await createWorkspace(other.userId, "refund-queued");
+      const id = `sub_${tag}_refund_queued`;
+      const firstStart = new Date(Date.now() - 31 * 86_400_000);
+      await deliver(
+        event(
+          snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: firstStart }),
+          "subscription.created",
+        ),
+      );
+      const renewal = paid(id, `txn_${tag}_renewal_queued`, new Date(Date.now() - 86_400_000));
+      // The renewal's webhook is stored, but its job hasn't run yet.
+      expect((await run(recordBillingEvent(renewal))).kind).toBe("recorded");
+      const refund = event(
+        null,
+        "adjustment.updated",
+        adjustment({
+          action: "refund",
+          type: "full",
+          subscriptionId: id,
+          transactionId: `txn_${tag}_renewal_queued`,
+        }),
+      );
+      expect(await applyOnce(refund)).toMatchObject({
+        outcome: "unmatched",
+        unmatched: "transaction",
+      });
+      const [row] = await db((d) =>
+        d
+          .select({ id: billingEvents.id })
+          .from(billingEvents)
+          .where(eq(billingEvents.providerEventId, renewal.eventId)),
+      );
+      expect(await run(applyBillingEvent(row!.id))).toMatchObject({
+        outcome: "applied",
+        planChange: { from: "pro", to: "free" },
+      });
+      expect(await outcomeOf(refund.eventId)).toBe("applied");
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
+    it("drops a waiting refund when its transaction turns out to be a duplicate", async () => {
+      const workspaceId = await createWorkspace(other.userId, "refund-duplicate");
+      const id = `sub_${tag}_refund_duplicate`;
+      const start = new Date(Date.now() - 86_400_000);
+      await deliver(
+        event(
+          snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: start }),
+          "subscription.created",
+        ),
+      );
+      const early = event(
+        null,
+        "adjustment.updated",
+        adjustment({
+          action: "refund",
+          type: "full",
+          subscriptionId: id,
+          transactionId: `txn_${tag}_same_period`,
+        }),
+      );
+      await deliver(early);
+      expect(await outcomeOf(early.eventId)).toBe("unmatched");
+      // A second charge for the period the checkout already paid.
+      await deliver(paid(id, `txn_${tag}_same_period`, start));
+      expect(await outcomeOf(early.eventId)).toBe("ignored");
+      expect(await planOf(workspaceId)).toBe("pro");
+    });
+
+    it("applies an early full refund on link only when it refunds the checkout's payment", async () => {
+      const refundBeforeLink = async (name: string, refunded: (id: string) => string) => {
+        const workspaceId = await createWorkspace(other.userId, name);
+        const id = `sub_${tag}_${name}`;
+        const early = event(
+          null,
+          "adjustment.created",
+          adjustment({
+            action: "refund",
+            type: "full",
+            subscriptionId: id,
+            transactionId: refunded(id),
+          }),
+        );
+        await deliver(early);
+        expect(await outcomeOf(early.eventId)).toBe("unmatched");
+        await deliver(event(snapshot({ subscriptionId: id, workspaceId }), "subscription.created"));
+        return { workspaceId, id };
+      };
+      const ours = await refundBeforeLink("early-refund", (id) => `txn_${id}`);
+      expect(await planOf(ours.workspaceId)).toBe("free");
+      expect((await subscriptionRow(ours.id))?.revokedAt).toBeInstanceOf(Date);
+
+      const another = await refundBeforeLink("early-other-refund", () => `txn_${tag}_elsewhere`);
+      expect(await planOf(another.workspaceId)).toBe("pro");
+      expect((await subscriptionRow(another.id))?.revokedAt).toBeNull();
+    });
+  });
+
+  describe("a second subscription for one workspace", () => {
+    it("reports Free to Pro for a duplicate beside a paused subscription, and flags it", async () => {
+      const workspaceId = await createWorkspace(other.userId, "beside-paused");
+      await deliver(
+        event(
+          snapshot({ subscriptionId: `sub_${tag}_paused_1`, workspaceId, status: "paused" }),
+          "subscription.created",
+        ),
+      );
+      expect(await planOf(workspaceId)).toBe("free");
+      const next = event(
+        snapshot({ subscriptionId: `sub_${tag}_paused_2`, workspaceId }),
+        "subscription.created",
+      );
+      await recordCheckout(next.subscription!);
+      expect(await applyOnce(next)).toMatchObject({
+        outcome: "applied",
+        duplicate: true,
+        planChange: { from: "free", to: "pro" },
+      });
+      expect(await planOf(workspaceId)).toBe("pro");
+    });
+    it("links it but flags it, with no plan change to report", async () => {
+      const workspaceId = await createWorkspace(other.userId, "twice");
+      const first = event(
+        snapshot({ subscriptionId: `sub_${tag}_twice_1`, workspaceId }),
+        "subscription.created",
+      );
+      await recordCheckout(first.subscription!);
+      expect(await applyOnce(first)).toMatchObject({
+        outcome: "applied",
+        planChange: { from: "free", to: "pro" },
+      });
+      const second = event(
+        snapshot({ subscriptionId: `sub_${tag}_twice_2`, workspaceId }),
+        "subscription.created",
+      );
+      await recordCheckout(second.subscription!);
+      const result = await applyOnce(second);
+      expect(result).toMatchObject({ outcome: "applied", duplicate: true });
+      expect(result).not.toHaveProperty("planChange");
+      expect((await subscriptionRow(`sub_${tag}_twice_2`))?.organizationId).toBe(workspaceId);
+      expect(await planOf(workspaceId)).toBe("pro");
+    });
+
+    it("doesn't flag a new subscription after the old one ended", async () => {
+      const workspaceId = await createWorkspace(other.userId, "again");
+      await deliver(
+        event(
+          snapshot({
+            subscriptionId: `sub_${tag}_again_1`,
+            workspaceId,
+            status: "canceled",
+            currentPeriodEnd: new Date(Date.now() - 86_400_000),
+          }),
+          "subscription.created",
+        ),
+      );
+      const next = event(
+        snapshot({ subscriptionId: `sub_${tag}_again_2`, workspaceId }),
+        "subscription.created",
+      );
+      await recordCheckout(next.subscription!);
+      const result = await applyOnce(next);
+      expect(result).toMatchObject({ outcome: "applied", planChange: { from: "free", to: "pro" } });
+      expect(result).not.toHaveProperty("duplicate");
     });
   });
 

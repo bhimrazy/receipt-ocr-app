@@ -548,6 +548,19 @@ export const billingSubscriptions = pgTable(
     /** One of `BILLING_STATUSES`. */
     status: text("status").notNull(),
     priceId: text("price_id"),
+    /**
+     * The plan this subscription grants, fixed when it links (its price was a Pro price then).
+     * Entitlement reads this, not the price, so changing the configured prices never moves a
+     * paying workspace.
+     */
+    plan: text("plan").notNull().default("pro"),
+    /**
+     * The transaction paying for the latest billing period, and that period's start. A full
+     * refund of this transaction ends Pro; a refund of any other (an earlier period, a duplicate
+     * charge, a one-off) doesn't.
+     */
+    paidTransactionId: text("paid_transaction_id"),
+    paidPeriodStart: timestamp("paid_period_start", { withTimezone: true }),
     /** `month` or `year`. */
     billingInterval: text("billing_interval"),
     currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
