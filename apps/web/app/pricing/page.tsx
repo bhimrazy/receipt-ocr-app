@@ -8,7 +8,8 @@ import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
 import { checkoutOpenToEveryone, getCheckoutConfig } from "@/lib/billing";
 import { getPlanTable } from "@/lib/plan-limits";
-import { allowance } from "@/lib/plan-copy";
+import { EARLY_ACCESS, FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
+import { allowance, longDate } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL, REFUND_DAYS } from "@/lib/pricing";
 import { pageMetadata } from "@/lib/seo";
 
@@ -61,6 +62,10 @@ export default async function PricingPage() {
       ),
     },
     {
+      q: "I signed up during early access. What do I get?",
+      a: `Accounts created before ${longDate(EARLY_ACCESS.joinedBefore)} get ${EARLY_ACCESS.receiptsPerMonth} scans a month on Free, instead of ${free.receiptsPerMonth ?? "the usual allowance"}, until ${longDate(EARLY_ACCESS.endsAt)}. Your usage meter shows it while it lasts.`,
+    },
+    {
       q: "What if we need more than Pro?",
       a: (
         <>
@@ -99,7 +104,7 @@ export default async function PricingPage() {
     },
     {
       q: "What counts as a scan?",
-      a: "Each receipt read successfully, and each one still being read. A few failed reads don't count, so a blurry photo doesn't use up your allowance.",
+      a: `Each receipt scanned successfully, and each one still being scanned. Your first ${FREE_FAILED_ROUNDS} failed scans each day and each month don't count, so a blurry photo doesn't use up your allowance.`,
     },
     {
       q: "What happens when I reach a limit?",

@@ -178,7 +178,7 @@ export function quotaMessage(verdict: QuotaVerdict): string {
     case "global":
       return "Receipt reading is at capacity for today. Try again after 00:00 UTC.";
     case "pool":
-      return "Free scanning is busy today: the Free plan's shared daily capacity is used up. Try again after 00:00 UTC, or upgrade this workspace to Pro.";
+      return "Free scanning is busy today: the Free plan's shared daily capacity is used up. Try again after 00:00 UTC.";
     case "month":
       return workspace
         ? `This workspace has used all ${scans(verdict.limit)} for this month. ${reset}`

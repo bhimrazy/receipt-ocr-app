@@ -109,36 +109,36 @@ describe("decideQuota, day only", () => {
   });
 });
 
-describe("decideQuota, Free (per user: 20 a day, 100 a month, shared pool)", () => {
+describe("decideQuota, Free (per user: 20 a day, 30 a month, shared pool)", () => {
   it("meters the user's month, with today alongside", () => {
-    const verdict = decideQuota(counts({ day: 4, month: 40, planDay: 0 }), free, undefined, now);
+    const verdict = decideQuota(counts({ day: 4, month: 12, planDay: 0 }), free, undefined, now);
     expect(verdict).toMatchObject({
       allowed: true,
       period: "month",
       scope: "user",
-      used: 40,
-      limit: 100,
+      used: 12,
+      limit: 30,
       day: { used: 4, limit: 20 },
     });
   });
 
-  it("refuses the 101st scan of the month until the 1st, 00:00 UTC", () => {
+  it("refuses the 31st scan of the month until the 1st, 00:00 UTC", () => {
     expect(
-      decideQuota(counts({ day: 5, month: 99, planDay: 0 }), free, undefined, now).allowed,
+      decideQuota(counts({ day: 5, month: 29, planDay: 0 }), free, undefined, now).allowed,
     ).toBe(true);
-    const verdict = decideQuota(counts({ day: 5, month: 100, planDay: 0 }), free, undefined, now);
+    const verdict = decideQuota(counts({ day: 5, month: 30, planDay: 0 }), free, undefined, now);
     expect(verdict).toMatchObject({
       allowed: false,
       window: "month",
       retryAfterSeconds: untilDecember,
     });
     expect(quotaMessage(verdict)).toBe(
-      "You've used all 100 scans on the Free plan this month. They reset on 1 December at 00:00 UTC. Upgrade a workspace to Pro for more scans.",
+      "You've used all 30 scans on the Free plan this month. They reset on 1 December at 00:00 UTC. Upgrade a workspace to Pro for more scans.",
     );
   });
 
   it("keeps 20 a day as the burst limit inside the month", () => {
-    const verdict = decideQuota(counts({ day: 20, month: 30, planDay: 0 }), free, undefined, now);
+    const verdict = decideQuota(counts({ day: 20, month: 25, planDay: 0 }), free, undefined, now);
     expect(verdict).toMatchObject({
       allowed: false,
       window: "day",
@@ -222,7 +222,7 @@ describe("quotaMessage", () => {
     expect(quotaMessage({ ...base, window: "minute" })).toContain("minute");
     expect(quotaMessage({ ...base, window: "global" })).toContain("capacity");
     expect(quotaMessage({ ...base, window: "pool" })).toBe(
-      "Free scanning is busy today: the Free plan's shared daily capacity is used up. Try again after 00:00 UTC, or upgrade this workspace to Pro.",
+      "Free scanning is busy today: the Free plan's shared daily capacity is used up. Try again after 00:00 UTC.",
     );
   });
 
