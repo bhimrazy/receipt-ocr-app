@@ -1,5 +1,11 @@
 import "server-only";
-import { drainOnce, JOB_REGISTRY, tick, type WideEventFields } from "@receipt-ocr/core";
+import {
+  drainOnce,
+  JOB_REGISTRY,
+  scheduleMaintenance,
+  tick,
+  type WideEventFields,
+} from "@receipt-ocr/core";
 import { Effect } from "effect";
 import { runtime } from "./runtime";
 
@@ -89,15 +95,21 @@ const DRAIN_STOP_CLAIMING_BEFORE_MS = 50_000;
 export const DRAIN_MAX_JOBS = 10;
 const DRAIN_CONCURRENCY = 3;
 
-/** One bounded pass over the queue for the cron route; never sleeps for backoff. */
+/**
+ * One bounded pass over the queue for the cron route; never sleeps for backoff. The cron is the
+ * only clock the app has, so it also queues the daily maintenance run first.
+ */
 export const drainQueue = (context: WideEventFields) =>
-  drainOnce({
-    worker: workerId(),
-    registry: JOB_REGISTRY,
-    trigger: "drain",
-    budgetMs: DRAIN_BUDGET_MS,
-    stopClaimingBeforeMs: DRAIN_STOP_CLAIMING_BEFORE_MS,
-    maxJobs: DRAIN_MAX_JOBS,
-    concurrency: DRAIN_CONCURRENCY,
-    context,
-  });
+  Effect.zipRight(
+    scheduleMaintenance(),
+    drainOnce({
+      worker: workerId(),
+      registry: JOB_REGISTRY,
+      trigger: "drain",
+      budgetMs: DRAIN_BUDGET_MS,
+      stopClaimingBeforeMs: DRAIN_STOP_CLAIMING_BEFORE_MS,
+      maxJobs: DRAIN_MAX_JOBS,
+      concurrency: DRAIN_CONCURRENCY,
+      context,
+    }),
+  );

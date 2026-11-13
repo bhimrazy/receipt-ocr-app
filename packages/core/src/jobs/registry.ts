@@ -2,6 +2,7 @@ import type { JobRegistry } from "./definition";
 import { billingApply } from "./kinds/billing-apply";
 import { billingRefundCheck } from "./kinds/billing-refund-check";
 import { contactReply } from "./kinds/contact-reply";
+import { maintenancePurge } from "./kinds/maintenance-purge";
 import { receiptExtract } from "./kinds/receipt-extract";
 import { storageDelete } from "./kinds/storage-delete";
 import { supportNotify } from "./kinds/support-notify";
@@ -23,6 +24,7 @@ export const JOB_REGISTRY: JobRegistry<
     | typeof billingRefundCheck
     | typeof storageDelete
     | typeof supportNotify
+    | typeof maintenancePurge
   >
 > = {
   [receiptExtract.kind]: receiptExtract,
@@ -32,4 +34,5 @@ export const JOB_REGISTRY: JobRegistry<
   [billingRefundCheck.kind]: billingRefundCheck,
   [storageDelete.kind]: storageDelete,
   [supportNotify.kind]: supportNotify,
+  [maintenancePurge.kind]: maintenancePurge,
 };
