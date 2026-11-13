@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyboardInset } from "./keyboard-inset";
+import { keyboardInset } from "../../src/lib/keyboard-inset";
 
 describe("keyboardInset", () => {
   it("is 0 with no keyboard", () => {

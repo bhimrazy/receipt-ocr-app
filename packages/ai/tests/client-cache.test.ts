@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CLIENT_CACHE_MAX, LruCache } from "./client-cache";
-import { registryCacheKeys, registryFor } from "./extract";
+import { CLIENT_CACHE_MAX, LruCache } from "../src/client-cache";
+import { registryCacheKeys, registryFor } from "../src/extract";
 
 describe("provider registry cache", () => {
   it("reuses the registry for the same keys and builds a new one for another key", () => {

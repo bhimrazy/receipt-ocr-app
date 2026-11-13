@@ -11,7 +11,7 @@ vi.mock("resend", () => ({
   },
 }));
 
-const { sendEmail, subscribeContact, unsubscribeContact } = await import("./index");
+const { sendEmail, subscribeContact, unsubscribeContact } = await import("../src/index");
 
 afterEach(() => vi.restoreAllMocks());
 

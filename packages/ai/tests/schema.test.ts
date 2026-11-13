@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FIXTURE_RECEIPTS } from "./fixture";
-import { receiptExtractionSchema, receiptRequestSchema } from "./schema";
+import { FIXTURE_RECEIPTS } from "../src/fixture";
+import { receiptExtractionSchema, receiptRequestSchema } from "../src/schema";
 
 const v3Reply = {
   merchant: null,

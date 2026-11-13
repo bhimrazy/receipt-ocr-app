@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CLIENT_CACHE_MAX, LruCache, s3Clients } from "./client-cache";
-import { s3Client } from "./index";
+import { CLIENT_CACHE_MAX, LruCache, s3Clients } from "../src/client-cache";
+import { s3Client } from "../src/index";
 
 const config = {
   endpoint: "http://localhost:9000",

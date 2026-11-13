@@ -1,7 +1,7 @@
 // What each provider is sent for a chain step's effort. Values are the ones in each provider's docs
 // (see the effort fields in models.ts); an unset step keeps the behaviour that predates the setting.
 import { describe, expect, it } from "vitest";
-import { maxOutputTokensFor, providerOptionsFor } from "./extract";
+import { maxOutputTokensFor, providerOptionsFor } from "../src/extract";
 
 describe("providerOptionsFor effort", () => {
   it("Claude: low unless the step chooses, any of the five levels when it does", () => {
