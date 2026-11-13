@@ -22,7 +22,7 @@ const columns: Array<{ title: string; links: Array<{ label: string; href: string
   {
     title: "Account",
     links: [
-      { label: "Create a free account", href: "/sign-up" },
+      { label: "Start free", href: "/sign-up" },
       { label: "Sign in", href: "/sign-in" },
     ],
   },
@@ -111,7 +111,7 @@ export function SiteFooter({ narrow = false }: { narrow?: boolean }) {
             target="_blank"
           >
             <GitHubIcon className="size-3.5" />
-            Open source on GitHub
+            Source on GitHub
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </div>

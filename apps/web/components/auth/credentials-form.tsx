@@ -245,7 +245,7 @@ export function CredentialsForm({
     <div className={authCardClass}>
       <AuthHeading title={isSignUp ? "Create your account" : "Sign in to ReceiptOCR"}>
         {isSignUp && freeAllowance !== undefined
-          ? `Free plan: ${freeAllowance}. No card required.`
+          ? `Free plan: ${freeAllowance}. No card needed.`
           : undefined}
       </AuthHeading>
       {notice ? (

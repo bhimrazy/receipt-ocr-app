@@ -123,10 +123,8 @@ export function SiteHeaderBar({
               <Link className={ghostClass} href="/sign-in">
                 Sign in
               </Link>
-              {/* Shorter on phones, so Sign in fits beside it instead of hiding in the menu. */}
               <Link className={primaryClass} href="/sign-up">
-                <span className="sm:hidden">Start free</span>
-                <span className="hidden sm:inline">Get started free</span>
+                Start free
               </Link>
             </>
           )}

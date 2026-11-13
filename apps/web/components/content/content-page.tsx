@@ -69,7 +69,7 @@ function SignUpButton({ size }: { size?: "lg" }) {
   return (
     <Button asChild size={size}>
       <Link href="/sign-up">
-        Get started free <ArrowRight className="size-4" />
+        Start free <ArrowRight className="size-4" />
       </Link>
     </Button>
   );
