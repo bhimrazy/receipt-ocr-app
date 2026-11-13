@@ -38,7 +38,7 @@ export class WelcomeMailer extends Context.Tag("@receipt-ocr/core/WelcomeMailer"
       policy: PlanPolicy;
       /** Stable across a job's attempts, so a retry after an accepted send doesn't mail twice. */
       idempotencyKey: string;
-    }) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected">;
+    }) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected" | "conflict">;
   }
 >() {
   static readonly Disabled = Layer.succeed(WelcomeMailer, {
@@ -106,6 +106,8 @@ export const welcomeEmail: JobDefinition<WelcomeEmailPayload, Db | Settings | We
       yield* annotateEvent({ kind: "welcome", plan, delivered: outcome === "delivered" });
       if (outcome === "rejected")
         return yield* new NonRetryableJobError({ kind: "email-render-failed" });
+      if (outcome === "conflict")
+        return yield* new NonRetryableJobError({ kind: "email-idempotency-conflict" });
       if (outcome === "failed") return yield* new RetryableJobError({ kind: "email-send-failed" });
       logger.info({
         event: "email.welcome_sent",

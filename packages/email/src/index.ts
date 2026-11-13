@@ -22,9 +22,23 @@ export interface SendEmailInput {
   idempotencyKey?: string;
 }
 
+/** Resend error names a caller may act on; any other name is not surfaced. */
+export type SendEmailErrorName = "invalid_idempotent_request" | "concurrent_idempotent_requests";
+
+const ACTIONABLE = new Set<string>([
+  "invalid_idempotent_request",
+  "concurrent_idempotent_requests",
+]);
+
 export type SendEmailResult =
   | { delivered: true; id?: string }
-  | { delivered: false; reason: "not_configured" | "failed"; error?: string };
+  | {
+      delivered: false;
+      reason: "not_configured" | "failed";
+      error?: string;
+      /** Resend's error name when it is one of `SendEmailErrorName`. */
+      errorName?: SendEmailErrorName;
+    };
 
 let client: Resend | null = null;
 
@@ -127,7 +141,12 @@ export async function sendEmail(
         ...kindOf(input),
         error: errorOf(error),
       });
-      return { delivered: false, reason: "failed", error: error.message };
+      return {
+        delivered: false,
+        reason: "failed",
+        error: error.message,
+        ...(ACTIONABLE.has(error.name) ? { errorName: error.name as SendEmailErrorName } : {}),
+      };
     }
     log({
       event: "email.sent",

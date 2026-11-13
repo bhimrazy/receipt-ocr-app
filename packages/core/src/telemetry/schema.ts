@@ -122,7 +122,7 @@ export const EVENT_SCHEMA = {
   },
   /** A named action (admin action, auth endpoint). */
   action: "token",
-  /** A short qualifier for events that need one (email kind, settings key). */
+  /** A short qualifier for events that need one (job kind, settings key). */
   kind: "token",
   /** The email template a message was made from (`email.*` events); one of a fixed set. */
   email_kind: "token",

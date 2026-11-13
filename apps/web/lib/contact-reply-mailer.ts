@@ -19,6 +19,7 @@ export const ContactReplyMailerLive = Layer.succeed(ContactReplyMailer, {
           const { mailer } = await import("./mailer");
           const result = await sendEmail(mailer, { to, idempotencyKey, ...content });
           if (result.delivered) return "delivered" as const;
+          if (result.errorName === "invalid_idempotent_request") return "conflict" as const;
           return result.reason === "not_configured"
             ? ("not_configured" as const)
             : ("failed" as const);
