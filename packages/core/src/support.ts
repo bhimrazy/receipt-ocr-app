@@ -16,6 +16,7 @@ import type { Tx } from "./audit";
 import { isUuid } from "./ids";
 import { enqueueJob } from "./jobs/queue";
 import { supportNotifyJob } from "./jobs/kinds/support-notify";
+import { LOCK_NAMESPACES } from "./locks";
 import { Db } from "./services";
 
 export type SupportKind = (typeof SUPPORT_KINDS)[number];
@@ -23,9 +24,6 @@ export type SupportSource = (typeof SUPPORT_SOURCES)[number];
 
 /** Per signed-in sender, on top of the route's per-IP limit: a shared NAT shares one IP bucket. */
 export const SUPPORT_USER_CAP = { windowMs: 24 * 60 * 60_000, max: 10 };
-
-/** First key of the per-sender advisory lock; the other namespaces are in usage.ts and billing. */
-const SUPPORT_LOCK_NAMESPACE = 7_304;
 
 export type SupportSubmission = {
   /** Client-generated; a retry with the same id, address and sender stores nothing new. */
@@ -60,7 +58,7 @@ async function store(tx: Tx, input: SupportSubmission): Promise<SupportSubmitRes
   // Held to commit, so concurrent sends from one user are counted one after another.
   if (sender) {
     await tx.execute(
-      sql`select pg_advisory_xact_lock(${SUPPORT_LOCK_NAMESPACE}, hashtext(${sender.userId}))`,
+      sql`select pg_advisory_xact_lock(${LOCK_NAMESPACES.support}, hashtext(${sender.userId}))`,
     );
   }
 

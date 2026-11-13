@@ -23,6 +23,7 @@ import {
 } from "../errors";
 import { billingApplyJob, refundWaitCheckJob } from "../jobs/billing-apply-job";
 import { enqueueJob } from "../jobs/queue";
+import { LOCK_NAMESPACES } from "../locks";
 import { DEFAULT_PLAN, policyFor, type PlanId, type PlanPolicy } from "../plans";
 import { Db } from "../services";
 import { Settings } from "../settings";
@@ -531,13 +532,10 @@ export class BillingPayloadError extends Error {
   }
 }
 
-/** Second key of the advisory lock namespace that serializes one subscription's writes. */
-const SUBSCRIPTION_LOCK_NAMESPACE = 7_303;
-
 const lockSubscription = (tx: Tx, provider: string, subscriptionId: string) =>
   tx
     .execute(
-      sql`select pg_advisory_xact_lock(${SUBSCRIPTION_LOCK_NAMESPACE}, hashtext(${`${provider}:${subscriptionId}`}))`,
+      sql`select pg_advisory_xact_lock(${LOCK_NAMESPACES.subscription},hashtext(${`${provider}:${subscriptionId}`}))`,
     )
     .then((r) => r.rows);
 
