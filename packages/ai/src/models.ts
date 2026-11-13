@@ -186,6 +186,7 @@ export const OCR_MODELS: readonly OcrModel[] = [
   // `minItems`/`maxItems` as supported, and lists length bounds as unsupported only for fine-tuned
   // models; that is unproven here, so every bound is dropped from the request and the reply is
   // still checked against the full schema.
+  // TODO(2026-11-13): send the full schema once a live call confirms strict mode accepts the bounds.
   {
     id: "openai:gpt-6-luna",
     provider: "openai",
