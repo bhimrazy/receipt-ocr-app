@@ -811,11 +811,15 @@ async function revoke(tx: Tx, stored: BillingSubscription, now: Date): Promise<A
   };
 }
 
-/** Whether a transaction has been reported (`transaction.completed`) or is one of our checkouts. */
+/**
+ * Whether a transaction has been applied (`transaction.completed`) or is one of our checkouts. A report still
+ * queued doesn't count: its job reads waiting refunds when it runs.
+ */
 async function transactionKnown(tx: Tx, provider: string, transactionId: string) {
   const rows = await tx
     .execute<{ known: boolean }>(
       sql`select exists (select 1 from billing_events e where e.provider = ${provider}
+          and e.processed_at is not null
           and e.payload->'transaction'->>'transactionId' = ${transactionId})
         or exists (select 1 from billing_checkouts c where c.provider = ${provider}
           and c.provider_transaction_id = ${transactionId}) as known`,

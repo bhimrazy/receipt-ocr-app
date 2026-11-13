@@ -1446,6 +1446,47 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(await planOf(workspaceId)).toBe("free");
     });
 
+    it("keeps a refund waiting while its renewal's report is stored but not yet applied", async () => {
+      const workspaceId = await createWorkspace(other.userId, "refund-queued");
+      const id = `sub_${tag}_refund_queued`;
+      const firstStart = new Date(Date.now() - 31 * 86_400_000);
+      await deliver(
+        event(
+          snapshot({ subscriptionId: id, workspaceId, currentPeriodStart: firstStart }),
+          "subscription.created",
+        ),
+      );
+      const renewal = paid(id, `txn_${tag}_renewal_queued`, new Date(Date.now() - 86_400_000));
+      // The renewal's webhook is stored, but its job hasn't run yet.
+      expect((await run(recordBillingEvent(renewal))).kind).toBe("recorded");
+      const refund = event(
+        null,
+        "adjustment.updated",
+        adjustment({
+          action: "refund",
+          type: "full",
+          subscriptionId: id,
+          transactionId: `txn_${tag}_renewal_queued`,
+        }),
+      );
+      expect(await applyOnce(refund)).toMatchObject({
+        outcome: "unmatched",
+        unmatched: "transaction",
+      });
+      const [row] = await db((d) =>
+        d
+          .select({ id: billingEvents.id })
+          .from(billingEvents)
+          .where(eq(billingEvents.providerEventId, renewal.eventId)),
+      );
+      expect(await run(applyBillingEvent(row!.id))).toMatchObject({
+        outcome: "applied",
+        planChange: { from: "pro", to: "free" },
+      });
+      expect(await outcomeOf(refund.eventId)).toBe("applied");
+      expect(await planOf(workspaceId)).toBe("free");
+    });
+
     it("drops a waiting refund when its transaction turns out to be a duplicate", async () => {
       const workspaceId = await createWorkspace(other.userId, "refund-duplicate");
       const id = `sub_${tag}_refund_duplicate`;
