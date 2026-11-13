@@ -177,9 +177,9 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
   5. Test a sandbox checkout, then submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
      account verification, and switch to live values ([10c](production-environment.md#10c-switch-from-sandbox-to-live)).
   6. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).
-  7. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price,
-     and keep the old price id in `PADDLE_PRICE_PRO_LEGACY` ([runbook](architecture/flows/billing.md#runbook)). There is
-     no automated email for this yet.
+  7. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price
+     ([runbook](architecture/flows/billing.md#runbook)). Existing subscribers keep Pro whatever the price settings say
+     (the plan is recorded when a subscription links). There is no automated email for this yet.
 - Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
 - Product updates signup (in review): built but off until you create a Resend segment (Audiences are now "segments"),
   set `RESEND_NEWSLETTER_SEGMENT_ID`, and use a **full-access** `RESEND_API_KEY` (a sending-only key cannot add

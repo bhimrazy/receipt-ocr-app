@@ -411,6 +411,14 @@ codes sent in the last 10 minutes.
 
 Steps specific to one release, newest first.
 
+### Billing plan column (migration 0005)
+
+- **`0005_billing_plan`** adds `plan` (`text not null default 'pro'`), `paid_transaction_id` and `paid_period_start`
+  to `billing_subscriptions`, and sets `paid_transaction_id` from `billing_checkouts` for rows that have a checkout.
+  No table rewrite (a constant default is stored in the catalog); `lock_timeout` 3 s. The code before this release
+  keeps working: it never reads the columns, and a row it inserts defaults to `pro`, which is right because it links
+  only at a Pro price. Run **Database Migration** on `staging-db`, then `production-db`, then deploy.
+
 ### Squashed baseline again (2026-11-08)
 
 - **`0000_baseline` through `0003_schema_fixes` were squashed into a new `0000_baseline`**, before launch. A database
