@@ -178,7 +178,9 @@ export function FullSizeView({
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }, []);
 
-  const ready = Boolean(url && file && shown && view && area);
+  const ready = Boolean(shown && view && area);
+  // A new size is still encoding or decoding: the last image stays, dimmed, rather than a blank frame.
+  const pending = !url || shown?.url !== url;
 
   // Wheel and Safari's trackpad gesture events need non-passive listeners to stop page zoom.
   useEffect(() => {
@@ -433,7 +435,7 @@ export function FullSizeView({
         </Button>
       </div>
       <div className="relative min-h-0 flex-1 overflow-hidden bg-muted/40" ref={areaRef}>
-        {url && file ? (
+        {(url && file) || shown ? (
           <>
             <div
               aria-label={label}
@@ -460,6 +462,7 @@ export function FullSizeView({
                   alt=""
                   className={cn(
                     "pointer-events-none absolute top-0 left-0 max-w-none origin-top-left",
+                    pending && "opacity-50",
                     animate &&
                       "transition-transform duration-200 ease-out motion-reduce:transition-none",
                   )}
@@ -540,6 +543,19 @@ export function FullSizeView({
                 <Plus aria-hidden="true" className="size-4" />
               </PillButton>
             </div>
+            {pending && shown ? (
+              <p className="absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/95 w-max max-w-[calc(100%-2rem)] px-3 py-1.5 text-center text-xs text-foreground shadow-sm">
+                {failed ? null : (
+                  <Loader2
+                    aria-hidden="true"
+                    className="size-3.5 animate-spin motion-reduce:animate-none"
+                  />
+                )}
+                {failed
+                  ? "This size can't be shown on this device. It still uploads."
+                  : "Preparing the upload…"}
+              </p>
+            ) : null}
             <p aria-live="polite" className="sr-only">
               {announcement}
             </p>
