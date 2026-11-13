@@ -2,8 +2,15 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { detectQuad, otsu } from "./detect-quad";
-import { applyHomography, homography, type Pixels, type Point, type Quad } from "./geometry";
+import { otsu } from "../../src/detect/channels";
+import { detectQuad } from "../../src/detect/detect-quad";
+import {
+  applyHomography,
+  homography,
+  type Pixels,
+  type Point,
+  type Quad,
+} from "../../src/geometry";
 
 /** Minimal decoder for the bench fixtures: 8-bit RGB or RGBA, not interlaced. */
 function decodePng(file: string): Pixels {
@@ -419,7 +426,7 @@ describe("detectQuad: cropping a photo nobody reviews", () => {
 });
 
 describe("detectQuad on bench receipts", () => {
-  const fixtures = path.join(import.meta.dirname, "../../../../packages/bench/fixtures");
+  const fixtures = path.join(import.meta.dirname, "../../../bench/fixtures");
   for (const name of ["npr-lakh", "long-groceries"]) {
     it(`finds ${name} placed at an angle on a dark table`, () => {
       const receipt = decodePng(path.join(fixtures, `${name}.png`));

@@ -60,6 +60,7 @@ export default defineConfig({
       "@receipt-ocr/db": path.join(root, "packages/db/src/index.ts"),
       "@receipt-ocr/email": path.join(root, "packages/email/src/index.ts"),
       "@receipt-ocr/storage": path.join(root, "packages/storage/src/index.ts"),
+      "@receipt-ocr/vision": path.join(root, "packages/vision/src/index.ts"),
     },
   },
 });

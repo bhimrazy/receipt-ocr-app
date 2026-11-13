@@ -1,4 +1,4 @@
-import type { Pixels } from "./geometry";
+import type { Pixels } from "@receipt-ocr/vision";
 
 /**
  * Look filters applied to the straightened image, as plain pixel loops (lookup tables and an
