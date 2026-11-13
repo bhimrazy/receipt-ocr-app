@@ -1,29 +1,22 @@
 import "server-only";
-import { ReceiptRepo } from "@receipt-ocr/core";
-import { Effect } from "effect";
 import { annotateCaller } from "./http";
 import { errorFields, logger, type WideEvent } from "./log";
-import { runtime } from "./runtime";
 import { getActiveScope } from "./session";
 
 /**
- * The receipt a "Report a problem" message is about: its id only when the sender is signed in
- * and it is in their active workspace, else null, so a message never points support at another
- * workspace's receipt. Never throws.
+ * The signed-in sender of a support message and their active workspace, or null for a visitor.
+ * A failed session lookup also gives null: the message is still stored, just not linked.
  */
-export async function senderReceipt(value: unknown, event: WideEvent): Promise<string | null> {
-  if (typeof value !== "string" || value === "") return null;
+export async function supportSender(
+  event: WideEvent,
+): Promise<{ userId: string; organizationId: string } | null> {
   try {
     const scope = await getActiveScope();
     if (!scope) return null;
     annotateCaller(event, { scope });
-    const [id] = await runtime.runPromise(
-      Effect.flatMap(ReceiptRepo, (repo) => repo.matchingIds(scope, { ids: [value] }, 1)),
-    );
-    if (id) event.receipt_id = id;
-    return id ?? null;
+    return { userId: scope.userId, organizationId: scope.organizationId };
   } catch (error) {
-    logger.error({ event: "contact.receipt_check_failed", unit: "log", error: errorFields(error) });
+    logger.error({ event: "contact.sender_lookup_failed", unit: "log", error: errorFields(error) });
     return null;
   }
 }
