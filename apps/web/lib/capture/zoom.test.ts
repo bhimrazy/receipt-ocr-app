@@ -1,95 +1,117 @@
 import { describe, expect, it } from "vitest";
 import {
-  actualScale,
-  actualView,
   canPan,
   clampView,
+  defaultView,
   fitScale,
   fitView,
-  MAX_ZOOM,
+  isFit,
+  isLong,
+  MAX_SCALE,
   panBy,
+  pinchView,
+  rubberBand,
   scaleLimits,
+  toggleScale,
+  verticalPosition,
   wheelFactor,
   zoomAt,
-  zoomMode,
   zoomPercent,
 } from "./zoom";
 
-// The owner's long receipt in a wide desktop stage.
-const receipt = { width: 909, height: 2576 };
-const desktop = { width: 1000, height: 700 };
+const long = { width: 909, height: 2576 };
+const ordinary = { width: 1000, height: 1300 };
+const desktop = { width: 1088, height: 800 };
+const phone = { width: 390, height: 700 };
 
-describe("fit and actual scale", () => {
-  it("fits the long side, and 1:1 is one image pixel per device pixel", () => {
-    expect(fitScale(receipt, desktop, 1)).toBeCloseTo(700 / 2576);
-    expect(actualScale(1)).toBe(1);
-    expect(actualScale(2)).toBe(0.5);
-    expect(actualScale(0)).toBe(1);
+describe("fit and the opening view", () => {
+  it("fits the whole image, never past 100%", () => {
+    expect(fitScale(ordinary, desktop)).toBeCloseTo(800 / 1300);
+    expect(fitScale({ width: 200, height: 100 }, desktop)).toBe(1);
   });
 
-  it("never enlarges a small image past actual pixels to fit", () => {
-    expect(fitScale({ width: 200, height: 100 }, desktop, 1)).toBe(1);
-    expect(fitScale({ width: 200, height: 100 }, desktop, 2)).toBe(0.5);
+  it("opens an ordinary receipt at Fit, centred on both axes", () => {
+    for (const viewport of [desktop, phone]) {
+      const view = defaultView(ordinary, viewport);
+      expect(view.scale).toBeCloseTo(fitScale(ordinary, viewport));
+      expect(view.x).toBeCloseTo((viewport.width - ordinary.width * view.scale) / 2);
+      expect(view.y).toBeCloseTo((viewport.height - ordinary.height * view.scale) / 2);
+    }
   });
 
-  it("zooms from fitted up to MAX_ZOOM × actual pixels", () => {
-    expect(scaleLimits(receipt, desktop, 2)).toEqual({
-      min: fitScale(receipt, desktop, 2),
-      max: MAX_ZOOM / 2,
-    });
+  it("opens a long receipt at its width, capped at 100%, from the top", () => {
+    expect(isLong(long)).toBe(true);
+    expect(isLong(ordinary)).toBe(false);
+    // Desktop: 909 px wide at 100%, centred across the wider stage.
+    expect(defaultView(long, desktop)).toEqual({ scale: 1, x: (1088 - 909) / 2, y: 0 });
+    // Phone: the full width, from the top.
+    const view = defaultView(long, phone);
+    expect(view.scale).toBeCloseTo(390 / 909);
+    expect(view.x).toBeCloseTo(0);
+    expect(view.y).toBe(0);
+  });
+
+  it("zooms from Fit to 400%", () => {
+    expect(scaleLimits(long, desktop)).toEqual({ min: 800 / 2576, max: MAX_SCALE });
+    expect(clampView({ scale: 100, x: 0, y: 0 }, long, desktop).scale).toBe(MAX_SCALE);
+    expect(clampView({ scale: 0.01, x: 0, y: 0 }, long, desktop).scale).toBeCloseTo(800 / 2576);
   });
 });
 
-describe("centring and clamping", () => {
-  it("centres the fitted image on both axes", () => {
-    const view = fitView(receipt, desktop, 1);
-    const shown = receipt.width * view.scale;
-    expect(view.x).toBeCloseTo((desktop.width - shown) / 2);
-    expect(view.y).toBeCloseTo(0);
+describe("bounds", () => {
+  it("keeps the image edge at the viewport edge, and a smaller axis centred", () => {
+    const view = defaultView(long, desktop);
+    expect(panBy(view, 0, 5000, long, desktop).y).toBe(0);
+    expect(panBy(view, 0, -5000, long, desktop).y).toBe(800 - 2576);
+    expect(panBy(view, 400, 0, long, desktop).x).toBeCloseTo((1088 - 909) / 2);
   });
 
-  it("centres a narrow image across but opens a tall one at its middle", () => {
-    const view = actualView(receipt, desktop, 1);
-    expect(view.x).toBeCloseTo((1000 - 909) / 2);
-    expect(view.y).toBeCloseTo((700 - 2576) / 2);
-  });
-
-  it("keeps the image covering the viewport on an axis where it is larger", () => {
-    const view = actualView(receipt, desktop, 1);
-    expect(panBy(view, 0, 5000, receipt, desktop, 1).y).toBe(0);
-    expect(panBy(view, 0, -5000, receipt, desktop, 1).y).toBe(700 - 2576);
-    // Narrower than the viewport: stays centred however far it is dragged.
-    expect(panBy(view, 400, 0, receipt, desktop, 1).x).toBeCloseTo(45.5);
-  });
-
-  it("clamps the scale to the limits", () => {
-    expect(clampView({ scale: 100, x: 0, y: 0 }, receipt, desktop, 1).scale).toBe(MAX_ZOOM);
-    expect(clampView({ scale: 0.01, x: 0, y: 0 }, receipt, desktop, 1).scale).toBeCloseTo(
-      700 / 2576,
+  it("lets a touch drag stretch a third past the edge", () => {
+    const view = defaultView(long, desktop);
+    expect(rubberBand({ ...view, y: 90 }, long, desktop).y).toBeCloseTo(30);
+    expect(rubberBand({ ...view, y: 800 - 2576 - 30 }, long, desktop).y).toBeCloseTo(
+      800 - 2576 - 10,
     );
+    expect(rubberBand({ ...view, y: -100 }, long, desktop).y).toBe(-100);
   });
 });
 
-describe("zoomAt", () => {
+describe("zooming at a point", () => {
+  const imagePoint = (
+    view: { scale: number; x: number; y: number },
+    p: { x: number; y: number },
+  ) => ({
+    x: (p.x - view.x) / view.scale,
+    y: (p.y - view.y) / view.scale,
+  });
+
   it("keeps the image point under the pointer in place", () => {
-    const view = actualView(receipt, desktop, 1);
-    const px = 600;
-    const py = 300;
-    const before = { x: (px - view.x) / view.scale, y: (py - view.y) / view.scale };
-    const next = zoomAt(view, 2, px, py, receipt, desktop, 1);
+    const view = fitView(ordinary, desktop);
+    const at = { x: 600, y: 300 };
+    const next = zoomAt(view, 2, at, ordinary, desktop);
     expect(next.scale).toBe(2);
-    expect((px - next.x) / next.scale).toBeCloseTo(before.x);
-    expect((py - next.y) / next.scale).toBeCloseTo(before.y);
+    expect(imagePoint(next, at).x).toBeCloseTo(imagePoint(view, at).x);
+    expect(imagePoint(next, at).y).toBeCloseTo(imagePoint(view, at).y);
   });
 
-  it("stops at the limits and re-centres when zoomed out to fitted", () => {
-    const view = actualView(receipt, desktop, 1);
-    expect(zoomAt(view, 50, 10, 10, receipt, desktop, 1).scale).toBe(MAX_ZOOM);
-    const out = zoomAt(view, 0.001, 10, 10, receipt, desktop, 1);
-    expect(out).toEqual(fitView(receipt, desktop, 1));
+  it("stops at the limits and re-centres at Fit", () => {
+    const view = defaultView(long, desktop);
+    expect(zoomAt(view, 50, { x: 10, y: 10 }, long, desktop).scale).toBe(MAX_SCALE);
+    expect(zoomAt(view, 0.001, { x: 10, y: 10 }, long, desktop)).toEqual(fitView(long, desktop));
   });
 
-  it("follows a pinch's small deltas and caps a mouse notch, and up zooms in", () => {
+  it("pinches around the midpoint and follows it as it moves", () => {
+    const start = fitView(ordinary, phone);
+    const mid = { x: 200, y: 300 };
+    const moved = { x: 220, y: 280 };
+    const next = pinchView(start, mid, 100, moved, 250, ordinary, phone);
+    expect(next.scale).toBeCloseTo(start.scale * 2.5);
+    expect(imagePoint(next, moved).x).toBeCloseTo(imagePoint(start, mid).x);
+    expect(imagePoint(next, moved).y).toBeCloseTo(imagePoint(start, mid).y);
+    expect(pinchView(start, mid, 10, mid, 10_000, ordinary, phone).scale).toBe(MAX_SCALE);
+  });
+
+  it("follows a trackpad pinch's small deltas and caps a mouse notch; up zooms in", () => {
     expect(wheelFactor(4)).toBeCloseTo(Math.exp(-0.04));
     expect(wheelFactor(100)).toBeCloseTo(Math.exp(-0.25));
     expect(wheelFactor(-100)).toBeCloseTo(Math.exp(0.25));
@@ -97,22 +119,34 @@ describe("zoomAt", () => {
   });
 });
 
-describe("mode, percent and panning", () => {
-  it("names the mode from the scale, preferring actual when it also fits", () => {
-    expect(zoomMode(fitScale(receipt, desktop, 2), receipt, desktop, 2)).toBe("fitted");
-    expect(zoomMode(0.5, receipt, desktop, 2)).toBe("actual");
-    expect(zoomMode(0.7, receipt, desktop, 2)).toBe("zoomed");
-    expect(zoomMode(1, { width: 100, height: 100 }, desktop, 1)).toBe("actual");
+describe("toggle, readout and position", () => {
+  it("toggles Fit to 100% and anything above Fit back to Fit", () => {
+    const fit = fitScale(long, desktop);
+    expect(toggleScale(fit, long, desktop)).toBe(1);
+    expect(toggleScale(1, long, desktop)).toBeCloseTo(fit);
+    expect(toggleScale(3, long, desktop)).toBeCloseTo(fit);
+    expect(toggleScale(0.6, long, desktop)).toBe(1);
+    // Fit is already 100%: go to 200%.
+    expect(toggleScale(1, { width: 200, height: 100 }, desktop)).toBe(2);
   });
 
-  it("reads 100% at actual pixels on any screen", () => {
-    expect(zoomPercent(0.5, 2)).toBe(100);
-    expect(zoomPercent(1, 2)).toBe(200);
-    expect(zoomPercent(700 / 2576, 1)).toBe(27);
+  it("reads 100% at one image pixel per CSS pixel", () => {
+    expect(zoomPercent(1)).toBe(100);
+    expect(zoomPercent(800 / 2576)).toBe(31);
+    expect(isFit(800 / 2576, long, desktop)).toBe(true);
+    expect(isFit(1, long, desktop)).toBe(false);
   });
 
   it("can pan only when the image is larger than the viewport", () => {
-    expect(canPan(fitView(receipt, desktop, 1), receipt, desktop)).toBe(false);
-    expect(canPan(actualView(receipt, desktop, 1), receipt, desktop)).toBe(true);
+    expect(canPan(fitView(long, desktop), long, desktop)).toBe(false);
+    expect(canPan(defaultView(long, desktop), long, desktop)).toBe(true);
+  });
+
+  it("places the visible band in the image height", () => {
+    const top = defaultView(long, desktop);
+    expect(verticalPosition(top, long, desktop)).toEqual({ start: 0, size: 800 / 2576 });
+    const bottom = panBy(top, 0, -5000, long, desktop);
+    expect(verticalPosition(bottom, long, desktop)!.start).toBeCloseTo(1 - 800 / 2576);
+    expect(verticalPosition(fitView(long, desktop), long, desktop)).toBeNull();
   });
 });
