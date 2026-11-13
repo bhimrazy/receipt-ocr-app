@@ -3,6 +3,7 @@ import {
   DEPLOYMENT_BODY_LIMIT_BYTES,
   MAX_UPLOAD_BYTES,
 } from "@receipt-ocr/core/upload-limits";
+import type { CropInfo } from "./capture/crop-outcome";
 import type { Filter } from "./capture/filters";
 import { ENCODING, encodeLadder, TooLargeError, type Encoder } from "./upload-encoding";
 
@@ -198,6 +199,8 @@ export type UploadInfo = {
   width: number;
   height: number;
   filter?: Filter;
+  /** What became of the detected crop; absent for a file that was not made from a reviewed edit. */
+  crop?: CropInfo;
   quality: number;
   attempts: number;
   rescued: boolean;
@@ -220,7 +223,7 @@ function jpegName(name: string) {
 export async function encodeUpload(
   source: EncodeSource,
   name: string,
-  { size, filter }: { size?: SizeId; filter?: Filter } = {},
+  { size, filter, crop }: { size?: SizeId; filter?: Filter; crop?: CropInfo } = {},
 ): Promise<File> {
   const option = chosenOption(uploadPlan(source), size);
   const encoder = jpegEncoder(source);
@@ -238,6 +241,7 @@ export async function encodeUpload(
     infos.set(file, {
       ...(size ? { size: option.id } : {}),
       ...(filter ? { filter } : {}),
+      ...(crop ? { crop } : {}),
       width: out.width,
       height: out.height,
       quality: out.quality,

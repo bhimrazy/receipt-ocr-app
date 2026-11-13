@@ -1,5 +1,6 @@
 import { TooLargeError } from "@/lib/upload-encoding";
 import { encodeUpload, prepareFile, type SizeId } from "@/lib/upload-prep";
+import { cropInfo } from "./crop-outcome";
 import { isFullFrame, type EditState } from "./edit-state";
 import { FULL_RENDER, loadImage, releaseCanvas, renderEdit } from "./render";
 
@@ -50,7 +51,11 @@ export async function preparePhoto(
   try {
     chosen ??= startingEdit(bitmap);
     canvas = renderEdit(bitmap, chosen, FULL_RENDER);
-    return await encodeUpload(canvas, image.name, { size, filter: chosen.filter });
+    return await encodeUpload(canvas, image.name, {
+      size,
+      filter: chosen.filter,
+      crop: cropInfo(chosen),
+    });
   } catch (error) {
     if (error instanceof TooLargeError) throw error;
     if (!chosen || isUnedited(chosen)) return original();

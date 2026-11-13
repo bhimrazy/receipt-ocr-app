@@ -487,7 +487,7 @@ gitignored `packages/bench/fixtures-local/` with labels made in the app's own cr
 - **Speed**: median and 95th percentile milliseconds per call at 192x256, after warm-up, reported as a ratio to the
   frozen v1 detector measured in the same process (so the gate does not depend on the machine).
 - **Size**: minified and gzipped bytes of the detector entry, from `bun build`.
-- **Production** (PR 3): share of uploads where the detected crop was kept, adjusted, or replaced by the full image.
+- **Production** (PR 3): share of uploads where the detected crop was kept, adjusted, or replaced by the full image. Landed: `crop.outcome` and `crop.level` on the `receipt.upload` event; the share per week is `crop.outcome` counted over uploads with a `crop` group.
 
 ### Pass bars
 
@@ -606,7 +606,7 @@ Each PR is small, carries its harness numbers in the description, and updates `d
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------- |
 | 1   | `packages/vision`: move geometry and the detector with their tests; architecture docs                                                                                                     | None             | Existing tests; bundle unchanged                                                  |
 | 2   | Harness and baseline: generator, metrics, runner, `baseline.json`, the gate test, corner labels for the nine real photos; a frozen v1 for the speed ratio                                 | None             | Baseline matches this document within noise                                       |
-| 3   | Telemetry: `crop.outcome` (kept, adjusted, full image, none) and the detection level on the upload event; enumerations only, field audit in the PR                                        | None visible     | Production baseline for "corrected or discarded" starts here                      |
+| 3   | Telemetry (landed): `crop.outcome` (kept, adjusted, full_image, none) and `crop.level` (apply, suggest, none) on `receipt.upload`; enumerations only                                      | None visible     | Production baseline for "corrected or discarded" starts here                      |
 | 4   | Speed, identical output: typed arrays, no per-pixel allocation, one labelling pass                                                                                                        | None             | Same quad on every scene; speed ratio at most 0.5                                 |
 | 5   | Cover gate by shape, top three components                                                                                                                                                 | Yes              | Long thermal and table misses gone; nothing else moves                            |
 | 6   | Paper-likeness channel, grey closing, second threshold, side fit with per-side support, frame-border sides; re-specify the two `it.fails` tests as "keeps all print, background under N%" | Yes              | Harmful at most 7% weighted; hand-held good at least 80%; no category worse       |

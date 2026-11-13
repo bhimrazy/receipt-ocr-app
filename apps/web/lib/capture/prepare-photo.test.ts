@@ -101,6 +101,7 @@ describe("preparePhoto", () => {
     expect(encodeUpload).toHaveBeenLastCalledWith(expect.anything(), "receipt.jpg", {
       size: "larger",
       filter: "original",
+      crop: { outcome: "none", level: "none" },
     });
     stubDecode(true);
     await preparePhoto(photo, undefined, noStartingEdit, "smaller");
@@ -204,6 +205,7 @@ describe("preparePhoto", () => {
     expect(encodeUpload).toHaveBeenLastCalledWith(expect.anything(), "receipt.jpg", {
       size: undefined,
       filter: "original",
+      crop: { outcome: "full_image", level: "suggest" },
     });
   });
 });

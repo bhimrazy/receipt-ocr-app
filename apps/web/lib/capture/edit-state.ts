@@ -12,6 +12,8 @@ export type EditState = {
   quad: Quad;
   /** The detected document outline, in the same frame as `quad`, if detection found one. */
   detected: Quad | null;
+  /** How sure detection was when the photo opened; fixed for the life of the edit. */
+  level: Detection["level"];
   filter: Filter;
 };
 
@@ -29,8 +31,12 @@ export const NUDGE_LARGE = 0.05;
 const MIN_GAP = 0.04;
 
 /** Starts on the detected outline when there is one (the seam for better detectors later). */
-export function initialEdit(detected: Quad | null = null, filter: Filter = "original"): EditState {
-  return { rotation: 0, quad: detected ?? FULL_QUAD, detected, filter };
+export function initialEdit(
+  detected: Quad | null = null,
+  filter: Filter = "original",
+  level: Detection["level"] = detected ? "suggest" : "none",
+): EditState {
+  return { rotation: 0, quad: detected ?? FULL_QUAD, detected, level, filter };
 }
 
 /**
@@ -43,7 +49,7 @@ export function editFromDetection(
   rememberedFilter: Filter | null,
 ): EditState {
   const apply = detection.level === "apply";
-  const edit = initialEdit(detection.quad, defaultFilter(rememberedFilter, apply));
+  const edit = initialEdit(detection.quad, defaultFilter(rememberedFilter, apply), detection.level);
   return apply ? edit : fullImage(edit);
 }
 

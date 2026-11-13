@@ -120,6 +120,15 @@ export const EVENT_SCHEMA = {
       rescued: "bool",
     },
   },
+  /** What became of the detected receipt crop; client-reported, checked against our own values. */
+  crop: {
+    group: {
+      /** `kept`, `adjusted`, `full_image` or `none` (detection found no outline). */
+      outcome: "token",
+      /** Detector confidence level when the photo opened: `apply`, `suggest` or `none`. */
+      level: "token",
+    },
+  },
   /** A named action (admin action, auth endpoint). */
   action: "token",
   /** A short qualifier for events that need one (job kind, settings key). */

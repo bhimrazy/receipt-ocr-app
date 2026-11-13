@@ -44,6 +44,31 @@ describe("upload encoding telemetry", () => {
   });
 });
 
+describe("crop telemetry", () => {
+  it("round-trips the crop outcome and detection level", () => {
+    const form = new FormData();
+    setUploadInfo(form, {
+      width: 1,
+      height: 1,
+      quality: 0.8,
+      attempts: 1,
+      rescued: false,
+      crop: { outcome: "adjusted", level: "apply" },
+    });
+    expect(readUploadInfo(form).crop).toEqual({ outcome: "adjusted", level: "apply" });
+  });
+
+  it("drops an outcome or level outside the enumerations, and a lone half", () => {
+    const form = new FormData();
+    form.set("crop_outcome", "kept");
+    form.set("crop_level", "0.1,0.2;0.9,0.9");
+    expect(readUploadInfo(form).crop).toBeUndefined();
+    form.set("crop_level", "suggest");
+    form.set("crop_outcome", "jane@example.com");
+    expect(readUploadInfo(form).crop).toBeUndefined();
+  });
+});
+
 describe("imageFields", () => {
   it("reads the size from a PNG header and works out bytes per pixel", () => {
     const png = new Uint8Array(1000);
