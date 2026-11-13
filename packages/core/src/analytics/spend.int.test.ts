@@ -153,6 +153,36 @@ describe.skipIf(!enabled)("spending aggregates against Postgres", () => {
     expect(usd.categories.top.find((c) => c.category === null)).toMatchObject({ total: 5.25 });
   });
 
+  it("groups merchants across case, spaces and punctuation, keeping every script's letters", async () => {
+    const ws = await workspace("spellings");
+    const at = (date: string, merchant: string, total = "1.00") =>
+      row(ws, { date, total, merchant });
+    await insert([
+      at("2026-11-01", "Bhatbhateni Super Market"),
+      at("2026-11-02", "Bhat-Bhateni Super Market"),
+      at("2026-11-03", "BHAT-BHATENI SUPERMARKET."),
+      at("2026-11-04", "Bhat-Bhateni Super Market"),
+      at("2026-11-05", "bhatbhateni super market"),
+      // Two spellings once each: the more recent receipt names the group.
+      at("2026-11-01", "O'Neil & Co."),
+      at("2026-11-02", "ONeil, Co"),
+      // Vowel signs and the virama are part of the word; the danda is punctuation.
+      at("2026-11-01", "भाटभटेनी सुपर मार्केट", "5.00"),
+      at("2026-11-02", "भाटभटेनी सुपरमार्केट।", "5.00"),
+      at("2026-11-03", "भटभटेनी सुपर मार्केट", "1.00"),
+      // Only punctuation reads as no merchant name.
+      at("2026-11-04", " -- ", "9.00"),
+    ]);
+    const usd = (await run(spendDashboard(ws, query()))).currencies[0]!;
+    expect(usd.merchants.top.map(({ key, name, count }) => ({ key, name, count }))).toEqual([
+      { key: "भाटभटेनीसुपरमार्केट", name: "भाटभटेनी सुपरमार्केट।", count: 2 },
+      { key: "bhatbhatenisupermarket", name: "Bhat-Bhateni Super Market", count: 5 },
+      { key: "oneilco", name: "ONeil, Co", count: 2 },
+      { key: "भटभटेनीसुपरमार्केट", name: "भटभटेनी सुपर मार्केट", count: 1 },
+    ]);
+    expect(usd.merchants.rest).toMatchObject({ total: 9, count: 1 });
+  });
+
   it("builds this month's pace and the last 12 months", async () => {
     const usd = (await run(spendDashboard(main, query()))).currencies[0]!;
     // November so far: 3 (1 Nov) + 30.50 + 5.25 + 20.

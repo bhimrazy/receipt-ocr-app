@@ -44,6 +44,7 @@ import {
   type UsageWindow,
 } from "./usage";
 import { isUuid } from "./ids";
+import { merchantKey } from "./merchant-key";
 import { storedExtraction } from "./extraction-fields";
 import {
   isIsoDay,
@@ -265,6 +266,12 @@ const ownUnlessManager = (scope: ReceiptScope) =>
 const writable = (id: string, scope: ReceiptScope) =>
   and(inScope(id, scope), ownUnlessManager(scope));
 
+/** An admin signed in as the user is the one vouching for the values. */
+const reviewedBy = (scope: ReceiptScope) => ({
+  reviewedAt: sql`now()`,
+  reviewedBy: scope.impersonatedBy ?? scope.userId,
+});
+
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefined {
@@ -272,7 +279,14 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
   const q = filters.q?.trim();
   if (q) {
     const pattern = `%${escapeLike(q)}%`;
-    conditions.push(or(ilike(receipts.merchant, pattern), ilike(receipts.fileName, pattern)));
+    // The key match finds every spelling the Spending page groups under one merchant.
+    conditions.push(
+      or(
+        ilike(receipts.merchant, pattern),
+        ilike(receipts.fileName, pattern),
+        sql`strpos(${merchantKey(sql`${receipts.merchant}`)}, ${merchantKey(sql`${q}::text`)}) > 0`,
+      ),
+    );
   }
   if (filters.category) conditions.push(eq(receipts.category, filters.category));
   if (filters.status === "needs-review") {
@@ -476,8 +490,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       sort?: ReceiptSort,
     ) => Effect.Effect<ReceiptExportRow[], DbError>;
     /**
-     * Applies user corrections and rechecks only the review reasons the changed fields affect (`editedReasons`);
-     * false when nothing matched or the caller may not edit it. Clearing the date clears the calendar. Fails
+     * Applies user corrections and rechecks only the review reasons the changed fields affect (`editedReasons`).
+     * Saving a completed receipt also marks it reviewed, as `setReviewed` does; false when nothing matched or the
+     * caller may not edit it. Clearing the date clears the calendar. Fails
      * InvalidInput for a date that isn't a real day from 2000 on or is after the day the receipt was uploaded, and
      * for a calendar on a receipt with no date.
      */
@@ -490,8 +505,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
      * Marks a completed receipt reviewed by the caller (now), or clears that.
      * While impersonating, the admin (`impersonatedBy`) is recorded as the
      * reviewer. False when nothing matched, the receipt isn't completed, or the
-     * caller may not edit it. Edits keep the
-     * flag; a new extraction (`complete`) clears it.
+     * caller may not edit it. Saving edits sets the flag; a new extraction
+     * (`complete`) clears it.
      */
     readonly setReviewed: (
       id: string,
@@ -849,14 +864,15 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 .select({ totalPrice: receiptItems.totalPrice })
                 .from(receiptItems)
                 .where(eq(receiptItems.receiptId, id));
+              const completed = row.status === "completed";
               await tx
                 .update(receipts)
                 .set({
                   ...changes,
-                  reviewReasons:
-                    row.status === "completed"
-                      ? editedReasons(row.reviewReasons, { ...row, ...changes, items }, changed)
-                      : row.reviewReasons,
+                  reviewReasons: completed
+                    ? editedReasons(row.reviewReasons, { ...row, ...changes, items }, changed)
+                    : row.reviewReasons,
+                  ...(completed ? reviewedBy(scope) : {}),
                   updatedAt: new Date(),
                 })
                 .where(and(eq(receipts.id, id), eq(receipts.organizationId, scope.organizationId)));
@@ -881,12 +897,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           if (!isReceiptId(id)) return false;
           const rows = await db
             .update(receipts)
-            .set(
-              reviewed
-                ? // An admin signed in as the user is the one vouching for the values.
-                  { reviewedAt: sql`now()`, reviewedBy: scope.impersonatedBy ?? scope.userId }
-                : { reviewedAt: null, reviewedBy: null },
-            )
+            .set(reviewed ? reviewedBy(scope) : { reviewedAt: null, reviewedBy: null })
             .where(and(writable(id, scope), eq(receipts.status, "completed")))
             .returning({ id: receipts.id });
           return rows.length > 0;

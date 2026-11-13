@@ -1,6 +1,7 @@
 import { sql, type SQL } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { InvalidInput, NotConfigured, type DbError } from "../errors";
+import { merchantKey } from "../merchant-key";
 import { Db } from "../services";
 import { addDays, daysInMonth, monthStart, shiftMonths } from "./dates";
 import type { SpendRange } from "./range";
@@ -58,7 +59,7 @@ export type CurrencySpend = Amount & {
   /** The previous period the same way; its bucket count can differ by one. */
   previousSeries: SpendBucket[];
   categories: { top: CategorySpend[]; rest: RestSpend | null };
-  /** Merchants grouped by trimmed, case-folded name. */
+  /** Merchants grouped by `merchantKey`: case, whitespace and punctuation ignored. */
   merchants: { top: MerchantSpend[]; rest: RestSpend | null };
   /** Monday (1) to Sunday (7), zero-filled. */
   weekdays: WeekdaySpend[];
@@ -148,6 +149,9 @@ const d = (iso: string) => sql`${iso}::date`;
  * the scan. It holds because `receipts_receipt_date_check` keeps every date
  * within a day of its UTC upload day; the second day is slack for time zones.
  * `materialized` computes each row's date once instead of in every filter.
+ *
+ * `named` gives each merchant group its most common spelling in the range,
+ * ties going to the spelling of the most recent receipt.
  */
 function tagged(scope: AnalyticsScope, w: Windows): SQL {
   const scanFrom = `${addDays(w.windowFrom, -2)}T00:00:00Z`;
@@ -157,8 +161,9 @@ function tagged(scope: AnalyticsScope, w: Windows): SQL {
       r.total,
       coalesce(r.tax, 0) as tax,
       r.category,
-      nullif(lower(btrim(r.merchant)), '') as merchant_key,
+      ${merchantKey(sql`r.merchant`)} as merchant_key,
       nullif(btrim(r.merchant), '') as merchant,
+      r.created_at,
       r.receipt_date as parsed,
       coalesce(r.receipt_date, (r.created_at at time zone ${w.tz})::date) as eff
     from receipts r
@@ -174,6 +179,17 @@ function tagged(scope: AnalyticsScope, w: Windows): SQL {
       eff between ${d(w.lastMonthFrom)} and ${d(w.today)} as in_months
     from base
     where eff between ${d(w.windowFrom)} and ${d(w.windowTo)}
+  ), spelled as (
+    select *,
+      count(*) filter (where in_range) over (partition by currency, merchant_key, merchant) as spelling_count
+    from tagged
+  ), named as (
+    select *,
+      first_value(merchant) over (
+        partition by currency, merchant_key
+        order by in_range desc, spelling_count desc, eff desc, created_at desc
+      ) as merchant_name
+    from spelled
   )`;
 }
 
@@ -232,7 +248,7 @@ function dashboardSql(scope: AnalyticsScope, w: Windows): SQL {
     select * from (
       select grouping(bucket, category, merchant_key, month, day, dow)::int as g,
         currency, bucket, category, merchant_key, month, day::text, dow,
-        mode() within group (order by merchant) filter (where in_range) as merchant_name,
+        max(merchant_name) as merchant_name,
         ${sum("in_range")} as range_total,
         (count(*) filter (where in_range))::int as range_count,
         coalesce(sum(tax) filter (where in_range), 0)::text as range_tax,
@@ -253,7 +269,7 @@ function dashboardSql(scope: AnalyticsScope, w: Windows): SQL {
           ${bucketSql(sql`eff`, "month")} as month,
           eff as day,
           extract(isodow from eff)::int as dow
-        from tagged
+        from named
       ) t
       group by grouping sets (
         (currency), (currency, bucket), (currency, category), (currency, merchant_key),

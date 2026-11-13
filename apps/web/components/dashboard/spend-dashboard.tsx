@@ -568,7 +568,7 @@ function MerchantCard({
       }
     : null;
   return (
-    <ChartCard description="Same name, ignoring case and spaces" title="Top merchants">
+    <ChartCard description="Same name, ignoring case, spaces and punctuation" title="Top merchants">
       {rows.length === 0 && !restRow ? null : rows.length === 1 && !restRow ? (
         <p className="text-sm">
           All from {top[0]!.name}: {money(top[0]!.total)}.

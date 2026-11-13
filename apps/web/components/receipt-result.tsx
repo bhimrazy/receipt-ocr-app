@@ -52,18 +52,6 @@ function NotFound() {
   return <span className="text-muted-foreground">Not found</span>;
 }
 
-/** Subtotal, tax and tip are often absent from a receipt; a dash, not a warning. */
-function None() {
-  return (
-    <>
-      <span aria-hidden="true" className="text-muted-foreground">
-        —
-      </span>
-      <span className="sr-only">None</span>
-    </>
-  );
-}
-
 function Field({
   label,
   children,
@@ -303,7 +291,21 @@ export function ReceiptResult({
     );
   }
 
-  const lowLines = receipt.items.filter((item) => confidenceLevel(item.confidence) === "review");
+  // Line items can't be edited, so a review is the only way to clear their warnings.
+  const reviewed = receipt.reviewedAt !== null;
+  const isLowLine = (item: ReceiptWithItems["items"][number]) =>
+    !reviewed && confidenceLevel(item.confidence) === "review";
+  const lowLines = receipt.items.filter(isLowLine);
+  // Printed on some receipts only, so the optional amounts and numbers show only when read.
+  const optional: [string, string | null][] = [
+    ["Bill number", receipt.invoiceNumber],
+    ["Merchant tax ID", receipt.merchantTaxId],
+    ["Subtotal", money(receipt.subtotal)],
+    ["Discount", money(receipt.discount)],
+    ["Service charge", money(receipt.serviceCharge)],
+    ["Tax", money(receipt.tax)],
+    ["Tip", money(receipt.tip)],
+  ];
 
   const details = (
     <Card>
@@ -329,36 +331,13 @@ export function ReceiptResult({
         <Field label="Currency" mono>
           {currency}
         </Field>
-        {/* Printed on some receipts only, so shown only when read. */}
-        {receipt.invoiceNumber ? (
-          <Field label="Bill number" mono>
-            {receipt.invoiceNumber}
-          </Field>
-        ) : null}
-        {receipt.merchantTaxId ? (
-          <Field label="Merchant tax ID" mono>
-            {receipt.merchantTaxId}
-          </Field>
-        ) : null}
-        <Field label="Subtotal" mono>
-          {money(receipt.subtotal) ?? <None />}
-        </Field>
-        {receipt.discount ? (
-          <Field label="Discount" mono>
-            {money(receipt.discount)}
-          </Field>
-        ) : null}
-        {receipt.serviceCharge ? (
-          <Field label="Service charge" mono>
-            {money(receipt.serviceCharge)}
-          </Field>
-        ) : null}
-        <Field label="Tax" mono>
-          {money(receipt.tax) ?? <None />}
-        </Field>
-        <Field label="Tip" mono>
-          {money(receipt.tip) ?? <None />}
-        </Field>
+        {optional.map(([label, value]) =>
+          value ? (
+            <Field key={label} label={label} mono>
+              {value}
+            </Field>
+          ) : null,
+        )}
       </dl>
       <div className="flex items-baseline justify-between gap-3 border-t border-border px-5 py-4">
         <span className="text-sm font-medium">Total</span>
@@ -388,7 +367,7 @@ export function ReceiptResult({
           </thead>
           <tbody className="divide-y divide-border">
             {receipt.items.map((item) => {
-              const low = confidenceLevel(item.confidence) === "review";
+              const low = isLowLine(item);
               return (
                 <tr
                   className={cn(low && "bg-warning/5 shadow-[inset_3px_0_0_var(--warning)]")}
@@ -427,23 +406,21 @@ export function ReceiptResult({
   );
 
   const json = JSON.stringify(receipt.rawJson ?? receipt, null, 2);
-  const footer = (
-    <>
-      {/* Right after a receipt was read: the moment the app has shown what it's for. */}
-      <InstallOfferCard />
-      <details className="group rounded-lg border border-border bg-card">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-          <ChevronRight
-            aria-hidden="true"
-            className="size-4 transition-transform group-open:rotate-90"
-          />
-          Raw extraction (JSON)
-        </summary>
-        <pre className="max-h-72 overflow-auto border-t border-border px-5 py-4 font-mono text-xs leading-6 whitespace-pre-wrap text-muted-foreground">
-          {json}
-        </pre>
-      </details>
-    </>
+  // Right after a receipt was read: the moment the app has shown what it's for.
+  const footer = <InstallOfferCard />;
+  const raw = (
+    <details className="group mt-5 rounded-lg border border-border bg-card">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          aria-hidden="true"
+          className="size-4 transition-transform group-open:rotate-90"
+        />
+        Raw extraction (JSON)
+      </summary>
+      <pre className="max-h-72 overflow-auto border-t border-border px-5 py-4 font-mono text-xs leading-6 whitespace-pre-wrap text-muted-foreground">
+        {json}
+      </pre>
+    </details>
   );
 
   return (
@@ -461,6 +438,7 @@ export function ReceiptResult({
             items={items}
             receipt={receipt}
           />
+          {raw}
         </div>
       </ReceiptEditingProvider>
     </ReceiptReviewProvider>

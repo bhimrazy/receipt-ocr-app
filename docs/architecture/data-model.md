@@ -243,9 +243,13 @@ from Needs review. The model's `confidence` is a hint only. There is no CHECK on
 line for a code they don't know.
 
 `receipts.reviewed_at` and `reviewed_by` record that someone who may edit the receipt confirmed it looks right
-(`PATCH /api/receipts/[id]` with `{ reviewed }`, migration `0002_receipt_review`). A reviewed receipt leaves "Needs
-review" and its checks card shows as one "Reviewed by" line. Edits keep the review; a new extraction (`complete`,
-after a retry) clears both columns.
+(`PATCH /api/receipts/[id]` with `{ reviewed }`, migration `0002_receipt_review`). Saving an edit to a completed
+receipt sets them too, in the same update, so a correction counts as a review. A reviewed receipt leaves "Needs
+review", its checks card shows as one "Reviewed by" line, and its line items lose their hard-to-read marks. Undo
+clears the review; a new extraction (`complete`, after a retry) clears both columns.
+
+Merchants group on a key that ignores case, whitespace and punctuation (`packages/core/src/merchant-key.ts`): the
+Spending page's top merchants, and the receipt search, which matches that key as well as the plain text.
 
 ## Receipt groups
 
