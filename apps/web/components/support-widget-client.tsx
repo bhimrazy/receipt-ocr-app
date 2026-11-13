@@ -73,7 +73,7 @@ export function SupportWidgetClient({
   }, [openWidget]);
 
   return (
-    <div className="fixed right-[max(0.5rem,env(safe-area-inset-right))] bottom-[calc(var(--site-bottom-inset,0px)+max(0.5rem,env(safe-area-inset-bottom)))] z-40 flex flex-col items-end gap-3 sm:right-5 sm:bottom-[calc(var(--site-bottom-inset,0px)+1.25rem)]">
+    <div className="fixed right-[max(0.5rem,env(safe-area-inset-right))] bottom-[calc(var(--site-bottom-inset,0px)+max(0.5rem+var(--app-bottom-inset,0px),env(safe-area-inset-bottom)))] z-40 flex flex-col items-end gap-3 sm:right-5 sm:bottom-[calc(var(--site-bottom-inset,0px)+1.25rem)]">
       {opened ? (
         failed ? (
           <div
