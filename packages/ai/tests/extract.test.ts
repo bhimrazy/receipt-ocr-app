@@ -1,9 +1,9 @@
 import { MockLanguageModelV4 } from "ai/test";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OcrCallError } from "./errors";
-import { extractReceipt, extractWith } from "./extract";
-import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, fixtureLatencyMs } from "./fixture";
-import { receiptExtractionSchema } from "./schema";
+import { OcrCallError } from "../src/errors";
+import { extractReceipt, extractWith } from "../src/extract";
+import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, fixtureLatencyMs } from "../src/fixture";
+import { receiptExtractionSchema } from "../src/schema";
 
 const file = (text: string) => ({ data: new TextEncoder().encode(text), mediaType: "image/jpeg" });
 

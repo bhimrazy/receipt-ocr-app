@@ -1,7 +1,7 @@
 import { zodSchema } from "ai";
 import { describe, expect, it } from "vitest";
-import { INJECTION_GUARD, PROMPT_VERSION, PROMPT_VERSIONS, promptFor } from "./prompt";
-import { FIELD_DESCRIPTIONS, receiptExtractionSchema, V3_FIELD_DESCRIPTIONS } from "./schema";
+import { INJECTION_GUARD, PROMPT_VERSION, PROMPT_VERSIONS, promptFor } from "../src/prompt";
+import { FIELD_DESCRIPTIONS, receiptExtractionSchema, V3_FIELD_DESCRIPTIONS } from "../src/schema";
 
 const NOW = new Date("2026-11-07T12:00:00Z");
 

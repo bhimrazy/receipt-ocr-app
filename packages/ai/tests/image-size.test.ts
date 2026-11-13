@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imageSize } from "./image-size";
+import { imageSize } from "../src/image-size";
 
 const bytes = (...parts: Array<string | number[]>) =>
   new Uint8Array(

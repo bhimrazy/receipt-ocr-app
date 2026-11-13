@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkProvider, PROVIDER_CHECK_STATUSES } from "./check";
-import { OCR_PROVIDERS } from "./models";
+import { checkProvider, PROVIDER_CHECK_STATUSES } from "../src/check";
+import { OCR_PROVIDERS } from "../src/models";
 
 const KEY = "sk-fake-KEY-1234567890";
 const json = (body: unknown, status = 200) =>

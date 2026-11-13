@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { extractReceipt } from "./extract";
-import { OCR_MODELS } from "./models";
-import { INJECTION_GUARD, PROMPT_VERSIONS } from "./prompt";
-import { FIELD_DESCRIPTIONS } from "./schema";
+import { extractReceipt } from "../src/extract";
+import { OCR_MODELS } from "../src/models";
+import { INJECTION_GUARD, PROMPT_VERSIONS } from "../src/prompt";
+import { FIELD_DESCRIPTIONS } from "../src/schema";
 
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 const keys = { google: "test-key-google-shape" };

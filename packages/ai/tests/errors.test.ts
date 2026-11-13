@@ -6,9 +6,9 @@ import {
   TypeValidationError,
 } from "ai";
 import { describe, expect, it } from "vitest";
-import { classifyOcrError, OcrCallError, retryAfterMs } from "./errors";
-import { extractReceipt } from "./extract";
-import { FIXTURE_FAIL_MARKER } from "./fixture";
+import { classifyOcrError, OcrCallError, retryAfterMs } from "../src/errors";
+import { extractReceipt } from "../src/extract";
+import { FIXTURE_FAIL_MARKER } from "../src/fixture";
 
 const apiError = (statusCode: number | undefined) =>
   new APICallError({

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 // WCAG 2.x contrast for the token pairs the UI relies on, in both themes. Tints (`bg-primary/15`)
 // are painted over a surface, so they are alpha-composited in sRGB, as the browser does.
-const css = readFileSync(path.join(import.meta.dirname, "styles.css"), "utf8");
+const css = readFileSync(path.join(import.meta.dirname, "../src/styles.css"), "utf8");
 
 type Rgb = [number, number, number];
 type Theme = Record<string, string>;
