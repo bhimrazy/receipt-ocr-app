@@ -136,6 +136,9 @@ test("Groups sits under Receipts, reached from Settings", async ({ page }) => {
     "aria-current",
     "page",
   );
+  await expect(page.getByRole("link", { name: "Back to Settings" })).toBeVisible();
+
+  await page.goto("/app/receipts/groups");
   await page.getByRole("link", { name: "Back to Receipts" }).click();
   await expect(page).toHaveURL(/\/app\/receipts$/);
 });
