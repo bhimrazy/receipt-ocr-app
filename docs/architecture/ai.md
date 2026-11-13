@@ -345,12 +345,12 @@ yet.
 
 ## How to test it
 
-`bun run test` runs [`extract.test.ts`](../../packages/ai/src/extract.test.ts) (with a mock model through
-`extractWith`), [`extract.anthropic.test.ts`](../../packages/ai/src/extract.anthropic.test.ts) (the real Anthropic
+`bun run test` runs [`extract.test.ts`](../../packages/ai/tests/extract.test.ts) (with a mock model through
+`extractWith`), [`extract.anthropic.test.ts`](../../packages/ai/tests/extract.anthropic.test.ts) (the real Anthropic
 provider over a mocked `fetch`: the request body each Claude model gets, usage, refusal and HTTP error mapping),
-[`extract.groq.test.ts`](../../packages/ai/src/extract.groq.test.ts) and [`extract.openai.test.ts`](../../packages/ai/src/extract.openai.test.ts) (the same for Groq and OpenAI), [`errors.test.ts`](../../packages/ai/src/errors.test.ts),
-[`models.test.ts`](../../packages/ai/src/models.test.ts) and
-[`categories.test.ts`](../../packages/ai/src/categories.test.ts). None calls a provider. For real accuracy, latency
+[`extract.groq.test.ts`](../../packages/ai/tests/extract.groq.test.ts) and [`extract.openai.test.ts`](../../packages/ai/tests/extract.openai.test.ts) (the same for Groq and OpenAI), [`errors.test.ts`](../../packages/ai/tests/errors.test.ts),
+[`models.test.ts`](../../packages/ai/tests/models.test.ts) and
+[`categories.test.ts`](../../packages/ai/tests/categories.test.ts). None calls a provider. For real accuracy, latency
 and cost, use the [OCR benchmark](tooling.md#ocr-benchmark).
 
 ## Common changes

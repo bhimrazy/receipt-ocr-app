@@ -107,12 +107,12 @@ through the same allowlist.
 
 ## Testing
 
-- [`telemetry.test.ts`](../../../packages/core/src/telemetry/telemetry.test.ts): the allowlist against adversarial
+- [`telemetry.test.ts`](../../../packages/core/tests/telemetry/telemetry.test.ts): the allowlist against adversarial
   input (nested objects, emails in messages, cause chains and error names, prototype tricks, caps), `errorFields`,
   sampling, formatting and the Effect logger.
-- [`runner.test.ts`](../../../packages/core/src/jobs/runner.test.ts): `job.attempt` and `job.tick`.
+- [`runner.test.ts`](../../../packages/core/tests/jobs/runner.test.ts): `job.attempt` and `job.tick`.
 - [`http.test.ts`](../../../apps/web/tests/lib/http.test.ts) and the route tests: one request event per request.
-- [`otlp.test.ts`](../../../packages/core/src/telemetry/otlp.test.ts): sinks get what stdout gets, sampling and
+- [`otlp.test.ts`](../../../packages/core/tests/telemetry/otlp.test.ts): sinks get what stdout gets, sampling and
   the allowlist apply first (a raw Drizzle `params:` message never reaches the exporter), flush scheduling, the OTLP
   mapping, and the throttled failure notice; [`instrumentation-node.test.ts`](../../../apps/web/tests/instrumentation-node.test.ts):
   no endpoint, no SDK import.

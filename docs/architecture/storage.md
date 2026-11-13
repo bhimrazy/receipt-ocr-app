@@ -59,7 +59,7 @@ for AWS), `S3_REGION` (default `auto`, right for R2), `S3_BUCKET`, `S3_ACCESS_KE
 
 ## How to test it
 
-[`index.test.ts`](../../packages/storage/src/index.test.ts) covers keys and signed-URL parameters (`bun run test`).
+[`index.test.ts`](../../packages/storage/tests/index.test.ts) covers keys and signed-URL parameters (`bun run test`).
 Real reads and writes run in the core integration suite and the e2e job against RustFS.
 
 ## Common changes

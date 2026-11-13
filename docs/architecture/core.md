@@ -239,10 +239,10 @@ A group is a named collection of receipts in a workspace; a receipt can be in se
 | Unit tests (`*.test.ts`, mocked services) | `bun run test`                                                                                        |
 | Against Postgres and RustFS               | `bun run --filter @receipt-ocr/core test:int` with `DATABASE_URL` and `S3_*` set to a throwaway stack |
 
-Unit tests provide fake layers (for example [`pipeline.test.ts`](../../packages/core/src/pipeline.test.ts),
-[`ocr.test.ts`](../../packages/core/src/ocr.test.ts) with a test clock). The integration suites
-[`receipts.int.test.ts`](../../packages/core/src/receipts.int.test.ts) and
-[`admin.int.test.ts`](../../packages/core/src/admin.int.test.ts) run real transactions, locks and cascades; CI runs
+Unit tests provide fake layers (for example [`pipeline.test.ts`](../../packages/core/tests/pipeline.test.ts),
+[`ocr.test.ts`](../../packages/core/tests/ocr.test.ts) with a test clock). The integration suites
+[`receipts.int.test.ts`](../../packages/core/tests/receipts.int.test.ts) and
+[`admin.int.test.ts`](../../packages/core/tests/admin.int.test.ts) run real transactions, locks and cascades; CI runs
 them in the e2e job.
 
 ## Common changes
@@ -256,7 +256,7 @@ Add a method to the `ReceiptRepo` tag type and its `Live` implementation. Start 
 
 Change `usedSql` or `countUsage` in [`usage.ts`](../../packages/core/src/usage.ts) and the decision in
 `decideQuota` ([`quota.ts`](../../packages/core/src/quota.ts)). Keep counting from the ledger, not `receipts`. Update
-[`quota.test.ts`](../../packages/core/src/quota.test.ts), the receipts integration test, and the table above.
+[`quota.test.ts`](../../packages/core/tests/quota.test.ts), the receipts integration test, and the table above.
 
 ### Add a failure kind that should fall back
 

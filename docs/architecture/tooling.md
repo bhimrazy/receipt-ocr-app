@@ -47,7 +47,7 @@ flowchart LR
 - Fixtures are `<id>.png|jpg|pdf` plus `<id>.json`. The five today are synthetic, made by
   [`make-fixtures.mjs`](../../packages/bench/make-fixtures.mjs) (`bun run bench:fixtures`).
 - [`score.ts`](../../packages/bench/score.ts) scores exact fields, amounts within 0.01, merchant by edit similarity, and line
-  items by F1. It is unit-tested ([`score.test.ts`](../../packages/bench/score.test.ts)).
+  items by F1. It is unit-tested ([`score.test.ts`](../../packages/bench/tests/score.test.ts)).
 - Cost uses `costOf` from [`packages/ai/src/models.ts`](../../packages/ai/src/models.ts), so benchmark and app agree.
 - Details and flags: [`packages/bench/README.md`](../../packages/bench/README.md).
 
