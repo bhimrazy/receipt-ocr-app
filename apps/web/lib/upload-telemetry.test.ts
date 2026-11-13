@@ -45,27 +45,77 @@ describe("upload encoding telemetry", () => {
 });
 
 describe("crop telemetry", () => {
-  it("round-trips the crop outcome and detection level", () => {
+  const encoded = { width: 1, height: 1, quality: 0.8, attempts: 1, rescued: false };
+  const full = {
+    crop_outcome: "kept",
+    crop_level: "apply",
+    crop_seen: "1",
+    crop_source: "camera",
+  };
+  const formWith = (fields: Record<string, string>) => {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) form.set(key, value);
+    return form;
+  };
+
+  it("round-trips the crop outcome, level, whether it was seen and the source", () => {
     const form = new FormData();
     setUploadInfo(form, {
-      width: 1,
-      height: 1,
-      quality: 0.8,
-      attempts: 1,
-      rescued: false,
-      crop: { outcome: "adjusted", level: "apply" },
+      ...encoded,
+      crop: { outcome: "adjusted", level: "apply", seen: true, source: "library" },
     });
-    expect(readUploadInfo(form).crop).toEqual({ outcome: "adjusted", level: "apply" });
+    expect(readUploadInfo(form).crop).toEqual({
+      outcome: "adjusted",
+      level: "apply",
+      seen: true,
+      source: "library",
+    });
   });
 
-  it("drops an outcome or level outside the enumerations, and a lone half", () => {
-    const form = new FormData();
-    form.set("crop_outcome", "kept");
-    form.set("crop_level", "0.1,0.2;0.9,0.9");
-    expect(readUploadInfo(form).crop).toBeUndefined();
-    form.set("crop_level", "suggest");
-    form.set("crop_outcome", "jane@example.com");
-    expect(readUploadInfo(form).crop).toBeUndefined();
+  it("accepts every outcome, level and source we send, and a photo nobody opened", () => {
+    for (const outcome of ["kept", "adjusted", "full_image", "manual", "none"]) {
+      expect(readUploadInfo(formWith({ ...full, crop_outcome: outcome })).crop?.outcome).toBe(
+        outcome,
+      );
+    }
+    for (const source of ["camera", "camera_app", "library"]) {
+      expect(readUploadInfo(formWith({ ...full, crop_source: source })).crop?.source).toBe(source);
+    }
+    expect(readUploadInfo(formWith({ ...full, crop_seen: "0" })).crop?.seen).toBe(false);
+  });
+
+  it("keeps the crop without a source, and drops a source outside the list", () => {
+    const noSource: Record<string, string> = { ...full };
+    delete noSource.crop_source;
+    expect(readUploadInfo(formWith(noSource)).crop).toEqual({
+      outcome: "kept",
+      level: "apply",
+      seen: true,
+    });
+    expect(readUploadInfo(formWith({ ...full, crop_source: "jane@example.com" })).crop).toEqual({
+      outcome: "kept",
+      level: "apply",
+      seen: true,
+    });
+  });
+
+  it("drops the whole crop when a value is outside the enumerations", () => {
+    expect(
+      readUploadInfo(formWith({ ...full, crop_level: "0.1,0.2;0.9,0.9" })).crop,
+    ).toBeUndefined();
+    expect(
+      readUploadInfo(formWith({ ...full, crop_outcome: "jane@example.com" })).crop,
+    ).toBeUndefined();
+    expect(readUploadInfo(formWith({ ...full, crop_seen: "yes" })).crop).toBeUndefined();
+  });
+
+  it("drops the crop when a required half is absent, as from an old client", () => {
+    for (const missing of ["crop_outcome", "crop_level", "crop_seen"]) {
+      const rest: Record<string, string> = { ...full };
+      delete rest[missing!];
+      expect(readUploadInfo(formWith(rest)).crop).toBeUndefined();
+    }
+    expect(readUploadInfo(formWith({})).crop).toBeUndefined();
   });
 });
 

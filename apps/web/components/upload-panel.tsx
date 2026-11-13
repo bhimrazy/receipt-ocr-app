@@ -23,6 +23,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import type { ReviewImage } from "@/components/capture/review-sheet";
+import type { CropSource } from "@/lib/capture/crop-outcome";
 import { formatTime } from "@/lib/format";
 import { usageNote, usageRemaining, type Usage } from "@/components/usage-meter";
 import { fitBatch } from "@/lib/capture/batch-limit";
@@ -420,7 +421,7 @@ export function UploadPanel({
   }
 
   /** Photos go to review first; PDFs can't be edited, so they join the list directly. */
-  async function addFiles(list: FileList | File[]) {
+  async function addFiles(list: FileList | File[], source: CropSource = "library") {
     const rejected: string[] = [];
     const candidates: File[] = [];
     for (const file of Array.from(list)) {
@@ -436,7 +437,7 @@ export function UploadPanel({
     if (photos.length > 0) {
       setReviewing((current) => [
         ...current,
-        ...photos.map((file) => ({ id: crypto.randomUUID(), blob: file, name: file.name })),
+        ...photos.map((file) => ({ id: crypto.randomUUID(), blob: file, name: file.name, source })),
       ]);
     }
     if (pdfs.length > 0) {
@@ -467,6 +468,7 @@ export function UploadPanel({
         id: crypto.randomUUID(),
         blob,
         name: `photo-${stamp}-${current.length + i + 1}.jpg`,
+        source: "camera" as const,
       })),
     ]);
   }
@@ -580,7 +582,7 @@ export function UploadPanel({
           disabled={locked}
           className="hidden"
           onChange={(event) => {
-            if (event.target.files) void addFiles(event.target.files);
+            if (event.target.files) void addFiles(event.target.files, "camera_app");
             event.target.value = "";
           }}
           ref={cameraRef}

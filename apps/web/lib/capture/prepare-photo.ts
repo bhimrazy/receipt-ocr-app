@@ -1,6 +1,6 @@
 import { TooLargeError } from "@/lib/upload-encoding";
 import { encodeUpload, prepareFile, type SizeId } from "@/lib/upload-prep";
-import { cropInfo } from "./crop-outcome";
+import { cropInfo, type CropSource } from "./crop-outcome";
 import { isFullFrame, type EditState } from "./edit-state";
 import { FULL_RENDER, loadImage, releaseCanvas, renderEdit } from "./render";
 
@@ -10,6 +10,18 @@ export class EditFailedError extends Error {
     super("This photo's edit couldn't be saved", { cause });
     this.name = "EditFailedError";
   }
+}
+
+/**
+ * What `encodeUpload` is told about a reviewed edit: its filter, and the crop facts the upload
+ * event carries. Every encode of a reviewed photo goes through here, the preview's included.
+ */
+export function encodeOptions(
+  edit: EditState,
+  size: SizeId | undefined,
+  review: { seen: boolean; source?: CropSource },
+) {
+  return { size, filter: edit.filter, crop: cropInfo(edit, review) };
 }
 
 /** True when the upload would look like the photo as taken: no crop, turn or filter. */
@@ -32,7 +44,7 @@ const isUnedited = (edit: EditState) =>
  * the hard cap throws `TooLargeError`.
  */
 export async function preparePhoto(
-  image: { blob: Blob; name: string },
+  image: { blob: Blob; name: string; source?: CropSource },
   edit: EditState | undefined,
   startingEdit: (bitmap: ImageBitmap) => EditState,
   size?: SizeId,
@@ -51,11 +63,11 @@ export async function preparePhoto(
   try {
     chosen ??= startingEdit(bitmap);
     canvas = renderEdit(bitmap, chosen, FULL_RENDER);
-    return await encodeUpload(canvas, image.name, {
-      size,
-      filter: chosen.filter,
-      crop: cropInfo(chosen),
-    });
+    return await encodeUpload(
+      canvas,
+      image.name,
+      encodeOptions(chosen, size, { seen: edit !== undefined, source: image.source }),
+    );
   } catch (error) {
     if (error instanceof TooLargeError) throw error;
     if (!chosen || isUnedited(chosen)) return original();

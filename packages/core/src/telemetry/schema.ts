@@ -123,10 +123,14 @@ export const EVENT_SCHEMA = {
   /** What became of the detected receipt crop; client-reported, checked against our own values. */
   crop: {
     group: {
-      /** `kept`, `adjusted`, `full_image` or `none` (detection found no outline). */
+      /** `kept`, `adjusted`, `full_image`, `manual` (cropped by hand where detection found nothing) or `none`. */
       outcome: "token",
       /** Detector confidence level when the photo opened: `apply`, `suggest` or `none`. */
       level: "token",
+      /** The photo was open in the review sheet, so the outcome is the user's choice and not a default. */
+      seen: "bool",
+      /** `camera` (in-app), `camera_app` (the phone's camera app) or `library` (picked or dropped file). */
+      source: "token",
     },
   },
   /** A named action (admin action, auth endpoint). */

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { editFromDetection, FULL_QUAD, initialEdit, type EditState } from "./edit-state";
 import { TooLargeError } from "@/lib/upload-encoding";
-import { EditFailedError, preparePhoto } from "./prepare-photo";
+import { EditFailedError, encodeOptions, preparePhoto } from "./prepare-photo";
 
 const prepareFile = vi.hoisted(() =>
   vi.fn<(file: File, options?: unknown) => Promise<File>>(async (file) => file),
@@ -101,7 +101,7 @@ describe("preparePhoto", () => {
     expect(encodeUpload).toHaveBeenLastCalledWith(expect.anything(), "receipt.jpg", {
       size: "larger",
       filter: "original",
-      crop: { outcome: "none", level: "none" },
+      crop: { outcome: "none", level: "none", seen: true },
     });
     stubDecode(true);
     await preparePhoto(photo, undefined, noStartingEdit, "smaller");
@@ -205,7 +205,45 @@ describe("preparePhoto", () => {
     expect(encodeUpload).toHaveBeenLastCalledWith(expect.anything(), "receipt.jpg", {
       size: undefined,
       filter: "original",
-      crop: { outcome: "full_image", level: "suggest" },
+      crop: { outcome: "full_image", level: "suggest", seen: false },
     });
+  });
+});
+
+describe("encodeOptions", () => {
+  const outline: EditState["quad"] = [
+    { x: 0.25, y: 0.1 },
+    { x: 0.75, y: 0.1 },
+    { x: 0.75, y: 0.9 },
+    { x: 0.25, y: 0.9 },
+  ];
+
+  it("gives the preview's encodes, which Upload reuses, the same crop facts as a fresh one", () => {
+    const applied = editFromDetection({ quad: outline, level: "apply" }, null);
+    expect(encodeOptions(applied, "larger", { seen: true, source: "camera" })).toEqual({
+      size: "larger",
+      filter: applied.filter,
+      crop: { outcome: "kept", level: "apply", seen: true, source: "camera" },
+    });
+  });
+
+  it("carries a photo the user opened as seen and one they never did as unseen", async () => {
+    stubCanvas({});
+    stubDecode();
+    const named = { ...photo, source: "library" as const };
+    await preparePhoto(named, unedited, noStartingEdit);
+    expect(encodeUpload).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "receipt.jpg",
+      expect.objectContaining({ crop: expect.objectContaining({ seen: true, source: "library" }) }),
+    );
+    await preparePhoto(named, undefined, () => unedited);
+    expect(encodeUpload).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "receipt.jpg",
+      expect.objectContaining({
+        crop: expect.objectContaining({ seen: false, source: "library" }),
+      }),
+    );
   });
 });

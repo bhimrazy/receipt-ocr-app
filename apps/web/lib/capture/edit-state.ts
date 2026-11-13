@@ -34,7 +34,7 @@ const MIN_GAP = 0.04;
 export function initialEdit(
   detected: Quad | null = null,
   filter: Filter = "original",
-  level: Detection["level"] = detected ? "suggest" : "none",
+  level: Detection["level"] = "none",
 ): EditState {
   return { rotation: 0, quad: detected ?? FULL_QUAD, detected, level, filter };
 }
