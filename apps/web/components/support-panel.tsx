@@ -19,6 +19,7 @@ const TOPICS: Array<{ id: SupportTopic; label: string; prompt: string }> = [
     prompt: "How many receipts a month, and what do you need?",
   },
   { id: "feature", label: "Feature request", prompt: "What would you like us to build?" },
+  { id: "problem", label: "Problem", prompt: "What went wrong?" },
 ];
 
 // Ring, not border: coloured border utilities lose to the theme's global border-color today.
@@ -37,11 +38,14 @@ const MAX_NAME = 80;
 export default function SupportPanel({
   open,
   topic,
+  receiptId,
   onTopicChange,
   onClose,
 }: {
   open: boolean;
   topic: SupportTopic;
+  /** Sent with a Problem message, so support can open the receipt. */
+  receiptId?: string;
   onTopicChange: (topic: SupportTopic) => void;
   onClose: () => void;
 }) {
@@ -113,7 +117,14 @@ export default function SupportPanel({
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...turnstile.fetchOptions?.headers },
-        body: JSON.stringify({ name, email, message, topic, company }),
+        body: JSON.stringify({
+          name,
+          email,
+          message,
+          topic,
+          company,
+          ...(aboutReceipt ? { receiptId } : {}),
+        }),
       });
       turnstile.reset();
       if (!res.ok) {
@@ -131,6 +142,7 @@ export default function SupportPanel({
     }
   };
 
+  const aboutReceipt = topic === "problem" && Boolean(receiptId);
   const firstName = name.trim().split(/\s+/)[0] ?? "";
 
   const sendAnother = () => {
@@ -203,6 +215,11 @@ export default function SupportPanel({
                   </button>
                 ))}
               </div>
+              {aboutReceipt ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  We&apos;ll see which receipt this is about.
+                </p>
+              ) : null}
             </fieldset>
 
             <Field>

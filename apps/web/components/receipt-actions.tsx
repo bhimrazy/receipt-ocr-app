@@ -22,7 +22,16 @@ import {
   DropdownMenuTrigger,
 } from "@receipt-ocr/ui/components/dropdown-menu";
 import { toast } from "@receipt-ocr/ui/components/toast";
-import { Copy, Download, Loader2, MoreHorizontal, Pencil, RotateCw, Trash2 } from "lucide-react";
+import {
+  Copy,
+  Download,
+  LifeBuoy,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  RotateCw,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api-request";
@@ -31,6 +40,7 @@ import { ReceiptEditor } from "@/components/receipt-editor";
 import { ReceiptChecks } from "@/components/receipt-review";
 import { useRetryReceipt } from "@/components/retry-receipt-button";
 import { AppBarActions } from "@/components/app-nav";
+import { openSupportWidget } from "@/lib/support-widget";
 
 function downloadBlob(contents: string, filename: string, type: string) {
   const url = URL.createObjectURL(new Blob([contents], { type }));
@@ -86,9 +96,10 @@ function useEditing() {
 }
 
 /**
- * Header actions. Desktop: Export CSV, with Copy JSON and Delete in the overflow menu
- * (editing lives on the Details card); failed or still reading: Delete only. Phones get the
- * same choices plus Edit and Try again in a bottom sheet. Edit and Delete need `canEdit`.
+ * Header actions. Desktop: Export CSV, with Copy JSON, Report a problem and Delete in the overflow
+ * menu (editing lives on the Details card); failed or still reading: Delete, and Report a problem
+ * in the menu. Phones get the same choices plus Edit and Try again in a bottom sheet. Edit and
+ * Delete need `canEdit`. Report a problem needs `SupportWidget` on the page.
  */
 export function ReceiptActions({
   receipt,
@@ -110,7 +121,11 @@ export function ReceiptActions({
   // Set by "Delete receipt": the confirm opens once the sheet has returned focus to its trigger,
   // so the dialog remembers a real element and Cancel (not <body>) gets focus.
   const confirmAfterSheet = useRef(false);
+  const reportAfterSheet = useRef(false);
   const completed = receipt.status === "completed";
+  // After the menu or sheet has returned focus to its trigger, so closing the form goes back there.
+  const reportProblem = () =>
+    setTimeout(() => openSupportWidget("problem", { receiptId: receipt.id }), 0);
 
   async function copyJson() {
     try {
@@ -149,10 +164,9 @@ export function ReceiptActions({
   );
 
   const canEditDetails = completed && canEdit && editing !== null && !editing.editing;
-  const hasSheetRows = completed || canEdit || canRetry;
 
   // In the app bar, so it stays in reach while the receipt scrolls.
-  const sheet = hasSheetRows ? (
+  const sheet = (
     <Drawer onOpenChange={setSheetOpen} open={sheetOpen}>
       <AppBarActions>
         <DrawerTrigger render={<Button aria-label="Receipt actions" size="icon" variant="ghost" />}>
@@ -164,6 +178,11 @@ export function ReceiptActions({
           if (confirmAfterSheet.current) {
             confirmAfterSheet.current = false;
             setTimeout(() => setConfirmOpen(true), 0);
+            return true;
+          }
+          if (reportAfterSheet.current) {
+            reportAfterSheet.current = false;
+            reportProblem();
             return true;
           }
           if (!focusForm.current) return true;
@@ -212,6 +231,15 @@ export function ReceiptActions({
               </DrawerAction>
             </>
           ) : null}
+          <DrawerAction
+            onClick={() => {
+              reportAfterSheet.current = true;
+              setSheetOpen(false);
+            }}
+          >
+            <LifeBuoy aria-hidden="true" />
+            Report a problem
+          </DrawerAction>
         </DrawerGroup>
         {canEdit ? (
           <DrawerGroup>
@@ -229,12 +257,33 @@ export function ReceiptActions({
         ) : null}
       </DrawerContent>
     </Drawer>
-  ) : null;
+  );
+
+  const reportItem = (
+    <DropdownMenuItem onClick={reportProblem}>
+      <LifeBuoy aria-hidden="true" />
+      Report a problem
+    </DropdownMenuItem>
+  );
+  const deleteItem = (
+    <DropdownMenuItem onClick={() => setConfirmOpen(true)} variant="destructive">
+      <Trash2 aria-hidden="true" />
+      Delete receipt
+    </DropdownMenuItem>
+  );
+  const moreTrigger = (
+    <DropdownMenuTrigger
+      render={
+        <Button aria-label="More actions" className="max-md:hidden" size="icon" variant="outline" />
+      }
+    >
+      <MoreHorizontal aria-hidden="true" />
+    </DropdownMenuTrigger>
+  );
 
   if (!completed) {
-    if (!canEdit && !canRetry) return null;
     return (
-      <>
+      <div className="flex gap-2">
         {canEdit ? (
           <Button className="max-md:hidden" onClick={() => setConfirmOpen(true)} variant="outline">
             <Trash2 aria-hidden="true" />
@@ -242,8 +291,14 @@ export function ReceiptActions({
           </Button>
         ) : null}
         {sheet}
+        <DropdownMenu>
+          {moreTrigger}
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuGroup>{reportItem}</DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {dialog}
-      </>
+      </div>
     );
   }
 
@@ -255,34 +310,19 @@ export function ReceiptActions({
       </Button>
       {sheet}
       <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              aria-label="More actions"
-              className="max-md:hidden"
-              size="icon"
-              variant="outline"
-            />
-          }
-        >
-          <MoreHorizontal aria-hidden="true" />
-        </DropdownMenuTrigger>
+        {moreTrigger}
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={copyJson}>
               <Copy aria-hidden="true" />
               Copy JSON
             </DropdownMenuItem>
+            {reportItem}
           </DropdownMenuGroup>
           {canEdit ? (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem onClick={() => setConfirmOpen(true)} variant="destructive">
-                  <Trash2 aria-hidden="true" />
-                  Delete receipt
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
+              <DropdownMenuGroup>{deleteItem}</DropdownMenuGroup>
             </>
           ) : null}
         </DropdownMenuContent>
