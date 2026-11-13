@@ -23,7 +23,7 @@ describe("NothingInRange", () => {
     const props = { what: "EUR receipts", span: "in the last 30 days" };
     expect(renderToStaticMarkup(<NothingInRange {...props} />)).not.toContain("Show the last");
     expect(
-      renderToStaticMarkup(<NothingInRange {...props} widerHref="/app?range=12m" />),
-    ).toContain('href="/app?range=12m"');
+      renderToStaticMarkup(<NothingInRange {...props} widerHref="/app/spending?range=12m" />),
+    ).toContain('href="/app/spending?range=12m"');
   });
 });

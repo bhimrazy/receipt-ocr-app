@@ -42,12 +42,18 @@ async function noSidewaysScroll(page: Page) {
   expect(overflow).toBeLessThanOrEqual(0);
 }
 
-test.describe("Home spending dashboard", () => {
-  test("an empty workspace keeps the first-run Home, without a dashboard", async ({ page }) => {
+test.describe("Spending page", () => {
+  test("an empty workspace keeps Home free of spending and says so on Spending", async ({
+    page,
+  }) => {
     await signUp(page, uniqueEmail("dash-empty"));
     await expect(page.getByRole("heading", { name: "Scan your first receipt" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "How it works" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Spending" })).toHaveCount(0);
+
+    await page.goto("/app/spending");
+    await expect(page.getByRole("heading", { level: 1, name: "Spending" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No spending yet" })).toBeVisible();
   });
 
   // One seeded account for both widths and the link check: sign-ups are rate-limited per client.
@@ -63,7 +69,7 @@ test.describe("Home spending dashboard", () => {
       { width: 1440, height: 900 },
     ]) {
       await page.setViewportSize(viewport);
-      await page.goto("/app");
+      await page.goto("/app/spending");
       const spending = page.getByRole("region", { name: "Spending" });
       await expect(spending).toBeVisible();
       // GBP has more receipts, so it is selected; JPY is offered, never added in.
@@ -86,7 +92,7 @@ test.describe("Home spending dashboard", () => {
       await noSidewaysScroll(page);
     }
 
-    await page.goto("/app?range=3m");
+    await page.goto("/app/spending?range=3m");
     const categories = page.getByRole("list", { name: "Spend by category" });
     await categories.getByRole("link", { name: /Fuel/ }).click();
     await expect(page).toHaveURL(/\/app\/receipts\?.*category=Fuel/);
@@ -104,7 +110,7 @@ test.describe("Home spending dashboard", () => {
     } finally {
       await sql.end();
     }
-    await page.goto("/app");
+    await page.goto("/app/spending");
     await expect(
       page.getByText("Spending shows here once a receipt has been scanned."),
     ).toBeVisible();

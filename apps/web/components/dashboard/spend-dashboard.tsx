@@ -3,6 +3,12 @@ import { Card } from "@receipt-ocr/ui/components/card";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { ArrowDownRight, ArrowUpRight, Info, Minus } from "lucide-react";
 import Link from "next/link";
+import {
+  PageHeader,
+  PageHeaderContent,
+  PageHeaderDescription,
+  PageHeaderTitle,
+} from "@/components/page-header";
 import { BarList, ChartCard, DataTable, type BarRow } from "./chart-card";
 import { DashboardControls } from "./controls";
 import { NothingInRange } from "./empty-states";
@@ -19,7 +25,7 @@ import {
 } from "./format";
 import { TimeZoneCookie } from "./time-zone-cookie";
 import { LazySparkline, LazyTimeChart } from "./lazy-charts";
-import { homeHref, sliceHref } from "./links";
+import { sliceHref, spendingHref } from "./links";
 import type { TimePoint } from "./time-chart";
 
 const RANGE_NAMES: Record<SpendRange["preset"], string> = {
@@ -61,6 +67,22 @@ export function selectCurrency(dashboard: SpendDashboard, requested?: string) {
   );
 }
 
+export function SpendingHeader({ multiCurrency = false }: { multiCurrency?: boolean }) {
+  return (
+    <PageHeader>
+      <PageHeaderContent>
+        <PageHeaderTitle id="spending-heading">Spending</PageHeaderTitle>
+        <PageHeaderDescription>
+          Scanned receipts by the date printed on them.{" "}
+          {multiCurrency
+            ? "Each currency has its own totals; amounts in different currencies are never added together."
+            : null}
+        </PageHeaderDescription>
+      </PageHeaderContent>
+    </PageHeader>
+  );
+}
+
 export function SpendDashboardView({
   dashboard,
   search,
@@ -74,19 +96,9 @@ export function SpendDashboardView({
   const money = (value: number) => (spend ? formatMoney(value, spend.currency) : "");
 
   return (
-    <section aria-labelledby="spending-heading" className="mt-10">
+    <section aria-labelledby="spending-heading">
       <TimeZoneCookie current={dashboard.timeZone} />
-      <div className="mb-4">
-        <h2 className="text-base font-semibold" id="spending-heading">
-          Spending
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Scanned receipts by the date printed on them.{" "}
-          {dashboard.currencies.length > 1
-            ? "Each currency has its own totals; amounts in different currencies are never added together."
-            : null}
-        </p>
-      </div>
+      <SpendingHeader multiCurrency={dashboard.currencies.length > 1} />
 
       <DashboardControls
         currencies={dashboard.currencies}
@@ -110,7 +122,7 @@ export function SpendDashboardView({
           widerHref={
             range.preset === "12m"
               ? undefined
-              : homeHref(search, { range: "12m", from: undefined, to: undefined })
+              : spendingHref(search, { range: "12m", from: undefined, to: undefined })
           }
         />
       ) : (
@@ -123,7 +135,7 @@ export function SpendDashboardView({
               widerHref={
                 range.preset === "12m"
                   ? undefined
-                  : homeHref(search, { range: "12m", from: undefined, to: undefined })
+                  : spendingHref(search, { range: "12m", from: undefined, to: undefined })
               }
             />
           ) : (

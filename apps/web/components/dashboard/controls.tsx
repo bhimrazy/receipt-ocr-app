@@ -6,7 +6,7 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import Form from "next/form";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { homeHref } from "./links";
+import { spendingHref } from "./links";
 
 const PRESETS: { id: Exclude<RangePreset, "custom">; label: string }[] = [
   { id: "30d", label: "30 days" },
@@ -54,7 +54,7 @@ export function DashboardControls({
             <Link
               aria-current={range.preset === preset.id ? "true" : undefined}
               className={cn(chip, range.preset === preset.id ? chipOn : chipOff)}
-              href={homeHref(base, { range: preset.id })}
+              href={spendingHref(base, { range: preset.id })}
               key={preset.id}
               scroll={false}
             >
@@ -65,7 +65,7 @@ export function DashboardControls({
         <CustomRange base={base} range={range} />
         <Link
           className={cn(chip, chipOff)}
-          href={homeHref(search, { compare: range.compare ? "0" : undefined })}
+          href={spendingHref(search, { compare: range.compare ? "0" : undefined })}
           scroll={false}
         >
           {range.compare ? "Hide comparison" : "Compare with previous period"}
@@ -82,7 +82,7 @@ export function DashboardControls({
             <Link
               aria-current={c.currency === selected ? "true" : undefined}
               className={cn(chip, c.currency === selected ? chipOn : chipOff)}
-              href={homeHref(search, { currency: c.currency })}
+              href={spendingHref(search, { currency: c.currency })}
               key={c.currency}
               scroll={false}
             >
