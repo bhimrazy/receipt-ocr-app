@@ -103,7 +103,7 @@ function LimitReached({
       ) : null}
       <Link
         className="text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring max-md:inline-flex max-md:min-h-11 max-md:items-center"
-        href="/app/history"
+        href="/app/receipts"
       >
         Review the receipts you already have
       </Link>
@@ -618,12 +618,12 @@ export function UploadPanel({
               href={
                 success.count === 1 && success.receiptId
                   ? `/app/receipts/${success.receiptId}`
-                  : "/app/history"
+                  : "/app/receipts"
               }
             >
               {success.count === 1 && success.receiptId
                 ? "Open the receipt"
-                : "See them in History"}
+                : "See them in Receipts"}
             </Link>
           </p>
         </Alert>

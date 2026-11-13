@@ -52,7 +52,7 @@ function useDeleteReceipt(receipt: ReceiptWithItems) {
     );
     if (!result.ok) return result.error;
     toast.add({ title: "Receipt deleted", type: "success" });
-    router.push("/app/history");
+    router.push("/app/receipts");
     router.refresh();
   };
 }

@@ -42,12 +42,12 @@ const randomReceipt = (user) => receiptId(user, Math.floor(Math.random() * RECEI
 const ROUTES = {
   landing: { path: () => "/", kind: "page" },
   home: { path: () => "/app", kind: "page" },
-  history: { path: () => "/app/history", kind: "page" },
+  history: { path: () => "/app/receipts", kind: "page" },
   history_filtered: {
-    path: () => "/app/history?q=coffee&category=Meals&status=completed",
+    path: () => "/app/receipts?q=coffee&category=Meals&status=completed",
     kind: "page",
   },
-  history_page2: { path: () => "/app/history?page=2", kind: "page" },
+  history_page2: { path: () => "/app/receipts?page=2", kind: "page" },
   detail: { path: (u) => `/app/receipts/${randomReceipt(u)}`, kind: "page" },
   export_csv: { path: () => "/api/receipts/export?category=Meals", kind: "api" },
   poll: { path: (u) => `/api/receipts/${randomReceipt(u)}`, kind: "api" },

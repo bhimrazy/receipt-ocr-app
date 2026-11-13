@@ -29,7 +29,7 @@ describe("launchedFromPwa", () => {
     expect(launchedFromPwa("/app?source=pwa")).toBe(true);
     expect(launchedFromPwa("/app?source=pwa&shared=1")).toBe(true);
     expect(launchedFromPwa("/app")).toBe(false);
-    expect(launchedFromPwa("/app/history?source=pwa")).toBe(false);
+    expect(launchedFromPwa("/app/receipts?source=pwa")).toBe(false);
     expect(launchedFromPwa(null)).toBe(false);
   });
 });

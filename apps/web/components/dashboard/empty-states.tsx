@@ -25,7 +25,7 @@ export function NoReadReceipts({ inFlight, failed }: { inFlight: number; failed:
           {failed > 0 ? (
             <li>
               {failed} {failed === 1 ? "receipt" : "receipts"} couldn&apos;t be scanned.{" "}
-              <Link className={link} href="/app/history?status=failed">
+              <Link className={link} href="/app/receipts?status=failed">
                 Try again
               </Link>
             </li>

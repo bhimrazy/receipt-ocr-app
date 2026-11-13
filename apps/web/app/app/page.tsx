@@ -97,7 +97,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
   const items: CheckItem[] = [
     {
       count: counts.needsReview,
-      href: "/app/history?status=needs-review",
+      href: "/app/receipts?status=needs-review",
       label: "Needs review",
       hint: "A field is missing, the amounts don't add up, or the date is unclear.",
       icon: TriangleAlert,
@@ -105,7 +105,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
     },
     {
       count: counts.failed,
-      href: "/app/history?status=failed",
+      href: "/app/receipts?status=failed",
       label: "Couldn't scan",
       hint: "Try again, or upload a clearer photo.",
       icon: CircleAlert,
@@ -113,7 +113,7 @@ function ToCheck({ counts }: { counts: ReceiptCounts }) {
     },
     {
       count: counts.inFlight,
-      href: "/app/history?status=processing",
+      href: "/app/receipts?status=processing",
       label: "Scanning now",
       hint: "No action needed. They finish on their own.",
       icon: Loader2,
@@ -241,7 +241,7 @@ async function RecentSection() {
         </h2>
         <Link
           className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary outline-none select-none hover:underline active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11"
-          href="/app/history"
+          href="/app/receipts"
         >
           All receipts
           <ArrowRight aria-hidden="true" className="size-4" />

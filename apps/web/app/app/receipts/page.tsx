@@ -34,7 +34,7 @@ import { unstable_rethrow } from "next/navigation";
 import { Suspense, cache } from "react";
 import { logPageRender } from "@/lib/page-event";
 
-export const metadata: Metadata = { title: "History" };
+export const metadata: Metadata = { title: "Receipts" };
 
 // Keyed by a string so the header summary and the results share one query per request.
 const loadPage = cache((key: string) =>
@@ -93,12 +93,12 @@ async function Groups({ filters }: { filters: HistoryFilters }) {
   return <GroupFilter groups={await getWorkspaceGroups()} selectedIds={filters.groups ?? []} />;
 }
 
-export default async function HistoryPage({
+export default async function ReceiptsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  logPageRender("/app/history");
+  logPageRender("/app/receipts");
   const params = await searchParams;
   const { page: requested, pageSize, sort, ...raw } = filtersFromSearchParams(params);
   const filters = cleanFilters(raw);
@@ -113,7 +113,7 @@ export default async function HistoryPage({
       <div className="mx-auto max-w-6xl">
         <PageHeader>
           <PageHeaderContent>
-            <PageHeaderTitle>History</PageHeaderTitle>
+            <PageHeaderTitle>Receipts</PageHeaderTitle>
             <PageHeaderDescription>
               <Suspense fallback={<Skeleton className="h-5 w-48" />}>
                 <Summary query={query} />

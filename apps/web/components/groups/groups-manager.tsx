@@ -54,7 +54,7 @@ export function GroupsManager({ groups }: { groups: ReceiptGroup[] }) {
           <FolderOpen aria-hidden="true" className="size-8 text-muted-foreground" />
           <p className="text-sm font-medium">No groups yet</p>
           <p className="max-w-sm text-sm text-muted-foreground">
-            Create one above, or select receipts in History and add them to a new group.
+            Create one above, or select receipts in the Receipts list and add them to a new group.
           </p>
         </Card>
       ) : (
@@ -106,7 +106,7 @@ export function GroupsManager({ groups }: { groups: ReceiptGroup[] }) {
         confirmLabel="Delete group"
         description={
           deleting
-            ? `The group is removed for everyone in this workspace. Its ${plural(deleting.receiptCount)} stay in History; only the grouping goes.`
+            ? `The group is removed for everyone in this workspace. Its ${plural(deleting.receiptCount)} are kept; only the grouping goes.`
             : ""
         }
         destructive

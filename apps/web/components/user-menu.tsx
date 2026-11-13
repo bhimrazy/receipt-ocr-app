@@ -187,12 +187,9 @@ export function AccountSheet({
   showAdmin,
   workspace,
   usage,
-  settingsLink = false,
 }: {
   user: MenuUser;
   showAdmin: boolean;
-  /** Settings has no tab in the three-tab bar, so the sheet carries it. */
-  settingsLink?: boolean;
   /** Omitted in the admin shell, which has no active workspace of its own. */
   workspace?: {
     activeId: string;
@@ -263,12 +260,6 @@ export function AccountSheet({
           ) : null}
           {usage ? <div className="border-t border-border px-4 py-3">{usage}</div> : null}
           <DrawerGroup>
-            {settingsLink ? (
-              <DrawerAction onClick={close} render={<Link href="/app/settings" />}>
-                <Settings aria-hidden="true" />
-                Settings
-              </DrawerAction>
-            ) : null}
             {showAdmin ? (
               <DrawerAction onClick={close} render={<Link href="/admin" />}>
                 <ShieldCheck aria-hidden="true" />

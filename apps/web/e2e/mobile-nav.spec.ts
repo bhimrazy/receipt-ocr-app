@@ -49,9 +49,12 @@ test("tab bar moves between sections and marks the active one", async ({ page })
     "/app/upload?capture=1",
   );
 
-  await tabs.getByRole("link", { name: "History" }).click();
-  await expect(page).toHaveURL(/\/app\/history$/);
-  await expect(tabs.getByRole("link", { name: "History" })).toHaveAttribute("aria-current", "page");
+  await tabs.getByRole("link", { name: "Receipts" }).click();
+  await expect(page).toHaveURL(/\/app\/receipts$/);
+  await expect(tabs.getByRole("link", { name: "Receipts" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   await expect(tabs.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
   await expectNoSideScroll(page);
 
@@ -64,32 +67,32 @@ test("tab bar moves between sections and marks the active one", async ({ page })
   await expectNoSideScroll(page);
 
   // Every tab is at least 44px tall.
-  for (const name of ["Home", "History", "Scan", "Groups", "Settings"]) {
+  for (const name of ["Home", "Receipts", "Scan", "Settings"]) {
     const box = await tabs.getByRole("link", { name }).boundingBox();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   }
 });
 
-test("Back returns from a receipt to History", async ({ page }) => {
+test("Back returns from a receipt to Receipts", async ({ page }) => {
   const id = receiptId;
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await page.getByRole("link", { name: "Phone Market" }).click();
   await expect(page).toHaveURL(new RegExp(`/app/receipts/${id}$`));
   await expect(page.getByRole("heading", { level: 1, name: "Phone Market" })).toBeVisible();
-  // A receipt belongs to History in the tab bar.
-  await expect(tabBar(page).getByRole("link", { name: "History" })).toHaveAttribute(
+  // A receipt belongs to Receipts in the tab bar.
+  await expect(tabBar(page).getByRole("link", { name: "Receipts" })).toHaveAttribute(
     "aria-current",
     "page",
   );
   await expectNoSideScroll(page);
 
-  await page.getByRole("link", { name: "Back to History" }).click();
-  await expect(page).toHaveURL(/\/app\/history$/);
+  await page.getByRole("link", { name: "Back to Receipts" }).click();
+  await expect(page).toHaveURL(/\/app\/receipts$/);
 
-  // Opened directly (no list behind it), Back still lands on History.
+  // Opened directly (no list behind it), Back still lands on Receipts.
   await page.goto(`/app/receipts/${id}`);
-  await page.getByRole("link", { name: "Back to History" }).click();
-  await expect(page).toHaveURL(/\/app\/history$/);
+  await page.getByRole("link", { name: "Back to Receipts" }).click();
+  await expect(page).toHaveURL(/\/app\/receipts$/);
 });
 
 test("Back is named for the page you came from", async ({ page }) => {
@@ -121,16 +124,26 @@ test("account sheet opens, and closes with Escape or a tap outside", async ({ pa
   await expect(sheet).toBeHidden();
 });
 
-test("Groups is a tab and Scan sits in the exact centre", async ({ page }) => {
-  await page.goto("/app/groups");
-  await expect(page.getByRole("link", { name: "Back to History" })).toBeHidden();
-  const scan = await tabBar(page).getByRole("link", { name: "Scan" }).boundingBox();
-  const width = page.viewportSize()!.width;
-  expect(Math.abs(scan!.x + scan!.width / 2 - width / 2)).toBeLessThanOrEqual(1);
-  await expect(tabBar(page).getByRole("link", { name: "Groups" })).toHaveAttribute(
+test("Groups sits under Receipts, reached from Settings", async ({ page }) => {
+  await page.goto("/app/settings");
+  await page
+    .getByRole("navigation", { name: "Settings" })
+    .getByRole("link", { name: "Groups" })
+    .click();
+  await expect(page).toHaveURL(/\/app\/receipts\/groups$/);
+  await expect(tabBar(page).getByRole("link", { name: "Groups" })).toHaveCount(0);
+  await expect(tabBar(page).getByRole("link", { name: "Receipts" })).toHaveAttribute(
     "aria-current",
     "page",
   );
+  await page.getByRole("link", { name: "Back to Receipts" }).click();
+  await expect(page).toHaveURL(/\/app\/receipts$/);
+});
+
+test("the old History and Groups URLs are gone", async ({ page }) => {
+  for (const path of ["history", "groups"].map((old) => `/app/${old}`)) {
+    expect((await page.goto(path))?.status(), path).toBe(404);
+  }
 });
 
 test("receipt actions sheet offers edit, export and delete", async ({ page }) => {
@@ -181,7 +194,7 @@ test("a pressed button changes colour; chrome is unselectable, receipt data is n
     loc.evaluate((el) => getComputedStyle(el).userSelect);
   expect(await userSelect(tabBar(page).getByRole("link").first())).toBe("none");
 
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   const row = page.getByRole("list").getByRole("listitem").filter({ hasText: "Phone Market" });
   await expect(row).toBeVisible();
   expect(await userSelect(row.locator("span.font-mono"))).not.toBe("none");
@@ -245,17 +258,17 @@ const transitions = (page: Page) =>
   page.evaluate(() => (window as unknown as { __vt: string[] }).__vt);
 
 // TODO(2026-11-16): re-enable with PushedScreen's transition.
-test.skip("a receipt slides in from History and back out, fast", async ({ page }) => {
+test.skip("a receipt slides in from Receipts and back out, fast", async ({ page }) => {
   await recordViewTransitions(page);
-  await page.goto("/app/history");
+  await page.goto("/app/receipts");
   await page.getByRole("link", { name: "Phone Market" }).click();
   await expect(page).toHaveURL(new RegExp(`/app/receipts/${receiptId}`));
   await expect
     .poll(() => transitions(page))
     .toContainEqual(expect.stringMatching(/new\(.+\) push-in 200$/));
 
-  await page.getByRole("link", { name: "Back to History" }).click();
-  await expect(page).toHaveURL(/\/app\/history$/);
+  await page.getByRole("link", { name: "Back to Receipts" }).click();
+  await expect(page).toHaveURL(/\/app\/receipts$/);
   await expect
     .poll(() => transitions(page))
     .toContainEqual(expect.stringMatching(/old\(.+\) push-in 160$/));
@@ -274,7 +287,7 @@ test.describe("with reduced motion", () => {
 
   test("pushing a receipt moves nothing", async ({ page }) => {
     await recordViewTransitions(page);
-    await page.goto("/app/history");
+    await page.goto("/app/receipts");
     await page.getByRole("link", { name: "Phone Market" }).click();
     await expect(page).toHaveURL(new RegExp(`/app/receipts/${receiptId}`));
     await expect(page.getByRole("heading", { level: 1, name: "Phone Market" })).toBeVisible();

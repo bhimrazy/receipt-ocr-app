@@ -192,7 +192,7 @@ export function ReceiptResult({
     <div className="mb-4 flex items-center justify-between gap-2 max-md:hidden">
       <Link
         className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-ml-3")}
-        href="/app/history"
+        href="/app/receipts"
       >
         <ArrowLeft aria-hidden="true" />
         History
@@ -223,7 +223,7 @@ export function ReceiptResult({
               <p className="font-medium">Scanning this receipt</p>
               <p className="mt-1 text-muted-foreground">
                 This usually takes a few seconds and the page updates by itself. You can leave; the
-                result is saved to History.
+                result is saved to Receipts.
               </p>
             </div>
           </div>

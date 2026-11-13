@@ -122,7 +122,7 @@ describe("install offer gating", () => {
 describe("isAppPath", () => {
   it("matches /app and below, not look-alikes", () => {
     expect(isAppPath("/app")).toBe(true);
-    expect(isAppPath("/app/history")).toBe(true);
+    expect(isAppPath("/app/receipts")).toBe(true);
     expect(isAppPath("/apple")).toBe(false);
   });
 });

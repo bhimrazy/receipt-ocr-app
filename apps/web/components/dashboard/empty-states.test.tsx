@@ -11,10 +11,10 @@ describe("NoReadReceipts", () => {
     );
   });
 
-  it("links failed receipts to History", () => {
+  it("links failed receipts to Receipts", () => {
     const html = renderToStaticMarkup(<NoReadReceipts failed={2} inFlight={0} />);
     expect(html).toContain("2 receipts couldn&#x27;t be scanned");
-    expect(html).toContain('href="/app/history?status=failed"');
+    expect(html).toContain('href="/app/receipts?status=failed"');
   });
 });
 

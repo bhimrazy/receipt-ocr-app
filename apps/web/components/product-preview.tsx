@@ -70,7 +70,7 @@ function PhonePreview() {
             />
             <div className="px-5 pt-6 pb-10">
               <span className="inline-flex items-center gap-0.5 text-sm text-primary">
-                <ChevronLeft aria-hidden className="size-4" /> History
+                <ChevronLeft aria-hidden className="size-4" /> Receipts
               </span>
               <p className="mt-2 text-2xl font-bold tracking-tight">Whole Foods Market</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">

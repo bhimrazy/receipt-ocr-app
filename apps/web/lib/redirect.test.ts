@@ -3,7 +3,7 @@ import { DEFAULT_REDIRECT, safeRedirect } from "./redirect";
 
 describe("safeRedirect", () => {
   it("keeps internal paths", () => {
-    expect(safeRedirect("/app/history")).toBe("/app/history");
+    expect(safeRedirect("/app/receipts")).toBe("/app/receipts");
     expect(safeRedirect("/accept-invitation/abc123")).toBe("/accept-invitation/abc123");
     expect(safeRedirect("/app/upload?tab=camera")).toBe("/app/upload?tab=camera");
   });
@@ -41,12 +41,12 @@ describe("safeRedirect", () => {
   });
 
   it("normalises dot segments without leaving the origin", () => {
-    expect(safeRedirect("/app/../app/history")).toBe("/app/history");
+    expect(safeRedirect("/app/../app/receipts")).toBe("/app/receipts");
     expect(safeRedirect("/..//evil.example")).toBe(DEFAULT_REDIRECT);
   });
 
   it("uses the first value when the param repeats", () => {
-    expect(safeRedirect(["/app/history", "//evil.example"])).toBe("/app/history");
-    expect(safeRedirect(["//evil.example", "/app/history"])).toBe(DEFAULT_REDIRECT);
+    expect(safeRedirect(["/app/receipts", "//evil.example"])).toBe("/app/receipts");
+    expect(safeRedirect(["//evil.example", "/app/receipts"])).toBe(DEFAULT_REDIRECT);
   });
 });

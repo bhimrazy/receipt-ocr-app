@@ -52,10 +52,12 @@ describe("group filter params", () => {
     expect(cleanFilters({ groups: many }).groups).toHaveLength(MAX_GROUP_FILTERS);
   });
 
-  it("carries groups into History, pagination and export links", () => {
+  it("carries groups into Receipts, pagination and export links", () => {
     const filters = { status: "failed" as const, groups: [A, B] };
     expect(isFiltered({ groups: [A] })).toBe(true);
-    expect(historyHref(filters, 2)).toBe(`/app/history?status=failed&group=${A}&group=${B}&page=2`);
+    expect(historyHref(filters, 2)).toBe(
+      `/app/receipts?status=failed&group=${A}&group=${B}&page=2`,
+    );
     expect(exportHref(filters)).toBe(`/api/receipts/export?status=failed&group=${A}&group=${B}`);
   });
 });

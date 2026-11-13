@@ -93,7 +93,10 @@ export function GroupFilter({
         </p>
       )}
       <div className="flex shrink-0 gap-2">
-        <Link className={buttonVariants({ size: "sm", variant: "ghost" })} href="/app/groups">
+        <Link
+          className={buttonVariants({ size: "sm", variant: "ghost" })}
+          href="/app/receipts/groups"
+        >
           <FolderCog aria-hidden="true" />
           Manage groups
         </Link>

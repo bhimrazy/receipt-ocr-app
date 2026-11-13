@@ -20,7 +20,7 @@ export const homeFaqs = [
   },
   {
     q: "Can I export what gets extracted?",
-    a: "Yes. Any receipt exports as CSV with its line items or copies as JSON, and History exports every receipt that matches your filters as one CSV.",
+    a: "Yes. Any receipt exports as CSV with its line items or copies as JSON, and the Receipts list exports every receipt that matches your filters as one CSV.",
   },
   {
     q: "Is there an iPhone or Android app?",

@@ -29,7 +29,7 @@ export function historyHref(
   const params = filterParams(filters);
   setViewParams(params, view);
   if (page > 1) params.set("page", String(page));
-  return params.size ? `/app/history?${params}` : "/app/history";
+  return params.size ? `/app/receipts?${params}` : "/app/receipts";
 }
 
 /** The CSV of every receipt matching the filters, in the list's order. */

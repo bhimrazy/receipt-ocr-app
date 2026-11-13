@@ -15,18 +15,16 @@ import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   ChevronLeft,
   Ellipsis,
-  History,
   House,
   Loader2,
   Plus,
+  ReceiptText,
   ScanLine,
   Settings,
-  Tags,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
-import { MOBILE_TABS, type MobileTabs } from "./mobile-tabs";
 import { backWithTransition } from "@/lib/back-transition";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -36,17 +34,9 @@ export type NavItem = { href: string; label: string; icon: LucideIcon; exact?: b
 
 export const APP_NAV: NavItem[] = [
   { href: "/app", label: "Home", icon: House, exact: true },
-  { href: "/app/history", label: "History", icon: History },
-  { href: "/app/groups", label: "Groups", icon: Tags },
+  { href: "/app/receipts", label: "Receipts", icon: ReceiptText },
   { href: "/app/settings", label: "Settings", icon: Settings },
 ];
-
-/** The tabs on either side of Scan for a layout. */
-export function tabItems(tabs: MobileTabs = MOBILE_TABS): NavItem[] {
-  return tabs === "five"
-    ? APP_NAV
-    : APP_NAV.filter((item) => item.href === "/app" || item.href === "/app/history");
-}
 
 export const ADMIN_NAV_ITEM: NavItem = { href: "/admin", label: "Admin", icon: ShieldCheck };
 
@@ -73,11 +63,8 @@ function NavIcon({ icon: Icon, className }: { icon: LucideIcon; className?: stri
   );
 }
 
-export function isActive(pathname: string, item: NavItem, tabs: MobileTabs = MOBILE_TABS) {
+export function isActive(pathname: string, item: NavItem) {
   if (item.exact) return pathname === item.href;
-  // Receipt pages (opened from History) belong to History, and so does Groups without its own tab.
-  const owned = tabs === "five" ? /^\/app\/receipts(\/|$)/ : /^\/app\/(receipts|groups)(\/|$)/;
-  if (item.href === "/app/history" && owned.test(pathname)) return true;
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
@@ -255,9 +242,9 @@ export function AppSidebarNav({ showAdmin }: { showAdmin: boolean }) {
   );
 }
 
-/** Scan sits in the middle of the tabs (see MOBILE_TABS). Admin is in the account sheet: few people use it, and rarely. */
+/** Admin is in the account sheet: few people use it, and rarely. */
 export function AppTabBar() {
-  return <BottomTabBar center={SCAN_ITEM} items={tabItems()} />;
+  return <BottomTabBar center={SCAN_ITEM} items={APP_NAV} />;
 }
 
 const APP_BAR_ACTIONS_ID = "app-bar-actions";
@@ -277,10 +264,8 @@ export function AppBarActions({ children }: { children: React.ReactNode }) {
 type Back = { href: string; label: string };
 
 /** Where Back goes from a detail page; null on a top-level page. */
-export function backFor(pathname: string, tabs: MobileTabs = MOBILE_TABS): Back | null {
-  if (pathname.startsWith("/app/receipts/")) return { href: "/app/history", label: "History" };
-  if (tabs === "three" && pathname === "/app/groups")
-    return { href: "/app/history", label: "History" };
+export function backFor(pathname: string): Back | null {
+  if (pathname.startsWith("/app/receipts/")) return { href: "/app/receipts", label: "Receipts" };
   if (pathname.startsWith("/app/settings/")) return { href: "/app/settings", label: "Settings" };
   if (/^\/admin\/users\/[^/]+/.test(pathname)) return { href: "/admin/users", label: "Users" };
   if (pathname === "/admin/jobs") return { href: "/admin/operations", label: "Operations" };
@@ -295,9 +280,9 @@ export function backFor(pathname: string, tabs: MobileTabs = MOBILE_TABS): Back 
 function labelFor(pathname: string): string | null {
   const known: Record<string, string> = {
     "/app": "Home",
-    "/app/history": "History",
+    "/app/receipts": "Receipts",
+    "/app/receipts/groups": "Groups",
     "/app/settings": "Settings",
-    "/app/groups": "Groups",
     "/admin/jobs": "Jobs",
     "/admin/operations": "Operations",
     "/admin/users": "Users",
