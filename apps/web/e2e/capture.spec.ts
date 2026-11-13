@@ -798,7 +798,7 @@ test("the camera link opens once: Back from the receipt doesn't reopen it", asyn
   await expect(page).toHaveURL(/\/app\/receipts\//, { timeout: 30_000 });
   await page.goBack();
   await expect(page).toHaveURL(/\/app\/upload$/);
-  await expect(page.getByRole("heading", { name: "Upload receipts" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add receipts" })).toBeVisible();
   await expect(camera).toHaveCount(0);
 });
 

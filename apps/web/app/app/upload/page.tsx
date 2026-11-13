@@ -14,7 +14,7 @@ import { getCurrentPlan } from "@/lib/plan-limits";
 import { getUsageSummary } from "@/lib/receipts";
 import { getUpgradeOffer } from "@/lib/upgrade-offer";
 
-export const metadata: Metadata = { title: "Upload" };
+export const metadata: Metadata = { title: "Add receipts" };
 
 /**
  * The upload panel on its own, for the Scan tab and home-screen shortcut (`?capture=1` opens
@@ -42,7 +42,7 @@ export default function UploadPage() {
     <div className="mx-auto max-w-3xl">
       <PageHeader>
         <PageHeaderContent>
-          <PageHeaderTitle>Upload receipts</PageHeaderTitle>
+          <PageHeaderTitle>Add receipts</PageHeaderTitle>
           <PageHeaderDescription>
             Take photos or add files. You can crop and straighten each photo before it uploads.
           </PageHeaderDescription>
