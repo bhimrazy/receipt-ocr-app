@@ -202,17 +202,18 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
 
 Open pull requests only.
 
-| PR   | Work                                                                                                                                                                      |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #236 | Billing: subscriptions and portal sessions bound to the checkout the server created (`billing_checkouts`; migration 0004 also validates the 0003 CHECKs); warn log level  |
-| #241 | Billing: one charging subscription per workspace, refunds revoke only the current period, plan recorded at link (migration 0005), cancel retried on lock, Free pool alert |
-| #219 | Receipts list: sorting, page size, range, selection across pages, bulk delete (`storage.delete` job), export and Add to group                                             |
-| #229 | Navigation PR 1: History becomes Receipts (`/app/receipts`), Groups moves to `/app/receipts/groups`; no redirects                                                         |
-| #230 | Navigation PR 3: Spending page (`/app/spending`) holds the dashboard from Home; tab bar is Home, Receipts, Scan, Spending, Settings                                       |
-| #238 | Free at 30 a month, one Plan and billing page, upgrade ladder from 80%, marketing claims fixed                                                                            |
-| #242 | Edge detection PR 1: `packages/vision` holds the capture geometry and the detector, moved with their tests; no behaviour change                                           |
-| #240 | Navigation PR 4: slim Home with a This month card; the upload panel is hidden on phones, which keep the usage line and limit card                                         |
-| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                                                                 |
+| PR   | Work                                                                                                                                                                                     |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #236 | Billing: subscriptions and portal sessions bound to the checkout the server created (`billing_checkouts`; migration 0004 also validates the 0003 CHECKs); warn log level                 |
+| #241 | Billing: one charging subscription per workspace, refunds revoke only the current period, plan recorded at link (migration 0005), cancel retried on lock, Free pool alert                |
+| #219 | Receipts list: sorting, page size, range, selection across pages, bulk delete (`storage.delete` job), export and Add to group                                                            |
+| #229 | Navigation PR 1: History becomes Receipts (`/app/receipts`), Groups moves to `/app/receipts/groups`; no redirects                                                                        |
+| #230 | Navigation PR 3: Spending page (`/app/spending`) holds the dashboard from Home; tab bar is Home, Receipts, Scan, Spending, Settings                                                      |
+| #238 | Free at 30 a month, one Plan and billing page, upgrade ladder from 80%, marketing claims fixed                                                                                           |
+| #242 | Edge detection PR 1: `packages/vision` holds the capture geometry and the detector, moved with their tests; no behaviour change                                                          |
+| #240 | Navigation PR 4: slim Home with a This month card; the upload panel is hidden on phones, which keep the usage line and limit card                                                        |
+| #246 | Support messages stored in `support_messages` (migration 0006); `/api/contact` answers 200 and an `email.support-notify` job mails the inbox; per-user cap, deletion by user and address |
+| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                                                                                |
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
