@@ -34,7 +34,7 @@ import { checkQuota, quotaGate, usageWindow } from "../quota";
 import { EXTRACTION_FAILED_MESSAGE, ReceiptRepo } from "../repository";
 import { Db, Storage } from "../services";
 import { Settings } from "../settings";
-import { DEFAULT_PLANS } from "../plans";
+import { DEFAULT_PLANS, personalPolicy } from "../plans";
 import { ensurePersonalWorkspace } from "../workspace";
 import { NonRetryableJobError, type JobDefinition } from "./definition";
 import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "./kinds/receipt-extract";
@@ -1297,7 +1297,12 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
       }).pipe(Effect.provide(mailer)),
     );
     expect(sent).toEqual([
-      { to: expect.stringContaining("@"), plan: "free", policy: DEFAULT_PLANS.free },
+      {
+        to: expect.stringContaining("@"),
+        plan: "free",
+        // Created just now: early access applies until its cutoff passes.
+        ...personalPolicy("free", DEFAULT_PLANS.free, new Date()),
+      },
     ]);
     expect((await welcomeJobs()).map((j) => j.state)).toEqual(["succeeded"]);
     expect(await run(enqueueWelcomeEmail(a.userId))).toBe(false);
