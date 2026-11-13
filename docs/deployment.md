@@ -411,6 +411,18 @@ codes sent in the last 10 minutes.
 
 Steps specific to one release, newest first.
 
+### Billing plan default dropped (migration 0007)
+
+- **`0007_billing_plan_default`** drops the `'pro'` default on `billing_subscriptions.plan`, which 0005 added only for
+  its backfill (catalog-only, no rewrite). It also sets `paid_period_start` to `current_period_start` on rows linked
+  before 0005 that have none (one row on `production-db`, none on `staging-db`), so a plan or interval change's payment
+  counts on them. `lock_timeout` 3 s, `statement_timeout` 10 s. Every insert since the 0005 release sets `plan`, and the
+  code before this release reads `paid_period_start` the same way, so run **Database Migration** on `staging-db`, then
+  `production-db`, **then** deploy. It must run after `0006`: drizzle silently skips a migration older than the last
+  one applied.
+- The release also adds the `billing.refund_wait_check` job kind. Code from before it doesn't claim that kind, so after
+  a rollback those jobs wait in the queue until the next deploy runs them.
+
 ### Billing plan column (migration 0005)
 
 - **`0005_billing_plan`** adds `plan` (`text not null default 'pro'`), `paid_transaction_id` and `paid_period_start`
@@ -434,8 +446,7 @@ Steps specific to one release, newest first.
   Expect `UPDATE 0` unless a checkout completed during the release. A row left null can still be revoked by a
   chargeback; a full refund revokes it once a renewal records its paid transaction.
 
-- **Follow-up release:** drop the column default (`alter table billing_subscriptions alter column plan drop default`)
-  once no code from before this release runs, so a row can't be Pro without the link setting it.
+- **Follow-up release:** migration 0007 drops the column default (see above).
 
 ### Squashed baseline again (2026-11-08)
 

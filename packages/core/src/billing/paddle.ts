@@ -111,7 +111,7 @@ const transactionData = z.object({
   id: z.string().min(1),
   subscription_id: z.string().nullish(),
   origin: z.string().nullish(),
-  billing_period: z.object({ starts_at: z.string() }).nullish(),
+  billing_period: z.object({ starts_at: z.string(), ends_at: z.string().nullish() }).nullish(),
 });
 
 const envelope = z.object({
@@ -203,12 +203,16 @@ function transactionOf(data: unknown): BillingEvent["transaction"] {
   const parsed = transactionData.safeParse(data);
   if (!parsed.success) return null;
   const t = parsed.data;
-  const start = t.billing_period ? new Date(t.billing_period.starts_at) : null;
+  const date = (value: string | null | undefined) => {
+    const parsed = value ? new Date(value) : null;
+    return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  };
   return {
     transactionId: t.id,
     subscriptionId: t.subscription_id ?? null,
     origin: t.origin ?? null,
-    billingPeriodStart: start && !Number.isNaN(start.getTime()) ? start : null,
+    billingPeriodStart: date(t.billing_period?.starts_at),
+    billingPeriodEnd: date(t.billing_period?.ends_at),
   };
 }
 

@@ -84,6 +84,10 @@ export const cancelRevoked = (subscriptionId: string) =>
           ),
         );
       }
+      // A cancel asked again after an earlier one went through: the goal is met.
+      if (error.providerCode === "subscription_is_canceled_action_invalid") {
+        return code.pipe(Effect.zipRight(Effect.logInfo("billing.cancel_already_canceled")));
+      }
       if (status !== null && status >= 400 && status < 500 && status !== 429) {
         // A notice on the job's wide event, at error level.
         return code.pipe(
@@ -123,6 +127,9 @@ export const billingApply: JobDefinition<BillingApplyPayload, Db | Settings | Bi
             ...(result.unmatched ? { unmatched_reason: result.unmatched } : {}),
             ...(result.transactionId ? { transaction_id: result.transactionId } : {}),
             ...(result.orphanCharging ? { orphan_charging: true } : {}),
+            ...(result.revokedCharged
+              ? { revoked_charged: true, subscription_id: result.subscriptionId ?? null }
+              : {}),
             ...(result.duplicate ? { duplicate_subscription: true } : {}),
             // The product event `plan_changed { from, to }`, for the upgrade funnel.
             ...(result.planChange
@@ -138,6 +145,10 @@ export const billingApply: JobDefinition<BillingApplyPayload, Db | Settings | Bi
       // Warn level, to be seen and refunded by hand: the workspace may now be paying twice.
       Effect.tap((result) =>
         result.duplicate ? Effect.logWarning("billing.duplicate_subscription") : Effect.void,
+      ),
+      // Warn level, to be seen and refunded by hand: Pro was revoked, yet the provider charged for a period.
+      Effect.tap((result) =>
+        result.revokedCharged ? Effect.logWarning("billing.revoked_charged") : Effect.void,
       ),
       // The plan was kept: the price settings may be missing a price subscribers pay.
       Effect.tap((result) =>

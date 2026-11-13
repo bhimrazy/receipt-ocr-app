@@ -9,7 +9,7 @@ import {
   isEntitled,
   memberLimitMessage,
   PAST_DUE_GRACE_DAYS,
-  paysNewerPeriod,
+  paysNewerPeriod as paysNewer,
   planForPrice,
   workspaceLimitMessage,
   type EntitlementFields,
@@ -178,10 +178,17 @@ describe("adjustmentRevokesPro", () => {
 });
 
 describe("paysNewerPeriod", () => {
-  const txn = (origin: string | null, start: Date | null) => ({
+  const txn = (origin: string | null, start: Date | null, end: Date | null = null) => ({
     origin,
     billingPeriodStart: start,
+    billingPeriodEnd: end,
   });
+  const period = { start: at(0), end: at(30) };
+  const paysNewerPeriod = (
+    t: ReturnType<typeof txn>,
+    recordedStart: Date | null,
+    stored: { start: Date | null; end: Date | null } = period,
+  ) => paysNewer(t, recordedStart, stored);
   it("takes a renewal or the first payment for a later period", () => {
     expect(paysNewerPeriod(txn("subscription_recurring", at(30)), at(0))).toBe(true);
     expect(paysNewerPeriod(txn("web", at(0)), null)).toBe(true);
@@ -191,6 +198,18 @@ describe("paysNewerPeriod", () => {
     expect(paysNewerPeriod(txn("subscription_update", at(10)), at(0))).toBe(true);
     expect(paysNewerPeriod(txn("subscription_update", at(0)), at(0))).toBe(false);
     expect(paysNewerPeriod(txn("subscription_update", at(10)), null)).toBe(false);
+  });
+  it("tells a proration from an interval change by where its period ends", () => {
+    // A mid-period change: from the change to the stored period's end.
+    expect(paysNewerPeriod(txn("subscription_update", at(10), at(30)), at(0))).toBe(false);
+    // An interval change, before and after its subscription.updated is stored.
+    expect(paysNewerPeriod(txn("subscription_update", at(10), at(375)), at(0))).toBe(true);
+    expect(
+      paysNewerPeriod(txn("subscription_update", at(10), at(375)), at(0), {
+        start: at(10),
+        end: at(375),
+      }),
+    ).toBe(true);
   });
   it("keeps the first payment for a period: a duplicate or an older period doesn't replace it", () => {
     expect(paysNewerPeriod(txn("subscription_recurring", at(0)), at(0))).toBe(false);

@@ -50,6 +50,13 @@
       "when": 1794575696374,
       "tag": "0006_support_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794579791069,
+      "tag": "0007_billing_plan_default",
+      "breakpoints": true
     }
   ]
 }

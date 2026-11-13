@@ -119,24 +119,59 @@ export function adjustmentRevokesPro(
  */
 const PERIOD_ORIGINS: ReadonlySet<string> = new Set(["web", "api", "subscription_recurring"]);
 
+type PeriodTransaction = {
+  origin: string | null;
+  billingPeriodStart: Date | null;
+  billingPeriodEnd: Date | null;
+};
+
+/** The stored subscription's current billing period. */
+type StoredPeriod = { start: Date | null; end: Date | null };
+
+const sameTime = (a: Date | null, b: Date | null) =>
+  a !== null && b !== null && a.getTime() === b.getTime();
+
+/**
+ * Whether a `subscription_update` only prorates a change inside the stored
+ * period. Paddle bills a proration from the change to the current period's end
+ * (API reference, "Preview an update to a subscription", checked 2026-11-13);
+ * an interval change starts a new period, which ends elsewhere, or is already
+ * the stored one when its `subscription.updated` came first.
+ */
+function isProration(t: PeriodTransaction, period: StoredPeriod): boolean {
+  return (
+    t.origin === "subscription_update" &&
+    sameTime(t.billingPeriodEnd, period.end) &&
+    !sameTime(t.billingPeriodStart, period.start)
+  );
+}
+
+/**
+ * Whether a completed transaction pays for a billing period: a checkout,
+ * renewal or a plan or interval change that starts a period. Not a one-off
+ * charge, a card check or a proration.
+ */
+export function paysPeriod(t: PeriodTransaction, period: StoredPeriod): boolean {
+  if (!t.origin || !t.billingPeriodStart) return false;
+  if (t.origin === "subscription_update") return !isProration(t, period);
+  return PERIOD_ORIGINS.has(t.origin);
+}
+
 /**
  * Whether a completed transaction now pays for its subscription's current
- * period: it pays for a period, and that period starts after the recorded
- * one. A second transaction for the same period (a duplicate charge) doesn't
- * replace the first. A `subscription_update` (a plan or interval change)
- * counts only when it starts a new period after a recorded one; a proration
- * inside the current period doesn't.
+ * period: it pays for a period (`paysPeriod`), and that period starts after
+ * the recorded one. A second transaction for the same period (a duplicate
+ * charge) doesn't replace the first. A `subscription_update` counts only
+ * after a recorded period.
  */
 export function paysNewerPeriod(
-  t: { origin: string | null; billingPeriodStart: Date | null },
+  t: PeriodTransaction,
   recordedStart: Date | null,
+  period: StoredPeriod,
 ): boolean {
-  if (!t.origin || !t.billingPeriodStart) return false;
-  if (t.origin === "subscription_update") {
-    return recordedStart !== null && t.billingPeriodStart > recordedStart;
-  }
-  if (!PERIOD_ORIGINS.has(t.origin)) return false;
-  return recordedStart === null || t.billingPeriodStart > recordedStart;
+  if (!paysPeriod(t, period)) return false;
+  if (recordedStart === null) return t.origin !== "subscription_update";
+  return t.billingPeriodStart !== null && t.billingPeriodStart > recordedStart;
 }
 
 /**

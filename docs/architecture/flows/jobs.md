@@ -170,6 +170,12 @@ enqueued in the same transaction that stores the event, with the idempotency key
 `after()` right after the webhook response. Up to 8 attempts (30 s lease, backoff 5 s doubling to 10 min). A database
 error retries; the outcome (`applied`, `stale`, `ignored`, `unmatched`) is logged. See [Billing](billing.md).
 
+`billing.refund_wait_check` ([`kinds/billing-refund-check.ts`](../../../packages/core/src/jobs/kinds/billing-refund-check.ts))
+is enqueued by `billing.apply_event` when it keeps a full refund waiting for its transaction, keyed
+`billing:refund-wait:<adjustment id>` (one check per refund, however many events report it) and due three days later (`REFUND_WAIT_ALERT_MS`, past Paddle's two-day redelivery
+window). If the refund is still `unmatched` it logs `billing.refund_unresolved` at warn level, once; otherwise nothing.
+Priority 9, read-only.
+
 `storage.delete` ([`kinds/storage-delete.ts`](../../../packages/core/src/jobs/kinds/storage-delete.ts)) deletes the
 stored files of receipts a user deleted. `ReceiptRepo.removeMany` enqueues it in the transaction that deletes the rows,
 with the object keys as the payload (at most 1,000, one bulk delete) and the workspace id, but no user, so it never

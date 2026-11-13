@@ -1,5 +1,6 @@
 import type { JobRegistry } from "./definition";
 import { billingApply } from "./kinds/billing-apply";
+import { billingRefundCheck } from "./kinds/billing-refund-check";
 import { contactReply } from "./kinds/contact-reply";
 import { receiptExtract } from "./kinds/receipt-extract";
 import { storageDelete } from "./kinds/storage-delete";
@@ -19,6 +20,7 @@ export const JOB_REGISTRY: JobRegistry<
     | typeof welcomeEmail
     | typeof contactReply
     | typeof billingApply
+    | typeof billingRefundCheck
     | typeof storageDelete
     | typeof supportNotify
   >
@@ -27,6 +29,7 @@ export const JOB_REGISTRY: JobRegistry<
   [welcomeEmail.kind]: welcomeEmail,
   [contactReply.kind]: contactReply,
   [billingApply.kind]: billingApply,
+  [billingRefundCheck.kind]: billingRefundCheck,
   [storageDelete.kind]: storageDelete,
   [supportNotify.kind]: supportNotify,
 };
