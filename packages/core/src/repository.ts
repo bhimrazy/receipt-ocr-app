@@ -1,4 +1,4 @@
-import { normalizeCategory, type ReceiptExtraction } from "@receipt-ocr/ai";
+import type { ReceiptExtraction } from "@receipt-ocr/ai";
 import {
   and,
   asc,
@@ -44,17 +44,14 @@ import {
   type UsageWindow,
 } from "./usage";
 import { isUuid } from "./ids";
-import { asciiDigits, resolveReceiptDate, type PrintedDate } from "@receipt-ocr/calendar";
+import { storedExtraction } from "./extraction-fields";
 import {
   isIsoDay,
   latestReceiptDate as latestReceiptDay,
-  parseCurrency,
   parseReceiptDate,
-  storableAmount,
-  storableQuantity,
 } from "./receipt-fields";
 import type { ReceiptPatch } from "./receipt-patch";
-import { editedReasons, reviewReasons } from "./review-reasons";
+import { editedReasons } from "./review-reasons";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -368,32 +365,6 @@ const toSummary = (row: SummaryRow): ReceiptSummary => ({
   confidence: row.confidence == null ? null : Number(row.confidence),
 });
 
-/** Optional extraction fields, read only when the model returned them. */
-// TODO(2026-12-15): fold into `ReceiptExtraction` once packages/ai's schema declares these fields.
-type ExtractionExtras = {
-  dates?: readonly PrintedDate[] | null;
-  invoiceNumber?: string | null;
-  merchantTaxId?: string | null;
-  discount?: number | null;
-  serviceCharge?: number | null;
-};
-
-/** Printed text for a length-checked column, or null when missing or too long to be what was asked for. */
-const boundedText = (value: unknown, max: number) => {
-  const text = typeof value === "string" ? value.trim() : "";
-  return text.length > 0 && text.length <= max ? text : null;
-};
-
-/** For comparing printed identifiers only (`PAN: 123 456 789` and `123456789`); never stored. */
-const identifierKey = (value: string) =>
-  asciiDigits(value.normalize("NFKC"))
-    .replace(/[^\p{L}\p{N}]/gu, "")
-    .toUpperCase();
-
-/** A discount or charge for a `>= 0` column: the model may sign a discount. */
-const storableCharge = (value: number | null | undefined) =>
-  value == null ? null : storableAmount(Math.abs(value));
-
 /** The UTC upload day, as the date CHECK counts it. */
 const uploadDayOf = (createdAt: Date) => createdAt.toISOString().slice(0, 10);
 
@@ -613,55 +584,16 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               .from(receipts)
               .where(currentAttempt(id, scope, attempt));
             if (!current) return null;
-            const extras = extraction as typeof extraction & ExtractionExtras;
-            const merchantTaxId = boundedText(extras.merchantTaxId, 32);
-            const printedNumber = boundedText(extras.invoiceNumber, 64);
-            // The model took the seller's PAN for the bill number.
-            const invoiceNumber =
-              printedNumber &&
-              merchantTaxId &&
-              identifierKey(printedNumber) === identifierKey(merchantTaxId)
-                ? null
-                : printedNumber;
-            const currency = parseCurrency(extraction.currency);
-            const resolved = resolveReceiptDate({
-              dates: Array.isArray(extras.dates) ? extras.dates : null,
-              modelReading: extraction.receiptDate,
-              uploadDay: uploadDayOf(current.createdAt),
-              currency,
-              fiscalYearHints: [printedNumber],
-            });
-            const fields = {
-              merchant: extraction.merchant?.trim() || null,
-              receiptDate: resolved.date,
-              currency,
-              subtotal: storableAmount(extraction.subtotal),
-              tax: storableAmount(extraction.tax),
-              tip: storableAmount(extraction.tip),
-              discount: storableCharge(extras.discount),
-              serviceCharge: storableCharge(extras.serviceCharge),
-              total: storableAmount(extraction.total),
-            };
-            const itemRows = extraction.items.map((item, position) => ({
-              receiptId: id,
-              position,
-              name: item.name,
-              quantity: storableQuantity(item.quantity),
-              unitPrice: storableAmount(item.unitPrice),
-              totalPrice: storableAmount(item.totalPrice),
-              confidence: String(item.confidence),
-            }));
+            const { items: storedItems, ...fields } = storedExtraction(
+              extraction,
+              uploadDayOf(current.createdAt),
+            );
+            const itemRows = storedItems.map((item) => ({ ...item, receiptId: id }));
             const [row] = await tx
               .update(receipts)
               .set({
                 ...fields,
                 status: "completed",
-                receiptDateCalendar: resolved.calendar,
-                invoiceNumber,
-                merchantTaxId,
-                category: normalizeCategory(extraction.category),
-                confidence: String(extraction.confidence),
-                reviewReasons: reviewReasons({ ...fields, items: itemRows }, resolved.reasons),
                 rawJson: extraction,
                 model,
                 errorMessage: null,

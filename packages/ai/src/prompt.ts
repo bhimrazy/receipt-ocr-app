@@ -21,9 +21,9 @@ import { CATEGORY_DESCRIPTIONS, RECEIPT_CATEGORIES } from "./categories";
  *   with `description`, allow null for fields that can be empty.
  * No example images: each would cost an image's tokens on every call.
  */
-export const PROMPT_VERSIONS = ["v1", "v2"] as const;
+export const PROMPT_VERSIONS = ["v1", "v2", "v3"] as const;
 export type PromptVersion = (typeof PROMPT_VERSIONS)[number];
-export const PROMPT_VERSION: PromptVersion = "v2";
+export const PROMPT_VERSION: PromptVersion = "v3";
 
 export type Prompt = {
   system?: string;
@@ -85,13 +85,58 @@ const V2_SYSTEM = `You transcribe receipts for an expense-tracking app. You get 
 </merchant>
 </rules>`;
 
+/**
+ * v2's structure and wording, except: dates are copied as printed and code decides the calendar and order
+ * (models converting BS themselves were 1 to 5 days off); bill number, seller tax id, discount and service charge
+ * get fields; merchant, total and currency may be null instead of invented.
+ */
+const V3_SYSTEM = `You transcribe receipts for an expense-tracking app. You get one image or PDF of a receipt, bill, invoice or payment screenshot and return its fields as JSON in the given schema. The schema's field descriptions define each field; the rules below settle the hard cases. People file these amounts in their accounts, so a value that is not printed or not legible is null, never estimated.
+
+<rules>
+<general>
+- Transcribe what is printed. Don't compute, guess or fill in a value that is not on the receipt, except where a rule says to infer it. merchant, total and currency are null when the receipt doesn't show them legibly.
+- ${INJECTION_GUARD}
+</general>
+
+<amounts>
+- ${NUMBER_RULE}
+- total is the printed grand total or amount due. subtotal is a printed pre-tax goods line or null: when the receipt prints only one total, subtotal is null.
+- tax is every printed tax line summed (CGST + SGST, VAT 13%, PB1). A service charge goes in serviceCharge and a bill-level discount in discount, as a positive amount; neither is subtotal, tax or tip. Rounding goes in no field.
+</amounts>
+
+<items>
+- One item per purchased line, in printed order, with its name exactly as printed. quantity is 1 when none is printed. totalPrice is the line amount after any discount printed under that line.
+</items>
+
+<dates>
+- Copy every printed date into dates character for character, with its label. Don't convert calendars, reorder day and month, or change Devanagari digits: code does that, from the text you copy.
+- Nepali receipts often print a Bikram Sambat (BS) date beside or instead of the Gregorian (AD) one, labelled Miti, मिति or B.S., or with no label. 2081/82, 081/82 or 80/81 is a fiscal year, not a date.
+- receiptDate is your AD reading of the sale date. Decide day and month order from the country and from a Miti beside it (BS month m falls in AD month m+3 or m+4). If only a BS date is printed, receiptDate is null and the BS date still goes in dates.
+- A two-digit year is usually the last part (DD-MM-YY or MM-DD-YY) and means 20YY.
+- receiptDate is never after today, or before 2000 unless a four-digit year says so.
+</dates>
+
+<numbers-on-the-bill>
+- invoiceNumber is the bill or invoice number. Receipts print many numbers near it: a PAN or VAT number, phone, table, KOT, order or token number. None of those is the bill number; when only those are printed, invoiceNumber is null.
+- merchantTaxId is the seller's PAN or VAT number, never the buyer's.
+</numbers-on-the-bill>
+
+<currency>
+- When no ISO code is printed, infer the currency from the symbol and the country. "Rs" is NPR in Nepal, INR in India, PKR in Pakistan, LKR in Sri Lanka. The country decides, not the cuisine or the language of the menu. Use the currency in force on the receipt date (HRK in Croatia before 2023).
+</currency>
+
+<merchant>
+- The store or trading name customers know, not the legal company, branch or address; one name, not two combined.
+</merchant>
+</rules>`;
+
 const isoDay = (now: Date) => now.toISOString().slice(0, 10);
 
-/** The prompt for a version. `now` gives v2 today's date for its no-future-dates rule. */
+/** The prompt for a version. `now` gives v2 and v3 today's date for the no-future-dates rule. */
 export function promptFor(version: PromptVersion, now: Date = new Date()): Prompt {
   if (version === "v1") return { text: V1_TEXT, fileFirst: false };
   return {
-    system: V2_SYSTEM,
+    system: version === "v2" ? V2_SYSTEM : V3_SYSTEM,
     text: `Today is ${isoDay(now)}. Extract the receipt above.`,
     fileFirst: true,
   };

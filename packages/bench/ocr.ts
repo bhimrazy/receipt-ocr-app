@@ -1,7 +1,7 @@
 // OCR accuracy, latency and cost benchmark.
 //   bun run bench:ocr [--models google:gemini-3.8-flash,anthropic:claude-haiku-5-5,...]
 //     [--fixtures fixtures] [--prep none,app,long:1568,short:1000] [--only id,id]
-//     [--concurrency 2] [--prompt v1|v2] [--effort low,medium] [--dry-run]
+//     [--concurrency 2] [--prompt v1|v2|v3] [--effort low,medium] [--dry-run]
 // --effort runs every model once per level it supports (a model without that level is skipped);
 // without it each runs at its default. Rows read `model@level`.
 // Needs each chosen provider's key (GOOGLE_GENERATIVE_AI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, OPENAI_API_KEY); --dry-run needs none
@@ -26,8 +26,10 @@ import { imageTokens, parsePrep, prepare, prepLabel, type Prepared, type PrepSpe
 import {
   AMOUNT_FIELDS,
   EXACT_FIELDS,
+  IDENTIFIER_FIELDS,
   percentile,
   scoreReceipt,
+  storedPrediction,
   type Predicted,
   type Receipt,
 } from "./score";
@@ -70,7 +72,8 @@ const providerOf = (model: string) => ocrModel(modelId(model))?.provider ?? "goo
 const keyEnvOf = (model: string) =>
   OCR_PROVIDERS.find((p) => p.id === providerOf(model))?.keyEnv ?? null;
 
-async function extract(model: string, sent: Prepared, effort?: string) {
+// Scored as the app stores it: the date resolved against the fixture's upload day (`_meta.uploadDay`, else today).
+async function extract(model: string, sent: Prepared, uploadDay: string, effort?: string) {
   const keys = Object.fromEntries(
     OCR_PROVIDERS.flatMap((p) => (p.keyEnv ? [[p.id, process.env[p.keyEnv]]] : [])),
   );
@@ -81,7 +84,7 @@ async function extract(model: string, sent: Prepared, effort?: string) {
     promptVersion,
     effort,
   });
-  return { got: extraction as Predicted, usage };
+  return { got: storedPrediction(extraction, uploadDay), usage };
 }
 
 function arg(name: string, fallback: string) {
@@ -157,7 +160,10 @@ if (fixtures.length === 0) {
 }
 
 const truthOf = (id: string) =>
-  JSON.parse(readFileSync(path.join(fixtureDir, `${id}.json`), "utf8")) as Receipt;
+  JSON.parse(readFileSync(path.join(fixtureDir, `${id}.json`), "utf8")) as Receipt & {
+    _meta?: { uploadDay?: string };
+  };
+const today = new Date().toISOString().slice(0, 10);
 
 // Every fixture under every prep mode, once, shared by all models.
 const prepared = new Map<string, Prepared>();
@@ -187,7 +193,8 @@ async function runOne(
   };
   const started = performance.now();
   try {
-    const { got, usage } = await extract(model, sent, effort);
+    const truth = truthOf(id);
+    const { got, usage } = await extract(model, sent, truth._meta?.uploadDay ?? today, effort);
     return {
       ...base,
       ok: true,
@@ -195,7 +202,7 @@ async function runOne(
       ms: performance.now() - started,
       usage,
       costMicroUsd: costOf(modelId(model), usage, new Date()).microUsd,
-      scores: scoreReceipt(truthOf(id), got),
+      scores: scoreReceipt(truth, got),
       got,
     };
   } catch (error) {
@@ -243,11 +250,12 @@ const safe = (s: string) => s.replace(/[^A-Za-z0-9.-]+/g, "_");
 
 /**
  * A rough, generous estimate with no calls. Prompt + schema + structured-output overhead
- * ~2000 tokens for v1 and ~3500 for v2 (its system prompt and field definitions); the image per `imageTokens` on the prepared size (1600 when unknown, e.g. a
+ * ~2000 tokens for v1, ~3500 for v2 (its system prompt and field definitions) and ~4400 for v3 (about 3,000 more
+ * characters of rules and definitions); the image per `imageTokens` on the prepared size (1600 when unknown, e.g. a
  * PDF page); output the ground truth's JSON at ~3 characters a token plus 1000 thinking tokens.
  */
 function printEstimate() {
-  const FIXED_INPUT = promptVersion === "v1" ? 2000 : 3500;
+  const FIXED_INPUT = { v1: 2000, v2: 3500, v3: 4400 }[promptVersion];
   const THINKING = 1000;
   const now = new Date();
   const lines = [
@@ -300,7 +308,14 @@ if (dryRun) {
 const date = new Date().toISOString().slice(0, 10);
 const runId = `${setName === "fixtures" ? date : `${date}-${safe(setName)}`}-prompt-${promptVersion}`;
 mkdirSync(path.join(root, "results"), { recursive: true });
-const fieldNames = [...EXACT_FIELDS, ...AMOUNT_FIELDS, "merchant", "itemsF1"];
+const fieldNames = [
+  ...EXACT_FIELDS,
+  ...IDENTIFIER_FIELDS,
+  ...AMOUNT_FIELDS,
+  "merchant",
+  "reviewReasons",
+  "itemsF1",
+];
 const md = [
   `# OCR benchmark ${date}`,
   "",

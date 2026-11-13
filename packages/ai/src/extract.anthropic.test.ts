@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { OcrCallError, retryAfterMs } from "./errors";
 import { extractReceipt, type ModelId } from "./extract";
 import { FIXTURE_RECEIPTS } from "./fixture";
-import { FIELD_DESCRIPTIONS } from "./schema";
+import { FIELD_DESCRIPTIONS, V3_FIELD_DESCRIPTIONS } from "./schema";
 import { INJECTION_GUARD } from "./prompt";
 
 const RECEIPT = FIXTURE_RECEIPTS[0]!;
@@ -123,14 +123,14 @@ describe("the Anthropic request body", () => {
     },
   );
 
-  it("sends the v2 field definitions in the schema, and v1 as it was for the A/B", async () => {
+  it("sends the v3 field definitions in the schema, and v1 as it was for the A/B", async () => {
     const calls = mockFetch(json(message()));
-    const v2 = await run("anthropic:claude-haiku-5-5");
-    expect(v2.promptVersion).toBe("v2");
+    const v3 = await run("anthropic:claude-haiku-5-5");
+    expect(v3.promptVersion).toBe("v3");
     const format = (i: number) =>
       JSON.stringify((calls[i]!.body.output_config as { format: unknown }).format);
     expect(format(0)).toContain(JSON.stringify(FIELD_DESCRIPTIONS.subtotal));
-    expect(format(0)).toContain(JSON.stringify(FIELD_DESCRIPTIONS.totalPrice));
+    expect(format(0)).toContain(JSON.stringify(V3_FIELD_DESCRIPTIONS.invoiceNumber));
 
     const v1 = await extractReceipt({
       model: "anthropic:claude-haiku-5-5",

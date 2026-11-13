@@ -98,8 +98,26 @@ Failure kinds and how they are decided ([`errors.ts`](../../packages/ai/src/erro
 ## The prompt
 
 [`prompt.ts`](../../packages/ai/src/prompt.ts) holds each prompt version; the app always uses `PROMPT_VERSION`
-(`v2`). The version goes back in every result as `promptVersion`, on the wide event as `ocr.prompt_version` (only
+(`v3`). The version goes back in every result as `promptVersion`, on the wide event as `ocr.prompt_version` (only
 when a model was called) and in the benchmark's raw results. It is not stored per receipt yet (no column).
+
+v3 is v2 (below) with these changes; each version has its own wire schema (`receiptRequestSchema`), and
+`ReceiptExtraction` marks the v3 fields optional because v1 and v2 replies and their `raw_json` lack them.
+
+- **Dates as printed.** `dates[]` (at most 4) holds each printed date character for character: `text`, the printed
+  `label` (Date, Miti, मिति), a `calendar` hint (`gregory`, `bikram-sambat` or null when nothing printed marks it)
+  and a `role` (`transaction`, or `other` for due and delivery dates). The model never converts a BS date;
+  `receiptDate` is only its own AD reading, a tie-break. Core decides the stored day
+  ([dates](dates.md#resolving-a-printed-date)).
+- **New fields:** `invoiceNumber` (the bill number, with a definition listing the PAN, phone, table, KOT and token
+  numbers it is not), `merchantTaxId` (the seller's PAN/VAT/GSTIN/EIN, never the buyer's), `discount` (bill level,
+  positive) and `serviceCharge`, so the totals check balances on Nepali restaurant bills.
+- **Null instead of invented:** `merchant`, `total` and `currency` are nullable; core adds `no_merchant`,
+  `no_total` and `no_currency` review reasons.
+- **Measured against v2** (2026-11-13; Haiku 5.5 and Gemini 3.5 Flash-Lite, two runs each; the table is in the PR
+  that added v3). No loss on merchant, total, currency or items. The stored date on the owner's Nepal set rose from
+  67% to 100% (Haiku) and from 17% to 100% (Flash-Lite). It costs about 1,600 more input tokens per Haiku call (+30% per
+  receipt) and about 110 more per Flash-Lite call.
 
 v2, the request both providers get:
 
@@ -128,8 +146,8 @@ Sources, checked 2026-11-07: Anthropic's [prompting best practices](https://plat
 [image understanding](https://aistudio.google.com/docs/image-understanding) and
 [structured output](https://aistudio.google.com/docs/structured-output).
 
-v1 (one text block before the file, no system prompt, no field definitions) stays selectable for the benchmark:
-`bun run bench:ocr --prompt v1`. Results: [`packages/bench/results/2026-11-07-prompt-v1-vs-v2.md`](../../packages/bench/results/2026-11-07-prompt-v1-vs-v2.md).
+v1 (one text block before the file, no system prompt, no field definitions) and v2 stay selectable for the
+benchmark: `bun run bench:ocr --prompt v1`. Results: [`packages/bench/results/2026-11-07-prompt-v1-vs-v2.md`](../../packages/bench/results/2026-11-07-prompt-v1-vs-v2.md).
 
 ### Change the prompt
 

@@ -1,0 +1,41 @@
+{
+  "merchant": "Example Mart",
+  "receiptDate": "2026-10-19",
+  "receiptDateCalendar": "bikram-sambat",
+  "invoiceNumber": "EM-82-00977",
+  "merchantTaxId": "999000041",
+  "category": "Groceries",
+  "currency": "NPR",
+  "subtotal": 1200,
+  "discount": 60,
+  "serviceCharge": null,
+  "tax": 148.2,
+  "tip": null,
+  "total": 1288,
+  "reviewReasons": [],
+  "items": [
+    {
+      "name": "Basmati Rice 5kg",
+      "quantity": 1,
+      "unitPrice": 950,
+      "totalPrice": 950
+    },
+    {
+      "name": "Sunflower Oil 1L",
+      "quantity": 1,
+      "unitPrice": 250,
+      "totalPrice": 250
+    }
+  ],
+  "_meta": {
+    "uploadDay": "2026-11-10",
+    "printedDates": [
+      {
+        "text": "2083/07/02",
+        "label": "Miti",
+        "calendar": "bikram-sambat",
+        "role": "transaction"
+      }
+    ]
+  }
+}

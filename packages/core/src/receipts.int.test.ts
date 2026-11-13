@@ -4,7 +4,7 @@
  * after `bun run db:migrate`, with DATABASE_URL and S3_* set and
  * OCR_PROVIDER=fixture.
  */
-import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS } from "@receipt-ocr/ai";
+import { FIXTURE_FAIL_MARKER, FIXTURE_RECEIPTS, type ReceiptExtraction } from "@receipt-ocr/ai";
 import {
   and,
   eq,
@@ -186,7 +186,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       const id = (await run(ingestUpload({ scope: c, fileName: "d.jpg", body: JPEG, limits })))
         .receipt.id;
       await dropJob(id);
-      const extraction = { ...FIXTURE_RECEIPTS[0]!, receiptDate, currency };
+      // No printed dates, as from prompt v2: the model's AD reading is all the evidence.
+      const extraction = { ...FIXTURE_RECEIPTS[0]!, dates: [], receiptDate, currency };
       return repo((r) => r.complete(id, c, 1, extraction, "fixture", []));
     };
     expect(await complete(" 2026-01-31 ", "eur")).toMatchObject({
@@ -252,7 +253,7 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const names = Array.from({ length: 12 }, (_, i) => `Line ${String(i).padStart(2, "0")}`);
     const id = await ingest();
     // A Nepali restaurant bill as extraction v3 would return it: the Miti disagrees with the AD date.
-    const extraction = {
+    const extraction: ReceiptExtraction = {
       ...FIXTURE_RECEIPTS[0]!,
       currency: "NPR",
       subtotal: 1000,
@@ -264,8 +265,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
         .reverse(),
       receiptDate: "2025-07-25",
       dates: [
-        { text: "25/07/2025", label: "Date", calendar: "ad", role: "transaction" },
-        { text: "01/04/2082", label: "Miti", calendar: "bs", role: "transaction" },
+        { text: "25/07/2025", label: "Date", calendar: "gregory", role: "transaction" },
+        { text: "01/04/2082", label: "Miti", calendar: "bikram-sambat", role: "transaction" },
       ],
       invoiceNumber: "SI-0042-82/83",
       merchantTaxId: "601234567",

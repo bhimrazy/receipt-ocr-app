@@ -137,47 +137,266 @@ const receipts = [
   },
 ];
 
+// Nepal bills for extraction v3: dates in either calendar, numbers that sit near the bill number, service charge,
+// discount and rounding. Invented merchants, 9990000xx PANs and 01-4000000 phones. Latin script only: the
+// renderer has no Devanagari font, so a Devanagari line would come out as boxes. Every one is "uploaded" on
+// UPLOAD_DAY, so the stored date and its review reasons are reproducible.
+const UPLOAD_DAY = "2026-11-10";
+const nepal = (receipt) => ({
+  category: "Meals",
+  currency: "NPR",
+  prefix: "Rs ",
+  fmt: lakh,
+  tax: 0.13,
+  taxLabel: "VAT 13%",
+  uploadDay: UPLOAD_DAY,
+  ...receipt,
+});
+const printed = (text, label, calendar = null, role = "transaction") => ({
+  text,
+  label,
+  calendar,
+  role,
+});
+const tea = items([
+  ["Chicken Momo", 2, 280],
+  ["Masala Tea", 3, 90],
+]);
+
+receipts.push(
+  nepal({
+    id: "npr-bs-only",
+    merchant: "Example Thakali Kitchen",
+    place: "Lazimpat, Kathmandu",
+    head: [
+      ["PAN No", "999000011"],
+      ["Bill No", "2041"],
+      ["Miti", "15/07/2082"],
+    ],
+    dates: [printed("15/07/2082", "Miti", "bikram-sambat")],
+    date: ["2025-11-01"],
+    truth: {
+      receiptDateCalendar: "bikram-sambat",
+      invoiceNumber: "2041",
+      merchantTaxId: "999000011",
+    },
+    items: items([
+      ["Thakali Khana Set", 2, 450],
+      ["Sweet Lassi", 2, 150],
+    ]),
+  }),
+  nepal({
+    id: "npr-ad-only",
+    merchant: "Example Hardware Suppliers",
+    place: "Teku, Kathmandu",
+    category: ["Supplies", "Equipment"],
+    head: [
+      ["VAT No", "999000012"],
+      ["Invoice No", "INV-0388"],
+      ["Date", "21/10/2026"],
+    ],
+    dates: [printed("21/10/2026", "Date")],
+    date: ["2026-10-21"],
+    truth: {
+      receiptDateCalendar: "gregory",
+      invoiceNumber: "INV-0388",
+      merchantTaxId: "999000012",
+    },
+    items: items([
+      ["PVC Pipe 1in", 6, 320],
+      ["Wall Putty 20kg", 1, 1450],
+    ]),
+  }),
+  nepal({
+    id: "npr-ad-miti-agree",
+    merchant: "Example Momo Corner",
+    place: "Jhamsikhel, Lalitpur",
+    head: [
+      ["Bill No", "5520"],
+      ["Date", "10/21/2026"],
+      ["Miti", "04/07/2083"],
+    ],
+    dates: [printed("10/21/2026", "Date"), printed("04/07/2083", "Miti", "bikram-sambat")],
+    date: ["2026-10-21"],
+    truth: { receiptDateCalendar: "bikram-sambat", invoiceNumber: "5520" },
+    items: tea,
+  }),
+  nepal({
+    id: "npr-ad-miti-conflict",
+    merchant: "Example Bakery Cafe",
+    place: "Baneshwor, Kathmandu",
+    head: [
+      ["Bill No", "5521"],
+      ["Date", "10/21/2026"],
+      ["Miti", "09/07/2083"],
+    ],
+    dates: [printed("10/21/2026", "Date"), printed("09/07/2083", "Miti", "bikram-sambat")],
+    // The Miti is five days after the AD date: an NPR bill keeps the Miti's day, and is flagged.
+    date: ["2026-10-26"],
+    truth: {
+      receiptDateCalendar: "bikram-sambat",
+      invoiceNumber: "5521",
+      reviewReasons: ["date_conflict"],
+    },
+    items: tea,
+  }),
+  nepal({
+    id: "npr-ambiguous-date",
+    merchant: "Example Tea House",
+    place: "Pokhara",
+    head: [["Date", "05/06/2026"]],
+    dates: [printed("05/06/2026", "Date")],
+    // 5 June or 6 May: either is stored, and it must be flagged.
+    date: [undefined],
+    truth: { receiptDateCalendar: "gregory", reviewReasons: ["date_ambiguous"] },
+    items: tea,
+  }),
+  nepal({
+    id: "npr-pan-bill",
+    merchant: "Example Newari Bhojanalaya",
+    place: "Patan Durbar Square, Lalitpur",
+    head: [
+      ["PAN", "999000021"],
+      ["Phone", "01-4000000"],
+      ["Bill No", "7311"],
+      ["Table No", "12"],
+      ["KOT No", "88"],
+      ["Date", "2026-10-30"],
+    ],
+    dates: [printed("2026-10-30", "Date")],
+    date: ["2026-10-30"],
+    truth: {
+      receiptDateCalendar: "gregory",
+      invoiceNumber: "7311",
+      merchantTaxId: "999000021",
+      reviewReasons: [],
+    },
+    items: items([
+      ["Samay Baji", 2, 380],
+      ["Bara", 4, 120],
+      ["Aila 1/4", 1, 650],
+    ]),
+  }),
+  nepal({
+    id: "npr-service-charge",
+    merchant: "Example Rooftop Restaurant",
+    place: "Thamel, Kathmandu",
+    head: [
+      ["PAN/VAT No", "999000031"],
+      ["Bill No", "SC-1101-83/84"],
+      ["Date", "2026/10/18"],
+    ],
+    dates: [printed("2026/10/18", "Date")],
+    date: ["2026-10-18"],
+    serviceRate: 0.1,
+    truth: {
+      receiptDateCalendar: "gregory",
+      invoiceNumber: "SC-1101-83/84",
+      merchantTaxId: "999000031",
+      reviewReasons: [],
+    },
+    items: items([
+      ["Dal Bhat Set", 2, 595],
+      ["Fresh Lime Soda", 2, 220],
+    ]),
+  }),
+  nepal({
+    id: "npr-rounded-total",
+    merchant: "Example Mart",
+    place: "Chabahil, Kathmandu",
+    category: "Groceries",
+    head: [
+      ["VAT No", "999000041"],
+      ["Invoice No", "EM-82-00977"],
+      ["Miti", "2083/07/02"],
+    ],
+    dates: [printed("2083/07/02", "Miti", "bikram-sambat")],
+    date: ["2026-10-19"],
+    discountRate: 0.05,
+    roundTotal: true,
+    truth: {
+      receiptDateCalendar: "bikram-sambat",
+      invoiceNumber: "EM-82-00977",
+      merchantTaxId: "999000041",
+      reviewReasons: [],
+    },
+    items: items([
+      ["Basmati Rice 5kg", 1, 950],
+      ["Sunflower Oil 1L", 1, 250],
+    ]),
+  }),
+);
+
+const row = (label, value, cls = "row") =>
+  `<div class="${cls}"><span>${label}</span><span>${value}</span></div>`;
 const html = (r, t) => `<!doctype html><meta charset="utf-8"><style>
 body{margin:0;background:#fff}
 .r{width:420px;box-sizing:border-box;padding:24px 20px;font:13px/1.45 "Courier New",monospace;color:#111;background:#fff}
 h1{font-size:16px;text-align:center;margin:0}.c{text-align:center;color:#444}
 .row{display:flex;justify-content:space-between;gap:8px}hr{border:0;border-top:1px dashed #444;margin:10px 0}
 .b{font-weight:bold;font-size:15px}</style><div class="r">
-<h1>${r.merchant}</h1><div class="c">${r.place}</div><div class="c">${r.date[1]}</div><hr>
+<h1>${r.merchant}</h1><div class="c">${r.place}</div>${
+  r.head
+    ? `<hr>${r.head.map(([label, value]) => row(`${label}:`, value)).join("")}`
+    : `<div class="c">${r.date[1]}</div>`
+}<hr>
 ${r.items
   .map(
     (i) =>
       `<div class="row"><span>${i.name}</span><span>${i.quantity} x ${m(r, i.unitPrice)} = ${m(r, i.totalPrice)}</span></div>`,
   )
   .join("")}<hr>
-<div class="row"><span>Subtotal</span><span>${m(r, t.subtotal)}</span></div>
-<div class="row"><span>Tax</span><span>${m(r, t.tax)}</span></div>
-${t.tip ? `<div class="row"><span>Tip</span><span>${m(r, t.tip)}</span></div>` : ""}
-<div class="row b"><span>TOTAL</span><span>${m(r, t.total)}</span></div><hr><div class="c">Thank you!</div></div>`;
-const m = (r, n) => `${r.prefix ?? ""}${r.fmt(n)}${r.suffix ?? ""}`;
+${row("Subtotal", m(r, t.subtotal))}
+${t.discount ? row(`Discount ${r.discountRate * 100}%`, `-${m(r, t.discount)}`) : ""}
+${t.serviceCharge ? row(`Service Charge ${r.serviceRate * 100}%`, m(r, t.serviceCharge)) : ""}
+${row(r.taxLabel ?? "Tax", m(r, t.tax))}
+${t.tip ? row("Tip", m(r, t.tip)) : ""}
+${t.roundOff ? row("Round Off", m(r, t.roundOff)) : ""}
+${row(r.head ? "GRAND TOTAL" : "TOTAL", m(r, t.total), "row b")}<hr><div class="c">Thank you!</div></div>`;
+const m = (r, n) => `${n < 0 ? "-" : ""}${r.prefix ?? ""}${r.fmt(Math.abs(n))}${r.suffix ?? ""}`;
 const round = (n) => Math.round(n * 100) / 100;
 
+// `bun make-fixtures.mjs npr-bs-only npr-pan-bill` renders only those, so the others' PNGs stay byte for byte.
+const only = process.argv.slice(2);
 const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ viewport: { width: 420, height: 400 } });
-  for (const r of receipts) {
+  for (const r of receipts.filter(({ id }) => only.length === 0 || only.includes(id))) {
     const subtotal = round(r.items.reduce((s, i) => s + i.totalPrice, 0));
-    const tax = round(subtotal * r.tax);
+    const discount = r.discountRate ? round(subtotal * r.discountRate) : null;
+    const serviceCharge = r.serviceRate ? round(subtotal * r.serviceRate) : null;
+    // Nepal VAT is charged on the amount after discount and service charge.
+    const tax = round((subtotal - (discount ?? 0) + (serviceCharge ?? 0)) * r.tax);
     const tip = r.tipRate ? round(subtotal * r.tipRate) : null;
-    const total = round(subtotal + tax + (tip ?? 0));
-    await page.setContent(html(r, { subtotal, tax, tip, total }));
+    const exact = round(subtotal - (discount ?? 0) + (serviceCharge ?? 0) + tax + (tip ?? 0));
+    const total = r.roundTotal ? Math.round(exact) : exact;
+    const roundOff = r.roundTotal ? round(total - exact) : null;
+    await page.setContent(
+      html(r, { subtotal, discount, serviceCharge, tax, tip, roundOff, total }),
+    );
     const png = await page.locator(".r").screenshot({ type: "png" });
     writeFileSync(path.join(dir, `${r.id}.png`), png);
+    const v3 = r.head
+      ? {
+          receiptDateCalendar: r.truth.receiptDateCalendar,
+          invoiceNumber: r.truth.invoiceNumber ?? null,
+          merchantTaxId: r.truth.merchantTaxId ?? null,
+        }
+      : {};
     const truth = {
       merchant: r.otherNames ? [r.merchant, ...r.otherNames] : r.merchant,
       receiptDate: r.date[0],
+      ...v3,
       category: r.category,
       currency: r.currency,
       subtotal,
+      ...(r.head ? { discount, serviceCharge } : {}),
       tax,
       tip,
       total,
+      ...(r.truth?.reviewReasons ? { reviewReasons: r.truth.reviewReasons } : {}),
       items: r.items,
+      ...(r.head ? { _meta: { uploadDay: r.uploadDay, printedDates: r.dates } } : {}),
     };
     writeFileSync(path.join(dir, `${r.id}.json`), `${JSON.stringify(truth, null, 2)}\n`);
     console.log(`${r.id}: ${(png.length / 1024).toFixed(0)} KB`);

@@ -51,6 +51,10 @@ export default defineConfig({
       "@receipt-ocr/core/upload-limits": path.join(root, "packages/core/src/upload-limits.ts"),
       "@receipt-ocr/core/review-reasons": path.join(root, "packages/core/src/review-reasons.ts"),
       "@receipt-ocr/core/receipt-fields": path.join(root, "packages/core/src/receipt-fields.ts"),
+      "@receipt-ocr/core/extraction-fields": path.join(
+        root,
+        "packages/core/src/extraction-fields.ts",
+      ),
       "@receipt-ocr/core": path.join(root, "packages/core/src/index.ts"),
       "@receipt-ocr/calendar": path.join(root, "packages/calendar/src/index.ts"),
       "@receipt-ocr/db": path.join(root, "packages/db/src/index.ts"),
