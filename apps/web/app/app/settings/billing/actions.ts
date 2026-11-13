@@ -1,6 +1,12 @@
 "use server";
 
-import { Billing, hitRateLimit, providerErrorCode } from "@receipt-ocr/core";
+import {
+  Billing,
+  hitRateLimit,
+  providerErrorCode,
+  UNVERIFIED_EMAIL,
+  type Forbidden,
+} from "@receipt-ocr/core";
 import { Cause, Effect, Exit, Option } from "effect";
 import { canManageBilling, getCheckoutFor } from "@/lib/billing";
 import { billingSetupHint } from "@/lib/billing-setup-hint";
@@ -53,7 +59,7 @@ const failureOf = <E extends { _tag: string }>(cause: Cause.Cause<E>) => {
 
 /**
  * A fresh Paddle customer portal link for the active workspace's subscription.
- * Only its buyer, never while an admin is impersonating. The link carries a
+ * Only its buyer, for the customer bound to them, never while an admin is impersonating. The link carries a
  * short-lived token, so it is made per click and not stored. Cancel and
  * payment open Paddle's page for this subscription; invoices open the overview.
  */
@@ -74,7 +80,7 @@ export async function openBillingPortalAction(
       return { ok: false, error: "This workspace has no subscription yet." };
     }
     if (failure.tag === "Forbidden") {
-      return { ok: false, error: "Only the person who subscribed can manage this subscription." };
+      return { ok: false, error: (failure.error as Forbidden).message };
     }
     logger.error({
       event: "billing.portal_failed",
@@ -100,7 +106,7 @@ export async function openBillingPortalAction(
  * Starts a Pro checkout for the active workspace: the server creates the
  * Paddle transaction with the configured price for `interval` and the
  * workspace and buyer in its custom data, and the browser opens that
- * transaction. Owners only, at most a few a minute. `via` says which button started it, for
+ * transaction. Owners with a verified email only, at most a few a minute. `via` says which button started it, for
  * the `checkout_started` product event; anything outside the closed set is refused.
  * `workspaceId` is the workspace the page named: a tab left open after switching workspace
  * is refused rather than checking out a different one.
@@ -120,6 +126,7 @@ export async function startCheckoutAction(
   if (workspaceId !== scope.organizationId) {
     return { ok: false, error: "Your active workspace changed. Reload and try again." };
   }
+  if (!session.user.emailVerified) return { ok: false, error: UNVERIFIED_EMAIL };
   if (!(await getCheckoutFor(isAdmin(session)))) {
     return { ok: false, error: "Paid plans aren't open yet." };
   }
@@ -128,7 +135,6 @@ export async function startCheckoutAction(
       billing.createCheckout({
         organizationId: scope.organizationId,
         userId: session.user.id,
-        email: session.user.email,
         interval,
       }),
     ),
@@ -139,7 +145,7 @@ export async function startCheckoutAction(
       return { ok: false, error: "This workspace is already on Pro." };
     if (failure.tag === "NotConfigured") return { ok: false, error: "Paid plans aren't open yet." };
     if (failure.tag === "Forbidden") {
-      return { ok: false, error: "Only the workspace owner can upgrade it." };
+      return { ok: false, error: (failure.error as Forbidden).message };
     }
     const code = providerErrorCode(failure.error);
     logger.error({

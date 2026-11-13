@@ -7,8 +7,13 @@ vi.mock("./env", () => ({ authEnv: { databaseUrl: undefined } }));
 vi.mock("./runtime", () => ({ runtime: { runPromise: vi.fn() } }));
 
 let loaded: CheckoutConfig | null = null;
-vi.mock("@receipt-ocr/core", () => ({
+vi.mock("@receipt-ocr/core", async () => ({
   loadCheckoutConfig: "load",
+  sandboxOnProduction: (
+    await vi.importActual<typeof import("../../../packages/core/src/billing/config")>(
+      "../../../packages/core/src/billing/config",
+    )
+  ).sandboxOnProduction,
   workspaceBilling: vi.fn(),
 }));
 vi.mock("effect", async (importOriginal) => ({

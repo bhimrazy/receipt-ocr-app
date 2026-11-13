@@ -24,7 +24,7 @@ const subscriptionBody = (
 ) =>
   JSON.stringify({
     event_id: "evt_01hv8x2a7mc9w5b4ytm2z1k0aa",
-    event_type: "subscription.updated",
+    event_type: "subscription.created",
     occurred_at: "2026-11-08T12:00:00.123456Z",
     notification_id: "ntf_01hv8x2a7mc9w5b4ytm2z1k0ab",
     data: {
@@ -41,6 +41,7 @@ const subscriptionBody = (
       scheduled_change: null,
       canceled_at: null,
       updated_at: "2026-11-08T12:00:00.654321Z",
+      transaction_id: "txn_01hv8x2a7mc9w5b4ytm2z1k0ae",
       ...data,
     },
     ...overrides,
@@ -90,7 +91,7 @@ describe("parsePaddleEvent", () => {
     expect(event).toMatchObject({
       provider: "paddle",
       eventId: "evt_01hv8x2a7mc9w5b4ytm2z1k0aa",
-      type: "subscription.updated",
+      type: "subscription.created",
       subscription: {
         subscriptionId: "sub_01hv8x2a7mc9w5b4ytm2z1k0ac",
         customerId: "ctm_01hv8x2a7mc9w5b4ytm2z1k0ad",
@@ -100,6 +101,7 @@ describe("parsePaddleEvent", () => {
         cancelAtPeriodEnd: false,
         workspaceId: "org_1",
         userId: "user_1",
+        transactionId: "txn_01hv8x2a7mc9w5b4ytm2z1k0ae",
       },
     });
     if (!event || event === "bad-body") throw new Error("expected an event");
@@ -117,15 +119,19 @@ describe("parsePaddleEvent", () => {
     expect(event).toMatchObject({ subscription: { status: "active", cancelAtPeriodEnd: true } });
   });
 
-  it("reads a yearly price and missing custom data", () => {
+  it("reads a yearly price, and missing custom data and transaction", () => {
     const event = parsePaddleEvent(
       subscriptionBody(
         {},
-        { billing_cycle: { interval: "year", frequency: 1 }, custom_data: null },
+        {
+          billing_cycle: { interval: "year", frequency: 1 },
+          custom_data: null,
+          transaction_id: undefined,
+        },
       ),
     );
     expect(event).toMatchObject({
-      subscription: { interval: "year", workspaceId: null, userId: null },
+      subscription: { interval: "year", workspaceId: null, userId: null, transactionId: null },
     });
   });
 
@@ -267,6 +273,7 @@ describe("createPaddleCheckoutTransaction", () => {
     apiKey: "pdl_sdbx_apikey_test",
     priceId: "pri_month",
     email: "a+b@example.com",
+    customerId: null,
     customData: { workspaceId: "org_1", userId: "user_1" },
   };
 
@@ -277,6 +284,7 @@ describe("createPaddleCheckoutTransaction", () => {
     );
     expect(await createPaddleCheckoutTransaction(options, fake)).toEqual({
       transactionId: "txn_1",
+      customerId: "ctm_1",
     });
     expect(calls).toEqual([
       {
@@ -296,6 +304,20 @@ describe("createPaddleCheckoutTransaction", () => {
     ]);
   });
 
+  it("uses the buyer's stored customer without looking anyone up by email", async () => {
+    const { calls, fake } = scripted(
+      Response.json({ data: { id: "txn_3", status: "draft" } }, { status: 201 }),
+    );
+    expect(
+      await createPaddleCheckoutTransaction({ ...options, customerId: "ctm_stored" }, fake),
+    ).toEqual({ transactionId: "txn_3", customerId: "ctm_stored" });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: "https://sandbox-api.paddle.com/transactions",
+      body: { customer_id: "ctm_stored" },
+    });
+  });
+
   it("creates the customer when none has that email, and throws on an error status", async () => {
     const first = scripted(
       Response.json({ data: [] }),
@@ -304,6 +326,7 @@ describe("createPaddleCheckoutTransaction", () => {
     );
     expect(await createPaddleCheckoutTransaction(options, first.fake)).toEqual({
       transactionId: "txn_2",
+      customerId: "ctm_new",
     });
     expect(first.calls[1]).toMatchObject({
       url: "https://sandbox-api.paddle.com/customers",
@@ -341,6 +364,7 @@ describe("Paddle error codes", () => {
         apiKey: "k",
         priceId: "pri_m",
         email: "a@example.com",
+        customerId: null,
         customData: { workspaceId: "org_1", userId: "user_1" },
       },
       fake,

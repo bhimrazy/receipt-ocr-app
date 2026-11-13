@@ -1,5 +1,6 @@
 import {
   and,
+  billingCheckouts,
   billingEvents,
   billingSubscriptions,
   desc,
@@ -27,12 +28,14 @@ import { Settings } from "../settings";
 import { annotateEvent } from "../telemetry/current";
 import type { Queryable } from "../usage";
 import {
+  DEPLOY_ENV_KEYS,
   PADDLE_ENV_KEYS,
   PADDLE_LEGACY_PRICES_KEY,
   PADDLE_PUBLIC_KEYS,
   parsePaddleConfig,
   parseProPriceIds,
   parsePublicPaddleConfig,
+  sandboxOnProduction,
   type PaddleConfig,
 } from "./config";
 import {
@@ -60,6 +63,7 @@ import {
   type BillingStatus,
   type CheckoutConfig,
   type PortalLinks,
+  type SubscriptionSnapshot,
   type WebhookRejection,
 } from "./provider";
 
@@ -119,6 +123,21 @@ export const loadProPriceIds: Effect.Effect<ReadonlySet<string>> = Config.all(
     ),
   ),
   Effect.orElseSucceed(() => new Set<string>()),
+);
+
+const TEST_MODE_KEYS = ["PADDLE_ENV", ...DEPLOY_ENV_KEYS] as const;
+
+/** Whether this deploy runs sandbox Paddle keys on the live site (`sandboxOnProduction`). */
+export const loadSandboxOnProduction: Effect.Effect<boolean> = Config.all(
+  TEST_MODE_KEYS.map((key) => Config.option(Config.string(key))),
+).pipe(
+  Effect.map((values) => {
+    const [environment, VERCEL_ENV, NODE_ENV] = values.map((value) =>
+      Option.getOrUndefined(value)?.trim(),
+    );
+    return environment === "sandbox" && sandboxOnProduction(environment, { VERCEL_ENV, NODE_ENV });
+  }),
+  Effect.orElseSucceed(() => false),
 );
 
 // ---------- Plan resolution ----------
@@ -416,11 +435,24 @@ export type ApplyOutcome =
   | "unmatched";
 
 /**
- * Why a new subscription wasn't linked. Custom data comes from the checkout,
- * so a link needs all three: a workspace that exists, a buyer who owns it,
- * and a Pro price.
+ * Why an event wasn't linked. A new subscription links only when it comes
+ * from a checkout transaction the server recorded for the same workspace and
+ * buyer (`unknown_transaction`) with the customer it put on it
+ * (`customer_mismatch`), the buyer still owns the workspace (`owner`), the
+ * price is a Pro price (`price`), and, with sandbox keys on the live site, the
+ * buyer is a platform admin (`test_mode`). Two are waiting for a link rather
+ * than refused: `no_transaction`, a subscription event other than the
+ * `created` one that names the transaction, and `subscription`, an adjustment
+ * for a subscription we don't have yet.
  */
-export type UnmatchedReason = "workspace" | "owner" | "price" | "subscription";
+export type UnmatchedReason =
+  | "no_transaction"
+  | "unknown_transaction"
+  | "customer_mismatch"
+  | "owner"
+  | "price"
+  | "test_mode"
+  | "subscription";
 
 export type ApplyResult = {
   outcome: ApplyOutcome;
@@ -428,6 +460,8 @@ export type ApplyResult = {
   planChange?: PlanChange;
   userId?: string;
   unmatched?: UnmatchedReason;
+  /** The checkout transaction an unmatched subscription named, for finding it in the provider. */
+  transactionId?: string;
   /** Its workspace or buyer was deleted but it can still charge: someone is paying for nothing (it is also cancelled). */
   orphanCharging?: true;
   /**
@@ -486,6 +520,7 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
   Effect.gen(function* () {
     const { use } = yield* Db;
     const prices = yield* loadProPriceIds;
+    const testMode = yield* loadSandboxOnProduction;
     return yield* use((db) =>
       db.transaction(async (tx): Promise<ApplyResult> => {
         const [row] = await tx
@@ -561,40 +596,48 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
         let organizationId = stored?.organizationId ?? null;
         let buyer = stored?.userId ?? null;
         let pending: string[] = [];
+        let current = snapshot;
+        let caughtUp: string[] = [];
         if (!stored) {
-          const link = await linkNewSubscription(tx, snapshot, prices);
+          const link = await linkNewSubscription(tx, event.provider, snapshot, prices, testMode);
           if ("unmatched" in link) {
             return finish({
               outcome: "unmatched",
               organizationId: null,
               unmatched: link.unmatched,
+              ...(snapshot.transactionId ? { transactionId: snapshot.transactionId } : {}),
             });
           }
           organizationId = link.organizationId;
           buyer = link.userId;
           pending = await pendingRevocations(tx, event.provider, snapshot.subscriptionId);
+          const earlier = await earlierSnapshots(tx, event.provider, snapshot.subscriptionId);
+          caughtUp = earlier.ids;
+          if (earlier.latest && earlier.latest.updatedAt > snapshot.updatedAt) {
+            current = earlier.latest;
+          }
         }
         if (stored && stored.providerUpdatedAt > snapshot.updatedAt) {
           return finish({ outcome: "stale", organizationId });
         }
 
         const pastDueSince =
-          snapshot.status !== "past_due"
+          current.status !== "past_due"
             ? null
             : stored?.status === "past_due" && stored.pastDueSince
               ? stored.pastDueSince
-              : snapshot.updatedAt;
+              : current.updatedAt;
         const values = {
-          status: snapshot.status,
-          providerCustomerId: snapshot.customerId,
-          priceId: snapshot.priceId,
-          billingInterval: snapshot.interval,
-          currentPeriodStart: snapshot.currentPeriodStart,
-          currentPeriodEnd: snapshot.currentPeriodEnd,
-          cancelAtPeriodEnd: snapshot.cancelAtPeriodEnd,
-          canceledAt: snapshot.canceledAt,
+          status: current.status,
+          providerCustomerId: current.customerId,
+          priceId: current.priceId,
+          billingInterval: current.interval,
+          currentPeriodStart: current.currentPeriodStart,
+          currentPeriodEnd: current.currentPeriodEnd,
+          cancelAtPeriodEnd: current.cancelAtPeriodEnd,
+          canceledAt: current.canceledAt,
           pastDueSince,
-          providerUpdatedAt: snapshot.updatedAt,
+          providerUpdatedAt: current.updatedAt,
           updatedAt: new Date(),
         };
         if (stored) {
@@ -611,11 +654,12 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
             providerSubscriptionId: snapshot.subscriptionId,
             revokedAt: pending.length > 0 ? now : null,
           });
-          if (pending.length > 0) {
+          const settled = [...pending, ...caughtUp];
+          if (settled.length > 0) {
             await tx
               .update(billingEvents)
               .set({ outcome: "applied", organizationId })
-              .where(inArray(billingEvents.id, pending));
+              .where(inArray(billingEvents.id, settled));
           }
         }
         // What this subscription grants, before and after: the product event "plan changed".
@@ -678,29 +722,68 @@ async function pendingRevocations(tx: Tx, provider: string, subscriptionId: stri
 }
 
 /**
- * Checks a new subscription's custom data before linking it: the workspace
- * exists, the buyer is one of its owners now, and the price is a Pro price.
- * Anyone can open a Paddle checkout with our public client token and any
- * custom data, so none of it is trusted on its own.
+ * Events of one subscription stored `unmatched` before it linked: only
+ * `subscription.created` names the checkout transaction, and the provider may
+ * deliver later events of the same subscription first. Returns their ids and
+ * the newest snapshot among them, which the link stores when it is newer.
+ */
+async function earlierSnapshots(tx: Tx, provider: string, subscriptionId: string) {
+  const rows = await tx
+    .select({ id: billingEvents.id, payload: billingEvents.payload })
+    .from(billingEvents)
+    .where(
+      and(
+        eq(billingEvents.provider, provider),
+        eq(billingEvents.outcome, "unmatched"),
+        sql`${billingEvents.payload}->'subscription'->>'subscriptionId' = ${subscriptionId}`,
+      ),
+    );
+  const ids: string[] = [];
+  let latest: SubscriptionSnapshot | null = null;
+  for (const row of rows) {
+    const snapshot = billingEventSchema.safeParse(row.payload).data?.subscription;
+    if (!snapshot) continue;
+    ids.push(row.id);
+    if (!latest || snapshot.updatedAt > latest.updatedAt) latest = snapshot;
+  }
+  return { ids, latest };
+}
+
+/**
+ * Checks a new subscription before linking it (see `UnmatchedReason`). Anyone
+ * can open a Paddle checkout with our public client token, any custom data and
+ * any customer, so a link needs the transaction the server created for that
+ * workspace and buyer, with the same customer on it.
  */
 async function linkNewSubscription(
   tx: Tx,
+  provider: string,
   snapshot: NonNullable<BillingEvent["subscription"]>,
   prices: ReadonlySet<string>,
+  testMode: boolean,
 ): Promise<{ organizationId: string; userId: string } | { unmatched: UnmatchedReason }> {
-  if (!snapshot.workspaceId) return { unmatched: "workspace" };
+  const { transactionId, workspaceId, userId } = snapshot;
+  if (!transactionId) return { unmatched: "no_transaction" };
+  if (!workspaceId || !userId) return { unmatched: "unknown_transaction" };
   const rows = await tx
-    .execute<{ workspace: boolean; owner: boolean }>(
-      sql`select
-    exists (select 1 from organization where id = ${snapshot.workspaceId}) as workspace,
-    exists (select 1 from member where organization_id = ${snapshot.workspaceId}
-      and user_id = ${snapshot.userId ?? ""} and role = 'owner') as owner`,
+    .execute<{ customer_id: string; owner: boolean; admin: boolean }>(
+      sql`select c.provider_customer_id as customer_id,
+    exists (select 1 from member m where m.organization_id = c.organization_id
+      and m.user_id = c.user_id and m.role = 'owner') as owner,
+    exists (select 1 from "user" u where u.id = c.user_id
+      and 'admin' = any(string_to_array(u.role, ','))) as admin
+    from billing_checkouts c
+    where c.provider = ${provider} and c.provider_transaction_id = ${transactionId}
+      and c.organization_id = ${workspaceId} and c.user_id = ${userId}`,
     )
     .then((r) => r.rows);
-  if (rows[0]?.workspace !== true) return { unmatched: "workspace" };
-  if (rows[0]?.owner !== true || !snapshot.userId) return { unmatched: "owner" };
+  const checkout = rows[0];
+  if (!checkout) return { unmatched: "unknown_transaction" };
+  if (checkout.customer_id !== snapshot.customerId) return { unmatched: "customer_mismatch" };
+  if (!checkout.owner) return { unmatched: "owner" };
   if (!snapshot.priceId || !prices.has(snapshot.priceId)) return { unmatched: "price" };
-  return { organizationId: snapshot.workspaceId, userId: snapshot.userId };
+  if (testMode && !checkout.admin) return { unmatched: "test_mode" };
+  return { organizationId: workspaceId, userId };
 }
 
 /**
@@ -823,7 +906,6 @@ export const loadCheckoutConfig: Effect.Effect<CheckoutConfig | null> = Config.a
 export type CheckoutRequest = {
   organizationId: string;
   userId: string;
-  email: string;
   interval: "month" | "year";
 };
 
@@ -860,6 +942,13 @@ const providerCall = <A>(message: string, call: (signal: AbortSignal) => Promise
     }),
   );
 
+/** The portal refusal once the buyer's account is gone. */
+export const BUYER_GONE =
+  "The person who subscribed no longer has an account, so this subscription can't be managed here. Use the support button for invoices or changes.";
+
+/** The checkout refusal while the buyer's email address isn't verified. */
+export const UNVERIFIED_EMAIL = "Verify your email address before upgrading.";
+
 export class Billing extends Context.Tag("@receipt-ocr/core/Billing")<
   Billing,
   {
@@ -870,8 +959,9 @@ export class Billing extends Context.Tag("@receipt-ocr/core/Billing")<
     ) => Effect.Effect<WebhookResult, NotConfigured | DbError>;
     /**
      * Short-lived customer portal links for the workspace's subscription.
-     * Only for its buyer (or any owner once the buyer is gone): the portal
-     * shows their card and invoices.
+     * Only for its buyer, and only when its customer is one the server put on
+     * a checkout for them: the portal shows that customer's card and
+     * invoices. Forbidden once the buyer's account is gone.
      */
     readonly portalLinks: (
       organizationId: string,
@@ -882,8 +972,11 @@ export class Billing extends Context.Tag("@receipt-ocr/core/Billing")<
     >;
     /**
      * Creates a checkout transaction for one workspace's Pro at the configured
-     * price for `interval`, with the workspace and buyer in its custom data.
-     * The caller has checked the user is an owner; this checks again.
+     * price for `interval`, with the workspace and buyer in its custom data,
+     * and records it in `billing_checkouts` before returning its id. The
+     * customer is the one on the buyer's last checkout, else found or created
+     * by their email, which must be verified. The caller has checked the user
+     * is an owner; this checks again.
      */
     readonly createCheckout: (
       request: CheckoutRequest,
@@ -946,9 +1039,31 @@ export class Billing extends Context.Tag("@receipt-ocr/core/Billing")<
             if (!row || row.provider !== PADDLE) {
               return yield* new NotFound({ message: "This workspace has no subscription yet." });
             }
-            if (picked.buyerEmail && row.userId !== userId) {
+            if (!row.userId || !picked.buyerEmail) {
+              return yield* new Forbidden({ message: BUYER_GONE });
+            }
+            if (row.userId !== userId) {
               return yield* new Forbidden({
                 message: "Only the person who subscribed can manage this subscription.",
+              });
+            }
+            const bound = yield* db.use((d) =>
+              d
+                .select({ id: billingCheckouts.id })
+                .from(billingCheckouts)
+                .where(
+                  and(
+                    eq(billingCheckouts.provider, row.provider),
+                    eq(billingCheckouts.userId, userId),
+                    eq(billingCheckouts.providerCustomerId, row.providerCustomerId),
+                  ),
+                )
+                .limit(1),
+            );
+            if (bound.length === 0) {
+              return yield* new Forbidden({
+                message:
+                  "This subscription can't be managed here. Use the support button for help.",
               });
             }
             return yield* providerCall("Paddle portal request failed", (signal) =>
@@ -967,32 +1082,64 @@ export class Billing extends Context.Tag("@receipt-ocr/core/Billing")<
           if (!config) return Effect.fail(off);
           return Effect.gen(function* () {
             const { use } = db;
-            const owner = yield* use((d) =>
+            const rows = yield* use((d) =>
               d
-                .execute<{ owner: boolean }>(
+                .execute<{ owner: boolean; email: string | null; verified: boolean | null }>(
                   sql`select exists (select 1 from member
                 where organization_id = ${request.organizationId} and user_id = ${request.userId}
-                and role = 'owner') as owner`,
+                and role = 'owner') as owner, u.email, u.email_verified as verified
+                from (select 1) one left join "user" u on u.id = ${request.userId}`,
                 )
                 .then((r) => r.rows),
             );
-            if (owner[0]?.owner !== true) {
+            const buyer = rows[0];
+            if (buyer?.owner !== true || !buyer.email) {
               return yield* new Forbidden({ message: "Only the workspace owner can upgrade it." });
             }
+            if (buyer.verified !== true) {
+              return yield* new Forbidden({ message: UNVERIFIED_EMAIL });
+            }
+            const email = buyer.email;
             const { plan } = yield* withDeps(workspacePlan(request.organizationId));
             if (plan === "pro") {
               return yield* new Conflict({ message: "This workspace is already on Pro." });
             }
-            return yield* providerCall("Paddle checkout request failed", (signal) =>
+            const [last] = yield* use((d) =>
+              d
+                .select({ customerId: billingCheckouts.providerCustomerId })
+                .from(billingCheckouts)
+                .where(
+                  and(
+                    eq(billingCheckouts.provider, PADDLE),
+                    eq(billingCheckouts.userId, request.userId),
+                  ),
+                )
+                .orderBy(desc(billingCheckouts.createdAt))
+                .limit(1),
+            );
+            const priceId = config.prices[request.interval];
+            const created = yield* providerCall("Paddle checkout request failed", (signal) =>
               createPaddleCheckoutTransaction({
                 environment: config.environment,
                 apiKey: Redacted.value(config.apiKey),
-                priceId: config.prices[request.interval],
-                email: request.email,
+                priceId,
+                email,
+                customerId: last?.customerId ?? null,
                 customData: { workspaceId: request.organizationId, userId: request.userId },
                 signal,
               }),
             );
+            yield* use((d) =>
+              d.insert(billingCheckouts).values({
+                provider: PADDLE,
+                providerTransactionId: created.transactionId,
+                organizationId: request.organizationId,
+                userId: request.userId,
+                providerCustomerId: created.customerId,
+                priceId,
+              }),
+            );
+            return { transactionId: created.transactionId };
           });
         },
 
