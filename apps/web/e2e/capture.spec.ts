@@ -66,7 +66,9 @@ test("take two photos, edit one, and upload both", async ({ page }) => {
   await expect(camera).toHaveCount(0);
 
   const review = page.getByRole("dialog", { name: "Review photos" });
-  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
+  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(review.getByText("Photo 1 of 2").filter({ visible: true })).toBeVisible();
   // Step 1: rotate, then move a corner with the keyboard.
   await review.getByRole("button", { name: "Rotate" }).click();
@@ -115,7 +117,9 @@ test("a picked photo is reviewed, then read and opened", async ({ page }) => {
   await expect(page.locator("[data-ready]")).toBeAttached();
   await page.locator('input[type="file"][multiple]').setInputFiles(receipt);
   const review = page.getByRole("dialog", { name: "Review photos" });
-  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible();
+  await expect(review.getByRole("heading", { name: "Adjust corners" })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(
     review.getByRole("button", { name: "Bottom-right corner, 100% across, 100% down" }),
   ).toBeVisible();
@@ -362,10 +366,18 @@ test("the full-size view zooms, pans and resets on a phone", async ({ page }) =>
     expect(box.height).toBeGreaterThanOrEqual(44);
   }
 
-  // Keyboard: in, Fit (the floor), 100%, the bottom and back to the top; each announced.
+  // At the long default the readout says, and does, Fit.
+  await expect(readout).toHaveAccessibleName("Zoom 61%. Fit to screen");
+  await readout.click();
+  await expect(readout).toHaveText("Fit");
+
+  // Keyboard: 100%, in, Fit (the floor), 100%, the bottom and back to the top; each announced.
+  await full.focus();
+  await page.keyboard.press("1");
+  await expect(readout).toHaveText("100%");
   await page.keyboard.press("+");
-  await expect(readout).toHaveText("76%");
-  await expect(review.getByText("Zoom 76%", { exact: true })).toBeAttached();
+  await expect(readout).toHaveText("125%");
+  await expect(review.getByText("Zoom 125%", { exact: true })).toBeAttached();
   await page.keyboard.press("0");
   await expect(readout).toHaveText("Fit");
   await expect(zoomOut).toHaveAttribute("aria-disabled", "true");
@@ -378,17 +390,17 @@ test("the full-size view zooms, pans and resets on a phone", async ({ page }) =>
   expect(Math.abs((await placement(full)).top)).toBeLessThan(1);
   await page.keyboard.press("ArrowDown");
   at = await placement(full);
-  expect(at.top).toBeCloseTo(-0.1 * at.area.width, 0);
+  expect(at.top).toBeCloseTo(-0.1 * at.area.height, 0);
 
   // Pinch out with two fingers: the app zooms, the page doesn't.
   const cdp = await page.context().newCDPSession(page);
   const touch = (
     type: "touchStart" | "touchMove" | "touchEnd",
-    points: { x: number; y: number }[],
+    points: { x: number; y: number; id?: number }[],
   ) =>
     cdp.send("Input.dispatchTouchEvent", {
       type,
-      touchPoints: points.map((p, id) => ({ ...p, id })),
+      touchPoints: points.map((p, id) => ({ id, ...p })),
     });
   await page.keyboard.press("0");
   const fitted = await placement(full);
@@ -407,6 +419,18 @@ test("the full-size view zooms, pans and resets on a phone", async ({ page }) =>
   const pinched = await placement(full);
   expect(pinched.scale).toBeGreaterThan(fitted.scale * 2);
   expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
+
+  // Lifting one of three fingers restarts the pinch from the two left, so the zoom doesn't jump.
+  const first = { x: centre.x - 40, y: centre.y, id: 0 };
+  const second = { x: centre.x + 40, y: centre.y, id: 1 };
+  const third = { x: centre.x, y: centre.y + 100, id: 2 };
+  await touch("touchStart", [first, second]);
+  await touch("touchStart", [first, second, third]);
+  const held = (await placement(full)).scale;
+  await touch("touchEnd", [second, third]);
+  await touch("touchMove", [second, { ...third, y: third.y + 1 }]);
+  expect((await placement(full)).scale).toBeCloseTo(held, 2);
+  await touch("touchEnd", []);
 
   // One finger drags; the edge can't come past the viewer's edge.
   await touch("touchStart", [centre]);

@@ -29,10 +29,9 @@ export function fitScale(image: Size, viewport: Size) {
   return Math.min(1, viewport.width / image.width, viewport.height / image.height);
 }
 
-/** From Fit up to 400% (or Fit, for an image so small that Fit is larger). */
+/** From Fit up to 400%. */
 export function scaleLimits(image: Size, viewport: Size) {
-  const min = fitScale(image, viewport);
-  return { min, max: Math.max(MAX_SCALE, min) };
+  return { min: fitScale(image, viewport), max: MAX_SCALE };
 }
 
 const clampScale = (scale: number, image: Size, viewport: Size) => {
@@ -66,12 +65,14 @@ export function clampView(view: View, image: Size, viewport: Size): View {
 
 /**
  * Like `clampView`, but an offset past an edge is let through at a third of the distance, so a
- * touch drag stretches at the edge and springs back (to `clampView`) on release.
+ * touch drag stretches at the edge and springs back (to `clampView`) on release. An axis the image
+ * doesn't fill stays centred, so a vertical drag never drifts sideways.
  */
 export function rubberBand(view: View, image: Size, viewport: Size): View {
   const scale = clampScale(view.scale, image, viewport);
   const axis = (offset: number, content: number, size: number) => {
     const { low, high } = axisRange(content, size);
+    if (low === high) return low;
     if (offset > high) return high + (offset - high) / 3;
     if (offset < low) return low - (low - offset) / 3;
     return offset;
@@ -145,13 +146,19 @@ export const isFit = (scale: number, image: Size, viewport: Size) =>
   near(scale, fitScale(image, viewport));
 
 /**
- * The click, double-tap and readout target: 100% from anything below it, Fit from anything
- * above Fit, and 200% when Fit already is 100% (a small image).
+ * The click and double-tap target: 100% from anything below it, Fit from anything above Fit, and
+ * 200% when Fit already is 100% (a small image).
  */
 export function toggleScale(scale: number, image: Size, viewport: Size) {
   if (scale < 1 && !near(scale, 1)) return 1;
   if (!isFit(scale, image, viewport)) return fitScale(image, viewport);
   return clampScale(2, image, viewport);
+}
+
+/** The readout's target: Fit from any other zoom, and from Fit the same step in as a click. */
+export function readoutScale(scale: number, image: Size, viewport: Size) {
+  if (!isFit(scale, image, viewport)) return fitScale(image, viewport);
+  return toggleScale(scale, image, viewport);
 }
 
 export const zoomPercent = (scale: number) => Math.round(scale * 100);

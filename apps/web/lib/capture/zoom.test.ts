@@ -10,6 +10,7 @@ import {
   MAX_SCALE,
   panBy,
   pinchView,
+  readoutScale,
   rubberBand,
   scaleLimits,
   toggleScale,
@@ -74,6 +75,14 @@ describe("bounds", () => {
     );
     expect(rubberBand({ ...view, y: -100 }, long, desktop).y).toBe(-100);
   });
+
+  it("keeps an axis the image doesn't fill centred while stretching", () => {
+    const view = defaultView(long, desktop);
+    const centred = (1088 - 909) / 2;
+    expect(rubberBand({ ...view, x: centred + 60, y: 40 }, long, desktop).x).toBe(centred);
+    const phoneView = defaultView(long, phone);
+    expect(rubberBand({ ...phoneView, x: 25 }, long, phone).x).toBeCloseTo(0);
+  });
 });
 
 describe("zooming at a point", () => {
@@ -128,6 +137,15 @@ describe("toggle, readout and position", () => {
     expect(toggleScale(0.6, long, desktop)).toBe(1);
     // Fit is already 100%: go to 200%.
     expect(toggleScale(1, { width: 200, height: 100 }, desktop)).toBe(2);
+  });
+
+  it("sends the readout back to Fit from any other zoom, the long default included", () => {
+    const fit = fitScale(long, phone);
+    const opening = defaultView(long, phone).scale;
+    expect(opening).toBeLessThan(1);
+    expect(readoutScale(opening, long, phone)).toBeCloseTo(fit);
+    expect(toggleScale(opening, long, phone)).toBe(1);
+    expect(readoutScale(fit, long, phone)).toBe(1);
   });
 
   it("reads 100% at one image pixel per CSS pixel", () => {

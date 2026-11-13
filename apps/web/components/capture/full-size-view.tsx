@@ -22,6 +22,7 @@ import {
   isLong,
   panBy,
   pinchView,
+  readoutScale,
   rubberBand,
   scaleLimits,
   toggleScale,
@@ -93,6 +94,7 @@ export function FullSizeView({
   const [announcement, setAnnouncement] = useState("");
   const [hint] = useState(initialHint);
   const [hintUsed, setHintUsed] = useState(false);
+  const [undecodable, setUndecodable] = useState<string | null>(null);
 
   const latest = useRef<{ image: Size | null; area: Size | null; view: View | null }>({
     image: null,
@@ -106,6 +108,7 @@ export function FullSizeView({
   const lastPointer = useRef<{ type: string; moved: boolean }>({ type: "mouse", moved: false });
   const lastTap = useRef<{ time: number; at: Point } | null>(null);
   const movingTimer = useRef<number | undefined>(undefined);
+  const hintSaved = useRef(false);
 
   const apply = useCallback((next: View, animated = false) => {
     latest.current.view = next;
@@ -121,6 +124,8 @@ export function FullSizeView({
 
   const used = useCallback(() => {
     touched.current = true;
+    if (hintSaved.current) return;
+    hintSaved.current = true;
     setHintUsed(true);
     try {
       sessionStorage.setItem(HINT_KEY, "1");
@@ -142,10 +147,18 @@ export function FullSizeView({
       .decode()
       .catch(() => {})
       .then(() => {
-        if (cancelled || !img.naturalWidth) return;
+        if (cancelled) return;
+        if (!img.naturalWidth) {
+          setUndecodable(url);
+          return;
+        }
         const image = { width: img.naturalWidth, height: img.naturalHeight };
         latest.current.image = image;
         touched.current = false;
+        // A gesture on the old image would continue from offsets that mean nothing on the new one.
+        gesture.current = null;
+        pointers.current.clear();
+        setDragging(false);
         setShown({ url, ...image });
         const size = latest.current.area;
         if (size) apply(defaultView(image, size));
@@ -174,22 +187,24 @@ export function FullSizeView({
   }, [apply]);
 
   const local = useCallback((event: { clientX: number; clientY: number }): Point => {
-    const rect = viewportRef.current!.getBoundingClientRect();
+    const rect = areaRef.current!.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }, []);
 
   const ready = Boolean(shown && view && area);
   // A new size is still encoding or decoding: the last image stays, dimmed, rather than a blank frame.
   const pending = !url || shown?.url !== url;
+  const unshowable = failed || (url !== null && undecodable === url);
 
-  // Wheel and Safari's trackpad gesture events need non-passive listeners to stop page zoom.
+  // Wheel and Safari's trackpad gesture events need non-passive listeners to stop page zoom, from
+  // the first frame: a Ctrl + wheel while the image loads must not zoom the page either.
   useEffect(() => {
-    const el = viewportRef.current;
-    if (!el || !ready) return;
+    const el = areaRef.current;
+    if (!el) return;
     const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
       const { image, area: size, view: current } = latest.current;
       if (!image || !size || !current) return;
-      event.preventDefault();
       used();
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? size.height : 1;
       if (event.ctrlKey || event.metaKey) {
@@ -223,10 +238,16 @@ export function FullSizeView({
       el.removeEventListener("gesturestart", onGestureStart);
       el.removeEventListener("gesturechange", onGestureChange);
     };
-  }, [ready, apply, local, used, showPosition]);
+  }, [apply, local, used, showPosition]);
 
+  // Focus starts on the trigger, which goes inert under the viewer; anything else the user picked
+  // in the meantime (Done, the pill) keeps focus.
   useEffect(() => {
-    viewportRef.current?.focus({ preventScroll: true });
+    if (!ready) return;
+    const active = document.activeElement;
+    if (!active || active === document.body || active.closest("[inert]")) {
+      viewportRef.current?.focus({ preventScroll: true });
+    }
   }, [ready]);
 
   const image = shown;
@@ -238,6 +259,7 @@ export function FullSizeView({
   const pannable = Boolean(view && image && area && canPan(view, image, area));
   const position = view && image && area ? verticalPosition(view, image, area) : null;
   const toggleTarget = view && image && area ? toggleScale(view.scale, image, area) : 1;
+  const readoutTarget = view && image && area ? readoutScale(view.scale, image, area) : 1;
 
   function say(next: View) {
     if (!image || !area) return;
@@ -263,6 +285,17 @@ export function FullSizeView({
     }
   }
 
+  /** A pinch from the current view and the first two fingers down, so a finger added or lifted never jumps the zoom. */
+  function startPinch() {
+    const [a, b] = [...pointers.current.values()] as [Point, Point];
+    gesture.current = {
+      kind: "pinch",
+      start: latest.current.view!,
+      mid: midpoint(a, b),
+      distance: distance(a, b),
+    };
+  }
+
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     const current = latest.current.view;
     if (!current || (event.pointerType === "mouse" && event.button !== 0)) return;
@@ -280,14 +313,8 @@ export function FullSizeView({
         moved: false,
       };
       setDragging(true);
-    } else if (pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()] as [Point, Point];
-      gesture.current = {
-        kind: "pinch",
-        start: current,
-        mid: midpoint(a, b),
-        distance: distance(a, b),
-      };
+    } else {
+      startPinch();
       lastTap.current = null;
     }
   }
@@ -326,7 +353,9 @@ export function FullSizeView({
     if (g?.kind === "pinch") {
       lastPointer.current.moved = true;
       const rest = [...pointers.current.values()];
-      if (rest.length === 1) {
+      if (rest.length >= 2) {
+        startPinch();
+      } else if (rest.length === 1) {
         gesture.current = {
           kind: "pan",
           pointerType: "touch",
@@ -370,7 +399,9 @@ export function FullSizeView({
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (!view || !image || !area || event.ctrlKey || event.metaKey || event.altKey) return;
-    const step = (event.shiftKey ? 0.5 : 0.1) * Math.min(area.width, area.height);
+    const share = event.shiftKey ? 0.5 : 0.1;
+    const across = share * area.width;
+    const down = share * area.height;
     const pan = (dx: number, dy: number) => {
       used();
       apply(panBy(view, dx, dy, image, area), true);
@@ -396,16 +427,16 @@ export function FullSizeView({
         zoomTo(1);
         break;
       case "ArrowLeft":
-        pan(step, 0);
+        pan(across, 0);
         break;
       case "ArrowRight":
-        pan(-step, 0);
+        pan(-across, 0);
         break;
       case "ArrowUp":
-        pan(0, step);
+        pan(0, down);
         break;
       case "ArrowDown":
-        pan(0, -step);
+        pan(0, -down);
         break;
       case "Home":
         pan(0, Infinity);
@@ -424,7 +455,7 @@ export function FullSizeView({
     : "Upload preview";
 
   return (
-    <div className="absolute inset-0 flex touch-none flex-col bg-background">
+    <div className="absolute inset-0 flex flex-col bg-background">
       <div
         className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-3"
         data-testid="full-size-bar"
@@ -435,12 +466,12 @@ export function FullSizeView({
         </Button>
       </div>
       <div className="relative min-h-0 flex-1 overflow-hidden bg-muted/40" ref={areaRef}>
-        {(url && file) || shown ? (
+        {shown || (url && file && !unshowable) ? (
           <>
             <div
               aria-label={label}
               className={cn(
-                "absolute inset-0 overflow-hidden outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                "absolute inset-0 touch-none overflow-hidden outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 pannable ? (dragging ? "cursor-grabbing" : "cursor-grab") : "cursor-zoom-in",
               )}
               data-scale={view ? view.scale.toFixed(4) : undefined}
@@ -457,7 +488,7 @@ export function FullSizeView({
               tabIndex={0}
             >
               {image && view ? (
-                // eslint-disable-next-line @next/next/no-img-element
+                // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL, sized and transformed by hand
                 <img
                   alt=""
                   className={cn(
@@ -527,10 +558,10 @@ export function FullSizeView({
                 disabled={!ready}
                 label={
                   fit
-                    ? `Fit. Zoom to ${zoomPercent(toggleTarget)}%`
+                    ? `Fit. Zoom to ${zoomPercent(readoutTarget)}%`
                     : `Zoom ${view ? zoomPercent(view.scale) : 100}%. Fit to screen`
                 }
-                onPress={() => zoomTo(toggleTarget)}
+                onPress={() => zoomTo(readoutTarget)}
                 testId="zoom-readout"
               >
                 {fit ? "Fit" : `${view ? zoomPercent(view.scale) : 100}%`}
@@ -545,13 +576,13 @@ export function FullSizeView({
             </div>
             {pending && shown ? (
               <p className="absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/95 w-max max-w-[calc(100%-2rem)] px-3 py-1.5 text-center text-xs text-foreground shadow-sm">
-                {failed ? null : (
+                {unshowable ? null : (
                   <Loader2
                     aria-hidden="true"
                     className="size-3.5 animate-spin motion-reduce:animate-none"
                   />
                 )}
-                {failed
+                {unshowable
                   ? "This size can't be shown on this device. It still uploads."
                   : "Preparing the upload…"}
               </p>
@@ -562,7 +593,7 @@ export function FullSizeView({
           </>
         ) : (
           <p className="flex h-full items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
-            {failed ? (
+            {unshowable ? (
               "This photo can't be shown at full size on this device. It still uploads."
             ) : (
               <>
