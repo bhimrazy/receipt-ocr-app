@@ -23,8 +23,27 @@ const STATUS_LABEL: Record<string, string> = {
   canceled: "Canceled",
 };
 
-/** What happened to the subscription, in one sentence, for the state it is in. */
-function subscriptionNote(subscription: WorkspaceBilling): string | null {
+/**
+ * Who can act on a subscription that blocks a new checkout, for a viewer without its portal
+ * buttons on this page: the buyer through Paddle's emails while billing is unavailable, another
+ * owner through the buyer, and support once the buyer is gone.
+ */
+function whoCanAct(subscription: WorkspaceBilling, isBuyer: boolean): string {
+  if (isBuyer) return "Reply to any email from Paddle about it, or use the support button.";
+  return subscription.buyer
+    ? `Ask ${subscription.buyer.email}, who subscribed, to cancel it, or use the support button.`
+    : "Use the support button to cancel or resume it.";
+}
+
+/**
+ * What happened to the subscription, for the state it is in. `canManage`: the viewer has its
+ * portal buttons on this page (the buyer, with billing on).
+ */
+function subscriptionNote(
+  subscription: WorkspaceBilling,
+  canManage: boolean,
+  isBuyer: boolean,
+): string | null {
   const until = formatDate(subscription.currentPeriodEnd);
   const ended = formatDate(subscription.endedAt) ?? "its last day";
   if (subscription.entitled) {
@@ -39,8 +58,14 @@ function subscriptionNote(subscription: WorkspaceBilling): string | null {
     }
     return until ? `Renews on ${until}.` : null;
   }
+  if (subscription.revoked && subscription.status !== "canceled") {
+    return `Pro ended on ${ended} after a refund or chargeback, and this subscription is being canceled in Paddle. A new one can start once that is done.`;
+  }
   if (subscription.status === "paused") {
-    return "This subscription is paused in Paddle, so Pro is off and nothing is charged. A new subscription can't start while it exists. Cancel it below, or use the support button to resume it.";
+    const next = canManage
+      ? "Cancel it below, or use the support button to resume it."
+      : whoCanAct(subscription, isBuyer);
+    return `This subscription is paused in Paddle, so Pro is off and nothing is charged. A new subscription can't start while it exists. ${next}`;
   }
   if (subscription.status === "past_due" && !subscription.revoked) {
     return `Pro ended on ${ended} because the payment didn't go through. Update the payment method to turn it back on.`;
@@ -133,7 +158,7 @@ function Subscription(props: PlanAndBillingProps & { subscription: WorkspaceBill
   const entitled = subscription.entitled;
   const portalOpen =
     entitled || subscription.status === "past_due" || subscription.status === "paused";
-  const note = subscriptionNote(subscription);
+  const note = subscriptionNote(subscription, canManageHere(props), isBuyer);
 
   let actions: React.ReactNode = null;
   if (impersonating) {
@@ -202,6 +227,10 @@ function Subscription(props: PlanAndBillingProps & { subscription: WorkspaceBill
   );
 }
 
+/** The viewer has the portal buttons for the subscription on this page. */
+const canManageHere = (props: PlanAndBillingProps) =>
+  props.isBuyer && props.portalAvailable && !props.impersonating && !props.subscription?.revoked;
+
 function Plans(props: PlanAndBillingProps) {
   const { plans, owner, impersonating, checkout, ownsPro, subscription } = props;
   const free = { ...plans.free, receiptsPerMonth: props.policy.receiptsPerMonth };
@@ -224,8 +253,11 @@ function Plans(props: PlanAndBillingProps) {
     // A second subscription would charge alongside the one that still can.
     proAction = (
       <p className="text-sm text-muted-foreground">
-        This workspace still has a subscription in Paddle. Manage it under Subscription above
-        instead of starting another.
+        {subscription.revoked
+          ? "This workspace's subscription is being canceled in Paddle. A new one can start once that is done."
+          : canManageHere(props)
+            ? "This workspace still has a subscription in Paddle. Manage it under Subscription above instead of starting another."
+            : `This workspace still has a subscription in Paddle, so a new one can't start. ${whoCanAct(subscription, props.isBuyer)}`}
       </p>
     );
   } else if (checkout) {
