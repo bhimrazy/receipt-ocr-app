@@ -37,7 +37,7 @@ const ISSUER = SITE_NAME;
 
 /**
  * Two-factor sign-in and step-up wiring for Better Auth, kept out of auth.ts
- * so that file only plugs these in. Plan: docs/plans/2026-11-06-passkeys-2fa.md.
+ * so that file only plugs these in.
  */
 
 type HookContext = Parameters<typeof getSessionFromCtx>[0] & { path: string; body?: unknown };

@@ -37,7 +37,6 @@ import {
   guardPasskeyDelete,
   guardUnlink,
 } from "./auth-accounts";
-// --- two-factor + step-up (feat/two-factor) ---
 import {
   authMethodOf,
   authMethodSessionField,
@@ -51,7 +50,6 @@ import {
   twoFactorPlugin,
   twoFactorUserUpdated,
 } from "./auth-two-factor";
-// --- end two-factor + step-up ---
 import { CAPTCHA_ENDPOINTS } from "./captcha-endpoints";
 import {
   assertCanCreateWorkspace,
@@ -119,7 +117,7 @@ async function deliver(input: SendEmailInput) {
   }
 }
 
-// two-factor + step-up (feat/two-factor): step-up codes are sent the same way.
+// Step-up codes are sent the same way.
 export { deliver as deliverEmail };
 
 /**
@@ -216,7 +214,7 @@ async function promoteIfBootstrapAdmin(user: {
     .where(and(eq(userTable.id, user.id), eq(userTable.emailVerified, true)));
 }
 
-/** Removes stored receipt files before the rows they belong to cascade away (U1). */
+/** Removes stored receipt files before the rows they belong to cascade away. */
 async function purgeFiles(owner: { organizationId: string } | { userId: string }) {
   const purged = await runtime.runPromise(purgeReceiptFiles(owner));
   logger.info({
@@ -365,9 +363,7 @@ export const auth = betterAuth({
     // Off: with the cache on, a revoked or banned session keeps working on
     // /api/auth/* for its maxAge (see GHSA-fvxx). App reads skip it anyway.
     cookieCache: { enabled: false },
-    // --- two-factor + step-up (feat/two-factor) ---
     additionalFields: authMethodSessionField,
-    // --- end two-factor + step-up ---
   },
   advanced: {
     ipAddress: authEnv.ipAddress,
@@ -540,7 +536,7 @@ export const auth = betterAuth({
     user: {
       create: {
         after: async (user, ctx) => {
-          // Personal workspace + owner membership, in one transaction (U4).
+          // Personal workspace + owner membership, in one transaction.
           await runtime.runPromise(ensurePersonalWorkspace(user));
           // OAuth sign-ups can arrive already verified.
           await promoteIfBootstrapAdmin(user);
@@ -564,9 +560,7 @@ export const auth = betterAuth({
           });
         },
       },
-      // --- two-factor + step-up (feat/two-factor) ---
       update: { after: twoFactorUserUpdated(deliver) },
-      // --- end two-factor + step-up ---
     },
     account: {
       create: { after: accountCreated(deliver) },
@@ -586,7 +580,6 @@ export const auth = betterAuth({
             data: {
               ...session,
               activeOrganizationId: membership?.organizationId ?? null,
-              // two-factor + step-up (feat/two-factor)
               authMethod: authMethodOf(session as { authMethod?: string | null }, ctx),
             },
           };
@@ -673,7 +666,6 @@ export const auth = betterAuth({
     admin({
       defaultRole: "user",
     }),
-    // two-factor + step-up (feat/two-factor)
     twoFactorPlugin(),
     passkeyPlugin(authEnv.betterAuthUrl),
     // Reads the token from `x-captcha-response` and the client IP from advanced.ipAddress. A

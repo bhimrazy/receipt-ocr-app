@@ -7,7 +7,7 @@ test("API hardening: workspace names, receipt ids and Origin checks", async ({ p
   const [receiptId] = await seedReceipts(email, ["Origin Check Mart"]);
   const origin = { origin: new URL(baseURL!).origin };
 
-  // P1-1: markup or an over-long name never reaches the workspace (or invitation mail).
+  // Markup or an over-long name never reaches the workspace (or invitation mail).
   const session = await (await page.request.get("/api/auth/get-session")).json();
   const organizationId = session.session.activeOrganizationId as string;
   for (const name of ['Acme</strong><h1 style="color:red">locked</h1>', "x".repeat(81)]) {

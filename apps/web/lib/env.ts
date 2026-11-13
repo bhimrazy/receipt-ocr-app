@@ -30,8 +30,8 @@ export const requireEmailVerification =
     ? isProduction
     : process.env.AUTH_REQUIRE_EMAIL_VERIFICATION !== "false";
 /**
- * Platform admins must have a second factor and prove it once per session (see
- * docs/plans/2026-11-06-passkeys-2fa.md). On in production and the production-mode e2e run;
+ * Platform admins must have a second factor and prove it once per session. On in production
+ * and the production-mode e2e run;
  * `ADMIN_MFA_ENFORCE=false` is the emergency off switch, `=true` turns it on in development.
  */
 export const adminMfaEnforced =

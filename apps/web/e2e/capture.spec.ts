@@ -686,7 +686,6 @@ for (const viewport of [
       hint: review.getByTestId("hint"),
     };
 
-    // Step 1.
     const base = await rects(controls);
     for (const name of ["Rotate", "Rotate", "Use full image", "Reset to detected"]) {
       const button = review.getByRole("button", { name });

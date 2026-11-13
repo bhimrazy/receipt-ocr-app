@@ -54,7 +54,7 @@ function Avatar({ user, className }: { user: MenuUser; className?: string }) {
       )}
     >
       {user.image ? (
-        // eslint-disable-next-line @next/next/no-img-element
+        // eslint-disable-next-line @next/next/no-img-element -- an OAuth avatar from arbitrary hosts
         <img alt="" className="size-full object-cover" src={user.image} />
       ) : (
         initial

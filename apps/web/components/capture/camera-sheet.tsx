@@ -330,7 +330,7 @@ export default function CameraSheet({
         >
           {shots.map((shot, i) => (
             <li className="relative shrink-0" key={shot.id}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {/* eslint-disable-next-line @next/next/no-img-element -- a local blob: URL */}
               <img
                 alt={`Photo ${i + 1}`}
                 className="h-16 w-12 rounded-md border border-foreground/30 object-cover"

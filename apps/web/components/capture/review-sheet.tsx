@@ -650,7 +650,7 @@ export default function ReviewSheet({
                       )}
                     >
                       {stripThumbs[filter] ? (
-                        // eslint-disable-next-line @next/next/no-img-element
+                        // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL
                         <img alt="" className="size-full object-cover" src={stripThumbs[filter]} />
                       ) : null}
                     </span>

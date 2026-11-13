@@ -75,7 +75,7 @@ export function ResultPreview({
   }
   return (
     <div className="relative size-full">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- a local blob: URL */}
       <img
         alt={`Receipt preview, ${FILTER_LABELS[frame.filter]}`}
         className="absolute inset-0 size-full object-contain p-3"

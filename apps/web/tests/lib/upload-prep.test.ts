@@ -20,7 +20,7 @@ const ids = (options: { id: string }[]) => options.map((o) => o.id);
 const dims = (s: Size) => [s.width, s.height];
 
 describe("planOption", () => {
-  // The shapes from the sizing review: a 1:1.4 photo, the owner's 1:2.16 receipt, a 1:4 receipt.
+  // A 1:1.4 photo, a 1:2.16 receipt, a 1:4 receipt.
   const normal = { width: 3024, height: 4234 };
   const owner = { width: 1400, height: 3028 };
   const long = { width: 1000, height: 4000 };
