@@ -36,7 +36,9 @@ export class WelcomeMailer extends Context.Tag("@receipt-ocr/core/WelcomeMailer"
       /** The account's plan when sending; the mail states its limits. */
       plan: PlanId;
       policy: PlanPolicy;
-    }) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected">;
+      /** Stable across a job's attempts, so a retry after an accepted send doesn't mail twice. */
+      idempotencyKey: string;
+    }) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected" | "conflict">;
   }
 >() {
   static readonly Disabled = Layer.succeed(WelcomeMailer, {
@@ -84,7 +86,7 @@ export const welcomeEmail: JobDefinition<WelcomeEmailPayload, Db | Settings | We
   leaseSeconds: 60,
   backoff: { baseMs: 30_000, capMs: 30 * 60_000 },
 
-  run: (payload) =>
+  run: (payload, { job }) =>
     Effect.gen(function* () {
       const { use } = yield* Db;
       const mailer = yield* WelcomeMailer;
@@ -95,10 +97,17 @@ export const welcomeEmail: JobDefinition<WelcomeEmailPayload, Db | Settings | We
       if (!row) return { kind: "skipped", reason: "user-gone" } satisfies WelcomeEmailResult;
       // Read now, not at enqueue: the plan may have changed since.
       const { plan, policy } = yield* accountPlan(payload.userId);
-      const outcome = yield* mailer.send({ to: row.email, plan, policy });
+      const outcome = yield* mailer.send({
+        to: row.email,
+        plan,
+        policy,
+        idempotencyKey: `job:${job.id}`,
+      });
       yield* annotateEvent({ kind: "welcome", plan, delivered: outcome === "delivered" });
       if (outcome === "rejected")
         return yield* new NonRetryableJobError({ kind: "email-render-failed" });
+      if (outcome === "conflict")
+        return yield* new NonRetryableJobError({ kind: "email-idempotency-conflict" });
       if (outcome === "failed") return yield* new RetryableJobError({ kind: "email-send-failed" });
       logger.info({
         event: "email.welcome_sent",

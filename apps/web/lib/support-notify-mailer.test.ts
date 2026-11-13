@@ -52,6 +52,7 @@ describe("SupportNotifyMailerLive", () => {
     expect(sendEmail.mock.calls[0][1]).toMatchObject({
       to: "help@example.com",
       replyTo: "me@example.com",
+      idempotencyKey: "job:job-1",
     });
   });
 

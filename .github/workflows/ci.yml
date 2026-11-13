@@ -112,6 +112,9 @@ jobs:
           scope: checks
       - run: bun run typecheck
       - run: bun run test
+      # Renders the gate scenes and fails when the receipt-edge detector is worse than packages/vision/bench/baseline.json.
+      - name: Edge detection benchmark
+        run: bun run --filter @receipt-ocr/vision bench:edges --check --no-timing
       - run: bun run build
       # Emails are prerendered by packages/email; React Email must never reach the server bundle.
       - name: No React Email in the server bundle

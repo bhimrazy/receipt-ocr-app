@@ -40,8 +40,11 @@ export class ContactReplyMailer extends Context.Tag("@receipt-ocr/core/ContactRe
   ContactReplyMailer,
   {
     readonly send: (
-      input: ContactReplyPayload,
-    ) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected">;
+      input: ContactReplyPayload & {
+        /** Stable across a job's attempts, so a retry after an accepted send doesn't mail twice. */
+        idempotencyKey: string;
+      },
+    ) => Effect.Effect<"delivered" | "not_configured" | "failed" | "rejected" | "conflict">;
   }
 >() {
   static readonly Disabled = Layer.succeed(ContactReplyMailer, {
@@ -78,10 +81,10 @@ export const contactReply: JobDefinition<ContactReplyPayload, ContactReplyMailer
   scrubPayload: true,
   backoff: { baseMs: 30_000, capMs: 10 * 60_000 },
 
-  run: (payload) =>
+  run: (payload, { job }) =>
     Effect.gen(function* () {
       const mailer = yield* ContactReplyMailer;
-      const outcome = yield* mailer.send(payload);
+      const outcome = yield* mailer.send({ ...payload, idempotencyKey: `job:${job.id}` });
       yield* annotateEvent({
         kind: "contact_reply",
         topic: payload.topic,
@@ -89,6 +92,8 @@ export const contactReply: JobDefinition<ContactReplyPayload, ContactReplyMailer
       });
       if (outcome === "rejected")
         return yield* new NonRetryableJobError({ kind: "email-render-failed" });
+      if (outcome === "conflict")
+        return yield* new NonRetryableJobError({ kind: "email-idempotency-conflict" });
       if (outcome === "failed") return yield* new RetryableJobError({ kind: "email-send-failed" });
       logger.info({
         event: "email.contact_reply_sent",

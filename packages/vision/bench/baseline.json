@@ -1,0 +1,119 @@
+{
+  "set": "gate",
+  "firstSeed": 5000,
+  "scenes": 40,
+  "categories": [
+    {
+      "id": "table",
+      "weight": 18,
+      "fingerprint": "4fd39dea",
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg",
+      "levels": "aaaaaaaaaaaaasaaaaaaaaaaaaaaasaaaaaaaaaa"
+    },
+    {
+      "id": "hand",
+      "weight": 15,
+      "fingerprint": "96de894a",
+      "outcomes": "lllhlhlhhlllghlhlllhllglhhllhlgglhglglll",
+      "levels": "ssssssssssssssssssssssssssssssssssssasss"
+    },
+    {
+      "id": "thumb",
+      "weight": 4,
+      "fingerprint": "d82cd426",
+      "outcomes": "ggggmmghhlgghghglghgggghlhggllggghhgghhh",
+      "levels": "ssssnnssssssssssssssssssssssssssssssssss"
+    },
+    {
+      "id": "white",
+      "weight": 10,
+      "fingerprint": "7a89261a",
+      "outcomes": "mmgmmmgmlmggmmggmmglmmgmmmggmmgmmmgmmlgm",
+      "levels": "nnsnnnansnasnnasnnssnnannnasnnannnannsan"
+    },
+    {
+      "id": "clutter",
+      "weight": 7,
+      "fingerprint": "c67fbb98",
+      "outcomes": "mgmhmlgmlllglhmlglhllgmlllgglmlgglllghlg",
+      "levels": "nansnsansssassnsassssanssssssnsassssasss"
+    },
+    {
+      "id": "patterned",
+      "weight": 7,
+      "fingerprint": "0e61cc0e",
+      "outcomes": "gggghgggghgggghmggghmggghgggghmggghlgggh",
+      "levels": "saasssaaassaaasnaaasnaaassaaasnasassaaas"
+    },
+    {
+      "id": "thermal",
+      "weight": 6,
+      "fingerprint": "c68f04a0",
+      "outcomes": "ggggggggmggggggggggggggmgmgggggggggmgggg",
+      "levels": "ssssssssnsassssssssssasnsnssssasassnsssa"
+    },
+    {
+      "id": "crumpled",
+      "weight": 5,
+      "fingerprint": "2b4787c9",
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg",
+      "levels": "sssssssssssssssssssasasasssssssssasasssa"
+    },
+    {
+      "id": "folded",
+      "weight": 2,
+      "fingerprint": "10913ae6",
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg",
+      "levels": "aaaaasaaaaaaaaaaaaasaaaaaaaaaaaaaasasaaa"
+    },
+    {
+      "id": "shadow",
+      "weight": 5,
+      "fingerprint": "3232aed9",
+      "outcomes": "gggmhgmghhggghhgggmhgghhmggghhmhghhggghm",
+      "levels": "aasnssnssssaassasanssassnaaassnsssssaasn"
+    },
+    {
+      "id": "lowlight",
+      "weight": 4,
+      "fingerprint": "5e05dada",
+      "outcomes": "gggggggggggggggggggggggggggggggggggggggg",
+      "levels": "saaaaaaaaaaaaaasaaaaaaaaaaassaaaaaaaaaaa"
+    },
+    {
+      "id": "glare",
+      "weight": 2,
+      "fingerprint": "f8e08c1e",
+      "outcomes": "glhlhlggglgggghlghgghgggggglgggggghlglgl",
+      "levels": "sssassaasassassaassasssssssaaaaasssasaaa"
+    },
+    {
+      "id": "partial",
+      "weight": 5,
+      "fingerprint": "9e4462d3",
+      "outcomes": "gggggghggghggghgggggghghghhhghhhghghhggg",
+      "levels": "ssssssssssssssssssssssssssssssssssssssss"
+    },
+    {
+      "id": "several",
+      "weight": 2,
+      "fingerprint": "0500fd61",
+      "outcomes": "hhllhhhhhlhlglhhgghhhhhlghhhhlhhghhlghhh",
+      "levels": "sssssssssssssassssssssssssssssssssssssss"
+    },
+    {
+      "id": "a4",
+      "weight": 4,
+      "fingerprint": "24f1ff15",
+      "outcomes": "ggggggggggggggggggggggggggghgggggggggggg",
+      "levels": "aaaaaaaaaaaaaaaaasaaaaaaaaasaaaaaaaaaaaa"
+    },
+    {
+      "id": "digital",
+      "weight": 5,
+      "fingerprint": "014e1749",
+      "outcomes": "ggggghhhggggghhhggggghhhggggghhhggggghhh",
+      "levels": "nnnnnsasnnnnnsasnnnnnsasnnnnnsssnnnnnsas"
+    }
+  ]
+}

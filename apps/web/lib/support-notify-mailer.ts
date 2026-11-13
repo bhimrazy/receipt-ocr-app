@@ -11,7 +11,7 @@ import { emailContext, isProduction, supportEmail } from "./env";
  * missing SUPPORT_EMAIL is "failed" too, so the job ends dead and visible instead of succeeding.
  */
 export const SupportNotifyMailerLive = Layer.succeed(SupportNotifyMailer, {
-  send: ({ name, email, kind, message, receiptId }) => {
+  send: ({ name, email, kind, message, receiptId, jobId }) => {
     if (!supportEmail) return Effect.succeed(isProduction ? "failed" : "not_configured");
     const to = supportEmail;
     return Effect.try(() =>
@@ -20,7 +20,7 @@ export const SupportNotifyMailerLive = Layer.succeed(SupportNotifyMailer, {
       Effect.flatMap((content) =>
         Effect.tryPromise(async () => {
           const { mailer } = await import("./mailer");
-          const result = await sendEmail(mailer, content);
+          const result = await sendEmail(mailer, { ...content, idempotencyKey: `job:${jobId}` });
           if (result.delivered) return "delivered" as const;
           return result.reason === "not_configured"
             ? ("not_configured" as const)

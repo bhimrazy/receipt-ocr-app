@@ -58,8 +58,68 @@ describe("sendEmail logging", () => {
     const log = vi.fn();
     send.mockResolvedValueOnce({ data: { id: "1" }, error: null });
     await sendEmail({ ...config, log }, input);
-    expect(log).toHaveBeenCalledWith({ event: "email.sent", unit: "log", level: "info" });
+    expect(log).toHaveBeenCalledWith({
+      event: "email.sent",
+      unit: "log",
+      level: "info",
+      provider_message_id: "1",
+    });
     expect(info).not.toHaveBeenCalled();
+  });
+
+  it("tags every outcome with the template kind and the sent one with Resend's id", async () => {
+    const log = vi.fn();
+    send.mockResolvedValueOnce({ data: { id: "msg_1" }, error: null });
+    send.mockResolvedValueOnce({
+      data: null,
+      error: { name: "rate_limit_exceeded", message: "m" },
+    });
+    send.mockRejectedValueOnce(new TypeError("fetch failed"));
+    for (const cfg of [config, config, config, {}]) {
+      await sendEmail({ ...cfg, log }, { ...input, kind: "welcome" });
+    }
+    expect(log.mock.calls.map(([e]) => [e.event, e.email_kind, e.provider_message_id])).toEqual([
+      ["email.sent", "welcome", "msg_1"],
+      ["email.send_failed", "welcome", undefined],
+      ["email.send_failed", "welcome", undefined],
+      ["email.not_configured", "welcome", undefined],
+    ]);
+  });
+});
+
+describe("sendEmail idempotency", () => {
+  const input = { to: "a@example.com", subject: "s", html: "<p>h</p>", text: "t" };
+  const config = { apiKey: "key", from: "x <noreply@example.com>", log: () => {} };
+
+  it("passes the key to Resend as its idempotency option", async () => {
+    send.mockClear();
+    send.mockResolvedValue({ data: { id: "1" }, error: null });
+    await sendEmail(config, { ...input, idempotencyKey: "job:abc" });
+    expect(send.mock.calls[0][1]).toEqual({ idempotencyKey: "job:abc" });
+  });
+
+  it("surfaces only the idempotency error names, never the message", async () => {
+    send.mockClear();
+    for (const name of ["invalid_idempotent_request", "concurrent_idempotent_requests"]) {
+      send.mockResolvedValueOnce({
+        data: null,
+        error: { name, message: "to a@example.com", statusCode: 409 },
+      });
+      const result = await sendEmail(config, input);
+      expect(result).toMatchObject({ delivered: false, errorName: name });
+    }
+    send.mockResolvedValueOnce({
+      data: null,
+      error: { name: "rate_limit_exceeded", message: "m", statusCode: 429 },
+    });
+    expect(await sendEmail(config, input)).not.toHaveProperty("errorName");
+  });
+
+  it("sends no options without a key", async () => {
+    send.mockClear();
+    send.mockResolvedValue({ data: { id: "1" }, error: null });
+    await sendEmail(config, input);
+    expect(send.mock.calls[0][1]).toBeUndefined();
   });
 });
 
