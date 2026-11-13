@@ -117,6 +117,13 @@ old files' on Postgres 17 and 18 apart from column order in two tables. Both dat
 reset. **From the first real user onward we never squash again.** Details:
 [data layer](architecture/db.md#migrations).
 
+## Launch blockers
+
+- Support messages retention: a `maintenance.purge` job for `support_messages` before launch. It covers closed messages
+  and unanswered public ones (anyone can store a message today), and the privacy page states the period.
+- Turnstile keys required in production for `/api/contact`: without them, `checkTurnstile` lets every request through
+  (`apps/web/lib/turnstile.ts`), so a script that rotates IPs can fill `support_messages`.
+
 ## Production to-dos (owner)
 
 Steps are in [deployment.md](deployment.md).

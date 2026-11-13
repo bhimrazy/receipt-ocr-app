@@ -114,6 +114,30 @@ describe.skipIf(!enabled)("support messages against Postgres", () => {
     expect(await notifyJobs(first.id)).toHaveLength(1);
   });
 
+  it("stores another sender's message under a fresh id when its submission id is taken", async () => {
+    const original = message();
+    await run(submitSupportMessage(original));
+    const otherAddress = await run(
+      submitSupportMessage({ ...original, email: `${tag}-someone-else@example.com` }),
+    );
+    const signedIn = await run(
+      submitSupportMessage({
+        ...original,
+        sender: { userId: alice.userId, organizationId: alice.organizationId },
+      }),
+    );
+    expect(otherAddress).toMatchObject({ kind: "stored" });
+    expect(signedIn).toMatchObject({ kind: "stored" });
+    expect(await rowsWhere(eq(supportMessages.submissionId, original.submissionId))).toHaveLength(
+      1,
+    );
+    // A retry differing only in the address's case is the same sender.
+    const retry = await run(
+      submitSupportMessage({ ...original, email: original.email.toUpperCase() }),
+    );
+    expect(retry).toEqual({ kind: "duplicate" });
+  });
+
   it("links a receipt only when it is in the sender's active workspace", async () => {
     const [mine] = await db((d) =>
       d
@@ -154,14 +178,16 @@ describe.skipIf(!enabled)("support messages against Postgres", () => {
     });
   });
 
-  it("refuses a signed-in sender over the cap and keeps nothing of the refused message", async () => {
+  it("holds the per-user cap under concurrent sends", async () => {
     const carol = await createUser("carol");
     const sender = { userId: carol.userId, organizationId: carol.organizationId };
-    for (let i = 0; i < SUPPORT_USER_CAP.max; i++) {
-      expect(await run(submitSupportMessage(message({ sender })))).toMatchObject({
-        kind: "stored",
-      });
-    }
+    const results = await Promise.all(
+      Array.from({ length: SUPPORT_USER_CAP.max * 2 }, () =>
+        run(submitSupportMessage(message({ sender }))),
+      ),
+    );
+    expect(results.filter((r) => r.kind === "stored")).toHaveLength(SUPPORT_USER_CAP.max);
+    expect(results.filter((r) => r.kind === "rate-limited")).toHaveLength(SUPPORT_USER_CAP.max);
     const over = message({ sender });
     expect(await run(submitSupportMessage(over))).toEqual({ kind: "rate-limited" });
     expect(await rowsWhere(eq(supportMessages.userId, carol.userId))).toHaveLength(
@@ -202,7 +228,13 @@ describe.skipIf(!enabled)("support messages against Postgres", () => {
     });
     const signedOut = message({ email: dana.email.toUpperCase() });
     const stranger = message();
-    for (const m of [signedIn, signedOut, stranger]) await run(submitSupportMessage(m));
+    // Bob, signed in, gave Dana's address as his reply address: his message is his, not hers.
+    const bobsWithHerAddress = message({
+      sender: { userId: bob.userId, organizationId: bob.organizationId },
+      email: dana.email,
+    });
+    for (const m of [signedIn, signedOut, stranger, bobsWithHerAddress])
+      await run(submitSupportMessage(m));
 
     await run(prepareUserDeletion(dana.userId));
     // Better Auth deletes the user row after prepareUserDeletion.
@@ -217,10 +249,13 @@ describe.skipIf(!enabled)("support messages against Postgres", () => {
             signedIn.submissionId,
             signedOut.submissionId,
             stranger.submissionId,
+            bobsWithHerAddress.submissionId,
           ]),
         ),
     );
-    expect(left.map((r) => r.submissionId)).toEqual([stranger.submissionId]);
+    expect(left.map((r) => r.submissionId).sort()).toEqual(
+      [stranger.submissionId, bobsWithHerAddress.submissionId].sort(),
+    );
   });
 
   it("keeps a message when its workspace or receipt is deleted, without the link", async () => {

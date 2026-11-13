@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { enqueueContactReply, hitRateLimit, submitSupportMessage } from "@receipt-ocr/core";
-import { greetingName } from "@receipt-ocr/email";
+import { greetingName, isEmailAddress } from "@receipt-ocr/email";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isTopic, topicKind } from "@/lib/contact-mail";
@@ -75,7 +75,7 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
 
   // One line: the name goes into the support mail's body and footer.
   const name = typeof data.name === "string" ? data.name.replace(/[\p{Cc}\s]+/gu, " ").trim() : "";
-  const email = typeof data.email === "string" ? data.email.trim() : "";
+  const email = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
   const message = typeof data.message === "string" ? data.message.trim() : "";
   const rawTopic = typeof data.topic === "string" ? data.topic.trim() : "";
   const topic = isTopic(rawTopic) ? rawTopic : "getting-started";
@@ -92,7 +92,8 @@ async function submit(request: Request, _context: unknown, event: WideEvent) {
     event.outcome = "name_too_long";
     return NextResponse.json({ error: "Name is too long" }, { status: 400 });
   }
-  if (email.length > 320 || !EMAIL_RE.test(email)) {
+  // isEmailAddress also refuses display-name forms (`a<x@y>`), which the templates would reject.
+  if (email.length > 320 || !EMAIL_RE.test(email) || !isEmailAddress(email)) {
     event.status_code = 400;
     event.outcome = "invalid_email";
     return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });

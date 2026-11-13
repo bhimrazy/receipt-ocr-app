@@ -212,7 +212,7 @@ export const prepareUserDeletion = (userId: string, audit?: AuditActor) =>
         .where(eq(user.id, userId))
         .limit(1);
       // Rows with this user_id go with the user (cascade); these are the ones sent signed out.
-      if (target) await deleteSupportMessagesFrom(tx, target.email);
+      if (target) await deleteSupportMessagesFrom(tx, { userId, email: target.email });
       if (audit) {
         await insertAudit(tx, {
           ...audit,

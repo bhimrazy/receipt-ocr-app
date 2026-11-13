@@ -1,3 +1,4 @@
+import { isEmailAddress } from "@receipt-ocr/email";
 import { Context, Effect, Layer } from "effect";
 import { z } from "zod";
 import type { DbError } from "../../errors";
@@ -24,7 +25,8 @@ export const contactReplyPayload = z.object({
   to: z
     .string()
     .max(320)
-    .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/),
+    .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+    .refine(isEmailAddress),
   name: z.string().max(80),
   topic: z.string().min(1).max(40),
 });

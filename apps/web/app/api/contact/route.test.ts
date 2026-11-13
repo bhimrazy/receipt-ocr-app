@@ -236,10 +236,18 @@ describe("POST /api/contact", () => {
   it.each([
     ["an invalid email", { email: "nope" }],
     ["an over-long email", { email: `${"a".repeat(320)}@example.com` }],
+    ["a display-name address", { email: "a<x@example.com>" }],
+    ["a quoted address", { email: '"x"@example.com' }],
+    ["an address with a query", { email: "x@example.com?cc=y" }],
     ["a message under five characters", { message: "😀😀😀" }],
   ])("rejects %s and stores nothing", async (_label, override) => {
     expect((await post({ ...valid, ...override })).status).toBe(400);
     expect(submitted).toEqual([]);
+  });
+
+  it("stores the address lowercased", async () => {
+    await post({ ...valid, email: "Me@Example.COM" });
+    expect(submitted[0]?.email).toBe("me@example.com");
   });
 
   it("queues an auto-reply with the cleaned first name and no message text", async () => {
