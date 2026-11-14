@@ -322,6 +322,8 @@ describe.skipIf(!enabled)("maintenance.purge retention against Postgres", () => 
     expect(left.map((r) => r.id)).toEqual([kept]);
     expect(left.map((r) => r.id)).not.toContain(old);
     await db((d) => d.delete(adminAuditLog).where(eq(adminAuditLog.targetId, tag)));
+  });
+
   it("clears provider tokens an older release wrote, and leaves passwords alone", async () => {
     const expiry = new Date(Date.now() + DAY);
     await db((d) =>
