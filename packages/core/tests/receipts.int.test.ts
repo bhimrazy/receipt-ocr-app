@@ -187,12 +187,20 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       run(Effect.flatMap(ReceiptRepo, f) as Effect.Effect<A, never, AppServices>);
     // Its own workspace, so the other tests' counts don't see these receipts.
     const c = await createUser("carol");
+    let bills = 0;
     const complete = async (receiptDate: string | null, currency: string) => {
       const id = (await run(ingestUpload({ scope: c, fileName: "d.jpg", body: JPEG, limits })))
         .receipt.id;
       await dropJob(id);
-      // No printed dates, as from prompt v2: the model's AD reading is all the evidence.
-      const extraction = { ...FIXTURE_RECEIPTS[0]!, dates: [], receiptDate, currency };
+      // No printed dates, as from prompt v2: the model's AD reading is all the evidence. Each a
+      // different bill, so none is a possible duplicate of another.
+      const extraction = {
+        ...FIXTURE_RECEIPTS[0]!,
+        dates: [],
+        receiptDate,
+        currency,
+        merchant: `Bill ${++bills}`,
+      };
       return repo((r) => r.complete(id, c, 1, extraction, "fixture", []));
     };
     expect(await complete(" 2026-01-31 ", "eur")).toMatchObject({

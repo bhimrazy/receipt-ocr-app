@@ -18,14 +18,23 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { isFiltered } from "@/components/history/history-href";
+import { SORT_OPTIONS, sortValue, viewFromParams } from "@/components/history/list-view";
 import type { HistoryFilters } from "@/lib/receipts";
 
 const STATUS_CHIPS = [
   { value: undefined, label: "All" },
   { value: "needs-review", label: "Needs review" },
+  { value: "not-reviewed", label: "Not reviewed" },
+  { value: "reviewed", label: "Reviewed" },
+  { value: "duplicate", label: "Possible duplicate" },
   { value: "failed", label: "Couldn't scan" },
   { value: "processing", label: "Scanning" },
 ] as const;
+
+const SORT_ITEMS = SORT_OPTIONS.map((option) => ({
+  value: sortValue(option.sort),
+  label: option.label,
+}));
 
 const CATEGORY_ITEMS = [
   { value: null, label: "All categories" },
@@ -52,8 +61,15 @@ export function HistoryToolbar({ filters }: { filters: HistoryFilters }) {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const filtered = isFiltered(filters);
+  const sort = sortValue(viewFromParams(searchParams).sort);
   const extraFilters = [filters.category, filters.from, filters.to].filter(Boolean).length;
   const [filtersOpen, setFiltersOpen] = useState(extraFilters > 0);
+
+  function applySort(value: string) {
+    const [by, dir] = value.split(":");
+    const isDefault = value === sortValue(undefined);
+    apply({ sort: isDefault ? undefined : by, dir: isDefault ? undefined : dir });
+  }
 
   function apply(patch: Record<string, string | undefined>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -110,7 +126,11 @@ export function HistoryToolbar({ filters }: { filters: HistoryFilters }) {
             value={query}
           />
         </div>
-        <div aria-label="Status" className="scroll-fade-x flex gap-2 overflow-x-auto" role="group">
+        <div
+          aria-label="Status"
+          className="scroll-fade-x flex min-w-0 flex-1 gap-2 overflow-x-auto"
+          role="group"
+        >
           {STATUS_CHIPS.map((chip) => {
             const active = filters.status === chip.value;
             return (
@@ -130,17 +150,40 @@ export function HistoryToolbar({ filters }: { filters: HistoryFilters }) {
           })}
         </div>
       </div>
-      <Button
-        aria-controls="history-more-filters"
-        aria-expanded={filtersOpen}
-        className="self-start lg:hidden"
-        onClick={() => setFiltersOpen((open) => !open)}
-        size="sm"
-        variant="outline"
-      >
-        <SlidersHorizontal aria-hidden="true" />
-        {extraFilters > 0 ? `Category and dates (${extraFilters})` : "Category and dates"}
-      </Button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button
+          aria-controls="history-more-filters"
+          aria-expanded={filtersOpen}
+          className="lg:hidden"
+          onClick={() => setFiltersOpen((open) => !open)}
+          size="sm"
+          variant="outline"
+        >
+          <SlidersHorizontal aria-hidden="true" />
+          {extraFilters > 0 ? `Category and dates (${extraFilters})` : "Category and dates"}
+        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground" htmlFor="history-sort">
+            Sort
+          </Label>
+          <Select
+            items={SORT_ITEMS}
+            onValueChange={(value) => applySort(value as string)}
+            value={sort}
+          >
+            <SelectTrigger className="w-56" id="history-sort" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {SORT_ITEMS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
       <div
         className={cn(
           "grid-cols-2 gap-3 sm:flex-wrap sm:items-end lg:flex",
@@ -171,7 +214,7 @@ export function HistoryToolbar({ filters }: { filters: HistoryFilters }) {
         </Field>
         <Field className="min-w-0 sm:w-40">
           <FieldLabel className="text-xs text-muted-foreground" htmlFor="history-from">
-            From
+            Receipt date from
           </FieldLabel>
           <Input
             id="history-from"
@@ -183,7 +226,7 @@ export function HistoryToolbar({ filters }: { filters: HistoryFilters }) {
         </Field>
         <Field className="min-w-0 sm:w-40">
           <FieldLabel className="text-xs text-muted-foreground" htmlFor="history-to">
-            To
+            Receipt date to
           </FieldLabel>
           <Input
             id="history-to"

@@ -126,6 +126,39 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   return `${formatted} UTC`;
 }
 
+const zonedFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * "14 Nov 2026, 17:45" in `timeZone` (the viewer's, from the time-zone cookie), without a zone
+ * label; null for a missing or invalid value. An unknown zone falls back to UTC.
+ */
+export function formatLocalDateTime(
+  value: string | Date | null | undefined,
+  timeZone: string,
+): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  let formatter = zonedFormatters.get(timeZone);
+  if (!formatter) {
+    try {
+      formatter = new Intl.DateTimeFormat(LOCALE, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone,
+      });
+    } catch {
+      formatter = dateTimeFormatter;
+    }
+    zonedFormatters.set(timeZone, formatter);
+  }
+  return threeLetterMonth(formatter.format(date));
+}
+
 /** "14:05 UTC". */
 export function formatTime(value: Date): string {
   const formatted = timeFormatter.format(value);

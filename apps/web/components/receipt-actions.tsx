@@ -36,7 +36,7 @@ import { createContext, useContext, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api-request";
 import { csvFilename, receiptItemsToCsv } from "@/lib/csv";
 import { ReceiptEditor } from "@/components/receipt-editor";
-import { ReceiptChecks } from "@/components/receipt-review";
+import { DuplicateNotice, ReceiptChecks } from "@/components/receipt-review";
 import { useRetryReceipt } from "@/components/retry-receipt-button";
 import { AppBarActions } from "@/components/app-nav";
 import { openSupportWidget } from "@/lib/support-widget";
@@ -356,6 +356,13 @@ export function ReceiptWorkspace({
 
   return (
     <>
+      {receipt.reviewReasons.includes("possible_duplicate") ? (
+        <DuplicateNotice
+          canEdit={canEdit}
+          duplicateOf={receipt.duplicateOf ?? null}
+          receiptId={receipt.id}
+        />
+      ) : null}
       <ReceiptChecks
         canEdit={canEdit}
         checks={checks}

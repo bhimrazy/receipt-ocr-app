@@ -1,6 +1,7 @@
 import { and, inArray, jobs, sql, type SQL } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { Db } from "../services";
+import { RECEIPT_RECHECK } from "./kinds/receipt-recheck";
 import { WELCOME_EMAIL } from "./kinds/welcome-email";
 
 /** Covers the Operations page's longest range (30 days) and recent support questions. */
@@ -12,14 +13,16 @@ export const FAILED_JOB_RETENTION_DAYS = 90;
  * Finished jobs past their retention. Idempotency keys only dedupe against live jobs, so deleting a
  * finished one frees nothing that wasn't free already. The exception is `enqueueWelcomeEmail`, which
  * reads finished welcome jobs to welcome a user once ever: those stay until the account is deleted
- * (which nulls `user_id`).
+ * (which nulls `user_id`). So does each version's first `receipt.recheck` job, which `scheduleRecheck`
+ * reads to run that version once.
  */
 const expired = (states: readonly string[], days: number): SQL =>
   sql`${jobs.state} in (${sql.join(
     states.map((s) => sql`${s}`),
     sql`, `,
   )}) and ${jobs.finishedAt} < now() - make_interval(days => ${days})
-    and not (${jobs.kind} = ${WELCOME_EMAIL} and ${jobs.userId} is not null)`;
+    and not (${jobs.kind} = ${WELCOME_EMAIL} and ${jobs.userId} is not null)
+    and not (${jobs.kind} = ${RECEIPT_RECHECK} and ${jobs.payload}->>'after' is null)`;
 
 const EXPIRED = {
   succeeded: expired(["succeeded"], SUCCEEDED_JOB_RETENTION_DAYS),
