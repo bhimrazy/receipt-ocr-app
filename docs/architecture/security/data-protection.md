@@ -127,8 +127,11 @@ batches of 500. New retention rules are added to it; nothing is deleted by a dat
 - **Row-level security is on for every table, with no policies** ([db.md](../db.md#design-principles-and-invariants)).
   The provider's API roles `anon` and `authenticated` therefore read no rows. `service_role` bypasses RLS, so RLS
   is not the control for that key.
-- **The app never uses Supabase's Data API.** Setting up a database includes removing `public` from the API's
-  exposed schemas ([deployment.md](../../deployment.md)).
+- **The API roles hold no grants.** `0010_data_api_grants` revokes every privilege `anon`, `authenticated` and
+  `service_role` have on tables, sequences and functions in `public`, and the default privileges for objects
+  `postgres` creates later. `rls.int.test.ts` asserts it wherever those roles exist.
+- **The app never uses Supabase's Data API,** and it is switched off for each project; Postgres connections must use
+  TLS (Enforce SSL) ([deployment.md](../../deployment.md#1-database)).
 - **Schema changes go through migrations only,** never the provider's table editor: objects created there receive
   the provider's default grants.
 - **Object storage is private:** no public access, no custom domain, one access key scoped to one bucket per
@@ -160,19 +163,17 @@ is encrypted, and is stored apart from the auth secret. Object storage has no se
 In build order. Reasons and sources are in the
 [principal review](../../reviews/2026-11-14-data-at-rest-principal.md).
 
-1. TODO (2026-11-14): switch the Data API off, revoke `anon`, `authenticated` and `service_role` grants and default
-   privileges in a guarded migration, assert it in `rls.int.test.ts`, and enforce TLS on the database.
-2. TODO (2026-11-14): extend `maintenance.purge`: sessions and step-up codes 1 day after expiry; step-up events 90
+1. TODO (2026-11-14): extend `maintenance.purge`: sessions and step-up codes 1 day after expiry; step-up events 90
    days; finished jobs 30 days (keeping each user's welcome-email record); invitations 30 days after expiry or an
    answer; admin audit log 2 years. Empty the contact-reply payload on every terminal path. State the periods, and
    that files keep their metadata, in the privacy policy.
-3. TODO (2026-11-14): test whether Better Auth's rate-limit pruning shortens the app's 24-hour limits; if so, move
+2. TODO (2026-11-14): test whether Better Auth's rate-limit pruning shortens the app's 24-hour limits; if so, move
    the app's counters to their own table.
-4. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
-5. TODO (2026-11-14): database backups with a restore test (STATUS D1).
-6. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
+3. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
+4. TODO (2026-11-14): database backups with a restore test (STATUS D1).
+5. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
    staying on the owner role.
-7. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
+6. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
    from `DATA_ENCRYPTION_KEYS`, AAD bound to table, column and row), a KMS-held key-encryption key, and one re-seal
    job covering those values and the auth-secret values ([BYOK plan](../../plans/2026-11-07-byok.md)).
 
