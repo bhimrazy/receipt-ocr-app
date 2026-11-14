@@ -156,6 +156,54 @@ any accuracy percentage on the site.
 | 6   | Reviewed state in the CSV                                                   | Add `reviewed_at` and `reviewed_by` columns now, appended (CSV is append-only after launch)      |
 | 7   | Excel encoding                                                              | Add a UTF-8 BOM if a Devanagari test in Excel shows garbling; no `.xlsx` export                  |
 
+## Receipts list: the Status column
+
+Today: "Checked" once someone reviewed it, "Needs review" while `review_reasons` is not empty, otherwise blank
+(`ReviewBadge`, `apps/web/components/receipt-list.tsx:27-36`). In the owner's list of 9, most are blank. The same
+3,701.60 bill appears three times (one Needs review, two blank, one of those with no date), and the same 185.00 bill
+twice.
+
+**What the column must answer, per job.** VAT register and accountant handoff: "Can I put this in the books?" and
+"Has someone vouched for it?". Expense claims: "Is this claimed already?". Budgeting: barely anything, as long as
+nothing is counted twice. So three questions: is it safe to export, did a person check it, is it a duplicate.
+Blank answers none of them: it reads as "nothing to see", and a duplicate that passed every check shows as blank too.
+
+**The undated blank receipt is a data gap, not a design choice.** Migration `0003` backfilled only
+`low_confidence` (`apps/web/drizzle/0003_receipt_fields.sql:20-21`), so receipts completed before it have an empty
+`review_reasons` even with no date, and an edit recomputes only the checks whose fields changed. A one-off job that
+recomputes reasons for every unreviewed completed receipt (no model call) fixes it. CTO to confirm that this is
+the cause.
+
+**Recommended model: three states plus one flag.**
+
+| State        | Means                                         | Label                                                  |
+| ------------ | --------------------------------------------- | ------------------------------------------------------ |
+| Needs review | A check fired, nobody reviewed it             | "Needs review" with the first reason on hover or below |
+| Not checked  | Checks passed, nobody reviewed it             | "Not checked", muted. Never blank                      |
+| Checked      | A person marked it right or saved an edit     | "Checked" (by whom on hover)                           |
+| Duplicate    | Same bill as another receipt in the workspace | A separate "Possible duplicate" mark beside any state  |
+
+- **Name the clean-but-unreviewed state.** The difference between "the machine found nothing" and "a person looked"
+  is exactly what an accountant needs; blank hides it.
+- **Duplicate is a flag, not a state.** It goes in `review_reasons` (so it puts a receipt into Needs review), but it
+  keeps showing after review until someone picks "Not a duplicate" or deletes one copy. Marking a duplicate
+  "Checked" doesn't hide it. This moves duplicate flags (ranked #3) next to the status work: the owner's list already
+  has two duplicates in nine receipts.
+- **Export:** the general CSV keeps every receipt, with `status`, `review_reasons`, `reviewed_at` and `reviewed_by`,
+  so the accountant filters. The VAT purchase-register export defaults to Checked receipts only, with a visible count
+  ("7 checked, 2 not checked left out") and an option to include them. Possible duplicates are left out of the
+  register until resolved, never added silently.
+- **The filter matches the column:** Needs review, Not checked, Checked, Possible duplicate.
+
+| #   | Decision                                  | Recommendation                                                                                      |
+| --- | ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 8   | Blank for clean-but-unreviewed receipts   | Replace with "Not checked"                                                                          |
+| 9   | Status model                              | Needs review / Not checked / Checked, plus a separate Possible duplicate flag                       |
+| 10  | Recompute reasons for old receipts        | Yes, one job before launch; it fixes the undated blank receipt                                      |
+| 11  | Duplicate flags                           | Pull forward to ship with the status column, ahead of the VAT export                                |
+| 12  | VAT register contents                     | Checked only by default, with a count and an "include not checked" option; duplicates out until resolved |
+| 13  | General CSV contents                      | Everything, with the review columns                                                                 |
+
 ## Sources
 
 All opened 2026-11-14.
