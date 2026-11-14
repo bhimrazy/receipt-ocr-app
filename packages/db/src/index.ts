@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+import { relations, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   bigint,
@@ -17,6 +17,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import pg from "pg";
 import {
@@ -61,6 +62,14 @@ export const receiptStatus = pgEnum("receipt_status", [
   "completed",
   "failed",
 ]);
+
+/**
+ * The key a printed identifier (bill number, seller tax id) matches on: NFKC, Devanagari digits as
+ * ASCII, then ASCII letters and digits only, upper case; null when nothing is left. All literals,
+ * so a query using it can use `receipts_org_invoice_key_idx`. Needs a UTF8 database.
+ */
+export const identifierKey = (value: SQL | AnyPgColumn) =>
+  sql`nullif(upper(regexp_replace(translate(normalize(${value}, NFKC), '०१२३४५६७८९', '0123456789'), '[^0-9A-Za-z]+', '', 'g')), '')`;
 
 /** Upload plus retries; `receipts_attempts_check` enforces it. */
 export const MAX_EXTRACTION_ATTEMPTS = 3;
@@ -132,6 +141,11 @@ export const receipts = pgTable(
     /** When someone confirmed the extraction looks right; a new extraction clears it. */
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     reviewedBy: text("reviewed_by").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * When someone said this isn't a duplicate: the `possible_duplicate` check skips it from then
+     * on. A new extraction clears it.
+     */
+    duplicateDismissedAt: timestamp("duplicate_dismissed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -148,6 +162,10 @@ export const receipts = pgTable(
     index("receipts_org_created_at_idx").on(table.organizationId, table.createdAt),
     // History's date filters and date ranges within a workspace.
     index("receipts_org_receipt_date_idx").on(table.organizationId, table.receiptDate),
+    // The possible-duplicate check: copies of one bill share a bill number and seller tax id.
+    index("receipts_org_invoice_key_idx")
+      .on(table.organizationId, identifierKey(table.invoiceNumber))
+      .where(sql`invoice_number is not null and merchant_tax_id is not null`),
     // Not before 2000, and at most a day after the UTC upload day (time zones):
     // a misread or Bikram Sambat year stored as AD fails this. The dashboard's
     // created_at scan bound relies on the upper limit.
@@ -725,6 +743,7 @@ export const supportMessages = pgTable(
 export const receiptsRelations = relations(receipts, ({ many, one }) => ({
   items: many(receiptItems),
   reviewer: one(user, { fields: [receipts.reviewedBy], references: [user.id] }),
+  uploader: one(user, { fields: [receipts.userId], references: [user.id] }),
 }));
 
 export const receiptItemsRelations = relations(receiptItems, ({ one }) => ({

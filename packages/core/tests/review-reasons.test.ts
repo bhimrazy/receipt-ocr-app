@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   editedReasons,
   isDateReason,
+  recheckedReasons,
   reviewReasons,
   totalsMismatch,
   type CheckedFields,
@@ -161,5 +162,49 @@ describe("editedReasons", () => {
     expect(
       editedReasons(["date_implausible"], { ...base, receiptDate: null }, new Set(["receiptDate"])),
     ).toEqual(["no_date"]);
+  });
+});
+
+describe("recheckedReasons", () => {
+  const clean = fields({ total: "10.00", subtotal: "10.00" });
+
+  it("fills in the checks an old receipt never had, and drops low_confidence", () => {
+    expect(recheckedReasons([], fields({ receiptDate: null, total: "10.00" }), [], false)).toEqual([
+      "no_date",
+    ]);
+    expect(recheckedReasons(["low_confidence"], clean, [], false)).toEqual([]);
+  });
+
+  it("takes the resolver's date reasons, or keeps the stored ones when a person set the date", () => {
+    expect(recheckedReasons([], clean, ["date_conflict"], false)).toEqual(["date_conflict"]);
+    expect(recheckedReasons(["date_ambiguous"], clean, [], false)).toEqual([]);
+    expect(recheckedReasons(["date_ambiguous"], clean, null, false)).toEqual(["date_ambiguous"]);
+    expect(recheckedReasons([], clean, null, false)).toEqual([]);
+  });
+
+  it("adds or clears possible_duplicate, and keeps codes it doesn't know, last", () => {
+    expect(recheckedReasons(["future_code"], clean, [], true)).toEqual([
+      "possible_duplicate",
+      "future_code",
+    ]);
+    expect(recheckedReasons(["possible_duplicate"], clean, [], false)).toEqual([]);
+  });
+
+  it("is stable: its own output rechecks to the same list", () => {
+    const once = recheckedReasons(
+      ["low_confidence"],
+      fields({ total: "9.00", subtotal: "10.00" }),
+      ["date_ambiguous"],
+      true,
+    );
+    expect(once).toEqual(["totals_mismatch", "date_ambiguous", "possible_duplicate"]);
+    expect(
+      recheckedReasons(
+        once,
+        fields({ total: "9.00", subtotal: "10.00" }),
+        ["date_ambiguous"],
+        true,
+      ),
+    ).toEqual(once);
   });
 });

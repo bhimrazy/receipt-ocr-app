@@ -14,11 +14,15 @@ export const REVIEW_REASONS = [
   "date_ambiguous",
   "date_conflict",
   "date_implausible",
-  // Set only by migration 0003 on receipts below 0.9 confidence; completions don't add it, and edits keep it.
+  // Set only by migration 0003 on receipts below 0.9 confidence; edits keep it and the recheck job drops it.
   "low_confidence",
+  // Another receipt added earlier in the workspace looks like the same bill (`duplicates.ts`).
+  "possible_duplicate",
 ] as const;
 
 export type ReviewReason = (typeof REVIEW_REASONS)[number];
+
+export const POSSIBLE_DUPLICATE = "possible_duplicate" satisfies ReviewReason;
 
 const DATE_REASONS: readonly string[] = ["date_ambiguous", "date_conflict", "date_implausible"];
 
@@ -106,6 +110,15 @@ const DEPENDS_ON: Partial<Record<ReviewReason, readonly EditableField[]>> = {
   totals_mismatch: AMOUNTS,
 };
 
+const inOrder = (reasons: Iterable<string>) => {
+  const all = new Set(reasons);
+  const known = REVIEW_REASONS.filter((reason) => all.has(reason));
+  return [
+    ...known,
+    ...[...all].filter((reason) => !(REVIEW_REASONS as readonly string[]).includes(reason)),
+  ];
+};
+
 /**
  * The reasons after an edit. Only checks that read a changed field are recomputed; the rest, `low_confidence`
  * and codes this version doesn't know included, are kept. A changed date or calendar was set by a person, so the
@@ -128,10 +141,26 @@ export function editedReasons(
     const fieldsRead = DEPENDS_ON[reason as ReviewReason];
     return fieldsRead?.some((field) => changed.has(field)) ?? false;
   });
-  const result = new Set([...kept, ...added]);
-  const known = REVIEW_REASONS.filter((reason) => result.has(reason));
-  return [
-    ...known,
-    ...[...result].filter((reason) => !(REVIEW_REASONS as readonly string[]).includes(reason)),
-  ];
+  return inOrder([...kept, ...added]);
+}
+
+/**
+ * The reasons the recheck job stores for a completed receipt, from its stored fields (edits
+ * included). `dateReasons` are the resolver's for the stored date, or null when a person set the
+ * date, which keeps the date reasons it has. `low_confidence` goes; codes this version doesn't know
+ * stay.
+ */
+export function recheckedReasons(
+  previous: readonly string[],
+  fields: CheckedFields,
+  dateReasons: readonly DateReason[] | null,
+  duplicate: boolean,
+): string[] {
+  const dates = dateReasons ?? previous.filter(isDateReason);
+  const known = REVIEW_REASONS as readonly string[];
+  return inOrder([
+    ...reviewReasons(fields, dates),
+    ...(duplicate ? [POSSIBLE_DUPLICATE] : []),
+    ...previous.filter((reason) => !known.includes(reason)),
+  ]);
 }

@@ -132,6 +132,7 @@ function harness(
     exportRows: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
     setReviewed: () => Effect.die("unused"),
+    setDuplicateDismissed: () => Effect.die("unused"),
     removeMany: (_scope, target) =>
       Effect.sync(() => {
         const ids = "ids" in target ? target.ids : [];

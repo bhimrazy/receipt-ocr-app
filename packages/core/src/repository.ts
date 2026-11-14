@@ -52,7 +52,9 @@ import {
   parseReceiptDate,
 } from "./receipt-fields";
 import type { ReceiptPatch } from "./receipt-patch";
-import { editedReasons } from "./review-reasons";
+import { editedReasons, POSSIBLE_DUPLICATE } from "./review-reasons";
+import { hasOlderCopy, isNewerCopyOf, oldestCopyOf, rowHasOlderCopy } from "./duplicates";
+import { isTimeZone } from "./analytics/time-buckets";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -86,6 +88,10 @@ export type ReceiptWithItems = Receipt & {
   imageUrl?: string;
   /** Who marked it reviewed; set by `get`, null once that user is deleted. */
   reviewer?: { name: string } | null;
+  /** Who uploaded it; set by `get`, null once that user is deleted. */
+  uploader?: { name: string } | null;
+  /** Set by `get` on a possible duplicate: the oldest receipt that looks like the same bill, if still there. */
+  duplicateOf?: string | null;
 };
 
 /** A History row: table columns only, no items or raw extraction. */
@@ -107,11 +113,11 @@ export type ReceiptSummary = {
   createdAt: Date;
   /** The uploader; null once their account is deleted. */
   userId: string | null;
-  /** Set on list rows: the uploader's name, null once their account is deleted. */
+  /** Set on list and export rows: the uploader's name, null once their account is deleted. */
   uploaderName?: string | null;
   /** When someone marked it reviewed; null until then, and again after a new extraction. */
   reviewedAt: Date | null;
-  /** Set on list rows: who marked it reviewed, null once their account is deleted. */
+  /** Set on list and export rows: who marked it reviewed, null once their account is deleted. */
   reviewerName?: string | null;
   /** Set on list rows: when a processing receipt's job next runs, if that is still ahead (waiting to retry). */
   retryAt?: Date | null;
@@ -130,13 +136,22 @@ export type ReceiptExportRow = ReceiptSummary & {
   groups: string[];
 };
 
+/** The list's review filters, beside the receipt statuses: the labels a completed row shows. */
+export const REVIEW_FILTERS = ["needs-review", "not-reviewed", "reviewed", "duplicate"] as const;
+export type ReviewFilter = (typeof REVIEW_FILTERS)[number];
+
 export type ReceiptFilters = {
   q?: string;
   category?: string;
-  status?: ReceiptStatus | "needs-review";
-  /** Inclusive receipt-date bounds, YYYY-MM-DD. */
+  status?: ReceiptStatus | ReviewFilter;
+  /**
+   * Inclusive receipt-date bounds, YYYY-MM-DD. A receipt with no date counts by the day it was added
+   * in `timeZone`, as Spending does.
+   */
   from?: string;
   to?: string;
+  /** IANA zone for undated receipts' added day; UTC when missing or unknown. */
+  timeZone?: string;
   /** Group ids: receipts in any of them. */
   groups?: string[];
   /** Only these receipts (a selection); ids that aren't UUIDs match nothing. */
@@ -221,6 +236,12 @@ export { MAX_EXTRACTION_ATTEMPTS };
 
 /** A completed receipt with a failed check (`review-reasons.ts`) that nobody has reviewed yet. */
 const needsReview = sql`${receipts.status} = 'completed' and ${receipts.reviewReasons} <> '{}' and ${receipts.reviewedAt} is null`;
+const REVIEW_FILTER_SQL: Record<ReviewFilter, SQL> = {
+  "needs-review": needsReview,
+  "not-reviewed": sql`${receipts.status} = 'completed' and ${receipts.reviewReasons} = '{}' and ${receipts.reviewedAt} is null`,
+  reviewed: sql`${receipts.status} = 'completed' and ${receipts.reviewedAt} is not null`,
+  duplicate: sql`${receipts.status} = 'completed' and ${POSSIBLE_DUPLICATE} = any(${receipts.reviewReasons})`,
+};
 
 /**
  * A `processing` receipt whose job is gone or long overdue (nothing ran the
@@ -289,8 +310,9 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
     );
   }
   if (filters.category) conditions.push(eq(receipts.category, filters.category));
-  if (filters.status === "needs-review") {
-    conditions.push(needsReview);
+  const reviewFilter = REVIEW_FILTERS.find((f) => f === filters.status);
+  if (reviewFilter) {
+    conditions.push(REVIEW_FILTER_SQL[reviewFilter]);
   } else if (filters.status === "processing") {
     // Matches the Home "Reading now" count, which includes receipts not yet picked up.
     conditions.push(sql`${effectiveStatus} in ('uploaded', 'processing')`);
@@ -298,9 +320,25 @@ function filterWhere(scope: ReceiptScope, filters: ReceiptFilters): SQL | undefi
     conditions.push(sql`${effectiveStatus} = ${filters.status}`);
   }
   // Only real days reach the date comparison, where Postgres would reject the rest.
-  if (filters.from && isIsoDay(filters.from))
-    conditions.push(gte(receipts.receiptDate, filters.from));
-  if (filters.to && isIsoDay(filters.to)) conditions.push(lte(receipts.receiptDate, filters.to));
+  const zone = filters.timeZone && isTimeZone(filters.timeZone) ? filters.timeZone : "UTC";
+  const dayStart = (day: string) => sql`((${day}::date)::timestamp at time zone ${zone})`;
+  const undated = sql`${receipts.receiptDate} is null`;
+  if (filters.from && isIsoDay(filters.from)) {
+    conditions.push(
+      or(
+        gte(receipts.receiptDate, filters.from),
+        and(undated, sql`${receipts.createdAt} >= ${dayStart(filters.from)}`),
+      ),
+    );
+  }
+  if (filters.to && isIsoDay(filters.to)) {
+    conditions.push(
+      or(
+        lte(receipts.receiptDate, filters.to),
+        and(undated, sql`${receipts.createdAt} < ${dayStart(filters.to)} + interval '1 day'`),
+      ),
+    );
+  }
   if (filters.ids) {
     const ids = filters.ids.filter(isReceiptId);
     conditions.push(ids.length > 0 ? inArray(receipts.id, ids) : sql`false`);
@@ -514,6 +552,16 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       reviewed: boolean,
     ) => Effect.Effect<boolean, DbError>;
     /**
+     * "Not a duplicate": clears `possible_duplicate` and keeps it cleared through rechecks, or undoes
+     * that (the check runs again). False when nothing matched, the receipt isn't completed, or the
+     * caller may not edit it.
+     */
+    readonly setDuplicateDismissed: (
+      id: string,
+      scope: ReceiptScope,
+      dismissed: boolean,
+    ) => Effect.Effect<boolean, DbError>;
+    /**
      * Deletes the receipts the caller may delete (items and group memberships cascade) and
      * enqueues one job for their stored files, in one transaction. Others' uploads are
      * skipped for a plain member; other workspaces' ids count as not found. Refuses, deleting
@@ -604,6 +652,17 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               uploadDayOf(current.createdAt),
             );
             const itemRows = storedItems.map((item) => ({ ...item, receiptId: id }));
+            const bill = {
+              ...fields,
+              id,
+              organizationId: scope.organizationId,
+              createdAt: current.createdAt,
+            };
+            const copy = await tx.execute<{ older: boolean }>(
+              sql`select ${hasOlderCopy(bill)} as older`,
+            );
+            if (copy.rows[0]?.older)
+              fields.reviewReasons = [...fields.reviewReasons, POSSIBLE_DUPLICATE];
             const [row] = await tx
               .update(receipts)
               .set({
@@ -615,11 +674,18 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 // A review vouched for the previous values, not these.
                 reviewedAt: null,
                 reviewedBy: null,
+                duplicateDismissedAt: null,
                 updatedAt: new Date(),
               })
               .where(currentAttempt(id, scope, attempt))
               .returning();
             if (!row) return null;
+            // An older upload read late (a retry): the copies added after it are the duplicates.
+            await tx.execute(
+              sql`update receipts n set review_reasons = array_append(n.review_reasons, ${POSSIBLE_DUPLICATE})
+                where n.status = 'completed' and n.duplicate_dismissed_at is null
+                  and not (${POSSIBLE_DUPLICATE} = any(n.review_reasons)) and ${isNewerCopyOf(bill, "n")}`,
+            );
             await tx.delete(receiptItems).where(eq(receiptItems.receiptId, id));
             const items =
               itemRows.length === 0
@@ -734,9 +800,17 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               // position has every line at 0.
               items: { orderBy: [asc(receiptItems.position), sql`ctid`] },
               reviewer: { columns: { name: true } },
+              uploader: { columns: { name: true } },
             },
           });
-          if (!row || !isStaleCandidate(row)) return row ?? null;
+          if (!row) return null;
+          if (row.status === "completed" && row.reviewReasons.includes(POSSIBLE_DUPLICATE)) {
+            const found = await db.execute<{ id: string | null }>(
+              sql`select ${oldestCopyOf("r")} as id from receipts r where r.id = ${id}::uuid`,
+            );
+            return { ...row, duplicateOf: found.rows[0]?.id ?? null };
+          }
+          if (!isStaleCandidate(row)) return row;
           const [live] = await db
             .select({ id: jobs.id })
             .from(jobs)
@@ -814,6 +888,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               serviceCharge: receipts.serviceCharge,
               invoiceNumber: receipts.invoiceNumber,
               merchantTaxId: receipts.merchantTaxId,
+              uploaderName: uploaderNameColumn,
+              reviewerName: reviewerNameColumn,
               // Qualified by hand: Drizzle renders columns unqualified in a single-table select.
               itemCount: sql<number>`(select count(*)::int from receipt_items where receipt_items.receipt_id = receipts.id)`,
               groups: sql<
@@ -898,6 +974,28 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
           const rows = await db
             .update(receipts)
             .set(reviewed ? reviewedBy(scope) : { reviewedAt: null, reviewedBy: null })
+            .where(and(writable(id, scope), eq(receipts.status, "completed")))
+            .returning({ id: receipts.id });
+          return rows.length > 0;
+        }),
+
+      setDuplicateDismissed: (id, scope, dismissed) =>
+        use(async (db) => {
+          if (!isReceiptId(id)) return false;
+          const rows = await db
+            .update(receipts)
+            .set(
+              dismissed
+                ? {
+                    duplicateDismissedAt: sql`now()`,
+                    reviewReasons: sql`array_remove(${receipts.reviewReasons}, ${POSSIBLE_DUPLICATE})`,
+                  }
+                : {
+                    duplicateDismissedAt: null,
+                    // Qualified by hand, as in `get`.
+                    reviewReasons: sql`case when ${rowHasOlderCopy("receipts")} and not (${POSSIBLE_DUPLICATE} = any(receipts.review_reasons)) then array_append(receipts.review_reasons, ${POSSIBLE_DUPLICATE}) else receipts.review_reasons end`,
+                  },
+            )
             .where(and(writable(id, scope), eq(receipts.status, "completed")))
             .returning({ id: receipts.id });
           return rows.length > 0;
