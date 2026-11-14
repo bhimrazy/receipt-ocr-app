@@ -200,6 +200,12 @@ Nightly database backups (#131) were closed for now; the `ops/db-backups` branch
 
 Tracks started 2026-11-14:
 
+- Receipt status, recheck and duplicates (`feat/receipt-status-duplicates`): one review vocabulary everywhere (Needs
+  review, Not reviewed, Reviewed; Scanning, Couldn't scan), the banner's close button gone, the `receipt.recheck` job
+  (once per deploy, drops `low_confidence`), `possible_duplicate` with "Not a duplicate", "Added …" on rows and the
+  receipt page, a Sort menu on every width, undated receipts in date ranges by their added day, four CSV columns
+  appended. Migration `0009_receipt_duplicates` (one nullable column, one partial index) needs the owner's go.
+
 - Support retention tweaks and one migration: `CHECK (closed_at >= created_at)`, an index for the purge, and an index
   on `step_up_codes (expires_at)`.
 - Reliability follow-ups: a missing stored file is non-retryable in the extract job, a sweep for orphaned objects,
