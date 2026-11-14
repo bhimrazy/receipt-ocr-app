@@ -1,5 +1,11 @@
 import { createDb, type DbClient } from "@receipt-ocr/db";
-import { deleteObjects, getObject, putObject, signedGetUrl } from "@receipt-ocr/storage";
+import {
+  deleteObjects,
+  getObject,
+  ObjectNotFound,
+  putObject,
+  signedGetUrl,
+} from "@receipt-ocr/storage";
 import { Context, Effect, Layer, Redacted } from "effect";
 import { DatabaseUrl, loadStorageConfig } from "./config";
 import { DbError, NotConfigured, StorageError } from "./errors";
@@ -95,6 +101,11 @@ const call = <A>(
     Effect.tryPromise({
       // The signal aborts the request when the fiber is interrupted (a timeout).
       try: (signal) => run(config, signal),
-      catch: (cause) => new StorageError({ message, cause }),
+      catch: (cause) =>
+        new StorageError({
+          message,
+          cause,
+          ...(cause instanceof ObjectNotFound ? { kind: "not-found" as const } : {}),
+        }),
     }),
   );
