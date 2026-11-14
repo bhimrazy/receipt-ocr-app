@@ -237,6 +237,8 @@ describe("withLineChecks", () => {
   it("falls back to stored quantities without a usable raw extraction", () => {
     expect(marks(null)).toEqual([false, true, false]);
     expect(marks({ items: "bad" })).toEqual([false, true, false]);
+  });
+});
 
 describe("recheckedReasons", () => {
   const clean = fields({ total: "10.00", subtotal: "10.00" });
