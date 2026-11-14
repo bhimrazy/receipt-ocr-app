@@ -204,6 +204,54 @@ the cause.
 | 12  | VAT register contents                     | Checked only by default, with a count and an "include not checked" option; duplicates out until resolved |
 | 13  | General CSV contents                      | Everything, with the review columns                                                                 |
 
+## Receipt date vs. uploaded date
+
+Today the list shows the receipt date (printed on the bill), and the uploaded time appears only on unfinished
+receipts. The Receipts date filter is on `receipt_date` only (`packages/core/src/repository.ts:302-303`). Spending
+uses the receipt date and falls back to the upload day when there is none
+(`packages/core/src/analytics/spend.ts:168`). The CSV has `created_at` but no uploader. `receipts.user_id` records
+who uploaded, and the receipt page already reads `uploaderName`.
+
+**Which date each job runs on**
+
+| Job                                 | Date that matters                                     | Why                                                                                         |
+| ----------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| VAT register, fiscal period         | Receipt date, as a BS month or fiscal year            | Input VAT belongs to the bill's period, not to the scan                                     |
+| Expense claim                       | Receipt date; upload date secondary                   | Policy windows ("submit within 60 days") count from the purchase                            |
+| Budgeting, Spending                 | Receipt date                                          | Spend belongs to the month it happened                                                      |
+| "What did I just scan", shared workspace | Uploaded date and uploader                       | Month-end handoff: "what has the shop added since my last export?"                          |
+| Late-scanned old bill (2017 bill today) | Receipt date for the books; uploaded date to find it | It belongs in 2017, but nobody will look there for it, and it may land in a period already filed |
+
+Two gaps follow:
+
+- **An undated receipt drops out of every date-filtered export.** A Kartik register built with a date filter misses
+  it, with no warning. `no_date` puts it in Needs review, but only once the reasons are recomputed for old receipts
+  (decision 10).
+- **A late bill changes a period that may already be filed.** The register for that month is now different from the
+  one sent. Nepal limits how late input VAT can be claimed (one year from the invoice date, by common guidance; not
+  verified here), so a bill older than that deserves a reason of its own.
+
+**Recommendation: the receipt date drives everything about money; the uploaded date drives "what's new".**
+
+| Surface        | Show or use                                                                                                                         |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| List           | Receipt date as now. "Sort by date added" as a sort option (default stays receipt date). In a workspace with more than one member, the uploader's name on the row's second line |
+| Receipt page   | Receipt date in Details; "Added 14 Nov 2026 by Asha" (test name) under it, always, not only while processing                        |
+| Filters        | Receipt date range (as now) plus "Added" presets (today, this week, since a date). Undated receipts never vanish silently: a date-filtered view says "3 receipts have no date" with a link |
+| Spending       | Receipt date only, as now. The upload-day fallback for undated receipts stays, but those receipts also count in Needs review          |
+| CSV            | Rename nothing. Append `uploaded_by` (name) beside the existing `created_at`; better, also append `uploaded_at` with the same value so the header says what it is, and keep `created_at` for importers |
+| VAT export     | Receipt date (AD and BS). Rows uploaded after the previous export of the same period are marked "added since last export"           |
+| Late bills     | A reason `old_bill` when the receipt date is more than a year before upload: "Dated 12 Mar 2017, added today. Check it belongs in this workspace's books" |
+
+| #   | Decision                                             | Recommendation                                                                          |
+| --- | ---------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 14  | Which date drives filters, Spending, VAT export      | Receipt date, as now                                                                    |
+| 15  | Uploaded date and uploader visible                   | On the receipt page always; uploader on list rows in multi-member workspaces; "date added" sort |
+| 16  | "Added" filter presets                               | Yes, for month-end handoff                                                              |
+| 17  | CSV                                                  | Append `uploaded_at` and `uploaded_by`; keep `created_at`                               |
+| 18  | Undated receipts in a date-filtered view             | Show a count and a link, never drop them silently                                       |
+| 19  | Old-bill reason                                      | Add `old_bill` at more than a year between receipt date and upload                      |
+
 ## Sources
 
 All opened 2026-11-14.
@@ -217,6 +265,7 @@ All opened 2026-11-14.
 
 ## Not verified
 
+- The one-year limit on claiming input VAT in Nepal.
 - Schedule 8 of the VAT Rules (exact purchase-book headings) and whether the 2024 amendment changed it.
 - Excel's handling of this CSV with Devanagari text; Tally's CSV/Excel import format.
 - How often real users hit line-caused mismatches: no usage data was read.
