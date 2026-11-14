@@ -112,7 +112,8 @@ outside Safari, shared files and direct API uploads are stored, and sent to the 
 | Account, workspaces, receipts, files                                          | Until the user deletes them                                              | Delete flows ([data model](../data-model.md#what-happens-on-delete)); files by `storage.delete` jobs queued with the row delete |
 | Support messages                                                              | 12 months after closing, or after the last change if never closed        | `maintenance.purge`, daily                                                                                                      |
 | Verification rows                                                             | Until expiry                                                             | Better Auth deletes expired rows on each lookup                                                                                 |
-| Rate-limit counters                                                           | About an hour                                                            | Better Auth prunes rows older than its longest window                                                                           |
+| Better Auth's rate-limit counters                                             | About an hour                                                            | Better Auth prunes rows older than its longest window                                                                           |
+| The app's rate-limit counters (`app_rate_limits`)                             | 2 days after a window starts; the longest window is a day                | `maintenance.purge`, daily                                                                                                      |
 | Usage ledger                                                                  | Indefinitely; unlinked from the user and workspace when they are deleted | `SET NULL` foreign keys                                                                                                         |
 | Billing records                                                               | While the workspace exists; afterwards without the workspace's identity  | Delete flows                                                                                                                    |
 | Sessions, step-up codes and events, job records, invitations, admin audit log | No limit yet                                                             | See [Planned](#planned)                                                                                                         |
@@ -167,13 +168,11 @@ In build order. Reasons and sources are in the
    days; finished jobs 30 days (keeping each user's welcome-email record); invitations 30 days after expiry or an
    answer; admin audit log 2 years. Empty the contact-reply payload on every terminal path. State the periods, and
    that files keep their metadata, in the privacy policy.
-2. TODO (2026-11-14): test whether Better Auth's rate-limit pruning shortens the app's 24-hour limits; if so, move
-   the app's counters to their own table.
-3. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
-4. TODO (2026-11-14): database backups with a restore test (STATUS D1).
-5. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
+2. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
+3. TODO (2026-11-14): database backups with a restore test (STATUS D1).
+4. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
    staying on the owner role.
-6. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
+5. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
    from `DATA_ENCRYPTION_KEYS`, AAD bound to table, column and row), a KMS-held key-encryption key, and one re-seal
    job covering those values and the auth-secret values ([BYOK plan](../../plans/2026-11-07-byok.md)).
 

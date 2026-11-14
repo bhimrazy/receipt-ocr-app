@@ -483,6 +483,21 @@ export const adminAuditLog = pgTable(
   ],
 ).enableRLS();
 
+/**
+ * The app's own fixed-window counters (`hitRateLimit`). Kept out of Better Auth's `rate_limit`, which
+ * deletes every row older than its longest window (an hour) and so would cut a day's cap short.
+ */
+export const appRateLimits = pgTable(
+  "app_rate_limits",
+  {
+    key: text("key").primaryKey(),
+    count: integer("count").notNull(),
+    /** Epoch milliseconds. */
+    windowStart: bigint("window_start", { mode: "number" }).notNull(),
+  },
+  (table) => [index("app_rate_limits_window_start_idx").on(table.windowStart)],
+).enableRLS();
+
 /** Runtime settings an admin can change (`plans`, `ocr`). Values are validated on read and write. */
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),
@@ -842,6 +857,7 @@ export const schema = {
   member,
   invitation,
   rateLimit,
+  appRateLimits,
   twoFactor,
   passkey,
 };

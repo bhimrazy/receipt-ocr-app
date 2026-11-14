@@ -1,6 +1,6 @@
 {
-  "id": "27b275d5-4ba6-400a-a0e2-3d1a7da70bc2",
-  "prevId": "228a49e4-b2e2-4155-ad1d-11416144f6f4",
+  "id": "3b9b405a-1af3-4211-9f8d-49518c28b87a",
+  "prevId": "3a5a27dc-6e98-460b-a27b-4f2342490c65",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -151,6 +151,53 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.app_rate_limits": {
+      "name": "app_rate_limits",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_start": {
+          "name": "window_start",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "app_rate_limits_window_start_idx": {
+          "name": "app_rate_limits_window_start_idx",
+          "columns": [
+            {
+              "expression": "window_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

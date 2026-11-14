@@ -121,7 +121,10 @@ no time-based pruning yet (proposed: 90 days, a follow-up in STATUS). `step_up_c
 emailed code; `step_up_codes_expires_idx` (`expires_at`) serves deleting expired codes.
 
 Also owned by Better Auth, with no foreign keys: `verification` (hashed email-verification and reset tokens) and
-`rate_limit` (fixed-window counters for auth endpoints, also used by the app's own limiters through `hitRateLimit`).
+`rate_limit` (fixed-window counters for auth endpoints). The app's own limiters (`hitRateLimit`) count in
+`app_rate_limits` (`key`, `count`, `window_start` in epoch milliseconds): Better Auth deletes every `rate_limit` row
+older than its longest window (an hour), which would cut a day-long cap short. `maintenance.purge` deletes a
+counter 2 days after its window starts.
 
 Notes:
 
