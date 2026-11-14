@@ -71,6 +71,13 @@
       "when": 1794666165186,
       "tag": "0009_oauth_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794669392915,
+      "tag": "0010_data_api_grants",
+      "breakpoints": true
     }
   ]
 }
