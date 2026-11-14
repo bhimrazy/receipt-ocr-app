@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { clearProviderTokens } from "../../account-security";
 import { Db } from "../../services";
+import { purgeRateLimits } from "../../workspace";
 import { purgeStepUpCodes } from "../../step-up/store";
 import { purgeSupportMessages } from "../../support";
 import { annotateEvent } from "../../telemetry/current";
@@ -100,6 +101,7 @@ export const maintenancePurge: JobDefinition<MaintenancePurgePayload, Db> = {
         step_up_codes: yield* inBatches(purgeStepUpCodes),
         jobs_succeeded: yield* inBatches((n) => purgeFinishedJobs("succeeded", n)),
         jobs_failed: yield* inBatches((n) => purgeFinishedJobs("failed", n)),
+        rate_limits: yield* inBatches(purgeRateLimits),
         provider_tokens: yield* inBatches(clearProviderTokens),
       };
       yield* annotateEvent({

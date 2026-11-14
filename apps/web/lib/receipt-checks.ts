@@ -24,14 +24,38 @@ export function fileNoun(receipt: { imageObjectKey: string | null }) {
   return receipt.imageObjectKey?.endsWith(".pdf") ? "PDF" : "photo";
 }
 
+const SHORT: Partial<Record<string, string>> = {
+  no_merchant: "No merchant",
+  no_date: "No date found",
+  no_total: "No total",
+  no_currency: "No currency",
+  totals_mismatch: "Amounts don't add up",
+  date_ambiguous: "Date unclear",
+  date_conflict: "Date unclear",
+  date_implausible: "Date unclear",
+  low_confidence: "Hard to read",
+};
+
+/** The first reason in a few words, for a row with no room for the sentence; null without one. */
+export function shortReason(reasons: readonly string[]): string | null {
+  for (const reason of reasons) {
+    if (reason === "possible_duplicate") continue;
+    return SHORT[reason] ?? "Needs a check";
+  }
+  return null;
+}
+
 /**
  * The receipt's stored review reasons in plain words, one line each: the same list that puts it in Needs review.
- * A reason this version doesn't know gets a generic line rather than none.
+ * A reason this version doesn't know gets a generic line rather than none. A possible duplicate has its own
+ * notice, with a link to the other receipt, so it has no line here.
  */
 export function checksFor(receipt: CheckedReceipt, money: (value: string | null) => string | null) {
   const noun = fileNoun(receipt);
-  const lines = receipt.reviewReasons.map((reason) => {
+  const lines = receipt.reviewReasons.flatMap((reason) => {
     switch (reason) {
+      case "possible_duplicate":
+        return [];
       case "no_merchant":
         return "No merchant name was found.";
       case "no_date":

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Scope = { organizationId: string; userId: string; role: string; impersonatedBy?: string };
-const state = vi.hoisted(() => ({ scope: null as Scope | null }));
+const state = vi.hoisted(() => ({ scope: null as Scope | null, zone: "Asia/Kathmandu" }));
 const repo = vi.hoisted(() => ({
   removeMany: vi.fn(),
   matchingIds: vi.fn(),
@@ -41,6 +41,12 @@ vi.mock("@/lib/session", () => ({
   requireActiveScope: async () => state.scope,
 }));
 vi.mock("@/lib/jobs", () => ({ kickJob }));
+// The viewer's zone, which decides the added day of undated receipts in a date range.
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) => (name === "tz" ? { value: state.zone } : undefined),
+  }),
+}));
 vi.mock("next/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/server")>()),
   after,
@@ -141,7 +147,7 @@ describe("POST /api/receipts/delete", () => {
     );
     expect(res.status).toBe(409);
     expect(repo.removeMany).toHaveBeenCalledWith(owner, {
-      filters: expect.objectContaining({ status: "failed", q: "cafe" }),
+      filters: expect.objectContaining({ status: "failed", q: "cafe", timeZone: "Asia/Kathmandu" }),
       expected: 3,
     });
     expect(kickJob).not.toHaveBeenCalled();

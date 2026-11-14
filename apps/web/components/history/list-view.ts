@@ -3,16 +3,39 @@
 export const PAGE_SIZES = [25, 50, 100] as const;
 export const DEFAULT_PAGE_SIZE = 25;
 
-export const SORT_KEYS = ["date", "total", "merchant"] as const;
+export const SORT_KEYS = ["uploaded", "date", "total", "merchant"] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 export type SortDir = "asc" | "desc";
 export type ListSort = { by: SortKey; dir: SortDir };
 
-/** Without `sort`, the list is newest upload first. */
+/** Without `sort`, the list is newest upload first; that order is never written as a `sort`. */
 export type ListView = { size: number; sort?: ListSort };
 
-/** Newest date and largest total first; merchants A to Z. */
-const FIRST_DIR: Record<SortKey, SortDir> = { date: "desc", total: "desc", merchant: "asc" };
+/** Newest added and date and largest total first; merchants A to Z. */
+const FIRST_DIR: Record<SortKey, SortDir> = {
+  uploaded: "desc",
+  date: "desc",
+  total: "desc",
+  merchant: "asc",
+};
+
+const isDefault = (sort: ListSort) => sort.by === "uploaded" && sort.dir === "desc";
+
+/** The orders the Sort menu offers, every width: each key in both directions. */
+export const SORT_OPTIONS: { sort: ListSort; label: string }[] = [
+  { sort: { by: "uploaded", dir: "desc" }, label: "Added, newest first" },
+  { sort: { by: "uploaded", dir: "asc" }, label: "Added, oldest first" },
+  { sort: { by: "date", dir: "desc" }, label: "Receipt date, newest first" },
+  { sort: { by: "date", dir: "asc" }, label: "Receipt date, oldest first" },
+  { sort: { by: "total", dir: "desc" }, label: "Total, highest first" },
+  { sort: { by: "total", dir: "asc" }, label: "Total, lowest first" },
+  { sort: { by: "merchant", dir: "asc" }, label: "Merchant, A to Z" },
+  { sort: { by: "merchant", dir: "desc" }, label: "Merchant, Z to A" },
+];
+
+/** The Sort menu's value for a view: `uploaded:desc` without a sort. */
+export const sortValue = (sort: ListSort | undefined) =>
+  sort ? `${sort.by}:${sort.dir}` : "uploaded:desc";
 
 type Params = URLSearchParams | Record<string, string | string[] | undefined>;
 
@@ -27,11 +50,12 @@ export function viewFromParams(params: Params): ListView {
   const by = first(params, "sort");
   const dir = first(params, "dir");
   const key = SORT_KEYS.find((k) => k === by);
+  const sort: ListSort | undefined = key
+    ? { by: key, dir: dir === "asc" || dir === "desc" ? dir : FIRST_DIR[key] }
+    : undefined;
   return {
     size: PAGE_SIZES.find((s) => s === size) ?? DEFAULT_PAGE_SIZE,
-    sort: key
-      ? { by: key, dir: dir === "asc" || dir === "desc" ? dir : FIRST_DIR[key] }
-      : undefined,
+    sort: sort && !isDefault(sort) ? sort : undefined,
   };
 }
 
@@ -40,7 +64,7 @@ export function setViewParams(params: URLSearchParams, view: ListView) {
   params.delete("sort");
   params.delete("dir");
   if (view.size !== DEFAULT_PAGE_SIZE) params.set("size", String(view.size));
-  if (view.sort) {
+  if (view.sort && !isDefault(view.sort)) {
     params.set("sort", view.sort.by);
     params.set("dir", view.sort.dir);
   }

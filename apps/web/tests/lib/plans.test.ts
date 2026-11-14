@@ -42,11 +42,11 @@ describe("default plans", () => {
     });
   });
 
-  it("counts Free per person: 20 a day, 30 a month, with a 300 a day pool across every Free user", () => {
+  it("counts Free per workspace: 50 a month, up to 20 a day, with a 300 a day pool across every Free workspace", () => {
     expect(DEFAULT_PLANS.free).toMatchObject({
-      scope: "user",
+      scope: "workspace",
       receiptsPerDay: 20,
-      receiptsPerMonth: 30,
+      receiptsPerMonth: 50,
       poolPerDay: 300,
     });
   });
@@ -55,9 +55,9 @@ describe("default plans", () => {
     expect(DEFAULT_PLANS.free.receiptsPerMonth!).toBeLessThan(DEFAULT_PLANS.pro.receiptsPerMonth!);
   });
 
-  it("allows 3 members in a Free workspace and 10 in a Pro one", () => {
-    expect(DEFAULT_PLANS.free.membersPerWorkspace).toBe(3);
-    expect(DEFAULT_PLANS.pro.membersPerWorkspace).toBe(10);
+  it("allows 2 members in a Free workspace and 5 in a Pro one", () => {
+    expect(DEFAULT_PLANS.free.membersPerWorkspace).toBe(2);
+    expect(DEFAULT_PLANS.pro.membersPerWorkspace).toBe(5);
   });
 
   it("caps an upload batch at 10 images on every plan", () => {

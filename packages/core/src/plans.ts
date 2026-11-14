@@ -7,9 +7,8 @@
  * table, with how each limit is counted, is in docs/architecture/flows/billing.md.
  */
 
-export const QUOTA_SCOPES = ["user", "workspace"] as const;
 /** Who a plan's day and month limits count: each person, or the workspace's members together. */
-export type QuotaScope = (typeof QUOTA_SCOPES)[number];
+export type QuotaScope = "user" | "workspace";
 
 /**
  * Flat so the stored settings JSON and the admin audit diff stay one level
@@ -17,7 +16,7 @@ export type QuotaScope = (typeof QUOTA_SCOPES)[number];
  */
 export interface PlanPolicy {
   // Scans: the allowance, counted for `scope` in UTC calendar windows.
-  /** `user`: each person, across every workspace on this plan (Free). `workspace`: shared by its members (Pro). */
+  /** `user`: each person, across every workspace on this plan. `workspace`: shared by its members. */
   scope: QuotaScope;
   /** Scans per UTC day, for `scope`. */
   receiptsPerDay: number;
@@ -71,17 +70,17 @@ export const MAX_BATCH = 20;
 export const MAX_MEMBERS = 100;
 
 export const DEFAULT_PLANS: PlanTable = {
-  // Per person across all their workspaces: 20 a day, 30 a month, and 300 a day for every Free
-  // user together.
+  // Per workspace, shared by its members: 50 a month, up to 20 a day, and 300 a day for every Free
+  // workspace together.
   free: {
-    scope: "user",
+    scope: "workspace",
     receiptsPerDay: 20,
-    receiptsPerMonth: 30,
+    receiptsPerMonth: 50,
     poolPerDay: 300,
     receiptsPerMinute: 10,
     batchMax: DEFAULT_BATCH_MAX,
     workspaces: 1,
-    membersPerWorkspace: 3,
+    membersPerWorkspace: 2,
   },
   // Per workspace, shared by its members: 500 a month, up to 200 a day.
   pro: {
@@ -92,7 +91,7 @@ export const DEFAULT_PLANS: PlanTable = {
     receiptsPerMinute: 30,
     batchMax: DEFAULT_BATCH_MAX,
     workspaces: 2,
-    membersPerWorkspace: 10,
+    membersPerWorkspace: 5,
   },
 };
 

@@ -3,6 +3,7 @@ import {
   drainOnce,
   JOB_REGISTRY,
   scheduleMaintenance,
+  scheduleRecheck,
   tick,
   type WideEventFields,
 } from "@receipt-ocr/core";
@@ -97,11 +98,12 @@ const DRAIN_CONCURRENCY = 3;
 
 /**
  * One bounded pass over the queue for the cron route; never sleeps for backoff. The cron is the
- * only clock the app has, so it also queues the daily maintenance run first.
+ * only clock the app has, so it also queues the daily maintenance run and, once per deploy, the
+ * review-reasons recheck first.
  */
 export const drainQueue = (context: WideEventFields) =>
   Effect.zipRight(
-    scheduleMaintenance(),
+    Effect.zipRight(scheduleMaintenance(), scheduleRecheck()),
     drainOnce({
       worker: workerId(),
       registry: JOB_REGISTRY,

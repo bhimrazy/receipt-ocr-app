@@ -6,6 +6,13 @@ export * from "./drain";
 export * from "./kinds/contact-reply";
 export { MAINTENANCE_PURGE, scheduleMaintenance } from "./kinds/maintenance-purge";
 export * from "./kinds/receipt-extract";
+export {
+  RECEIPT_RECHECK,
+  RECHECK_VERSION,
+  receiptRecheckJob,
+  resetRecheckSchedule,
+  scheduleRecheck,
+} from "./kinds/receipt-recheck";
 export { SUPPORT_NOTIFY, SupportNotifyMailer, type SupportNotice } from "./kinds/support-notify";
 export * from "./kinds/welcome-email";
 export * from "./queue";

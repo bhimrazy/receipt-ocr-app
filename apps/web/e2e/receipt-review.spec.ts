@@ -19,13 +19,14 @@ test("marking a receipt reviewed replaces its checks with who reviewed it, and U
   await page.goto(`/app/receipts/${id}`);
   const card = page.getByRole("region", { name: "Check before you use this" });
   await expect(card).toContainText("Overall confidence is 60%");
-  // The header badge: Needs review, and the Checked badge that replaces it.
+  // The header's state: Needs review, then Reviewed. The card has no close button to vouch with.
   const flag = page.getByText("Needs review", { exact: true });
-  const checked = page.getByText("Checked by E2E User");
+  const checked = page.getByText("Reviewed", { exact: true });
   await expect(flag).toBeVisible();
   await expect(checked).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Mark as reviewed" })).toHaveCount(0);
 
-  await card.getByRole("button", { name: "Mark as reviewed" }).click();
+  await card.getByRole("button", { name: "Looks right" }).click();
   await expect(card).toBeHidden();
   await expect(page.getByText("Reviewed by E2E User")).toBeVisible();
   await expect(page.getByRole("button", { name: "Undo review" })).toBeFocused();
@@ -64,7 +65,7 @@ test("marking a receipt reviewed replaces its checks with who reviewed it, and U
   await expect(flag).toBeVisible();
 });
 
-test("saving a correction marks the receipt checked and clears its line warnings, and Undo brings them back", async ({
+test("saving a correction marks the receipt reviewed and clears its line warnings, and Undo brings them back", async ({
   page,
 }) => {
   const email = uniqueEmail("review-save");

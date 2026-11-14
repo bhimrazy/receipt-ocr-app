@@ -4,6 +4,7 @@ import {
   getReceiptWithImage,
   isIsoDay,
   MAX_BULK_DELETE,
+  REVIEW_FILTERS,
   ReceiptRepo,
   type ReceiptCounts,
   type ReceiptExportRow,
@@ -13,11 +14,14 @@ import {
   type ReceiptWithItems,
 } from "@receipt-ocr/core";
 import { Effect } from "effect";
+import { cookies } from "next/headers";
 import { cache } from "react";
 import { z } from "zod";
 import { DEFAULT_PAGE_SIZE, viewFromParams, type ListSort } from "@/components/history/list-view";
 import { runtime } from "./runtime";
 import { requireActiveScope } from "./session";
+import { viewerTimeZone } from "./spend";
+import { TIME_ZONE_COOKIE } from "./time-zone-cookie";
 
 export type { ReceiptStatus } from "@receipt-ocr/core";
 export { getUsageSummary, type UsageSummary } from "./quota";
@@ -50,7 +54,18 @@ export function pageNumber(requested: number | undefined): number {
   const page = Math.trunc(requested ?? 1);
   return Number.isFinite(page) ? Math.min(MAX_PAGE, Math.max(1, page)) : 1;
 }
-const STATUSES = new Set(["uploaded", "processing", "completed", "failed", "needs-review"]);
+const STATUSES = new Set<string>([
+  "uploaded",
+  "processing",
+  "completed",
+  "failed",
+  ...REVIEW_FILTERS,
+]);
+
+/** The viewer's IANA zone from the time-zone cookie, UTC without one. */
+export async function viewerZone() {
+  return viewerTimeZone((await cookies()).get(TIME_ZONE_COOKIE)?.value);
+}
 /** Group filter from `?group=` (repeatable): valid ids only, at most MAX_GROUP_FILTERS. */
 export const MAX_GROUP_FILTERS = 20;
 const groupFilterSchema = z
@@ -72,6 +87,7 @@ export function cleanFilters(input: ReceiptListFilters): ReceiptFilters {
     to: input.to && isIsoDay(input.to) ? input.to : undefined,
     groups: cleanGroups(input.groups),
     ids: input.ids ? cleanIds(input.ids) : undefined,
+    timeZone: input.timeZone ? viewerTimeZone(input.timeZone) : undefined,
   };
 }
 
@@ -142,7 +158,7 @@ export async function listReceiptSummaries(
     Math.max(1, Math.trunc(filters.pageSize ?? DEFAULT_PAGE_SIZE)),
   );
   const page = pageNumber(filters.page);
-  const clean = cleanFilters(filters);
+  const clean = { ...cleanFilters(filters), timeZone: await viewerZone() };
 
   const scope = await requireActiveScope();
   const { rows, total } = await runtime.runPromise(
@@ -173,9 +189,15 @@ export const exportRows = (
   scope: { organizationId: string; userId: string },
   filters: ReceiptListFilters,
 ) =>
-  Effect.flatMap(ReceiptRepo, (repo) =>
-    repo.exportRows(scope, cleanFilters(filters), MAX_EXPORT_ROWS + 1, filters.sort),
-  ).pipe(
+  Effect.all([ReceiptRepo, Effect.promise(viewerZone)]).pipe(
+    Effect.flatMap(([repo, timeZone]) =>
+      repo.exportRows(
+        scope,
+        { ...cleanFilters(filters), timeZone },
+        MAX_EXPORT_ROWS + 1,
+        filters.sort,
+      ),
+    ),
     Effect.map((rows): { rows: ReceiptExportRow[]; truncated: boolean } => ({
       rows: rows.slice(0, MAX_EXPORT_ROWS),
       truncated: rows.length > MAX_EXPORT_ROWS,
@@ -187,14 +209,15 @@ export const exportRows = (
  * action takes ids. `truncated` when more than MAX_BULK_DELETE match.
  */
 export const matchingReceiptIds = (scope: ReceiptScope, filters: ReceiptListFilters) =>
-  Effect.flatMap(ReceiptRepo, (repo) =>
-    repo.matchingIds(
-      scope,
-      { ...cleanFilters(filters), ids: undefined },
-      MAX_BULK_DELETE + 1,
-      filters.sort,
+  Effect.all([ReceiptRepo, Effect.promise(viewerZone)]).pipe(
+    Effect.flatMap(([repo, timeZone]) =>
+      repo.matchingIds(
+        scope,
+        { ...cleanFilters(filters), ids: undefined, timeZone },
+        MAX_BULK_DELETE + 1,
+        filters.sort,
+      ),
     ),
-  ).pipe(
     Effect.map((ids) => ({
       ids: ids.slice(0, MAX_BULK_DELETE),
       truncated: ids.length > MAX_BULK_DELETE,
