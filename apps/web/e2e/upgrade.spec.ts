@@ -370,8 +370,8 @@ test.describe("on a phone, Home keeps the plan state outside the upload panel", 
 
     await spendShare(page, email, 0.35);
     await page.reload();
-    await expect(plan.getByText(/^\d+ scans? left this month$/)).toBeVisible();
-    await expect(plan.getByRole("button")).toHaveCount(0);
+    await expect(plan.getByText(/^\d+ scans? left this month · resets \d+ \w+$/)).toBeVisible();
+    await expect(plan.getByRole("link", { name: /^Upgrade/ })).toBeVisible();
     await expect(upload).toBeHidden();
 
     await addScans(email, 20, "month");

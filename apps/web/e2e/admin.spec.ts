@@ -116,7 +116,7 @@ test("plan limits saved by an admin show on the customer's billing page", async 
 
     await signIn(target.page, target.email);
     await target.page.goto("/app/settings/billing");
-    await expect(target.page.getByText(/^17 a day · up to \d+ members$/)).toBeVisible();
+    await expect(target.page.getByText(/^\d+ a month · 17 a day · \d+ members$/)).toBeVisible();
   } finally {
     // Other tests expect the defaults: put back whatever was there.
     await sql((db) =>
