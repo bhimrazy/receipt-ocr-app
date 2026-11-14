@@ -25,7 +25,7 @@ const usage = (used: number, over: Partial<Usage> = {}): Usage => ({
 
 // What an admin might save in Plan limits: every number differs from the defaults.
 const edited: PlanTable = {
-  free: { ...DEFAULT_PLANS.free, receiptsPerDay: 15, receiptsPerMonth: 60, membersPerWorkspace: 2 },
+  free: { ...DEFAULT_PLANS.free, receiptsPerDay: 15, receiptsPerMonth: 60, membersPerWorkspace: 3 },
   pro: {
     ...DEFAULT_PLANS.pro,
     receiptsPerDay: 150,
@@ -36,11 +36,11 @@ const edited: PlanTable = {
 };
 
 describe("upgrade copy", () => {
-  it("words the comparison from the saved limits, per person against shared", () => {
+  it("words the comparison from the saved limits, per workspace on both plans", () => {
     expect(comparisonRows(edited)).toEqual([
-      { label: "Scans a month", free: "60 per person", pro: "750 shared" },
+      { label: "Scans a month", free: "60", pro: "750" },
       { label: "Scans a day", free: "15", pro: "150" },
-      { label: "Members per workspace", free: "2", pro: "12" },
+      { label: "Members per workspace", free: "3", pro: "12" },
       { label: "Workspaces you can own", free: "1", pro: "3" },
       { label: "Busy-day pauses", free: "Can pause", pro: "Never" },
     ]);
@@ -51,7 +51,7 @@ describe("upgrade copy", () => {
       free: { ...edited.free, receiptsPerMonth: null, poolPerDay: null },
       pro: edited.pro,
     });
-    expect(rows[0]).toEqual({ label: "Scans a month", free: "No limit", pro: "750 shared" });
+    expect(rows[0]).toEqual({ label: "Scans a month", free: "No limit", pro: "750" });
     expect(rows[4]).toEqual({ label: "Busy-day pauses", free: "Never", pro: "Never" });
   });
 
@@ -86,6 +86,9 @@ describe("upgrade copy", () => {
     expect(day?.body).toBe(
       "You've used today's 20 Free scans. Uploads open at 00:00 UTC. Pro allows up to 150 a day in this workspace.",
     );
+    expect(
+      bannerCopy(usage(50, { blocked: "month", scope: "workspace", limit: 50 }), edited.pro)?.body,
+    ).toMatch(/^This workspace has used all 50 Free scans this month\./);
     expect(bannerCopy(usage(5, { blocked: "pool" }), edited.pro)?.body).toContain(
       "Pro workspaces don't use it.",
     );

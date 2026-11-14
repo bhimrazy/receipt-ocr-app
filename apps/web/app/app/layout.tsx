@@ -6,7 +6,7 @@ import { NoWorkspace } from "@/components/no-workspace";
 import { OfflineBar } from "@/components/offline-bar";
 import { RefreshOnReturn } from "@/components/refresh-on-return";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
-import { UsageMeter, usageWarns, type Usage } from "@/components/usage-meter";
+import { UsageMeter, type Usage } from "@/components/usage-meter";
 import { AccountSheet, UserMenu, WorkspaceNameButton, type MenuUser } from "@/components/user-menu";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { SecurityNudge } from "@/components/security/security-nudge";
@@ -18,7 +18,7 @@ import { UpgradeModal } from "@/components/upgrade/upgrade-modal";
 import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
 import { ASK_OWNER, proOpensSoon } from "@/lib/upgrade-copy";
 import { getUpgradeOffer } from "@/lib/upgrade-offer";
-import type { UpgradeOffer } from "@/lib/upgrade-level";
+import { upgradeLevel, type UpgradeOffer } from "@/lib/upgrade-level";
 import { errorFields, logger } from "@/lib/log";
 import { getCurrentPlan, getPlanTable } from "@/lib/plan-limits";
 import type { PlanId, PlanPolicy } from "@/lib/plans";
@@ -64,7 +64,8 @@ async function Meter({ offer }: { offer: UpgradeOffer | null }) {
 }
 
 function meterAction(usage: Usage, plan: PlanId, offer: UpgradeOffer | null, pro: PlanPolicy) {
-  if (plan !== "free" || !usageWarns(usage) || usage.blocked === "global") return null;
+  const level = upgradeLevel(usage);
+  if (plan !== "free" || level === null || level === "quiet") return null;
   if (offer?.audience === "owner") {
     return offer.level === "at" ? (
       <UpgradeTrigger className="w-full" size="sm" surface="meter">

@@ -12,24 +12,21 @@ test("pricing shows Free, Pro and Custom with a monthly/yearly switch, and the F
   await expect(page.getByRole("heading", { name: "Free", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pro", exact: true })).toBeVisible();
   // Numbers come from the saved plan table; admin.spec.ts changes it for a moment, so match the shape.
-  await expect(
-    page.getByText(/^\d+ scans a month shared by the workspace, up to \d+ a day$/),
-  ).toBeVisible();
-  await expect(page.getByText(/^\d+ scans a day and \d+ a month for each member$/)).toBeVisible();
+  await expect(page.getByText(/^\d+ scans a month per workspace, up to \d+ a day$/)).toHaveCount(2);
   await expect(page.getByText(/^Up to \d+ members?$/)).toHaveCount(2);
   await expect(page.getByText(/^\d+ workspaces? to own$/)).toBeVisible();
   await expect(
-    page.getByText(/^Own up to \d+ workspaces \(each upgraded separately\)$/),
+    page.getByText(/^Own up to \d+ workspaces, each upgraded separately$/),
   ).toBeVisible();
   // Pro states one workspace rule, not "1 workspace" next to "Own up to 2".
   await expect(page.getByText("1 workspace", { exact: true })).toHaveCount(0);
-  // Pro's list starts from Free.
+  // Pro's list includes Free.
   await expect(page.getByText("Everything in Free", { exact: true })).toBeVisible();
 
   // Custom has no price; its button opens the support form on "Plans & limits".
   await expect(page.getByRole("heading", { name: "Custom", exact: true })).toBeVisible();
   await expect(page.getByText("Let's talk", { exact: true })).toBeVisible();
-  await expect(page.getByText(/^More scans, members or workspaces/)).toBeVisible();
+  await expect(page.getByText(/^Higher limits on request/)).toBeVisible();
   await page.getByRole("button", { name: "Contact us" }).first().click();
   const form = page.getByRole("dialog");
   await expect(form).toBeVisible();

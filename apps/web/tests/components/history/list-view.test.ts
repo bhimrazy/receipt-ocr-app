@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { historyHref, exportHref } from "@/components/history/history-href";
-import { nextSort, rangeText, viewFromParams } from "@/components/history/list-view";
+import {
+  nextSort,
+  rangeText,
+  SORT_OPTIONS,
+  sortValue,
+  viewFromParams,
+} from "@/components/history/list-view";
 
 describe("rangeText", () => {
   it("names the rows on the page within the whole list", () => {
@@ -32,6 +38,27 @@ describe("list view params", () => {
       by: "date",
       dir: "desc",
     });
+  });
+
+  it("reads oldest added first, and treats newest added first as no sort", () => {
+    expect(viewFromParams({ sort: "uploaded", dir: "asc" }).sort).toEqual({
+      by: "uploaded",
+      dir: "asc",
+    });
+    expect(viewFromParams({ sort: "uploaded" }).sort).toBeUndefined();
+    expect(historyHref({}, 1, { size: 25, sort: { by: "uploaded", dir: "desc" } })).toBe(
+      "/app/receipts",
+    );
+  });
+
+  it("offers every order in the Sort menu, newest added first", () => {
+    expect(sortValue(undefined)).toBe(sortValue(SORT_OPTIONS[0]!.sort));
+    const values = SORT_OPTIONS.map((option) => sortValue(option.sort));
+    expect(new Set(values).size).toBe(8);
+    for (const option of SORT_OPTIONS.slice(1)) {
+      const params = new URLSearchParams({ sort: option.sort.by, dir: option.sort.dir });
+      expect(viewFromParams(params).sort).toEqual(option.sort);
+    }
   });
 
   it("flips the sorted column and starts others in their natural direction", () => {

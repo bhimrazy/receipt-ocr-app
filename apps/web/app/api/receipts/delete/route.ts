@@ -11,7 +11,7 @@ import {
 import { kickJob } from "@/lib/jobs";
 import { readJson } from "@/lib/json-body";
 import type { WideEvent } from "@/lib/log";
-import { strictFiltersFromQuery, WORKSPACE_CHANGED } from "@/lib/receipts";
+import { strictFiltersFromQuery, viewerZone, WORKSPACE_CHANGED } from "@/lib/receipts";
 import { getActiveScope } from "@/lib/session";
 
 /** Room for MAX_BULK_DELETE ids. */
@@ -72,7 +72,8 @@ async function remove(request: Request, _context: unknown, event: WideEvent) {
   } else {
     const filters = strictFiltersFromQuery(body.filter);
     if (!filters) return jsonError(400, "The filters weren't recognised. Reload and try again.");
-    target = { filters, expected: body.expected };
+    // The zone the list counted undated receipts in, so the count matches what was confirmed.
+    target = { filters: { ...filters, timeZone: await viewerZone() }, expected: body.expected };
   }
   event.mode = "ids" in body ? "ids" : "filter";
   event.count = "ids" in body ? body.ids.length : body.expected;

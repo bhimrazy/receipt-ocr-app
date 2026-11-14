@@ -66,6 +66,9 @@ type Seed = {
 
 async function seed(over: Seed = {}) {
   const status = over.status ?? (over.closedAt ? "closed" : "new");
+  // A second `new Date()` here can land a millisecond after the caller's `closedAt` and trip
+  // `support_messages_closed_after_created_check`.
+  const createdAt = over.createdAt ?? over.closedAt ?? new Date();
   const [row] = await db((d) =>
     d
       .insert(supportMessages)
@@ -78,8 +81,8 @@ async function seed(over: Seed = {}) {
         email: `${tag}-${randomUUID().slice(0, 8)}@example.com`,
         message: "A test question",
         organizationId: over.organizationId ?? null,
-        createdAt: over.createdAt ?? new Date(),
-        updatedAt: over.updatedAt ?? over.closedAt ?? over.createdAt ?? new Date(),
+        createdAt,
+        updatedAt: over.updatedAt ?? over.closedAt ?? createdAt,
         closedAt: over.closedAt ?? null,
       })
       .returning({ id: supportMessages.id }),

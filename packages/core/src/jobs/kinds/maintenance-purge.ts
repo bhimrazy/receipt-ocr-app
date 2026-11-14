@@ -9,6 +9,7 @@ import {
   purgeStepUpEvents,
 } from "../../retention";
 import { Db } from "../../services";
+import { purgeRateLimits } from "../../workspace";
 import { purgeStepUpCodes } from "../../step-up/store";
 import { purgeSupportMessages } from "../../support";
 import { annotateEvent } from "../../telemetry/current";
@@ -110,6 +111,7 @@ export const maintenancePurge: JobDefinition<MaintenancePurgePayload, Db> = {
         step_up_events: yield* inBatches(purgeStepUpEvents),
         invitations: yield* inBatches(purgeInvitations),
         admin_audit_log: yield* inBatches(purgeAdminAuditLog),
+        rate_limits: yield* inBatches(purgeRateLimits),
         provider_tokens: yield* inBatches(clearProviderTokens),
       };
       yield* annotateEvent({

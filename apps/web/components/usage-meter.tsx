@@ -7,7 +7,7 @@ import { NEAR_RATIO, usageRatio } from "@/lib/upgrade-level";
 export type Usage = {
   /** The month when the plan has a monthly limit, else the day. */
   period: "day" | "month";
-  /** Whose usage: the person's (Free, across their workspaces) or the workspace's (Pro). */
+  /** Whose usage: the person's (across their workspaces on the plan) or the workspace's. */
   scope: "user" | "workspace";
   used: number;
   limit: number;
@@ -30,9 +30,18 @@ export function usageRemaining({ used, limit, day }: Usage): number {
   return day ? Math.min(left, Math.max(0, day.limit - day.used)) : left;
 }
 
-/** Whether the meter is amber: from NEAR_RATIO used, or while uploads are refused. */
+/** The window `usageRemaining` comes from: the month when it is the tighter limit. */
+export function remainingSpan(usage: Usage): "today" | "this month" {
+  if (usage.period === "day") return "today";
+  return usageRemaining(usage) === Math.max(0, usage.limit - usage.used) ? "this month" : "today";
+}
+
+/** Whether the bar is amber: from NEAR_RATIO of its own window used, or while uploads are refused. */
+const barWarns = (usage: Usage) => usage.blocked !== null || usageRatio(usage) >= NEAR_RATIO;
+
+/** Whether the meter warns: the bar does, or today's limit is NEAR_RATIO used (the bar shows the month). */
 export const usageWarns = (usage: Usage) =>
-  usage.blocked !== null || usageRatio(usage) >= NEAR_RATIO;
+  barWarns(usage) || (usage.day !== undefined && usageRatio(usage.day) >= NEAR_RATIO);
 
 const resetDay = (date: Date) =>
   date.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
@@ -79,7 +88,7 @@ export function meterNote(usage: Usage): string {
       : `${left} left today`;
   }
   if (blocked === "month" || left === 0) return `Limit reached · opens ${shortDay(usage.resetsAt)}`;
-  if (blocked === "day") return "Today's limit reached · opens tomorrow";
+  if (blocked === "day") return "Today's limit reached · opens 00:00 UTC";
   const dayLeft = usageRemaining(usage);
   if (dayLeft < left) return `${dayLeft} left today`;
   return usageRatio(usage) >= NEAR_RATIO
@@ -108,6 +117,7 @@ export function UsageMeter({
   const { used, limit } = usage;
   const ratio = usageRatio(usage);
   const warn = usageWarns(usage);
+  const barWarn = barWarns(usage);
   const span = usage.period === "month" ? "this month" : "today";
 
   return (
@@ -128,7 +138,7 @@ export function UsageMeter({
         role="meter"
       >
         <div
-          className={cn("h-full rounded-full", warn ? "bg-warning" : "bg-primary")}
+          className={cn("h-full rounded-full", barWarn ? "bg-warning" : "bg-primary")}
           style={{ width: `${ratio * 100}%` }}
         />
       </div>

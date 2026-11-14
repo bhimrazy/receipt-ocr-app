@@ -146,6 +146,35 @@ describe("receiptsToCsv", () => {
     expect(value("review_reasons")).toBe("no_date; totals_mismatch");
   });
 
+  it("appends who added and reviewed each receipt, and when, after the existing columns", () => {
+    const csv = receiptsToCsv([
+      row({
+        userId: "u1",
+        uploaderName: "Asha",
+        reviewedAt: new Date("2026-08-02T08:30:00Z"),
+        reviewerName: "=Bikram",
+      }),
+      row({ id: "r2", reviewerName: "Ignored without a review" }),
+    ]);
+    const [header, reviewed, open] = csv.trimEnd().split("\n");
+    const columns = header!.split(",");
+    expect(columns.slice(-5)).toEqual([
+      "created_at",
+      "uploaded_at",
+      "uploaded_by",
+      "reviewed_at",
+      "reviewed_by",
+    ]);
+    expect(columns.filter((name) => name === "review_reasons")).toHaveLength(1);
+    expect(reviewed!.split(",").slice(-4)).toEqual([
+      "2026-08-01T10:00:00.000Z",
+      "Asha",
+      "2026-08-02T08:30:00.000Z",
+      "'=Bikram",
+    ]);
+    expect(open!.split(",").slice(-3)).toEqual(["", "", ""]);
+  });
+
   it("leaves negative amounts numeric so refunds still add up (L7)", () => {
     const csv = receiptsToCsv([row({ total: "-5.00", tax: "-0.40" })]);
     expect(csv).toContain(",-5.00,");

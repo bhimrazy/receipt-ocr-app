@@ -107,20 +107,21 @@ outside Safari, shared files and direct API uploads are stored, and sent to the 
 
 ## Retention
 
-| Data                                  | Kept                                                                                          | Enforced by                                                          |
-| ------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Account, workspaces, receipts, files  | Until the user deletes them                                                                   | Delete flows ([data model](../data-model.md#what-happens-on-delete)) |
-| Support messages                      | 12 months after closing, or after the last change if never closed                             | `maintenance.purge`, daily                                           |
-| Verification rows                     | Until expiry                                                                                  | Better Auth deletes expired rows on each lookup                      |
-| Rate-limit counters                   | About an hour                                                                                 | Better Auth prunes rows older than its longest window                |
-| Usage ledger                          | Indefinitely; unlinked from the user and workspace when they are deleted                      | `SET NULL` foreign keys                                              |
-| Billing records                       | While the workspace exists; afterwards without the workspace's identity                       | Delete flows                                                         |
-| Sessions and emailed step-up codes    | 1 day after expiry                                                                            | `maintenance.purge`, daily                                           |
-| Step-up events (method, outcome, IP)  | 90 days; the lockout reads 15 minutes                                                         | `maintenance.purge`, daily                                           |
-| Job records                           | 30 days after success, 90 after dying or a cancel; `email.welcome` rows while the user exists | `maintenance.purge`, daily                                           |
-| Contact-reply payload (address, name) | Until the job ends, whichever way                                                             | Emptied when it succeeds, dies, is reaped dead or is cancelled       |
-| Invitations                           | 30 days after expiry, whatever the status                                                     | `maintenance.purge`, daily                                           |
-| Admin audit log                       | 2 years                                                                                       | `maintenance.purge`, daily                                           |
+| Data                                              | Kept                                                                                          | Enforced by                                                                                                                     |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Account, workspaces, receipts, files              | Until the user deletes them                                                                   | Delete flows ([data model](../data-model.md#what-happens-on-delete)); files by `storage.delete` jobs queued with the row delete |
+| Support messages                                  | 12 months after closing, or after the last change if never closed                             | `maintenance.purge`, daily                                                                                                      |
+| Verification rows                                 | Until expiry                                                                                  | Better Auth deletes expired rows on each lookup                                                                                 |
+| Better Auth's rate-limit counters                 | About an hour                                                                                 | Better Auth prunes rows older than its longest window                                                                           |
+| The app's rate-limit counters (`app_rate_limits`) | 2 days after a window starts; the longest window is a day                                     | `maintenance.purge`, daily                                                                                                      |
+| Usage ledger                                      | Indefinitely; unlinked from the user and workspace when they are deleted                      | `SET NULL` foreign keys                                                                                                         |
+| Billing records                                   | While the workspace exists; afterwards without the workspace's identity                       | Delete flows                                                                                                                    |
+| Sessions and emailed step-up codes                | 1 day after expiry                                                                            | `maintenance.purge`, daily                                                                                                      |
+| Step-up events (method, outcome, IP)              | 90 days; the lockout reads 15 minutes                                                         | `maintenance.purge`, daily                                                                                                      |
+| Job records                                       | 30 days after success, 90 after dying or a cancel; `email.welcome` rows while the user exists | `maintenance.purge`, daily                                                                                                      |
+| Contact-reply payload (address, name)             | Until the job ends, whichever way                                                             | Emptied when it succeeds, dies, is reaped dead or is cancelled                                                                  |
+| Invitations                                       | 30 days after expiry, whatever the status                                                     | `maintenance.purge`, daily                                                                                                      |
+| Admin audit log                                   | 2 years                                                                                       | `maintenance.purge`, daily                                                                                                      |
 
 `maintenance.purge` is one job kind that runs once a day through the [job queue](../flows/jobs.md) and deletes in
 batches of 500. New retention rules are added to it; nothing is deleted by a database scheduler.
@@ -168,13 +169,11 @@ is encrypted, and is stored apart from the auth secret. Object storage has no se
 In build order. Reasons and sources are in the
 [principal review](../../reviews/2026-11-14-data-at-rest-principal.md).
 
-1. TODO (2026-11-14): test whether Better Auth's rate-limit pruning shortens the app's 24-hour limits; if so, move
-   the app's counters to their own table.
-2. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
-3. TODO (2026-11-14): database backups with a restore test (STATUS D1).
-4. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
+1. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
+2. TODO (2026-11-14): database backups with a restore test (STATUS D1).
+3. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
    staying on the owner role.
-5. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
+4. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
    from `DATA_ENCRYPTION_KEYS`, AAD bound to table, column and row), a KMS-held key-encryption key, and one re-seal
    job covering those values and the auth-secret values ([BYOK plan](../../plans/2026-11-07-byok.md)).
 

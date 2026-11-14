@@ -78,6 +78,20 @@
       "when": 1794669392915,
       "tag": "0010_data_api_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794669779843,
+      "tag": "0011_app_rate_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794673177647,
+      "tag": "0012_receipt_duplicates",
+      "breakpoints": true
     }
   ]
 }

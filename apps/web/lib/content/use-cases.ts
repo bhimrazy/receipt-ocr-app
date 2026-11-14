@@ -545,7 +545,7 @@ export const useCasePages: ContentPage[] = [
         heading: "Plans, limits and what it leaves out",
         layout: "does-doesnt",
         paragraphs: [
-          "Free scans are counted per person. When the business needs more, Pro is bought for one workspace and its larger monthly allowance is shared by everyone in it.",
+          "Free scans are shared by everyone in the workspace. When the business needs more, Pro is bought for that workspace and its larger monthly allowance is shared the same way.",
         ],
         does: [
           "One shared history for everyone in the workspace",

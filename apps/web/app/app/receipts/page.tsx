@@ -21,9 +21,11 @@ import {
   filtersFromSearchParams,
   getReceiptCounts,
   listReceiptSummaries,
+  viewerZone,
   type HistoryFilters,
   type ReceiptListFilters,
 } from "@/lib/receipts";
+import { TimeZoneCookie } from "@/components/dashboard/time-zone-cookie";
 import { requireActiveScope } from "@/lib/session";
 import { isSharedWorkspace } from "@/lib/workspaces";
 import { buttonVariants } from "@receipt-ocr/ui/components/button";
@@ -65,14 +67,16 @@ async function Results({
   view: ListView;
 }) {
   const scope = await requireActiveScope();
-  const [{ rows, total, page }, counts, groups, shared] = await Promise.all([
+  const [{ rows, total, page }, counts, groups, shared, timeZone] = await Promise.all([
     loadPage(query),
     getReceiptCounts(),
     getWorkspaceGroups(),
     isSharedWorkspace(scope.organizationId),
+    viewerZone(),
   ]);
   return (
     <>
+      <TimeZoneCookie current={timeZone} />
       <ListPoller active={rows.some((receipt) => isInFlight(receipt.status))} counts={counts} />
       <HistoryResults
         filters={filters}
@@ -80,6 +84,7 @@ async function Results({
         page={page}
         receipts={rows}
         shared={shared}
+        timeZone={timeZone}
         total={total}
         view={view}
         viewer={{ userId: scope.userId, role: scope.role }}

@@ -114,8 +114,8 @@ export function PlanAndBilling(props: PlanAndBillingProps) {
     <>
       <SettingsSection
         description={
-          plan === "pro"
-            ? "Pro scans are shared by everyone in this workspace."
+          usage.scope === "workspace"
+            ? "Shared by everyone in this workspace."
             : "Free scans are counted per person, across every Free workspace you use."
         }
         id="billing-usage-heading"

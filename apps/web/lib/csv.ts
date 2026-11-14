@@ -58,7 +58,14 @@ const RECEIPT_HEADERS = [
   "groups",
   "file_name",
   "created_at",
+  // Appended, so importers that read columns by position keep working. `review_reasons` is above.
+  "uploaded_at",
+  "uploaded_by",
+  "reviewed_at",
+  "reviewed_by",
 ];
+
+const iso = (value: Date | string | null) => (value instanceof Date ? value.toISOString() : value);
 
 /** One row per receipt, with the line-item count. For the filtered export. */
 export function receiptsToCsv(receipts: ReceiptExportRow[]): string {
@@ -86,7 +93,11 @@ export function receiptsToCsv(receipts: ReceiptExportRow[]): string {
         receipt.itemCount,
         receipt.groups.map(guardFormula).join("; "),
         receipt.fileName,
-        receipt.createdAt instanceof Date ? receipt.createdAt.toISOString() : receipt.createdAt,
+        iso(receipt.createdAt),
+        iso(receipt.createdAt),
+        receipt.uploaderName,
+        iso(receipt.reviewedAt),
+        receipt.reviewedAt ? receipt.reviewerName : null,
       ]),
     );
   }

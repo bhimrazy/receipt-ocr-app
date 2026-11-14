@@ -121,7 +121,10 @@ when the session ends (`session_id` set null) and goes with the user. It holds t
 emailed code; `step_up_codes_expires_idx` (`expires_at`) serves deleting expired codes.
 
 Also owned by Better Auth, with no foreign keys: `verification` (hashed email-verification and reset tokens) and
-`rate_limit` (fixed-window counters for auth endpoints, also used by the app's own limiters through `hitRateLimit`).
+`rate_limit` (fixed-window counters for auth endpoints). The app's own limiters (`hitRateLimit`) count in
+`app_rate_limits` (`key`, `count`, `window_start` in epoch milliseconds): Better Auth deletes every `rate_limit` row
+older than its longest window (an hour), which would cut a day-long cap short. `maintenance.purge` deletes a
+counter 2 days after its window starts.
 
 Notes:
 
@@ -166,6 +169,7 @@ erDiagram
     jsonb raw_json
     timestamptz reviewed_at "null = not reviewed"
     text reviewed_by FK "nullable, set null on user delete"
+    timestamptz duplicate_dismissed_at "set by Not a duplicate"
   }
   receipt_items {
     uuid id PK
@@ -236,14 +240,42 @@ before it, they stay null.
 
 **Needs review** is `status = 'completed' AND review_reasons <> '{}' AND reviewed_at IS NULL` (History filter and
 the Home count, and every warning badge). `review_reasons` holds the codes of the deterministic checks that failed,
-decided in `packages/core/src/review-reasons.ts`: `reviewReasons()` at completion, `editedReasons()` on an edit. The
-codes are `no_merchant`, `no_date`, `no_total`, `no_currency`, `totals_mismatch`, and the resolver's
-`date_ambiguous`, `date_conflict` and `date_implausible`. The totals check is exact to the cent, except that a
-whole-number total may be up to 0.99 off (bills rounded to the unit). An edit rechecks only the reasons that read a
-changed field; a changed date or calendar drops the date reasons. `low_confidence` is set only by migration
-`0003_receipt_fields`, on receipts below 0.9 confidence, and edits keep it; reviewing the receipt is what clears it
-from Needs review. The model's `confidence` is a hint only. There is no CHECK on the values: readers show a generic
-line for a code they don't know.
+decided in `packages/core/src/review-reasons.ts`: `reviewReasons()` at completion, `editedReasons()` on an edit,
+`recheckedReasons()` in the recheck job. The codes are `no_merchant`, `no_date`, `no_total`, `no_currency`,
+`totals_mismatch`, the resolver's `date_ambiguous`, `date_conflict` and `date_implausible`, and
+`possible_duplicate`. The totals check is exact to the cent, except that a whole-number total may be up to 0.99 off
+(bills rounded to the unit). An edit rechecks only the reasons that read a changed field; a changed date or calendar
+drops the date reasons. `low_confidence` was set only by migration `0003_receipt_fields`, on receipts below 0.9
+confidence; edits keep it and the recheck job drops it. The model's `confidence` is a hint only. There is no CHECK on
+the values: readers show a generic line for a code they don't know.
+
+Every completed receipt shows one review state, the same in the list, the receipt page, the list's filter and Home:
+**Needs review** (above), **Not reviewed** (no reasons, `reviewed_at` null) or **Reviewed** (`reviewed_at` set).
+**Possible duplicate** shows beside any of them while `review_reasons` holds `possible_duplicate`.
+
+**Recheck** (`receipt.recheck`, [`packages/core/src/recheck.ts`](../../packages/core/src/recheck.ts)) recomputes
+`review_reasons` for every completed receipt from its stored fields and items, with no model call: keyset batches of
+200 by id, `FOR UPDATE SKIP LOCKED` so an edit in progress wins. The resolver's date reasons are taken again only
+while the stored date is still the one it reads from `raw_json`; a date a person set keeps its (cleared) reasons. It
+writes only rows whose reasons change and never `reviewed_at` or `updated_at`, so a second run changes nothing and a
+reviewed receipt stays reviewed. The drain queues it once per `RECHECK_VERSION` (keyed `receipt.recheck:<version>`,
+checked once per process), so a deploy that changes a check bumps the version.
+
+**Possible duplicates** ([`packages/core/src/duplicates.ts`](../../packages/core/src/duplicates.ts)) are matched in
+the workspace, on completed receipts only. When both print a bill number and a seller tax id, those decide (compared
+on `identifierKey`: NFKC, Devanagari digits as ASCII, ASCII letters and digits, upper case), within 400 days.
+Otherwise the merchant key, total, currency and receipt date must all match; two undated copies match when added
+within 7 days. The newer copy is flagged, never the older, and an upload is never refused. `complete` checks the new
+receipt and also flags copies added after it (an older upload read late, after a retry); the recheck job checks
+every receipt again. There is no `duplicate_of` column: the receipt page finds the oldest copy again with the same
+match, so deleting it leaves no dangling link. "Not a duplicate" removes the code and sets
+`duplicate_dismissed_at`, which the recheck respects; a new extraction clears it. The identifier match reads
+`receipts_org_invoice_key_idx` (`organization_id`, the bill number's key; partial on both ids present); the others
+read `receipts_org_receipt_date_idx` and `receipts_created_at_idx`. On a 10,000-receipt workspace a probe takes under
+1 ms and a recheck batch of 200 about 15 ms (EXPLAIN ANALYZE, 2026-11-14; 27 ms and 6.5 s without the index).
+
+The Receipts date filter is on the receipt date; a receipt with no date counts by the day it was added, in the
+viewer's time zone, as Spending does.
 
 `receipts.reviewed_at` and `reviewed_by` record that someone who may edit the receipt confirmed it looks right
 (`PATCH /api/receipts/[id]` with `{ reviewed }`, migration `0002_receipt_review`). Saving an edit to a completed
@@ -534,6 +566,7 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `receipts_org_created_at_idx`                                                                                                                                                                                                                            | History, newest first, per workspace; the dashboard's scan                                                                                                  |
 | `receipts_org_receipt_date_idx` (`organization_id, receipt_date`)                                                                                                                                                                                        | History's date filters                                                                                                                                      |
+| `receipts_org_invoice_key_idx` (`organization_id`, the bill number's `identifierKey`; partial: bill number and seller tax id present)                                                                                                                    | Possible-duplicate match on bill number and seller tax id                                                                                                   |
 | `receipts_user_created_at_idx`                                                                                                                                                                                                                           | A user's uploads, the set-null on account delete                                                                                                            |
 | `receipts_created_at_idx`                                                                                                                                                                                                                                | Admin upload charts and counts across workspaces                                                                                                            |
 | `receipts_reviewed_by_idx` (`reviewed_by` where not null)                                                                                                                                                                                                | The set-null on account delete; partial, since most receipts are never reviewed                                                                             |

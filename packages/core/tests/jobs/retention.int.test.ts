@@ -27,6 +27,7 @@ import {
   enqueueWelcomeEmail,
   JOB_REGISTRY,
   MAINTENANCE_PURGE,
+  RECEIPT_RECHECK,
   SupportNotifyMailer,
   tick,
   WELCOME_EMAIL,
@@ -69,6 +70,7 @@ type JobSeed = {
   kind?: string;
   userId?: string | null;
   idempotencyKey?: string;
+  payload?: Record<string, unknown>;
 };
 
 async function seedJob(over: JobSeed) {
@@ -78,7 +80,7 @@ async function seedJob(over: JobSeed) {
       .values({
         kind: over.kind ?? KIND,
         state: over.state,
-        payload: {},
+        payload: over.payload ?? {},
         maxAttempts: 1,
         userId: over.userId ?? null,
         idempotencyKey: over.idempotencyKey ?? null,
@@ -186,6 +188,23 @@ describe.skipIf(!enabled)("maintenance.purge retention against Postgres", () => 
     await run(purgeFinishedJobs("succeeded", 500));
     expect(await remainingJobs([welcomed, deletedAccount])).toEqual([welcomed]);
     expect(await run(enqueueWelcomeEmail(userId))).toBe(false);
+  });
+
+  it("keeps each version's first recheck job, so a version is rechecked once", async () => {
+    const first = await seedJob({
+      state: "succeeded",
+      finishedDaysAgo: 400,
+      kind: RECEIPT_RECHECK,
+      payload: { version: tag },
+    });
+    const followUp = await seedJob({
+      state: "succeeded",
+      finishedDaysAgo: 400,
+      kind: RECEIPT_RECHECK,
+      payload: { version: tag, after: randomUUID() },
+    });
+    await run(purgeFinishedJobs("succeeded", 500));
+    expect(await remainingJobs([first, followUp])).toEqual([first]);
   });
 
   it("an old finished job's key is already free, so purging it lets nothing run twice", async () => {

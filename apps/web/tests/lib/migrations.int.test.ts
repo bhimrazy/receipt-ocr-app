@@ -16,6 +16,7 @@ const scratch = `migrations_probe_${process.pid}`;
 const tables = [
   "account",
   "admin_audit_log",
+  "app_rate_limits",
   "app_settings",
   "billing_checkouts",
   "billing_events",
@@ -66,7 +67,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is the baseline, billing, receipt review, receipt fields, billing checkouts, billing plan, support messages, the dropped plan default, support retention, cleared OAuth tokens and the Data API grants", () => {
+  it("is the baseline, billing, receipt review, receipt fields, billing checkouts, billing plan, support messages, the dropped plan default, support retention, cleared OAuth tokens, the Data API grants, the app rate-limit table and the receipt duplicates", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
     expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
       "0000_baseline",
@@ -80,6 +81,8 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "0008_support_retention",
       "0009_oauth_tokens",
       "0010_data_api_grants",
+      "0011_app_rate_limits",
+      "0012_receipt_duplicates",
     ]);
   });
 
@@ -181,6 +184,9 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     const rows = await db`select indexname, indexdef from pg_indexes where schemaname = 'public'`;
     const def = (name: string) => rows.find((r) => r.indexname === name)?.indexdef ?? "";
     expect(def("receipts_org_receipt_date_idx")).toContain("(organization_id, receipt_date)");
+    expect(def("receipts_org_invoice_key_idx")).toMatch(
+      /\(organization_id, NULLIF\(upper\(.*invoice_number.*WHERE \(\(invoice_number IS NOT NULL\) AND \(merchant_tax_id IS NOT NULL\)\)$/,
+    );
     for (const [index, column] of [
       ["ocr_calls_user_id_idx", "user_id"],
       ["jobs_user_id_idx", "user_id"],

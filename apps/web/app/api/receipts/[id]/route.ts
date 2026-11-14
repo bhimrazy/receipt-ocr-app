@@ -71,7 +71,8 @@ async function poll(_request: Request, { params }: Params, event: WideEvent) {
 
 /**
  * User corrections to an extracted receipt (`parseReceiptPatch`: 400 with the field's problem, never a silent
- * drop), or `{ reviewed: boolean }` on its own to mark it reviewed or not. Only human-correctable fields are
+ * drop), `{ reviewed: boolean }` on its own to mark it reviewed or not, or `{ duplicate: false }` on its own
+ * for "Not a duplicate" (`true` undoes that). Only human-correctable fields are
  * accepted: never status, confidence, ownership or the raw extraction. Members may edit only their own uploads
  * (enforced in ReceiptRepo).
  */
@@ -100,6 +101,18 @@ async function update(request: Request, { params }: Params, event: WideEvent) {
     event.flags = { reviewed };
     return runRoute(
       Effect.flatMap(ReceiptRepo, (repo) => repo.setReviewed(id, scope, reviewed)),
+      (updated) => (updated ? NextResponse.json({ ok: true }) : notFound()),
+      event,
+    );
+  }
+
+  if ("duplicate" in body) {
+    const { duplicate, ...rest } = body;
+    if (typeof duplicate !== "boolean") return jsonError(400, "duplicate must be true or false");
+    if (Object.keys(rest).length > 0) return jsonError(400, "Send duplicate on its own");
+    event.flags = { duplicate };
+    return runRoute(
+      Effect.flatMap(ReceiptRepo, (repo) => repo.setDuplicateDismissed(id, scope, !duplicate)),
       (updated) => (updated ? NextResponse.json({ ok: true }) : notFound()),
       event,
     );
