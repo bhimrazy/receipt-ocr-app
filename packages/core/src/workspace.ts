@@ -123,7 +123,11 @@ export const purgeRateLimits = (limit: number) =>
   Effect.flatMap(Db, ({ use }) =>
     use(async (db) => {
       const stale = sql`${appRateLimits.windowStart} < ${Date.now() - RATE_LIMIT_RETENTION_MS}`;
-      const keys = db.select({ key: appRateLimits.key }).from(appRateLimits).where(stale).limit(limit);
+      const keys = db
+        .select({ key: appRateLimits.key })
+        .from(appRateLimits)
+        .where(stale)
+        .limit(limit);
       const deleted = await db
         .delete(appRateLimits)
         .where(sql`${inArray(appRateLimits.key, keys)} and ${stale}`)

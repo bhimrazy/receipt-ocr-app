@@ -188,7 +188,7 @@ index and the stale rule ignore it.
 `email.contact-reply` ([`kinds/contact-reply.ts`](../../../packages/core/src/jobs/kinds/contact-reply.ts)) sends the
 "we got your message" reply to a contact-form sender. `/api/contact` queues it only after Turnstile passes and the
 message is stored, and only within `allowContactReply` in `lib/email-limits.ts`: 1 reply per address and 3 per IP a
-day (hashed keys in `rate_limits`; a limiter failure skips the reply). The payload is the typed address, a first name
+day (hashed keys in `app_rate_limits`; a limiter failure skips the reply). The payload is the typed address, a first name
 already cleaned by `greetingName` and the topic id, never the message. It is sent through `ContactReplyMailer`
 (`lib/contact-reply-mailer.ts`), 3 attempts. The kind sets `scrubPayload`, so `settle` replaces the payload with `{}` when the job
 succeeds or dies (a retry keeps it); the address and name are not kept in the `jobs` row.
@@ -210,6 +210,7 @@ deletes data past its retention period, each table in turn:
 | `step_up_codes`           | 1 day after `expires_at` (a code lives 10 minutes; the send limit counts the last 10 minutes)                                                    | `purgeStepUpCodes` (`step-up/store.ts`)       |
 | `jobs`, succeeded         | 30 days after `finished_at`: the Operations page's longest range                                                                                 | `purgeFinishedJobs` (`jobs/retention.ts`)     |
 | `jobs`, dead or cancelled | 90 days after `finished_at`: what an admin investigates or re-runs                                                                               | `purgeFinishedJobs`                           |
+| `app_rate_limits`         | 2 days after `window_start` (the longest window is a day)                                                                                        | `purgeRateLimits` (`workspace.ts`)            |
 | `account`, tokens only    | Nulls Google and GitHub tokens on any row that has one (written by an older release during a deploy, or a path the account hooks miss)           | `clearProviderTokens` (`account-security.ts`) |
 
 Each delete repeats its predicate on the locked rows, so a row changed meanwhile (a reopened message, a job an admin

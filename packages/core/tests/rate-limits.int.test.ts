@@ -41,9 +41,7 @@ describe.skipIf(!enabled)("app rate limits against Postgres", () => {
 
   it("purges counters two days past their start and keeps a day-old one", async () => {
     const seed = (key: string, ageMs: number) =>
-      db((d) =>
-        d.insert(appRateLimits).values({ key, count: 1, windowStart: Date.now() - ageMs }),
-      );
+      db((d) => d.insert(appRateLimits).values({ key, count: 1, windowStart: Date.now() - ageMs }));
     await seed(`${tag}-old`, 2 * DAY + 60_000);
     await seed(`${tag}-day`, DAY);
     expect(await run(purgeRateLimits(500))).toBeGreaterThanOrEqual(1);

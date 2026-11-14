@@ -1047,7 +1047,9 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     expect((await run(hitRateLimit(key, 1, 3))).allowed).toBe(true);
     await run(
       Effect.flatMap(Db, ({ use }) =>
-        use((db) => db.execute(sql`delete from app_rate_limits where key = ${key}`).then((r) => r.rows)),
+        use((db) =>
+          db.execute(sql`delete from app_rate_limits where key = ${key}`).then((r) => r.rows),
+        ),
       ),
     );
   });

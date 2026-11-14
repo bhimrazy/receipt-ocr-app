@@ -424,6 +424,15 @@ codes sent in the last 10 minutes.
 
 Steps specific to one release, newest first.
 
+### App rate limits in their own table (migration 0011)
+
+- **`0011_app_rate_limits`** creates `app_rate_limits` (`key` primary key, `count`, `window_start`) with row-level
+  security and an index on `window_start`. New empty table, `lock_timeout` 3 s.
+- **Run Database Migration** on `staging-db`, then `production-db`, **then** deploy: the new code writes only to the
+  new table. Until the deploy the old code keeps counting in `rate_limit`, so every app limit (sign-in attempts per
+  address, auth emails, contact replies, invitations and the rest) starts from zero once, at the deploy.
+- The old rows in `rate_limit` are left for Better Auth to prune within the hour.
+
 ### Data API grants revoked (migration 0010)
 
 - **`0010_data_api_grants`** revokes every privilege `anon`, `authenticated` and `service_role` hold on tables,
