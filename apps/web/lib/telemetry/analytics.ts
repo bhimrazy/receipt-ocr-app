@@ -100,13 +100,17 @@ export function fromRecord(record: EventRecord): ProductEvent | null {
         props: { count: record.count as number | undefined },
       };
     }
-    // A plan limit (the day, the month, the Free pool or the per-minute burst), not the service-wide cap,
-    // and not a repeat within the minute (`keepQuotaRejection` in http.ts).
+    // A plan limit (the day, the month, the Free pool, the per-minute burst or storage), not the
+    // service-wide cap, and not a repeat within the minute (`keepQuotaRejection` in http.ts).
     const limit = str(group(record.error).kind);
     if (
       status === 429 &&
       record.outcome === "QuotaExceeded" &&
-      (limit === "day" || limit === "month" || limit === "pool" || limit === "minute") &&
+      (limit === "day" ||
+        limit === "month" ||
+        limit === "pool" ||
+        limit === "minute" ||
+        limit === "storage") &&
       group(record.flags).quota_repeat !== true
     ) {
       return {

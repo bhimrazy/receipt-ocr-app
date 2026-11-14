@@ -93,6 +93,28 @@ export async function getObject(
 }
 
 /**
+ * The object's size in bytes, from a HEAD request (nothing is downloaded).
+ * @throws ObjectNotFound when the key doesn't exist.
+ */
+export async function objectSize(
+  config: S3StorageConfig,
+  key: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  const response = await s3Client(config)
+    .send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }), { abortSignal: signal })
+    .catch((error: unknown) => {
+      // A HEAD has no body, so a missing key comes back as a bare 404 rather than NoSuchKey.
+      const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+        ?.httpStatusCode;
+      if (status === 404) throw new ObjectNotFound("No such key", { cause: error });
+      throw error;
+    });
+  if (response.ContentLength === undefined) throw new Error(`Object ${key} has no size`);
+  return response.ContentLength;
+}
+
+/**
  * Reachability and credentials check for health probes: a HEAD on a key that
  * need not exist. 200 or 404 means the bucket answered an authenticated request.
  * AWS S3 answers 403 for a missing key without s3:ListBucket, which reads as down.

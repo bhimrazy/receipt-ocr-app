@@ -2,7 +2,7 @@ import { ConfigProvider, Effect, Exit, Layer } from "effect";
 import { OCR_MODELS } from "@receipt-ocr/ai";
 import { describe, expect, it } from "vitest";
 import { activeChain } from "../src/ocr";
-import { DEFAULT_PLANS, MAX_BATCH } from "../src/plans";
+import { DEFAULT_PLANS, MAX_BATCH, MAX_STORAGE_BYTES, MB } from "../src/plans";
 import { Db } from "../src/services";
 import {
   ocrRoutingSchema,
@@ -79,6 +79,7 @@ describe("storedPlanTableSchema", () => {
       receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
       poolPerDay: DEFAULT_PLANS.free.poolPerDay,
       membersPerWorkspace: DEFAULT_PLANS.free.membersPerWorkspace,
+      storageBytes: DEFAULT_PLANS.free.storageBytes,
     });
     expect(read.pro.batchMax).toBe(15);
   });
@@ -111,6 +112,22 @@ describe("storedPlanTableSchema", () => {
       planTableSchema.safeParse({ free: { ...policy, membersPerWorkspace: 0 }, pro: policy })
         .success,
     ).toBe(false);
+  });
+
+  it("gives a row saved before storage each plan's own cap, and bounds a saved one", () => {
+    const read = storedPlanTableSchema.parse({ free: policy, pro: policy });
+    expect(read.free.storageBytes).toBe(100_000_000);
+    expect(read.pro.storageBytes).toBe(5_000_000_000);
+    const saved = planTableSchema.parse({
+      free: { ...policy, storageBytes: 250 * MB },
+      pro: policy,
+    });
+    expect(saved.free.storageBytes).toBe(250_000_000);
+    for (const storageBytes of [0, MB - 1, MAX_STORAGE_BYTES + 1, 1.5 * MB + 0.5]) {
+      expect(
+        planTableSchema.safeParse({ free: { ...policy, storageBytes }, pro: policy }).success,
+      ).toBe(false);
+    }
   });
 
   it("keeps a saved null (no limit) and refuses a day above the month", () => {
@@ -400,6 +417,7 @@ describe("Settings", () => {
       receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
       poolPerDay: DEFAULT_PLANS.free.poolPerDay,
       membersPerWorkspace: DEFAULT_PLANS.free.membersPerWorkspace,
+      storageBytes: DEFAULT_PLANS.free.storageBytes,
     });
   });
 

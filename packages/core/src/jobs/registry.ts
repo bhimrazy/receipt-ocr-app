@@ -4,6 +4,7 @@ import { billingRefundCheck } from "./kinds/billing-refund-check";
 import { contactReply } from "./kinds/contact-reply";
 import { maintenancePurge } from "./kinds/maintenance-purge";
 import { receiptExtract } from "./kinds/receipt-extract";
+import { receiptFileSizeBackfill } from "./kinds/receipt-file-size-backfill";
 import { receiptRecheck } from "./kinds/receipt-recheck";
 import { storageDelete } from "./kinds/storage-delete";
 import { storageOrphanSweep } from "./kinds/storage-orphan-sweep";
@@ -29,6 +30,7 @@ export const JOB_REGISTRY: JobRegistry<
     | typeof maintenancePurge
     | typeof storageOrphanSweep
     | typeof receiptRecheck
+    | typeof receiptFileSizeBackfill
   >
 > = {
   [receiptExtract.kind]: receiptExtract,
@@ -41,4 +43,5 @@ export const JOB_REGISTRY: JobRegistry<
   [maintenancePurge.kind]: maintenancePurge,
   [storageOrphanSweep.kind]: storageOrphanSweep,
   [receiptRecheck.kind]: receiptRecheck,
+  [receiptFileSizeBackfill.kind]: receiptFileSizeBackfill,
 };

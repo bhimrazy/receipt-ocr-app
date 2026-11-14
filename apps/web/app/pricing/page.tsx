@@ -8,7 +8,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SupportWidget } from "@/components/support-widget";
 import { checkoutOpenToEveryone, getCheckoutConfig } from "@/lib/billing";
 import { getPlanTable } from "@/lib/plan-limits";
-import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
+import { FREE_FAILED_ROUNDS, formatStorage } from "@receipt-ocr/core/plans";
 import { allowance, pricingHeadline } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL, REFUND_DAYS } from "@/lib/pricing";
 import { pageMetadata } from "@/lib/seo";
@@ -49,6 +49,11 @@ export default async function PricingPage() {
               A Free workspace can have up to {free.membersPerWorkspace} members and a Pro workspace
               up to {pro.membersPerWorkspace}, counting pending invitations. Members a workspace
               already has stay if it moves to Free.
+            </li>
+            <li>
+              Each workspace can keep {formatStorage(free.storageBytes)} of receipt files on Free
+              and {formatStorage(pro.storageBytes)} on Pro. Deleting receipts makes room; it
+              doesn&apos;t give scans back.
             </li>
             <li>
               You can own {free.workspaces === 1 ? "1 workspace" : `${free.workspaces} workspaces`}{" "}

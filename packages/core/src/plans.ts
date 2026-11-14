@@ -41,6 +41,11 @@ export interface PlanPolicy {
    * invited and when an invitation is accepted; a workspace already past it keeps its members.
    */
   membersPerWorkspace: number;
+  /**
+   * Bytes of stored receipt files a workspace on this plan may hold, in decimal units. Checked at
+   * upload against the exact sum of `receipts.file_bytes`; deleting receipts frees room.
+   */
+  storageBytes: number;
 }
 
 /**
@@ -69,6 +74,19 @@ export const MAX_BATCH = 20;
  */
 export const MAX_MEMBERS = 100;
 
+/** Storage is counted and shown in decimal units, as storage is sold. */
+export const MB = 1_000_000;
+const GB = 1_000 * MB;
+
+/** The most `storageBytes` may be set to: 1 TB. */
+export const MAX_STORAGE_BYTES = 1_000 * GB;
+
+/** "86 MB" under 1 GB (whole MB), "4.1 GB" from 1 GB (one decimal, "5 GB" when whole). */
+export function formatStorage(bytes: number): string {
+  if (bytes < GB) return `${Math.round(bytes / MB)} MB`;
+  return `${Number((bytes / GB).toFixed(1))} GB`;
+}
+
 export const DEFAULT_PLANS: PlanTable = {
   // Per workspace, shared by its members: 50 a month, up to 20 a day, and 300 a day for every Free
   // workspace together.
@@ -81,6 +99,7 @@ export const DEFAULT_PLANS: PlanTable = {
     batchMax: DEFAULT_BATCH_MAX,
     workspaces: 1,
     membersPerWorkspace: 2,
+    storageBytes: 100 * MB,
   },
   // Per workspace, shared by its members: 500 a month, up to 200 a day.
   pro: {
@@ -92,6 +111,7 @@ export const DEFAULT_PLANS: PlanTable = {
     batchMax: DEFAULT_BATCH_MAX,
     workspaces: 2,
     membersPerWorkspace: 5,
+    storageBytes: 5 * GB,
   },
 };
 

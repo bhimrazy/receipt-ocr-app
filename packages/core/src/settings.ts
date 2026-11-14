@@ -9,6 +9,8 @@ import {
   DEFAULT_PLANS,
   MAX_BATCH,
   MAX_MEMBERS,
+  MAX_STORAGE_BYTES,
+  MB,
   type PlanPolicy,
   type PlanTable,
   type QuotaScope,
@@ -43,6 +45,12 @@ const policySchema = (batchMax: z.ZodType<number>, defaults: PlanPolicy) =>
       poolPerDay: count(10_000_000).nullable().default(defaults.poolPerDay),
       receiptsPerMinute: count(1_000),
       batchMax: batchMax.default(DEFAULT_BATCH_MAX),
+      storageBytes: z
+        .number()
+        .int()
+        .min(MB, "Storage must be at least 1 MB.")
+        .max(MAX_STORAGE_BYTES, "Storage can be at most 1,000,000 MB.")
+        .default(defaults.storageBytes),
     })
     .refine((p) => p.receiptsPerMinute <= p.receiptsPerDay, {
       message: "The per-minute limit can't be higher than the daily limit.",

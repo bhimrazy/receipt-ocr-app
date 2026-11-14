@@ -1,4 +1,4 @@
-import type { PlanPolicy } from "@receipt-ocr/core/plans";
+import { formatStorage, type PlanPolicy } from "@receipt-ocr/core/plans";
 
 /**
  * What each plan includes, worded from the limits an admin saved (Admin →
@@ -41,11 +41,19 @@ export function scansLine(policy: PlanPolicy): string {
 export const membersLine = (policy: PlanPolicy) =>
   `Up to ${n(policy.membersPerWorkspace, "member")}`;
 
-/** Every plan card lists scans, members and workspaces first, in that order, so Free and Pro line up. */
+/** "100 MB of receipt storage", per workspace. */
+export const storageLine = (policy: PlanPolicy) =>
+  `${formatStorage(policy.storageBytes)} of receipt storage`;
+
+/**
+ * Every plan card lists scans, members, storage and workspaces first, in that order, so Free and
+ * Pro line up.
+ */
 export function freeFeatures(free: PlanPolicy): string[] {
   return [
     scansLine(free),
     membersLine(free),
+    storageLine(free),
     `${n(free.workspaces, "workspace")} to own`,
     "Merchant, date, items, tax and totals, with confidence scores and review flags",
     "Searchable history, CSV export and JSON copy",
@@ -56,6 +64,7 @@ export function proFeatures(pro: PlanPolicy): string[] {
   return [
     scansLine(pro),
     membersLine(pro),
+    storageLine(pro),
     `Own up to ${n(pro.workspaces, "workspace")}, each upgraded separately`,
     ...(pro.poolPerDay === null ? ["Never paused on busy days"] : []),
     "Everything in Free",

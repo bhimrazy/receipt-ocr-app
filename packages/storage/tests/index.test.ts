@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   getObject,
   ObjectNotFound,
+  objectSize,
   probeBucket,
   receiptObjectKey,
   s3Client,
@@ -101,6 +102,26 @@ describe("getObject", () => {
     send.mockRejectedValueOnce(new Error("ECONNRESET") as never);
     const other = await getObject(config, "users/u1/receipts/r1.jpg").catch((e: unknown) => e);
     expect(other).toBeInstanceOf(Error);
+    expect(other).not.toBeInstanceOf(ObjectNotFound);
+    send.mockRestore();
+  });
+});
+
+describe("objectSize", () => {
+  it("reads ContentLength, and a 404 as ObjectNotFound", async () => {
+    const send = vi.spyOn(s3Client(config), "send");
+    send.mockResolvedValueOnce({ ContentLength: 1234 } as never);
+    await expect(objectSize(config, "users/u1/receipts/r1.jpg")).resolves.toBe(1234);
+    send.mockRejectedValueOnce(
+      Object.assign(new Error("NotFound"), { $metadata: { httpStatusCode: 404 } }) as never,
+    );
+    await expect(objectSize(config, "users/u1/receipts/r1.jpg")).rejects.toBeInstanceOf(
+      ObjectNotFound,
+    );
+    send.mockRejectedValueOnce(
+      Object.assign(new Error("HTTP 403"), { $metadata: { httpStatusCode: 403 } }) as never,
+    );
+    const other = await objectSize(config, "users/u1/receipts/r1.jpg").catch((e: unknown) => e);
     expect(other).not.toBeInstanceOf(ObjectNotFound);
     send.mockRestore();
   });

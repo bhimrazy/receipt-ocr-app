@@ -23,6 +23,7 @@ import {
   type DbClient,
   type NewOcrCall,
   type Receipt,
+  type ReceiptFileMeta,
   type ReceiptItem,
   type SQL,
   user,
@@ -36,6 +37,7 @@ import { storageDeleteJob } from "./jobs/storage-delete-job";
 import { MAX_BULK_DELETE } from "./bulk-limits";
 import type { QuotaVerdict } from "./quota";
 import { Db } from "./services";
+import { decideStorage, sumStorage, type StorageVerdict } from "./storage-quota";
 import {
   countUsage,
   lockQuota,
@@ -217,10 +219,14 @@ export type OcrCallRow = Omit<NewOcrCall, "id" | "status"> & {
 export type QuotaGate = {
   window: UsageWindow;
   decide: (counts: UsageCounts) => QuotaVerdict;
+  /** The workspace's storage cap, checked by `insert` only; null for none. */
+  storageBytes: number | null;
 };
 
 export type InsertResult =
-  { kind: "inserted"; receipt: Receipt; jobId: string } | { kind: "quota"; verdict: QuotaVerdict };
+  | { kind: "inserted"; receipt: Receipt; jobId: string }
+  | { kind: "quota"; verdict: QuotaVerdict }
+  | { kind: "storage"; verdict: StorageVerdict };
 
 export type RetryClaim =
   | { kind: "claimed"; round: number; jobId: string }
@@ -463,6 +469,9 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
         scope: ReceiptScope;
         fileName: string;
         imageObjectKey: string;
+        /** The stored object's size, counted against `quota.storageBytes`. */
+        fileBytes: number;
+        fileMeta: ReceiptFileMeta;
         /** Job priority; interactive by default. */
         priority?: number;
       },
@@ -584,20 +593,30 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
       subject: UsageSubject,
       window: UsageWindow,
     ) => Effect.Effect<UsageCounts, DbError>;
+    /** Bytes of stored files in a workspace (`sumStorage`), read without a lock. */
+    readonly storageUsed: (organizationId: string) => Effect.Effect<number, DbError>;
   }
 >() {
   static readonly Live = Layer.effect(
     ReceiptRepo,
     Effect.map(Db, ({ use }) => ({
-      insert: ({ id, scope, fileName, imageObjectKey, priority }, quota) => {
+      insert: ({ id, scope, fileName, imageObjectKey, fileBytes, fileMeta, priority }, quota) => {
         // Drizzle sends COMMIT only once the callback returns: a failure after
         // this is set may have committed the row.
         let committing = false;
+        const storageCap = quota.storageBytes;
         return use((db) =>
           db.transaction(async (tx): Promise<InsertResult> => {
-            await lockQuota(tx, scope, quota.window.scope === "workspace");
+            // The workspace lock also serializes the storage sum below with every other insert
+            // into this workspace, so parallel uploads can't each see room for themselves.
+            await lockQuota(tx, scope, quota.window.scope === "workspace" || storageCap !== null);
             const verdict = quota.decide(await countUsage(tx, scope, quota.window));
             if (!verdict.allowed) return { kind: "quota", verdict };
+            if (storageCap !== null) {
+              const used = await sumStorage(tx, scope.organizationId);
+              const storage = decideStorage(used, fileBytes, storageCap);
+              if (!storage.allowed) return { kind: "storage", verdict: storage };
+            }
             const [row] = await tx
               .insert(receipts)
               .values({
@@ -607,6 +626,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
                 status: "processing",
                 fileName,
                 imageObjectKey,
+                fileBytes,
+                fileMeta,
               })
               .returning();
             if (!row) throw new Error("Insert returned no row");
@@ -1085,6 +1106,7 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
         }),
 
       usage: (subject, window) => use((db) => countUsage(db, subject, window)),
+      storageUsed: (organizationId) => use((db) => sumStorage(db, organizationId)),
     })),
   );
 }

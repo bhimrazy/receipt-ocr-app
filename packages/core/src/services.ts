@@ -4,6 +4,7 @@ import {
   getObject,
   listObjects,
   ObjectNotFound,
+  objectSize,
   type ListedObject,
   putObject,
   signedGetUrl,
@@ -72,6 +73,8 @@ export class Storage extends Context.Tag("@receipt-ocr/core/Storage")<
       contentType: string,
     ) => Effect.Effect<void, StorageFailure>;
     readonly get: (key: string) => Effect.Effect<Uint8Array, StorageFailure>;
+    /** The stored size in bytes, without downloading; `kind: "not-found"` for a missing key. */
+    readonly size: (key: string) => Effect.Effect<number, StorageFailure>;
     readonly remove: (keys: readonly string[]) => Effect.Effect<void, StorageFailure>;
     readonly signedUrl: (key: string) => Effect.Effect<string, StorageFailure>;
     /** One page of keys in key order; pass `next` back as `startAfter` for the following one. */
@@ -89,6 +92,10 @@ export class Storage extends Context.Tag("@receipt-ocr/core/Storage")<
       ),
     get: (key) =>
       call("Failed to read the receipt file", (config, signal) => getObject(config, key, signal)),
+    size: (key) =>
+      call("Failed to read the receipt file's size", (config, signal) =>
+        objectSize(config, key, signal),
+      ),
     remove: (keys) =>
       keys.length === 0
         ? Effect.void
