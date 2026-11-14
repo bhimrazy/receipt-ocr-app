@@ -76,14 +76,22 @@
       "items": [
         {
           "price": {
-            "id": "pri_pro_yearly"
+            "id": "pri_pro_yearly",
+            "billing_cycle": {
+              "interval": "year",
+              "frequency": 1
+            }
           },
           "quantity": 1,
           "proration": null
         },
         {
           "price": {
-            "id": "pri_pro_monthly"
+            "id": "pri_pro_monthly",
+            "billing_cycle": {
+              "interval": "month",
+              "frequency": 1
+            }
           },
           "quantity": -1,
           "proration": {
@@ -149,7 +157,11 @@
       "items": [
         {
           "price": {
-            "id": "pri_pro_yearly"
+            "id": "pri_pro_yearly",
+            "billing_cycle": {
+              "interval": "year",
+              "frequency": 1
+            }
           },
           "quantity": 1,
           "proration": {
@@ -185,7 +197,11 @@
       "items": [
         {
           "price": {
-            "id": "pri_pro_monthly"
+            "id": "pri_pro_monthly",
+            "billing_cycle": {
+              "interval": "month",
+              "frequency": 1
+            }
           },
           "quantity": 1,
           "proration": null

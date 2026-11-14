@@ -133,15 +133,19 @@ const sameTime = (a: Date | null, b: Date | null) =>
   a !== null && b !== null && a.getTime() === b.getTime();
 
 /**
- * Whether a `subscription_update` charges a full price, from the provider's
- * proration markers: some item with a positive quantity isn't prorated. A
- * price or interval change billed at once has one (the new price, beside a
- * prorated credit for the old one); a change inside the period, such as a
- * moved billing date, has only prorated items. Null when the items are unknown.
+ * Whether a `subscription_update` charges a full recurring price, from the
+ * provider's proration markers: some recurring item with a positive quantity
+ * isn't prorated. An interval change billed at once has one (the new price,
+ * beside a prorated credit for the old one) and starts a new period. A change
+ * inside the period has only prorated items: a moved billing date, or a
+ * same-interval price swap billed prorated. A same-interval swap billed in
+ * full keeps the period's start, so `paysNewerPeriod` refuses it; either way
+ * the original payment stays current. A one-time item never pays a period.
+ * Null when the items are unknown.
  */
 function chargesFullPrice(lines: readonly TransactionLine[] | null): boolean | null {
   if (lines === null || lines.length === 0) return null;
-  return lines.some((line) => line.quantity > 0 && !line.prorated);
+  return lines.some((line) => line.quantity > 0 && line.recurring && !line.prorated);
 }
 
 /**
@@ -167,6 +171,17 @@ export function paysPeriod(t: PeriodTransaction, period: StoredPeriod): boolean 
     return chargesFullPrice(t.lines) ?? !isLegacyProration(t, period);
   }
   return PERIOD_ORIGINS.has(t.origin);
+}
+
+/**
+ * Whether a completed transaction charged anything: some item with a positive
+ * quantity, else (items unknown) whether it pays a period. Never a card check,
+ * whose item is the subscription's price at a zero total.
+ */
+export function chargesCustomer(t: PeriodTransaction, period: StoredPeriod): boolean {
+  if (t.origin === "subscription_payment_method_change") return false;
+  if (t.lines === null || t.lines.length === 0) return paysPeriod(t, period);
+  return t.lines.some((line) => line.quantity > 0);
 }
 
 /**

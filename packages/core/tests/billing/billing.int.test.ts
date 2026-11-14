@@ -188,6 +188,7 @@ const paid = (
   start: Date | null,
   origin = "subscription_recurring",
   end: Date | null = null,
+  lines: TransactionSnapshot["lines"] = null,
 ) =>
   event(null, "transaction.completed", null, {
     transactionId,
@@ -195,7 +196,7 @@ const paid = (
     origin,
     billingPeriodStart: start,
     billingPeriodEnd: end,
-    lines: null,
+    lines,
   });
 
 const adjustment = (fields: Partial<AdjustmentSnapshot>): AdjustmentSnapshot => ({
@@ -1832,6 +1833,14 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(
         await applyOnce(paid(id, `txn_${tag}_revoked_one_off`, null, "subscription_charge")),
       ).not.toHaveProperty("revokedCharged");
+      // A proration pays no period but still charged the customer.
+      expect(
+        await applyOnce(
+          paid(id, `txn_${tag}_revoked_proration`, renewalStart, "subscription_update", null, [
+            { quantity: 1, prorated: true, recurring: true },
+          ]),
+        ),
+      ).toMatchObject({ outcome: "ignored", revokedCharged: true });
       expect(await planOf(workspaceId)).toBe("free");
     });
 

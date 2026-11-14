@@ -209,8 +209,8 @@ describe("parsePaddleEvent", () => {
         billingPeriodStart: new Date("2026-11-14T11:44:08.927Z"),
         billingPeriodEnd: new Date("2027-11-14T11:44:08.927Z"),
         lines: [
-          { quantity: 1, prorated: false },
-          { quantity: -1, prorated: true },
+          { quantity: 1, prorated: false, recurring: true },
+          { quantity: -1, prorated: true, recurring: true },
         ],
       },
       {
@@ -219,7 +219,7 @@ describe("parsePaddleEvent", () => {
         origin: "subscription_update",
         billingPeriodStart: new Date("2026-11-14T11:44:08.927Z"),
         billingPeriodEnd: new Date("2027-11-25T11:44:00Z"),
-        lines: [{ quantity: 1, prorated: true }],
+        lines: [{ quantity: 1, prorated: true, recurring: true }],
       },
     ]);
     // `transaction.canceled` isn't subscribed; the dashboard cancel ends the subscription at once.
@@ -227,6 +227,24 @@ describe("parsePaddleEvent", () => {
     expect(events.at(-1)).toMatchObject({
       type: "subscription.canceled",
       subscription: { status: "canceled", cancelAtPeriodEnd: false, currentPeriodEnd: null },
+    });
+  });
+
+  it("marks a one-time price's item as not recurring", () => {
+    const event = parsePaddleEvent(
+      JSON.stringify({
+        event_id: "evt_5",
+        event_type: "transaction.completed",
+        occurred_at: "2026-11-08T12:00:00Z",
+        data: {
+          id: "txn_5",
+          origin: "subscription_update",
+          items: [{ quantity: 1, proration: null, price: { id: "pri_1", billing_cycle: null } }],
+        },
+      }),
+    );
+    expect(event).toMatchObject({
+      transaction: { lines: [{ quantity: 1, prorated: false, recurring: false }] },
     });
   });
 
@@ -240,7 +258,15 @@ describe("parsePaddleEvent", () => {
           data: { id: "txn_4", origin: "subscription_update", items },
         }),
       );
-    for (const items of [[{ quantity: 1 }], [{ quantity: "1", proration: null }], [], "x"]) {
+    const price = { billing_cycle: null };
+    for (const items of [
+      [{ quantity: 1, price }],
+      [{ quantity: 1, proration: null }],
+      [{ quantity: 1, proration: null, price: {} }],
+      [{ quantity: "1", proration: null, price }],
+      [],
+      "x",
+    ]) {
       expect(lines(items)).toMatchObject({ transaction: { transactionId: "txn_4", lines: null } });
     }
   });

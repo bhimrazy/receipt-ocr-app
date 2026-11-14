@@ -62,6 +62,8 @@ const transactionLineSchema = z.object({
   quantity: z.number().int(),
   /** Charged for part of a period (the provider's proration marker), not at full price. */
   prorated: z.boolean(),
+  /** Its price bills every period; false for a one-time price. */
+  recurring: z.boolean(),
 });
 
 export type TransactionLine = z.output<typeof transactionLineSchema>;

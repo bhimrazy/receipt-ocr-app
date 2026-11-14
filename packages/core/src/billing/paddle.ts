@@ -116,9 +116,18 @@ const transactionData = z.object({
   items: z.unknown().optional(),
 });
 
-/** `proration` is null on a full-price item; a missing key leaves the lines unknown, not full price. */
+/**
+ * `proration` is null on a full-price item and `price.billing_cycle` null on a one-time price; a
+ * missing key leaves the lines unknown rather than full price or recurring.
+ */
 const transactionItems = z
-  .array(z.object({ quantity: z.number().int(), proration: z.object({}).loose().nullable() }))
+  .array(
+    z.object({
+      quantity: z.number().int(),
+      proration: z.object({}).loose().nullable(),
+      price: z.object({ billing_cycle: z.object({}).loose().nullable() }),
+    }),
+  )
   .min(1)
   .max(100);
 
@@ -233,6 +242,7 @@ function linesOf(items: unknown): TransactionLine[] | null {
   return parsed.data.map((item) => ({
     quantity: item.quantity,
     prorated: item.proration !== null,
+    recurring: item.price.billing_cycle !== null,
   }));
 }
 
