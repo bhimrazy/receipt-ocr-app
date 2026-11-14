@@ -87,7 +87,7 @@ Errors returned to the browser are safe messages only: Zod's first issue, a core
 | `setMemberRoleAction` (`workspace.member_role`)                           | core                   | Change a member's workspace role; keeps at least one owner                                                                                      |
 | `removeMemberAction` (`workspace.member_remove`)                          | core                   | Remove a member; their receipts stay                                                                                                            |
 | `cancelInvitationAction` (`workspace.invitation_cancel`)                  | core                   | Cancel a pending invitation                                                                                                                     |
-| `deleteWorkspaceAction` (`workspace.delete`)                              | core                   | Delete the workspace (cascade), then its stored files                                                                                           |
+| `deleteWorkspaceAction` (`workspace.delete`)                              | core                   | Delete the workspace (cascade) and queue its files' deletion                                                                                    |
 | `savePlansAction` (`settings.plans`)                                      | core                   | Save plan limits; see [Settings cache](settings-cache.md)                                                                                       |
 | `saveOcrAction` (`settings.ocr`)                                          | core                   | Save the model chain                                                                                                                            |
 | `checkConnectionsAction` (`connections.check`)                            | core                   | Check AI providers and storage now; statuses only; one run per 30 s per admin                                                                   |
@@ -105,14 +105,14 @@ Core writes are in [`packages/core/src/admin.ts`](../../../packages/core/src/adm
 
 ## Guards
 
-| Guard                                                          | Where                                                                                             |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Can't act on yourself (role, ban, delete, impersonate)         | `notSelf` in `actions.ts`                                                                         |
-| Admins can't be banned, deleted or impersonated; demote first  | `notAdmin` in `actions.ts`                                                                        |
-| Deleting a user or workspace requires typing its email or name | `confirm` field, checked on the server                                                            |
-| Ban and impersonation need a written reason                    | Zod, stored in `admin_audit_log.reason`                                                           |
-| A workspace keeps at least one owner                           | `setMemberRole`, `removeMember`, `prepareUserDeletion`, under `FOR UPDATE` on all its member rows |
-| A deleted workspace's files are removed after the rows         | `deleteWorkspace` locks the organization row so no receipt is added meanwhile                     |
+| Guard                                                               | Where                                                                                                                                   |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Can't act on yourself (role, ban, delete, impersonate)              | `notSelf` in `actions.ts`                                                                                                               |
+| Admins can't be banned, deleted or impersonated; demote first       | `notAdmin` in `actions.ts`                                                                                                              |
+| Deleting a user or workspace requires typing its email or name      | `confirm` field, checked on the server                                                                                                  |
+| Ban and impersonation need a written reason                         | Zod, stored in `admin_audit_log.reason`                                                                                                 |
+| A workspace keeps at least one owner                                | `setMemberRole`, `removeMember`, `prepareUserDeletion`, under `FOR UPDATE` on all its member rows                                       |
+| A deleted workspace's files are removed if and only if the rows are | `deleteWorkspace` locks the organization row so no receipt is added meanwhile, and queues `storage.delete` jobs in the same transaction |
 
 Every audit row stores the actor's id and email, the target's id and a label (email or workspace name), optional
 reason and metadata (for example `from` and `to`), and the client IP resolved like the auth rate limiter.

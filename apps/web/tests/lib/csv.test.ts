@@ -28,7 +28,6 @@ function receipt(overrides: Partial<ReceiptWithItems> = {}): ReceiptWithItems {
     storageSource: "managed",
     attempts: 1,
     lastAttemptAt: null,
-    rawJson: null,
     errorMessage: null,
     createdAt: new Date("2026-08-01T10:00:00Z"),
     updatedAt: new Date("2026-08-01T10:00:00Z"),

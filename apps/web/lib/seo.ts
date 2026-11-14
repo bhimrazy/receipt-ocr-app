@@ -102,7 +102,7 @@ export function formatLegalDate(isoDate: string): string {
 const APP_FEATURES = [
   "Receipt photo and PDF upload (JPEG, PNG, WebP, HEIC, PDF)",
   "Merchant, date, line items, tax and total extracted",
-  "Confidence score per receipt and per line item",
+  "Confidence score per receipt, with lines that don't add up marked",
   "Totals that do not add up are flagged for review",
   "Searchable receipt history",
   "CSV export and JSON copy",

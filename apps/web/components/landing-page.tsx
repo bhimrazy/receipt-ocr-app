@@ -44,12 +44,12 @@ const features = [
   {
     icon: ScanLine,
     title: "Accurate extraction",
-    desc: "Merchant, date, line items, tax, and totals pulled into clean fields, with a confidence score for the receipt and for each line so you know what to check.",
+    desc: "Merchant, date, line items, tax, and totals pulled into clean fields, with a confidence score for the receipt, so you know what to check.",
   },
   {
     icon: ListChecks,
     title: "Checks before you trust it",
-    desc: "Low-confidence lines are marked, and totals that don't add up are flagged, so you know which receipts to look at twice.",
+    desc: "Lines whose numbers don't add up are marked, and receipts with a missing total or date, or totals that don't add up, get a Needs review flag.",
   },
   {
     icon: Shield,
@@ -75,7 +75,7 @@ const features = [
 
 const stats: Array<[string, string]> = [
   ["Line items", "Scanned too, not just the total"],
-  ["Confidence", "Per receipt and per line"],
+  ["Checks", "Lines and totals that don't add up"],
   ["CSV + JSON", "Export as CSV, copy as JSON"],
   ["$0", "To start, no card required"],
 ];
@@ -87,7 +87,7 @@ const steps = (batchMax: number) => [
   },
   {
     title: "Get structured data",
-    desc: "Merchant, date, items, tax, and totals are scanned in seconds, with a confidence score to show what needs a second look.",
+    desc: "Merchant, date, items, tax, and totals are scanned in seconds, with checks that show what needs a second look.",
   },
   {
     title: "Review, search, export",

@@ -195,7 +195,7 @@ export function SectionBody({ section }: { section: ContentSection }) {
   }
 }
 
-const SHARED_FACTS = ["12 categories", "CSV + JSON", "Per-line confidence"];
+const SHARED_FACTS = ["12 categories", "CSV + JSON", "Line checks"];
 
 /** Short facts under the hero on md and up; none are numbers the product can't back. */
 export function FactTiles({ fact }: { fact: string }) {

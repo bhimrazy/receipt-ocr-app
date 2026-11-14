@@ -12,12 +12,14 @@ import {
 import { Effect } from "effect";
 import { insertAudit, transact, type AuditActor, type Tx } from "./audit";
 import { chargingWorkspacesOf, hasChargingSubscription } from "./billing/service";
+import { MAX_BULK_DELETE } from "./bulk-limits";
 import { Conflict, NotFound } from "./errors";
 import { clearGroupCreator } from "./groups";
+import { enqueueJob } from "./jobs/queue";
+import { storageDeleteJob } from "./jobs/storage-delete-job";
 import type { PlanId } from "./plans";
-import { Db, Storage } from "./services";
+import { Db } from "./services";
 import { deleteSupportMessagesFrom } from "./support";
-import { errorFields } from "./telemetry/redact";
 
 /**
  * Admin writes. Each one makes its change and writes its audit row in the
@@ -45,14 +47,34 @@ const lockMembers = (tx: Tx, organizationIds: string[]) =>
     .orderBy(member.id)
     .for("update");
 
-const objectKeysOf = async (tx: Tx, organizationIds: string[]) => {
+/**
+ * Queues `storage.delete` jobs in `tx` for the workspaces' stored files, so the files go if and
+ * only if the row delete in the same transaction commits. Returns how many files were queued.
+ */
+const queueFileDeletes = async (tx: Tx, organizationIds: string[]) => {
+  // Holds back new receipts until commit (their foreign key check waits), so no file is missed.
+  await tx
+    .select({ id: organization.id })
+    .from(organization)
+    .where(inArray(organization.id, organizationIds))
+    .orderBy(organization.id)
+    .for("update");
   const rows = await tx
-    .select({ key: receipts.imageObjectKey })
+    .select({ organizationId: receipts.organizationId, key: receipts.imageObjectKey })
     .from(receipts)
     .where(
       and(inArray(receipts.organizationId, organizationIds), isNotNull(receipts.imageObjectKey)),
     );
-  return rows.flatMap((row) => (row.key ? [row.key] : []));
+  for (const organizationId of organizationIds) {
+    const keys = rows.flatMap((row) =>
+      row.organizationId === organizationId && row.key ? [row.key] : [],
+    );
+    for (let start = 0; start < keys.length; start += MAX_BULK_DELETE) {
+      const batch = keys.slice(start, start + MAX_BULK_DELETE);
+      await enqueueJob(tx, storageDeleteJob(batch, organizationId));
+    }
+  }
+  return rows.length;
 };
 
 /** The workspace name and member email an audit row is labelled with. */
@@ -67,46 +89,31 @@ const labels = async (tx: Tx, organizationId: string, userId: string) => {
 };
 
 /**
- * Deletes stored files once their rows are gone. A failure leaves orphaned
- * objects, which only cost storage, so it is logged rather than surfaced.
+ * Deletes a workspace (members, invitations and receipts cascade) and queues its stored files'
+ * deletion in the same transaction. With `audit`, the `workspace.delete` row commits with it.
  */
-const purgeObjects = (keys: string[], context: Record<string, string>) =>
-  Effect.flatMap(Storage, (storage) => storage.remove(keys)).pipe(
-    Effect.catchAll((error) =>
-      Effect.logError("admin.purge_failed", {
-        ...context,
-        count: keys.length,
-        error: errorFields(error),
-      }),
-    ),
-  );
-
-/** Deletes a workspace (members, invitations and receipts cascade), then its stored files. */
-export const deleteWorkspace = (organizationId: string, audit: AuditActor) =>
-  Effect.gen(function* () {
-    const keys = yield* transact(async (tx) => {
-      // The row lock also holds back new receipts (their foreign key check waits), so `keys` is complete.
-      const [org] = await tx
-        .select({ name: organization.name })
-        .from(organization)
-        .where(eq(organization.id, organizationId))
-        .for("update");
-      if (!org) throw new NotFound({ message: "That workspace no longer exists." });
-      if (await hasChargingSubscription(tx, organizationId)) throw subscriptionConflict([org.name]);
-      const keys = await objectKeysOf(tx, [organizationId]);
-      await tx.delete(organization).where(eq(organization.id, organizationId));
+export const deleteWorkspace = (organizationId: string, audit?: AuditActor) =>
+  transact(async (tx) => {
+    const [org] = await tx
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .for("update");
+    if (!org) throw new NotFound({ message: "That workspace no longer exists." });
+    if (await hasChargingSubscription(tx, organizationId)) throw subscriptionConflict([org.name]);
+    const files = await queueFileDeletes(tx, [organizationId]);
+    await tx.delete(organization).where(eq(organization.id, organizationId));
+    if (audit) {
       await insertAudit(tx, {
         ...audit,
         action: "workspace.delete",
         targetType: "workspace",
         targetId: organizationId,
         targetLabel: org.name,
-        metadata: { files: keys.length },
+        metadata: { files },
       });
-      return keys;
-    });
-    yield* purgeObjects(keys, { organization_id: organizationId });
-    return { files: keys.length };
+    }
+    return { files };
   });
 
 /**
@@ -181,52 +188,48 @@ const subscriptionConflict = (names: string[]) =>
   });
 
 export const prepareUserDeletion = (userId: string, audit?: AuditActor) =>
-  Effect.gen(function* () {
-    const { keys, workspacesDeleted } = yield* transact(async (tx) => {
-      const mine = await tx
-        .select({ organizationId: member.organizationId })
-        .from(member)
-        .where(eq(member.userId, userId));
-      const organizationIds = [...new Set(mine.map((m) => m.organizationId))];
-      const rows = organizationIds.length > 0 ? await lockMembers(tx, organizationIds) : [];
+  transact(async (tx) => {
+    const mine = await tx
+      .select({ organizationId: member.organizationId })
+      .from(member)
+      .where(eq(member.userId, userId));
+    const organizationIds = [...new Set(mine.map((m) => m.organizationId))];
+    const rows = organizationIds.length > 0 ? await lockMembers(tx, organizationIds) : [];
 
-      const { solo, blocked } = splitForDeletion(userId, organizationIds, rows);
-      if (blocked.length > 0) {
-        const names = await tx
-          .select({ name: organization.name })
-          .from(organization)
-          .where(inArray(organization.id, blocked));
-        throw new Conflict({
-          message: `This user owns ${names.map((n) => n.name).join(", ")}, which has other members. Make one of them an owner first.`,
-        });
-      }
-      // Under the member locks, so a solo workspace can't gain a member between check and delete.
-      const subscribed = await chargingWorkspacesOf(tx, userId);
-      if (subscribed.length > 0) throw subscriptionConflict(subscribed.map((w) => w.name));
+    const { solo, blocked } = splitForDeletion(userId, organizationIds, rows);
+    if (blocked.length > 0) {
+      const names = await tx
+        .select({ name: organization.name })
+        .from(organization)
+        .where(inArray(organization.id, blocked));
+      throw new Conflict({
+        message: `This user owns ${names.map((n) => n.name).join(", ")}, which has other members. Make one of them an owner first.`,
+      });
+    }
+    // Under the member locks, so a solo workspace can't gain a member between check and delete.
+    const subscribed = await chargingWorkspacesOf(tx, userId);
+    if (subscribed.length > 0) throw subscriptionConflict(subscribed.map((w) => w.name));
 
-      const keys = solo.length > 0 ? await objectKeysOf(tx, solo) : [];
-      if (solo.length > 0) await tx.delete(organization).where(inArray(organization.id, solo));
-      const [target] = await tx
-        .select({ email: user.email })
-        .from(user)
-        .where(eq(user.id, userId))
-        .limit(1);
-      // Rows with this user_id go with the user (cascade); these are the ones sent signed out.
-      if (target) await deleteSupportMessagesFrom(tx, { userId, email: target.email });
-      if (audit) {
-        await insertAudit(tx, {
-          ...audit,
-          action: "user.delete",
-          targetType: "user",
-          targetId: userId,
-          targetLabel: target?.email ?? userId,
-          metadata: { workspacesDeleted: solo.length, files: keys.length },
-        });
-      }
-      return { keys, workspacesDeleted: solo.length };
-    });
-    yield* purgeObjects(keys, { user_id: userId });
-    return { workspacesDeleted, files: keys.length };
+    const files = solo.length > 0 ? await queueFileDeletes(tx, solo) : 0;
+    if (solo.length > 0) await tx.delete(organization).where(inArray(organization.id, solo));
+    const [target] = await tx
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    // Rows with this user_id go with the user (cascade); these are the ones sent signed out.
+    if (target) await deleteSupportMessagesFrom(tx, { userId, email: target.email });
+    if (audit) {
+      await insertAudit(tx, {
+        ...audit,
+        action: "user.delete",
+        targetType: "user",
+        targetId: userId,
+        targetLabel: target?.email ?? userId,
+        metadata: { workspacesDeleted: solo.length, files },
+      });
+    }
+    return { workspacesDeleted: solo.length, files };
   });
 
 /** A workspace always keeps at least one owner. */

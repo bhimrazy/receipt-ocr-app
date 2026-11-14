@@ -1,4 +1,4 @@
-import { account, and, asc, eq, passkey, receipts, sql, user } from "@receipt-ocr/db";
+import { account, and, asc, eq, inArray, passkey, receipts, sql, user } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { Db } from "./services";
 
@@ -152,5 +152,37 @@ export const securityPromptDue = (userId: string) =>
         .where(eq(user.id, userId))
         .limit(1);
       return Boolean(row && row.passkeys === 0 && row.scanned >= SECURITY_PROMPT_AFTER_RECEIPTS);
+    }),
+  );
+
+const storesProviderToken = sql`(${account.accessToken} is not null or ${account.refreshToken} is not null
+  or ${account.idToken} is not null or ${account.accessTokenExpiresAt} is not null
+  or ${account.refreshTokenExpiresAt} is not null)`;
+
+/**
+ * Nulls Google and GitHub tokens on up to `limit` account rows and returns how many. The web app's
+ * account hooks stop new ones; this daily pass clears any written by an older release still serving
+ * while a migration ran, or by a path the hooks miss.
+ */
+export const clearProviderTokens = (limit: number) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const ids = db
+        .select({ id: account.id })
+        .from(account)
+        .where(storesProviderToken)
+        .limit(limit);
+      const cleared = await db
+        .update(account)
+        .set({
+          accessToken: null,
+          refreshToken: null,
+          idToken: null,
+          accessTokenExpiresAt: null,
+          refreshTokenExpiresAt: null,
+        })
+        .where(inArray(account.id, ids))
+        .returning({ id: account.id });
+      return cleared.length;
     }),
   );

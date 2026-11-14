@@ -4,9 +4,12 @@
  */
 import {
   adminAuditLog,
+  and,
   appSettings,
   eq,
+  inArray,
   invitation,
+  jobs,
   member,
   organization,
   receipts,
@@ -27,7 +30,9 @@ import { countOtherAdmins } from "../src/admin-queries";
 import { DEFAULT_PLANS } from "../src/plans";
 import { Settings } from "../src/settings";
 import { AppLayer, type AppServices } from "../src/index";
+import { JOB_REGISTRY, STORAGE_DELETE, tick } from "../src/jobs";
 import { ingestUpload, purgeReceiptFiles } from "../src/pipeline";
+import { MAX_BULK_DELETE } from "../src/repository";
 import { Db, Storage } from "../src/services";
 import { ensurePersonalWorkspace } from "../src/workspace";
 
@@ -104,6 +109,35 @@ const auditRows = (action: string, targetId: string) =>
     ),
   );
 
+const db = <A>(f: (d: Parameters<Parameters<typeof Db.Service.use>[0]>[0]) => Promise<A>) =>
+  run(Effect.flatMap(Db, ({ use }) => use(f)));
+
+const deletedWorkspaces = new Set<string>();
+
+const deleteJobs = async (organizationId: string) => {
+  deletedWorkspaces.add(organizationId);
+  const rows = await db((d) =>
+    d
+      .select({ id: jobs.id, payload: jobs.payload })
+      .from(jobs)
+      .where(and(eq(jobs.kind, STORAGE_DELETE), eq(jobs.organizationId, organizationId))),
+  );
+  return rows.map((row) => ({ id: row.id, keys: (row.payload as { keys: string[] }).keys }));
+};
+
+const runJobs = async (ids: string[]) => {
+  const stats = await run(
+    tick({
+      worker: `${tag}-worker`,
+      registry: JOB_REGISTRY,
+      budgetMs: 30_000,
+      ids,
+      waitForRetries: false,
+    }),
+  );
+  expect(stats.runs.map((r) => r.outcome)).toEqual(ids.map(() => "succeeded"));
+};
+
 /** An admin to attribute changes to: actor_id must reference a real user. */
 let auditor: { actor: { id: string; email: string }; ip: string };
 beforeAll(async () => {
@@ -129,6 +163,9 @@ afterAll(async () => {
         }
         await d.delete(organization).where(sql`${organization.slug} like ${`${tag}%`}`);
         await d.delete(user).where(sql`${user.id} like ${`${tag}%`}`);
+        if (deletedWorkspaces.size > 0) {
+          await d.delete(jobs).where(inArray(jobs.organizationId, [...deletedWorkspaces]));
+        }
       }),
     ),
   );
@@ -144,13 +181,17 @@ describe.skipIf(!enabled)("admin deletion against Postgres + S3", () => {
     const shared = await upload({ ...carol, organizationId: dave.organizationId, role: "member" });
 
     const result = await run(prepareUserDeletion(carol.userId));
-    expect(result.workspacesDeleted).toBe(1);
+    expect(result).toEqual({ workspacesDeleted: 1, files: 1 });
     await run(
       Effect.flatMap(Db, ({ use }) =>
         use((d) => d.delete(user).where(sql`${user.id} = ${carol.userId}`)),
       ),
     );
 
+    const queued = await deleteJobs(carol.organizationId);
+    expect(queued.map((job) => job.keys)).toEqual([[own.imageObjectKey]]);
+    expect(await objectExists(own.imageObjectKey!)).toBe(true);
+    await runJobs(queued.map((job) => job.id));
     expect(await objectExists(own.imageObjectKey!)).toBe(false);
     expect(await objectExists(shared.imageObjectKey!)).toBe(true);
     const rows = await run(
@@ -184,14 +225,73 @@ describe.skipIf(!enabled)("admin deletion against Postgres + S3", () => {
     expect(await workspaceExists(hana.organizationId)).toBe(false);
   });
 
-  it("deleting a workspace removes its rows, writes the audit row, then deletes its files", async () => {
+  it("deleting a workspace removes its rows, writes the audit row and queues its files' deletion", async () => {
     const gina = await createUser("gina");
     const receipt = await upload(gina);
     const { files } = await run(deleteWorkspace(gina.organizationId, auditor));
     expect(files).toBe(1);
     expect(await workspaceExists(gina.organizationId)).toBe(false);
-    expect(await objectExists(receipt.imageObjectKey!)).toBe(false);
     expect(await auditRows("workspace.delete", gina.organizationId)).toHaveLength(1);
+
+    const queued = await deleteJobs(gina.organizationId);
+    expect(queued.map((job) => job.keys)).toEqual([[receipt.imageObjectKey]]);
+    expect(await objectExists(receipt.imageObjectKey!)).toBe(true);
+    await runJobs(queued.map((job) => job.id));
+    expect(await objectExists(receipt.imageObjectKey!)).toBe(false);
+  });
+
+  it("keeps the files and queues nothing when the row delete fails", async () => {
+    const nell = await createUser("nell");
+    const receipt = await upload(nell);
+    const fn = `adm_fail_${Date.now()}`;
+    await db(async (d) => {
+      await d.execute(
+        sql.raw(`create function ${fn}() returns trigger language plpgsql as $$
+          begin if old.id = '${nell.organizationId}' then raise exception 'blocked'; end if;
+          return old; end $$`),
+      );
+      await d.execute(
+        sql.raw(
+          `create trigger ${fn} before delete on organization for each row execute function ${fn}()`,
+        ),
+      );
+    });
+    try {
+      expect(Exit.isFailure(await runExit(deleteWorkspace(nell.organizationId, auditor)))).toBe(
+        true,
+      );
+      expect(Exit.isFailure(await runExit(prepareUserDeletion(nell.userId)))).toBe(true);
+    } finally {
+      await db(async (d) => {
+        await d.execute(sql.raw(`drop trigger if exists ${fn} on organization`));
+        await d.execute(sql.raw(`drop function if exists ${fn}()`));
+      });
+    }
+    expect(await workspaceExists(nell.organizationId)).toBe(true);
+    expect(await deleteJobs(nell.organizationId)).toEqual([]);
+    expect(await objectExists(receipt.imageObjectKey!)).toBe(true);
+    expect(await auditRows("workspace.delete", nell.organizationId)).toHaveLength(0);
+  });
+
+  it("splits a large workspace's files into storage.delete jobs of at most MAX_BULK_DELETE keys", async () => {
+    const olga = await createUser("olga");
+    await db((d) =>
+      d.insert(receipts).values(
+        Array.from({ length: MAX_BULK_DELETE + 1 }, (_, i) => ({
+          organizationId: olga.organizationId,
+          userId: olga.userId,
+          status: "failed" as const,
+          fileName: `${i}.jpg`,
+          imageObjectKey: `${tag}/olga/${i}.jpg`,
+        })),
+      ),
+    );
+    expect(await run(prepareUserDeletion(olga.userId))).toEqual({
+      workspacesDeleted: 1,
+      files: MAX_BULK_DELETE + 1,
+    });
+    const sizes = (await deleteJobs(olga.organizationId)).map((job) => job.keys.length).sort();
+    expect(sizes).toEqual([1, MAX_BULK_DELETE]);
   });
 });
 

@@ -4,8 +4,8 @@ import { ReceiptText, TriangleAlert } from "lucide-react";
 import { ConfidenceBadge } from "@/components/receipt-status";
 import { exampleCsv } from "@/lib/content/example-csv";
 import type { ContentExample } from "@/lib/content/types";
-import { reviewReasons } from "@receipt-ocr/core/review-reasons";
-import { confidenceLevel, formatConfidence, formatDate, formatMoney } from "@/lib/format";
+import { lineNeedsCheck, reviewReasons } from "@receipt-ocr/core/review-reasons";
+import { formatDate, formatMoney } from "@/lib/format";
 import { checksFor } from "@/lib/receipt-checks";
 
 function Field({ label, mono, children }: { label: string; mono?: boolean; children: string }) {
@@ -122,18 +122,24 @@ export function ContentExampleView({ example }: { example: ContentExample }) {
             </span>
           </div>
           <table className="w-full text-sm">
-            <caption className="sr-only">Line items with quantity, price and confidence</caption>
+            <caption className="sr-only">Line items with quantity and price</caption>
             <thead className="sr-only">
               <tr>
                 <th scope="col">Item</th>
                 <th scope="col">Quantity</th>
                 <th scope="col">Price</th>
-                <th scope="col">Confidence</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {receipt.items.map((item) => {
-                const low = confidenceLevel(item.confidence) === "review";
+                const low = lineNeedsCheck(
+                  {
+                    ...item,
+                    unitPrice: String(item.unitPrice),
+                    totalPrice: String(item.totalPrice),
+                  },
+                  receipt.currency,
+                );
                 return (
                   <tr
                     className={cn(low && "bg-warning/5 shadow-[inset_3px_0_0_var(--warning)]")}
@@ -151,11 +157,8 @@ export function ContentExampleView({ example }: { example: ContentExample }) {
                     <td className="px-3 py-3 text-right align-top font-mono whitespace-nowrap text-muted-foreground tabular-nums">
                       × {item.quantity}
                     </td>
-                    <td className="py-3 pl-3 text-right align-top font-mono whitespace-nowrap tabular-nums">
+                    <td className="py-3 pr-5 pl-3 text-right align-top font-mono whitespace-nowrap tabular-nums">
                       {money(item.totalPrice)}
-                    </td>
-                    <td className="py-3 pr-5 pl-3 text-right align-top font-mono text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-                      {formatConfidence(item.confidence)}
                     </td>
                   </tr>
                 );
