@@ -69,13 +69,23 @@ async function Meter({ offer, owner }: { offer: UpgradeOffer | null; owner: bool
   );
 }
 
-function MeterSkeleton({ withAction }: { withAction: boolean }) {
+// Heights follow the card: base 5.25rem, plus the button (3rem) or a one-line action (1.75rem,
+// 3.5rem on phones where the link keeps a 44 px target).
+const METER_SKELETON_HEIGHT = {
+  none: "h-[5.25rem]",
+  button: "h-[8.25rem]",
+  line: "h-[7rem] max-md:h-[8.75rem]",
+} as const;
+
+function MeterSkeleton({ kind }: { kind: keyof typeof METER_SKELETON_HEIGHT }) {
   return (
-    <Skeleton
-      aria-hidden="true"
-      className={withAction ? "h-[8.25rem] w-full rounded-lg" : "h-[5.25rem] w-full rounded-lg"}
-    />
+    <Skeleton aria-hidden="true" className={`${METER_SKELETON_HEIGHT[kind]} w-full rounded-lg`} />
   );
+}
+
+function skeletonKind(action: ReturnType<typeof meterAction>): keyof typeof METER_SKELETON_HEIGHT {
+  if (action === null) return "none";
+  return action === "upgrade-button" ? "button" : "line";
 }
 
 // Signed-in pages are private; keep them out of search results even if a link leaks.
@@ -136,10 +146,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <Suspense
         fallback={
           <MeterSkeleton
-            withAction={
-              usage !== null &&
-              meterAction({ usage, plan, owner, audience: offer?.audience ?? null }) ===
-                "upgrade-button"
+            kind={
+              usage === null
+                ? "none"
+                : skeletonKind(
+                    meterAction({ usage, plan, owner, audience: offer?.audience ?? null }),
+                  )
             }
           />
         }
