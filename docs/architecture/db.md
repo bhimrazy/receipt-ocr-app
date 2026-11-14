@@ -67,7 +67,7 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
 - **Postgres versions: Supabase runs 17; self-hosted Docker uses 18; CI tests migrations and integration on both.**
   CI's integration job runs on both majors and the e2e jobs on 17, so a migration or query that only works on one
   major fails the PR. Supabase reported `show server_version` = 17.11 on both projects (2026-11-08). CI pins
-  `postgres:17.10-alpine`; bump 17.10 to 17.11 after 2026-11-13, when it clears the 7-day cooldown.
+  `postgres:17.10-alpine`; bump 17.10 to 17.11 after 2026-11-18, when it clears the 7-day cooldown.
 - **Driver: node-postgres (`pg`) with `drizzle-orm/node-postgres`.** The same code runs against direct Postgres
   (Docker, RDS), PgBouncer, Supabase's Supavisor and Neon's pooler. pg-pool checks out one connection per query and
   never pipelines onto a busy one, which is what a transaction-mode pooler needs (postgres.js did pipeline, which
