@@ -357,8 +357,10 @@ plan's `workspaces` limit, read fresh from the database.
   `prepareUserDeletion`. Workspaces where the user is the only member are deleted with their files; deletion is
   refused while they are the only owner of a workspace with other members. Receipts they uploaded to shared
   workspaces stay, with no uploader.
-- **Delete a workspace** (owner): the `beforeDeleteOrganization` hook deletes its stored files first, then the
-  cascade removes members, invitations and receipts.
+- **Delete a workspace** (owner): the `beforeDeleteOrganization` hook runs core's `deleteWorkspace`, which deletes
+  the workspace (the cascade removes members, invitations and receipts) and queues `storage.delete` jobs for its files
+  in the same transaction. Better Auth's own delete then finds nothing left. Account deletion queues the files of the
+  workspaces it deletes the same way.
 
 ## Sensitive account changes
 

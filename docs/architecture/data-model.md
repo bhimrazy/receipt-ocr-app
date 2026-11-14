@@ -486,7 +486,8 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 - Before a user is deleted, `prepareUserDeletion` deletes workspaces where they are the only member, and refuses if
   they are the only owner of a workspace that has other members. It also deletes the support messages sent from the
   account's address while signed out.
-- Stored files are deleted from the bucket after their rows are gone (`purgeReceiptFiles`, `deleteWorkspace`). The
+- Stored files are deleted from the bucket after their rows are gone: every delete (`ReceiptRepo.removeMany`,
+  `deleteWorkspace`, `prepareUserDeletion`) queues `storage.delete` jobs in the transaction that deletes the rows. The
   database cascade alone would leave them behind.
 
 ## Unique indexes and checks
