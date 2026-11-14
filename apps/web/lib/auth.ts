@@ -10,7 +10,7 @@ import {
   workspacesBlockingDeletion,
   releaseMemberGroups,
 } from "@receipt-ocr/core";
-import { and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
+import { account, and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
 import {
   deleteAccountEmail,
   emailChangeEmail,
@@ -81,6 +81,7 @@ import {
 } from "./env";
 import { errorFields, logger } from "./log";
 import { mailer } from "./mailer";
+import { hashPassword, needsRehash, verifyPassword } from "./password";
 import { isEmailChangeVerification, queueWelcomeEmail, welcomeAtCreation } from "./welcome";
 import { runtime } from "./runtime";
 import { wantsProductUpdates, requestProductUpdates } from "./newsletter";
@@ -186,6 +187,33 @@ async function notify(input: SendEmailInput, userId: string, kind: string) {
     kind,
     delivered: result.delivered,
   });
+}
+
+/**
+ * After a correct password sign-in (including one that goes on to two-step sign-in), re-hashes a
+ * password stored with older scrypt parameters. Better Auth has no rehash hook, and this is the only
+ * moment the plain password is at hand. A failure is logged; the sign-in stands.
+ */
+async function upgradePasswordHash(email: string, password: unknown) {
+  if (typeof password !== "string") return;
+  try {
+    const [row] = await db
+      .select({ id: account.id, hash: account.password, userId: account.userId })
+      .from(account)
+      .innerJoin(userTable, eq(userTable.id, account.userId))
+      .where(and(eq(userTable.email, email.toLowerCase()), eq(account.providerId, "credential")))
+      .limit(1);
+    if (!row?.hash || !needsRehash(row.hash)) return;
+    const upgraded = await hashPassword(password);
+    // Only if the hash is still the one just checked: a password change in between wins.
+    await db
+      .update(account)
+      .set({ password: upgraded })
+      .where(and(eq(account.id, row.id), eq(account.password, row.hash)));
+    logger.info({ event: "auth.password_rehashed", unit: "log", user_id: row.userId });
+  } catch (error) {
+    logger.error({ event: "auth.password_rehash_failed", unit: "log", error: errorFields(error) });
+  }
 }
 
 /** Password reset page for "if this wasn't you" in notices. */
@@ -313,6 +341,7 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 8,
     maxPasswordLength: 128,
+    password: { hash: hashPassword, verify: verifyPassword },
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: RESET_LINK_SECONDS,
     requireEmailVerification,
@@ -468,7 +497,10 @@ export const auth = betterAuth({
       if (ctx.path === "/sign-in/email") {
         // Only a successful sign-in (the real password) resets the count.
         const email = signInEmail(ctx.body);
-        if (email && !isAPIError(ctx.context.returned)) await clearSignInAttempts(email);
+        if (email && !isAPIError(ctx.context.returned)) {
+          await clearSignInAttempts(email);
+          await upgradePasswordHash(email, (ctx.body as { password?: unknown }).password);
+        }
         return;
       }
       const returned = ctx.context.returned as
