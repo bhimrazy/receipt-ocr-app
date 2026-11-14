@@ -64,6 +64,13 @@
       "when": 1794656527049,
       "tag": "0008_support_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794666714789,
+      "tag": "0009_data_api_grants",
+      "breakpoints": true
     }
   ]
 }

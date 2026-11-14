@@ -148,8 +148,9 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   connects as `postgres`, which owns the tables, so nothing changes for it (on Supabase it also has `BYPASSRLS`). The
   point is defence in depth: Supabase's Data API (PostgREST) exposes the `public` schema as `anon` and
   `authenticated`, and with RLS on and no policy they read and write no rows even if someone later grants them access.
-  `service_role` bypasses RLS by design, so only removing `public` from the Data API's exposed schemas protects
-  against a leaked service-role key. Do not add `FORCE ROW LEVEL SECURITY` (it would apply RLS to the owner the app
+  `service_role` bypasses RLS by design, so `0009_data_api_grants` revokes every grant the three API roles hold in
+  `public`, including the default privileges for objects `postgres` creates later, and the Data API is switched off
+  ([deployment.md](../deployment.md#1-database)). Do not add `FORCE ROW LEVEL SECURITY` (it would apply RLS to the owner the app
   uses) and do not add policies unless the app starts using the Data API. `tests/rls.test.ts` fails when a table lacks
   `.enableRLS()`, and `rls.int.test.ts` checks the migrated database, including that the app role owns every table.
 - **`user_credentials` and `receipts.storage_source` are unused.** Reserved for bring-your-own-key; nothing reads or
