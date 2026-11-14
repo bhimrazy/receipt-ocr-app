@@ -149,7 +149,7 @@ jobs:
           - major: 18
             image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     services:
       postgres:
         image: ${{ matrix.postgres.image }}
@@ -211,6 +211,24 @@ jobs:
         run: bun run --filter @receipt-ocr/db test:int && bun run --filter @receipt-ocr/core test:int && bun run --filter @receipt-ocr/web test:int
         env:
           INTEGRATION: "1"
+      # TEMPORARY (support-admin flake): remove before review.
+      - name: "TEMP: flake repro loops"
+        env:
+          INTEGRATION: "1"
+        run: |
+          cp packages/core/tests/flake-before.int.test.ts.txt packages/core/tests/flake-before.int.test.ts
+          cp packages/core/tests/flake-repro.int.test.ts.txt packages/core/tests/flake-repro.int.test.ts
+          N=5000 bunx vitest run --project int packages/core/tests/flake-repro.int.test.ts 2>&1 | grep REPRO
+          loop() {
+            pass=0 fail=0
+            for i in $(seq "$2"); do
+              if out=$(bunx vitest run --project int "$1" 2>&1); then pass=$((pass+1)); else fail=$((fail+1)); echo "$out" | grep -m2 -E "×|check constraint" || true; fi
+            done
+            echo "LOOP $1 runs=$2 pass=$pass fail=$fail"
+            [ "$3" = strict ] && [ "$fail" -gt 0 ] && return 1 || true
+          }
+          loop packages/core/tests/flake-before.int.test.ts 150 report
+          loop packages/core/tests/support-admin.int.test.ts 150 strict
 
   e2e:
     name: E2E (Playwright)
