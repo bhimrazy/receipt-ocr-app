@@ -82,10 +82,13 @@ async function recheckAll() {
   return changed;
 }
 
-const bill = (overrides: Partial<ReceiptExtraction>): ReceiptExtraction => ({
-  ...FIXTURE_RECEIPTS[0]!,
-  ...overrides,
-});
+/** A fixture bill whose amounts add up, unless `overrides` break them. */
+const bill = (overrides: Partial<ReceiptExtraction>): ReceiptExtraction => {
+  const base = { ...FIXTURE_RECEIPTS[0]!, ...overrides };
+  return overrides.total === undefined
+    ? base
+    : { ...base, subtotal: overrides.total, tax: null, tip: null };
+};
 
 describe.skipIf(!enabled)("possible duplicates and the recheck job", () => {
   it("flags the newer copy by bill number and seller tax id, or by merchant, total and date", async () => {
@@ -235,21 +238,25 @@ describe.skipIf(!enabled)("possible duplicates and the recheck job", () => {
         .set({ reviewReasons: sql`'{}'` })
         .where(eq(receipts.id, id)),
     );
-    await db((d) =>
-      d
-        .update(jobs)
-        .set({ runAt: new Date(0) })
-        .where(eq(jobs.id, queued[0]!.id)),
-    );
-    await run(
-      tick({
-        worker: `${tag}-worker`,
-        registry: JOB_REGISTRY,
-        budgetMs: 60_000,
-        ids: [queued[0]!.id],
-        waitForRetries: false,
-      }),
-    );
+    // The first run and the follow-ups it queues for the rest, until none is left.
+    for (let run_ = 0; run_ < 100; run_++) {
+      const live = await db((d) =>
+        d
+          .select({ id: jobs.id })
+          .from(jobs)
+          .where(and(eq(jobs.kind, RECEIPT_RECHECK), inArray(jobs.state, ["queued", "running"]))),
+      );
+      if (live.length === 0) break;
+      await run(
+        tick({
+          worker: `${tag}-worker`,
+          registry: JOB_REGISTRY,
+          budgetMs: 60_000,
+          ids: live.map((job) => job.id),
+          waitForRetries: false,
+        }),
+      );
+    }
     const [done] = await db((d) => d.select().from(jobs).where(eq(jobs.id, queued[0]!.id)));
     expect(done?.state).toBe("succeeded");
     expect(await reasons(f, id)).toEqual(["no_date"]);
