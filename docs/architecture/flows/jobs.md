@@ -272,6 +272,23 @@ practice on the first drain after a deploy. A run does at most 10 batches of 200
 starts again from its own cursor, which changes nothing already written. Priority 9, 5 attempts. To run it again for
 the same version, re-run its job from `/admin/jobs`.
 
+### File-size backfill
+
+`receipt.file_size_backfill`
+([`kinds/receipt-file-size-backfill.ts`](../../../packages/core/src/jobs/kinds/receipt-file-size-backfill.ts)) fills
+`receipts.file_bytes` for receipts stored before uploads recorded it, so the [storage cap](billing.md) counts them.
+Like the recheck it has no `receipt_id`, and `drainQueue` queues it once: an insert keyed `receipt.file_size_backfill`,
+skipped when any job ever had that key (retention keeps that first job), checked once per process.
+
+- A batch selects the next 100 receipts by id, across every workspace, with a stored file and no size. It HEADs their
+  objects through `Storage.size` (8 at a time, outside any transaction, nothing downloaded), then one `UPDATE` writes
+  the sizes found `where file_bytes is null`, so an upload's own size is never overwritten and a rerun changes nothing.
+- A missing object (404) leaves the row null, which the cap counts as 0, and is counted in the run's
+  `counts.missing`; the cursor moves past it, so the run doesn't stall on it.
+- A run does at most 5 batches and queues the rest as `receipt.file_size_backfill:<last id>`. Priority 9, 5 attempts,
+  lease 120 s. Storage not configured is dead at once (`storage-off`); a storage or database failure retries from the
+  run's own cursor.
+
 ## Tables
 
 `jobs` and `job_controls` come from migration

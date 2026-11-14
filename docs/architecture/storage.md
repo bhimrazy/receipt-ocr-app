@@ -13,6 +13,7 @@ All in [`src/index.ts`](../../packages/storage/src/index.ts):
 | `S3StorageConfig`                             | `endpoint`, `region`, `bucket`, `accessKeyId`, `secretAccessKey`, `forcePathStyle`                             |
 | `receiptObjectKey(userId, id, type)`          | `users/<userId>/receipts/<receiptId>.<ext>`                                                                    |
 | `putObject`, `getObject`                      | Store and read one object; `getObject` throws `ObjectNotFound` for a missing key (the SDK's typed `NoSuchKey`) |
+| `objectSize(config, key)`                     | The object's size from a HEAD (nothing downloaded); a 404 throws `ObjectNotFound`                              |
 | `listObjects(config, { prefix, startAfter })` | One page (up to 1,000) of keys and their `LastModified`, in key order; `next` resumes after the last key       |
 | `deleteObjects(config, keys)`                 | Delete in batches of 1,000 (the S3 maximum); throws if any key fails                                           |
 | `signedGetUrl(config, key, expiresIn)`        | A read URL valid 10 to 15 minutes by default, stable within a 5-minute window                                  |
@@ -55,12 +56,17 @@ for AWS), `S3_REGION` (default `auto`, right for R2), `S3_BUCKET`, `S3_ACCESS_KE
 - **One client per config.** Clients are cached in a 16-entry LRU keyed by a SHA-256 of the settings (never the
   secret itself), so keep-alive connections and TLS sessions are reused across requests. Only the Map keys are
   hashed: a cached client still holds its credentials in memory. Evicted clients are destroyed.
+- **Sizes come from the database, not the bucket.** The storage cap sums `receipts.file_bytes`, recorded at upload;
+  nothing lists the bucket to count a workspace. `objectSize` is only for `receipt.file_size_backfill`, which fills
+  the column for receipts stored before it existed. A HEAD on a missing key has no body, so the SDK raises a bare
+  404 rather than `NoSuchKey`; `objectSize` maps the status, which R2, S3 and RustFS all send.
 - **Missing config is local.** If `S3_*` is unset, only storage operations fail (`NotConfigured`); receipt pages
   still load without an image.
 
 ## How to test it
 
-[`index.test.ts`](../../packages/storage/tests/index.test.ts) covers keys and signed-URL parameters (`bun run test`).
+[`index.test.ts`](../../packages/storage/tests/index.test.ts) covers keys, signed-URL parameters and how missing keys
+are reported (`bun run test`).
 Real reads and writes run in the core integration suite and the e2e job against RustFS.
 
 ## Common changes

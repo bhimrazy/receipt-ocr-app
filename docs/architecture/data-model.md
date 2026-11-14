@@ -160,6 +160,8 @@ erDiagram
     text invoice_number "as printed, 1 to 64"
     text merchant_tax_id "as printed, 1 to 32"
     text image_object_key
+    int file_bytes "CHECK >= 0, null = not known yet"
+    jsonb file_meta "content type, image size"
     text model "provider:model that read it"
     numeric discount "CHECK >= 0"
     numeric service_charge "CHECK >= 0"
@@ -348,15 +350,21 @@ erDiagram
 ```
 
 The `plans` value holds, per plan, `workspaces`, `receiptsPerDay`, `receiptsPerMonth` (null = none), `poolPerDay` (null
-= none), `receiptsPerMinute` and `batchMax` (images in one
-upload batch, 1 to 20 on save). `scope` (`user` or `workspace`) is also stored per plan but is not editable in the admin form. A row saved before `receiptsPerMonth`, `poolPerDay` or `scope` existed reads with that plan's default; a row saved before `batchMax` existed reads as 10; a stored value over 20 reads as 20, so
+= none), `receiptsPerMinute`, `batchMax` (images in one
+upload batch, 1 to 20 on save), `membersPerWorkspace` and `storageBytes` (bytes, 1 MB to 1 TB; a row saved before it
+existed reads with that plan's default). `scope` (`user` or `workspace`) is also stored per plan but is not editable in the admin form. A row saved before `receiptsPerMonth`, `poolPerDay` or `scope` existed reads with that plan's default; a row saved before `batchMax` existed reads as 10; a stored value over 20 reads as 20, so
 the other limits in the row still apply.
 
 `admin_audit_log` stores the actor's email and the target's label as text, so an entry still reads after either is
 deleted. `target_id` is not a foreign key for the same reason.
 
-`user_credentials` (and `receipts.storage_source`) exist for a bring-your-own-key feature that is not built; nothing
-reads or writes them.
+`receipts.storage_source` exists for a bring-your-own-storage feature that is not built; it is always `managed`.
+`user_credentials`, never used, was dropped in `0013_storage_cap`.
+
+`receipts.file_bytes` is the stored file's size, summed per workspace for the storage cap
+([Billing](flows/billing.md)); `file_meta` is what the upload read from the bytes (`contentType`, and `width` and
+`height` for an image). Both are null on receipts stored before `0013`; `receipt.file_size_backfill` fills
+`file_bytes` from the objects, and leaves it null where the object is missing.
 
 ## Billing
 
@@ -507,11 +515,11 @@ erDiagram
 
 ## What happens on delete
 
-| When this is deleted | Rows that cascade (are deleted)                                                                                                                                                 | Rows that stay with the id set to null                                                                                                                                                                                                                       |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A user               | `session`, `account`, `member`, `invitation` they sent, `user_credentials`, `two_factor`, `passkey`, `step_up_events`, `step_up_codes`, `billing_checkouts`, `support_messages` | `receipts.user_id`, `receipts.reviewed_by`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by`, `billing_subscriptions.user_id` |
-| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`, `billing_checkouts`                                                                    | `ocr_rounds.organization_id`, `ocr_calls.organization_id`, `billing_subscriptions.organization_id`, `support_messages.organization_id`                                                                                                                       |
-| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                                                               | `support_messages.receipt_id`; the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                                                                |
+| When this is deleted | Rows that cascade (are deleted)                                                                                                                             | Rows that stay with the id set to null                                                                                                                                                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A user               | `session`, `account`, `member`, `invitation` they sent, `two_factor`, `passkey`, `step_up_events`, `step_up_codes`, `billing_checkouts`, `support_messages` | `receipts.user_id`, `receipts.reviewed_by`, `ocr_rounds.user_id`, `ocr_calls.user_id`, `jobs.user_id`, `receipt_groups.created_by`, `receipt_group_members.added_by`, `admin_audit_log.actor_id`, `app_settings.updated_by`, `billing_subscriptions.user_id` |
+| A workspace          | `member`, `invitation`, `receipts` (and through them `receipt_items`), `receipt_groups`, `billing_checkouts`                                                | `ocr_rounds.organization_id`, `ocr_calls.organization_id`, `billing_subscriptions.organization_id`, `support_messages.organization_id`                                                                                                                       |
+| A receipt            | `receipt_items`, its `receipt_group_members` rows                                                                                                           | `support_messages.receipt_id`; the ledger has no foreign key to `receipts` and keeps its rows                                                                                                                                                                |
 
 Two rules sit on top of the cascades, in [packages/core](core.md):
 

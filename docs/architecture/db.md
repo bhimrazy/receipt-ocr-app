@@ -16,16 +16,17 @@ their keys and delete behaviour, are on the [data model](data-model.md) page.
 
 From `@receipt-ocr/db` ([`src/index.ts`](../../packages/db/src/index.ts)):
 
-| Export                                                                                                 | What                                                                              |
-| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `createDb(url)`, `DbClient`                                                                            | The cached Drizzle client for a connection string                                 |
-| `receipts`, `receiptItems`, `ocrRounds`, `ocrCalls`, `adminAuditLog`, `appSettings`, `userCredentials` | App tables                                                                        |
-| `user`, `session`, `account`, `verification`, `organization`, `member`, `invitation`, `rateLimit`      | Better Auth tables ([`auth-schema.ts`](../../packages/db/src/auth-schema.ts))     |
-| `schema`                                                                                               | All tables and relations, passed to Drizzle and to Better Auth's adapter          |
-| `OCR_CALL_STATUSES`                                                                                    | Allowed `ocr_calls.status` values, also used to build the `CHECK` constraint      |
-| `MAX_EXTRACTION_ATTEMPTS`                                                                              | The retry cap (3), used by core and by `receipts_attempts_check`                  |
-| `and`, `eq`, `sql`, `desc`, `inArray`, ...                                                             | Drizzle operators, re-exported so every package uses this package's `drizzle-orm` |
-| `Receipt`, `ReceiptItem`, `OcrCall`, `NewOcrCall`, `AdminAuditEntry`, ...                              | Row types inferred from the tables                                                |
+| Export                                                                                            | What                                                                              |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `createDb(url)`, `DbClient`                                                                       | The cached Drizzle client for a connection string                                 |
+| `receipts`, `receiptItems`, `ocrRounds`, `ocrCalls`, `adminAuditLog`, `appSettings`, ...          | App tables                                                                        |
+| `user`, `session`, `account`, `verification`, `organization`, `member`, `invitation`, `rateLimit` | Better Auth tables ([`auth-schema.ts`](../../packages/db/src/auth-schema.ts))     |
+| `schema`                                                                                          | All tables and relations, passed to Drizzle and to Better Auth's adapter          |
+| `OCR_CALL_STATUSES`                                                                               | Allowed `ocr_calls.status` values, also used to build the `CHECK` constraint      |
+| `MAX_EXTRACTION_ATTEMPTS`                                                                         | The retry cap (3), used by core and by `receipts_attempts_check`                  |
+| `and`, `eq`, `sql`, `desc`, `inArray`, ...                                                        | Drizzle operators, re-exported so every package uses this package's `drizzle-orm` |
+| `Receipt`, `ReceiptItem`, `OcrCall`, `NewOcrCall`, `AdminAuditEntry`, ...                         | Row types inferred from the tables                                                |
+| `ReceiptFileMeta`                                                                                 | The shape of `receipts.file_meta`: the sniffed content type, and an image's size  |
 
 ## Key modules
 
@@ -154,9 +155,16 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   ([deployment.md](../deployment.md#1-database)). Do not add `FORCE ROW LEVEL SECURITY` (it would apply RLS to the owner the app
   uses) and do not add policies unless the app starts using the Data API. `tests/rls.test.ts` fails when a table lacks
   `.enableRLS()`, and `rls.int.test.ts` checks the migrated database, including that the app role owns every table.
-- **`user_credentials` and `receipts.storage_source` are unused.** Reserved for bring-your-own-key; nothing reads or
-  writes them, and no encryption exists for the ciphertext column (see [byok-key-management.md](../byok-key-management.md)
-  and decision 8 in [STATUS](../STATUS.md)).
+- **`receipts.storage_source` is unused.** Always `managed`; the bring-your-own-storage plan needs it
+  ([byok-key-management.md](../byok-key-management.md)). `user_credentials`, unused since the baseline, was dropped in
+  `0013_storage_cap` (decided 2026-11-14); BYOK adds its own table, with encryption, when it is built.
+- **`receipts.file_bytes` is what the storage cap sums.** Written at upload (an `integer`: one file is at most
+  `MAX_UPLOAD_BYTES`, 10 MB; the sum is taken as `bigint`), `CHECK (file_bytes >= 0)`. Null for receipts stored before
+  `0013`, until `receipt.file_size_backfill` reads their objects' sizes, and for those whose object is missing; null
+  counts as 0. `receipts.file_meta` (`jsonb`, nullable) holds only what the upload read from the bytes:
+  `{ contentType, width?, height? }`. The per-workspace sum reads `receipts_org_receipt_date_idx` (its leading column
+  is `organization_id`): about 9 ms for a full Pro workspace of 26,000 receipts, measured on a seeded local database,
+  so no index of its own.
 
 ## How to test it
 
