@@ -52,7 +52,7 @@ import {
   parseReceiptDate,
 } from "./receipt-fields";
 import type { ReceiptPatch } from "./receipt-patch";
-import { editedReasons, POSSIBLE_DUPLICATE } from "./review-reasons";
+import { editedReasons, POSSIBLE_DUPLICATE, withLineChecks } from "./review-reasons";
 import { hasOlderCopy, isNewerCopyOf, oldestCopyOf, rowHasOlderCopy } from "./duplicates";
 import { isTimeZone } from "./analytics/time-buckets";
 
@@ -83,8 +83,9 @@ export const canManageAnyReceipt = (role: string | undefined) =>
 /** Receipt ids are UUIDs; anything else can't match, and Postgres would reject the cast. */
 export const isReceiptId = isUuid;
 
-export type ReceiptWithItems = Receipt & {
-  items: ReceiptItem[];
+export type ReceiptWithItems = Omit<Receipt, "rawJson" | "model"> & {
+  /** `needsCheck`: the line's own numbers disagree; set by `get`. */
+  items: (ReceiptItem & { needsCheck?: boolean })[];
   imageUrl?: string;
   /** Who marked it reviewed; set by `get`, null once that user is deleted. */
   reviewer?: { name: string } | null;
@@ -93,6 +94,10 @@ export type ReceiptWithItems = Receipt & {
   /** Set by `get` on a possible duplicate: the oldest receipt that looks like the same bill, if still there. */
   duplicateOf?: string | null;
 };
+
+/** A row without the fields customers never see: the raw extraction and the model that read it. */
+const withoutFields = <T extends object, K extends keyof T>(row: T, ...keys: K[]) =>
+  Object.fromEntries(Object.entries(row).filter(([key]) => !keys.includes(key as K))) as Omit<T, K>;
 
 /** A History row: table columns only, no items or raw extraction. */
 export type ReceiptSummary = {
@@ -804,19 +809,23 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             },
           });
           if (!row) return null;
+          const rest = withoutFields(row, "rawJson", "model");
+          const checked = { ...rest, items: withLineChecks(row.items, row.currency, row.rawJson) };
           if (row.status === "completed" && row.reviewReasons.includes(POSSIBLE_DUPLICATE)) {
             const found = await db.execute<{ id: string | null }>(
               sql`select ${oldestCopyOf("r")} as id from receipts r where r.id = ${id}::uuid`,
             );
-            return { ...row, duplicateOf: found.rows[0]?.id ?? null };
+            return { ...checked, duplicateOf: found.rows[0]?.id ?? null };
           }
-          if (!isStaleCandidate(row)) return row;
+          if (!isStaleCandidate(row)) return checked;
           const [live] = await db
             .select({ id: jobs.id })
             .from(jobs)
             .where(and(eq(jobs.receiptId, id), liveReceiptJob("jobs")))
             .limit(1);
-          return live ? row : { ...row, status: "failed" as const, errorMessage: STALE_MESSAGE };
+          return live
+            ? checked
+            : { ...checked, status: "failed" as const, errorMessage: STALE_MESSAGE };
         }),
 
       list: (scope, filters, page) =>

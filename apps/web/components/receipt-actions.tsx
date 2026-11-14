@@ -23,7 +23,6 @@ import {
 } from "@receipt-ocr/ui/components/dropdown-menu";
 import { toast } from "@receipt-ocr/ui/components/toast";
 import {
-  Copy,
   Download,
   LifeBuoy,
   Loader2,
@@ -96,7 +95,7 @@ function useEditing() {
 }
 
 /**
- * Header actions. Desktop: Export CSV, with Copy JSON, Report a problem and Delete in the overflow
+ * Header actions. Desktop: Export CSV, with Report a problem and Delete in the overflow
  * menu (editing lives on the Details card); failed or still reading: Delete, and Report a problem
  * in the menu. Phones get the same choices plus Edit and Try again in a bottom sheet. Edit and
  * Delete need `canEdit`. Report a problem needs `SupportWidget` on the page.
@@ -129,15 +128,6 @@ export function ReceiptActions({
   // the form returns focus to that trigger.
   const reportProblem = (returnFocus: HTMLElement | null) =>
     setTimeout(() => openSupportWidget("problem", { receiptId: receipt.id, returnFocus }), 0);
-
-  async function copyJson() {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(receipt.rawJson ?? receipt, null, 2));
-      toast.add({ title: "JSON copied", type: "success" });
-    } catch {
-      toast.add({ title: "Couldn't copy to the clipboard", type: "error" });
-    }
-  }
 
   function exportCsv() {
     downloadBlob(
@@ -237,10 +227,6 @@ export function ReceiptActions({
                 <Download aria-hidden="true" />
                 Export CSV
               </DrawerAction>
-              <DrawerAction onClick={fromSheet(() => void copyJson())}>
-                <Copy aria-hidden="true" />
-                Copy JSON
-              </DrawerAction>
             </>
           ) : null}
           <DrawerAction
@@ -330,13 +316,7 @@ export function ReceiptActions({
       <DropdownMenu>
         {moreTrigger}
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuGroup>
-            <DropdownMenuItem onClick={copyJson}>
-              <Copy aria-hidden="true" />
-              Copy JSON
-            </DropdownMenuItem>
-            {reportItem}
-          </DropdownMenuGroup>
+          <DropdownMenuGroup>{reportItem}</DropdownMenuGroup>
           {canEdit ? (
             <>
               <DropdownMenuSeparator />

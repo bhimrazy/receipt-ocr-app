@@ -74,13 +74,13 @@ test("saving a correction marks the receipt reviewed and clears its line warning
   const sql = postgres(process.env.DATABASE_URL!, { max: 1, prepare: false });
   try {
     await sql`update receipts set review_reasons = '{no_date}', receipt_date = null where id = ${id!}`;
-    await sql`update receipt_items set confidence = 0.5 where receipt_id = ${id!}`;
+    await sql`update receipt_items set quantity = 1, unit_price = 10, total_price = 20 where receipt_id = ${id!}`;
   } finally {
     await sql.end();
   }
   const card = page.getByRole("region", { name: "Check before you use this" });
   const lineWarning = page.getByText("Check this line against the photo");
-  const lineNote = page.getByText("Marked lines were hard to read.");
+  const lineNote = page.getByText("Marked lines don't add up.");
 
   await page.goto("/app/receipts?status=needs-review");
   await expect(page.getByText("Edit Review Shop").filter({ visible: true }).first()).toBeVisible();

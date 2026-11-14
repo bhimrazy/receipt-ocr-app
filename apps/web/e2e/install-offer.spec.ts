@@ -48,7 +48,7 @@ test("Settings and the account menu offer Install app only when the browser can 
 }) => {
   await signUp(page, uniqueEmail("install-row"));
   await page.goto("/app/settings");
-  await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "App", exact: true })).toHaveCount(0);
 
   await offerInstall(page);

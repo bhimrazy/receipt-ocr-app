@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   editedReasons,
   isDateReason,
+  lineNeedsCheck,
   recheckedReasons,
   reviewReasons,
+  withLineChecks,
   totalsMismatch,
   type CheckedFields,
 } from "../src/review-reasons";
@@ -164,6 +166,77 @@ describe("editedReasons", () => {
     ).toEqual(["no_date"]);
   });
 });
+
+describe("lineNeedsCheck", () => {
+  const line = (quantity: number, unitPrice: string | null, totalPrice: string | null) => ({
+    quantity,
+    unitPrice,
+    totalPrice,
+  });
+
+  it("accepts a line whose quantity times unit price is its total", () => {
+    expect(lineNeedsCheck(line(1, "10.00", "10.00"), "USD")).toBe(false);
+    expect(lineNeedsCheck(line(2, "4.50", "9.00"), "USD")).toBe(false);
+  });
+
+  it("marks a line that disagrees beyond rounding", () => {
+    expect(lineNeedsCheck(line(3, "3.79", "15.16"), "USD")).toBe(true);
+    expect(lineNeedsCheck(line(1, "10.00", "10.02"), "USD")).toBe(true);
+  });
+
+  it("allows rounding of a printed unit price and fractional quantities", () => {
+    expect(lineNeedsCheck(line(3, "3.33", "10.00"), "USD")).toBe(false);
+    expect(lineNeedsCheck(line(1, "4.99", "3.74"), "USD", 0.75)).toBe(false);
+    expect(lineNeedsCheck(line(1, "4.99", "4.20"), "USD", 0.75)).toBe(true);
+  });
+
+  it("uses the currency's minor unit", () => {
+    expect(lineNeedsCheck(line(1, "500", "501"), "JPY")).toBe(true);
+    expect(lineNeedsCheck(line(1, "500", "500"), "JPY")).toBe(false);
+    expect(lineNeedsCheck(line(1, "1.000", "1.001"), "KWD")).toBe(true);
+    expect(lineNeedsCheck(line(1, "1.00", "1.004"), null)).toBe(false);
+  });
+
+  it("marks a missing total but not a missing unit price", () => {
+    expect(lineNeedsCheck(line(1, "10.00", null), "USD")).toBe(true);
+    expect(lineNeedsCheck(line(1, null, "10.00"), "USD")).toBe(false);
+  });
+
+  it("accepts discount lines with negative amounts", () => {
+    expect(lineNeedsCheck(line(1, "-5.00", "-5.00"), "USD")).toBe(false);
+    expect(lineNeedsCheck(line(1, "-5.00", "5.00"), "USD")).toBe(true);
+  });
+
+  it("uses the printed quantity when the extraction has one", () => {
+    expect(lineNeedsCheck(line(1, "120.00", "90.00"), "USD", 0.75)).toBe(false);
+    expect(lineNeedsCheck(line(1, "120.00", "100.00"), "USD", 0.75)).toBe(true);
+    expect(lineNeedsCheck(line(2, "5.00", "15.00"), "USD", 2)).toBe(true);
+  });
+
+  it("doesn't mark a weighed line stored as quantity 1 when only the rounded quantity is known", () => {
+    expect(lineNeedsCheck(line(1, "120.00", "90.00"), "USD")).toBe(false);
+    expect(lineNeedsCheck(line(1, "7.99", "2.40"), "USD")).toBe(false);
+    expect(lineNeedsCheck(line(1, "10.00", "20.00"), "USD")).toBe(true);
+  });
+});
+
+describe("withLineChecks", () => {
+  const items = [
+    { quantity: 1, unitPrice: "120.00", totalPrice: "90.00" },
+    { quantity: 1, unitPrice: "10.00", totalPrice: "20.00" },
+    { quantity: 2, unitPrice: "4.50", totalPrice: "9.00" },
+  ];
+  const marks = (rawJson: unknown) =>
+    withLineChecks(items, "USD", rawJson).map((i) => i.needsCheck);
+
+  it("matches printed quantities to lines by order", () => {
+    const raw = { items: [{ quantity: 0.75 }, { quantity: 1 }, { quantity: 2 }] };
+    expect(marks(raw)).toEqual([false, true, false]);
+  });
+
+  it("falls back to stored quantities without a usable raw extraction", () => {
+    expect(marks(null)).toEqual([false, true, false]);
+    expect(marks({ items: "bad" })).toEqual([false, true, false]);
 
 describe("recheckedReasons", () => {
   const clean = fields({ total: "10.00", subtotal: "10.00" });

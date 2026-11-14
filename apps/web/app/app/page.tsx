@@ -56,7 +56,7 @@ const steps = (batchMax: number): { icon: LucideIcon; title: string; body: strin
   {
     icon: Download,
     title: "Check and export",
-    body: "Lines that were hard to read are marked. Correct the details, then download a CSV.",
+    body: "Lines that don't add up are marked. Correct the details, then download a CSV.",
   },
 ];
 
