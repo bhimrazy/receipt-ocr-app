@@ -241,13 +241,13 @@ describe.skipIf(!enabled)("admin deletion against Postgres + S3", () => {
   });
 
   it("keeps the files and queues nothing when the row delete fails", async () => {
-    const nora = await createUser("nora");
-    const receipt = await upload(nora);
+    const nell = await createUser("nell");
+    const receipt = await upload(nell);
     const fn = `adm_fail_${Date.now()}`;
     await db(async (d) => {
       await d.execute(
         sql.raw(`create function ${fn}() returns trigger language plpgsql as $$
-          begin if old.id = '${nora.organizationId}' then raise exception 'blocked'; end if;
+          begin if old.id = '${nell.organizationId}' then raise exception 'blocked'; end if;
           return old; end $$`),
       );
       await d.execute(
@@ -257,20 +257,20 @@ describe.skipIf(!enabled)("admin deletion against Postgres + S3", () => {
       );
     });
     try {
-      expect(Exit.isFailure(await runExit(deleteWorkspace(nora.organizationId, auditor)))).toBe(
+      expect(Exit.isFailure(await runExit(deleteWorkspace(nell.organizationId, auditor)))).toBe(
         true,
       );
-      expect(Exit.isFailure(await runExit(prepareUserDeletion(nora.userId)))).toBe(true);
+      expect(Exit.isFailure(await runExit(prepareUserDeletion(nell.userId)))).toBe(true);
     } finally {
       await db(async (d) => {
         await d.execute(sql.raw(`drop trigger if exists ${fn} on organization`));
         await d.execute(sql.raw(`drop function if exists ${fn}()`));
       });
     }
-    expect(await workspaceExists(nora.organizationId)).toBe(true);
-    expect(await deleteJobs(nora.organizationId)).toEqual([]);
+    expect(await workspaceExists(nell.organizationId)).toBe(true);
+    expect(await deleteJobs(nell.organizationId)).toEqual([]);
     expect(await objectExists(receipt.imageObjectKey!)).toBe(true);
-    expect(await auditRows("workspace.delete", nora.organizationId)).toHaveLength(0);
+    expect(await auditRows("workspace.delete", nell.organizationId)).toHaveLength(0);
   });
 
   it("splits a large workspace's files into storage.delete jobs of at most MAX_BULK_DELETE keys", async () => {
