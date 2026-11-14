@@ -4,6 +4,7 @@ import {
   SUBSCRIPTION_STATUSES,
   type BillingEvent,
   type PortalLinks,
+  type TransactionLine,
   type WebhookRejection,
 } from "./provider";
 
@@ -112,7 +113,14 @@ const transactionData = z.object({
   subscription_id: z.string().nullish(),
   origin: z.string().nullish(),
   billing_period: z.object({ starts_at: z.string(), ends_at: z.string().nullish() }).nullish(),
+  items: z.unknown().optional(),
 });
+
+/** `proration` is null on a full-price item; a missing key leaves the lines unknown, not full price. */
+const transactionItems = z
+  .array(z.object({ quantity: z.number().int(), proration: z.object({}).loose().nullable() }))
+  .min(1)
+  .max(100);
 
 const envelope = z.object({
   event_id: z.string().min(1),
@@ -126,8 +134,9 @@ const envelope = z.object({
  * don't subscribe to, "bad-body" for a shape we can't read (Paddle retries it,
  * and the failure shows in the logs). `transaction.completed` carries no
  * subscription state (its subscription's own events follow), only its id,
- * subscription, origin and billing period. An adjustment (refund,
- * chargeback) keeps only its ids, action, type and status.
+ * subscription, origin, billing period, and each item's quantity and whether
+ * it was prorated. An adjustment (refund, chargeback) keeps only its ids,
+ * action, type and status.
  */
 export function parsePaddleEvent(rawBody: string): BillingEvent | null | "bad-body" {
   let json: unknown;
@@ -213,7 +222,18 @@ function transactionOf(data: unknown): BillingEvent["transaction"] {
     origin: t.origin ?? null,
     billingPeriodStart: date(t.billing_period?.starts_at),
     billingPeriodEnd: date(t.billing_period?.ends_at),
+    lines: linesOf(t.items),
   };
+}
+
+/** Items we can't read are kept as unknown, so the period rules fall back to the stored period. */
+function linesOf(items: unknown): TransactionLine[] | null {
+  const parsed = transactionItems.safeParse(items);
+  if (!parsed.success) return null;
+  return parsed.data.map((item) => ({
+    quantity: item.quantity,
+    prorated: item.proration !== null,
+  }));
 }
 
 export const paddleApiBase = (environment: PaddleEnvironment) =>

@@ -1,4 +1,4 @@
-import type { AdjustmentSnapshot, BillingStatus } from "./provider";
+import type { AdjustmentSnapshot, BillingStatus, TransactionLine } from "./provider";
 
 /**
  * Which subscription states grant Pro. Pure: the queries that apply this rule
@@ -123,6 +123,7 @@ type PeriodTransaction = {
   origin: string | null;
   billingPeriodStart: Date | null;
   billingPeriodEnd: Date | null;
+  lines: readonly TransactionLine[] | null;
 };
 
 /** The stored subscription's current billing period. */
@@ -132,28 +133,39 @@ const sameTime = (a: Date | null, b: Date | null) =>
   a !== null && b !== null && a.getTime() === b.getTime();
 
 /**
- * Whether a `subscription_update` only prorates a change inside the stored
- * period. Paddle bills a proration from the change to the current period's end
- * (API reference, "Preview an update to a subscription", checked 2026-11-13);
- * an interval change starts a new period, which ends elsewhere, or is already
- * the stored one when its `subscription.updated` came first.
+ * Whether a `subscription_update` charges a full price, from the provider's
+ * proration markers: some item with a positive quantity isn't prorated. A
+ * price or interval change billed at once has one (the new price, beside a
+ * prorated credit for the old one); a change inside the period, such as a
+ * moved billing date, has only prorated items. Null when the items are unknown.
  */
-function isProration(t: PeriodTransaction, period: StoredPeriod): boolean {
-  return (
-    t.origin === "subscription_update" &&
-    sameTime(t.billingPeriodEnd, period.end) &&
-    !sameTime(t.billingPeriodStart, period.start)
-  );
+function chargesFullPrice(lines: readonly TransactionLine[] | null): boolean | null {
+  if (lines === null || lines.length === 0) return null;
+  return lines.some((line) => line.quantity > 0 && !line.prorated);
 }
 
 /**
- * Whether a completed transaction pays for a billing period: a checkout,
- * renewal or a plan or interval change that starts a period. Not a one-off
- * charge, a card check or a proration.
+ * The rule for a `subscription_update` stored without its items: a proration
+ * ends where the stored period does but starts elsewhere. Paddle's transaction
+ * period is the subscription's whole period, not the prorated part (sandbox,
+ * checked 2026-11-14), so a change inside the period usually passes here and
+ * is caught by `paysNewerPeriod`'s start check instead.
+ */
+function isLegacyProration(t: PeriodTransaction, period: StoredPeriod): boolean {
+  return sameTime(t.billingPeriodEnd, period.end) && !sameTime(t.billingPeriodStart, period.start);
+}
+
+/**
+ * Whether a completed transaction pays for a billing period: a checkout or a
+ * renewal, or a `subscription_update` that charges a full price
+ * (`chargesFullPrice`, else the stored-period rule for items we don't know).
+ * Not a one-off charge, a card check or a proration.
  */
 export function paysPeriod(t: PeriodTransaction, period: StoredPeriod): boolean {
   if (!t.origin || !t.billingPeriodStart) return false;
-  if (t.origin === "subscription_update") return !isProration(t, period);
+  if (t.origin === "subscription_update") {
+    return chargesFullPrice(t.lines) ?? !isLegacyProration(t, period);
+  }
   return PERIOD_ORIGINS.has(t.origin);
 }
 

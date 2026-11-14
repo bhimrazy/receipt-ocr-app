@@ -4,6 +4,7 @@
  * network: events are built in the provider-neutral shape the Paddle adapter
  * produces (its parsing and signatures are unit-tested in paddle.test.ts).
  */
+import { readFileSync } from "node:fs";
 import {
   billingCheckouts,
   billingEvents,
@@ -32,6 +33,7 @@ import { Db } from "../../src/services";
 import { ensurePersonalWorkspace } from "../../src/workspace";
 import { deleteWorkspace, prepareUserDeletion, workspacesBlockingDeletion } from "../../src/admin";
 import { blocksCheckout, PAST_DUE_GRACE_DAYS } from "../../src/billing/entitlement";
+import { parsePaddleEvent } from "../../src/billing/paddle";
 import type {
   AdjustmentSnapshot,
   BillingEvent,
@@ -193,6 +195,7 @@ const paid = (
     origin,
     billingPeriodStart: start,
     billingPeriodEnd: end,
+    lines: null,
   });
 
 const adjustment = (fields: Partial<AdjustmentSnapshot>): AdjustmentSnapshot => ({
@@ -1703,6 +1706,94 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
         expect((await subscriptionRow(id))?.paidTransactionId).toBe(`txn_${tag}_${order}_yearly`);
 
         await deliver(fullRefund(id, `txn_${tag}_${order}_yearly`));
+        expect(await planOf(workspaceId)).toBe("free");
+      }
+    });
+
+    it("replays a sandbox interval change and billing-date move by their proration markers, in any order", async () => {
+      const captured = (
+        JSON.parse(
+          readFileSync(
+            new URL("fixtures/paddle-sandbox-subscription-changes.json", import.meta.url),
+            "utf8",
+          ),
+        ) as unknown[]
+      ).flatMap((body) => {
+        const parsed = parsePaddleEvent(JSON.stringify(body));
+        return parsed && parsed !== "bad-body" ? [parsed] : [];
+      });
+      const [, toYearly, yearlyPayment, moveDate, extension, ...cancel] = captured;
+      const yearStart = new Date("2026-11-14T11:44:08.927Z");
+      const orders = {
+        "as-sent": [toYearly, yearlyPayment, moveDate, extension],
+        "payments-first": [yearlyPayment, toYearly, extension, moveDate],
+        // The extension arrives while the recorded payment is still the monthly one.
+        "payments-last": [toYearly, moveDate, extension, yearlyPayment],
+      };
+      for (const [order, sequence] of Object.entries(orders)) {
+        const workspaceId = await createWorkspace(other.userId, `sandbox-${order}`);
+        const id = `sub_${tag}_sandbox_${order}`;
+        const retag = (e: BillingEvent | undefined): BillingEvent => ({
+          ...e!,
+          eventId: `${id}_${e!.eventId}`,
+          subscription: e!.subscription && {
+            ...e!.subscription,
+            subscriptionId: id,
+            customerId: `ctm_${tag}`,
+            priceId: e!.subscription.interval === "year" ? "pri_year" : "pri_month",
+          },
+          transaction: e!.transaction && {
+            ...e!.transaction,
+            subscriptionId: id,
+            transactionId: `${id}_${e!.transaction.transactionId}`,
+          },
+        });
+        await deliver(
+          event(
+            snapshot({
+              subscriptionId: id,
+              workspaceId,
+              currentPeriodStart: new Date("2026-11-13T04:45:23.135Z"),
+              currentPeriodEnd: new Date("2026-12-13T04:45:23.135Z"),
+              updatedAt: new Date("2026-11-13T04:45:23.607Z"),
+            }),
+            "subscription.created",
+          ),
+        );
+        for (const e of sequence) await deliver(retag(e));
+
+        expect(await outcomeOf(retag(yearlyPayment).eventId)).toBe("applied");
+        expect(await outcomeOf(retag(extension).eventId)).toBe("ignored");
+        expect(await subscriptionRow(id)).toMatchObject({
+          paidTransactionId: `${id}_txn_sandbox_1`,
+          paidPeriodStart: yearStart,
+          currentPeriodStart: yearStart,
+          currentPeriodEnd: new Date("2027-11-25T11:44:00Z"),
+          billingInterval: "year",
+          revokedAt: null,
+        });
+
+        // Refunding the extension keeps Pro; refunding the yearly payment would end it.
+        const refund = event(
+          null,
+          "adjustment.updated",
+          adjustment({
+            action: "refund",
+            type: "full",
+            subscriptionId: id,
+            transactionId: `${id}_txn_sandbox_2`,
+          }),
+        );
+        await deliver(refund);
+        expect(await outcomeOf(refund.eventId)).toBe("ignored");
+        expect((await subscriptionRow(id))?.revokedAt).toBeNull();
+
+        for (const e of cancel) await deliver(retag(e));
+        expect(await subscriptionRow(id)).toMatchObject({
+          status: "canceled",
+          cancelAtPeriodEnd: false,
+          currentPeriodEnd: null,
+        });
         expect(await planOf(workspaceId)).toBe("free");
       }
     });
