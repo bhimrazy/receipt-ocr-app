@@ -239,7 +239,7 @@ Two gaps follow:
 | Receipt page   | Receipt date in Details; "Added 14 Nov 2026 by Asha" (test name) under it, always, not only while processing                        |
 | Filters        | Receipt date range (as now) plus "Added" presets (today, this week, since a date). Undated receipts never vanish silently: a date-filtered view says "3 receipts have no date" with a link |
 | Spending       | Receipt date only, as now. The upload-day fallback for undated receipts stays, but those receipts also count in Needs review          |
-| CSV            | Rename nothing. Append `uploaded_by` (name) beside the existing `created_at`; better, also append `uploaded_at` with the same value so the header says what it is, and keep `created_at` for importers |
+| CSV            | Keep `created_at` for importers. Append `uploaded_at` (same value, a clearer name) and `uploaded_by` (name) |
 | VAT export     | Receipt date (AD and BS). Rows uploaded after the previous export of the same period are marked "added since last export"           |
 | Late bills     | A reason `old_bill` when the receipt date is more than a year before upload: "Dated 12 Mar 2017, added today. Check it belongs in this workspace's books" |
 
