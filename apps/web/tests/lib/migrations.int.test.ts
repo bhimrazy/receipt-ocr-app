@@ -80,7 +80,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "0008_support_retention",
       "0009_oauth_tokens",
       "0010_data_api_grants",
-      "0011_receipt_duplicates",
+      "0012_receipt_duplicates",
     ]);
   });
 

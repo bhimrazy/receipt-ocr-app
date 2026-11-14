@@ -45,7 +45,7 @@ From `@receipt-ocr/db` ([`src/index.ts`](../../packages/db/src/index.ts)):
 | [`0002_receipt_review.sql`](../../apps/web/drizzle/0002_receipt_review.sql)         | `receipts.reviewed_at`, `reviewed_by` (foreign key to `user`, set null) and the partial `receipts_reviewed_by_idx`; `lock_timeout` first                                                                  |
 | [`0004_billing_checkouts.sql`](../../apps/web/drizzle/0004_billing_checkouts.sql)   | `billing_checkouts` (foreign keys to `organization` and `user`, cascade; unique transaction and linked subscription); validates the six 0003 `CHECK`s; `lock_timeout` first                               |
 | [`0006_support_messages.sql`](../../apps/web/drizzle/0006_support_messages.sql)     | `support_messages` (foreign keys to `user` cascade, `organization` and `receipts` set null; unique `submission_id`, value and length checks); `lock_timeout` first, indexes before the foreign keys       |
-| [`0011_receipt_duplicates.sql`](../../apps/web/drizzle/0011_receipt_duplicates.sql) | `receipts.duplicate_dismissed_at` (nullable, catalog-only) and the partial expression index `receipts_org_invoice_key_idx` for the possible-duplicate match; `lock_timeout` and `statement_timeout` first |
+| [`0012_receipt_duplicates.sql`](../../apps/web/drizzle/0012_receipt_duplicates.sql) | `receipts.duplicate_dismissed_at` (nullable, catalog-only) and the partial expression index `receipts_org_invoice_key_idx` for the possible-duplicate match; `lock_timeout` and `statement_timeout` first |
 
 The migrations were **squashed into this one baseline again on 2026-11-08, before launch**, when both databases held
 only test data and were reset. The first squash (2026-11-07) was followed by three migrations: the `refused` and
