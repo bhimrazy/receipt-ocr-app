@@ -8,14 +8,15 @@ Plain functions over the AWS S3 client, so the same code talks to Cloudflare R2 
 
 All in [`src/index.ts`](../../packages/storage/src/index.ts):
 
-| Export                                 | Does                                                                               |
-| -------------------------------------- | ---------------------------------------------------------------------------------- |
-| `S3StorageConfig`                      | `endpoint`, `region`, `bucket`, `accessKeyId`, `secretAccessKey`, `forcePathStyle` |
-| `receiptObjectKey(userId, id, type)`   | `users/<userId>/receipts/<receiptId>.<ext>`                                        |
-| `putObject`, `getObject`               | Store and read one object                                                          |
-| `deleteObjects(config, keys)`          | Delete in batches of 1,000 (the S3 maximum); throws if any key fails               |
-| `signedGetUrl(config, key, expiresIn)` | A read URL valid 10 to 15 minutes by default, stable within a 5-minute window      |
-| `s3Client(config)`                     | The cached client for a config                                                     |
+| Export                                        | Does                                                                                                           |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `S3StorageConfig`                             | `endpoint`, `region`, `bucket`, `accessKeyId`, `secretAccessKey`, `forcePathStyle`                             |
+| `receiptObjectKey(userId, id, type)`          | `users/<userId>/receipts/<receiptId>.<ext>`                                                                    |
+| `putObject`, `getObject`                      | Store and read one object; `getObject` throws `ObjectNotFound` for a missing key (the SDK's typed `NoSuchKey`) |
+| `listObjects(config, { prefix, startAfter })` | One page (up to 1,000) of keys and their `LastModified`, in key order; `next` resumes after the last key       |
+| `deleteObjects(config, keys)`                 | Delete in batches of 1,000 (the S3 maximum); throws if any key fails                                           |
+| `signedGetUrl(config, key, expiresIn)`        | A read URL valid 10 to 15 minutes by default, stable within a 5-minute window                                  |
+| `s3Client(config)`                            | The cached client for a config                                                                                 |
 
 ## Data flow
 
@@ -68,4 +69,6 @@ Real reads and writes run in the core integration suite and the e2e job against 
   [`upload-limits.ts`](../../packages/core/src/upload-limits.ts), its magic bytes to `sniffMediaType` in
   [`files.ts`](../../packages/core/src/files.ts), and its extension to `EXTENSIONS` here. Check the model accepts it.
 - **Move to another S3-compatible store.** Change the `S3_*` variables; the code does not change. Create the bucket
-  private, with a token that can read, write and delete objects.
+  private, with a token that can list, read, write and delete objects (on AWS, `s3:ListBucket` too: the orphan sweep
+  lists keys). Give each database its own bucket: the [orphan sweep](flows/jobs.md#orphan-sweep) treats every receipt
+  file whose row isn't in its database as orphaned.

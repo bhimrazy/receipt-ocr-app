@@ -10,6 +10,7 @@ import { errorFields } from "../../telemetry/redact";
 import { RetryableJobError, type JobDefinition, type NewJob } from "../definition";
 import { enqueueJob } from "../queue";
 import { purgeFinishedJobs } from "../retention";
+import { storageOrphanSweepJob } from "./storage-orphan-sweep";
 
 export const MAINTENANCE_PURGE = "maintenance.purge";
 const MAINTENANCE_PURGE_MAX_ATTEMPTS = 5;
@@ -60,6 +61,17 @@ export const scheduleMaintenance = () =>
     ),
   );
 
+/** Queues today's orphan sweep (UTC, by the database clock); a no-op while one is live. */
+const queueOrphanSweep = Effect.flatMap(Db, ({ use }) =>
+  use(async (db) => {
+    const { rows } = await db.execute<{ day: string }>(
+      sql`select to_char((now() at time zone 'UTC')::date, 'YYYY-MM-DD') as day`,
+    );
+    const day = rows[0]?.day;
+    if (day) await enqueueJob(db, storageOrphanSweepJob({ day, part: 0 }));
+  }),
+);
+
 /** Runs one table's purge until a batch comes back short or the run's batch budget is spent. */
 const inBatches = <E, R>(purge: (limit: number) => Effect.Effect<number, E, R>) =>
   Effect.gen(function* () {
@@ -92,6 +104,7 @@ export const maintenancePurge: JobDefinition<MaintenancePurgePayload, Db> = {
         count: Object.values(deleted).reduce((sum, n) => sum + n, 0),
         counts: deleted,
       });
+      yield* queueOrphanSweep;
       return deleted;
     }).pipe(
       Effect.catchTag("DbError", (error) =>

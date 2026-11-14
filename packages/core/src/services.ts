@@ -2,7 +2,9 @@ import { createDb, type DbClient } from "@receipt-ocr/db";
 import {
   deleteObjects,
   getObject,
+  listObjects,
   ObjectNotFound,
+  type ListedObject,
   putObject,
   signedGetUrl,
 } from "@receipt-ocr/storage";
@@ -72,6 +74,12 @@ export class Storage extends Context.Tag("@receipt-ocr/core/Storage")<
     readonly get: (key: string) => Effect.Effect<Uint8Array, StorageFailure>;
     readonly remove: (keys: readonly string[]) => Effect.Effect<void, StorageFailure>;
     readonly signedUrl: (key: string) => Effect.Effect<string, StorageFailure>;
+    /** One page of keys in key order; pass `next` back as `startAfter` for the following one. */
+    readonly list: (input: {
+      prefix: string;
+      startAfter?: string;
+      maxKeys?: number;
+    }) => Effect.Effect<{ objects: ListedObject[]; next?: string }, StorageFailure>;
   }
 >() {
   static readonly Live = Layer.succeed(Storage, {
@@ -89,6 +97,8 @@ export class Storage extends Context.Tag("@receipt-ocr/core/Storage")<
           ),
     signedUrl: (key) =>
       call("Failed to sign the receipt image URL", (config) => signedGetUrl(config, key)),
+    list: (input) =>
+      call("Failed to list stored files", (config, signal) => listObjects(config, input, signal)),
   });
 }
 

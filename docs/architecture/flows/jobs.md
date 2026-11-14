@@ -220,12 +220,43 @@ It runs once a day. The app has no scheduler of its own, so `drainQueue` (the dr
 run, due 00:00 UTC by the database clock and keyed `maintenance.purge:<that day>`; the key dedupes against the queued
 job, so every later drain's insert is a no-op, and keying by the next day stops a second run on the day one finished.
 Deletes go 500 rows per statement, at most 20 statements per table a run (10,000 rows); the rest waits for the next
-day. Priority 9, 5
-attempts, payload `{}`.
+day. Then it queues the day's [orphan sweep](#orphan-sweep). Priority 9, 5 attempts, payload `{}`.
 
 Cancelling a queued `maintenance.purge` doesn't stick: the key is free again, so the next drain queues it again. To stop
 it, pause the kind in `/admin/jobs`. After a rollback to a release without the kind, a due `maintenance.purge` job is
 never claimed (the old registry doesn't run it) and waits, queued, until the roll-forward.
+
+### Orphan sweep
+
+`storage.orphan_sweep` ([`kinds/storage-orphan-sweep.ts`](../../../packages/core/src/jobs/kinds/storage-orphan-sweep.ts))
+finds stored receipt files that no receipt row points at: an upload whose insert failed or may have committed
+(`receipt.ingest_unknown`), a `storage.delete` job that died, or an inline purge that failed (`admin.purge_failed`).
+Each `maintenance.purge` run queues the day's first part as its last step, keyed `storage.orphan_sweep:<day>::0`.
+
+```mermaid
+flowchart LR
+  purge["maintenance.purge<br/>(daily)"] -->|queues part 0| part["storage.orphan_sweep<br/>part n"]
+  part -->|"ListObjectsV2 users/,<br/>10 pages of 1,000 keys"| bucket[(Bucket)]
+  part -->|"select id from receipts<br/>where id in (ids from the keys)"| db[(Postgres)]
+  part -->|more to list| next["part n+1<br/>startAfter = last key"]
+  part -->|"STORAGE_ORPHAN_SWEEP_DELETE=true"| del["storage.delete<br/>(1,000 keys a job)"]
+```
+
+- **What counts.** Only keys `receiptObjectKey` makes (`users/<user>/receipts/<uuid>.<ext>`) whose `LastModified` is
+  more than 24 hours ago, so an upload in flight (file stored, row not yet committed) is never touched. A key carries
+  its receipt's id and only that row ever points at it, so a primary-key lookup per page decides. Any other key under
+  `users/` is counted as `unrecognised` and never deleted.
+- **Report-only by default.** The run's event has `counts` (`listed`, `recent`, `referenced`, `unrecognised`,
+  `orphaned`, `delete_jobs`, `part`), `flags` (`orphan_delete`, `more`, `capped`) and up to 20 orphaned keys in
+  `storage_keys`. With `STORAGE_ORPHAN_SWEEP_DELETE=true` the orphans go to `storage.delete` jobs (no workspace), which
+  retry on their own; any other value keeps it report-only.
+- **Bounded.** A part lists 10 pages of 1,000 keys, then queues the next part with `startAfter` set to its last key (a
+  key, not a continuation token, so a later job can resume). At most 20 parts a day (200,000 files); a sweep that
+  reaches the cap sets `capped` and starts over the next day.
+- **One bucket per database.** A file whose row lives in another database looks orphaned, so staging and production
+  must never share a bucket. The managed bucket only: BYOK buckets aren't listed.
+- Priority 9, 5 attempts, lease 120 s. Storage not configured is dead at once (`storage-off`); a listing or database
+  failure retries.
 
 ## Tables
 

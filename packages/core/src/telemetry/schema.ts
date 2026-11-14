@@ -275,6 +275,8 @@ export const EVENT_SCHEMA = {
   /** Contact form: the stored message is linked to a receipt in the sender's workspace. */
   has_receipt: "bool",
   turnstile_errors: "tokens",
+  /** Orphan sweep: a sample of stored-file keys no receipt row points at (`users/<user id>/receipts/<receipt id>.<ext>`). */
+  storage_keys: "tokens",
   /** Newsletter routes: the step and its result (`confirm_sent`, `confirmed`, `expired`). No address. */
   newsletter: "token",
   /** CSP reports: the directive and the blocked host or keyword only. */

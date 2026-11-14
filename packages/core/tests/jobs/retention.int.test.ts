@@ -18,6 +18,7 @@ import {
   WELCOME_EMAIL,
   WelcomeMailer,
 } from "../../src/jobs";
+import { STORAGE_ORPHAN_SWEEP } from "../../src/jobs/kinds/storage-orphan-sweep";
 import { purgeFinishedJobs } from "../../src/jobs/retention";
 import { Db } from "../../src/services";
 import { purgeStepUpCodes } from "../../src/step-up/store";
@@ -201,5 +202,35 @@ describe.skipIf(!enabled)("maintenance.purge retention against Postgres", () => 
     expect(stats.runs.map((r) => r.outcome)).toEqual(["succeeded"]);
     expect(await remainingJobs([expiredJob])).toEqual([]);
     await db((d) => d.delete(jobs).where(eq(jobs.id, queued.id)));
+  });
+
+  it("queues the day's first orphan-sweep part once, however often the purge runs", async () => {
+    const sweepParts = () =>
+      db((d) =>
+        d
+          .select({ id: jobs.id, payload: jobs.payload })
+          .from(jobs)
+          .where(sql`${jobs.kind} = ${STORAGE_ORPHAN_SWEEP} and ${jobs.state} = 'queued'`),
+      );
+    for (let i = 0; i < 2; i++) {
+      const queued = await db((d) =>
+        enqueueJob(d, { kind: MAINTENANCE_PURGE, payload: {}, maxAttempts: 1 }),
+      );
+      if (!("id" in queued)) throw new Error("not queued");
+      await run(
+        tick({
+          worker: `${tag}-worker`,
+          registry: JOB_REGISTRY,
+          budgetMs: 30_000,
+          ids: [queued.id],
+          waitForRetries: false,
+        }),
+      );
+      await db((d) => d.delete(jobs).where(eq(jobs.id, queued.id)));
+    }
+    const parts = await sweepParts();
+    expect(parts).toHaveLength(1);
+    expect(parts[0]!.payload).toMatchObject({ part: 0 });
+    await db((d) => d.delete(jobs).where(eq(jobs.id, parts[0]!.id)));
   });
 });
