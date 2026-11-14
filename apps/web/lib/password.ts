@@ -6,8 +6,15 @@ import { verifyPassword as verifyBetterAuthHash } from "better-auth/crypto";
 export const SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 3 } as const;
 const KEY_BYTES = 64;
 const PREFIX = "$scrypt$";
-// A stored hash names its own cost; these caps stop an edited row from asking for minutes of CPU or GBs of memory.
-const MAX = { N: 2 ** 20, r: 32, p: 16 };
+// A stored hash names its own cost; these caps stop an edited row from asking for seconds of CPU or GBs of memory.
+const MAX_MEMORY = 64 * 1024 * 1024; // 128·N·r bytes
+const MAX_WORK = 2 ** 23; // N·r·p
+/**
+ * A wrong password against a Better Auth hash (`N=2^14, r=16, p=1`) pays this too, so it takes as long as an unknown
+ * address, for which Better Auth hashes the submitted password at `SCRYPT_PARAMS`. Otherwise the timing tells which
+ * addresses have accounts. Measured: 80 ms + 170 ms against 260 ms (r=16 runs faster per unit of N·r·p than r=8).
+ */
+const LEGACY_PAD = { N: 2 ** 14, r: 16, p: 2 } as const;
 
 type Params = { N: number; r: number; p: number };
 
@@ -38,14 +45,14 @@ function parse(hash: string) {
   const match = FORMAT.exec(hash);
   if (!match) return null;
   const params = { N: Number(match[1]), r: Number(match[2]), p: Number(match[3]) };
+  const { N, r, p } = params;
   const valid =
-    params.N >= 2 &&
-    (params.N & (params.N - 1)) === 0 &&
-    params.N <= MAX.N &&
-    params.r >= 1 &&
-    params.r <= MAX.r &&
-    params.p >= 1 &&
-    params.p <= MAX.p;
+    N >= 2 &&
+    (N & (N - 1)) === 0 &&
+    r >= 1 &&
+    p >= 1 &&
+    128 * N * r <= MAX_MEMORY &&
+    N * r * p <= MAX_WORK;
   return valid ? { params, salt: match[4]!, key: Buffer.from(match[5]!, "hex") } : null;
 }
 
@@ -59,7 +66,11 @@ export function needsRehash(hash: string): boolean {
 
 /** Checks this module's hashes and Better Auth's own `<salt>:<key>` ones (`N=2^14, r=16, p=1`). */
 export async function verifyPassword({ hash, password }: { hash: string; password: string }) {
-  if (!hash.startsWith(PREFIX)) return verifyBetterAuthHash({ hash, password });
+  if (!hash.startsWith(PREFIX)) {
+    if (await verifyBetterAuthHash({ hash, password })) return true;
+    await derive(password, "0".repeat(32), LEGACY_PAD);
+    return false;
+  }
   const parsed = parse(hash);
   if (!parsed) return false;
   return timingSafeEqual(await derive(password, parsed.salt, parsed.params), parsed.key);
