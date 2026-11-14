@@ -463,9 +463,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   between admin re-run and user retry (L4).
 - Support messages (from the [support data review](reviews/2026-11-13-support-data-cto.md)): stored, triaged in
   `/admin/support` and deleted by the daily `maintenance.purge` job 12 months after closing (or after sending or the
-  last reopen, while not closed); the notification mail carries only a link. Still to do: the Resend bounce webhook and
-  suppression table (PR 4, owner: later), and an index for the purge's scan (`coalesce(closed_at, greatest(created_at,
-updated_at))`; it needs a migration, and the table is small until then).
+  last status change, while not closed); the notification mail carries only a link. Migration `0008` indexes the
+  purge's scan. Still to do: the Resend bounce webhook and suppression table (PR 4, owner: later).
 - Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
   rows older than 90 days in the daily `maintenance.purge` job, keeping the last
   pass and recent failures that the lockout reads; then update the privacy policy.

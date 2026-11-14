@@ -411,6 +411,20 @@ codes sent in the last 10 minutes.
 
 Steps specific to one release, newest first.
 
+### Support retention (migration 0008)
+
+- **`0008_support_retention`** adds `support_messages_retention_idx` (the purge's
+  `coalesce(closed_at, greatest(created_at, updated_at))`), `step_up_codes_expires_idx` (`expires_at`) and the check
+  `support_messages_closed_after_created_check` (`closed_at is null or closed_at >= created_at`). Plain `CREATE INDEX`
+  and an inline-validated check: both tables are small, and the migration runner holds every lock until commit, so
+  `NOT VALID` plus `VALIDATE` in the same run would scan under the same lock. `lock_timeout` 3 s, `statement_timeout`
+  30 s. While it runs, writes to both tables wait (reads of `support_messages` too, for the check); milliseconds at
+  today's volume.
+- No code depends on it: the purge query is unchanged and works with or without the index, so run **Database
+  Migration** on `staging-db`, then `production-db`, before or after the deploy. If the check fails on existing rows,
+  the migration rolls back and changes nothing; find them with
+  `select id from support_messages where closed_at < created_at`.
+
 ### Billing plan default dropped (migration 0007)
 
 - **`0007_billing_plan_default`** drops the `'pro'` default on `billing_subscriptions.plan`, which 0005 added only for
