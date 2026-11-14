@@ -6,14 +6,17 @@ import {
   adjustmentRevokesPro,
   blocksCheckout,
   canStillCharge,
+  chargesCustomer,
   isEntitled,
   memberLimitMessage,
   PAST_DUE_GRACE_DAYS,
   paysNewerPeriod as paysNewer,
+  paysPeriod,
   planForPrice,
   workspaceLimitMessage,
   type EntitlementFields,
 } from "../../src/billing/entitlement";
+import type { TransactionLine } from "../../src/billing/provider";
 
 const now = new Date("2026-11-08T12:00:00Z");
 const day = 86_400_000;
@@ -178,11 +181,16 @@ describe("adjustmentRevokesPro", () => {
 });
 
 describe("paysNewerPeriod", () => {
-  const txn = (origin: string | null, start: Date | null, end: Date | null = null) => ({
-    origin,
-    billingPeriodStart: start,
-    billingPeriodEnd: end,
-  });
+  const txn = (
+    origin: string | null,
+    start: Date | null,
+    end: Date | null = null,
+    lines: TransactionLine[] | null = null,
+  ) => ({ origin, billingPeriodStart: start, billingPeriodEnd: end, lines });
+  const full = { quantity: 1, prorated: false, recurring: true };
+  const prorated = { quantity: 1, prorated: true, recurring: true };
+  const credit = { quantity: -1, prorated: true, recurring: true };
+  const oneTime = { quantity: 1, prorated: false, recurring: false };
   const period = { start: at(0), end: at(30) };
   const paysNewerPeriod = (
     t: ReturnType<typeof txn>,
@@ -199,7 +207,44 @@ describe("paysNewerPeriod", () => {
     expect(paysNewerPeriod(txn("subscription_update", at(0)), at(0))).toBe(false);
     expect(paysNewerPeriod(txn("subscription_update", at(10)), null)).toBe(false);
   });
-  it("tells a proration from an interval change by where its period ends", () => {
+  it("takes a change that charges a full price, whatever the stored period", () => {
+    const yearly = txn("subscription_update", at(10), at(375), [full, credit]);
+    for (const stored of [period, { start: at(10), end: at(375) }, { start: null, end: null }]) {
+      expect(paysNewerPeriod(yearly, at(0), stored)).toBe(true);
+    }
+  });
+  it("never takes a change with only prorated items, whatever the stored period", () => {
+    // A moved billing date: Paddle bills the whole extended period, its item prorated.
+    const extension = txn("subscription_update", at(10), at(386), [prorated]);
+    for (const stored of [
+      period,
+      { start: at(10), end: at(375) },
+      { start: at(10), end: at(386) },
+    ]) {
+      expect(paysNewerPeriod(extension, at(0), stored)).toBe(false);
+      expect(paysPeriod(extension, stored)).toBe(false);
+    }
+    expect(paysPeriod(txn("subscription_update", at(0), at(30), [prorated, credit]), period)).toBe(
+      false,
+    );
+  });
+  it("never takes a one-time item at full price as paying a period", () => {
+    const addOn = txn("subscription_update", at(10), at(375), [oneTime, prorated]);
+    expect(paysNewerPeriod(addOn, at(0), period)).toBe(false);
+  });
+  it("keeps the original payment on a same-interval swap billed in full: the start doesn't move", () => {
+    expect(paysNewerPeriod(txn("subscription_update", at(0), at(30), [full, credit]), at(0))).toBe(
+      false,
+    );
+  });
+  it("only reads the markers on a change: a renewal or checkout always pays its period", () => {
+    expect(
+      paysPeriod(txn("subscription_recurring", at(30), at(60), [full, prorated]), period),
+    ).toBe(true);
+    expect(paysPeriod(txn("subscription_charge", at(30), at(60), [full]), period)).toBe(false);
+  });
+  it("falls back to where the period ends when the items are unknown", () => {
+    expect(paysPeriod(txn("subscription_update", at(10), at(30), []), period)).toBe(false);
     // A mid-period change: from the change to the stored period's end.
     expect(paysNewerPeriod(txn("subscription_update", at(10), at(30)), at(0))).toBe(false);
     // An interval change, before and after its subscription.updated is stored.
@@ -220,6 +265,32 @@ describe("paysNewerPeriod", () => {
     expect(paysNewerPeriod(txn("subscription_payment_method_change", at(30)), at(0))).toBe(false);
     expect(paysNewerPeriod(txn("subscription_recurring", null), at(0))).toBe(false);
     expect(paysNewerPeriod(txn(null, at(30)), at(0))).toBe(false);
+  });
+});
+
+describe("chargesCustomer (charged after a revoke)", () => {
+  const period = { start: at(0), end: at(30) };
+  const line = (quantity: number, prorated = true) => ({ quantity, prorated, recurring: true });
+  const txn = (origin: string, lines: TransactionLine[] | null, start: Date | null = at(0)) => ({
+    origin,
+    billingPeriodStart: start,
+    billingPeriodEnd: at(30),
+    lines,
+  });
+  it("counts any charged item, a proration or a one-off included", () => {
+    expect(chargesCustomer(txn("subscription_update", [line(1)]), period)).toBe(true);
+    expect(chargesCustomer(txn("subscription_charge", [line(1, false)], null), period)).toBe(true);
+    expect(chargesCustomer(txn("subscription_recurring", [line(1, false)]), period)).toBe(true);
+  });
+  it("skips a card check and a transaction that only credits", () => {
+    expect(chargesCustomer(txn("subscription_payment_method_change", [line(1)]), period)).toBe(
+      false,
+    );
+    expect(chargesCustomer(txn("subscription_update", [line(-1)]), period)).toBe(false);
+  });
+  it("falls back to whether it pays a period when the items are unknown", () => {
+    expect(chargesCustomer(txn("subscription_recurring", null), period)).toBe(true);
+    expect(chargesCustomer(txn("subscription_charge", null, null), period)).toBe(false);
   });
 });
 

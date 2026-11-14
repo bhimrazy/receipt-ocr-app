@@ -49,8 +49,8 @@ import {
   isEntitled,
   PAST_DUE_GRACE_DAYS,
   PAST_DUE_GRACE_MS,
+  chargesCustomer,
   paysNewerPeriod,
-  paysPeriod,
   planForPrice,
   workspaceLimitMessage,
 } from "./entitlement";
@@ -498,7 +498,7 @@ export type ApplyResult = {
   unmatched?: UnmatchedReason;
   /** The checkout transaction an unmatched subscription named, or the one that charged a revoked subscription. */
   transactionId?: string;
-  /** A revoked subscription was charged for a period (`transactionId`): someone must refund it by hand. */
+  /** A revoked subscription was charged (`transactionId`), for a period or a proration: someone must refund it by hand. */
   revokedCharged?: true;
   /** The provider subscription, set with `revokedCharged`. */
   subscriptionId?: string;
@@ -611,11 +611,11 @@ export const applyBillingEvent = (eventId: string, now = new Date()) =>
           if (!stored) return finish({ outcome: "ignored", organizationId: null });
           const period = { start: stored.currentPeriodStart, end: stored.currentPeriodEnd };
           const newer = paysNewerPeriod(transaction, stored.paidPeriodStart, period);
-          // Charged for a period after Pro was revoked (not the revoked payment itself): refunded by hand.
+          // Charged after Pro was revoked (not the revoked payment itself): refunded by hand.
           const after =
             stored.revokedAt !== null &&
             transaction.transactionId !== stored.paidTransactionId &&
-            paysPeriod(transaction, period)
+            chargesCustomer(transaction, period)
               ? {
                   revokedCharged: true as const,
                   subscriptionId: stored.providerSubscriptionId,
