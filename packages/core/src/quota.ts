@@ -73,7 +73,7 @@ const secondsUntil = (at: Date, now: Date) =>
  * Checked in this order, first refusal wins:
  * 1. the global fuse (`OCR_DAILY_CAP`, every plan, platform-wide);
  * 2. the plan's platform pool for today (Free: every Free user together);
- * 3. the month, for the plan's scope (Free: the user; Pro: the workspace);
+ * 3. the month, for the plan's scope (the workspace on both plans by default);
  * 4. the day, for the same scope;
  * 5. the user's burst minute.
  */

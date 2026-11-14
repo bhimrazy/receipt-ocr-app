@@ -555,27 +555,32 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
     const check = (organizationId: string, email = `${tag}-next@example.com`) =>
       run(memberLimitCheck(organizationId, { kind: "invite", email }));
 
-    it("refuses a 4th on Free, counting pending invitations, and names the Pro limit", async () => {
+    it("refuses a 3rd on Free, counting pending invitations, and names the Pro limit", async () => {
       const boss = await createUser("seats-free");
-      const mate = await createUser("seats-mate");
-      await addMember(boss.organizationId, mate.userId);
-      expect(await check(boss.organizationId)).toMatchObject({ allowed: true, used: 2, limit: 3 });
+      expect(await check(boss.organizationId)).toMatchObject({ allowed: true, used: 1, limit: 2 });
 
-      await invite(boss.organizationId, boss.userId, `${tag}-third@example.com`);
+      await invite(boss.organizationId, boss.userId, `${tag}-second@example.com`);
       const full = await check(boss.organizationId);
-      expect(full).toMatchObject({ allowed: false, used: 3, limit: 3, plan: "free" });
-      expect(full.message).toContain("Free workspaces have up to 3 members");
+      expect(full).toMatchObject({ allowed: false, used: 2, limit: 2, plan: "free" });
+      expect(full.message).toContain("Free workspaces have up to 2 members");
       expect(full.message).toContain(
         `Pro workspaces up to ${DEFAULT_PLANS.pro.membersPerWorkspace}`,
       );
 
       // Re-inviting the same address replaces its invitation, so it isn't refused.
-      expect(await check(boss.organizationId, `${tag}-THIRD@example.com`)).toMatchObject({
+      expect(await check(boss.organizationId, `${tag}-SECOND@example.com`)).toMatchObject({
         allowed: true,
       });
       // Accepting counts members only: the invitation was counted when it was sent.
       expect(await run(memberLimitCheck(boss.organizationId, { kind: "accept" }))).toMatchObject({
         allowed: true,
+        used: 1,
+      });
+
+      const mate = await createUser("seats-mate");
+      await addMember(boss.organizationId, mate.userId);
+      expect(await run(memberLimitCheck(boss.organizationId, { kind: "accept" }))).toMatchObject({
+        allowed: false,
         used: 2,
       });
     });
@@ -593,21 +598,21 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(await check(boss.organizationId)).toMatchObject({ allowed: true, used: 1 });
     });
 
-    it("allows 10 on Pro and keeps members over the limit after a move to Free", async () => {
+    it("allows 5 on Pro and keeps members over the limit after a move to Free", async () => {
       const boss = await createUser("seats-pro");
       await deliver(
         event(snapshot({ subscriptionId: `sub_${tag}_seats`, workspaceId: boss.organizationId })),
       );
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 3; i++) {
         const mate = await createUser(`seats-pro-${i}`);
         await addMember(boss.organizationId, mate.userId);
       }
-      await invite(boss.organizationId, boss.userId, `${tag}-ninth@example.com`);
+      await invite(boss.organizationId, boss.userId, `${tag}-fifth@example.com`);
       const full = await check(boss.organizationId);
-      expect(full).toMatchObject({ allowed: false, used: 10, limit: 10, plan: "pro" });
-      expect(full.message).toContain("Pro workspaces have up to 10 members");
+      expect(full).toMatchObject({ allowed: false, used: 5, limit: 5, plan: "pro" });
+      expect(full.message).toContain("Pro workspaces have up to 5 members");
 
-      // Pro revoked (as a chargeback would): the 9 members stay, and no one else can join.
+      // Pro revoked (as a chargeback would): the 4 members stay, and no one else can join.
       await db((d) =>
         d
           .update(billingSubscriptions)
@@ -615,12 +620,12 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
           .where(eq(billingSubscriptions.providerSubscriptionId, `sub_${tag}_seats`)),
       );
       const free = await run(memberLimitCheck(boss.organizationId, { kind: "accept" }));
-      expect(free).toMatchObject({ allowed: false, used: 9, limit: 3, plan: "free" });
+      expect(free).toMatchObject({ allowed: false, used: 4, limit: 2, plan: "free" });
       expect(free.message).toContain("Ask its owner to make room.");
       const members = await db((d) =>
         d.select().from(member).where(eq(member.organizationId, boss.organizationId)),
       );
-      expect(members).toHaveLength(9);
+      expect(members).toHaveLength(4);
     });
   });
 
@@ -2089,11 +2094,67 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
     const verdict = (scope: { organizationId: string; userId: string }, limits: QuotaLimits) =>
       run(checkQuota(scope, limits));
 
-    it("counts Free per user across all workspaces, so an extra free workspace adds nothing", async () => {
+    const auditor = () => ({ actor: { id: other.userId, email: `${other.userId}@example.com` } });
+
+    it("shares a Free workspace's month among its members, apart from their other workspaces", async () => {
+      const boss = await createUser("free-ws-boss");
+      const mate = await createUser("free-ws-mate");
+      const inBoss = await addMember(boss.organizationId, mate.userId);
+      const free = quotaLimits("free", {
+        ...DEFAULT_PLANS.free,
+        receiptsPerDay: 10,
+        receiptsPerMonth: 2,
+        poolPerDay: null,
+      });
+      expect(free.scope).toBe("workspace");
+      expect(Exit.isSuccess(await upload(boss, free))).toBe(true);
+      expect(Exit.isSuccess(await upload(inBoss, free))).toBe(true);
+      const refused = await upload(boss, free);
+      expect(Exit.isFailure(refused)).toBe(true);
+      const message = Exit.isFailure(refused) ? JSON.stringify(refused.cause) : "";
+      expect(message).toContain("This workspace has used all 2 scans for this month.");
+      expect(await verdict(inBoss, free)).toMatchObject({
+        allowed: false,
+        window: "month",
+        used: 2,
+        scope: "workspace",
+      });
+      // The member's own Free workspace has its own allowance.
+      expect(await verdict(mate, free)).toMatchObject({ allowed: true, used: 0 });
+    });
+
+    it("keeps counting a deleted workspace's scans for whoever made them, so recreating it resets nothing", async () => {
+      const u = await createUser("free-del");
+      const mate = await createUser("free-del-mate");
+      const doomed = await createWorkspace(u.userId, "doomed");
+      const inDoomed = { organizationId: doomed, userId: u.userId, role: "owner" };
+      const mateInDoomed = await addMember(doomed, mate.userId);
+      const free = quotaLimits("free", {
+        ...DEFAULT_PLANS.free,
+        receiptsPerDay: 10,
+        receiptsPerMonth: 3,
+        poolPerDay: null,
+      });
+      expect(Exit.isSuccess(await upload(inDoomed, free))).toBe(true);
+      expect(Exit.isSuccess(await upload(inDoomed, free))).toBe(true);
+      expect(Exit.isSuccess(await upload(mateInDoomed, free))).toBe(true);
+      await run(purgeReceiptFiles({ organizationId: doomed }));
+      await run(deleteWorkspace(doomed, auditor()));
+
+      const fresh = { organizationId: await createWorkspace(u.userId, "fresh"), userId: u.userId };
+      expect(await verdict(fresh, free)).toMatchObject({ allowed: true, used: 2 });
+      expect(await verdict(u, free)).toMatchObject({ allowed: true, used: 2 });
+      expect(Exit.isSuccess(await upload({ ...fresh, role: "owner" }, free))).toBe(true);
+      expect(Exit.isFailure(await upload({ ...fresh, role: "owner" }, free))).toBe(true);
+      // The member's scan in the deleted workspace counts against them, not the owner.
+      expect(await verdict(mate, free)).toMatchObject({ allowed: true, used: 1 });
+    });
+
+    it("counts a user-scoped plan per user across all workspaces, so an extra workspace adds nothing", async () => {
       const u = await createUser("free-u");
       const host = await createUser("free-host");
       const elsewhere = await addMember(host.organizationId, u.userId);
-      const free: QuotaLimits = { plan: "free", perMinute: 100, perDay: 2 };
+      const free: QuotaLimits = { plan: "free", scope: "user", perMinute: 100, perDay: 2 };
       expect(Exit.isSuccess(await upload(u, free))).toBe(true);
       expect(Exit.isSuccess(await upload(elsewhere, free))).toBe(true);
       expect(Exit.isFailure(await upload(u, free))).toBe(true);
@@ -2105,13 +2166,13 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       });
     });
 
-    it("refuses the scan past Free's monthly limit, across workspaces, saying when it resets and that Pro has more", async () => {
+    it("refuses the scan past a user-scoped monthly limit, across workspaces, saying when it resets", async () => {
       const u = await createUser("free-month");
       const host = await createUser("free-month-host");
       const elsewhere = await addMember(host.organizationId, u.userId);
-      // The 100-a-month rule with a small limit: the 4th scan this month is the "101st".
       const free = quotaLimits("free", {
         ...DEFAULT_PLANS.free,
+        scope: "user",
         receiptsPerDay: 10,
         receiptsPerMonth: 3,
         poolPerDay: null,
@@ -2144,7 +2205,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       expect(plan).toBe("pro");
       const pro: QuotaLimits = { ...quotaLimits(plan, policy), perMonth: 3, perDay: 3 };
       const inPro = await addMember(boss.organizationId, mate.userId);
-      const free: QuotaLimits = { plan: "free", perMinute: 100, perDay: 2 };
+      const free = quotaLimits("free", DEFAULT_PLANS.free);
 
       expect(Exit.isSuccess(await upload(boss, pro))).toBe(true);
       expect(Exit.isSuccess(await upload(inPro, pro))).toBe(true);
@@ -2188,9 +2249,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
       );
       // Make the pool exactly what Free has used today, platform-wide: it is full.
       const probe = await verdict(freeUser, {
-        plan: "free",
-        perMinute: 100,
-        perDay: 100,
+        ...quotaLimits("free", DEFAULT_PLANS.free),
         planPoolPerDay: 1_000_000,
       });
       expect(probe.allowed).toBe(true);
@@ -2202,9 +2261,7 @@ describe.skipIf(!enabled)("billing against Postgres", () => {
           .then((r) => r.rows),
       );
       const full: QuotaLimits = {
-        plan: "free",
-        perMinute: 100,
-        perDay: 100,
+        ...quotaLimits("free", DEFAULT_PLANS.free),
         planPoolPerDay: Math.max(1, used),
       };
       if (used === 0) expect(Exit.isSuccess(await upload(freeUser, full))).toBe(true);

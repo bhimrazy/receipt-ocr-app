@@ -9,9 +9,9 @@ import {
   DEFAULT_PLANS,
   MAX_BATCH,
   MAX_MEMBERS,
-  QUOTA_SCOPES,
   type PlanPolicy,
   type PlanTable,
+  type QuotaScope,
 } from "./plans";
 import { Db } from "./services";
 import { errorFields } from "./telemetry/redact";
@@ -26,14 +26,15 @@ const count = (max: number) => z.number().int().min(1).max(max);
 
 /**
  * `defaults` fills fields a stored row predates (it was saved before they existed), so an older
- * save keeps its own numbers and gets the code default for the new ones.
+ * save keeps its own numbers and gets the code default for the new ones. `scope` is not an admin
+ * setting: it always comes from the code defaults, whatever a stored row says.
  */
 const policySchema = (batchMax: z.ZodType<number>, defaults: PlanPolicy) =>
   z
     .object({
       workspaces: count(100),
       membersPerWorkspace: count(MAX_MEMBERS).default(defaults.membersPerWorkspace),
-      scope: z.enum(QUOTA_SCOPES).default(defaults.scope),
+      scope: z.unknown().transform((): QuotaScope => defaults.scope),
       receiptsPerDay: count(100_000),
       receiptsPerMonth: count(1_000_000).nullable().default(defaults.receiptsPerMonth),
       poolPerDay: count(10_000_000).nullable().default(defaults.poolPerDay),
