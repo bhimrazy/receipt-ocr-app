@@ -167,7 +167,7 @@ More help: [Workspaces](https://docs.anthropic.com/en/api/workspaces).
 **Check:** after deploying, **Admin → Settings → OCR models** shows **API key set** next to each provider. Pick and
 order the models there. Keys are never typed into or shown in the admin page.
 
-**Optional spend guards** (Config): `OCR_DAILY_CAP`, the most receipts read per day across everyone (e.g. `200`), and
+**Optional spend guards** (Config): `OCR_DAILY_CAP`, the most receipts read per day across everyone (`1000` in Production), and
 `OCR_MONTHLY_BUDGET_USD`, the monthly budget the admin page tracks (e.g. `50`).
 
 ---
@@ -869,7 +869,7 @@ These were set when the project was created. Listed so a new environment doesn't
 | `BETTER_AUTH_URL`     | `https://receipt-ocr.bhimraj.com.np` (Production only)                            | Config |
 | `ADMIN_EMAILS`        | Who becomes admin on sign-up, comma-separated                                     | Config |
 | `LOG_SAMPLE_RATE`     | `0.1`: keep 10% of routine logs (Production)                                      | Config |
-| `OCR_DAILY_CAP`       | `200` Production, `50` Preview                                                    | Config |
+| `OCR_DAILY_CAP`       | `1000` Production, `50` Preview                                                   | Config |
 | `CRON_SECRET`         | Bearer secret for `/api/jobs/drain` ([step 8](#8-queue-drain-cron))               | Secret |
 
 Two-step sign-in and "confirm it's you" need nothing new: they use `BETTER_AUTH_SECRET(S)` and the mailer above.
