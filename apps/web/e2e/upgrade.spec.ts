@@ -220,19 +220,19 @@ test("at the limit the banner shows on Receipts, not on Home or Upload", async (
   const banner = page.getByRole("complementary", { name: "Plan limit" });
 
   await page.goto("/app");
-  await expect(page.getByRole("heading", { name: "You've reached today's limit" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Daily limit reached" })).toBeVisible();
   await expect(
     page.getByText("Pro allows up to 200 a day in this workspace.").first(),
   ).toBeVisible();
   await expect(page.locator("main").getByRole("link", { name: "Upgrade to Pro" })).toBeVisible();
   await expect(banner).toHaveCount(0);
   await page.goto("/app/upload");
-  await expect(page.getByRole("heading", { name: "You've reached today's limit" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Daily limit reached" })).toBeVisible();
   await expect(banner).toHaveCount(0);
 
   await page.goto("/app/receipts");
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText("You've used today's 20 Free scans.");
+  await expect(banner).toContainText("This workspace has used today's 20 Free scans.");
   await dismissWith(page, banner.getByRole("button", { name: /^Hide until / }));
   await expect(banner).toHaveCount(0);
   await page.reload();
@@ -273,9 +273,13 @@ test("at the monthly limit with checkout closed: when uploads open, in days, and
   await page.goto("/app");
   const main = page.locator("main");
   await expect(
-    main.getByRole("heading", { name: /^You've used this month's \d+ free scans$/ }),
+    main.getByRole("heading", { name: "This workspace has reached its monthly limit" }),
   ).toBeVisible();
-  await expect(main.getByText(/^Uploads open again on 1 \w+, in \d+ (days|hours)\./)).toBeVisible();
+  await expect(
+    main.getByText(
+      /^Its \d+ scans for this month are used\. Uploads open again on 1 \w+, in \d+ (days|hours)\./,
+    ),
+  ).toBeVisible();
   await expect(main.getByText(/Pro, with \d+ scans a month, opens soon\./)).toBeVisible();
   await expect(main.getByRole("link", { name: "Compare plans" })).toHaveAttribute(
     "href",
