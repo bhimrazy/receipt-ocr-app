@@ -1,0 +1,255 @@
+[
+  {
+    "event_id": "evt_sandbox_1",
+    "event_type": "subscription.updated",
+    "occurred_at": "2026-11-14T11:40:56.723479Z",
+    "data": {
+      "id": "sub_sandbox_1",
+      "status": "active",
+      "customer_id": "ctm_sandbox_1",
+      "custom_data": null,
+      "items": [
+        {
+          "price": {
+            "id": "pri_pro_monthly"
+          },
+          "quantity": 1
+        }
+      ],
+      "billing_cycle": {
+        "interval": "month",
+        "frequency": 1
+      },
+      "current_billing_period": {
+        "ends_at": "2026-12-13T04:45:23.135439Z",
+        "starts_at": "2026-11-13T04:45:23.135439Z"
+      },
+      "scheduled_change": null,
+      "canceled_at": null,
+      "updated_at": "2026-11-14T11:40:56.616Z"
+    }
+  },
+  {
+    "event_id": "evt_sandbox_2",
+    "event_type": "subscription.updated",
+    "occurred_at": "2026-11-14T11:44:11.934190Z",
+    "data": {
+      "id": "sub_sandbox_1",
+      "status": "active",
+      "customer_id": "ctm_sandbox_1",
+      "custom_data": null,
+      "items": [
+        {
+          "price": {
+            "id": "pri_pro_yearly"
+          },
+          "quantity": 1
+        }
+      ],
+      "billing_cycle": {
+        "interval": "year",
+        "frequency": 1
+      },
+      "current_billing_period": {
+        "ends_at": "2027-11-14T11:44:08.927Z",
+        "starts_at": "2026-11-14T11:44:08.927Z"
+      },
+      "scheduled_change": null,
+      "canceled_at": null,
+      "updated_at": "2026-11-14T11:44:08.998Z"
+    }
+  },
+  {
+    "event_id": "evt_sandbox_3",
+    "event_type": "transaction.completed",
+    "occurred_at": "2026-11-14T11:44:13.918394Z",
+    "data": {
+      "id": "txn_sandbox_1",
+      "status": "completed",
+      "origin": "subscription_update",
+      "subscription_id": "sub_sandbox_1",
+      "billing_period": {
+        "ends_at": "2027-11-14T11:44:08.927Z",
+        "starts_at": "2026-11-14T11:44:08.927Z"
+      },
+      "currency_code": "USD",
+      "items": [
+        {
+          "price": {
+            "id": "pri_pro_yearly"
+          },
+          "quantity": 1,
+          "proration": null
+        },
+        {
+          "price": {
+            "id": "pri_pro_monthly"
+          },
+          "quantity": -1,
+          "proration": {
+            "rate": "0.95697",
+            "billing_period": {
+              "ends_at": "2026-12-13T04:45:23.135439Z",
+              "starts_at": "2026-11-14T11:44:08.937Z"
+            }
+          }
+        }
+      ],
+      "details": {
+        "totals": {
+          "total": "8139"
+        }
+      }
+    }
+  },
+  {
+    "event_id": "evt_sandbox_4",
+    "event_type": "subscription.updated",
+    "occurred_at": "2026-11-14T11:48:56.378180Z",
+    "data": {
+      "id": "sub_sandbox_1",
+      "status": "active",
+      "customer_id": "ctm_sandbox_1",
+      "custom_data": null,
+      "items": [
+        {
+          "price": {
+            "id": "pri_pro_yearly"
+          },
+          "quantity": 1
+        }
+      ],
+      "billing_cycle": {
+        "interval": "year",
+        "frequency": 1
+      },
+      "current_billing_period": {
+        "ends_at": "2027-11-25T11:44:00Z",
+        "starts_at": "2026-11-14T11:44:08.927Z"
+      },
+      "scheduled_change": null,
+      "canceled_at": null,
+      "updated_at": "2026-11-14T11:48:55.167Z"
+    }
+  },
+  {
+    "event_id": "evt_sandbox_5",
+    "event_type": "transaction.completed",
+    "occurred_at": "2026-11-14T11:48:57.876159Z",
+    "data": {
+      "id": "txn_sandbox_2",
+      "status": "completed",
+      "origin": "subscription_update",
+      "subscription_id": "sub_sandbox_1",
+      "billing_period": {
+        "ends_at": "2027-11-25T11:44:00Z",
+        "starts_at": "2026-11-14T11:44:08.927Z"
+      },
+      "currency_code": "USD",
+      "items": [
+        {
+          "price": {
+            "id": "pri_pro_yearly"
+          },
+          "quantity": 1,
+          "proration": {
+            "rate": "0.03005",
+            "billing_period": {
+              "ends_at": "2027-11-25T11:44:00Z",
+              "starts_at": "2027-11-14T11:44:08.927Z"
+            }
+          }
+        }
+      ],
+      "details": {
+        "totals": {
+          "total": "270"
+        }
+      }
+    }
+  },
+  {
+    "event_id": "evt_sandbox_6",
+    "event_type": "transaction.canceled",
+    "occurred_at": "2026-11-14T11:49:27.782978Z",
+    "data": {
+      "id": "txn_sandbox_3",
+      "status": "canceled",
+      "origin": "subscription_payment_method_change",
+      "subscription_id": "sub_sandbox_1",
+      "billing_period": {
+        "ends_at": "2026-12-13T04:45:23.135439Z",
+        "starts_at": "2026-11-13T04:45:23.135439Z"
+      },
+      "currency_code": "USD",
+      "items": [
+        {
+          "price": {
+            "id": "pri_pro_monthly"
+          },
+          "quantity": 1,
+          "proration": null
+        }
+      ],
+      "details": {
+        "totals": {
+          "total": "0"
+        }
+      }
+    }
+  },
+  {
+    "event_id": "evt_sandbox_7",
+    "event_type": "subscription.updated",
+    "occurred_at": "2026-11-14T11:49:27.880872Z",
+    "data": {
+      "id": "sub_sandbox_1",
+      "status": "canceled",
+      "customer_id": "ctm_sandbox_1",
+      "custom_data": null,
+      "items": [
+        {
+          "price": {
+            "id": "pri_pro_yearly"
+          },
+          "quantity": 1
+        }
+      ],
+      "billing_cycle": {
+        "interval": "year",
+        "frequency": 1
+      },
+      "current_billing_period": null,
+      "scheduled_change": null,
+      "canceled_at": "2026-11-14T11:49:27.793Z",
+      "updated_at": "2026-11-14T11:49:27.796Z"
+    }
+  },
+  {
+    "event_id": "evt_sandbox_8",
+    "event_type": "subscription.canceled",
+    "occurred_at": "2026-11-14T11:49:27.880872Z",
+    "data": {
+      "id": "sub_sandbox_1",
+      "status": "canceled",
+      "customer_id": "ctm_sandbox_1",
+      "custom_data": null,
+      "items": [
+        {
+          "price": {
+            "id": "pri_pro_yearly"
+          },
+          "quantity": 1
+        }
+      ],
+      "billing_cycle": {
+        "interval": "year",
+        "frequency": 1
+      },
+      "current_billing_period": null,
+      "scheduled_change": null,
+      "canceled_at": "2026-11-14T11:49:27.793Z",
+      "updated_at": "2026-11-14T11:49:27.796Z"
+    }
+  }
+]

@@ -57,6 +57,15 @@ export const adjustmentSnapshotSchema = z.object({
 
 export type AdjustmentSnapshot = z.output<typeof adjustmentSnapshotSchema>;
 
+/** One item a transaction charged. A negative quantity credits an item it replaced. */
+const transactionLineSchema = z.object({
+  quantity: z.number().int(),
+  /** Charged for part of a period (the provider's proration marker), not at full price. */
+  prorated: z.boolean(),
+});
+
+export type TransactionLine = z.output<typeof transactionLineSchema>;
+
 /** A completed transaction, kept to know which one pays for a subscription's current period. */
 export const transactionSnapshotSchema = z.object({
   transactionId: z.string().min(1).max(100),
@@ -67,6 +76,12 @@ export const transactionSnapshotSchema = z.object({
   billingPeriodStart: isoDate.nullable(),
   /** Its end. Absent on events stored before it was kept. */
   billingPeriodEnd: isoDate.nullish().transform((value) => value ?? null),
+  /** The items it charged; null when unknown, as on events stored before they were kept. */
+  lines: z
+    .array(transactionLineSchema)
+    .max(100)
+    .nullish()
+    .transform((value) => value ?? null),
 });
 
 export type TransactionSnapshot = z.output<typeof transactionSnapshotSchema>;

@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   cancelPaddleSubscription,
@@ -11,6 +12,14 @@ import {
   SIGNATURE_TOLERANCE_SECONDS,
   verifyPaddleSignature,
 } from "../../src/billing/paddle";
+
+/** Trimmed from a sandbox run of docs/runbooks/paddle-sandbox-tests.md, with placeholder ids. */
+const sandboxEvents: unknown[] = JSON.parse(
+  readFileSync(
+    new URL("fixtures/paddle-sandbox-subscription-changes.json", import.meta.url),
+    "utf8",
+  ),
+);
 
 const secret = "pdl_ntfset_test_secret";
 const nowMs = Date.UTC(2026, 10, 8, 12, 0, 0);
@@ -167,6 +176,7 @@ describe("parsePaddleEvent", () => {
         origin: "subscription_recurring",
         billingPeriodStart: new Date("2026-12-08T12:00:00Z"),
         billingPeriodEnd: new Date("2027-01-08T12:00:00Z"),
+        lines: null,
       },
     });
     expect(parsePaddleEvent(body({ id: "txn_2" }))).toMatchObject({
@@ -184,6 +194,55 @@ describe("parsePaddleEvent", () => {
       subscription: null,
       transaction: null,
     });
+  });
+
+  it("keeps each item's quantity and proration marker from a sandbox interval change and billing-date move", () => {
+    const events = sandboxEvents.map((e) => parsePaddleEvent(JSON.stringify(e)));
+    const transactions = events.flatMap((e) =>
+      e && e !== "bad-body" && e.transaction ? [e.transaction] : [],
+    );
+    expect(transactions).toEqual([
+      {
+        transactionId: "txn_sandbox_1",
+        subscriptionId: "sub_sandbox_1",
+        origin: "subscription_update",
+        billingPeriodStart: new Date("2026-11-14T11:44:08.927Z"),
+        billingPeriodEnd: new Date("2027-11-14T11:44:08.927Z"),
+        lines: [
+          { quantity: 1, prorated: false },
+          { quantity: -1, prorated: true },
+        ],
+      },
+      {
+        transactionId: "txn_sandbox_2",
+        subscriptionId: "sub_sandbox_1",
+        origin: "subscription_update",
+        billingPeriodStart: new Date("2026-11-14T11:44:08.927Z"),
+        billingPeriodEnd: new Date("2027-11-25T11:44:00Z"),
+        lines: [{ quantity: 1, prorated: true }],
+      },
+    ]);
+    // `transaction.canceled` isn't subscribed; the dashboard cancel ends the subscription at once.
+    expect(events.at(-3)).toBeNull();
+    expect(events.at(-1)).toMatchObject({
+      type: "subscription.canceled",
+      subscription: { status: "canceled", cancelAtPeriodEnd: false, currentPeriodEnd: null },
+    });
+  });
+
+  it("leaves the lines unknown when an item has no proration marker or isn't readable", () => {
+    const lines = (items: unknown) =>
+      parsePaddleEvent(
+        JSON.stringify({
+          event_id: "evt_4",
+          event_type: "transaction.completed",
+          occurred_at: "2026-11-08T12:00:00Z",
+          data: { id: "txn_4", origin: "subscription_update", items },
+        }),
+      );
+    for (const items of [[{ quantity: 1 }], [{ quantity: "1", proration: null }], [], "x"]) {
+      expect(lines(items)).toMatchObject({ transaction: { transactionId: "txn_4", lines: null } });
+    }
   });
 
   it("keeps an adjustment's ids, action, type and status, nothing else", () => {
