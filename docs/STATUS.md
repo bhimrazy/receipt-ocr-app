@@ -287,13 +287,13 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
     Pro. Tell us what you need and we'll say plainly what we can do."; "Everything in Pro" and "Higher limits on
     request, where we can arrange them"; "Contact us". No own keys or storage lines until each ships. A Free owner's
     Billing page gets one line, "Need more than Pro? Contact us", not a third card.
-14. ~~Usage card and plan lists~~ Decided 2026-11-14: the design review's spec in full (month-first card, the day only
+14. ~~Light and System themes~~ Decided 2026-11-08 (owner took every recommendation in the [spec](plans/2026-11-08-light-theme.md)): System as the default for everyone,
+    per-device storage (no account sync), toggle in Settings, account menu and footer (not the header), a light iOS
+    splash set, emails out of scope.
+15. ~~Usage card and plan lists~~ Decided 2026-11-14: the design review's spec in full (month-first card, the day only
     from 80% of today's limit or when used up, storage only from 80% and always on Billing, upgrade button only at
     100% of the month, a text link at 100% of the day, "Need more? Contact us" for a Pro owner at 100%), and its plan
     rows exactly. Storage rows go live only in the release that enforces the cap.
-15. ~~Light and System themes~~ Decided 2026-11-08 (owner took every recommendation in the [spec](plans/2026-11-08-light-theme.md)): System as the default for everyone,
-    per-device storage (no account sync), toggle in Settings, account menu and footer (not the header), a light iOS
-    splash set, emails out of scope.
 
 ## Roadmap (order)
 
