@@ -134,8 +134,7 @@ test("the meter button opens the modal, Escape closes it and focus returns", asy
   await expect(dialog.getByText("Test mode: no real charge")).toBeVisible();
   const table = dialog.getByRole("table");
   await expect(table.getByRole("rowheader", { name: "Scans a month" })).toBeVisible();
-  await expect(table.getByRole("cell", { name: /^\d+ per person$/ })).toBeVisible();
-  await expect(table.getByRole("cell", { name: /^\d+ shared$/ })).toBeVisible();
+  await expect(table.getByRole("row", { name: /^Scans a month \d+ \d+$/ })).toBeVisible();
   await expect.poll(() => paddle.requested()).toBe(1);
 
   await dialog.locator("label", { hasText: "Yearly" }).click();

@@ -25,7 +25,12 @@ import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import type { ReviewImage } from "@/components/capture/review-sheet";
 import type { CropSource } from "@/lib/capture/crop-outcome";
 import { formatTime } from "@/lib/format";
-import { usageNote, usageRemaining, type Usage } from "@/components/usage-meter";
+import {
+  remainingSpan,
+  usageNote,
+  usageRemaining,
+  type Usage,
+} from "@/components/usage-meter";
 import { fitBatch } from "@/lib/capture/batch-limit";
 import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
 import { browserCameraSupport, wantsCamera, type CameraSupport } from "@/lib/capture/camera";
@@ -95,7 +100,7 @@ function LimitReached({
   plan: LimitPlan;
 }) {
   const { title, body, scope } = limitCopy(usage, formatTime(usage.opensAt), resetsIn);
-  const pro = usage.blocked === "global" || usage.scope === "workspace" ? null : plan.pro;
+  const pro = usage.blocked === "global" ? null : plan.pro;
   const canBuy = pro !== null && plan.offer === "owner";
   const upgradeLine = pro ? limitUpgradeLine(usage, pro) : null;
   return (
@@ -193,10 +198,7 @@ function limitCopy(
 /** From NEAR_RATIO used: the room left, under the phone's upload buttons. */
 function nearLimitLine(usage: Usage): string | null {
   if (usage.blocked || usageRatio(usage) < NEAR_RATIO) return null;
-  const monthLeft = Math.max(0, usage.limit - usage.used);
-  const left = usageRemaining(usage);
-  const span = usage.period === "month" && left === monthLeft ? "this month" : "today";
-  return `${plural(left, "scan")} left ${span}`;
+  return `${plural(usageRemaining(usage), "scan")} left ${remainingSpan(usage)}`;
 }
 
 /** The plan state without the drop zone, for Home on a phone: the limit card, or the usage line from NEAR_RATIO. */
@@ -768,7 +770,7 @@ export function UploadPanel({
                       ? "Uploading and scanning. This takes a few seconds."
                       : "Uploading two at a time. Keep this page open until every file is uploaded; scanning carries on after that."
                     : overLimit
-                      ? `You have ${plural(remaining, "receipt")} left today, so only the first ${remaining} will be scanned.`
+                      ? `You have ${plural(remaining, "scan")} left ${usage ? remainingSpan(usage) : "today"}, so only the first ${remaining} will be scanned.`
                       : usage
                         ? usageNote(usage)
                         : null}
