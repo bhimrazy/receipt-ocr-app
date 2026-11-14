@@ -193,10 +193,120 @@ When each piece ships, add a line, no sooner: `Higher limits for your workspace`
 `Use your own AI provider keys` once own keys ship; `Keep files in your own S3-compatible bucket, such as Cloudflare
 R2` once own storage ships. No "coming soon" or dated line in the meantime.
 
+## Spec: the Usage page in Settings
+
+The owner accepted decisions 1 to 9 above. This section adds a detailed usage view.
+
+### Owner decisions
+
+| #   | Decision                              | Recommendation                                                                                                                                                                    | Alternative                                                             |
+| --- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| U1  | Where it lives                        | **Its own page, `/app/settings/usage`, titled "Usage"**, open to every member. Plan and billing keeps its compact meter and links to it                                       | A Usage block at the top of Plan and billing: one page, but members then open a billing page to see usage |
+| U2  | Per-member breakdown (STATUS 3)       | **Owners and workspace admins see every member's counts; a member sees the workspace total and their own count only**                                                           | Everyone sees everyone: simpler, but it shows colleagues' activity to each other |
+| U3  | Which months                          | **This month, with last month's total as one line.** No month picker                                                                                                            | A picker back to the ledger's retention (13 months suggested in STATUS 9) |
+| U4  | Failed scans                          | **Shown as a breakdown that adds up to "used"**: read, in progress, failed (free and counted)                                                                                  | Hide failures: then the total doesn't add up when a sixth one counts   |
+
+**Why U1:** usage is for everyone in the workspace; billing is the owner's. On its own page, a member never lands on a
+page that is mostly "Managed by the workspace owner". **Why U2:** the allowance is shared, so the total matters to
+everyone, and the owner needs per-person numbers to manage it. But a colleague's daily scan count is a record of their
+work pattern, and nothing a member does needs it. Admins manage members already, so they get the owner's view.
+
+### Settings rows
+
+| Row              | Value                                    | Link               |
+| ---------------- | ---------------------------------------- | ------------------ |
+| Usage            | `9 / 50 scans this month`                | `View`, the page   |
+| Plan and billing | `Free` (badge); owner `Manage`, others `View` | the billing page |
+
+The scan count moves from the Plan and billing row to the Usage row. Both rows at both widths, 44 px tall.
+
+### What the page shows, top to bottom
+
+1. **This month:** the usage card's scan meter, full width, with the full sentence: `9 of 50 scans used. 41 left. Resets
+   1 December, 00:00 UTC.`
+2. **Today:** `2 of 20 scans today. Resets 00:00 UTC.` A line, not a second meter, until today reaches 80%; then a
+   4 px meter appears, amber.
+3. **Storage** (only once bytes are counted; until then the row isn't there, never `0 MB`): a 4 px meter and
+   `86 MB of 100 MB used`, plus `Delete receipts to make room.` from 80%.
+4. **Scans per day, this month:** the chart below.
+5. **How "used" adds up** (U4), a four-row list in mono tabular numbers:
+   `Read 38` · `In progress 1` · `Failed 7: first 5 free, 2 counted` · `Used 41`.
+   Under it: `A receipt counts once however often it is retried. Each day and each month, the first 5 failed scans
+   don't count.`
+6. **By member** (shared workspaces only, U2). Owner and admins: one row per member, name, then `read · failed`, sorted
+   by used, highest first, with `You` marked; members who left or deleted their account fold into one row,
+   `Former members`. Member: one row, `You: 12 of the workspace's 41`.
+7. **Receipts:** `214 receipts kept in this workspace · 6 need review`, with a link to the filtered list. A count of
+   receipts, not scans: deleting receipts lowers it, never "used".
+8. **Last month:** `October: 47 of 50 scans used.` One line.
+
+Members and owners see the same page except item 6, and no upgrade or contact action appears here unless the card's
+own rules show one (from 80%, the same link as the card).
+
+### The chart
+
+- **Form:** vertical bars, one series (scans read per UTC day), the month's days on the x axis. One series, so no
+  legend; the section title names it. One y axis, starting at 0, scaled to the month's highest day (at least 4) with a
+  single recessive gridline at that value, labelled. No day-limit line: at 20 a day it would flatten typical days of 1
+  to 5 into the baseline.
+- **Marks:** `bg-primary` bars, 4 px rounded top, anchored to the baseline, 2 px gap. Days still to come draw as a
+  1 px baseline tick, so the month's length is visible. Today has `Today` under its bar instead of a number.
+- **Limit days:** a day that reached the day limit gets a small warning icon above its bar (`text-warning`, with the
+  tooltip text), never colour alone.
+- **Labels:** x ticks on 1, 8, 15, 22 and 29 only; no value on every bar.
+- **Interaction:** hovering or focusing a day shows `12 Nov · 4 scans read` (and `Daily limit reached` when it applies).
+  Each day's hit area is the full column height. On touch, dragging across the chart moves the readout, which sits
+  above the chart, so bars 9 px wide still work. The chart is one focusable element; arrow keys move between days.
+- **Table:** a `Show as table` disclosure under the chart lists every day with scans (date, read, failed). This is
+  also what a screen reader gets: the chart has `role="img"` and a label with the month's total.
+- **Themes:** token colours only. Primary is the same token in both themes, so no new colours to validate.
+
+### Phone (390)
+
+One column, 16 px gutters. The chart is the full width (358 px, about 9 px per bar with 31 days), 120 px tall, with the
+readout line above it. The member list stays rows, not a table; name truncates, numbers never wrap. No horizontal
+scroll.
+
+### Empty and edge states
+
+| State                       | Shows                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| No scans this month         | Meters at 0. Chart replaced by `No scans yet this month.` Breakdown hidden    |
+| First day of the month      | Same as above. Last month's line still shows                                   |
+| Workspace with one member   | No "By member" section                                                        |
+| Storage not counted yet     | No storage row                                                                |
+| Plan changed this month     | Counts follow the plan now in effect, as the meter does, so the two agree; the line `Includes scans since this workspace moved to Pro on 9 Nov.` |
+| Ledger read fails           | The section's error boundary: `Usage couldn't load. Try again.` with a retry |
+
+### What not to show
+
+No model or provider names, no cost or estimated cost (STATUS 3 recommends admins only), no retry attempts or
+job states, no Free capacity or service-wide cap numbers, no other workspace's usage, no IPs or devices.
+
+### Data: what exists and what's new
+
+- **Exists:** `ocr_rounds` (one row per upload or retry, with `organization_id`, `user_id`, `plan` and `created_at`)
+  and `ocr_calls` (status per model call). `countUsage` in `packages/core/src/usage.ts` gives today's and the month's
+  "used" with the failed-rounds rule. `getUsageSummary` (`apps/web/lib/quota.ts`) feeds the meter, and
+  `ReceiptRepo.counts` gives the receipt counts.
+- **New query, one, in `packages/core`:** the month's rounds of the workspace and plan, grouped by UTC day and by
+  `user_id`, returning read, in progress and failed (the same `readOk`, `liveJobForRound` and `failedPaid` predicates,
+  shared, not copied). Pro has at most a few hundred rows a month; Free about 50.
+- **Indexes:** none new. `ocr_rounds_org_created_at_idx` covers the window, and the per-round `ocr_calls` lookup
+  already uses the unique (receipt, round) index the quota uses. Check with `EXPLAIN` on a seeded Pro month in the
+  build PR.
+- **The sums don't add up per day.** The 5 free failures apply per day and per month, so daily "used" doesn't sum to
+  the month's. That is why the chart shows scans read, not "used", and the breakdown carries the month's rule.
+- **Per member:** grouped by `user_id`; rows set null by account deletion form `Former members`. A member's view
+  filters to their own `user_id` on the server, not in the browser.
+- **Storage:** needs the byte total from the storage cap migration; nothing to query until then.
+- **Last month:** `countUsage` with last month's window, or the same grouped query.
+
 ## Build notes
 
 - `usageWarns` and `upgradeLevel` read both windows and storage; `upgradeLevel` stays month-and-block driven for the
   button (decision 4), so a day at 80% warns without an offer.
 - `meterNote` gains the day-at-80% branch and stops showing the day when it is merely tighter.
 - PR #262's trap holds: the upload panel hides the upgrade offer when the scope is `workspace`, which is now Free too.
-- Screenshots for the PR: every state in both tables at 1440 and 390, dark and light, plus the pricing page.
+- Screenshots for the PR: every state in both tables at 1440 and 390, dark and light, plus the pricing page and the
+  Usage page (empty, typical, owner and member views).
