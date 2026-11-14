@@ -127,8 +127,9 @@ Notes:
 
 - `session.active_organization_id` has no foreign key. The app treats it as a preference and resolves the real
   workspace through `member` on every request ([`resolveScope`](../../packages/core/src/workspace.ts)).
-- `account.access_token`, `refresh_token` and `id_token` are encrypted with the auth secret
-  (`encryptOAuthTokens` in [`lib/auth.ts`](../../apps/web/lib/auth.ts)).
+- `account.access_token`, `refresh_token`, `id_token` and their expiry columns stay null: the account hooks in
+  [`lib/auth-accounts.ts`](../../apps/web/lib/auth-accounts.ts) drop Google and GitHub tokens before every write, and
+  `0009_oauth_tokens` cleared the ones stored before. `encryptOAuthTokens` stays on as a backstop.
 - `user.plan` is never accepted from the client (`input: false`); only an admin action changes it. Set to `pro` it is a comp: the workspaces that user owns count as Pro (see [Billing](flows/billing.md#plans-are-per-workspace)).
 
 ## Receipts and the usage ledger

@@ -412,6 +412,18 @@ codes sent in the last 10 minutes.
 
 Steps specific to one release, newest first.
 
+### Provider tokens no longer stored (migration 0009)
+
+- **`0009_oauth_tokens`** sets `access_token`, `refresh_token`, `id_token` and both expiry columns to null on every
+  `account` row that has one. Data only, no schema change. `lock_timeout` 3 s; one small `UPDATE`.
+- **Run Database Migration** on `staging-db`, then `production-db`, **then** deploy, as usual. Code from before this
+  release still writes sealed tokens on each Google or GitHub sign-in until the deploy; the daily `maintenance.purge`
+  clears those (and any a later path writes), so no second migration run is needed. No code reads the token columns.
+- **Check the day after the deploy:** `select count(*) from account where access_token is not null or refresh_token is
+not null or id_token is not null` returns 0.
+- `/api/auth/get-access-token`, `/api/auth/refresh-token` and `/api/auth/account-info` now answer 404. Google and
+  GitHub sign-in, connecting and disconnecting are unchanged.
+
 ### Support retention (migration 0008)
 
 - **`0008_support_retention`** adds `support_messages_retention_idx` (the purge's

@@ -36,6 +36,8 @@ import {
   accountLinking,
   guardPasskeyDelete,
   guardUnlink,
+  PROVIDER_TOKEN_PATHS,
+  withoutProviderTokens,
 } from "./auth-accounts";
 import {
   authMethodOf,
@@ -292,6 +294,7 @@ export const auth = betterAuth({
     schema,
   }),
   trustedOrigins: authEnv.trustedOrigins,
+  disabledPaths: PROVIDER_TOKEN_PATHS,
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
@@ -350,9 +353,9 @@ export const auth = betterAuth({
   verification: {
     storeIdentifier: { default: "hashed", overrides: { "trust-device-": trustDeviceIdentifier } },
   },
-  // Rows sealed before this was on stay readable: Better Auth passes non-hex
-  // (plaintext) tokens through and seals them on the user's next sign-in.
-  account: { encryptOAuthTokens: true, accountLinking },
+  // Provider tokens are dropped by the account hooks below; sealing stays on in case a Better Auth
+  // upgrade writes one through a path the hooks don't see.
+  account: { encryptOAuthTokens: true, updateAccountOnSignIn: false, accountLinking },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
@@ -563,7 +566,11 @@ export const auth = betterAuth({
       update: { after: twoFactorUserUpdated(deliver) },
     },
     account: {
-      create: { after: accountCreated(deliver) },
+      create: {
+        before: async (data) => withoutProviderTokens(data),
+        after: accountCreated(deliver),
+      },
+      update: { before: async (data) => withoutProviderTokens(data) },
       delete: { after: accountDeleted(deliver) },
     },
     session: {

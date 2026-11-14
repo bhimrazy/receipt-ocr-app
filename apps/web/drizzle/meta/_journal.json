@@ -64,6 +64,13 @@
       "when": 1794656527049,
       "tag": "0008_support_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794666165186,
+      "tag": "0009_oauth_tokens",
+      "breakpoints": true
     }
   ]
 }
