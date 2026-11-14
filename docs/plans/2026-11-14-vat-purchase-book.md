@@ -23,7 +23,7 @@ duplicates, and after line editing).
   The screen shows what was left out, with counts, and each group has its own "Include" switch.
 - **CSV with a UTF-8 BOM, no xlsx in v1.** Microsoft says a UTF-8 CSV opens correctly in Excel only when it has a
   BOM. Devanagari headings make that mandatory. Whether to add xlsx later depends on IRD's upload template.
-- **Six small PRs**, the last of them optional. Eight open questions for the owner.
+- **Six small PRs**, the last of them optional. The owner decided all eight questions on 2026-11-14.
 
 ## 1. The official purchase-book columns
 
@@ -321,18 +321,18 @@ Each PR is small, ordered, and has its own tests and gates.
 Later, each only on demand: a capital-purchase flag (Q3), import documents, xlsx, the buyer-PAN reason (Q5), the
 workspace calendar setting, and "Pro only" gating (Q7).
 
-## Open questions for the owner
+## Owner decisions (2026-11-14)
 
-| #   | Question                                                                                                   | Recommendation                                                                                 |
-| --- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Q1  | Base v1 on the 2078/79 14-column form while later amendments are unconfirmed?                              | Yes. The layout is one table; T1 confirms it before launch                                     |
-| Q2  | Default file: IRD columns only, with reference columns as an option?                                       | Yes                                                                                            |
-| Q3  | Capital purchases (columns 13–14): a per-receipt "capital purchase" flag?                                  | Not in v1; everything in 9–10. Add the flag when an accountant asks                            |
-| Q4  | Bills with no VAT (non-VAT suppliers): include them in the book, all in the exempt column?                 | Include them, all in column 8, marked in the reference columns. An accountant confirms         |
-| Q5  | "Bill doesn't show your PAN": allow the model to read the buyer PAN (a per-receipt yes/no, not the value)? | Later. It conflicts with the 2026-11-14 "no buyer PAN" decision unless stored only as a yes/no |
-| Q6  | BOM on the general receipts CSV too?                                                                       | Not until a Devanagari merchant name is seen garbled in Excel (T2)                             |
-| Q7  | Is the VAT export Free and Pro, or Pro only?                                                               | Both, until pricing says otherwise. It is the reason Nepali SMBs sign up                       |
-| Q8  | Fiscal-year export: one file of 12 months, or 12 files?                                                    | One file sorted by date; the BS month is in column 1                                           |
+| #   | Question                                                                      | Decision                                                                                              |
+| --- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Q1  | Base v1 on the 2078/79 14-column form while later amendments are unconfirmed? | Yes. The layout is one table in code so columns 5 and 6 can be dropped; T1 confirms before launch     |
+| Q2  | Default file: IRD columns only, with reference columns as an option?          | Yes. A separate "VAT purchase book (Nepal)" export; reference columns behind a switch, off by default |
+| Q3  | Capital purchases (columns 13–14): a per-receipt "capital purchase" flag?     | Not in v1; everything goes in 9–10                                                                    |
+| Q4  | Bills with no VAT: include them, all in the exempt column?                    | Yes, all in column 8, marked in the reference columns. An accountant confirms                         |
+| Q5  | Read a yes/no "bill shows your PAN" to warn when it's missing?                | Later. The "no buyer PAN" decision stands for v1                                                      |
+| Q6  | BOM on the general receipts CSV too?                                          | Not yet; only the IRD file gets one, until T2 shows Excel garbling the general CSV                    |
+| Q7  | Free and Pro, or Pro only?                                                    | Free and Pro                                                                                          |
+| Q8  | Fiscal-year export: one file or 12?                                           | One file sorted by date                                                                               |
 
 ## Owner to-dos
 
