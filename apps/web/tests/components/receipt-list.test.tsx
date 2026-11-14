@@ -9,16 +9,17 @@ const badge = (receipt: {
 }) => renderToStaticMarkup(<ReviewBadge receipt={receipt} />);
 
 describe("ReviewBadge", () => {
-  it("shows Checked, with who checked it, in place of Needs review", () => {
+  it("shows Reviewed, with who reviewed it, in place of Needs review", () => {
     const html = badge({ reviewReasons: ["no_date"], reviewedAt: new Date(), reviewerName: "Ana" });
-    expect(html).toContain("Checked by Ana");
+    expect(html).toContain("Reviewed by Ana");
     expect(html).not.toContain("Needs review");
+    expect(html).not.toContain("Checked");
   });
 
-  it("shows Checked for a reviewed receipt whose reviewer was deleted", () => {
-    expect(badge({ reviewReasons: [], reviewedAt: new Date(), reviewerName: null })).toContain(
-      "Checked",
-    );
+  it("shows Reviewed for a reviewed receipt whose reviewer was deleted", () => {
+    const html = badge({ reviewReasons: [], reviewedAt: new Date(), reviewerName: null });
+    expect(html).toContain(">Reviewed</span>");
+    expect(html).not.toContain("Reviewed by");
   });
 
   it("shows Needs review exactly when the receipt is in the Needs review filter", () => {
@@ -27,7 +28,18 @@ describe("ReviewBadge", () => {
     );
   });
 
-  it("shows nothing for a receipt that passed its checks", () => {
-    expect(badge({ reviewReasons: [], reviewedAt: null })).toBe("");
+  it("is never blank: a receipt that passed its checks and nobody reviewed is Not reviewed", () => {
+    const html = badge({ reviewReasons: [], reviewedAt: null });
+    expect(html).toContain("Not reviewed");
+    expect(html).not.toContain("Looks fine");
+  });
+
+  it("shows Possible duplicate beside the state, reviewed or not", () => {
+    expect(badge({ reviewReasons: ["possible_duplicate"], reviewedAt: null })).toMatch(
+      /Needs review.*Possible duplicate/,
+    );
+    expect(
+      badge({ reviewReasons: ["possible_duplicate"], reviewedAt: new Date(), reviewerName: "Ana" }),
+    ).toMatch(/Reviewed by Ana.*Possible duplicate/);
   });
 });

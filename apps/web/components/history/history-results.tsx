@@ -37,7 +37,7 @@ import { historyHref, isFiltered } from "@/components/history/history-href";
 import { ReceiptRowContent, receiptTitle, ReviewBadge, ROW_LINK } from "@/components/receipt-list";
 import { StatusBadge } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
-import { formatMoney } from "@/lib/format";
+import { formatLocalDateTime, formatMoney } from "@/lib/format";
 import { ReceiptDate } from "@/components/receipt-date";
 import { canEditReceipt } from "@/lib/receipt-permissions";
 import type { HistoryFilters, ReceiptSummary } from "@/lib/receipts";
@@ -68,18 +68,8 @@ function Missing() {
   );
 }
 
-/** In Needs review, reviewed, failed or still scanning; a receipt that passed its checks shows nothing. */
-function hasStatus(receipt: ReceiptSummary) {
-  return (
-    receipt.status !== "completed" ||
-    receipt.reviewedAt !== null ||
-    receipt.reviewReasons.length > 0
-  );
-}
-
-/** The status column: Checked, what needs attention (with Try again on a failed read), or nothing. */
+/** The status column: the review state, or Scanning or Couldn't scan (with Try again). Never blank. */
 function RowStatus({ receipt, retry = true }: { receipt: ReceiptSummary; retry?: boolean }) {
-  if (!hasStatus(receipt)) return <span className="sr-only">Done</span>;
   if (receipt.status === "completed") return <ReviewBadge receipt={receipt} />;
   return (
     <div className="flex items-center gap-2">
@@ -97,8 +87,27 @@ function RowStatus({ receipt, retry = true }: { receipt: ReceiptSummary; retry?:
 }
 
 function uploaderLabel(receipt: ReceiptSummary, viewer: Viewer) {
-  if (receipt.userId === viewer.userId) return "You";
-  return receipt.uploaderName ?? "Former member";
+  if (receipt.userId === viewer.userId) return "you";
+  return receipt.uploaderName ?? "a former member";
+}
+
+/** "Added 14 Nov 2026, 17:45", and who added it in a shared workspace. */
+function addedLine(receipt: ReceiptSummary, timeZone: string, by: string | null) {
+  const when = `Added ${formatLocalDateTime(receipt.createdAt, timeZone)}`;
+  return by ? `${when} · by ${by}` : when;
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Phone rows have room for when it was added only where the order would otherwise look random:
+ * sorted by added, with no receipt date or one more than a week before it was added.
+ */
+function addedMatters(receipt: ReceiptSummary, view: ListView) {
+  if (view.sort && view.sort.by !== "uploaded") return false;
+  if (receipt.status !== "completed" || !receipt.receiptDate) return true;
+  const added = new Date(receipt.createdAt).getTime();
+  return new Date(`${receipt.receiptDate}T00:00:00Z`).getTime() < added - WEEK_MS;
 }
 
 function SortHeader({
@@ -220,6 +229,7 @@ export function HistoryResults({
   groups,
   viewer,
   shared,
+  timeZone,
 }: {
   receipts: ReceiptSummary[];
   total: number;
@@ -230,6 +240,8 @@ export function HistoryResults({
   viewer: Viewer;
   /** More than one member: show who uploaded each receipt. */
   shared: boolean;
+  /** The viewer's IANA zone, for when each receipt was added. */
+  timeZone: string;
 }) {
   const { selection, setSelection, selecting, setSelecting } = useSelection();
   const [pending, setPending] = useState<PendingAction>(null);
@@ -243,6 +255,10 @@ export function HistoryResults({
   const flip = (id: string, on: boolean) =>
     setSelection((current) => toggle(current, id, on, pageIds));
   const flipPage = (on: boolean) => setSelection((current) => togglePage(current, pageIds, on));
+  const added = (receipt: ReceiptSummary) =>
+    addedLine(receipt, timeZone, shared ? uploaderLabel(receipt, viewer) : null);
+  const phoneAdded = (receipt: ReceiptSummary) =>
+    addedMatters(receipt, view) ? added(receipt) : null;
 
   // Shared by the empty state: rows picked on other pages are still selected there.
   const actions = (
@@ -338,6 +354,7 @@ export function HistoryResults({
                       onChange={(next) => flip(receipt.id, next)}
                     />
                     <ReceiptRowContent
+                      added={phoneAdded(receipt)}
                       receipt={receipt}
                       retry={false}
                       title={
@@ -356,6 +373,7 @@ export function HistoryResults({
                 ) : (
                   <div className="flex w-full items-center gap-3 px-4 py-3">
                     <ReceiptRowContent
+                      added={phoneAdded(receipt)}
                       receipt={receipt}
                       title={
                         <Link
@@ -396,14 +414,11 @@ export function HistoryResults({
                 by="date"
                 className="w-32 px-2 lg:px-4"
                 filters={filters}
-                label="Date"
+                label="Receipt date"
                 view={view}
               />
               <TableHead className="hidden w-36 xl:table-cell">Category</TableHead>
-              {shared ? (
-                <TableHead className="hidden w-36 xl:table-cell">Uploaded by</TableHead>
-              ) : null}
-              <TableHead className="hidden w-40 lg:table-cell">Status</TableHead>
+              <TableHead className="hidden w-52 lg:table-cell">Status</TableHead>
               <SortHeader
                 by="total"
                 className="w-32 px-2 text-right lg:px-4"
@@ -448,12 +463,13 @@ export function HistoryResults({
                     >
                       {title.text}
                     </Link>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {added(receipt)}
+                    </p>
                     {/* The Status column only fits from lg; until then it sits under the name. */}
-                    {hasStatus(receipt) ? (
-                      <div className="mt-1 lg:hidden">
-                        <RowStatus receipt={receipt} retry={false} />
-                      </div>
-                    ) : null}
+                    <div className="mt-1 lg:hidden">
+                      <RowStatus receipt={receipt} retry={false} />
+                    </div>
                   </TableCell>
                   <TableCell className="px-2 whitespace-nowrap text-muted-foreground lg:px-4">
                     {completed ? (
@@ -470,11 +486,6 @@ export function HistoryResults({
                   <TableCell className="hidden truncate text-muted-foreground xl:table-cell">
                     {completed && receipt.category ? receipt.category : <Missing />}
                   </TableCell>
-                  {shared ? (
-                    <TableCell className="hidden truncate text-muted-foreground xl:table-cell">
-                      {uploaderLabel(receipt, viewer)}
-                    </TableCell>
-                  ) : null}
                   <TableCell className="hidden lg:table-cell">
                     <RowStatus receipt={receipt} />
                   </TableCell>

@@ -1,13 +1,13 @@
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import { CircleAlert, CircleCheck, Eye, Loader2, TriangleAlert } from "lucide-react";
+import { CircleAlert, CircleCheck, Copy, Eye, Loader2, TriangleAlert } from "lucide-react";
 import { confidenceLevel, formatConfidence, type ConfidenceLevel } from "@/lib/format";
 import type { ReceiptStatus } from "@/lib/receipts";
 
 const STATUS = {
   completed: { label: "Done", variant: "success", icon: CircleCheck },
-  processing: { label: "Scanning…", variant: "secondary", icon: Loader2 },
-  uploaded: { label: "Scanning…", variant: "secondary", icon: Loader2 },
+  processing: { label: "Scanning", variant: "secondary", icon: Loader2 },
+  uploaded: { label: "Scanning", variant: "secondary", icon: Loader2 },
   failed: { label: "Couldn't scan", variant: "destructive", icon: CircleAlert },
 } as const;
 
@@ -45,23 +45,70 @@ export const CONFIDENCE = {
   },
 } as const satisfies Record<ConfidenceLevel, unknown>;
 
-/** A completed receipt in Needs review: it has review reasons and nobody has reviewed it. */
-export function NeedsReviewBadge({ className }: { className?: string }) {
+export type ReviewState = "needs-review" | "not-reviewed" | "reviewed";
+
+/**
+ * A completed receipt's review state, as the list filter and Home count it: Reviewed once someone
+ * vouched for it, Needs review while a check failed, else Not reviewed. Never blank.
+ */
+export function reviewState(receipt: {
+  reviewReasons: readonly string[];
+  reviewedAt: Date | string | null;
+}): ReviewState {
+  if (receipt.reviewedAt) return "reviewed";
+  return receipt.reviewReasons.length > 0 ? "needs-review" : "not-reviewed";
+}
+
+/**
+ * The review state as shown everywhere. Colour is kept for Needs review, the state that needs the
+ * person; Reviewed and Not reviewed are muted text.
+ */
+export function ReviewStatus({
+  state,
+  by,
+  className,
+}: {
+  state: ReviewState;
+  /** The reviewer's name, for Reviewed. */
+  by?: string | null;
+  className?: string;
+}) {
+  if (state === "needs-review") {
+    return (
+      <Badge className={className} variant="warning">
+        <TriangleAlert aria-hidden="true" />
+        Needs review
+      </Badge>
+    );
+  }
+  if (state === "reviewed") {
+    return (
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-muted-foreground",
+          className,
+        )}
+        title={by ? `Reviewed by ${by}` : undefined}
+      >
+        <CircleCheck aria-hidden="true" className="size-3.5 text-primary" />
+        <span aria-hidden={by ? true : undefined}>Reviewed</span>
+        {by ? <span className="sr-only">Reviewed by {by}</span> : null}
+      </span>
+    );
+  }
   return (
-    <Badge className={className} variant="warning">
-      <TriangleAlert aria-hidden="true" />
-      Needs review
-    </Badge>
+    <span className={cn("shrink-0 text-xs whitespace-nowrap text-muted-foreground", className)}>
+      Not reviewed
+    </span>
   );
 }
 
-/** A receipt someone marked reviewed. */
-export function CheckedBadge({ by, className }: { by?: string | null; className?: string }) {
+/** Shown beside the review state while another receipt looks like the same bill. */
+export function DuplicateBadge({ className }: { className?: string }) {
   return (
-    <Badge className={className} title={by ? `Checked by ${by}` : undefined} variant="success">
-      <CircleCheck aria-hidden="true" />
-      <span aria-hidden={by ? true : undefined}>Checked</span>
-      {by ? <span className="sr-only">Checked by {by}</span> : null}
+    <Badge className={className} variant="warning">
+      <Copy aria-hidden="true" />
+      Possible duplicate
     </Badge>
   );
 }

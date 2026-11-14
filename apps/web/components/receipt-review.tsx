@@ -1,14 +1,13 @@
 "use client";
 
 import type { ReceiptWithItems } from "@receipt-ocr/core";
-import { Button } from "@receipt-ocr/ui/components/button";
+import { Button, buttonVariants } from "@receipt-ocr/ui/components/button";
 import { toast } from "@receipt-ocr/ui/components/toast";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@receipt-ocr/ui/components/tooltip";
-import { cn } from "@receipt-ocr/ui/lib/utils";
-import { Check, CircleCheck, Pencil, TriangleAlert, X } from "lucide-react";
+import { Check, CircleCheck, Copy, ExternalLink, Pencil, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { CheckedBadge, NeedsReviewBadge } from "@/components/receipt-status";
+import { ReviewStatus } from "@/components/receipt-status";
 import { formatDate } from "@/lib/format";
 
 type Review = { at: Date | string; name: string | null } | null;
@@ -111,11 +110,102 @@ export function ReceiptReviewProvider({
   );
 }
 
-/** The header's badge: Checked once reviewed, Needs review while it has reasons, else nothing. */
+/**
+ * The header's review state: Reviewed, Needs review while it has reasons, else Not reviewed. Who
+ * reviewed it is on the line under the header.
+ */
 export function ReviewStateBadge({ needsReview }: { needsReview: boolean }) {
   const { review } = useReview();
-  if (review) return <CheckedBadge by={review.name} />;
-  return needsReview ? <NeedsReviewBadge /> : null;
+  return (
+    <ReviewStatus state={review ? "reviewed" : needsReview ? "needs-review" : "not-reviewed"} />
+  );
+}
+
+/**
+ * Shown while another receipt in the workspace looks like the same bill, reviewed or not: a
+ * reviewed copy is still counted twice. "Not a duplicate" clears it for good; the toast can undo it.
+ */
+export function DuplicateNotice({
+  receiptId,
+  duplicateOf,
+  canEdit,
+}: {
+  receiptId: string;
+  /** The older receipt; null when it was deleted since the check ran. */
+  duplicateOf: string | null;
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+
+  async function setDismissed(dismissed: boolean) {
+    setSaving(true);
+    const status = await fetch(`/api/receipts/${receiptId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ duplicate: !dismissed }),
+    })
+      .then((res) => res.status)
+      .catch(() => null);
+    setSaving(false);
+    if (status === null || status >= 400) {
+      toast.add({
+        title: dismissed ? "Couldn't save that" : "Couldn't undo that",
+        description: reviewFailure(status),
+        type: "error",
+      });
+      return;
+    }
+    if (dismissed) {
+      toast.add({
+        title: "Marked as not a duplicate",
+        type: "success",
+        actionProps: { children: "Undo", onClick: () => void setDismissed(false) },
+      });
+    }
+    router.refresh();
+  }
+
+  return (
+    <section
+      aria-labelledby="duplicate-heading"
+      className="mb-6 flex gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4"
+    >
+      <Copy aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-warning max-sm:hidden" />
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-medium text-warning" id="duplicate-heading">
+          Possible duplicate
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {duplicateOf
+            ? "A receipt added earlier has the same bill number and seller, or the same merchant, date and total. Check it isn't counted twice."
+            : "A receipt added earlier looked like the same bill. It has since been deleted."}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {duplicateOf ? (
+            <Link
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              href={`/app/receipts/${duplicateOf}`}
+            >
+              <ExternalLink aria-hidden="true" />
+              Open the other receipt
+            </Link>
+          ) : null}
+          {canEdit ? (
+            <Button
+              disabled={saving}
+              onClick={() => void setDismissed(true)}
+              size="sm"
+              variant="ghost"
+            >
+              <Check aria-hidden="true" />
+              Not a duplicate
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 /**
@@ -169,17 +259,14 @@ export function ReceiptChecks({
   return (
     <section
       aria-labelledby="checks-heading"
-      className="relative mb-6 flex gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4"
+      className="mb-6 flex gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4"
     >
       <TriangleAlert
         aria-hidden="true"
         className="mt-0.5 size-5 shrink-0 text-warning max-sm:hidden"
       />
       <div className="min-w-0 flex-1">
-        <h2
-          className={cn("text-sm font-medium text-warning", canEdit && "pr-8 max-md:pr-11")}
-          id="checks-heading"
-        >
+        <h2 className="text-sm font-medium text-warning" id="checks-heading">
           Check before you use this
         </h2>
         <ul className="mt-2 flex list-disc flex-col gap-1 pl-4 text-sm text-muted-foreground marker:text-warning">
@@ -207,24 +294,6 @@ export function ReceiptChecks({
           </div>
         ) : null}
       </div>
-      {canEdit ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                aria-label="Mark as reviewed"
-                className="absolute top-2 right-2"
-                onClick={() => void setReviewed(true)}
-                size="icon-sm"
-                variant="ghost"
-              />
-            }
-          >
-            <X aria-hidden="true" />
-          </TooltipTrigger>
-          <TooltipContent side="left">Mark as reviewed</TooltipContent>
-        </Tooltip>
-      ) : null}
     </section>
   );
 }

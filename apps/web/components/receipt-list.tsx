@@ -4,13 +4,15 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { ReceiptSummary } from "@/lib/receipts";
 import {
-  CheckedBadge,
-  NeedsReviewBadge,
+  DuplicateBadge,
+  ReviewStatus,
   StatusBadge,
   isInFlight,
+  reviewState,
 } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 import { formatMoney, formatReceiptDate } from "@/lib/format";
+import { shortReason } from "@/lib/receipt-checks";
 
 /** What a row is called: the merchant once read, the uploaded file name until then. */
 export function receiptTitle(receipt: Pick<ReceiptSummary, "status" | "merchant" | "fileName">) {
@@ -21,8 +23,8 @@ export function receiptTitle(receipt: Pick<ReceiptSummary, "status" | "merchant"
 }
 
 /**
- * A completed receipt's badge: Checked once someone reviewed it, Needs review while it has review
- * reasons, else nothing. It always agrees with the Needs review filter.
+ * A completed receipt's review state (Needs review, Not reviewed or Reviewed, never blank), with
+ * Possible duplicate beside it. It always agrees with the list's filters.
  */
 export function ReviewBadge({
   receipt,
@@ -31,8 +33,12 @@ export function ReviewBadge({
   receipt: Pick<ReceiptSummary, "reviewReasons" | "reviewedAt" | "reviewerName">;
   className?: string;
 }) {
-  if (receipt.reviewedAt) return <CheckedBadge by={receipt.reviewerName} className={className} />;
-  return receipt.reviewReasons.length > 0 ? <NeedsReviewBadge className={className} /> : null;
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-1.5", className)}>
+      <ReviewStatus by={receipt.reviewerName} state={reviewState(receipt)} />
+      {receipt.reviewReasons.includes("possible_duplicate") ? <DuplicateBadge /> : null}
+    </span>
+  );
 }
 
 /** The row's title as a link that covers the whole row. */
@@ -41,23 +47,30 @@ export const ROW_LINK =
 
 /**
  * A row's text: `title` (a link, or plain text while selecting), the amount, and a line with
- * the date and category, or the status and what to do next. `retry` adds Try again to a failed
- * row; leave it out where the row itself is a control.
+ * the date and category (the first reason instead, while it needs review) and the review state, or
+ * the status and what to do next. `retry` adds Try again to a failed row; leave it out where the
+ * row itself is a control. `added` is a last line, such as when it was added.
  */
 export function ReceiptRowContent({
   receipt,
   title,
   retry = true,
+  added,
 }: {
   receipt: ReceiptSummary;
   title: ReactNode;
   retry?: boolean;
+  added?: string | null;
 }) {
   const completed = receipt.status === "completed";
   const amount = completed ? formatMoney(receipt.total, receipt.currency) : null;
   const date = completed
     ? formatReceiptDate(receipt.receiptDate, receipt.receiptDateCalendar)
     : null;
+  const detail =
+    completed && reviewState(receipt) === "needs-review"
+      ? shortReason(receipt.reviewReasons)
+      : receipt.category;
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-baseline justify-between gap-3">
@@ -68,10 +81,10 @@ export function ReceiptRowContent({
         {completed ? (
           <>
             <span>{date ?? "No date"}</span>
-            {receipt.category ? (
+            {detail ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span>{receipt.category}</span>
+                <span>{detail}</span>
               </>
             ) : null}
             <ReviewBadge className="ml-auto" receipt={receipt} />
@@ -97,6 +110,7 @@ export function ReceiptRowContent({
           </>
         )}
       </div>
+      {added ? <p className="mt-1 text-xs text-muted-foreground">{added}</p> : null}
     </div>
   );
 }

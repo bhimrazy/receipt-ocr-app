@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
-const { ReceiptChecks, ReceiptReviewProvider, ReviewStateBadge, reviewFailure } =
+const { DuplicateNotice, ReceiptChecks, ReceiptReviewProvider, ReviewStateBadge, reviewFailure } =
   await import("@/components/receipt-review");
 
 const receipt = (fields: Partial<ReceiptWithItems> = {}) =>
@@ -27,40 +27,33 @@ const render = (props: { receipt: ReceiptWithItems; checks?: string[]; canEdit?:
   );
 
 describe("ReviewStateBadge", () => {
-  it("shows Needs review until the receipt is reviewed, then Checked with who checked it", () => {
+  it("shows Needs review until the receipt is reviewed, then Reviewed", () => {
     const unreviewed = withReview(receipt(), <ReviewStateBadge needsReview />);
     expect(unreviewed).toContain("Needs review");
-    expect(unreviewed).not.toContain("Checked");
+    expect(unreviewed).not.toContain("Reviewed");
 
     const reviewed = withReview(
       receipt({ reviewedAt: new Date("2026-11-10T09:00:00Z"), reviewer: { name: "Test User" } }),
       <ReviewStateBadge needsReview />,
     );
-    expect(reviewed).toContain("Checked by Test User");
+    expect(reviewed).toContain(">Reviewed</span>");
     expect(reviewed).not.toContain("Needs review");
   });
 
-  it("shows nothing for a receipt that passed its checks", () => {
-    expect(withReview(receipt(), <ReviewStateBadge needsReview={false} />)).toBe("");
-  });
-
-  it("says Checked without a name once the reviewer's account is gone", () => {
-    const html = withReview(
-      receipt({ reviewedAt: new Date("2026-11-10T09:00:00Z") }),
-      <ReviewStateBadge needsReview />,
+  it("says Not reviewed for a receipt that passed its checks", () => {
+    expect(withReview(receipt(), <ReviewStateBadge needsReview={false} />)).toContain(
+      "Not reviewed",
     );
-    expect(html).toContain(">Checked</span>");
-    expect(html).not.toContain("Checked by");
   });
 });
 
 describe("ReceiptChecks", () => {
-  it("offers Looks right and a dismiss X to editors", () => {
+  it("offers Looks right to editors, and no close button that would mark it reviewed", () => {
     const html = render({ receipt: receipt() });
     expect(html).toContain("Check before you use this");
     expect(html).toContain("No date was found.");
     expect(html).toContain("Looks right");
-    expect(html).toContain('aria-label="Mark as reviewed"');
+    expect(html).not.toContain("Mark as reviewed");
   });
 
   it("shows the checks without review controls to someone who can't edit", () => {
@@ -91,6 +84,26 @@ describe("ReceiptChecks", () => {
 
   it("renders nothing for an unreviewed receipt with no checks", () => {
     expect(render({ receipt: receipt(), checks: [] })).toBe("");
+  });
+});
+
+describe("DuplicateNotice", () => {
+  it("links to the other receipt and offers Not a duplicate to editors", () => {
+    const html = renderToStaticMarkup(
+      <DuplicateNotice canEdit duplicateOf="older-id" receiptId="r1" />,
+    );
+    expect(html).toContain("Possible duplicate");
+    expect(html).toContain('href="/app/receipts/older-id"');
+    expect(html).toContain("Not a duplicate");
+  });
+
+  it("says when the other receipt is gone, and has no action for someone who can't edit", () => {
+    const html = renderToStaticMarkup(
+      <DuplicateNotice canEdit={false} duplicateOf={null} receiptId="r1" />,
+    );
+    expect(html).toContain("since been deleted");
+    expect(html).not.toContain("href=");
+    expect(html).not.toContain("Not a duplicate");
   });
 });
 

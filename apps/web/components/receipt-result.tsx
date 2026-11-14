@@ -28,7 +28,7 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { confidenceLevel, formatDateTime, formatMoney } from "@/lib/format";
+import { confidenceLevel, formatLocalDateTime, formatMoney } from "@/lib/format";
 import { checksFor, fileNoun } from "@/lib/receipt-checks";
 import { ReceiptDate } from "@/components/receipt-date";
 import { InstallOfferCard } from "@/components/install-offer";
@@ -40,7 +40,7 @@ import {
 } from "@/components/receipt-actions";
 import { receiptTitle } from "@/components/receipt-list";
 import { ReceiptReviewProvider, ReviewStateBadge } from "@/components/receipt-review";
-import { StatusBadge, isInFlight } from "@/components/receipt-status";
+import { DuplicateBadge, StatusBadge, isInFlight } from "@/components/receipt-status";
 import { RetryReceiptButton } from "@/components/retry-receipt-button";
 
 const FAILED_FALLBACK = {
@@ -76,6 +76,8 @@ export function ReceiptResult({
   canEdit,
   viewerName,
   groups,
+  timeZone,
+  shared,
 }: {
   receipt: ReceiptWithItems;
   /** False for members viewing someone else's receipt: no edit, review or delete controls. */
@@ -84,6 +86,10 @@ export function ReceiptResult({
   viewerName: string;
   /** groups: the receipt's group chips and picker, shown under the title. */
   groups?: React.ReactNode;
+  /** The viewer's IANA zone, for when it was added. */
+  timeZone: string;
+  /** More than one member: say who added it. */
+  shared: boolean;
 }) {
   const inFlight = isInFlight(receipt.status);
   const completed = receipt.status === "completed";
@@ -92,6 +98,12 @@ export function ReceiptResult({
   const title = receiptTitle(receipt);
   const money = (value: string | null) => formatMoney(value, currency);
   const triesLeft = Math.max(0, MAX_EXTRACTION_ATTEMPTS - receipt.attempts);
+  const added = [
+    `Added ${formatLocalDateTime(receipt.createdAt, timeZone)}`,
+    shared ? `by ${receipt.uploader?.name ?? "a former member"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const header = (
     <PageHeader className="sm:flex-col sm:items-stretch md:flex-row md:items-start">
@@ -111,14 +123,13 @@ export function ReceiptResult({
               </span>
               {receipt.category ? <Badge variant="secondary">{receipt.category}</Badge> : null}
               <ReviewStateBadge needsReview={receipt.reviewReasons.length > 0} />
+              {receipt.reviewReasons.includes("possible_duplicate") ? <DuplicateBadge /> : null}
             </>
           ) : (
-            <>
-              <StatusBadge status={receipt.status} />
-              <span>Uploaded {formatDateTime(receipt.createdAt)}</span>
-            </>
+            <StatusBadge status={receipt.status} />
           )}
         </PageHeaderDescription>
+        <p className="mt-2 text-xs text-muted-foreground">{added}</p>
         {groups ? <div className="mt-3">{groups}</div> : null}
       </PageHeaderContent>
       <ReceiptActions canEdit={canEdit} canRetry={failed && triesLeft > 0} receipt={receipt} />
