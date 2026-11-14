@@ -241,7 +241,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 1. ~~Classic as the homepage (then delete `app/(lab)` and `components/marketing`)~~ Done: the lab landing variants are removed.
 2. ~~Plan limits and payment provider~~ Decided: Free 30 scans a month (20 a day), Pro by workspace, Paddle. Still
    open: the plan-limits review in Admin → Settings.
-3. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
+3. Who sees estimated cost (recommended: platform admins only); ~~whether customers see the model name~~ decided
+   2026-11-14: customers don't see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
 4. Default OCR chain: decided 2026-11-08. Claude Haiku 5.5, then Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; steps
    without an API key are skipped ([ai.md](architecture/ai.md#default-chain)). Groq zero data retention must be on first.
@@ -381,6 +382,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Admin receipt view with the raw extraction (customers no longer see it).
 - **Receipt review and the totals check (#216):**
   - The totals check treats a total equal to the subtotal or the line sum as tax-inclusive prices. So a total
     misread as the subtotal raises no warning. Fixing that needs a `taxIncluded` signal from extraction.
