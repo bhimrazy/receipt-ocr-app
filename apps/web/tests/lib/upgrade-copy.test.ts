@@ -40,7 +40,7 @@ describe("upgrade copy", () => {
     expect(comparisonRows(edited)).toEqual([
       { label: "Scans a month", free: "60", pro: "750" },
       { label: "Scans a day", free: "15", pro: "150" },
-      { label: "Members per workspace", free: "3", pro: "12" },
+      { label: "Members", free: "3", pro: "12" },
       { label: "Workspaces you can own", free: "1", pro: "3" },
       { label: "Busy-day pauses", free: "Can pause", pro: "Never" },
     ]);

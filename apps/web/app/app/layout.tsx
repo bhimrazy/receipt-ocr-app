@@ -15,19 +15,18 @@ import { StepUpProvider } from "@/components/step-up/step-up";
 import { SupportWidget } from "@/components/support-widget";
 import { UpgradeBanner } from "@/components/upgrade/upgrade-banner";
 import { UpgradeModal } from "@/components/upgrade/upgrade-modal";
-import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
-import { ASK_OWNER, proOpensSoon } from "@/lib/upgrade-copy";
+import { MeterActionView } from "@/components/upgrade/meter-action-view";
+import { meterAction } from "@/lib/meter-action";
+import { proOpensSoon } from "@/lib/upgrade-copy";
 import { getUpgradeOffer } from "@/lib/upgrade-offer";
-import { upgradeLevel, type UpgradeOffer } from "@/lib/upgrade-level";
+import type { UpgradeOffer } from "@/lib/upgrade-level";
 import { errorFields, logger } from "@/lib/log";
 import { getCurrentPlan, getPlanTable } from "@/lib/plan-limits";
-import type { PlanId, PlanPolicy } from "@/lib/plans";
 import { getActiveScope, isAdmin, requireSession } from "@/lib/session";
 import { getWorkspaceAllowance, isSharedWorkspace, listWorkspaces } from "@/lib/workspaces";
 import { Toaster } from "@receipt-ocr/ui/components/toast";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
 import { getUsageSummary } from "@/lib/receipts";
 import { showSecurityPrompt } from "@/lib/security-prompt";
 import { runtime } from "@/lib/runtime";
@@ -46,47 +45,27 @@ async function loadUsage(): Promise<Usage | null> {
 }
 
 /**
- * Streams in after the shell. Both reads are per-request cached, and the layout has already
- * made them for the upgrade offer. Nothing below NEAR_RATIO. From it, an owner who can buy gets
- * a link (a button at the limit), a member the "ask the owner" line, and anyone on Free while
- * checkout is closed to them the "opens soon" line.
+ * Streams in after the shell. The reads are per-request cached, and the layout has already
+ * made them for the upgrade offer. What it offers under the note is `meterAction`'s.
  */
-async function Meter({ offer }: { offer: UpgradeOffer | null }) {
+async function Meter({ offer, owner }: { offer: UpgradeOffer | null; owner: boolean }) {
   const [usage, { plan }, plans] = await Promise.all([
     loadUsage(),
     getCurrentPlan(),
     getPlanTable(),
   ]);
   if (!usage) return null;
+  const action = meterAction({ usage, plan, owner, audience: offer?.audience ?? null });
   return (
-    <UsageMeter action={meterAction(usage, plan, offer, plans.pro)} plan={plan} usage={usage} />
-  );
-}
-
-function meterAction(usage: Usage, plan: PlanId, offer: UpgradeOffer | null, pro: PlanPolicy) {
-  const level = upgradeLevel(usage);
-  if (plan !== "free" || level === null || level === "quiet") return null;
-  if (offer?.audience === "owner") {
-    return offer.level === "at" ? (
-      <UpgradeTrigger className="w-full" size="sm" surface="meter">
-        Upgrade to Pro
-      </UpgradeTrigger>
-    ) : (
-      <UpgradeTrigger className="h-auto justify-start p-0 text-xs" surface="meter" variant="link">
-        Upgrade
-        <ChevronRight aria-hidden="true" />
-      </UpgradeTrigger>
-    );
-  }
-  if (offer?.audience === "member")
-    return <p className="text-xs text-muted-foreground">{ASK_OWNER}</p>;
-  return (
-    <p className="text-xs text-muted-foreground">
-      {proOpensSoon(pro)}{" "}
-      <Link className="font-medium text-foreground underline underline-offset-4" href="/pricing">
-        Compare plans
-      </Link>
-    </p>
+    <UsageMeter
+      action={
+        action ? (
+          <MeterActionView action={action} opensSoon={proOpensSoon(plans.pro)} surface="meter" />
+        ) : null
+      }
+      plan={plan}
+      usage={usage}
+    />
   );
 }
 
@@ -138,6 +117,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // At the limit the limit is the message: the passkey prompts wait until uploads reopen.
   const blocked = usage?.blocked != null;
   const ownerOffer = offer?.audience === "owner" ? offer : null;
+  const owner = scope.role === "owner";
   const showAdmin = isAdmin(session);
   const user: MenuUser = {
     name: session.user.name ?? null,
@@ -153,8 +133,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   };
   const meter = (
     <SectionBoundary label="Usage">
-      <Suspense fallback={<MeterSkeleton withAction={ownerOffer?.level === "at"} />}>
-        <Meter offer={offer} />
+      <Suspense
+        fallback={
+          <MeterSkeleton
+            withAction={
+              usage !== null &&
+              meterAction({ usage, plan, owner, audience: offer?.audience ?? null }) ===
+                "upgrade-button"
+            }
+          />
+        }
+      >
+        <Meter offer={offer} owner={owner} />
       </Suspense>
     </SectionBoundary>
   );

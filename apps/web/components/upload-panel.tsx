@@ -25,7 +25,15 @@ import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import type { ReviewImage } from "@/components/capture/review-sheet";
 import type { CropSource } from "@/lib/capture/crop-outcome";
 import { formatTime } from "@/lib/format";
-import { remainingSpan, usageNote, usageRemaining, type Usage } from "@/components/usage-meter";
+import {
+  remainingSpan,
+  stripNote,
+  usageNote,
+  usageRemaining,
+  type Usage,
+} from "@/components/usage-meter";
+import { MeterActionView } from "@/components/upgrade/meter-action-view";
+import { meterAction } from "@/lib/meter-action";
 import { fitBatch } from "@/lib/capture/batch-limit";
 import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
 import { browserCameraSupport, wantsCamera, type CameraSupport } from "@/lib/capture/camera";
@@ -37,7 +45,6 @@ import { SharedFilesNotice } from "@/components/shared-files-notice";
 import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
 import type { PlanPolicy } from "@/lib/plans";
 import { ASK_OWNER, limitUpgradeLine, proOpensSoon } from "@/lib/upgrade-copy";
-import { NEAR_RATIO, usageRatio } from "@/lib/upgrade-level";
 
 // Loaded on first use, so the camera and editor don't weigh on the upload page.
 const loadCamera = () => import("@/components/capture/camera-sheet");
@@ -190,10 +197,43 @@ function limitCopy(
   }
 }
 
-/** From NEAR_RATIO used: the room left, under the phone's upload buttons. */
-function nearLimitLine(usage: Usage): string | null {
-  if (usage.blocked || usageRatio(usage) < NEAR_RATIO) return null;
-  return `${plural(usageRemaining(usage), "scan")} left ${remainingSpan(usage)}`;
+/**
+ * On a phone, from NEAR_RATIO of either window: the room left and the usage card's action, so
+ * the offer is one tap away without opening the account sheet.
+ */
+function PlanStrip({
+  usage,
+  plan,
+  className,
+}: {
+  usage: Usage;
+  plan: LimitPlan;
+  className?: string;
+}) {
+  const note = stripNote(usage);
+  if (!note) return null;
+  const action = meterAction({
+    usage,
+    plan: plan.pro ? "free" : "pro",
+    owner: plan.offer === "owner",
+    audience: plan.offer,
+  });
+  return (
+    <div
+      className={cn(
+        "flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-warning/30 bg-warning/5 px-3 py-1.5 text-sm",
+        className,
+      )}
+    >
+      <p className="flex items-center gap-1.5">
+        <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
+        {note}
+      </p>
+      {action && plan.pro ? (
+        <MeterActionView action={action} opensSoon={proOpensSoon(plan.pro)} surface="home" />
+      ) : null}
+    </div>
+  );
 }
 
 /** The plan state without the drop zone, for Home on a phone: the limit card, or the usage line from NEAR_RATIO. */
@@ -207,14 +247,7 @@ export function PlanState({
   plan: LimitPlan;
 }) {
   if (usage.blocked) return <LimitReached plan={plan} resetsIn={resetsIn} usage={usage} />;
-  const line = nearLimitLine(usage);
-  if (!line) return null;
-  return (
-    <p className="flex items-center justify-center gap-1.5 text-sm">
-      <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
-      {line}
-    </p>
-  );
+  return <PlanStrip plan={plan} usage={usage} />;
 }
 
 /** Seconds until `until`, ticking while it's set. */
@@ -388,7 +421,6 @@ export function UploadPanel({
 
   const busy = snapshot.running;
   const remaining = usage ? usageRemaining(usage) : null;
-  const nearLine = usage ? nearLimitLine(usage) : null;
   const inBatch = items.length + reviewing.length;
   const room = Math.max(0, batchMax - inBatch);
   /** What the batch holds right now, including adds not yet rendered. */
@@ -527,6 +559,9 @@ export function UploadPanel({
 
   return (
     <div className="flex flex-col gap-4" data-ready={hydrated ? "" : undefined}>
+      {usage ? (
+        <PlanStrip className="hidden max-md:flex pointer-coarse:flex" plan={plan} usage={usage} />
+      ) : null}
       <Card
         aria-describedby="upload-hint"
         aria-label="Add receipt photos or PDFs"
@@ -648,12 +683,6 @@ export function UploadPanel({
           <ImageUp aria-hidden="true" />
           Choose files
         </Button>
-        {nearLine ? (
-          <p className="flex items-center justify-center gap-1.5 text-sm">
-            <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
-            {nearLine}
-          </p>
-        ) : null}
       </div>
 
       <SharedFilesNotice input={inputRef} />

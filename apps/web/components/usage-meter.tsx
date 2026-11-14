@@ -36,12 +36,21 @@ export function remainingSpan(usage: Usage): "today" | "this month" {
   return usageRemaining(usage) === Math.max(0, usage.limit - usage.used) ? "this month" : "today";
 }
 
-/** Whether the bar is amber: from NEAR_RATIO of its own window used, or while uploads are refused. */
-const barWarns = (usage: Usage) => usage.blocked !== null || usageRatio(usage) >= NEAR_RATIO;
+/** Today's limit is NEAR_RATIO used, on a plan whose meter shows the month. */
+const dayNear = (usage: Usage) => usage.day !== undefined && usageRatio(usage.day) >= NEAR_RATIO;
 
-/** Whether the meter warns: the bar does, or today's limit is NEAR_RATIO used (the bar shows the month). */
+/**
+ * Whether the bar (the month, or the day on a plan without one) is amber: from NEAR_RATIO used,
+ * or once that window is used up. A used-up day leaves a month bar as it is.
+ */
+const barWarns = (usage: Usage) =>
+  usageRatio(usage) >= NEAR_RATIO ||
+  usage.blocked === "month" ||
+  (usage.period === "day" && usage.blocked === "day");
+
+/** Whether the note warns (amber icon): any refusal, or either window from NEAR_RATIO. */
 export const usageWarns = (usage: Usage) =>
-  barWarns(usage) || (usage.day !== undefined && usageRatio(usage.day) >= NEAR_RATIO);
+  usage.blocked !== null || usageRatio(usage) >= NEAR_RATIO || dayNear(usage);
 
 const resetDay = (date: Date) =>
   date.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
@@ -63,9 +72,8 @@ export function usageNote(usage: Usage): string {
     if (blocked === "month" || left === 0) return `Limit reached. Uploads open on ${reset}.`;
     if (blocked === "day")
       return `Today's limit reached. Uploads open at ${opens}. ${left} left this month.`;
-    const dayLeft = usageRemaining(usage);
-    return dayLeft < left
-      ? `${dayLeft} left today, ${left} this month. Resets ${reset}.`
+    return dayNear(usage)
+      ? `${usageRemaining(usage)} left today, ${left} this month. Resets ${reset}.`
       : `${left} left this month. Resets ${reset}.`;
   }
   const reset = formatTime(usage.resetsAt);
@@ -74,8 +82,9 @@ export function usageNote(usage: Usage): string {
 }
 
 /**
- * The sidebar's one line: the tighter of the day and the month, the reset date only from
- * NEAR_RATIO. Short on purpose; Billing has the full sentence.
+ * The card's one line, first match wins: paused for everyone, the Free pool, the month used up,
+ * the day used up, the day from NEAR_RATIO, the month from NEAR_RATIO (with its reset date),
+ * then the month's room. Short on purpose; Billing has the full sentence.
  */
 export function meterNote(usage: Usage): string {
   const { used, limit, blocked, period } = usage;
@@ -88,12 +97,24 @@ export function meterNote(usage: Usage): string {
       : `${left} left today`;
   }
   if (blocked === "month" || left === 0) return `Limit reached · opens ${shortDay(usage.resetsAt)}`;
-  if (blocked === "day") return "Today's limit reached · opens 00:00 UTC";
-  const dayLeft = usageRemaining(usage);
-  if (dayLeft < left) return `${dayLeft} left today`;
+  if (blocked === "day") return `Today's limit reached · opens ${formatTime(usage.opensAt)}`;
+  if (dayNear(usage)) return `${usageRemaining(usage)} left today`;
   return usageRatio(usage) >= NEAR_RATIO
     ? `${left} left · resets ${shortDay(usage.resetsAt)}`
     : `${left} left this month`;
+}
+
+/**
+ * The phone strip's line from NEAR_RATIO of either window, while uploads are open: the day when
+ * it is near, else the month with its reset date. Null below that.
+ */
+export function stripNote(usage: Usage): string | null {
+  if (usage.blocked) return null;
+  const scans = (n: number) => `${n} ${n === 1 ? "scan" : "scans"}`;
+  if (dayNear(usage) || (usage.period === "day" && usageRatio(usage) >= NEAR_RATIO))
+    return `${scans(usageRemaining(usage))} left today`;
+  if (usageRatio(usage) < NEAR_RATIO) return null;
+  return `${scans(Math.max(0, usage.limit - usage.used))} left this month · resets ${shortDay(usage.resetsAt)}`;
 }
 
 /**

@@ -124,7 +124,7 @@ export function PlanAndBilling(props: PlanAndBillingProps) {
         <div className="flex flex-col gap-3">
           <UsageMeter className="p-5" detail plan={plan} usage={usage} />
           <p className="font-mono text-xs text-muted-foreground tabular-nums">
-            {policy.receiptsPerDay} a day · up to {policy.membersPerWorkspace} members
+            {limitsLine(policy)}
           </p>
           {memberOfPro ? (
             <Alert>Managed by the workspace owner. Ask them to change the plan.</Alert>
@@ -304,10 +304,34 @@ function Plans(props: PlanAndBillingProps) {
             {proAction ? <div className="mt-auto pt-2">{proAction}</div> : null}
           </Card>
         </div>
+        {owner ? (
+          <p className="text-sm text-muted-foreground">
+            Need more than Pro?{" "}
+            <ContactButton
+              className="h-auto p-0 align-baseline max-md:h-auto max-md:px-0"
+              topic="use-case"
+              variant="link"
+            >
+              Contact us
+            </ContactButton>
+          </p>
+        ) : null}
         {subscription ? null : <FooterLinks />}
       </div>
     </SettingsSection>
   );
+}
+
+/** "50 a month · 20 a day · 2 members", the plan's limits under the meter. */
+function limitsLine(policy: PlanPolicy): string {
+  const members = `${policy.membersPerWorkspace} ${policy.membersPerWorkspace === 1 ? "member" : "members"}`;
+  return [
+    policy.receiptsPerMonth === null ? null : `${policy.receiptsPerMonth} a month`,
+    `${policy.receiptsPerDay} a day`,
+    members,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function FeatureList({ features }: { features: string[] }) {

@@ -95,7 +95,7 @@ export function comparisonRows({ free, pro }: PlanTable): ComparisonRow[] {
     },
     { label: "Scans a day", free: String(free.receiptsPerDay), pro: String(pro.receiptsPerDay) },
     {
-      label: "Members per workspace",
+      label: "Members",
       free: String(free.membersPerWorkspace),
       pro: String(pro.membersPerWorkspace),
     },
