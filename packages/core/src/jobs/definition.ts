@@ -73,7 +73,10 @@ export type JobDefinition<P, R> = {
   readonly backoff: BackoffPolicy;
   /** Its result is reported to the caller of `tick` (wide events); it is not stored. */
   readonly run: (payload: P, context: JobContext) => Effect.Effect<unknown, JobFailure, R>;
-  /** Replaces the payload with `{}` once the job succeeds or dies, for payloads holding personal data. */
+  /**
+   * Replaces the payload with `{}` once the job ends (succeeded, dead, reaped dead or cancelled), for
+   * payloads holding personal data. An admin re-run of such a job is refused.
+   */
   readonly scrubPayload?: boolean;
   /**
    * Runs once the job is dead (retries exhausted, not retryable, lease expired
@@ -90,6 +93,11 @@ export type JobDefinition<P, R> = {
 export type AnyJobDefinition<R> = JobDefinition<any, R>;
 
 export type JobRegistry<R> = Readonly<Record<string, AnyJobDefinition<R>>>;
+
+export const scrubbedKinds = <R>(registry: JobRegistry<R>) =>
+  Object.values(registry)
+    .filter((definition) => definition.scrubPayload)
+    .map((definition) => definition.kind);
 
 /** A new job. `idempotencyKey` dedupes against live (queued or running) jobs. */
 export type NewJob = {

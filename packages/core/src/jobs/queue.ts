@@ -70,9 +70,13 @@ export type ClaimInput = {
   ids?: readonly string[];
 };
 
-const COLUMNS = sql.raw(`j.id, j.kind, j.state, j.priority, j.payload, j.idempotency_key,
+const columns = (payload: string) =>
+  sql.raw(`j.id, j.kind, j.state, j.priority, ${payload}, j.idempotency_key,
   j.receipt_id, j.organization_id, j.user_id, j.attempts, j.max_attempts, j.run_at,
   j.locked_by, j.locked_until, j.last_error_kind`);
+const COLUMNS = columns("j.payload");
+/** For an update that may scrub the payload: returns it as it was, from an `old` row in the FROM. */
+const COLUMNS_BEFORE = columns("old.payload as payload");
 
 type RawJob = {
   id: string;
@@ -119,6 +123,10 @@ const list = (values: readonly string[]) =>
     values.map((v) => sql`${v}`),
     sql`, `,
   );
+
+/** `j.kind` is one of `kinds`; false for none. */
+export const kindIn = (kinds: readonly string[]) =>
+  kinds.length === 0 ? sql`false` : sql`j.kind in (${list(kinds)})`;
 
 const ts = (date: Date) => sql`${date.toISOString()}::timestamptz`;
 
@@ -169,11 +177,21 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
     ) => Effect.Effect<boolean, DbError>;
     /**
      * Running jobs whose lease ran out (crash, deploy, killed function) go
-     * back to queued, or to dead on their last attempt. Returns them.
+     * back to queued, or to dead on their last attempt. Returns them with the
+     * payload they had; a dead one of a `scrubKinds` kind is stored with `{}`.
      */
-    readonly reap: (limit?: number) => Effect.Effect<Job[], DbError>;
-    /** Cancels a queued or running job; returns it, or null when it had already finished. */
-    readonly cancel: (id: string) => Effect.Effect<Job | null, DbError>;
+    readonly reap: (options?: {
+      limit?: number;
+      scrubKinds?: readonly string[];
+    }) => Effect.Effect<Job[], DbError>;
+    /**
+     * Cancels a queued or running job and returns it with the payload it had, or null when it had
+     * already finished. One of a `scrubKinds` kind is stored with `{}`.
+     */
+    readonly cancel: (
+      id: string,
+      scrubKinds?: readonly string[],
+    ) => Effect.Effect<Job | null, DbError>;
     readonly get: (id: string) => Effect.Effect<Job | null, DbError>;
     /**
      * Milliseconds until the next queued job of these kinds is runnable, by
@@ -306,33 +324,38 @@ export class JobQueue extends Context.Tag("@receipt-ocr/core/JobQueue")<
           return result.length > 0;
         }),
 
-      reap: (limit = 100) =>
+      reap: ({ limit = 100, scrubKinds = [] } = {}) =>
         use((db) =>
           rows(
             db,
             sql`update jobs j set
                 state = case when j.attempts >= j.max_attempts then 'dead'::job_state else 'queued'::job_state end,
                 finished_at = case when j.attempts >= j.max_attempts then now() end,
+                payload = case when j.attempts >= j.max_attempts and ${kindIn(scrubKinds)}
+                  then '{}'::jsonb else j.payload end,
                 run_at = now(), last_error_kind = 'lease-expired', last_error_at = now(),
                 attempt_log = ${appendLog(logEntry("lease-expired", "lease-expired"))},
                 locked_by = null, locked_until = null, updated_at = now()
-              where j.id in (
-                select id from jobs where state = 'running' and locked_until < now()
+              from (
+                select id, payload from jobs where state = 'running' and locked_until < now()
                 order by locked_until limit ${limit}
-                for update skip locked)
-              returning ${COLUMNS}`,
+                for update skip locked) old
+              where j.id = old.id
+              returning ${COLUMNS_BEFORE}`,
           ),
         ),
 
-      cancel: (id) =>
+      cancel: (id, scrubKinds = []) =>
         use(async (db) => {
           const [job] = await rows(
             db,
             sql`update jobs j set state = 'cancelled', finished_at = now(),
+                payload = case when ${kindIn(scrubKinds)} then '{}'::jsonb else j.payload end,
                 last_error_kind = 'cancelled', last_error_at = now(),
                 locked_by = null, locked_until = null, updated_at = now()
-              where j.id = ${id} and j.state in ('queued', 'running')
-              returning ${COLUMNS}`,
+              from (select id, payload from jobs where id = ${id} for update) old
+              where j.id = old.id and j.state in ('queued', 'running')
+              returning ${COLUMNS_BEFORE}`,
           );
           return job ?? null;
         }),

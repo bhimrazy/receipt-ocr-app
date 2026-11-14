@@ -4,8 +4,9 @@ import { insertAudit, transact, type AuditActor } from "../audit";
 import { Conflict, InvalidInput, NotFound } from "../errors";
 import { utcDayStart } from "../quota";
 import { roundsSince } from "../usage";
-import type { Job, JobRegistry } from "./definition";
+import { scrubbedKinds, type Job, type JobRegistry } from "./definition";
 import { liveReceiptJob } from "./live";
+import { kindIn } from "./queue";
 
 /**
  * Admin actions on the queue. Each one changes the job (and its receipt) and
@@ -70,6 +71,11 @@ export const rerunJob = <R>(
     }
     if (job.last_error_kind === "superseded") {
       throw new Conflict({ message: "A newer try of this receipt replaced this job." });
+    }
+    if (definition.scrubPayload && !definition.payload.safeParse(job.payload).success) {
+      throw new Conflict({
+        message: "This job's details were deleted when it ended, so it can't be re-run.",
+      });
     }
 
     if (options.dailyCap !== undefined) {
@@ -174,14 +180,17 @@ export const cancelQueuedJob = <R>(
   reason?: string | null,
 ) =>
   Effect.gen(function* () {
+    const scrubbed = kindIn(scrubbedKinds(registry));
     const job = yield* transact(async (tx) => {
       const [row] = await tx
         .execute<LockedJob & { run_at: string | Date; priority: number }>(
-          sql`update jobs set state = 'cancelled', finished_at = now(), last_error_kind = 'cancelled',
+          sql`update jobs j set state = 'cancelled', finished_at = now(), last_error_kind = 'cancelled',
+            payload = case when ${scrubbed} then '{}'::jsonb else j.payload end,
             last_error_at = now(), locked_by = null, locked_until = null, updated_at = now()
-          where id = ${id}::uuid and state = 'queued'
-          returning id, kind, state, attempts, max_attempts, receipt_id, organization_id, user_id,
-            last_error_kind, payload, run_at, priority`,
+          from (select id, payload from jobs where id = ${id}::uuid for update) old
+          where j.id = old.id and j.state = 'queued'
+          returning j.id, j.kind, j.state, j.attempts, j.max_attempts, j.receipt_id, j.organization_id,
+            j.user_id, j.last_error_kind, old.payload as payload, j.run_at, j.priority`,
         )
         .then((r) => r.rows);
       if (!row) {

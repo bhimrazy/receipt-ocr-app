@@ -1,6 +1,12 @@
 import { sql } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { z } from "zod";
+import {
+  purgeAdminAuditLog,
+  purgeExpiredSessions,
+  purgeInvitations,
+  purgeStepUpEvents,
+} from "../../retention";
 import { Db } from "../../services";
 import { purgeStepUpCodes } from "../../step-up/store";
 import { purgeSupportMessages } from "../../support";
@@ -99,6 +105,10 @@ export const maintenancePurge: JobDefinition<MaintenancePurgePayload, Db> = {
         step_up_codes: yield* inBatches(purgeStepUpCodes),
         jobs_succeeded: yield* inBatches((n) => purgeFinishedJobs("succeeded", n)),
         jobs_failed: yield* inBatches((n) => purgeFinishedJobs("failed", n)),
+        sessions: yield* inBatches(purgeExpiredSessions),
+        step_up_events: yield* inBatches(purgeStepUpEvents),
+        invitations: yield* inBatches(purgeInvitations),
+        admin_audit_log: yield* inBatches(purgeAdminAuditLog),
       };
       yield* annotateEvent({
         count: Object.values(deleted).reduce((sum, n) => sum + n, 0),

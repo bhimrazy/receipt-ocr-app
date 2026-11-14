@@ -54,20 +54,20 @@ for at most 15 minutes ([storage.md](../storage.md)).
 object (AES-256-GCM, provider-managed keys). That protects against loss of the provider's media, not against a
 reader of the database. The table below is what the application adds.
 
-| Data                                        | Stored as                                                                                                              | Why                                                          |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Password                                    | scrypt, random salt per hash (Better Auth)                                                                             | Verifier                                                     |
-| Verification, reset and trust-device tokens | SHA-256 of the token (`verification.storeIdentifier`)                                                                  | Verifier; the token is long and random                       |
-| Emailed step-up code                        | HMAC-SHA-256 under the auth secret, bound to the session, with an attempt cap                                          | Verifier; six digits need a keyed hash                       |
-| Session token                               | Plain. The cookie must also carry an HMAC under the auth secret, so the row alone signs nobody in                      | Looked up on every request                                   |
-| TOTP seed, backup codes                     | Sealed: XChaCha20-Poly1305 under the versioned auth secret                                                             | The server must read them to check a code                    |
-| Google and GitHub access and refresh tokens | Sealed the same way (`account.encryptOAuthTokens`)                                                                     | Not used by the app; see [Planned](#planned)                 |
-| Google id token                             | Plain                                                                                                                  | Not used by the app; see [Planned](#planned)                 |
-| Passkey public keys                         | Plain                                                                                                                  | Public by design                                             |
-| Rate-limit keys that name an address        | SHA-256 of the normalized address                                                                                      | Keeps addresses out of a counter table; rows are short-lived |
-| C2, C3, C4, C5 columns                      | Plain columns                                                                                                          | Queried, aggregated, searched and exported                   |
-| Receipt files                               | Objects keyed `users/<user id>/receipts/<receipt id>.<ext>`: ids only, never a file name or an address                 | The key appears in URLs and logs                             |
-| Job payloads                                | Ids and object keys. The one payload with an address (the contact-form reply) is emptied when the job succeeds or dies | Job rows outlive the work                                    |
+| Data                                        | Stored as                                                                                                      | Why                                                          |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Password                                    | scrypt, random salt per hash (Better Auth)                                                                     | Verifier                                                     |
+| Verification, reset and trust-device tokens | SHA-256 of the token (`verification.storeIdentifier`)                                                          | Verifier; the token is long and random                       |
+| Emailed step-up code                        | HMAC-SHA-256 under the auth secret, bound to the session, with an attempt cap                                  | Verifier; six digits need a keyed hash                       |
+| Session token                               | Plain. The cookie must also carry an HMAC under the auth secret, so the row alone signs nobody in              | Looked up on every request                                   |
+| TOTP seed, backup codes                     | Sealed: XChaCha20-Poly1305 under the versioned auth secret                                                     | The server must read them to check a code                    |
+| Google and GitHub access and refresh tokens | Sealed the same way (`account.encryptOAuthTokens`)                                                             | Not used by the app; see [Planned](#planned)                 |
+| Google id token                             | Plain                                                                                                          | Not used by the app; see [Planned](#planned)                 |
+| Passkey public keys                         | Plain                                                                                                          | Public by design                                             |
+| Rate-limit keys that name an address        | SHA-256 of the normalized address                                                                              | Keeps addresses out of a counter table; rows are short-lived |
+| C2, C3, C4, C5 columns                      | Plain columns                                                                                                  | Queried, aggregated, searched and exported                   |
+| Receipt files                               | Objects keyed `users/<user id>/receipts/<receipt id>.<ext>`: ids only, never a file name or an address         | The key appears in URLs and logs                             |
+| Job payloads                                | Ids and object keys. The one payload with an address (the contact-form reply) is emptied whenever the job ends | Job rows outlive the work                                    |
 
 **What is not application-encrypted, and why.** Receipts, line items and support messages. The product sums
 amounts, searches merchants, groups and deduplicates receipts, and admins triage support text; none of that works
@@ -102,15 +102,20 @@ outside Safari, shared files and direct API uploads are stored, and sent to the 
 
 ## Retention
 
-| Data                                                                          | Kept                                                                     | Enforced by                                                          |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| Account, workspaces, receipts, files                                          | Until the user deletes them                                              | Delete flows ([data model](../data-model.md#what-happens-on-delete)) |
-| Support messages                                                              | 12 months after closing, or after the last change if never closed        | `maintenance.purge`, daily                                           |
-| Verification rows                                                             | Until expiry                                                             | Better Auth deletes expired rows on each lookup                      |
-| Rate-limit counters                                                           | About an hour                                                            | Better Auth prunes rows older than its longest window                |
-| Usage ledger                                                                  | Indefinitely; unlinked from the user and workspace when they are deleted | `SET NULL` foreign keys                                              |
-| Billing records                                                               | While the workspace exists; afterwards without the workspace's identity  | Delete flows                                                         |
-| Sessions, step-up codes and events, job records, invitations, admin audit log | No limit yet                                                             | See [Planned](#planned)                                              |
+| Data                                  | Kept                                                                                          | Enforced by                                                          |
+| ------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Account, workspaces, receipts, files  | Until the user deletes them                                                                   | Delete flows ([data model](../data-model.md#what-happens-on-delete)) |
+| Support messages                      | 12 months after closing, or after the last change if never closed                             | `maintenance.purge`, daily                                           |
+| Verification rows                     | Until expiry                                                                                  | Better Auth deletes expired rows on each lookup                      |
+| Rate-limit counters                   | About an hour                                                                                 | Better Auth prunes rows older than its longest window                |
+| Usage ledger                          | Indefinitely; unlinked from the user and workspace when they are deleted                      | `SET NULL` foreign keys                                              |
+| Billing records                       | While the workspace exists; afterwards without the workspace's identity                       | Delete flows                                                         |
+| Sessions and emailed step-up codes    | 1 day after expiry                                                                            | `maintenance.purge`, daily                                           |
+| Step-up events (method, outcome, IP)  | 90 days; the lockout reads 15 minutes                                                         | `maintenance.purge`, daily                                           |
+| Job records                           | 30 days after success, 90 after dying or a cancel; `email.welcome` rows while the user exists | `maintenance.purge`, daily                                           |
+| Contact-reply payload (address, name) | Until the job ends, whichever way                                                             | Emptied when it succeeds, dies, is reaped dead or is cancelled       |
+| Invitations                           | 30 days after expiry, whatever the status                                                     | `maintenance.purge`, daily                                           |
+| Admin audit log                       | 2 years                                                                                       | `maintenance.purge`, daily                                           |
 
 `maintenance.purge` is one job kind that runs once a day through the [job queue](../flows/jobs.md) and deletes in
 batches of 500. New retention rules are added to it; nothing is deleted by a database scheduler.
@@ -159,17 +164,13 @@ In build order. Reasons and sources are in the
    `/get-access-token`, `/refresh-token` and `/account-info` with `disabledPaths`, and null the stored values.
 2. TODO (2026-11-14): switch the Data API off, revoke `anon`, `authenticated` and `service_role` grants and default
    privileges in a guarded migration, assert it in `rls.int.test.ts`, and enforce TLS on the database.
-3. TODO (2026-11-14): extend `maintenance.purge`: sessions and step-up codes 1 day after expiry; step-up events 90
-   days; finished jobs 30 days (keeping each user's welcome-email record); invitations 30 days after expiry or an
-   answer; admin audit log 2 years. Empty the contact-reply payload on every terminal path. State the periods, and
-   that files keep their metadata, in the privacy policy.
-4. TODO (2026-11-14): test whether Better Auth's rate-limit pruning shortens the app's 24-hour limits; if so, move
+3. TODO (2026-11-14): test whether Better Auth's rate-limit pruning shortens the app's 24-hour limits; if so, move
    the app's counters to their own table.
-5. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
-6. TODO (2026-11-14): database backups with a restore test (STATUS D1).
-7. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
+4. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
+5. TODO (2026-11-14): database backups with a restore test (STATUS D1).
+6. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
    staying on the owner role.
-8. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
+7. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
    from `DATA_ENCRYPTION_KEYS`, AAD bound to table, column and row), a KMS-held key-encryption key, and one re-seal
    job covering those values and the auth-secret values ([BYOK plan](../../plans/2026-11-07-byok.md)).
 

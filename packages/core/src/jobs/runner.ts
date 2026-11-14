@@ -1,6 +1,13 @@
 import { Cause, Clock, Duration, Effect, Exit, Option } from "effect";
 import { backoffMs } from "./backoff";
-import type { AnyJobDefinition, Job, JobErrorKind, JobFailure, JobRegistry } from "./definition";
+import {
+  scrubbedKinds,
+  type AnyJobDefinition,
+  type Job,
+  type JobErrorKind,
+  type JobFailure,
+  type JobRegistry,
+} from "./definition";
 import { DEFAULT_OWNER_CAP, JobQueue, type JobOutcome } from "./queue";
 import { annotateEvent, mergeFields, withWideEvent } from "../telemetry/current";
 import { emitEvent } from "../telemetry/logger";
@@ -140,7 +147,7 @@ const runTick = <R>(options: TickOptions<R>) =>
       for (const kind of due) lastTickMark.set(kind, beganAt);
       yield* queue.markTick(due).pipe(Effect.ignore);
     }
-    const reaped = yield* queue.reap().pipe(
+    const reaped = yield* queue.reap({ scrubKinds: scrubbedKinds(options.registry) }).pipe(
       Effect.tapError((error) =>
         Effect.zipRight(
           annotateEvent({ error: errorFields(error) }),
@@ -413,7 +420,7 @@ const finalFailure = <R>(
 export const cancelJob = <R>(registry: JobRegistry<R>, id: string) =>
   Effect.gen(function* () {
     const queue = yield* JobQueue;
-    const job = yield* queue.cancel(id);
+    const job = yield* queue.cancel(id, scrubbedKinds(registry));
     if (!job) return false;
     yield* finalFailure(registry[job.kind], job, "cancelled");
     return true;
