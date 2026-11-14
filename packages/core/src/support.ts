@@ -286,7 +286,7 @@ export const setSupportStatus = (id: string, status: SupportStatus, audit: Audit
     return { previous: before.status };
   });
 
-/** How long a message is kept: after it is closed, or after it was sent or last reopened if it isn't. */
+/** How long a message is kept: after it is closed, or, while it isn't, after it was sent or its status last changed. */
 export const SUPPORT_RETENTION_MONTHS = 12;
 
 /**

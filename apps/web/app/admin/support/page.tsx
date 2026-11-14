@@ -42,7 +42,14 @@ const link =
 const replyHref = (row: AdminSupportRow) =>
   `mailto:${encodeURIComponent(row.email)}?subject=${encodeURIComponent(`Re: your message to ${SITE_NAME}`)}`;
 
+const REOPEN_HINTS = {
+  new: `Marking it open restarts the ${SUPPORT_RETENTION_MONTHS}-month retention clock.`,
+  open: null,
+  closed: `Reopening restarts the ${SUPPORT_RETENTION_MONTHS}-month retention clock.`,
+} as const;
+
 function Message({ row }: { row: AdminSupportRow }) {
+  const reopenHint = REOPEN_HINTS[row.status];
   const headingId = `message-${row.id}`;
   return (
     <li>
@@ -122,8 +129,18 @@ function Message({ row }: { row: AdminSupportRow }) {
             <Reply aria-hidden="true" />
             Reply by email
           </a>
-          <StatusButtons messageId={row.id} sender={row.name} status={row.status} />
+          <StatusButtons
+            messageId={row.id}
+            openHintId={reopenHint ? `${row.id}-retention` : undefined}
+            sender={row.name}
+            status={row.status}
+          />
         </div>
+        {reopenHint ? (
+          <p className="mt-2 text-xs text-muted-foreground" id={`${row.id}-retention`}>
+            {reopenHint}
+          </p>
+        ) : null}
       </article>
     </li>
   );
@@ -147,7 +164,7 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
   return (
     <>
       <AdminPageHeader
-        description={`Messages sent through the support button, newest first. Messages are deleted ${SUPPORT_RETENTION_MONTHS} months after they are closed; one that isn't closed counts from when it was sent or last reopened.`}
+        description={`Messages sent through the support button, newest first. Messages are deleted ${SUPPORT_RETENTION_MONTHS} months after they are closed; one that isn't closed counts from when it was sent or its status last changed.`}
         title="Support"
       />
       <ListToolbar

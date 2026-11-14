@@ -66,7 +66,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is the baseline, billing, receipt review, receipt fields, billing checkouts, billing plan, support messages and the dropped plan default", () => {
+  it("is the baseline, billing, receipt review, receipt fields, billing checkouts, billing plan, support messages, the dropped plan default and support retention", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
     expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
       "0000_baseline",
@@ -77,6 +77,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "0005_billing_plan",
       "0006_support_messages",
       "0007_billing_plan_default",
+      "0008_support_retention",
     ]);
   });
 
@@ -121,6 +122,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "receipts_service_charge_check",
       "step_up_events_method_check",
       "step_up_events_outcome_check",
+      "support_messages_closed_after_created_check",
       "support_messages_closed_check",
       "support_messages_email_check",
       "support_messages_kind_check",
@@ -131,7 +133,18 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     ]);
   });
 
-  it("keeps the partial and expression unique indexes the queue and groups rely on", async () => {
+  it("refuses a support message closed before it was sent", async () => {
+    const insert = (closedAt: string) => db`insert into support_messages
+      (submission_id, kind, source, status, name, email, message, created_at, closed_at)
+      values (gen_random_uuid(), 'question', 'public', 'closed', 'Test', 'test@example.com',
+        'A test question', '2026-01-02T00:00:00Z', ${closedAt})`;
+    await expect(insert("2026-01-01T00:00:00Z")).rejects.toMatchObject({
+      constraint_name: "support_messages_closed_after_created_check",
+    });
+    await expect(insert("2026-01-02T00:00:00Z")).resolves.toBeDefined();
+  });
+
+  it("keeps the partial and expression indexes the queue, groups and purges rely on", async () => {
     const rows = await db`select indexname, indexdef from pg_indexes where schemaname = 'public'`;
     const def = (name: string) => rows.find((r) => r.indexname === name)?.indexdef ?? "";
     expect(def("jobs_idempotency_idx")).toMatch(/UNIQUE.*WHERE/);
@@ -153,6 +166,10 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     );
     // A retried support form submission stores one message.
     expect(def("support_messages_submission_idx")).toMatch(/UNIQUE.*\(submission_id\)/);
+    expect(def("support_messages_retention_idx")).toContain(
+      "(COALESCE(closed_at, GREATEST(created_at, updated_at)))",
+    );
+    expect(def("step_up_codes_expires_idx")).toMatch(/\(expires_at\)$/);
   });
 
   it("types receipt_date as a date with a workspace index, and indexes the foreign keys deletes walk", async () => {

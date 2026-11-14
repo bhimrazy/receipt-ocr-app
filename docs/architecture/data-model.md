@@ -118,7 +118,7 @@ erDiagram
 `step_up_events` is the "confirm it's you" audit trail and also feeds the lockout and TOTP replay checks; it keeps rows
 when the session ends (`session_id` set null) and goes with the user. It holds the client IP of each check. There is
 no time-based pruning yet (proposed: 90 days, a follow-up in STATUS). `step_up_codes` holds only an HMAC of each
-emailed code.
+emailed code; `step_up_codes_expires_idx` (`expires_at`) serves deleting expired codes.
 
 Also owned by Better Auth, with no foreign keys: `verification` (hashed email-verification and reset tokens) and
 `rate_limit` (fixed-window counters for auth endpoints, also used by the app's own limiters through `hitRateLimit`).
@@ -467,7 +467,9 @@ erDiagram
   `closed_at` on close and clearing it on reopen.
 - Retention: the daily `maintenance.purge` job deletes a message 12 months after `closed_at`, or, while it isn't
   closed, 12 months after the later of `created_at` and `updated_at` (a reopen stamps `updated_at`, so a reopened old
-  message isn't deleted that night) (`SUPPORT_RETENTION_MONTHS`); the privacy page states the period.
+  message isn't deleted that night) (`SUPPORT_RETENTION_MONTHS`); the privacy page states the period. Any status
+  change stamps `updated_at`, so marking a message open or reopening it restarts the period; `/admin/support` says so
+  beside those buttons. The scan uses `support_messages_retention_idx`, built on the purge's expression exactly.
 
 ## What happens on delete
 
@@ -521,6 +523,7 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `receipt_group_members` | Primary key on `(group_id, receipt_id)`                                                                                                                                                       | A receipt is in a group once                                                                                                                                        |
 | `app_settings`          | Primary key on `key`                                                                                                                                                                          | One row per setting, upserted on save                                                                                                                               |
 | `support_messages`      | `support_messages_submission_idx` on `submission_id`; checks on `kind`, `source`, `status`, the lengths of `name`, `email` and `message`, and `(status = 'closed') = (closed_at is not null)` | A double tap or retried request stores one message; only known values (migration `0006_support_messages`)                                                           |
+| `support_messages`      | `support_messages_closed_after_created_check`: `closed_at is null or closed_at >= created_at`                                                                                                 | A message can't close before it was sent, so the purge never counts from a date before `created_at` (migration `0008_support_retention`)                            |
 
 ## Other indexes
 
@@ -547,3 +550,5 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 | `receipt_group_members_receipt_id_idx`                                                                                                                                                                                                                   | Groups of a receipt, the History group filter, cascade on receipt delete                                                                                    |
 | `admin_audit_log_created_at_idx`, `admin_audit_log_target_idx`                                                                                                                                                                                           | Audit log, newest first and per target                                                                                                                      |
 | `support_messages_status_created_idx` (`status, created_at desc`), `support_messages_user_created_idx` (`user_id, created_at` where not null), `support_messages_email_idx` (`lower(email)`), `support_messages_org_idx`, `support_messages_receipt_idx` | The admin list by status, the per-user cap and the cascade, deletion by address, the set-nulls on workspace and receipt delete                              |
+| `support_messages_retention_idx` (`coalesce(closed_at, greatest(created_at, updated_at))`)                                                                                                                                                               | The daily purge's scan (migration `0008_support_retention`)                                                                                                 |
+| `step_up_codes_expires_idx` (`expires_at`)                                                                                                                                                                                                               | Deleting expired step-up codes (migration `0008_support_retention`)                                                                                         |
