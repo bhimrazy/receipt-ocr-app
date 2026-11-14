@@ -29,13 +29,13 @@ const FIELDS: {
   {
     key: "receiptsPerMonth",
     label: "Receipts a month",
-    hint: "From the 1st at 00:00 UTC, counted like the daily limit: per person on Free (across every workspace they use), per workspace on Pro (shared by its members). Empty means no monthly limit.",
+    hint: "From the 1st at 00:00 UTC, per workspace and shared by its members, like the daily limit. Scans in a workspace since deleted still count for whoever made them. Empty means no monthly limit.",
     optional: true,
   },
   {
     key: "receiptsPerDay",
     label: "Receipts a day",
-    hint: `From 00:00 UTC: per person on Free (across every workspace they use), per workspace on Pro. The first ${FREE_FAILED_ROUNDS} failed reads in each window don't count.`,
+    hint: `From 00:00 UTC, per workspace and shared by its members. The first ${FREE_FAILED_ROUNDS} failed reads in each window don't count.`,
   },
   {
     key: "poolPerDay",
@@ -81,21 +81,17 @@ const toDraft = (table: PlanTable): Draft =>
     ]),
   ) as Draft;
 
-/**
- * Empty optional fields save as null (no limit); the server validates the rest.
- * `scope` (who a plan counts) isn't editable here; it is kept from the saved table.
- */
-const toTable = (draft: Draft, base: PlanTable) =>
+/** Empty optional fields save as null (no limit); the server validates the rest. */
+const toTable = (draft: Draft) =>
   Object.fromEntries(
     PLANS.map(({ id }) => [
       id,
-      Object.fromEntries([
-        ["scope", base[id].scope],
-        ...FIELDS.map(({ key, optional }) => [
+      Object.fromEntries(
+        FIELDS.map(({ key, optional }) => [
           key,
           optional && draft[id][key] === "" ? null : Number(draft[id][key]),
         ]),
-      ]),
+      ),
     ]),
   );
 
@@ -119,7 +115,7 @@ export function PlanLimitsForm({ current, defaults }: { current: PlanTable; defa
     event.preventDefault();
     setPending(true);
     setError(null);
-    const result = await withStepUp(() => savePlansAction(toTable(draft, current)));
+    const result = await withStepUp(() => savePlansAction(toTable(draft)));
     setPending(false);
     if (!result.ok) {
       setError(result.error);

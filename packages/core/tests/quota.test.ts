@@ -58,10 +58,10 @@ describe("usage windows", () => {
     );
   });
 
-  it("count Free per user and Pro per workspace, each with a month, and the pool only on Free", () => {
+  it("count both plans per workspace, each with a month, and the pool only on Free", () => {
     expect(usageWindow(now, false, free)).toMatchObject({
       plan: "free",
-      scope: "user",
+      scope: "workspace",
       monthStart: new Date("2026-11-01T00:00:00Z"),
       includePlanPool: true,
     });
@@ -111,35 +111,35 @@ describe("decideQuota, day only", () => {
   });
 });
 
-describe("decideQuota, Free (per user: 20 a day, 30 a month, shared pool)", () => {
-  it("meters the user's month, with today alongside", () => {
+describe("decideQuota, Free (per workspace: 20 a day, 50 a month, shared pool)", () => {
+  it("meters the workspace's month, with today alongside", () => {
     const verdict = decideQuota(counts({ day: 4, month: 12, planDay: 0 }), free, undefined, now);
     expect(verdict).toMatchObject({
       allowed: true,
       period: "month",
-      scope: "user",
+      scope: "workspace",
       used: 12,
-      limit: 30,
+      limit: 50,
       day: { used: 4, limit: 20 },
     });
   });
 
-  it("refuses the 31st scan of the month until the 1st, 00:00 UTC", () => {
+  it("refuses the 51st scan of the month until the 1st, 00:00 UTC", () => {
     expect(
-      decideQuota(counts({ day: 5, month: 29, planDay: 0 }), free, undefined, now).allowed,
+      decideQuota(counts({ day: 5, month: 49, planDay: 0 }), free, undefined, now).allowed,
     ).toBe(true);
-    const verdict = decideQuota(counts({ day: 5, month: 30, planDay: 0 }), free, undefined, now);
+    const verdict = decideQuota(counts({ day: 5, month: 50, planDay: 0 }), free, undefined, now);
     expect(verdict).toMatchObject({
       allowed: false,
       window: "month",
       retryAfterSeconds: untilDecember,
     });
     expect(quotaMessage(verdict)).toBe(
-      "You've used all 30 scans on the Free plan this month. They reset on 1 December at 00:00 UTC.",
+      "This workspace has used all 50 scans for this month. They reset on 1 December at 00:00 UTC.",
     );
   });
 
-  it("keeps 20 a day as the burst limit inside the month", () => {
+  it("keeps 20 a day as the pace inside the month", () => {
     const verdict = decideQuota(counts({ day: 20, month: 25, planDay: 0 }), free, undefined, now);
     expect(verdict).toMatchObject({
       allowed: false,
@@ -147,7 +147,15 @@ describe("decideQuota, Free (per user: 20 a day, 30 a month, shared pool)", () =
       retryAfterSeconds: untilMidnight,
     });
     expect(quotaMessage(verdict)).toBe(
-      "You've used all 20 scans for today. You can upload again at 00:00 UTC.",
+      "This workspace has used its 20 scans for today. Uploads open at 00:00 UTC; 25 of 50 scans are left this month.",
+    );
+  });
+
+  it("words a user-scoped plan's refusals for the person", () => {
+    const perUser = quotaLimits("free", { ...DEFAULT_PLANS.free, scope: "user" });
+    const verdict = decideQuota(counts({ day: 5, month: 50, planDay: 0 }), perUser, undefined, now);
+    expect(quotaMessage(verdict)).toBe(
+      "You've used all 50 scans on the Free plan this month. They reset on 1 December at 00:00 UTC.",
     );
   });
 

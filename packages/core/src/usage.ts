@@ -25,10 +25,12 @@ import { Db } from "./services";
  *   plan of its workspace at that moment (`ocr_rounds.plan`): the allowance it
  *   draws from.
  * - A plan's `scope` says whose rounds its day and month limits count.
- *   `user` (Free): the user's rounds of that plan across every workspace, so an
- *   extra free workspace adds nothing. `workspace` (Pro): the workspace's
- *   rounds of that plan, whoever uploaded them. A member's Pro scans never use
- *   up their own Free allowance, nor the reverse.
+ *   `workspace` (the default on both plans): the workspace's rounds of that
+ *   plan, whoever uploaded them, plus the uploader's own rounds of that plan in
+ *   workspaces since deleted, so deleting and recreating a workspace doesn't
+ *   reset the allowance. `user`: the user's rounds of that plan across every
+ *   workspace. A member's Pro scans never use up a Free allowance, nor the
+ *   reverse.
  * - Within a window: receipts read successfully, counted once, plus rounds
  *   still in flight (their job is live, or they are recent with no calls yet),
  *   plus finished failed rounds beyond the first `FREE_FAILED_ROUNDS` of the
@@ -113,7 +115,7 @@ export async function countUsage(
   const { userId, organizationId } = subject;
   const whose =
     window.scope === "workspace"
-      ? sql`r.organization_id = ${organizationId} and r.plan = ${window.plan}`
+      ? sql`(r.organization_id = ${organizationId} or (r.organization_id is null and r.user_id = ${userId})) and r.plan = ${window.plan}`
       : sql`r.user_id = ${userId} and r.plan = ${window.plan}`;
   const rows = await db
     .execute<{

@@ -94,7 +94,7 @@ subagents alike:
 
 Every PR with a visible change embeds screenshots in its description: 390 px in light and dark, and 1440 px where the
 layout differs. If one can't be taken, the description says which and why. Capture with
-`node scripts/screenshot.mjs --out <scratch dir> --base <server URL> [--login email:password] [--theme light|dark]
+`node scripts/screenshot.mjs --out <scratch dir> --base <server URL> [--login email:password] [--theme light|dark] [--wait load]
 <path>...` against a running local instance. A new Codespace installs Chromium and its system libraries through
 `.devcontainer/setup.sh`.
 

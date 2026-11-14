@@ -40,19 +40,22 @@ export function homeCardCopy(usage: Usage, pro: PlanPolicy): HomeCardCopy {
   };
 }
 
+const whoUsed = (usage: Pick<Usage, "scope">) =>
+  usage.scope === "workspace" ? "This workspace has used" : "You've used";
+
 /** The page banner while uploads are blocked; null for the service-wide cap (no banner then). */
 export function bannerCopy(usage: Usage, pro: PlanPolicy): { body: string; opens: string } | null {
   if (usage.blocked === "month") {
     const opens = resetDay(usage.opensAt);
     return {
-      body: `You've used all ${usage.limit} Free scans this month. Uploads open on ${opens}. Pro gives this workspace ${allowance(pro)}.`,
+      body: `${whoUsed(usage)} all ${usage.limit} Free scans this month. Uploads open on ${opens}. Pro gives this workspace ${allowance(pro)}.`,
       opens,
     };
   }
   if (usage.blocked === "day") {
     const opens = formatTime(usage.opensAt);
     return {
-      body: `You've used today's ${usage.day?.limit ?? usage.limit} Free scans. Uploads open at ${opens}. Pro allows up to ${pro.receiptsPerDay} a day in this workspace.`,
+      body: `${whoUsed(usage)} today's ${usage.day?.limit ?? usage.limit} Free scans. Uploads open at ${opens}. Pro allows up to ${pro.receiptsPerDay} a day in this workspace.`,
       opens,
     };
   }
@@ -80,9 +83,7 @@ export const usedLine = (usage: Usage) => `${usage.used} / ${usage.limit} used $
 export type ComparisonRow = { label: string; free: string; pro: string };
 
 const scansCell = (policy: PlanPolicy, count: number | null) =>
-  count === null
-    ? "No limit"
-    : `${count} ${policy.scope === "workspace" ? "shared" : "per person"}`;
+  count === null ? "No limit" : `${count}${policy.scope === "workspace" ? "" : " per person"}`;
 
 /** The modal's Free and Pro comparison: five rows, every number from the saved plan table. */
 export function comparisonRows({ free, pro }: PlanTable): ComparisonRow[] {

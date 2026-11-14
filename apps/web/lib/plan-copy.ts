@@ -21,43 +21,44 @@ export const allowanceOwner = (policy: PlanPolicy) =>
   policy.scope === "workspace" ? "for the workspace, shared by its members" : "per person";
 
 /**
- * The scan line of a plan card: "20 scans a day and 100 a month for each member" (counted per
- * person) or "500 scans a month shared by the workspace, up to 200 a day".
+ * The scan line of a plan card: "50 scans a month per workspace, up to 20 a day", or "20 scans a
+ * day and 100 a month for each member" when counted per person.
  */
 export function scansLine(policy: PlanPolicy): string {
   const day = policy.receiptsPerDay;
   const month = policy.receiptsPerMonth;
   if (policy.scope === "workspace") {
     return month === null
-      ? `${n(day, "scan")} a day shared by the workspace`
-      : `${n(month, "scan")} a month shared by the workspace, up to ${day} a day`;
+      ? `${n(day, "scan")} a day per workspace`
+      : `${n(month, "scan")} a month per workspace, up to ${day} a day`;
   }
   return month === null
     ? `${n(day, "scan")} a day for each member`
     : `${n(day, "scan")} a day and ${month} a month for each member`;
 }
 
-/** "Up to 3 members": members of one workspace, pending invitations included. */
+/** "Up to 2 members": members of one workspace, pending invitations included. */
 export const membersLine = (policy: PlanPolicy) =>
   `Up to ${n(policy.membersPerWorkspace, "member")}`;
 
+/** Every plan card lists scans, members and workspaces first, in that order, so Free and Pro line up. */
 export function freeFeatures(free: PlanPolicy): string[] {
   return [
     scansLine(free),
     membersLine(free),
     `${n(free.workspaces, "workspace")} to own`,
-    "Merchant, items, tax and totals extracted",
-    "Confidence scores and review flags",
+    "Merchant, date, items, tax and totals, with confidence scores and review flags",
     "Searchable history, CSV export and JSON copy",
   ];
 }
 
 export function proFeatures(pro: PlanPolicy): string[] {
   return [
-    "Everything in Free",
     scansLine(pro),
     membersLine(pro),
-    `Own up to ${n(pro.workspaces, "workspace")} (each upgraded separately)`,
+    `Own up to ${n(pro.workspaces, "workspace")}, each upgraded separately`,
+    ...(pro.poolPerDay === null ? ["Never paused on busy days"] : []),
+    "Everything in Free",
   ];
 }
 
@@ -68,8 +69,9 @@ export function proFeatures(pro: PlanPolicy): string[] {
 export const CUSTOM_PLAN = {
   name: "Custom",
   price: "Let's talk",
-  description: "Need more than Pro? Tell us what you need and we'll say what we can do.",
-  features: ["Everything in Pro", "More scans, members or workspaces, if we can arrange it"],
+  description:
+    "For teams that need more than Pro. Tell us what you need and we'll say plainly what we can do.",
+  features: ["Everything in Pro", "Higher limits on request, where we can arrange them"],
   cta: "Contact us",
 } as const;
 
@@ -84,14 +86,13 @@ export const pricingHeadline = (checkoutOpen: boolean) =>
     : "Start free. Pro opens soon for workspaces that need more.";
 
 /**
- * The welcome email's plan line: "Your Free plan includes 20 scans a day, up to 30 a month. …".
- * A shared Pro allowance still says so; a Free one is the reader's own.
+ * The welcome email's plan line: "Your Free plan includes 50 scans a month per workspace, up to 20
+ * a day. …".
  */
 export function welcomePlanLine(plan: "free" | "pro", policy: PlanPolicy): string {
   const name = plan === "pro" ? "Pro" : "Free";
-  const owner = policy.scope === "workspace" ? `, ${allowanceOwner(policy)}` : "";
-  const line = `Your ${name} plan includes ${allowance(policy)}${owner}.`;
-  return `${line} Limits reset at 00:00 UTC.`;
+  const scans = policy.scope === "workspace" ? scansLine(policy) : allowance(policy);
+  return `Your ${name} plan includes ${scans}. Limits reset at 00:00 UTC.`;
 }
 
 /**

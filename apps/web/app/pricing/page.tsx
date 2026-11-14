@@ -40,14 +40,11 @@ export default async function PricingPage() {
           A Pro subscription covers exactly one workspace.
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>
-              That workspace&apos;s {allowance(pro)} are shared by everyone in it, and scanning
-              there never uses anyone&apos;s Free scans.
+              Each workspace has its own scans, shared by everyone in it, on Free ({allowance(free)}
+              ) and on Pro ({allowance(pro)}). Scans made in a workspace that is later deleted still
+              count for whoever made them.
             </li>
             <li>Your other workspaces, and new ones, stay on Free until each is upgraded.</li>
-            <li>
-              Free scans ({allowance(free)}) are per person, counted across every Free workspace you
-              use.
-            </li>
             <li>
               A Free workspace can have up to {free.membersPerWorkspace} members and a Pro workspace
               up to {pro.membersPerWorkspace}, counting pending invitations. Members a workspace

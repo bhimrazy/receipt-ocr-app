@@ -148,8 +148,10 @@ Steps are in [deployment.md](deployment.md).
   4. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price
      ([runbook](architecture/flows/billing.md#runbook)). Existing subscribers keep Pro whatever the price settings say
      (the plan is recorded when a subscription links). There is no automated email for this yet.
-- Review the plan limits in Admin → Settings (Free is 30 scans a month by default; no saved row exists in production).
-- Set `OCR_DAILY_CAP` in production as a spend guard (about 1000, the all-plans fuse; the Free pool is 300 a day).
+- Check Preview and staging for a saved Plan limits row (Admin → Settings): a saved row keeps its own numbers, so
+  reset it to the defaults there after the 2026-11-14 limits ship. No saved row exists in production.
+- Set `OCR_DAILY_CAP` to `1000` in production, the all-plans fuse (the Free pool is 300 a day; 200 would let Free
+  traffic alone stop Pro).
 - Support inbox: delete the contact notification emails from before 2026-11-14 (they hold the full message text) from
   the support mailbox, and confirm or change the "usually within 2 business days" promise in the contact auto-reply.
 - Renew the GitHub token used for workflow dispatch.
@@ -234,18 +236,34 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 ## Decisions waiting on the owner
 
 1. ~~Classic as the homepage (then delete `app/(lab)` and `components/marketing`)~~ Done: the lab landing variants are removed.
-2. ~~Plan limits and payment provider~~ Decided: Free 30 scans a month (20 a day), Pro by workspace, Paddle. Still
-   open: the plan-limits review in Admin → Settings.
+2. ~~Plan limits and payment provider~~ Decided 2026-11-14 ([review](reviews/2026-11-14-plan-limits-review.md)),
+   all admin-editable, Paddle as the provider:
+
+   |                               | Free                                 | Pro       |
+   | ----------------------------- | ------------------------------------ | --------- |
+   | Scope                         | workspace, shared by members         | workspace |
+   | Scans a day                   | 20                                   | 200       |
+   | Scans a month                 | 50                                   | 500       |
+   | Burst a minute (per user)     | 10                                   | 30        |
+   | Members, with pending invites | 2                                    | 5         |
+   | Workspaces to own             | 1                                    | 2         |
+   | Storage per workspace         | 100 MB                               | 5 GB      |
+   | Pool                          | 300 a day across all Free workspaces | none      |
+
+   Scans in a deleted workspace still count against whoever made them. Members already over the new caps stay. The
+   storage cap needs a stored byte count (a migration); until it ships, storage is neither enforced nor listed.
+
 3. Who sees estimated cost (recommended: platform admins only); ~~whether customers see the model name~~ decided
    2026-11-14: customers don't see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
 4. Default OCR chain: decided 2026-11-08. Claude Haiku 5.5, then Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; steps
    without an API key are skipped ([ai.md](architecture/ai.md#default-chain)). Groq zero data retention must be on first.
 5. PostHog: server-only first (recommended) or browser too; Sentry tracing off; source-map upload approach.
-6. ~~Members: free seats 3 or 5~~ Decided 2026-11-08: Free 3, Pro 10 members per workspace, pending invites count,
+6. ~~Members: free seats 3 or 5~~ Decided 2026-11-14: Free 2, Pro 5 members per workspace, pending invites count,
    admin-editable in the plan limits. Still open: single owner + transfer ([members plan](plans/2026-11-06-members-admin-plan.md)).
 7. Branch protection on `main` requiring CI.
-8. BYOK tables (`user_credentials`, `storage_source`): keep or delete.
+8. ~~BYOK tables (`user_credentials`, `storage_source`)~~ Decided 2026-11-14: drop `user_credentials` in a later
+   migration; keep `receipts.storage_source` for BYOK.
 9. Usage ledger: retention period (suggested 13 months, then a purge job and a privacy-page line); whether the
    global cap needs a platform-wide lock (it can overshoot by the number of users uploading at the same moment).
 10. ~~Passkeys and two-factor~~ Decided 2026-11-08: go for #95 and migration `0002`; a recent sign-in no longer
@@ -260,10 +278,18 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
     which needs the consent decision; the landing sheet's defaults (Android only, 7-day snooze, 3 shows) are the
     design review's and the owner may revise them.
 13. ~~Custom plan card: its name, and how a custom deal is delivered~~ Decided 2026-11-08: the card stays "Custom";
-    per-workspace overrides are deferred (see "Later, once the app is stable").
+    per-workspace overrides are deferred (see "Later, once the app is stable"). Its copy, decided 2026-11-14
+    ([design review](reviews/2026-11-14-usage-and-pricing-design.md)): "Let's talk"; "For teams that need more than
+    Pro. Tell us what you need and we'll say plainly what we can do."; "Everything in Pro" and "Higher limits on
+    request, where we can arrange them"; "Contact us". No own keys or storage lines until each ships. A Free owner's
+    Billing page gets one line, "Need more than Pro? Contact us", not a third card.
 14. ~~Light and System themes~~ Decided 2026-11-08 (owner took every recommendation in the [spec](plans/2026-11-08-light-theme.md)): System as the default for everyone,
     per-device storage (no account sync), toggle in Settings, account menu and footer (not the header), a light iOS
     splash set, emails out of scope.
+15. ~~Usage card and plan lists~~ Decided 2026-11-14: the design review's spec in full (month-first card, the day only
+    from 80% of today's limit or when used up, storage only from 80% and always on Billing, upgrade button only at
+    100% of the month, a text link at 100% of the day, "Need more? Contact us" for a Pro owner at 100%), and its plan
+    rows exactly. Storage rows go live only in the release that enforces the cap.
 
 ## Roadmap (order)
 
@@ -401,10 +427,9 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Linking a new subscription looks up early revoking adjustments in `billing_events` with a sequential scan. Add a
   partial expression index `billing_events (provider, (payload->'adjustment'->>'subscriptionId')) where outcome =
 'unmatched'`; fold it into the next schema change.
-- Storage limit per plan (owner, 2026-11-08): today only each upload is capped (10 MB, 10 PDF pages), so total storage
-  per workspace is unbounded on both Free and Pro, and R2's free tier is 10 GB. Decide a cap per plan (stored bytes or
-  receipts per workspace, and maybe a retention period for Free), enforce it at upload from a per-workspace usage
-  total, show it in Settings → Billing and the plan table, and list it on `/pricing`.
+- Storage cap per workspace (decided 2026-11-14: Free 100 MB, Pro 5 GB, admin-editable): needs a stored byte count
+  per receipt (a migration; `receipts` has none), then enforcement at upload, the usage meter rows and the plan
+  lists. Uploads past the cap are refused with "delete receipts to make room" and the upgrade for a Free owner.
 - The one-time "protect your receipts" card (after the fifth receipt) is dismissed with a per-browser cookie, so it
   shows once more on each new device. A per-user column (`user.security_prompt_dismissed_at`) needs a migration;
   fold it into the next schema change.

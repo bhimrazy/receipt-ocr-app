@@ -75,7 +75,7 @@ describe("storedPlanTableSchema", () => {
       ...policy,
       receiptsPerDay: 12,
       batchMax: MAX_BATCH,
-      scope: "user",
+      scope: DEFAULT_PLANS.free.scope,
       receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
       poolPerDay: DEFAULT_PLANS.free.poolPerDay,
       membersPerWorkspace: DEFAULT_PLANS.free.membersPerWorkspace,
@@ -85,14 +85,23 @@ describe("storedPlanTableSchema", () => {
 
   it("gives a row saved before the monthly and pool limits each plan's own defaults", () => {
     const read = storedPlanTableSchema.parse({ free: policy, pro: policy });
-    expect(read.free).toMatchObject({ scope: "user", receiptsPerMonth: 30, poolPerDay: 300 });
+    expect(read.free).toMatchObject({ scope: "workspace", receiptsPerMonth: 50, poolPerDay: 300 });
     expect(read.pro).toMatchObject({ scope: "workspace", receiptsPerMonth: 500, poolPerDay: null });
+  });
+
+  it("takes the scope from the code defaults, whatever a stored row says", () => {
+    const read = storedPlanTableSchema.parse({
+      free: { ...policy, scope: "user" },
+      pro: { ...policy, scope: "anything" },
+    });
+    expect(read.free.scope).toBe(DEFAULT_PLANS.free.scope);
+    expect(read.pro.scope).toBe(DEFAULT_PLANS.pro.scope);
   });
 
   it("gives a row saved before the member limit each plan's own default, and keeps a saved one", () => {
     const read = storedPlanTableSchema.parse({ free: policy, pro: policy });
-    expect(read.free.membersPerWorkspace).toBe(3);
-    expect(read.pro.membersPerWorkspace).toBe(10);
+    expect(read.free.membersPerWorkspace).toBe(2);
+    expect(read.pro.membersPerWorkspace).toBe(5);
     const saved = storedPlanTableSchema.parse({
       free: { ...policy, membersPerWorkspace: 5 },
       pro: policy,
@@ -387,7 +396,7 @@ describe("Settings", () => {
       ...policy,
       receiptsPerDay: 12,
       batchMax: MAX_BATCH,
-      scope: "user",
+      scope: DEFAULT_PLANS.free.scope,
       receiptsPerMonth: DEFAULT_PLANS.free.receiptsPerMonth,
       poolPerDay: DEFAULT_PLANS.free.poolPerDay,
       membersPerWorkspace: DEFAULT_PLANS.free.membersPerWorkspace,
