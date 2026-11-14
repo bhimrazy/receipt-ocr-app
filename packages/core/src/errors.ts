@@ -59,6 +59,8 @@ export class BillingProviderError extends Data.TaggedError("BillingProviderError
 export class StorageError extends Data.TaggedError("StorageError")<{
   readonly message: string;
   readonly cause?: unknown;
+  /** `not-found`: the key doesn't exist, so a retry can't succeed. Unset for every other failure. */
+  readonly kind?: "not-found";
 }> {}
 
 /** One model call in the OCR chain: logged on the wide event and written to `ocr_calls`. */

@@ -33,10 +33,15 @@ export const EXTRACTION_REFUSED_MESSAGE =
 export const EXTRACTION_UNSUPPORTED_MESSAGE =
   "This file is too large or in a format the AI models can't read. Upload a smaller JPEG, PNG or PDF copy.";
 
+/** The stored file is gone from the bucket, so no retry can read it. */
+export const EXTRACTION_FILE_MISSING_MESSAGE =
+  "The file for this receipt is missing from storage, so it can't be read. Delete this receipt and upload the file again.";
+
 const FINAL_MESSAGES = new Map<string, string>([
   ["cancelled", EXTRACTION_CANCELLED_MESSAGE],
   ["refused", EXTRACTION_REFUSED_MESSAGE],
   ["unsupported-file", EXTRACTION_UNSUPPORTED_MESSAGE],
+  ["stored-file-missing", EXTRACTION_FILE_MISSING_MESSAGE],
 ]);
 
 /** The receipt's message for the job's final error kind; undefined means the generic one. */
@@ -59,11 +64,11 @@ const MAX_COOLDOWN_MS = 10 * 60_000;
 
 /**
  * Maps a failed attempt to the job's next step:
- * - retry: timeout, rate-limited, provider-error, storage and database errors;
+ * - retry: timeout, rate-limited, provider-error, storage errors other than a missing file, and database errors;
  * - dead now: a value or row Postgres refuses (SQLSTATE class 22 or 23; the same extraction would fail again),
  *   invalid-output (every model in the chain returned it), bad-image, not-configured (an admin re-runs it
  *   once keys are fixed), refused and unsupported-file (every model in the
- *   chain was already tried), and an unreadable stored file;
+ *   chain was already tried), and a stored file that is unreadable or missing from the bucket;
  * - deferred, without spending an attempt: every provider is cooling down.
  * The chain reports its last step's kind, but a transient failure anywhere in
  * it makes the whole round worth retrying: [429, HEIC skipped] is a 429. The
@@ -101,7 +106,9 @@ export function classifyExtractionError(error: ExtractionError, now = Date.now()
     case "InvalidInput":
       return new NonRetryableJobError({ kind: "stored-file-invalid" });
     case "StorageError":
-      return new RetryableJobError({ kind: "storage-error" });
+      return error.kind === "not-found"
+        ? new NonRetryableJobError({ kind: "stored-file-missing" })
+        : new RetryableJobError({ kind: "storage-error" });
     case "DbError":
       return isDataError(error.cause)
         ? new NonRetryableJobError({ kind: "db-data-error" })

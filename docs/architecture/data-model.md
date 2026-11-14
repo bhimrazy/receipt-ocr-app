@@ -429,8 +429,9 @@ erDiagram
 - `jobs` has storage parameters set by hand at the end of the baseline migration: `fillfactor = 80` (room for HOT heartbeats) and aggressive
   per-table autovacuum.
 - `organization_id` and `receipt_id` are plain values: the job record outlives a deleted receipt or workspace.
-  `user_id` is set to null when the account is deleted; the payload keeps the id until a retention purge (planned,
-  Track D of the [jobs plan](../plans/2026-11-06-jobs-queue.md)).
+  `user_id` is set to null when the account is deleted; the payload keeps the id until the retention purge deletes the
+  row: the daily `maintenance.purge` deletes succeeded jobs 30 days and dead or cancelled ones 90 days after
+  `finished_at` (`email.welcome` jobs only once their user is gone; see [Background jobs](flows/jobs.md)).
 - How the queue uses them: [Background jobs](flows/jobs.md).
 
 ## Support messages

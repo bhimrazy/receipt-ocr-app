@@ -2,12 +2,14 @@ import { sql } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { z } from "zod";
 import { Db } from "../../services";
+import { purgeStepUpCodes } from "../../step-up/store";
 import { purgeSupportMessages } from "../../support";
 import { annotateEvent } from "../../telemetry/current";
 import { logger } from "../../telemetry/logger";
 import { errorFields } from "../../telemetry/redact";
 import { RetryableJobError, type JobDefinition, type NewJob } from "../definition";
 import { enqueueJob } from "../queue";
+import { purgeFinishedJobs } from "../retention";
 
 export const MAINTENANCE_PURGE = "maintenance.purge";
 const MAINTENANCE_PURGE_MAX_ATTEMPTS = 5;
@@ -58,6 +60,18 @@ export const scheduleMaintenance = () =>
     ),
   );
 
+/** Runs one table's purge until a batch comes back short or the run's batch budget is spent. */
+const inBatches = <E, R>(purge: (limit: number) => Effect.Effect<number, E, R>) =>
+  Effect.gen(function* () {
+    let total = 0;
+    for (let batch = 0; batch < PURGE_MAX_BATCHES; batch++) {
+      const deleted = yield* purge(PURGE_BATCH);
+      total += deleted;
+      if (deleted < PURGE_BATCH) break;
+    }
+    return total;
+  });
+
 /** Deletes data past its retention period, in batches; a retry after a partial run is safe. */
 export const maintenancePurge: JobDefinition<MaintenancePurgePayload, Db> = {
   kind: MAINTENANCE_PURGE,
@@ -68,14 +82,17 @@ export const maintenancePurge: JobDefinition<MaintenancePurgePayload, Db> = {
 
   run: () =>
     Effect.gen(function* () {
-      let supportMessages = 0;
-      for (let batch = 0; batch < PURGE_MAX_BATCHES; batch++) {
-        const deleted = yield* purgeSupportMessages(PURGE_BATCH);
-        supportMessages += deleted;
-        if (deleted < PURGE_BATCH) break;
-      }
-      yield* annotateEvent({ count: supportMessages });
-      return { supportMessages };
+      const deleted = {
+        support_messages: yield* inBatches(purgeSupportMessages),
+        step_up_codes: yield* inBatches(purgeStepUpCodes),
+        jobs_succeeded: yield* inBatches((n) => purgeFinishedJobs("succeeded", n)),
+        jobs_failed: yield* inBatches((n) => purgeFinishedJobs("failed", n)),
+      };
+      yield* annotateEvent({
+        count: Object.values(deleted).reduce((sum, n) => sum + n, 0),
+        counts: deleted,
+      });
+      return deleted;
     }).pipe(
       Effect.catchTag("DbError", (error) =>
         Effect.zipRight(
