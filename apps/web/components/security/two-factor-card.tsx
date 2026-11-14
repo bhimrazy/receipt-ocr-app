@@ -5,11 +5,11 @@ import { Button } from "@receipt-ocr/ui/components/button";
 import { Card, CardContent } from "@receipt-ocr/ui/components/card";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
-import { Input } from "@receipt-ocr/ui/components/input";
 import { OtpInput } from "@receipt-ocr/ui/components/otp-input";
 import { Check, Copy, Download, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { PasswordInput } from "@/components/password-input";
 import { withStepUp } from "@/components/step-up/step-up";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
@@ -412,14 +412,13 @@ export function TwoFactorCard({
           >
             <Field data-invalid={error ? true : undefined}>
               <FieldLabel htmlFor={`${id}-password`}>Your password</FieldLabel>
-              <Input
+              <PasswordInput
                 aria-describedby={error ? `${id}-hint ${id}-error` : `${id}-hint`}
                 aria-invalid={error ? true : undefined}
                 autoComplete="current-password"
                 autoFocus
                 id={`${id}-password`}
                 onChange={(event) => setPassword(event.target.value)}
-                type="password"
                 value={password}
               />
               <FieldDescription id={`${id}-hint`}>{PASSWORD_COPY[asking].hint}</FieldDescription>
