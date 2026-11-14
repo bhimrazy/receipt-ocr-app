@@ -48,9 +48,21 @@ outcome the app should record:
 The dashboard's Cancel subscription cancels **immediately**, with no refund of the time left. A customer cancelling from
 the app's Billing page (Paddle's portal) cancels at the period end instead.
 
-Whether a `subscription_update` transaction pays a new period comes from its items: one with a positive quantity and no
-`proration` means it does; only prorated items means it doesn't. The rule is in `paysPeriod`
-(`packages/core/src/billing/entitlement.ts`).
+Whether a `subscription_update` transaction pays a new period comes from its items: a recurring item with a positive
+quantity and no `proration` means it does, if its period also starts after the recorded one; only prorated items means
+it doesn't. The rule is in `paysPeriod` and `paysNewerPeriod` (`packages/core/src/billing/entitlement.ts`).
+
+## Still to run before live
+
+These haven't been captured yet. Run each, read the events back, and add the outcome to the table above (or fix the
+code first if it's wrong):
+
+| Change                                                                                                          | What to check                                                                                                                                                                                                                                                                                  |
+| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Yearly → monthly**, proration on                                                                              | The credit for the unused year is larger than the monthly charge. Does a `transaction.completed` arrive at all, with a zero or credited total? If it does, it has a full-price monthly item and a later start, so it becomes `paid_transaction_id`: confirm that is what refunds should follow |
+| **Interval change with "Charge for what's remaining" off**                                                      | Whether Paddle bills the new price now, at the next billing date, or not at all, which transaction (if any) arrives, and whether `paid_transaction_id` still points at a payment for the current period                                                                                        |
+| **Pause, then resume**                                                                                          | `subscription.paused` ends Pro; on resume, which events arrive, whether a transaction bills a new period, and that the row is `active` with Pro back                                                                                                                                           |
+| **Monthly → yearly over the API** (`PATCH /subscriptions/{id}`, `proration_billing_mode: prorated_immediately`) | Paddle's docs say the period start is kept, while the dashboard capture above restarted it. If the start stays, the transaction's start isn't later than the recorded one and the yearly payment would be `ignored`: check `paid_transaction_id` afterwards                                    |
 
 ## Checking the outcomes
 
