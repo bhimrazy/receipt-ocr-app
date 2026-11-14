@@ -1,6 +1,7 @@
 import { sql } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { z } from "zod";
+import { clearProviderTokens } from "../../account-security";
 import {
   purgeAdminAuditLog,
   purgeExpiredSessions,
@@ -109,6 +110,7 @@ export const maintenancePurge: JobDefinition<MaintenancePurgePayload, Db> = {
         step_up_events: yield* inBatches(purgeStepUpEvents),
         invitations: yield* inBatches(purgeInvitations),
         admin_audit_log: yield* inBatches(purgeAdminAuditLog),
+        provider_tokens: yield* inBatches(clearProviderTokens),
       };
       yield* annotateEvent({
         count: Object.values(deleted).reduce((sum, n) => sum + n, 0),

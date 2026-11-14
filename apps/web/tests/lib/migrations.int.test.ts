@@ -66,7 +66,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is the baseline, billing, receipt review, receipt fields, billing checkouts, billing plan, support messages, the dropped plan default and support retention", () => {
+  it("is the baseline, billing, receipt review, receipt fields, billing checkouts, billing plan, support messages, the dropped plan default, support retention, cleared OAuth tokens and the Data API grants", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
     expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
       "0000_baseline",
@@ -78,6 +78,8 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "0006_support_messages",
       "0007_billing_plan_default",
       "0008_support_retention",
+      "0009_oauth_tokens",
+      "0010_data_api_grants",
     ]);
   });
 

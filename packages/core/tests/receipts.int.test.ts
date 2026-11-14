@@ -291,6 +291,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
     const stored = await repo((r) => r.get(id, d));
     expect(stored!.items.map((item) => item.name)).toEqual([...names].reverse());
     expect(stored!.items.map((item) => item.position)).toEqual(names.map((_, i) => i));
+    expect(stored).not.toHaveProperty("rawJson");
+    expect(stored).not.toHaveProperty("model");
 
     const needsReview = async () => ({
       count: (await repo((r) => r.counts(d))).needsReview,

@@ -4,19 +4,10 @@ import {
   PageHeaderDescription,
   PageHeaderTitle,
 } from "@/components/page-header";
-import {
-  hasStrongFactor,
-  providerAvailability,
-  receiptReaders,
-  Settings,
-  workspacesBlockingDeletion,
-} from "@receipt-ocr/core";
-import { Effect } from "effect";
-import { AboutSettings } from "@/components/about-settings";
+import { hasStrongFactor, workspacesBlockingDeletion } from "@receipt-ocr/core";
 import { AccountSettings } from "@/components/account-settings";
 import { ContactButton } from "@/components/contact-button";
 import { InstallAppSettings } from "@/components/install-offer";
-import { ReceiptReadingSettings } from "@/components/receipt-reading-settings";
 import { SettingsList } from "@/components/settings-list";
 import { SettingsSection } from "@/components/settings-section";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -61,17 +52,10 @@ export default async function SettingsPage({
     searchParams,
   ]);
   const resumeStep = resume === "delete-account" ? resume : undefined;
-  const [{ plan }, usage, workspace, readers, blocking, protectedAccount] = await Promise.all([
+  const [{ plan }, usage, workspace, blocking, protectedAccount] = await Promise.all([
     getCurrentPlan(),
     getUsageSummary(),
     loadWorkspace(scope.organizationId),
-    runtime.runPromise(
-      Effect.zipWith(
-        Effect.flatMap(Settings, (settings) => settings.ocr),
-        providerAvailability,
-        receiptReaders,
-      ),
-    ),
     runtime.runPromise(workspacesBlockingDeletion(session.user.id)),
     runtime.runPromise(hasStrongFactor(session.user.id)),
   ]);
@@ -83,9 +67,7 @@ export default async function SettingsPage({
       <PageHeader className="mb-8">
         <PageHeaderContent>
           <PageHeaderTitle>Settings</PageHeaderTitle>
-          <PageHeaderDescription>
-            Your plan, your workspace, how receipts are scanned and your account.
-          </PageHeaderDescription>
+          <PageHeaderDescription>Your plan, your workspace and your account.</PageHeaderDescription>
         </PageHeaderContent>
       </PageHeader>
 
@@ -188,8 +170,6 @@ export default async function SettingsPage({
         <ThemeToggle aria-labelledby="appearance-heading" className="w-full sm:w-auto" labels />
       </SettingsSection>
 
-      <ReceiptReadingSettings readers={readers} />
-
       <SettingsSection
         className="max-md:hidden"
         description="Passkeys, two-step sign-in and the check before important changes."
@@ -257,10 +237,27 @@ export default async function SettingsPage({
         </Card>
       </SettingsSection>
 
-      <AboutSettings />
-
       {/* Last: it appears only once the browser offers an install, so nothing below it shifts. */}
       <InstallAppSettings />
+
+      <p className="flex items-center justify-center text-xs text-muted-foreground">
+        {(
+          [
+            ["Terms", "/terms"],
+            ["Privacy", "/privacy"],
+          ] as const
+        ).map(([label, href], index) => (
+          <span className="flex items-center" key={href}>
+            {index > 0 ? <span aria-hidden="true">·</span> : null}
+            <Link
+              className="inline-flex min-h-11 items-center rounded-md px-3 underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              href={href}
+            >
+              {label}
+            </Link>
+          </span>
+        ))}
+      </p>
     </div>
   );
 }

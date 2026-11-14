@@ -127,8 +127,9 @@ Notes:
 
 - `session.active_organization_id` has no foreign key. The app treats it as a preference and resolves the real
   workspace through `member` on every request ([`resolveScope`](../../packages/core/src/workspace.ts)).
-- `account.access_token`, `refresh_token` and `id_token` are encrypted with the auth secret
-  (`encryptOAuthTokens` in [`lib/auth.ts`](../../apps/web/lib/auth.ts)).
+- `account.access_token`, `refresh_token`, `id_token` and their expiry columns stay null: the account hooks in
+  [`lib/auth-accounts.ts`](../../apps/web/lib/auth-accounts.ts) drop Google and GitHub tokens before every write, and
+  `0009_oauth_tokens` cleared the ones stored before. `encryptOAuthTokens` stays on as a backstop.
 - `user.plan` is never accepted from the client (`input: false`); only an admin action changes it. Set to `pro` it is a comp: the workspaces that user owns count as Pro (see [Billing](flows/billing.md#plans-are-per-workspace)).
 
 ## Receipts and the usage ledger
@@ -485,7 +486,8 @@ Two rules sit on top of the cascades, in [packages/core](core.md):
 - Before a user is deleted, `prepareUserDeletion` deletes workspaces where they are the only member, and refuses if
   they are the only owner of a workspace that has other members. It also deletes the support messages sent from the
   account's address while signed out.
-- Stored files are deleted from the bucket after their rows are gone (`purgeReceiptFiles`, `deleteWorkspace`). The
+- Stored files are deleted from the bucket after their rows are gone: every delete (`ReceiptRepo.removeMany`,
+  `deleteWorkspace`, `prepareUserDeletion`) queues `storage.delete` jobs in the transaction that deletes the rows. The
   database cascade alone would leave them behind.
 
 ## Unique indexes and checks

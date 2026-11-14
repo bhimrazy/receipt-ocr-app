@@ -18,7 +18,6 @@ import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   ArrowLeft,
-  ChevronRight,
   CircleAlert,
   ExternalLink,
   Loader2,
@@ -28,7 +27,7 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { confidenceLevel, formatDateTime, formatMoney } from "@/lib/format";
+import { formatDateTime, formatMoney } from "@/lib/format";
 import { checksFor, fileNoun } from "@/lib/receipt-checks";
 import { ReceiptDate } from "@/components/receipt-date";
 import { InstallOfferCard } from "@/components/install-offer";
@@ -183,7 +182,7 @@ export function ReceiptResult({
         href="/app/receipts"
       >
         <ArrowLeft aria-hidden="true" />
-        History
+        Receipts
       </Link>
       <Link className={buttonVariants({ variant: "ghost", size: "sm" })} href="/app">
         <Upload aria-hidden="true" />
@@ -294,7 +293,7 @@ export function ReceiptResult({
   // Line items can't be edited, so a review is the only way to clear their warnings.
   const reviewed = receipt.reviewedAt !== null;
   const isLowLine = (item: ReceiptWithItems["items"][number]) =>
-    !reviewed && confidenceLevel(item.confidence) === "review";
+    !reviewed && item.needsCheck === true;
   const lowLines = receipt.items.filter(isLowLine);
   // Printed on some receipts only, so the optional amounts and numbers show only when read.
   const optional: [string, string | null][] = [
@@ -399,29 +398,14 @@ export function ReceiptResult({
         </p>
       )}
       <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
-        {lowLines.length > 0 ? "Marked lines were hard to read. " : null}
+        {lowLines.length > 0 ? "Marked lines don't add up. " : null}
         Line items can&apos;t be edited yet.
       </p>
     </Card>
   );
 
-  const json = JSON.stringify(receipt.rawJson ?? receipt, null, 2);
   // Right after a receipt was read: the moment the app has shown what it's for.
   const footer = <InstallOfferCard />;
-  const raw = (
-    <details className="group mt-5 rounded-lg border border-border bg-card">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          aria-hidden="true"
-          className="size-4 transition-transform group-open:rotate-90"
-        />
-        Raw extraction (JSON)
-      </summary>
-      <pre className="max-h-72 overflow-auto border-t border-border px-5 py-4 font-mono text-xs leading-6 whitespace-pre-wrap text-muted-foreground">
-        {json}
-      </pre>
-    </details>
-  );
 
   return (
     <ReceiptReviewProvider receipt={receipt} viewerName={viewerName}>
@@ -438,7 +422,6 @@ export function ReceiptResult({
             items={items}
             receipt={receipt}
           />
-          {raw}
         </div>
       </ReceiptEditingProvider>
     </ReceiptReviewProvider>

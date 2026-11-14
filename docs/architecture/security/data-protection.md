@@ -34,7 +34,7 @@ describe the code as it is; anything not built is under [Planned](#planned).
 
 | Class                   | What it holds                                                                                                                                                                                             | Sensitivity                           |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| C1 Credentials          | Passwords, session tokens, verification and reset tokens, step-up codes, TOTP seeds, backup codes, provider tokens from Google and GitHub sign-in, application keys                                       | Highest: each one grants access       |
+| C1 Credentials          | Passwords, session tokens, verification and reset tokens, step-up codes, TOTP seeds, backup codes, application keys. Google and GitHub tokens are not stored                                              | Highest: each one grants access       |
 | C2 Customer content     | Receipt files in object storage; `receipts` (merchant, amounts, dates, seller tax id, the structured extraction, file name); `receipt_items`; support messages                                            | High: financial records and free text |
 | C3 Identity and contact | `user` (email, name, image); `invitation.email`; session IP and user agent; `step_up_events.ip`; the admin audit log (actor email, IP, target, reason); a contact-form visitor's address in a job payload | Personal data                         |
 | C4 Billing identifiers  | Paddle customer, subscription and transaction ids; normalized webhook events. No card data, address or tax number: Paddle is the merchant of record                                                       | Low: identifiers, not credentials     |
@@ -61,8 +61,7 @@ reader of the database. The table below is what the application adds.
 | Emailed step-up code                        | HMAC-SHA-256 under the auth secret, bound to the session, with an attempt cap                                  | Verifier; six digits need a keyed hash                       |
 | Session token                               | Plain. The cookie must also carry an HMAC under the auth secret, so the row alone signs nobody in              | Looked up on every request                                   |
 | TOTP seed, backup codes                     | Sealed: XChaCha20-Poly1305 under the versioned auth secret                                                     | The server must read them to check a code                    |
-| Google and GitHub access and refresh tokens | Sealed the same way (`account.encryptOAuthTokens`)                                                             | Not used by the app; see [Planned](#planned)                 |
-| Google id token                             | Plain                                                                                                          | Not used by the app; see [Planned](#planned)                 |
+| Google and GitHub tokens                    | Not stored: the account hooks null access, refresh and id tokens and their expiries before every write         | Not used by the app; sign-in matches the provider account id |
 | Passkey public keys                         | Plain                                                                                                          | Public by design                                             |
 | Rate-limit keys that name an address        | SHA-256 of the normalized address                                                                              | Keeps addresses out of a counter table; rows are short-lived |
 | C2, C3, C4, C5 columns                      | Plain columns                                                                                                  | Queried, aggregated, searched and exported                   |
@@ -76,18 +75,24 @@ application key would also sit in the same environment as the app, so it would s
 not a compromised app. Grants, retention and encrypted backups address the dump; nothing in this class is a bearer
 secret. Data that would change this answer (card numbers, bank account numbers, government ids) is not stored.
 
+**Provider tokens.** Better Auth would store each Google or GitHub sign-in's access, refresh and id tokens. The
+`account` create and update hooks null them, `maintenance.purge` nulls any that reach a row anyway (an older release
+still serving during a migration), `account.updateAccountOnSignIn` is off so a sign-in doesn't rewrite the row, and `/get-access-token`, `/refresh-token` and `/account-info` answer 404 (`disabledPaths`). Without the tokens
+the app cannot revoke the provider's grant when an account is deleted; users remove it in their Google or GitHub
+settings.
+
 **Uploaded files keep their metadata.** The browser re-encodes most images, which removes EXIF and GPS. PDFs, HEIC
 outside Safari, shared files and direct API uploads are stored, and sent to the model provider, as received.
 
 ## Keys and secrets
 
-| Key                                          | Protects                                                                                           | Held in           | Rotation                                                                                            |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------- |
-| Auth secret keyring (`BETTER_AUTH_SECRETS`)  | Session cookie signatures; sealed TOTP seeds, backup codes and provider tokens; step-up code HMACs | Host secret store | Versioned, current first. A new version signs everyone out; old versions stay listed for decryption |
-| Database credentials                         | All of Postgres                                                                                    | Host secret store | On suspicion of exposure or operator change                                                         |
-| Object storage keys                          | One bucket per environment                                                                         | Host secret store | Same                                                                                                |
-| Provider keys (models, email, billing, cron) | Calls to those services, webhook verification                                                      | Host secret store | Same; each provider's console                                                                       |
-| Disk and object encryption keys              | Storage media                                                                                      | The providers     | Provider-managed                                                                                    |
+| Key                                          | Protects                                                                          | Held in           | Rotation                                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------- |
+| Auth secret keyring (`BETTER_AUTH_SECRETS`)  | Session cookie signatures; sealed TOTP seeds and backup codes; step-up code HMACs | Host secret store | Versioned, current first. A new version signs everyone out; old versions stay listed for decryption |
+| Database credentials                         | All of Postgres                                                                   | Host secret store | On suspicion of exposure or operator change                                                         |
+| Object storage keys                          | One bucket per environment                                                        | Host secret store | Same                                                                                                |
+| Provider keys (models, email, billing, cron) | Calls to those services, webhook verification                                     | Host secret store | Same; each provider's console                                                                       |
+| Disk and object encryption keys              | Storage media                                                                     | The providers     | Provider-managed                                                                                    |
 
 - The host secret store is Vercel's write-only Secret variables; values cannot be read back. Operator copies are
   covered in [secrets.md](../../secrets.md). The full variable list is in
@@ -127,8 +132,11 @@ batches of 500. New retention rules are added to it; nothing is deleted by a dat
 - **Row-level security is on for every table, with no policies** ([db.md](../db.md#design-principles-and-invariants)).
   The provider's API roles `anon` and `authenticated` therefore read no rows. `service_role` bypasses RLS, so RLS
   is not the control for that key.
-- **The app never uses Supabase's Data API.** Setting up a database includes removing `public` from the API's
-  exposed schemas ([deployment.md](../../deployment.md)).
+- **The API roles hold no grants.** `0010_data_api_grants` revokes every privilege `anon`, `authenticated` and
+  `service_role` have on tables, sequences and functions in `public`, and the default privileges for objects
+  `postgres` creates later. `rls.int.test.ts` asserts it wherever those roles exist.
+- **The app never uses Supabase's Data API,** and it is switched off for each project; Postgres connections must use
+  TLS (Enforce SSL) ([deployment.md](../../deployment.md#1-database)).
 - **Schema changes go through migrations only,** never the provider's table editor: objects created there receive
   the provider's default grants.
 - **Object storage is private:** no public access, no custom domain, one access key scoped to one bucket per
@@ -160,17 +168,13 @@ is encrypted, and is stored apart from the auth secret. Object storage has no se
 In build order. Reasons and sources are in the
 [principal review](../../reviews/2026-11-14-data-at-rest-principal.md).
 
-1. TODO (2026-11-14): stop storing Google and GitHub tokens (database hooks, `updateAccountOnSignIn: false`), disable
-   `/get-access-token`, `/refresh-token` and `/account-info` with `disabledPaths`, and null the stored values.
-2. TODO (2026-11-14): switch the Data API off, revoke `anon`, `authenticated` and `service_role` grants and default
-   privileges in a guarded migration, assert it in `rls.int.test.ts`, and enforce TLS on the database.
-3. TODO (2026-11-14): test whether Better Auth's rate-limit pruning shortens the app's 24-hour limits; if so, move
+1. TODO (2026-11-14): test whether Better Auth's rate-limit pruning shortens the app's 24-hour limits; if so, move
    the app's counters to their own table.
-4. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
-5. TODO (2026-11-14): database backups with a restore test (STATUS D1).
-6. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
+2. TODO (2026-11-14): owner decision on raising the password hash to an OWASP-listed scrypt configuration.
+3. TODO (2026-11-14): database backups with a restore test (STATUS D1).
+4. TODO (2026-11-14, after launch): a least-privilege database role for the app (DML only, `BYPASSRLS`), with migrations
    staying on the owner role.
-7. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
+5. TODO (2026-11-14, with bring-your-own-key): envelope encryption for provider keys (per-value data key, key-encryption key
    from `DATA_ENCRYPTION_KEYS`, AAD bound to table, column and row), a KMS-held key-encryption key, and one re-seal
    job covering those values and the auth-secret values ([BYOK plan](../../plans/2026-11-07-byok.md)).
 

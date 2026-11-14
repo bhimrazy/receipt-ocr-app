@@ -170,7 +170,7 @@ test("receipt actions sheet offers edit, export and delete", async ({ page }) =>
   await page.getByRole("button", { name: "Receipt actions" }).click();
   const sheet = page.getByRole("dialog", { name: "Phone Market" });
   await expect(sheet).toBeVisible();
-  for (const name of ["Edit details", "Export CSV", "Copy JSON", "Delete receipt"]) {
+  for (const name of ["Edit details", "Export CSV", "Delete receipt"]) {
     const row = sheet.getByRole("button", { name });
     await expect(row).toBeVisible();
     expect((await row.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
@@ -229,7 +229,7 @@ test("Settings is a grouped list of rows that open their page or a sheet", async
   await expect(list.getByRole("link", { name: "Security Set up" })).toBeVisible();
   // The long sections those rows replace are desktop-only; the rest stay.
   await expect(page.getByRole("heading", { name: "Plan and billing" })).toBeHidden();
-  await expect(page.getByRole("heading", { name: "Receipt scanning" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Privacy", exact: true })).toBeVisible();
   await expectNoSideScroll(page);
   for (const row of await list.getByRole("listitem").all()) {
     expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
