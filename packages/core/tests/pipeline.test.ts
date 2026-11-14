@@ -159,6 +159,7 @@ function harness(
     },
     remove: (keys) => Effect.sync(() => keys.forEach((key) => objects.delete(key))),
     signedUrl: (key) => Effect.succeed(`https://signed/${key}`),
+    list: () => Effect.succeed({ objects: [] }),
   });
 
   const ocr = Layer.succeed(Ocr, {

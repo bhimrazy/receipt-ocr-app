@@ -19,9 +19,10 @@ const PRIORITY_MAINTENANCE = 9;
 
 /**
  * Enqueued in the transaction that deletes the rows, so the files are deleted if and only if
- * the rows are. No owner (`userId`): it must not take one of the user's running slots.
+ * the rows are. No owner (`userId`): it must not take one of the user's running slots. No
+ * workspace for files the orphan sweep found: theirs is unknown.
  */
-export const storageDeleteJob = (keys: readonly string[], organizationId: string): NewJob => ({
+export const storageDeleteJob = (keys: readonly string[], organizationId?: string): NewJob => ({
   kind: STORAGE_DELETE,
   payload: { keys: [...keys] } satisfies StorageDeletePayload,
   priority: PRIORITY_MAINTENANCE,

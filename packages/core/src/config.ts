@@ -36,6 +36,17 @@ export const loadStorageConfig: Effect.Effect<S3StorageConfig, NotConfigured> = 
   ),
 );
 
+/**
+ * `STORAGE_ORPHAN_SWEEP_DELETE=true` lets the orphan sweep delete what it finds. Anything else,
+ * an invalid value included, keeps it report-only.
+ */
+export const loadOrphanSweepDelete: Effect.Effect<boolean> = Config.boolean(
+  "STORAGE_ORPHAN_SWEEP_DELETE",
+).pipe(
+  Config.withDefault(false),
+  Effect.orElseSucceed(() => false),
+);
+
 /** Optional ceiling on receipts created per UTC day across all users: a spend guard. */
 export const loadDailyOcrCap: Effect.Effect<number | undefined, NotConfigured> = Config.option(
   Config.integer("OCR_DAILY_CAP"),
