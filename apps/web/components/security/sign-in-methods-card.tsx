@@ -6,13 +6,13 @@ import { Button, buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Card, CardContent } from "@receipt-ocr/ui/components/card";
 import { ConfirmDialog } from "@receipt-ocr/ui/components/confirm-dialog";
 import { Field, FieldDescription, FieldLabel } from "@receipt-ocr/ui/components/field";
-import { Input } from "@receipt-ocr/ui/components/input";
 import { Check, ChevronRight, KeyRound, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { setPasswordAction } from "@/app/app/settings/security/actions";
 import { ProviderIcon } from "@/components/security/provider-icon";
+import { PasswordInput } from "@/components/password-input";
 import { withStepUp } from "@/components/step-up/step-up";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
@@ -55,7 +55,7 @@ function SetPasswordForm({ onDone }: { onDone: (set: boolean) => void }) {
     <form className="flex flex-col gap-3" noValidate onSubmit={save}>
       <Field data-invalid={error ? true : undefined}>
         <FieldLabel htmlFor={`${id}-password`}>New password</FieldLabel>
-        <Input
+        <PasswordInput
           aria-describedby={error ? `${id}-error ${id}-hint` : `${id}-hint`}
           aria-invalid={error ? true : undefined}
           autoComplete="new-password"
@@ -63,7 +63,6 @@ function SetPasswordForm({ onDone }: { onDone: (set: boolean) => void }) {
           id={`${id}-password`}
           maxLength={128}
           onChange={(event) => setPassword(event.target.value)}
-          type="password"
           value={password}
         />
         <FieldDescription id={`${id}-hint`}>At least 8 characters.</FieldDescription>
