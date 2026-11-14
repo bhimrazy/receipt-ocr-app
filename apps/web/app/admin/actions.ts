@@ -344,8 +344,8 @@ export async function resendVerificationAction(input: { userId: string }) {
 }
 
 /**
- * Deletes their solo workspaces (with the audit row, in one transaction), then
- * the user through Better Auth, then their stored files. Redirects to the list.
+ * Deletes their solo workspaces (with the audit row and the jobs that delete their
+ * stored files, in one transaction), then the user through Better Auth. Redirects to the list.
  */
 export async function deleteUserAction(input: { userId: string; confirm: string }) {
   const result = await run("user.delete", async (ctx) => {

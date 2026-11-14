@@ -9,7 +9,7 @@ export const useCasesCollection: ContentCollection = {
     "How expense claimants, bookkeepers, freelancers and small business teams use ReceiptOCR to turn receipt photos and PDFs into CSV rows they can check.",
   h1: "Receipt scanner use cases: who uses ReceiptOCR, and how",
   intro:
-    "The same extraction runs for everyone: merchant, date, category, line items, tax, tip and total, with a confidence score for the receipt and for each line. What changes is what happens next. Pick the workflow closest to yours.",
+    "The same extraction runs for everyone: merchant, date, category, line items, tax, tip and total, with a confidence score for the receipt. What changes is what happens next. Pick the workflow closest to yours.",
   heroArt: "pipeline",
   updated: "2026-11-08",
 };
@@ -155,7 +155,7 @@ export const useCasePages: ContentPage[] = [
       },
       {
         q: "What if a receipt is faded or the photo is blurry?",
-        a: "A receipt that could not be read says so and offers a retry, and a few failed reads do not count towards your scan allowance. A receipt with a missing field, amounts that do not add up or an unclear date shows up under Needs review, and its page says what to check and marks the lines that were hard to read.",
+        a: "A receipt that could not be read says so and offers a retry, and a few failed reads do not count towards your scan allowance. A receipt with a missing field, amounts that do not add up or an unclear date shows up under Needs review, and its page says what to check and marks the lines whose numbers do not add up.",
       },
     ],
     related: ["/use-cases/small-businesses", "/use-cases/freelancers-taxes"],
@@ -234,7 +234,7 @@ export const useCasePages: ContentPage[] = [
       {
         heading: "Checking before it reaches the books",
         paragraphs: [
-          'The Receipts list has a Needs review filter for receipts with something to check: a missing merchant, date, total or currency, amounts that do not add up, or a date that can be read more than one way. On the receipt page, lines that were hard to read are marked, and a note says when the amounts disagree, for example "The amounts add up to €104.20, but the total says €104.75". You correct the header fields (merchant, date, category, currency, bill number, seller tax ID, subtotal, discount, service charge, tax, tip and total) and the corrected values are what gets exported. Line items cannot be edited yet.',
+          'The Receipts list has a Needs review filter for receipts with something to check: a missing merchant, date, total or currency, amounts that do not add up, or a date that can be read more than one way. On the receipt page, lines whose numbers do not add up are marked, and a note says when the amounts disagree, for example "The amounts add up to €104.20, but the total says €104.75". You correct the header fields (merchant, date, category, currency, bill number, seller tax ID, subtotal, discount, service charge, tax, tip and total) and the corrected values are what gets exported. Line items cannot be edited yet.',
           "The confidence column is in the export too, so you can sort by it in a spreadsheet and look at the lowest first.",
         ],
       },
@@ -348,7 +348,7 @@ export const useCasePages: ContentPage[] = [
       },
       {
         q: "How do I know which receipts to check?",
-        a: "Use the Needs review filter in Receipts, which lists receipts with a missing field, totals that do not add up or an unclear date. Each receipt and each line has its own score, the confidence column is in the CSV, and each receipt's page points out lines that were hard to read and totals that do not add up.",
+        a: "Use the Needs review filter in Receipts, which lists receipts with a missing field, totals that do not add up or an unclear date. Each receipt has its own confidence score, which is a column in the CSV, and each receipt's page points out lines that do not add up and totals that do not add up.",
       },
     ],
     related: ["/use-cases/small-businesses", "/use-cases/freelancers-taxes"],
@@ -537,7 +537,7 @@ export const useCasePages: ContentPage[] = [
       {
         heading: "What the person doing the books gets",
         paragraphs: [
-          "Every receipt arrives with merchant, date, category, line items, tax and total, and a confidence score for the receipt and each line. The Needs review filter collects receipts with a missing field, totals that do not add up or an unclear date; each receipt's page also marks lines that were hard to read and amounts that do not add up to the total. Corrections to the header fields are what gets exported.",
+          "Every receipt arrives with merchant, date, category, line items, tax and total, and a confidence score for the receipt. The Needs review filter collects receipts with a missing field, totals that do not add up or an unclear date; each receipt's page also marks lines whose numbers do not add up and amounts that do not add up to the total. Corrections to the header fields are what gets exported.",
           "The app's home screen shows the workspace's spending this month and over time, per currency. When it is time to update the books, the Receipts list exports any filtered set (a month, a category, a job) as one CSV.",
         ],
       },
@@ -562,9 +562,9 @@ export const useCasePages: ContentPage[] = [
       },
     ],
     example: {
-      heading: "A hardware store receipt with one line to check",
+      heading: "A hardware store receipt, line by line",
       caption:
-        "A supplies receipt where one line was hard to read: it is marked so the person checking compares it with the photo. Below, the job's receipts as a Receipts CSV.",
+        "A supplies receipt where every line's quantity and price match its total and the amounts add up, so nothing is marked. A line that did not add up would be marked so the person checking compares it with the photo. Below, the job's receipts as a Receipts CSV.",
       fileName: "IMG_4471.jpg",
       extraction: {
         merchant: "Northside Hardware",

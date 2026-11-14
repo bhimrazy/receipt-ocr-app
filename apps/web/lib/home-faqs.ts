@@ -8,7 +8,7 @@ export const homeFaqs = [
   },
   {
     q: "How accurate is the extraction?",
-    a: "Each receipt gets an overall confidence score and each line item gets its own. Receipts below the threshold, lines that were hard to read, and totals that don't add up are flagged so you know what to check.",
+    a: "Each receipt gets an overall confidence score. Receipts with a missing total or date or with totals that don't add up get a Needs review flag, and lines whose numbers don't add up are marked, so you know what to check.",
   },
   {
     q: "Where is my receipt data stored?",

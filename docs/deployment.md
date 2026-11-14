@@ -39,6 +39,18 @@ Then, as a one-time setup step, run the two `ALTER ROLE` statements (10 s `state
 `idle_in_transaction_session_timeout`) on the role the app connects as; the SQL, how to check and undo it, and what it
 affects are in [db.md](architecture/db.md#design-principles-and-invariants).
 
+On Supabase, also (staging first, then production):
+
+1. **Switch the Data API off:** Integrations, Data API, turn **Enable Data API** off. The app never uses it, and with
+   it off none of the generated REST endpoints answer, whatever the grants. The migrations also revoke every grant
+   to `anon`, `authenticated` and `service_role` in `public` (`service_role` bypasses row-level security), so a
+   table is not reachable even if the API is switched back on.
+2. **Enforce SSL:** Database, Settings, SSL Configuration, turn **Enforce SSL on incoming connections** on. Supabase
+   reboots the database to apply it (a few seconds on a small project), so do it outside busy hours. Supabase
+   doesn't enforce it by default.
+3. **Check `DATABASE_SSL_CA`** is set for the environment (Vercel, and the Database Migration workflow's secrets).
+   Without it the pool encrypts but does not verify the server ([db.md](architecture/db.md#design-principles-and-invariants)).
+
 ### 2. Storage
 
 Create a private bucket (for example `receipt-ocr`) and an API token with read and write access to it. Receipt
@@ -411,6 +423,43 @@ codes sent in the last 10 minutes.
 ## Release notes
 
 Steps specific to one release, newest first.
+
+### Data API grants revoked (migration 0010)
+
+- **`0010_data_api_grants`** revokes every privilege `anon`, `authenticated` and `service_role` hold on tables,
+  sequences and functions in `public`, and the default privileges `postgres` gives them on objects it creates later.
+  It runs only when all three roles exist, so on plain Postgres (CI, Docker) it changes nothing. Catalog changes only,
+  no table lock beyond the grant update; `lock_timeout` 3 s.
+- The app connects as `postgres`, the owner, and is unaffected; so are the migrator and the `drain-jobs` cron job
+  (`pg_cron` runs it as `postgres`, and `pg_net` calls out over HTTP). Run **Database Migration** on `staging-db`,
+  then `production-db`, before or after the deploy.
+- **Check after migrating** (both return no rows):
+
+  ```sql
+  select grantee, table_name, privilege_type from information_schema.role_table_grants
+    where table_schema = 'public' and grantee in ('anon', 'authenticated', 'service_role');
+  select defaclrole::regrole, defaclobjtype, defaclacl from pg_default_acl
+    where defaclnamespace = 'public'::regnamespace
+      and defaclacl::text ~ '(anon|authenticated|service_role)=';
+  ```
+
+  A row in the first query means a grant made by another role (a table created in the dashboard's Table Editor is
+  owned by `supabase_admin`): revoke it by hand and create tables through migrations only.
+
+- **Owner steps, once per project:** switch the Data API off, enforce SSL and confirm `DATABASE_SSL_CA` is set, as in
+  [1. Database](#1-database).
+
+### Provider tokens no longer stored (migration 0009)
+
+- **`0009_oauth_tokens`** sets `access_token`, `refresh_token`, `id_token` and both expiry columns to null on every
+  `account` row that has one. Data only, no schema change. `lock_timeout` 3 s; one small `UPDATE`.
+- **Run Database Migration** on `staging-db`, then `production-db`, **then** deploy, as usual. Code from before this
+  release still writes sealed tokens on each Google or GitHub sign-in until the deploy; the daily `maintenance.purge`
+  clears those (and any a later path writes), so no second migration run is needed. No code reads the token columns.
+- **Check the day after the deploy:** `select count(*) from account where access_token is not null or refresh_token is
+not null or id_token is not null` returns 0.
+- `/api/auth/get-access-token`, `/api/auth/refresh-token` and `/api/auth/account-info` now answer 404. Google and
+  GitHub sign-in, connecting and disconnecting are unchanged.
 
 ### Support retention (migration 0008)
 

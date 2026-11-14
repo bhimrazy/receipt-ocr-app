@@ -76,6 +76,76 @@ export function totalsMismatch(fields: CheckedFields): number | null {
   return (bases[0]! - discount + service + tax + tip) / 100;
 }
 
+const minorDigits = new Map<string, number>();
+
+function minorUnitDigits(currency: string | null | undefined): number {
+  if (!currency) return 2;
+  let digits = minorDigits.get(currency);
+  if (digits === undefined) {
+    try {
+      digits =
+        new Intl.NumberFormat("en-US", { style: "currency", currency }).resolvedOptions()
+          .maximumFractionDigits ?? 2;
+    } catch {
+      digits = 2;
+    }
+    minorDigits.set(currency, digits);
+  }
+  return digits;
+}
+
+function amount(value: Amount): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Whether a line's own numbers disagree: its total is missing, or quantity × unit price differs from the total by
+ * more than rounding. The allowance is half the currency's minor unit, scaled up for quantities above 1 because a
+ * printed unit price is itself rounded. A line without a unit price can't be checked beyond having a total.
+ * Never reads the model's confidence, and never compares lines with the subtotal (`totals_mismatch` does).
+ *
+ * Stored quantities are whole numbers, so a weighed line (0.75 kg) is stored as 1. `printedQuantity` is the
+ * unrounded quantity from the extraction. Without it, a mismatch whose total is a non-integer multiple of the
+ * unit price is taken as a fractional quantity and not marked.
+ */
+export function lineNeedsCheck(
+  item: { quantity: number | string | null; unitPrice: Amount; totalPrice: Amount },
+  currency: string | null | undefined,
+  printedQuantity?: number | null,
+): boolean {
+  const total = amount(item.totalPrice);
+  if (total === null) return true;
+  const unit = amount(item.unitPrice);
+  const exact =
+    typeof printedQuantity === "number" && Number.isFinite(printedQuantity) && printedQuantity > 0;
+  const quantity = exact ? printedQuantity : Number(item.quantity);
+  if (unit === null || !Number.isFinite(quantity) || quantity <= 0) return false;
+  const minor = 10 ** -minorUnitDigits(currency);
+  const allowance = 0.5 * Math.max(1, quantity) * minor;
+  if (Math.abs(quantity * unit - total) <= allowance + 1e-9) return false;
+  if (exact || unit === 0) return true;
+  const ratio = total / unit;
+  return Math.abs(ratio - Math.round(ratio)) < 0.005;
+}
+
+/** Items with `needsCheck` set; `rawJson` supplies the unrounded quantities, matched by printed order. */
+export function withLineChecks<
+  T extends { quantity: number; unitPrice: Amount; totalPrice: Amount },
+>(
+  items: readonly T[],
+  currency: string | null | undefined,
+  rawJson: unknown,
+): (T & { needsCheck: boolean })[] {
+  const printed = (rawJson as { items?: unknown } | null)?.items;
+  return items.map((item, index) => {
+    const raw = Array.isArray(printed) ? (printed[index] as { quantity?: unknown } | null) : null;
+    const quantity = typeof raw?.quantity === "number" ? raw.quantity : null;
+    return { ...item, needsCheck: lineNeedsCheck(item, currency, quantity) };
+  });
+}
+
 /**
  * Every reason a completed receipt needs review, in `REVIEW_REASONS` order. `dateReasons` come from the date
  * resolver, which needs the printed text; the rest are computed from the fields. Edits go through `editedReasons`.

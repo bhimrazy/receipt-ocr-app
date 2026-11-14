@@ -5,12 +5,14 @@
  */
 import {
   account,
+  and,
   billingSubscriptions,
   createDb,
   eq,
   jobs,
   member,
   organization,
+  receipts,
   session,
   sql,
   user,
@@ -18,7 +20,6 @@ import {
 } from "@receipt-ocr/db";
 import type { SendEmailInput } from "@receipt-ocr/email";
 import { APIError } from "better-auth/api";
-import { decryptOAuthToken, setTokenUtil } from "better-auth/oauth2";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const enabled = process.env.INTEGRATION === "1";
@@ -35,6 +36,7 @@ vi.mock("@receipt-ocr/email", async (importOriginal) => ({
 const tag = `int-auth-${Date.now()}`;
 const email = `${tag}@example.com`;
 const password = "int-password-123";
+const origin = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
 
 describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
   const db = createDb(process.env.DATABASE_URL ?? "");
@@ -160,29 +162,61 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     await db.delete(user).where(eq(user.id, created.user.id));
   });
 
-  it("P2-4: seals new OAuth tokens and still reads plaintext rows from before", async () => {
-    // The inferred plugin context is narrower than the helpers' AuthContext parameter.
-    const context = (await auth.$context) as unknown as Parameters<typeof setTokenUtil>[1];
-    const sealed = await setTokenUtil("ya29.new-access-token", context);
-    expect(sealed).not.toContain("ya29");
-    expect(await decryptOAuthToken(sealed!, context)).toBe("ya29.new-access-token");
-
-    await db.insert(account).values({
-      id: `${tag}-acct`,
-      accountId: `${tag}-google`,
-      providerId: "google",
+  it("stores no Google or GitHub tokens on link, re-link or sign-in", async () => {
+    const ctx = await auth.$context;
+    const expiresAt = new Date(Date.now() + 3_600_000);
+    const tokens = {
+      accessToken: "ya29.access",
+      refreshToken: "1//refresh",
+      idToken: "eyJ.id.token",
+      accessTokenExpiresAt: expiresAt,
+      refreshTokenExpiresAt: expiresAt,
+    };
+    const created = await ctx.internalAdapter.createAccount({
       userId,
-      accessToken: "ya29.legacy-plaintext",
-      refreshToken: "1//legacy-refresh",
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      providerId: "google",
+      accountId: `${tag}-google`,
+      scope: "openid,email",
+      ...tokens,
     });
-    const [legacy] = await db
-      .select()
+    await ctx.internalAdapter.updateAccount(created.id, {
+      ...tokens,
+      scope: "openid,email,profile",
+    });
+    const [row] = await db.select().from(account).where(eq(account.id, created.id));
+    expect(row).toMatchObject({
+      accountId: `${tag}-google`,
+      scope: "openid,email,profile",
+      accessToken: null,
+      refreshToken: null,
+      idToken: null,
+      accessTokenExpiresAt: null,
+      refreshTokenExpiresAt: null,
+    });
+    // A plain sign-in writes nothing to the account row; a re-link still goes through the update hook.
+    expect(auth.options.account?.updateAccountOnSignIn).toBe(false);
+    const [credential] = await db
+      .select({ password: account.password })
       .from(account)
-      .where(eq(account.id, `${tag}-acct`));
-    expect(await decryptOAuthToken(legacy!.accessToken!, context)).toBe("ya29.legacy-plaintext");
-    expect(await decryptOAuthToken(legacy!.refreshToken!, context)).toBe("1//legacy-refresh");
+      .where(and(eq(account.userId, userId), eq(account.providerId, "credential")));
+    expect(credential?.password).toBeTruthy();
+    await db.delete(account).where(eq(account.id, created.id));
+  });
+
+  it("answers 404 on the endpoints that hand out provider tokens", async () => {
+    const call = (path: string, method = "GET") =>
+      auth.handler(
+        new Request(`${origin}/api/auth${path}`, {
+          method,
+          headers: { cookie, origin, "content-type": "application/json" },
+          ...(method === "POST" ? { body: JSON.stringify({ providerId: "google" }) } : {}),
+        }),
+      );
+    for (const path of ["/get-access-token", "/refresh-token", "/account-info"]) {
+      expect((await call(path, "POST")).status, path).toBe(404);
+      expect((await call(path)).status, path).toBe(404);
+    }
+    expect((await call("/list-accounts")).status).not.toBe(404);
   });
 
   it("GHSA-c85h: refuses role lists and stores padded roles trimmed", async () => {
@@ -482,6 +516,71 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       .delete(billingSubscriptions)
       .where(eq(billingSubscriptions.providerSubscriptionId, subscriptionId));
     await db.delete(user).where(eq(user.id, buyerId));
+  });
+
+  it("deleting a workspace queues its files' deletion with the rows, and neither when the delete fails", async () => {
+    const headers = new Headers({ cookie });
+    await db
+      .update(session)
+      .set({ stepUpAt: new Date(), stepUpMethod: "email" })
+      .where(eq(session.userId, userId));
+    const workspace = async (name: string) => {
+      const id = crypto.randomUUID();
+      await db
+        .insert(organization)
+        .values({ id, name, slug: `${tag}-${name}`, createdAt: new Date() });
+      await db.insert(member).values({
+        id: crypto.randomUUID(),
+        organizationId: id,
+        userId,
+        role: "owner",
+        createdAt: new Date(),
+      });
+      const key = `${tag}/${name}.jpg`;
+      await db.insert(receipts).values({
+        organizationId: id,
+        userId,
+        status: "failed",
+        fileName: `${name}.jpg`,
+        imageObjectKey: key,
+      });
+      return { id, key };
+    };
+    const deleteJobs = (organizationId: string) =>
+      db
+        .select({ payload: jobs.payload })
+        .from(jobs)
+        .where(and(eq(jobs.kind, "storage.delete"), eq(jobs.organizationId, organizationId)));
+    const exists = async (organizationId: string) =>
+      (await db.select().from(organization).where(eq(organization.id, organizationId))).length;
+
+    const gone = await workspace("gone");
+    await auth.api.deleteOrganization({ headers, body: { organizationId: gone.id } });
+    expect(await exists(gone.id)).toBe(0);
+    expect(await deleteJobs(gone.id)).toEqual([{ payload: { keys: [gone.key] } }]);
+
+    const kept = await workspace("kept");
+    const fn = `auth_fail_${Date.now()}`;
+    await db.execute(
+      sql.raw(`create function ${fn}() returns trigger language plpgsql as $$
+        begin if old.id = '${kept.id}' then raise exception 'blocked'; end if; return old; end $$`),
+    );
+    await db.execute(
+      sql.raw(
+        `create trigger ${fn} before delete on organization for each row execute function ${fn}()`,
+      ),
+    );
+    try {
+      await expect(
+        auth.api.deleteOrganization({ headers, body: { organizationId: kept.id } }),
+      ).rejects.toThrow();
+    } finally {
+      await db.execute(sql.raw(`drop trigger if exists ${fn} on organization`));
+      await db.execute(sql.raw(`drop function if exists ${fn}()`));
+    }
+    expect(await exists(kept.id)).toBe(1);
+    expect(await deleteJobs(kept.id)).toEqual([]);
+    await db.delete(jobs).where(eq(jobs.organizationId, gone.id));
   });
 
   it("a revoked session stops working on auth endpoints at once (cookie cache off)", async () => {
