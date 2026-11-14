@@ -704,6 +704,10 @@ export const supportMessages = pgTable(
     index("support_messages_receipt_idx").on(table.receiptId),
     // Account deletion also removes the signed-out messages sent from the account's address.
     index("support_messages_email_idx").on(sql`lower(${table.email})`),
+    // The purge's expression exactly, or the planner can't use it.
+    index("support_messages_retention_idx").on(
+      sql`coalesce(${table.closedAt}, greatest(${table.createdAt}, ${table.updatedAt}))`,
+    ),
     check("support_messages_kind_check", sql`kind in ('question', 'problem', 'feedback', 'sales')`),
     check("support_messages_source_check", sql`source in ('help', 'receipt', 'public')`),
     check("support_messages_status_check", sql`status in ('new', 'open', 'closed')`),
@@ -711,6 +715,10 @@ export const supportMessages = pgTable(
     check("support_messages_email_check", sql`char_length(email) between 3 and 320`),
     check("support_messages_message_check", sql`char_length(message) between 5 and 2000`),
     check("support_messages_closed_check", sql`(status = 'closed') = (closed_at is not null)`),
+    check(
+      "support_messages_closed_after_created_check",
+      sql`closed_at is null or closed_at >= created_at`,
+    ),
   ],
 ).enableRLS();
 
@@ -781,6 +789,7 @@ export const stepUpCodes = pgTable(
   (table) => [
     index("step_up_codes_session_idx").on(table.sessionId),
     index("step_up_codes_user_created_idx").on(table.userId, table.createdAt),
+    index("step_up_codes_expires_idx").on(table.expiresAt),
   ],
 ).enableRLS();
 

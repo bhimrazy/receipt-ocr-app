@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/settings-section";
+import { PasswordInput } from "@/components/password-input";
 import { withStepUp } from "@/components/step-up/step-up";
 import { cancelSubscriptionFirst, soleOwnerMessage } from "@/lib/account-deletion";
 import { authErrorMessage } from "@/lib/auth-errors";
@@ -224,23 +225,21 @@ function PasswordCard() {
         <form className="flex flex-col gap-3" noValidate onSubmit={save}>
           <Field>
             <FieldLabel htmlFor="current-password">Current password</FieldLabel>
-            <Input
+            <PasswordInput
               aria-describedby={error ? "password-error" : undefined}
               autoComplete="current-password"
               id="current-password"
               onChange={(event) => setCurrent(event.target.value)}
-              type="password"
               value={current}
             />
           </Field>
           <Field>
             <FieldLabel htmlFor="new-password">New password</FieldLabel>
-            <Input
+            <PasswordInput
               aria-describedby={error ? "password-error new-password-hint" : "new-password-hint"}
               autoComplete="new-password"
               id="new-password"
               onChange={(event) => setNext(event.target.value)}
-              type="password"
               value={next}
             />
             <FieldDescription id="new-password-hint">At least 8 characters.</FieldDescription>

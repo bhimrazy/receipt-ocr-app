@@ -7,6 +7,24 @@ async function changePassword(page: import("@playwright/test").Page, from: strin
   await page.getByRole("button", { name: "Change password" }).click();
 }
 
+test("each Settings password field can be shown and hidden", async ({ page }) => {
+  await signUp(page, uniqueEmail("password-toggle"));
+  await page.goto("/app/settings");
+
+  for (const name of ["Current password", "New password"]) {
+    const input = page.getByLabel(name, { exact: true });
+    const toggle = input.locator("xpath=following-sibling::button");
+    await input.fill("hunter22-test");
+    await expect(input).toHaveAttribute("type", "password");
+    await toggle.click();
+    await expect(input).toHaveAttribute("type", "text");
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await toggle.click();
+    await expect(input).toHaveAttribute("type", "password");
+  }
+  await expect(page.getByText("Password changed.")).toHaveCount(0);
+});
+
 test("without a second factor, a password change right after sign-up asks for the emailed code", async ({
   page,
 }) => {

@@ -156,11 +156,13 @@ test("admin closes a support message, finds it under Closed, and the audit log s
     await expect(message).toBeHidden();
 
     await page.goto(`/admin/support?status=closed&q=${encodeURIComponent(sender)}`);
-    await expect(
-      page
-        .getByRole("article", { name: sender })
-        .getByRole("button", { name: `Reopen: message from ${sender}` }),
-    ).toBeVisible();
+    const reopen = page
+      .getByRole("article", { name: sender })
+      .getByRole("button", { name: `Reopen: message from ${sender}` });
+    await expect(reopen).toBeVisible();
+    await expect(reopen).toHaveAccessibleDescription(
+      "Reopening restarts the 12-month retention clock.",
+    );
 
     await page.goto("/admin/audit?type=support");
     await expect(page.getByText("Changed support message status").first()).toBeVisible();
