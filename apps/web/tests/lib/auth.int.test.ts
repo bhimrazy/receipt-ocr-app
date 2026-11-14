@@ -245,15 +245,14 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
         headers,
         body: { organizationId: personal!.id, email: `${tag}-${to}@example.com`, role: "member" },
       });
-    // The owner plus two pending invitations fill Free's 3.
+    // The owner plus one pending invitation fill Free's 2.
     expect(await status(invite("one"))).toBe(200);
-    expect(await status(invite("two"))).toBe(200);
-    await expect(invite("three")).rejects.toMatchObject({
+    await expect(invite("two")).rejects.toMatchObject({
       status: "FORBIDDEN",
-      body: { message: expect.stringContaining("Free workspaces have up to 3 members") },
+      body: { message: expect.stringContaining("Free workspaces have up to 2 members") },
     });
     // Re-inviting someone already invited replaces that invitation, so it still goes out.
-    expect(await status(invite("two"))).toBe(200);
+    expect(await status(invite("one"))).toBe(200);
     await db.delete(organization).where(eq(organization.id, personal!.id));
     await db.delete(user).where(eq(user.id, signUp.response.user.id));
   });

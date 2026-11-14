@@ -34,7 +34,10 @@ const policySchema = (batchMax: z.ZodType<number>, defaults: PlanPolicy) =>
     .object({
       workspaces: count(100),
       membersPerWorkspace: count(MAX_MEMBERS).default(defaults.membersPerWorkspace),
-      scope: z.unknown().transform((): QuotaScope => defaults.scope),
+      scope: z
+        .unknown()
+        .optional()
+        .transform((): QuotaScope => defaults.scope),
       receiptsPerDay: count(100_000),
       receiptsPerMonth: count(1_000_000).nullable().default(defaults.receiptsPerMonth),
       poolPerDay: count(10_000_000).nullable().default(defaults.poolPerDay),

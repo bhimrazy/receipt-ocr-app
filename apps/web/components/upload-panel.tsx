@@ -25,12 +25,7 @@ import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import type { ReviewImage } from "@/components/capture/review-sheet";
 import type { CropSource } from "@/lib/capture/crop-outcome";
 import { formatTime } from "@/lib/format";
-import {
-  remainingSpan,
-  usageNote,
-  usageRemaining,
-  type Usage,
-} from "@/components/usage-meter";
+import { remainingSpan, usageNote, usageRemaining, type Usage } from "@/components/usage-meter";
 import { fitBatch } from "@/lib/capture/batch-limit";
 import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
 import { browserCameraSupport, wantsCamera, type CameraSupport } from "@/lib/capture/camera";
