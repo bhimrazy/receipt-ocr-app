@@ -52,7 +52,7 @@ import {
   parseReceiptDate,
 } from "./receipt-fields";
 import type { ReceiptPatch } from "./receipt-patch";
-import { editedReasons } from "./review-reasons";
+import { editedReasons, withLineChecks } from "./review-reasons";
 
 export type ReceiptStatus = Receipt["status"];
 
@@ -81,8 +81,9 @@ export const canManageAnyReceipt = (role: string | undefined) =>
 /** Receipt ids are UUIDs; anything else can't match, and Postgres would reject the cast. */
 export const isReceiptId = isUuid;
 
-export type ReceiptWithItems = Receipt & {
-  items: ReceiptItem[];
+export type ReceiptWithItems = Omit<Receipt, "rawJson"> & {
+  /** `needsCheck`: the line's own numbers disagree; set by `get`. */
+  items: (ReceiptItem & { needsCheck?: boolean })[];
   imageUrl?: string;
   /** Who marked it reviewed; set by `get`, null once that user is deleted. */
   reviewer?: { name: string } | null;
@@ -736,13 +737,18 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
               reviewer: { columns: { name: true } },
             },
           });
-          if (!row || !isStaleCandidate(row)) return row ?? null;
+          if (!row) return null;
+          const { rawJson, ...rest } = row;
+          const checked = { ...rest, items: withLineChecks(row.items, row.currency, rawJson) };
+          if (!isStaleCandidate(row)) return checked;
           const [live] = await db
             .select({ id: jobs.id })
             .from(jobs)
             .where(and(eq(jobs.receiptId, id), liveReceiptJob("jobs")))
             .limit(1);
-          return live ? row : { ...row, status: "failed" as const, errorMessage: STALE_MESSAGE };
+          return live
+            ? checked
+            : { ...checked, status: "failed" as const, errorMessage: STALE_MESSAGE };
         }),
 
       list: (scope, filters, page) =>
