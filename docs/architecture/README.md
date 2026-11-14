@@ -158,6 +158,7 @@ flowchart TD
 - [Billing](flows/billing.md): Paddle checkout, webhooks, workspace plans and quota rules
 - [Observability](flows/observability.md): wide events, the schema allowlist and sampling
 - [Admin actions and the audit log](flows/admin-actions.md)
+- [Data protection](security/data-protection.md): data classes, hashing and encryption, keys, retention, access and backups
 - [Admin operations and jobs](flows/admin-operations.md): charts, their sources, and the job actions
 - [Settings cache](flows/settings-cache.md)
 - [Receipt dates and Bikram Sambat](dates.md): the stored date, the month table and its yearly update, the resolver
