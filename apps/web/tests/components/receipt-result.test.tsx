@@ -48,10 +48,26 @@ const receipt = (fields: Partial<ReceiptWithItems> = {}) =>
     ...fields,
   }) as unknown as ReceiptWithItems;
 
-const render = (r: ReceiptWithItems) =>
-  renderToStaticMarkup(<ReceiptResult canEdit receipt={r} viewerName="Test User" />);
+const render = (r: ReceiptWithItems, shared = false) =>
+  renderToStaticMarkup(
+    <ReceiptResult
+      canEdit
+      receipt={r}
+      shared={shared}
+      timeZone="Asia/Kathmandu"
+      viewerName="Test User"
+    />,
+  );
 
 describe("ReceiptResult", () => {
+  it("says when it was added in the viewer's zone, and by whom in a shared workspace", () => {
+    expect(render(receipt())).toContain("Added 1 Oct 2026, 17:45");
+    expect(render(receipt({ uploader: { name: "Asha" } }), true)).toContain(
+      "Added 1 Oct 2026, 17:45 · by Asha",
+    );
+    expect(render(receipt({ status: "processing" }))).toContain("Added 1 Oct 2026, 17:45");
+  });
+
   it("marks hard-to-read lines until the receipt is reviewed", () => {
     const unreviewed = render(receipt());
     expect(unreviewed).toContain("Check this line against the photo");
