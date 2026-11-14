@@ -5,12 +5,14 @@
  */
 import {
   account,
+  and,
   billingSubscriptions,
   createDb,
   eq,
   jobs,
   member,
   organization,
+  receipts,
   session,
   sql,
   user,
@@ -483,6 +485,71 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       .delete(billingSubscriptions)
       .where(eq(billingSubscriptions.providerSubscriptionId, subscriptionId));
     await db.delete(user).where(eq(user.id, buyerId));
+  });
+
+  it("deleting a workspace queues its files' deletion with the rows, and neither when the delete fails", async () => {
+    const headers = new Headers({ cookie });
+    await db
+      .update(session)
+      .set({ stepUpAt: new Date(), stepUpMethod: "email" })
+      .where(eq(session.userId, userId));
+    const workspace = async (name: string) => {
+      const id = crypto.randomUUID();
+      await db
+        .insert(organization)
+        .values({ id, name, slug: `${tag}-${name}`, createdAt: new Date() });
+      await db.insert(member).values({
+        id: crypto.randomUUID(),
+        organizationId: id,
+        userId,
+        role: "owner",
+        createdAt: new Date(),
+      });
+      const key = `${tag}/${name}.jpg`;
+      await db.insert(receipts).values({
+        organizationId: id,
+        userId,
+        status: "failed",
+        fileName: `${name}.jpg`,
+        imageObjectKey: key,
+      });
+      return { id, key };
+    };
+    const deleteJobs = (organizationId: string) =>
+      db
+        .select({ payload: jobs.payload })
+        .from(jobs)
+        .where(and(eq(jobs.kind, "storage.delete"), eq(jobs.organizationId, organizationId)));
+    const exists = async (organizationId: string) =>
+      (await db.select().from(organization).where(eq(organization.id, organizationId))).length;
+
+    const gone = await workspace("gone");
+    await auth.api.deleteOrganization({ headers, body: { organizationId: gone.id } });
+    expect(await exists(gone.id)).toBe(0);
+    expect(await deleteJobs(gone.id)).toEqual([{ payload: { keys: [gone.key] } }]);
+
+    const kept = await workspace("kept");
+    const fn = `auth_fail_${Date.now()}`;
+    await db.execute(
+      sql.raw(`create function ${fn}() returns trigger language plpgsql as $$
+        begin if old.id = '${kept.id}' then raise exception 'blocked'; end if; return old; end $$`),
+    );
+    await db.execute(
+      sql.raw(
+        `create trigger ${fn} before delete on organization for each row execute function ${fn}()`,
+      ),
+    );
+    try {
+      await expect(
+        auth.api.deleteOrganization({ headers, body: { organizationId: kept.id } }),
+      ).rejects.toThrow();
+    } finally {
+      await db.execute(sql.raw(`drop trigger if exists ${fn} on organization`));
+      await db.execute(sql.raw(`drop function if exists ${fn}()`));
+    }
+    expect(await exists(kept.id)).toBe(1);
+    expect(await deleteJobs(kept.id)).toEqual([]);
+    await db.delete(jobs).where(eq(jobs.organizationId, gone.id));
   });
 
   it("a revoked session stops working on auth endpoints at once (cookie cache off)", async () => {

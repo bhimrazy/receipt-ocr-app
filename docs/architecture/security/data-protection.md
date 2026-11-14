@@ -102,15 +102,15 @@ outside Safari, shared files and direct API uploads are stored, and sent to the 
 
 ## Retention
 
-| Data                                                                          | Kept                                                                     | Enforced by                                                          |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| Account, workspaces, receipts, files                                          | Until the user deletes them                                              | Delete flows ([data model](../data-model.md#what-happens-on-delete)) |
-| Support messages                                                              | 12 months after closing, or after the last change if never closed        | `maintenance.purge`, daily                                           |
-| Verification rows                                                             | Until expiry                                                             | Better Auth deletes expired rows on each lookup                      |
-| Rate-limit counters                                                           | About an hour                                                            | Better Auth prunes rows older than its longest window                |
-| Usage ledger                                                                  | Indefinitely; unlinked from the user and workspace when they are deleted | `SET NULL` foreign keys                                              |
-| Billing records                                                               | While the workspace exists; afterwards without the workspace's identity  | Delete flows                                                         |
-| Sessions, step-up codes and events, job records, invitations, admin audit log | No limit yet                                                             | See [Planned](#planned)                                              |
+| Data                                                                          | Kept                                                                     | Enforced by                                                                                                                     |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Account, workspaces, receipts, files                                          | Until the user deletes them                                              | Delete flows ([data model](../data-model.md#what-happens-on-delete)); files by `storage.delete` jobs queued with the row delete |
+| Support messages                                                              | 12 months after closing, or after the last change if never closed        | `maintenance.purge`, daily                                                                                                      |
+| Verification rows                                                             | Until expiry                                                             | Better Auth deletes expired rows on each lookup                                                                                 |
+| Rate-limit counters                                                           | About an hour                                                            | Better Auth prunes rows older than its longest window                                                                           |
+| Usage ledger                                                                  | Indefinitely; unlinked from the user and workspace when they are deleted | `SET NULL` foreign keys                                                                                                         |
+| Billing records                                                               | While the workspace exists; afterwards without the workspace's identity  | Delete flows                                                                                                                    |
+| Sessions, step-up codes and events, job records, invitations, admin audit log | No limit yet                                                             | See [Planned](#planned)                                                                                                         |
 
 `maintenance.purge` is one job kind that runs once a day through the [job queue](../flows/jobs.md) and deletes in
 batches of 500. New retention rules are added to it; nothing is deleted by a database scheduler.
