@@ -81,13 +81,17 @@ export const canManageAnyReceipt = (role: string | undefined) =>
 /** Receipt ids are UUIDs; anything else can't match, and Postgres would reject the cast. */
 export const isReceiptId = isUuid;
 
-export type ReceiptWithItems = Omit<Receipt, "rawJson"> & {
+export type ReceiptWithItems = Omit<Receipt, "rawJson" | "model"> & {
   /** `needsCheck`: the line's own numbers disagree; set by `get`. */
   items: (ReceiptItem & { needsCheck?: boolean })[];
   imageUrl?: string;
   /** Who marked it reviewed; set by `get`, null once that user is deleted. */
   reviewer?: { name: string } | null;
 };
+
+/** A row without the fields customers never see: the raw extraction and the model that read it. */
+const withoutFields = <T extends object, K extends keyof T>(row: T, ...keys: K[]) =>
+  Object.fromEntries(Object.entries(row).filter(([key]) => !keys.includes(key as K))) as Omit<T, K>;
 
 /** A History row: table columns only, no items or raw extraction. */
 export type ReceiptSummary = {
@@ -738,8 +742,8 @@ export class ReceiptRepo extends Context.Tag("@receipt-ocr/core/ReceiptRepo")<
             },
           });
           if (!row) return null;
-          const { rawJson, ...rest } = row;
-          const checked = { ...rest, items: withLineChecks(row.items, row.currency, rawJson) };
+          const rest = withoutFields(row, "rawJson", "model");
+          const checked = { ...rest, items: withLineChecks(row.items, row.currency, row.rawJson) };
           if (!isStaleCandidate(row)) return checked;
           const [live] = await db
             .select({ id: jobs.id })
