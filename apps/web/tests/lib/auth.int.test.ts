@@ -322,7 +322,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     // Not permanent: ageing the counter past the window reopens sign-in.
     await db
       .execute(
-        sql`update rate_limit set last_request = last_request - ${16 * 60 * 1000} where id like 'signin-fail:%'`,
+        sql`update app_rate_limits set window_start = window_start - ${16 * 60 * 1000} where key like 'signin-fail:%'`,
       )
       .then((r) => r.rows);
     // The real password then clears the count, so a fresh budget of wrong guesses follows.
@@ -333,7 +333,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
       sql`delete from organization where id in (select organization_id from member where user_id = ${created.user.id})`,
     );
     await db.delete(user).where(eq(user.id, created.user.id));
-    await db.execute(sql`delete from rate_limit where id like 'signin-fail:%'`);
+    await db.execute(sql`delete from app_rate_limits where key like 'signin-fail:%'`);
   });
 
   it("guards the admin plugin endpoints: no last-admin demotion, no banning or removing admins", async () => {
@@ -418,7 +418,7 @@ describe.skipIf(!enabled)("Better Auth hardening against Postgres", () => {
     for (let i = 0; i < 11; i++) results.push(await status(change()));
     expect(results.slice(0, 10).every((code) => code !== 429)).toBe(true);
     expect(results[10]).toBe(429);
-    await db.execute(sql`delete from rate_limit where id = ${`pwchange:${userId}`}`);
+    await db.execute(sql`delete from app_rate_limits where key = ${`pwchange:${userId}`}`);
   });
 
   // Last: it deletes this user's sessions.

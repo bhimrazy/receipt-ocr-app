@@ -12,7 +12,7 @@ vi.mock("@receipt-ocr/core", async (importOriginal) => ({
   memberLimitCheck: () => room,
   userPaysForWorkspace: (organizationId: string, userId: string) =>
     buyers.has(`${organizationId}:${userId}`),
-  // In-memory stand-in for the rate_limit table.
+  // In-memory stand-in for the app_rate_limits table.
   hitRateLimit: (key: string, _windowMs: number, max: number) => {
     const count = (hits.get(key) ?? 0) + 1;
     hits.set(key, count);
