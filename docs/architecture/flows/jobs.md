@@ -177,10 +177,11 @@ window). If the refund is still `unmatched` it logs `billing.refund_unresolved` 
 Priority 9, read-only.
 
 `storage.delete` ([`kinds/storage-delete.ts`](../../../packages/core/src/jobs/kinds/storage-delete.ts)) deletes the
-stored files of receipts a user deleted. `ReceiptRepo.removeMany` enqueues it in the transaction that deletes the rows,
-with the object keys as the payload (at most 1,000, one bulk delete) and the workspace id, but no user, so it never
-takes one of the user's running slots. Priority 9, behind receipt reads. Both delete routes start it in `after()`;
-otherwise the next drain runs it. A key already gone counts as deleted, so a retry is safe. Up to 8 attempts (backoff
+stored files of deleted receipts. It is enqueued in the transaction that deletes the rows, with the object keys as the
+payload (at most 1,000) and the workspace id, but no user, so it never takes one of the user's running slots:
+`ReceiptRepo.removeMany` queues one for a user's delete, and `deleteWorkspace` and `prepareUserDeletion` (workspace and
+account deletion) one per 1,000 keys of each deleted workspace. Priority 9, behind receipt reads. Both receipt delete
+routes start it in `after()`; otherwise the next drain runs it. A key already gone counts as deleted, so a retry is safe. Up to 8 attempts (backoff
 30 s doubling to 1 h); storage not configured is dead at once. It is not a `receipt.%` kind, so the per-receipt live-job
 index and the stale rule ignore it.
 
@@ -203,12 +204,13 @@ job ends dead and shows in the jobs admin.
 `maintenance.purge` ([`kinds/maintenance-purge.ts`](../../../packages/core/src/jobs/kinds/maintenance-purge.ts))
 deletes data past its retention period, each table in turn:
 
-| Table                     | Deleted                                                                                                                                          | Function                                  |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| `support_messages`        | 12 months after `closed_at`, or, while a message isn't closed, 12 months after the later of `created_at` and `updated_at` (a reopen restarts it) | `purgeSupportMessages` (`support.ts`)     |
-| `step_up_codes`           | 1 day after `expires_at` (a code lives 10 minutes; the send limit counts the last 10 minutes)                                                    | `purgeStepUpCodes` (`step-up/store.ts`)   |
-| `jobs`, succeeded         | 30 days after `finished_at`: the Operations page's longest range                                                                                 | `purgeFinishedJobs` (`jobs/retention.ts`) |
-| `jobs`, dead or cancelled | 90 days after `finished_at`: what an admin investigates or re-runs                                                                               | `purgeFinishedJobs`                       |
+| Table                     | Deleted                                                                                                                                          | Function                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `support_messages`        | 12 months after `closed_at`, or, while a message isn't closed, 12 months after the later of `created_at` and `updated_at` (a reopen restarts it) | `purgeSupportMessages` (`support.ts`)         |
+| `step_up_codes`           | 1 day after `expires_at` (a code lives 10 minutes; the send limit counts the last 10 minutes)                                                    | `purgeStepUpCodes` (`step-up/store.ts`)       |
+| `jobs`, succeeded         | 30 days after `finished_at`: the Operations page's longest range                                                                                 | `purgeFinishedJobs` (`jobs/retention.ts`)     |
+| `jobs`, dead or cancelled | 90 days after `finished_at`: what an admin investigates or re-runs                                                                               | `purgeFinishedJobs`                           |
+| `account`, tokens only    | Nulls Google and GitHub tokens on any row that has one (written by an older release during a deploy, or a path the account hooks miss)           | `clearProviderTokens` (`account-security.ts`) |
 
 Each delete repeats its predicate on the locked rows, so a row changed meanwhile (a reopened message, a job an admin
 re-ran) is kept. Deleting a finished job frees no idempotency key: keys only dedupe against live jobs, and an email's
@@ -230,7 +232,7 @@ never claimed (the old registry doesn't run it) and waits, queued, until the rol
 
 `storage.orphan_sweep` ([`kinds/storage-orphan-sweep.ts`](../../../packages/core/src/jobs/kinds/storage-orphan-sweep.ts))
 finds stored receipt files that no receipt row points at: an upload whose insert failed or may have committed
-(`receipt.ingest_unknown`), a `storage.delete` job that died, or an inline purge that failed (`admin.purge_failed`).
+(`receipt.ingest_unknown`), or a `storage.delete` job that died.
 Each `maintenance.purge` run queues the day's first part as its last step, keyed `storage.orphan_sweep:<day>::0`.
 
 ```mermaid

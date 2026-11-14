@@ -13,7 +13,7 @@ const item = {
   id: "i1",
   receiptId: "r1",
   name: "Smudged item",
-  quantity: "1",
+  quantity: 1,
   unitPrice: "10.00",
   totalPrice: "10.00",
   confidence: "0.5000",
@@ -43,7 +43,6 @@ const receipt = (fields: Partial<ReceiptWithItems> = {}) =>
     attempts: 1,
     createdAt: new Date("2026-10-01T12:00:00Z"),
     imageObjectKey: "r1.jpg",
-    rawJson: null,
     items: [item],
     ...fields,
   }) as unknown as ReceiptWithItems;
@@ -52,15 +51,30 @@ const render = (r: ReceiptWithItems) =>
   renderToStaticMarkup(<ReceiptResult canEdit receipt={r} viewerName="Test User" />);
 
 describe("ReceiptResult", () => {
-  it("marks hard-to-read lines until the receipt is reviewed", () => {
-    const unreviewed = render(receipt());
+  it("marks lines whose numbers disagree until the receipt is reviewed", () => {
+    const off = { ...item, totalPrice: "20.00", needsCheck: true };
+    const unreviewed = render(receipt({ items: [off] }));
     expect(unreviewed).toContain("Check this line against the photo");
-    expect(unreviewed).toContain("Marked lines were hard to read.");
+    expect(unreviewed).toContain("Marked lines don&#x27;t add up.");
 
-    const reviewed = render(receipt({ reviewedAt: new Date(), reviewer: { name: "Test User" } }));
+    const reviewed = render(
+      receipt({ items: [off], reviewedAt: new Date(), reviewer: { name: "Test User" } }),
+    );
     expect(reviewed).not.toContain("Check this line against the photo");
-    expect(reviewed).not.toContain("Marked lines were hard to read.");
+    expect(reviewed).not.toContain("Marked lines don&#x27;t add up.");
     expect(reviewed).not.toContain("bg-warning/5");
+  });
+
+  it("does not mark a line that adds up, whatever the model's confidence", () => {
+    const html = render(receipt());
+    expect(html).not.toContain("Check this line against the photo");
+    expect(html).not.toContain("Marked lines");
+  });
+
+  it("links back to Receipts and has no raw extraction block", () => {
+    const html = render(receipt());
+    expect(html).toContain("Receipts</a>");
+    expect(html).not.toContain("Raw extraction");
   });
 
   it("shows only the optional fields the receipt has", () => {

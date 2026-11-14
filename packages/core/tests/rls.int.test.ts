@@ -49,6 +49,24 @@ describe.skipIf(!enabled)("row-level security against Postgres", () => {
     expect(rows[0]?.n).toBe(0);
   });
 
+  it("grants Supabase's API roles nothing in public (where those roles exist)", async () => {
+    const rows = await db((d) =>
+      d
+        .execute<{ entry: string }>(
+          sql`
+        select r.rolname || ':' || c.relname as entry
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        cross join pg_roles r
+        where n.nspname = 'public' and r.rolname in ('anon', 'authenticated', 'service_role')
+          and c.relkind in ('r', 'p')
+          and has_table_privilege(r.oid, c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')`,
+        )
+        .then((r) => r.rows),
+    );
+    expect(rows.map((r) => r.entry)).toEqual([]);
+  });
+
   it("lets the app role read and write", async () => {
     const id = `rls-${Date.now()}`;
     const slug = id;

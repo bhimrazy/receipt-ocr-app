@@ -200,12 +200,7 @@ Nightly database backups (#131) were closed for now; the `ops/db-backups` branch
 
 ## In flight
 
-Tracks started 2026-11-14:
-
-- Support retention tweaks and one migration: `CHECK (closed_at >= created_at)`, an index for the purge, and an index
-  on `step_up_codes (expires_at)`.
-- Reliability follow-ups: a missing stored file is non-retryable in the extract job, a sweep for orphaned objects,
-  and a purge of `step_up_codes` and finished jobs.
+Open PRs, unfinished tracks, migration rollout steps and owner to-dos as of 2026-11-14: [handoff](plans/2026-11-14-handoff.md).
 
 After 2026-11-18: bump CI's `postgres:17.10-alpine` to `17.11-alpine` (index digest), and update
 [db.md](architecture/db.md) and [decisions.md](decisions.md).
@@ -258,7 +253,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
    Scans in a deleted workspace still count against whoever made them. Members already over the new caps stay. The
    storage cap needs a stored byte count (a migration); until it ships, storage is neither enforced nor listed.
 
-3. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
+3. Who sees estimated cost (recommended: platform admins only); ~~whether customers see the model name~~ decided
+   2026-11-14: customers don't see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
 4. Default OCR chain: decided 2026-11-08. Claude Haiku 5.5, then Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; steps
    without an API key are skipped ([ai.md](architecture/ai.md#default-chain)). Groq zero data retention must be on first.
@@ -407,6 +403,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 
 ## Known follow-ups
 
+- Admin receipt view with the raw extraction (customers no longer see it).
 - **Receipt review and the totals check (#216):**
   - The totals check treats a total equal to the subtotal or the line sum as tax-inclusive prices. So a total
     misread as the subtotal raises no warning. Fixing that needs a `taxIncluded` signal from extraction.

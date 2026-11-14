@@ -4,10 +4,10 @@ import { authRateLimitRules } from "./auth-rate-limit";
 import { SITE_NAME } from "./site";
 import {
   countOtherAdmins,
+  deleteWorkspace,
   ensurePersonalWorkspace,
   prepareUserDeletion,
   workspacesBlockingDeletion,
-  purgeReceiptFiles,
   releaseMemberGroups,
 } from "@receipt-ocr/core";
 import { and, createDb, eq, member, schema, user as userTable } from "@receipt-ocr/db";
@@ -36,6 +36,8 @@ import {
   accountLinking,
   guardPasskeyDelete,
   guardUnlink,
+  PROVIDER_TOKEN_PATHS,
+  withoutProviderTokens,
 } from "./auth-accounts";
 import {
   authMethodOf,
@@ -214,15 +216,29 @@ async function promoteIfBootstrapAdmin(user: {
     .where(and(eq(userTable.id, user.id), eq(userTable.emailVerified, true)));
 }
 
-/** Removes stored receipt files before the rows they belong to cascade away. */
-async function purgeFiles(owner: { organizationId: string } | { userId: string }) {
-  const purged = await runtime.runPromise(purgeReceiptFiles(owner));
-  logger.info({
-    event: "receipt.files_purged",
-    unit: "log",
-    ...("userId" in owner ? { user_id: owner.userId } : { organization_id: owner.organizationId }),
-    count: purged,
-  });
+/**
+ * Deletes the workspace through core, which queues its stored files' deletion in the same
+ * transaction. Better Auth's own delete runs after this hook and finds nothing left to delete.
+ */
+async function deleteOwnWorkspace(organizationId: string) {
+  const exit = await runtime.runPromiseExit(deleteWorkspace(organizationId));
+  if (exit._tag === "Success") {
+    logger.info({
+      event: "workspace.deleted",
+      unit: "log",
+      organization_id: organizationId,
+      counts: { files: exit.value.files },
+    });
+    return;
+  }
+  const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+  if (failure?._tag === "Conflict") {
+    // Core's message is worded for admins; the subscription check says it for the owner.
+    await assertNoLiveSubscription(organizationId);
+    throw new APIError("BAD_REQUEST", { message: failure.message });
+  }
+  if (failure?._tag === "NotFound") throw new APIError("BAD_REQUEST", { message: failure.message });
+  throw new Error("Could not delete the workspace", { cause: exit.cause });
 }
 
 /**
@@ -292,6 +308,7 @@ export const auth = betterAuth({
     schema,
   }),
   trustedOrigins: authEnv.trustedOrigins,
+  disabledPaths: PROVIDER_TOKEN_PATHS,
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
@@ -350,9 +367,9 @@ export const auth = betterAuth({
   verification: {
     storeIdentifier: { default: "hashed", overrides: { "trust-device-": trustDeviceIdentifier } },
   },
-  // Rows sealed before this was on stay readable: Better Auth passes non-hex
-  // (plaintext) tokens through and seals them on the user's next sign-in.
-  account: { encryptOAuthTokens: true, accountLinking },
+  // Provider tokens are dropped by the account hooks below; sealing stays on in case a Better Auth
+  // upgrade writes one through a path the hooks don't see.
+  account: { encryptOAuthTokens: true, updateAccountOnSignIn: false, accountLinking },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
@@ -563,7 +580,11 @@ export const auth = betterAuth({
       update: { after: twoFactorUserUpdated(deliver) },
     },
     account: {
-      create: { after: accountCreated(deliver) },
+      create: {
+        before: async (data) => withoutProviderTokens(data),
+        after: accountCreated(deliver),
+      },
+      update: { before: async (data) => withoutProviderTokens(data) },
       delete: { after: accountDeleted(deliver) },
     },
     session: {
@@ -655,7 +676,7 @@ export const auth = betterAuth({
         },
         beforeDeleteOrganization: async ({ organization }) => {
           await assertNoLiveSubscription(organization.id);
-          await purgeFiles({ organizationId: organization.id });
+          await deleteOwnWorkspace(organization.id);
         },
       },
       // The ownership cap (Free 1, Pro 2) is checked in beforeCreateOrganization,

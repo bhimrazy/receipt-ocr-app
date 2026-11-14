@@ -81,7 +81,7 @@ function harness(
         rows.set(id, row);
         return Effect.succeed({
           kind: "inserted" as const,
-          receipt: row as Receipt,
+          receipt: row as unknown as Receipt,
           jobId: `job-${id}`,
         });
       }),

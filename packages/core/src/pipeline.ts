@@ -468,7 +468,10 @@ export const deleteReceipt = (input: { receiptId: string; scope: ReceiptScope })
         : Effect.succeed({ jobId: result.jobId }),
   );
 
-/** Deletes every stored file of a workspace or user, before their rows cascade away. */
+/**
+ * Deletes every stored file of a workspace or user at once, with no row delete: cleanup only.
+ * Deletes that remove rows queue `storage.delete` jobs in their transaction instead.
+ */
 export const purgeReceiptFiles = (owner: { organizationId: string } | { userId: string }) =>
   Effect.gen(function* () {
     const repo = yield* ReceiptRepo;

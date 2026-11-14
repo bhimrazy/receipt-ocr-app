@@ -199,18 +199,19 @@ default, how it is counted and the check order are in the single
 throwing `Conflict`, `NotFound` or `InvalidInput` inside rolls it back. Member changes lock all member rows of the
 workspace (`FOR UPDATE`) so the "at least one owner" check can't race another admin.
 
-**Files after rows.** Deletes remove database rows first and stored objects afterwards. A user's delete (one receipt
-or many) deletes the rows and enqueues one `storage.delete` job with their object keys in the same transaction, so the
-files go if and only if the rows did; the job retries until the bucket answers. Account and workspace purges still
-delete objects inline and log a failure with its key (`admin.purge_failed`) rather than failing the request; an
-orphaned object costs storage only. On ingest, the just-stored object is removed whenever the insert can't have
+**Files after rows.** Deletes remove database rows first and stored objects afterwards. Every delete path enqueues
+`storage.delete` jobs with the object keys in the transaction that deletes the rows, so the files go if and only if
+the rows did; the job retries until the bucket answers. A user's delete (one receipt or many, `ReceiptRepo.removeMany`)
+queues one job. A workspace delete (`deleteWorkspace`: the owner through Better Auth or an admin) and account deletion
+(`prepareUserDeletion`, for the workspaces only that user belongs to) lock the organization rows, so no receipt is
+added meanwhile, and queue one job per 1,000 keys (`MAX_BULK_DELETE`). On ingest, the just-stored object is removed whenever the insert can't have
 committed: a quota refusal, or any failure before the transaction's last statement finished. A failure while
 committing (`DbError.atCommit`) keeps the object unless Postgres answered with a SQLSTATE outside class 08 (a
 rollback); a timeout, a lost socket or a pooler's connection error may have committed, so `receipt.ingest_unknown`
 logs the receipt id for a sweep. The daily [orphan sweep](flows/jobs.md#orphan-sweep) finds files that any of these
-paths left behind (report-only until `STORAGE_ORPHAN_SWEEP_DELETE=true`). One path runs the other way round: Better
-Auth's `beforeDeleteOrganization` hook (`apps/web/lib/auth.ts`) purges a workspace's files before its rows go, so a
-delete that then fails leaves receipts whose file is gone; their reads fail as `stored-file-missing`.
+paths left behind (report-only until `STORAGE_ORPHAN_SWEEP_DELETE=true`). Better Auth's `beforeDeleteOrganization`
+hook (`apps/web/lib/auth.ts`) runs `deleteWorkspace` itself, so the rows and the jobs commit together; Better Auth's own
+delete then finds nothing left.
 
 ## Receipt groups
 
