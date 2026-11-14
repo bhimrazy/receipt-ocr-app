@@ -22,14 +22,17 @@ export function StatusButtons({
   messageId,
   status,
   sender,
+  openHintId,
 }: {
   messageId: string;
   status: Status;
   sender: string;
+  openHintId?: string;
 }) {
   const [pending, startTransition] = useTransition();
   return MOVES[status].map(({ to, label, done, icon: Icon }) => (
     <Button
+      aria-describedby={to === "open" ? openHintId : undefined}
       aria-label={`${label}: message from ${sender}`}
       disabled={pending}
       key={to}
