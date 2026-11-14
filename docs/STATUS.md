@@ -1,7 +1,7 @@
 # Status and handoff
 
 Where the project stands, what is in flight, and what needs a decision. Read this first when picking the work up on a
-new machine; keep it current when something merges or a decision is made. Last updated 2026-11-08 (billing v1 in review).
+new machine; keep it current when something merges or a decision is made. Last updated 2026-11-14.
 
 How the system is built (every app and package, the main flows and the data model) is in
 [architecture](architecture/README.md).
@@ -110,92 +110,62 @@ Every PR merged 2026-11-07 (plus #42 and #44 from 2026-11-06), by number. Detail
 
 ## Migrations squashed (2026-11-07, again 2026-11-08)
 
-Pre-launch, all migrations `0000`-`0010` were squashed into one `0000_baseline` that also enables row-level security on
-every table (no policies; the app role bypasses it, so it is defence in depth for Supabase's Data API). On 2026-11-08
-the four files since then (`0000`-`0003`) were squashed again into a new `0000_baseline`; its schema dump matches the
-old files' on Postgres 17 and 18 apart from column order in two tables. Both databases hold only test data and get
-reset. **From the first real user onward we never squash again.** Details:
-[data layer](architecture/db.md#migrations).
+Before launch the migrations were squashed twice (2026-11-07 and 2026-11-08) into one `0000_baseline`, which also
+enables row-level security on every table (no policies; the app role bypasses it, so it is defence in depth for
+Supabase's Data API). Migrations `0000`-`0007` are applied on `staging-db` and `production-db`. **From the first real
+user onward we never squash again.** Details: [data layer](architecture/db.md#migrations).
 
 ## Launch blockers
 
-- Turnstile keys required in production for `/api/contact`: without them, `checkTurnstile` lets every request through
-  (`apps/web/lib/turnstile.ts`), so a script that rotates IPs can fill `support_messages`.
+None known.
 
 ## Production to-dos (owner)
 
 Steps are in [deployment.md](deployment.md).
 
-- Migration `0003_receipt_fields` (#224, receipt fields and review reasons): run **Database Migration** on
-  `staging-db`, then `production-db`, then deploy production by hand straight away. The window between migration and
-  deploy is in the [rollout notes](architecture/dates.md#migration-0003-rollout).
+- Migrations roll out by hand: run **Database Migration** on `staging-db`, then `production-db` (the owner approves),
+  then run **Vercel Production Deployment** by hand. Production deploys automatically after CI passes on a push to
+  `main`, but skips any release that changes `apps/web/drizzle/` since the last successful production deploy. Manual
+  runs are allowed only from `main` and need a successful `production-db` run with the same migrations.
+- Point Vercel's Preview variables at `receipt-ocr-staging`, leave `BETTER_AUTH_URL` unset there and turn on Deployment
+  Protection for previews ([deployment.md](deployment.md#staging-and-previews)).
 - **By 2027-04-14: update the Bikram Sambat table for 2084.** That day the guard test in
   `packages/calendar/tests/bs.test.ts` turns CI red. Do the update once the 2084 almanac is approved
   ([runbook](architecture/dates.md#yearly-table-update-runbook)).
-- Migration `0002_receipt_review` (reviewed receipts): run **Database Migration** on `staging-db`, then
-  `production-db`, before deploying the release that contains it. It adds two nullable columns, a foreign key and a
-  partial index to `receipts`, with `lock_timeout = '3s'`.
-- Reset `staging-db` and `production-db` with the 2026-11-08 SQL (23 tables, two enum types, the `drizzle`
-  bookkeeping schema; [release note](deployment.md#squashed-baseline-again-2026-11-08), not `DROP SCHEMA public`),
-  run **Database Migration** on `staging-db`, then `production-db` (owner approves), then deploy by hand. This applies
-  the squashed baseline with row-level security. Then check the **RLS enabled** badge in the Supabase dashboard and remove `public` from the
-  Data API's exposed schemas ([deployment.md](deployment.md#release-notes)).
-- Queue drain: done 2026-11-08. A new `CRON_SECRET` is in Vercel and in Supabase Vault (`cron_secret`); pg_cron job
-  `drain-jobs` calls `/api/jobs/drain` every 5 minutes ([step 8](production-environment.md#8-queue-drain-cron)). Check
-  `net._http_response` for 200s after the next deploy.
-- Production deploys automatically after CI passes on a push to `main`. Manual runs are allowed only from `main`.
-  Once `ci/db-migrations` lands, the automatic deploy skips any release that changes `apps/web/drizzle/` since the
-  last successful production deploy run; migrations run only by hand (**Database Migration**: `staging-db`, then `production-db`
-  with the owner's approval), then the deploy is run by hand. Production and staging are reset to the squashed baseline.
-- `staging-db` and `production-db` exist (`main` only, `DIRECT_URL` set, required reviewer on `production-db`).
-  Still to do for `ci/db-migrations`: point Vercel's Preview variables at `receipt-ocr-staging`, leave
-  `BETTER_AUTH_URL` unset there and turn on Deployment Protection for previews
-  ([deployment.md](deployment.md#staging-and-previews)). After merging, once: run **Database Migration** for
-  `staging-db`, then `production-db` (applies the baseline), then **Vercel Production Deployment** by hand. Manual
-  deploys need a successful `production-db` run with the same migrations. The automatic gate compares with the last
-  run of the workflow on `main` whose `deploy-production` job succeeded; CI creates no git tags (tags are for real
-  releases, later).
+- Billing M1: run a Paddle sandbox test of an interval change with proration, a billing-date change and a cancel; read
+  the events back from `billing_events`.
+- Before Paddle goes live ([10c](production-environment.md#10c-switch-from-sandbox-to-live)):
+  1. In each Paddle account, set the **default payment link** (Checkout → Checkout settings; without it every checkout
+     fails with `transaction_default_checkout_url_not_set`), the sales tax mode (exclusive), the API key's permissions
+     and expiry, and the rest of [account settings](production-environment.md#paddle-account-settings). Point the
+     default payment link at `/pay` in both accounts (F1 in the
+     [Paddle docs review](reviews/2026-11-09-paddle-docs-review.md)). Its other follow-ups (F4 to F7) don't block live.
+  2. Test a sandbox checkout, submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
+     account verification, and switch to live values. `PADDLE_API_KEY` and `PADDLE_WEBHOOK_SECRET` are Sensitive; the
+     other four `PADDLE_*` variables are read at build time, when `vercel pull` returns Sensitive values empty.
+     `PADDLE_ENV` must match the account the secrets come from.
+  3. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).
+  4. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price
+     ([runbook](architecture/flows/billing.md#runbook)). Existing subscribers keep Pro whatever the price settings say
+     (the plan is recorded when a subscription links). There is no automated email for this yet.
+- Review the plan limits in Admin → Settings (Free is 30 scans a month by default; no saved row exists in production).
+- Set `OCR_DAILY_CAP` in production as a spend guard (about 1000, the all-plans fuse; the Free pool is 300 a day).
+- Support inbox: delete the contact notification emails from before 2026-11-14 (they hold the full message text) from
+  the support mailbox, and confirm or change the "usually within 2 business days" promise in the contact auto-reply.
+- Renew the GitHub token used for workflow dispatch.
 - `vercel-preview` environment (review P2-1): previews use it, so its `VERCEL_TOKEN`, which can deploy to production,
   reaches same-repo PR runs; it can't get a `main`-only policy without breaking previews. Production and cleanup use
   the main-only `vercel-production`, which alone holds `SENTRY_AUTH_TOKEN`. Both tokens are team-scoped for now (owner
-  to replace them with separate ones). Mitigations:
-  every production secret is stored as Vercel Sensitive (`vercel pull` can't read them back), and the repository has
-  no outside collaborators. The full fix is a separate Vercel project for previews, with its own token.
-- Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders. The auth secret was
-  replaced on 2026-11-08 (only `BETTER_AUTH_SECRET`; keep its copy in a password manager).
-- Set `OCR_DAILY_CAP` in production as a spend guard.
-- Billing v1 (in review, #143). Before it can take money, in this order:
-  1. Run **Database Migration** (`staging-db`, then `production-db`) before deploying; the release adds `billing_events`,
-     `billing_subscriptions` and `ocr_rounds.plan`, and replaces `ocr_rounds_organization_id_idx` (migration
-     `0001_billing`, on top of the squashed baseline).
-  2. Add the six `PADDLE_*` variables (sandbox first) and the webhook destination, including the `adjustment.*` events
-     ([step 10](production-environment.md#10-payments-paddle)); redeploy so the CSP picks up the client token. Only
-     `PADDLE_API_KEY` and `PADDLE_WEBHOOK_SECRET` are Sensitive: the other four are read at build time, when `vercel
-pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the secrets come from.
-  3. Set `OCR_DAILY_CAP` to about 1000 (the all-plans fuse; the Free pool is 300 a day).
-  4. In each Paddle account, set the **default payment link** (Checkout → Checkout settings; without it every checkout
-     fails with `transaction_default_checkout_url_not_set`), the sales tax mode (exclusive), the API key's permissions
-     and expiry, and the rest of [account settings](production-environment.md#paddle-account-settings). Before live:
-     point the default payment link at `/pay` in both accounts once it is deployed (F1 in the
-     [Paddle docs review](reviews/2026-11-09-paddle-docs-review.md), built with F2 and F3). Its other follow-ups (F4 to
-     F7) don't block live. The owner accepted all the review's decisions on 2026-11-09.
-  5. Test a sandbox checkout, then submit Paddle's website review once `/pricing` and `/refunds` are live, finish live
-     account verification, and switch to live values ([10c](production-environment.md#10c-switch-from-sandbox-to-live)).
-  6. Not built yet: scan packs ([where they fit](architecture/flows/billing.md#how-scan-packs-will-fit)).
-  7. Commitment: before any Pro price change, email current subscribers ahead of their next renewal at the new price
-     ([runbook](architecture/flows/billing.md#runbook)). Existing subscribers keep Pro whatever the price settings say
-     (the plan is recorded when a subscription links). There is no automated email for this yet.
-- After #241 deploys: run the `paid_transaction_id` backfill on each database
-  ([release note](deployment.md#billing-plan-column-migration-0005)), then plan a follow-up migration that drops the
-  `billing_subscriptions.plan` default ('pro'), which only the code from before #241 needs.
-- Vercel env: `SUPPORT_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM`.
-- Product updates signup (in review): built but off until you create a Resend segment (Audiences are now "segments"),
-  set `RESEND_NEWSLETTER_SEGMENT_ID`, and use a **full-access** `RESEND_API_KEY` (a sending-only key cannot add
-  contacts). No migration. Details and limits: [plan](plans/2026-11-08-newsletter.md).
+  to replace them with separate ones). Mitigations: every production secret is stored as Vercel Sensitive (`vercel
+pull` can't read them back), and the repository has no outside collaborators. The full fix is a separate Vercel
+  project for previews, with its own token.
+- Keep every new production secret Sensitive in Vercel; the build tolerates their placeholders.
+- Product updates signup: built but off until you create a Resend segment (Audiences are now "segments"), set
+  `RESEND_NEWSLETTER_SEGMENT_ID`, and use a **full-access** `RESEND_API_KEY` (a sending-only key cannot add
+  contacts). Details and limits: [plan](plans/2026-11-08-newsletter.md).
 - Standing decisions and dated reminders: [decisions.md](decisions.md).
 - The production Gemini key must belong to a paid Google project (free-tier content can be used by Google).
 - If an admin saved an OCR chain naming `gemini-3.7-flash`, re-save it in Admin → Settings.
-- `EMAIL_FROM` is `ReceiptOCR <noreply@receipt-ocr.bhimraj.com.np>` (set 2026-11-08). `GROQ_API_KEY` is set for Production and Preview (2026-11-08).
 - Groq: enable Zero Data Retention in the Groq org's Data Controls before adding `GROQ_API_KEY`; without it Groq may
   keep inputs and outputs for up to 30 days, and the privacy policy says it does not ([deployment.md](deployment.md)).
 - OpenAI: requests are kept up to 30 days for abuse monitoring; zero data retention needs OpenAI's approval. The
@@ -203,28 +173,40 @@ pull` returns Sensitive values empty. `PADDLE_ENV` must match the account the se
 - `receipt-ocr.vercel.app` belongs to another Vercel project, so it is not this app's URL; use the project's own
   `*.vercel.app` URL or the custom domain (the production host is `receipt-ocr.bhimraj.com.np`).
 
+## Shipped 2026-11-12 to 2026-11-13
+
+Production runs `main`, and migrations `0000`-`0007` are applied on staging and production.
+
+- Receipt fields and dates: reviewed receipts and the checks card (#216), receipt fields, review reasons and Bikram
+  Sambat dates (#224, #227), extraction v3 (#228), merchant grouping and warnings that clear on save (#235).
+- Receipts list and navigation: sortable receipts list with bulk actions (#219), History becomes Receipts (#229), the
+  Spending page (#230), the desktop Add receipts button (#226), a slim Home (#240), Report a problem and Help rows (#237).
+- Billing v1 fixes: subscriptions bound to the checkout we created (#236), one subscription per workspace and
+  current-period refunds (#241), waiting refunds and the plan default dropped (#247).
+- Free at 30 a month for everyone, one Plan and billing page, honest marketing claims (#238, #243).
+- Support inbox: messages stored with a notify job (#246), admin support list and 12-month purge (#250).
+- Email: kind and provider message id on email events, idempotency key from job senders (#244, #248).
+- Edge detection: `packages/vision` (#242), measurement harness and baseline (#245), crop outcome on the upload event
+  (#249), auto-crop only on a confident detection (#220).
+- Photo viewer: pan and zoom (#251), no page zoom from rapid taps on iOS (#252); passed a real-device test.
+- Tests layout: `tests/` mirrors `src/` in every package and in `apps/web` (#234, #253, #254).
+- Comment cleanup against the comment rules (#255, #256, #257).
+- Other: Sentry source-map upload (#214), migrations verify TLS against `DATABASE_SSL_CA` (#222), staff review
+  correctness batch (#217).
+
+Nightly database backups (#131) were closed for now; the `ops/db-backups` branch is kept.
+
 ## In flight
 
-Open pull requests only.
+Tracks started 2026-11-14:
 
-| PR   | Work                                                                                                                                                                                                                                                                                                                                                 |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #236 | Billing: subscriptions and portal sessions bound to the checkout the server created (`billing_checkouts`; migration 0004 also validates the 0003 CHECKs); warn log level                                                                                                                                                                             |
-| #241 | Billing: one charging subscription per workspace, refunds revoke only the current period, plan recorded at link (migration 0005), cancel retried on lock, Free pool alert                                                                                                                                                                            |
-| #219 | Receipts list: sorting, page size, range, selection across pages, bulk delete (`storage.delete` job), export and Add to group                                                                                                                                                                                                                        |
-| #229 | Navigation PR 1: History becomes Receipts (`/app/receipts`), Groups moves to `/app/receipts/groups`; no redirects                                                                                                                                                                                                                                    |
-| #230 | Navigation PR 3: Spending page (`/app/spending`) holds the dashboard from Home; tab bar is Home, Receipts, Scan, Spending, Settings                                                                                                                                                                                                                  |
-| #238 | Free at 30 a month, one Plan and billing page, upgrade ladder from 80%, marketing claims fixed                                                                                                                                                                                                                                                       |
-| #242 | Edge detection PR 1: `packages/vision` holds the capture geometry and the detector, moved with their tests; no behaviour change                                                                                                                                                                                                                      |
-| #245 | Edge detection PR 2: measurement harness in `packages/vision/bench` (synthetic scenes for the 16 categories, metrics, per-variant table, `baseline.json`, CI check), baseline recorded in the plan; no behaviour change                                                                                                                              |
-| #249 | Edge detection PR 3: `crop.outcome` (kept, adjusted, full_image, manual, none), `crop.level`, `crop.seen` and `crop.source` on the `receipt.upload` event, enumerations only; no behaviour change                                                                                                                                                    |
-| #246 | Support messages stored in `support_messages` (migration 0006); `/api/contact` answers 200 and an `email.support-notify` job mails the inbox; per-user cap, deletion by user and address                                                                                                                                                             |
-| #250 | Support: `/admin/support` (status filter, replies, audited status changes, waiting count on the overview); daily `maintenance.purge` deletes messages 12 months after closing (or after the last change, while open); notification mail is a link only; privacy text updated; advisory lock namespaces in one registry (groups no longer share 7302) |
-| #251 | Full-size photo viewer: free zoom Fit to 400% (pinch, wheel, click, double-tap, pill, keys), pan with bounds, long receipts open fit-width from the top, full screen on phones; "Whole receipt / Actual pixels" removed                                                                                                                              |
-| #254 | Tests layout: `packages/core` and `packages/db` tests moved from `src/` to `tests/` (mirrors `src/`; same files and test counts); `docs/architecture` links updated                                                                                                                                                                                  |
-| #240 | Navigation PR 4: slim Home with a This month card; the upload panel is hidden on phones, which keep the usage line and limit card                                                                                                                                                                                                                    |
-| #131 | Nightly encrypted database backups to R2 with a restore drill (draft, needs a rebase; D1)                                                                                                                                                                                                                                                            |
-| #253 | Tests: `apps/web` colocated tests moved to `apps/web/tests/`, mirroring the source tree; no test logic changes                                                                                                                                                                                                                                       |
+- Support retention tweaks and one migration: `CHECK (closed_at >= created_at)`, an index for the purge, and an index
+  on `step_up_codes (expires_at)`.
+- Reliability follow-ups: a missing stored file is non-retryable in the extract job, a sweep for orphaned objects,
+  and a purge of `step_up_codes` and finished jobs.
+
+After 2026-11-18: bump CI's `postgres:17.10-alpine` to `17.11-alpine` (index digest), and update
+[db.md](architecture/db.md) and [decisions.md](decisions.md).
 
 Reviews from this round: [readiness audit](reviews/2026-11-06-readiness.md) (four lenses, ranked roadmap),
 [Midday study](reviews/2026-11-06-midday-study.md), [UX sweep](reviews/2026-11-06-ux-sweep.md).
@@ -257,8 +239,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 ## Decisions waiting on the owner
 
 1. ~~Classic as the homepage (then delete `app/(lab)` and `components/marketing`)~~ Done: the lab landing variants are removed.
-2. Plan limits: daily per user (today) or monthly per workspace; prices; payment provider. See
-   [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
+2. ~~Plan limits and payment provider~~ Decided: Free 30 scans a month (20 a day), Pro by workspace, Paddle. Still
+   open: the plan-limits review in Admin → Settings.
 3. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
 4. Default OCR chain: decided 2026-11-08. Claude Haiku 5.5, then Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; steps
@@ -287,21 +269,17 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
     per-device storage (no account sync), toggle in Settings, account menu and footer (not the header), a light iOS
     splash set, emails out of scope.
 
-15. Free month: if Admin → Settings has a saved plan table, its Free month (likely 100) wins over the new default of 30.
-    **Deploy step for #238:** on production, open Admin → Settings → Plan limits and set the Free month to 30 (or clear
-    the saved row). Until then Free stays at the saved value. The owner reviews the plan-limits settings separately.
-
 ## Roadmap (order)
 
 **Next up (ordered, 2026-11-08):** [plans/2026-11-08-next-up.md](plans/2026-11-08-next-up.md). The list below is the
 longer-term roadmap.
 
-**In review (#184):** upgrade call-to-action for Free workspaces (Home card, meter button, account menu, at-limit banner, all
+**Shipped (#184):** upgrade call-to-action for Free workspaces (Home card, meter button, account menu, at-limit banner, all
 opening an in-app upgrade modal with Paddle's overlay checkout):
 [plans/2026-11-08-upgrade-cta.md](plans/2026-11-08-upgrade-cta.md), owner took every default. Hidden on production
 for everyone but platform admins until live Paddle keys replace the sandbox ones.
 
-**In review:** the photo-flow rework, owner decisions recorded 2026-11-09 (all recommended, plus a file-size rule).
+**Shipped:** the photo-flow rework, owner decisions recorded 2026-11-09 (all recommended, plus a file-size rule).
 Sizing and preview ([sizing review](reviews/2026-11-09-upload-sizing.md),
 [compression research](reviews/2026-11-09-image-compression.md)): Compact / Small / Standard / Sharpest by shape
 (four options from 2026-11-09: Compact is a new 600 px option, Small the earlier 800 px Compact), a
@@ -349,14 +327,14 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 12. Security and incident readiness: owner MFA and secrets out of the Codespace, the 2026-11-10 upgrades, backups, admin kill switches with break-glass, a status page, abuse rules ([plan](plans/2026-11-07-security-incident-readiness.md)).
 13. In-app feedback: "Send feedback" in the account menu and Settings, "Your feedback" list, admin inbox with email
     replies; public board later ([feedback and requests](plans/2026-11-07-feedback-and-requests.md)).
-14. Dual-calendar dates and receipt fields. Track 1 (in review): migration `0003_receipt_fields` (new columns,
+14. Dual-calendar dates and receipt fields. Track 1 (shipped, #224): migration `0003_receipt_fields` (new columns,
     CHECKs `NOT VALID`, backfills), the vendored BS table and resolver in `@receipt-ocr/calendar`,
     `reviewReasons()` as the Needs review rule, BS-first display for BS receipts, the editor's AD/BS date and new
-    fields, zod PATCH parsing, CSV `receipt_date_bs` and the new columns. Extraction v3 (in review: `dates[]`, bill
+    fields, zod PATCH parsing, CSV `receipt_date_bs` and the new columns. Extraction v3 (#228: `dates[]`, bill
     number, tax id, discount, service charge, nullable merchant/total/currency; synthetic Nepal bench fixtures.
     Benchmarked 2026-11-13: no loss on the core fields, Nepal stored date 67% → 100% on Haiku and 17% → 100% on
-    Flash-Lite, Haiku +30% cost per receipt). Next: migration `0004` validating
-    the `0003` CHECKs, "Copy JSON" from the row, list badges from `review_reasons`, then Nepal fiscal-year and
+    Flash-Lite, Haiku +30% cost per receipt). Shipped: migration `0004` validating
+    the `0003` CHECKs, "Copy JSON" from the row, list badges from `review_reasons`. Next: Nepal fiscal-year and
     BS-month presets ([research](reviews/2026-11-12-dates-and-fields-research.md),
     [dual-calendar dates](plans/2026-11-07-dual-calendar-dates.md)).
 
@@ -406,8 +384,6 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - **Receipt review and the totals check (#216):**
   - The totals check treats a total equal to the subtotal or the line sum as tax-inclusive prices. So a total
     misread as the subtotal raises no warning. Fixing that needs a `taxIncluded` signal from extraction.
-  - History's confidence badge still shows "Review N%" on a receipt someone has reviewed. The receipts-list PR
-    will handle it.
   - At millions of `receipts` rows, revisit how review-style columns are added: the FK `NOT VALID` then
     `VALIDATE`, and the index `CONCURRENTLY`, in separate migrations (`0002` runs as one transaction).
 - **From the 2026-11-09 Home incident** ([note](reviews/2026-11-09-home-stuck-incident.md), fixed in #210 by moving to
@@ -422,11 +398,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   (#131, then Supabase Pro at launch), D2 turn off the Supabase Data API and revoke `anon`/`authenticated` grants, D3
   retention and a purge job.
 - **From the 2026-11-12 staff code review (#217):**
-  - A sweep for stored objects that no receipt row references. An upload whose insert fails while committing keeps
-    its object (`receipt.ingest_unknown`), and a failed delete leaves one (`receipt.object_delete_failed`). Purges find
-    objects through rows, so these also survive account and workspace deletion.
-  - Make a missing stored file (`NoSuchKey`) non-retryable in the extract job: today it is a `StorageError` and uses
-    all 4 attempts.
+  - Covered by the reliability track in flight: the orphaned-object sweep and a non-retryable `NoSuchKey` in the
+    extract job.
 
 - Linking a new subscription looks up early revoking adjustments in `billing_events` with a sequential scan. Add a
   partial expression index `billing_events (provider, (payload->'adjustment'->>'subscriptionId')) where outcome =
@@ -464,8 +437,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Support messages (from the [support data review](reviews/2026-11-13-support-data-cto.md)): stored, triaged in
   `/admin/support` and deleted by the daily `maintenance.purge` job 12 months after closing (or after sending or the
   last reopen, while not closed); the notification mail carries only a link. Still to do: the Resend bounce webhook and
-  suppression table (PR 4, owner: later), and an index for the purge's scan (`coalesce(closed_at, greatest(created_at,
-updated_at))`; it needs a migration, and the table is small until then).
+  suppression table (PR 4, owner: later).
 - Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
   rows older than 90 days in the daily `maintenance.purge` job, keeping the last
   pass and recent failures that the lockout reads; then update the privacy policy.
