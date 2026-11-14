@@ -60,7 +60,7 @@ One new decision: **M1**, our 24-hour rate limits are probably being reset after
   (`ba/oauth2/link-account.mjs:242-259`); with the hook that write would only store nulls. The update hook is still
   needed for a re-link (`link-account.mjs:78-87`).
 - **Use `disabledPaths`** [B1], a documented option answered with 404 before rate limiting or routing
-  (`ba/api/index.mjs:168-170`). `/delete-user/callback` can move there from `hooks.before` in the same PR.
+  (`ba/api/index.mjs:168-170`). It covers HTTP requests only; no server code calls these three through `auth.api`.
 - **Proved in memory** (1.7.18, memory adapter, both hooks, the three paths disabled): a Google-shaped
   `createAccount` and `updateAccount` stored `null` for every token field; a credential row kept its password;
   `/get-access-token`, the same with a trailing slash, a double slash, upper case and `%2f`, `/refresh-token` and
@@ -75,12 +75,9 @@ One new decision: **M1**, our 24-hour rate limits are probably being reset after
 
 ## F2 · Data API and grants
 
-Supabase's hardening guide [S4] gives exactly this, and its own SQL names three roles, not two:
-
-```sql
-alter default privileges for role postgres in schema public
-  revoke all on tables from anon, authenticated, service_role;   -- then sequences, then functions
-```
+Supabase's hardening guide [S4] gives exactly this, and its SQL names three roles, not two:
+`alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated,
+service_role;`, then the same for sequences and functions.
 
 - **Switch the Data API off** (Integrations, Data API, Enable Data API). "With the Data API disabled, none of the
   auto-generated REST endpoints respond, regardless of grants or RLS" [S4]. `docs/deployment.md:583` says to remove
