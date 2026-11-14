@@ -9,7 +9,7 @@ import { receiptObjectKey } from "@receipt-ocr/storage";
 import { Effect, ManagedRuntime } from "effect";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { AppLayer, type AppServices } from "../../src/index";
-import { enqueueJob, STORAGE_DELETE, tick } from "../../src/jobs";
+import { enqueueJob, STORAGE_DELETE, tick, type JobRegistry } from "../../src/jobs";
 import { storageDelete } from "../../src/jobs/kinds/storage-delete";
 import {
   makeStorageOrphanSweep,
@@ -43,7 +43,7 @@ const exists = (key: string) =>
     () => false,
   );
 
-const runJob = (id: string, registry: Parameters<typeof tick>[0]["registry"]) =>
+const runJob = (id: string, registry: JobRegistry<Db | Storage>) =>
   run(tick({ worker: `${tag}-w`, registry, budgetMs: 30_000, ids: [id], waitForRetries: false }));
 
 describe.skipIf(!enabled)("storage orphan sweep against Postgres and S3", () => {
