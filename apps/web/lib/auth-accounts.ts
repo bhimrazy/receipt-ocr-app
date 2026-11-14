@@ -101,6 +101,29 @@ async function notify(deliver: Deliver, input: SendEmailInput, kind: string) {
   }
 }
 
+const PROVIDER_TOKEN_FIELDS = [
+  "accessToken",
+  "refreshToken",
+  "idToken",
+  "accessTokenExpiresAt",
+  "refreshTokenExpiresAt",
+] as const;
+
+/**
+ * For `databaseHooks.account.{create,update}.before`: Google and GitHub tokens are never stored.
+ * Sign-in, linking and unlinking match on the provider's account id; nothing reads the tokens.
+ */
+export function withoutProviderTokens(data: Record<string, unknown>) {
+  return {
+    data: Object.fromEntries(
+      PROVIDER_TOKEN_FIELDS.filter((field) => field in data).map((field) => [field, null]),
+    ),
+  };
+}
+
+/** Better Auth endpoints that hand out provider tokens; answered 404 through `disabledPaths`. */
+export const PROVIDER_TOKEN_PATHS = ["/get-access-token", "/refresh-token", "/account-info"];
+
 type AccountRow = { userId: string; providerId: string };
 
 /**

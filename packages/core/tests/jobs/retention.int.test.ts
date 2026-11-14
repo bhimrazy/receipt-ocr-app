@@ -1,12 +1,13 @@
 /**
- * Retention in `maintenance.purge` against real Postgres: expired step-up codes and finished jobs.
+ * Retention in `maintenance.purge` against real Postgres: expired step-up codes, finished jobs and stray provider
+ * tokens.
  * Skipped unless INTEGRATION=1.
  */
 import { randomUUID } from "node:crypto";
-import { eq, inArray, jobs, session, sql, stepUpCodes, user } from "@receipt-ocr/db";
+import { account, eq, inArray, jobs, session, sql, stepUpCodes, user } from "@receipt-ocr/db";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { makeAppLayer, type AppServices } from "../../src/index";
+import { clearProviderTokens, makeAppLayer, type AppServices } from "../../src/index";
 import {
   ContactReplyMailer,
   enqueueJob,
@@ -201,6 +202,51 @@ describe.skipIf(!enabled)("maintenance.purge retention against Postgres", () => 
       ),
     ).toEqual({ duplicate: true });
     expect(await remainingJobs([old])).toEqual([]);
+  });
+
+  it("clears provider tokens an older release wrote, and leaves passwords alone", async () => {
+    const expiry = new Date(Date.now() + DAY);
+    await db((d) =>
+      d.insert(account).values([
+        {
+          id: `${tag}-google`,
+          accountId: `${tag}-g`,
+          providerId: "google",
+          userId,
+          accessToken: "sealed-access",
+          refreshToken: "sealed-refresh",
+          idToken: "eyJ.id",
+          accessTokenExpiresAt: expiry,
+          refreshTokenExpiresAt: expiry,
+        },
+        {
+          id: `${tag}-credential`,
+          accountId: userId,
+          providerId: "credential",
+          userId,
+          password: "salt:key",
+        },
+      ]),
+    );
+    expect(await run(clearProviderTokens(500))).toBeGreaterThanOrEqual(1);
+    const rows = await db((d) =>
+      d.select().from(account).where(eq(account.userId, userId)).orderBy(account.providerId),
+    );
+    expect(
+      rows.map((r) => [
+        r.providerId,
+        r.password,
+        r.accessToken,
+        r.refreshToken,
+        r.idToken,
+        r.accessTokenExpiresAt,
+        r.refreshTokenExpiresAt,
+      ]),
+    ).toEqual([
+      ["credential", "salt:key", null, null, null, null, null],
+      ["google", null, null, null, null, null, null],
+    ]);
+    expect(await run(clearProviderTokens(500))).toBe(0);
   });
 
   it("runs as part of the daily purge job and reports what each table lost", async () => {

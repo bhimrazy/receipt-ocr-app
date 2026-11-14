@@ -45,7 +45,7 @@ From `@receipt-ocr/db` ([`src/index.ts`](../../packages/db/src/index.ts)):
 | [`0002_receipt_review.sql`](../../apps/web/drizzle/0002_receipt_review.sql)         | `receipts.reviewed_at`, `reviewed_by` (foreign key to `user`, set null) and the partial `receipts_reviewed_by_idx`; `lock_timeout` first                                                                  |
 | [`0004_billing_checkouts.sql`](../../apps/web/drizzle/0004_billing_checkouts.sql)   | `billing_checkouts` (foreign keys to `organization` and `user`, cascade; unique transaction and linked subscription); validates the six 0003 `CHECK`s; `lock_timeout` first                               |
 | [`0006_support_messages.sql`](../../apps/web/drizzle/0006_support_messages.sql)     | `support_messages` (foreign keys to `user` cascade, `organization` and `receipts` set null; unique `submission_id`, value and length checks); `lock_timeout` first, indexes before the foreign keys       |
-| [`0009_receipt_duplicates.sql`](../../apps/web/drizzle/0009_receipt_duplicates.sql) | `receipts.duplicate_dismissed_at` (nullable, catalog-only) and the partial expression index `receipts_org_invoice_key_idx` for the possible-duplicate match; `lock_timeout` and `statement_timeout` first |
+| [`0011_receipt_duplicates.sql`](../../apps/web/drizzle/0011_receipt_duplicates.sql) | `receipts.duplicate_dismissed_at` (nullable, catalog-only) and the partial expression index `receipts_org_invoice_key_idx` for the possible-duplicate match; `lock_timeout` and `statement_timeout` first |
 
 The migrations were **squashed into this one baseline again on 2026-11-08, before launch**, when both databases held
 only test data and were reset. The first squash (2026-11-07) was followed by three migrations: the `refused` and
@@ -149,8 +149,9 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   connects as `postgres`, which owns the tables, so nothing changes for it (on Supabase it also has `BYPASSRLS`). The
   point is defence in depth: Supabase's Data API (PostgREST) exposes the `public` schema as `anon` and
   `authenticated`, and with RLS on and no policy they read and write no rows even if someone later grants them access.
-  `service_role` bypasses RLS by design, so only removing `public` from the Data API's exposed schemas protects
-  against a leaked service-role key. Do not add `FORCE ROW LEVEL SECURITY` (it would apply RLS to the owner the app
+  `service_role` bypasses RLS by design, so `0010_data_api_grants` revokes every grant the three API roles hold in
+  `public`, including the default privileges for objects `postgres` creates later, and the Data API is switched off
+  ([deployment.md](../deployment.md#1-database)). Do not add `FORCE ROW LEVEL SECURITY` (it would apply RLS to the owner the app
   uses) and do not add policies unless the app starts using the Data API. `tests/rls.test.ts` fails when a table lacks
   `.enableRLS()`, and `rls.int.test.ts` checks the migrated database, including that the app role owns every table.
 - **`user_credentials` and `receipts.storage_source` are unused.** Reserved for bring-your-own-key; nothing reads or
