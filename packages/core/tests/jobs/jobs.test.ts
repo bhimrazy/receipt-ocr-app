@@ -127,6 +127,10 @@ describe("finalFailureMessage", () => {
     expect(EXTRACTION_REFUSED_MESSAGE.toLowerCase()).not.toContain("try again");
   });
 
+  it("tells the user to upload again when the stored file is gone", () => {
+    expect(finalFailureMessage("stored-file-missing")).toMatch(/upload the file again/);
+  });
+
   it("names the file as the problem when no model could take it", () => {
     expect(finalFailureMessage("unsupported-file")).toMatch(/too large or in a format/);
   });
@@ -197,10 +201,13 @@ describe("classifyExtractionError", () => {
     });
   });
 
-  it("retries storage and database errors, not an unreadable stored file or missing config", () => {
+  it("retries storage and database errors, not a missing or unreadable stored file or missing config", () => {
     expect(classifyExtractionError(new StorageError({ message: "x" }))._tag).toBe(
       "RetryableJobError",
     );
+    expect(
+      classifyExtractionError(new StorageError({ message: "x", kind: "not-found" })),
+    ).toMatchObject({ _tag: "NonRetryableJobError", kind: "stored-file-missing" });
     expect(classifyExtractionError(new DbError({ message: "x" }))._tag).toBe("RetryableJobError");
     expect(classifyExtractionError(new InvalidInput({ message: "x" }))._tag).toBe(
       "NonRetryableJobError",

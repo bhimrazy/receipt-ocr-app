@@ -2,6 +2,7 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  NoSuchKey,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -69,15 +70,23 @@ export async function putObject(
   );
 }
 
+/** The key doesn't exist in the bucket: another attempt won't find it either. */
+export class ObjectNotFound extends Error {
+  override readonly name = "ObjectNotFound";
+}
+
+/** @throws ObjectNotFound when the key doesn't exist. */
 export async function getObject(
   config: S3StorageConfig,
   key: string,
   signal?: AbortSignal,
 ): Promise<Uint8Array> {
-  const response = await s3Client(config).send(
-    new GetObjectCommand({ Bucket: config.bucket, Key: key }),
-    { abortSignal: signal },
-  );
+  const response = await s3Client(config)
+    .send(new GetObjectCommand({ Bucket: config.bucket, Key: key }), { abortSignal: signal })
+    .catch((error: unknown) => {
+      if (error instanceof NoSuchKey) throw new ObjectNotFound("No such key", { cause: error });
+      throw error;
+    });
   if (!response.Body) throw new Error(`Object ${key} has no body`);
   return response.Body.transformToByteArray();
 }
