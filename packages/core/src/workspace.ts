@@ -1,4 +1,4 @@
-import { asc, desc, eq, member, organization, rateLimit, sql } from "@receipt-ocr/db";
+import { appRateLimits, asc, desc, eq, inArray, member, organization, sql } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import type { ReceiptScope } from "./repository";
 import { Db } from "./services";
@@ -81,29 +81,25 @@ export const ensurePersonalWorkspace = (user: {
     ),
   );
 
-/**
- * Fixed-window counter in Better Auth's rate_limit table, so limits hold
- * across serverless instances. Our rows use the key as id, which never
- * collides with Better Auth's generated ids.
- */
+/** Fixed-window counter in `app_rate_limits`, so limits hold across serverless instances. */
 export const hitRateLimit = (key: string, windowMs: number, max: number) =>
   Effect.flatMap(Db, ({ use }) =>
     use(async (db) => {
       const now = Date.now();
-      const expired = sql`${rateLimit.lastRequest} < ${now - windowMs}`;
+      const expired = sql`${appRateLimits.windowStart} < ${now - windowMs}`;
       const [row] = await db
-        .insert(rateLimit)
-        .values({ id: key, key, count: 1, lastRequest: now })
+        .insert(appRateLimits)
+        .values({ key, count: 1, windowStart: now })
         .onConflictDoUpdate({
-          target: rateLimit.id,
+          target: appRateLimits.key,
           set: {
-            count: sql`case when ${expired} then 1 else ${rateLimit.count} + 1 end`,
-            lastRequest: sql`case when ${expired} then ${now} else ${rateLimit.lastRequest} end`,
+            count: sql`case when ${expired} then 1 else ${appRateLimits.count} + 1 end`,
+            windowStart: sql`case when ${expired} then ${now} else ${appRateLimits.windowStart} end`,
           },
         })
-        .returning({ count: rateLimit.count, lastRequest: rateLimit.lastRequest });
+        .returning({ count: appRateLimits.count, windowStart: appRateLimits.windowStart });
       const count = row?.count ?? 1;
-      const windowStart = row?.lastRequest ?? now;
+      const windowStart = row?.windowStart ?? now;
       return {
         allowed: count <= max,
         retryAfterSeconds: Math.max(1, Math.ceil((windowStart + windowMs - now) / 1000)),
@@ -115,6 +111,23 @@ export const hitRateLimit = (key: string, windowMs: number, max: number) =>
 export const clearRateLimit = (key: string) =>
   Effect.flatMap(Db, ({ use }) =>
     use(async (db) => {
-      await db.delete(rateLimit).where(eq(rateLimit.id, key));
+      await db.delete(appRateLimits).where(eq(appRateLimits.key, key));
+    }),
+  );
+
+/** Twice the longest window any caller uses (a day), so no live window is ever cut short. */
+const RATE_LIMIT_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
+
+/** Deletes up to `limit` counters whose window ended long ago, for `maintenance.purge`. */
+export const purgeRateLimits = (limit: number) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const stale = sql`${appRateLimits.windowStart} < ${Date.now() - RATE_LIMIT_RETENTION_MS}`;
+      const keys = db.select({ key: appRateLimits.key }).from(appRateLimits).where(stale).limit(limit);
+      const deleted = await db
+        .delete(appRateLimits)
+        .where(sql`${inArray(appRateLimits.key, keys)} and ${stale}`)
+        .returning({ key: appRateLimits.key });
+      return deleted.length;
     }),
   );
