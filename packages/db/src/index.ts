@@ -216,19 +216,18 @@ export const ocrRounds = pgTable(
     round: smallint("round").notNull(),
     /**
      * The workspace's plan when the round was accepted, i.e. the allowance it
-     * draws from: Free rounds count against their user, Pro rounds against their
-     * workspace, so neither uses up the other.
+     * draws from, so a Free round never uses up a Pro allowance nor the reverse.
      */
     plan: text("plan").notNull().default("free"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("ocr_rounds_receipt_round_idx").on(table.receiptId, table.round),
-    // Per-user quota windows.
+    // The burst minute, user-scoped windows, and a user's rounds in deleted workspaces.
     index("ocr_rounds_user_created_at_idx").on(table.userId, table.createdAt),
     // Global cap and the per-plan daily pool.
     index("ocr_rounds_created_at_idx").on(table.createdAt),
-    // Workspace-pooled (Pro) day and month windows, and the set-null when a workspace is deleted.
+    // Workspace-scoped day and month windows, and the set-null when a workspace is deleted.
     index("ocr_rounds_org_created_at_idx").on(table.organizationId, table.createdAt),
     check("ocr_rounds_plan_check", sql`plan in ('free', 'pro')`),
   ],

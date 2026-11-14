@@ -29,8 +29,8 @@ export const enforceUploadQuota = (subject: UsageSubject) =>
 export type UsageSummary = Usage;
 
 /**
- * The usage meter for the active workspace: the user's Free day, or the
- * workspace's Pro month. Deduplicated per request. Windows are UTC.
+ * The usage meter for the active workspace, for its plan's scope and period. Deduplicated per
+ * request. Windows are UTC.
  */
 export const getUsageSummary = cache(async (): Promise<UsageSummary> => {
   const scope = await requireActiveScope();
