@@ -203,12 +203,13 @@ job ends dead and shows in the jobs admin.
 `maintenance.purge` ([`kinds/maintenance-purge.ts`](../../../packages/core/src/jobs/kinds/maintenance-purge.ts))
 deletes data past its retention period, each table in turn:
 
-| Table                     | Deleted                                                                                                                                          | Function                                  |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| `support_messages`        | 12 months after `closed_at`, or, while a message isn't closed, 12 months after the later of `created_at` and `updated_at` (a reopen restarts it) | `purgeSupportMessages` (`support.ts`)     |
-| `step_up_codes`           | 1 day after `expires_at` (a code lives 10 minutes; the send limit counts the last 10 minutes)                                                    | `purgeStepUpCodes` (`step-up/store.ts`)   |
-| `jobs`, succeeded         | 30 days after `finished_at`: the Operations page's longest range                                                                                 | `purgeFinishedJobs` (`jobs/retention.ts`) |
-| `jobs`, dead or cancelled | 90 days after `finished_at`: what an admin investigates or re-runs                                                                               | `purgeFinishedJobs`                       |
+| Table                     | Deleted                                                                                                                                          | Function                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `support_messages`        | 12 months after `closed_at`, or, while a message isn't closed, 12 months after the later of `created_at` and `updated_at` (a reopen restarts it) | `purgeSupportMessages` (`support.ts`)         |
+| `step_up_codes`           | 1 day after `expires_at` (a code lives 10 minutes; the send limit counts the last 10 minutes)                                                    | `purgeStepUpCodes` (`step-up/store.ts`)       |
+| `jobs`, succeeded         | 30 days after `finished_at`: the Operations page's longest range                                                                                 | `purgeFinishedJobs` (`jobs/retention.ts`)     |
+| `jobs`, dead or cancelled | 90 days after `finished_at`: what an admin investigates or re-runs                                                                               | `purgeFinishedJobs`                           |
+| `account`, tokens only    | Nulls Google and GitHub tokens on any row that has one (written by an older release during a deploy, or a path the account hooks miss)           | `clearProviderTokens` (`account-security.ts`) |
 
 Each delete repeats its predicate on the locked rows, so a row changed meanwhile (a reopened message, a job an admin
 re-ran) is kept. Deleting a finished job frees no idempotency key: keys only dedupe against live jobs, and an email's

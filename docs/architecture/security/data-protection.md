@@ -76,8 +76,8 @@ not a compromised app. Grants, retention and encrypted backups address the dump;
 secret. Data that would change this answer (card numbers, bank account numbers, government ids) is not stored.
 
 **Provider tokens.** Better Auth would store each Google or GitHub sign-in's access, refresh and id tokens. The
-`account` create and update hooks null them, `account.updateAccountOnSignIn` is off so a sign-in doesn't rewrite the
-row, and `/get-access-token`, `/refresh-token` and `/account-info` answer 404 (`disabledPaths`). Without the tokens
+`account` create and update hooks null them, `maintenance.purge` nulls any that reach a row anyway (an older release
+still serving during a migration), `account.updateAccountOnSignIn` is off so a sign-in doesn't rewrite the row, and `/get-access-token`, `/refresh-token` and `/account-info` answer 404 (`disabledPaths`). Without the tokens
 the app cannot revoke the provider's grant when an account is deleted; users remove it in their Google or GitHub
 settings.
 
