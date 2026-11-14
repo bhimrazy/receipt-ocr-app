@@ -957,8 +957,8 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       const rows = await db((d) =>
         d.select().from(ocrCalls).where(eq(ocrCalls.receiptId, receipt.id)),
       );
-      // One no-model row per automatic attempt (the object may come back).
-      expect(rows).toHaveLength(4);
+      // A missing file ends the round on its first attempt.
+      expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ model: null, status: "storage-error", costMicroUsd: 0 });
       // Not a model call: rollups leave it out.
       const days = await run(
