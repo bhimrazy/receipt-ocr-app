@@ -238,7 +238,7 @@ export const EVENT_SCHEMA = {
       transaction_id: "id",
       /** A full refund still waiting for its transaction three days on (the `billing.refund_wait_check` job, logged as `billing.refund_unresolved` at warn level). Set from our own event log; no personal data. */
       refund_unresolved: "bool",
-      /** A revoked subscription was charged for a period (logged as `billing.revoked_charged` at warn level, with `transaction_id` and `subscription_id`, to refund by hand). Set from our own row and the event's origin and billing period; no personal data. */
+      /** A revoked subscription was charged, for a period or a proration (logged as `billing.revoked_charged` at warn level, with `transaction_id` and `subscription_id`, to refund by hand). Set from our own row and the event's origin, billing period and item quantities; no personal data. */
       revoked_charged: "bool",
       /** A subscription whose workspace or buyer is gone can still charge, so the job cancels it. Set from the stored row's workspace and buyer links and the event's status; no personal data. */
       orphan_charging: "bool",
@@ -275,6 +275,8 @@ export const EVENT_SCHEMA = {
   /** Contact form: the stored message is linked to a receipt in the sender's workspace. */
   has_receipt: "bool",
   turnstile_errors: "tokens",
+  /** Orphan sweep: a sample of stored-file keys no receipt row points at (`users/<user id>/receipts/<receipt id>.<ext>`). */
+  storage_keys: "tokens",
   /** Newsletter routes: the step and its result (`confirm_sent`, `confirmed`, `expired`). No address. */
   newsletter: "token",
   /** CSP reports: the directive and the blocked host or keyword only. */

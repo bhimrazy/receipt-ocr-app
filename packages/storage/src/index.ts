@@ -2,6 +2,8 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
+  NoSuchKey,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -69,15 +71,23 @@ export async function putObject(
   );
 }
 
+/** The key doesn't exist in the bucket: another attempt won't find it either. */
+export class ObjectNotFound extends Error {
+  override readonly name = "ObjectNotFound";
+}
+
+/** @throws ObjectNotFound when the key doesn't exist. */
 export async function getObject(
   config: S3StorageConfig,
   key: string,
   signal?: AbortSignal,
 ): Promise<Uint8Array> {
-  const response = await s3Client(config).send(
-    new GetObjectCommand({ Bucket: config.bucket, Key: key }),
-    { abortSignal: signal },
-  );
+  const response = await s3Client(config)
+    .send(new GetObjectCommand({ Bucket: config.bucket, Key: key }), { abortSignal: signal })
+    .catch((error: unknown) => {
+      if (error instanceof NoSuchKey) throw new ObjectNotFound("No such key", { cause: error });
+      throw error;
+    });
   if (!response.Body) throw new Error(`Object ${key} has no body`);
   return response.Body.transformToByteArray();
 }
@@ -97,6 +107,34 @@ export async function probeBucket(config: S3StorageConfig, signal?: AbortSignal)
     const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
     if (status !== 404) throw error;
   }
+}
+
+export type ListedObject = { key: string; lastModified: Date };
+
+/**
+ * One page of the keys under `prefix` (at most `maxKeys`; S3 caps it at 1000), in key order,
+ * after `startAfter`. `next` is the `startAfter` for the following page, absent on the last.
+ * A key, unlike a continuation token, can resume the listing in a later job.
+ */
+export async function listObjects(
+  config: S3StorageConfig,
+  input: { prefix: string; startAfter?: string; maxKeys?: number },
+  signal?: AbortSignal,
+): Promise<{ objects: ListedObject[]; next?: string }> {
+  const result = await s3Client(config).send(
+    new ListObjectsV2Command({
+      Bucket: config.bucket,
+      Prefix: input.prefix,
+      StartAfter: input.startAfter,
+      MaxKeys: input.maxKeys ?? 1000,
+    }),
+    { abortSignal: signal },
+  );
+  const objects = (result.Contents ?? []).flatMap((o) =>
+    o.Key && o.LastModified ? [{ key: o.Key, lastModified: o.LastModified }] : [],
+  );
+  const last = result.Contents?.at(-1)?.Key;
+  return { objects, ...(result.IsTruncated && last ? { next: last } : {}) };
 }
 
 /** Deletes keys in batches of the S3 maximum (1000) per request. */

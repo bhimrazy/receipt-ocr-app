@@ -207,7 +207,10 @@ orphaned object costs storage only. On ingest, the just-stored object is removed
 committed: a quota refusal, or any failure before the transaction's last statement finished. A failure while
 committing (`DbError.atCommit`) keeps the object unless Postgres answered with a SQLSTATE outside class 08 (a
 rollback); a timeout, a lost socket or a pooler's connection error may have committed, so `receipt.ingest_unknown`
-logs the receipt id for a sweep.
+logs the receipt id for a sweep. The daily [orphan sweep](flows/jobs.md#orphan-sweep) finds files that any of these
+paths left behind (report-only until `STORAGE_ORPHAN_SWEEP_DELETE=true`). One path runs the other way round: Better
+Auth's `beforeDeleteOrganization` hook (`apps/web/lib/auth.ts`) purges a workspace's files before its rows go, so a
+delete that then fails leaves receipts whose file is gone; their reads fail as `stored-file-missing`.
 
 ## Receipt groups
 

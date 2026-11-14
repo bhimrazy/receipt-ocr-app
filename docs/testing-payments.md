@@ -2,7 +2,8 @@
 
 A walkthrough for checking the Pro checkout end to end without spending money. How billing works is in
 [the billing flow](architecture/flows/billing.md); setting up Paddle is in
-[production-environment.md §10](production-environment.md#10-payments-paddle).
+[production-environment.md §10](production-environment.md#10-payments-paddle). Subscription changes made in Paddle's
+dashboard (interval, billing date, cancel) are in the [Paddle sandbox tests](runbooks/paddle-sandbox-tests.md).
 
 ## Where it runs today
 

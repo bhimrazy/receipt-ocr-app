@@ -107,13 +107,13 @@ sequenceDiagram
 
 ## Retries, dead jobs and cooldowns
 
-| Failure                                                                                                                                                                                       | Next                                                                                                            |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `timeout`, `rate-limited`, `provider-error`, storage, DB (other than below)                                                                                                                   | Retry after backoff, up to 4 attempts                                                                           |
-| `invalid-output`, `bad-image`, `not-configured`, `refused`, `unsupported-file`, unreadable stored file, bad payload, a DB data or constraint error (SQLSTATE class 22 or 23, `db-data-error`) | Dead now (`refused` and `unsupported-file` already tried every model; each has its own receipt message)         |
-| A chain where any step hit `timeout`, `rate-limited` or `provider-error`, whatever the last step's kind (e.g. a 429, then HEIC skipped)                                                       | Retry after backoff, as that transient kind                                                                     |
-| Steps left out for a cooling provider and the rest failed for good (`refused`, `unsupported-file`, ...)                                                                                       | Retry, as `providers-cooling`, once the first left-out provider is back (spends an attempt, so the cap ends it) |
-| Every provider in the chain cooling down                                                                                                                                                      | Back to `queued` at the cooldown end, attempt not spent                                                         |
+| Failure                                                                                                                                                                                                                                                                                   | Next                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `timeout`, `rate-limited`, `provider-error`, storage (other than a missing file), DB (other than below)                                                                                                                                                                                   | Retry after backoff, up to 4 attempts                                                                           |
+| `invalid-output`, `bad-image`, `not-configured`, `refused`, `unsupported-file`, unreadable stored file, a stored file missing from the bucket (`stored-file-missing`: the SDK's typed `NoSuchKey`), bad payload, a DB data or constraint error (SQLSTATE class 22 or 23, `db-data-error`) | Dead now (`refused` and `unsupported-file` already tried every model; each has its own receipt message)         |
+| A chain where any step hit `timeout`, `rate-limited` or `provider-error`, whatever the last step's kind (e.g. a 429, then HEIC skipped)                                                                                                                                                   | Retry after backoff, as that transient kind                                                                     |
+| Steps left out for a cooling provider and the rest failed for good (`refused`, `unsupported-file`, ...)                                                                                                                                                                                   | Retry, as `providers-cooling`, once the first left-out provider is back (spends an attempt, so the cap ends it) |
+| Every provider in the chain cooling down                                                                                                                                                                                                                                                  | Back to `queued` at the cooldown end, attempt not spent                                                         |
 
 - Backoff: `min(10 min, 10 s x 2^(attempt-1))`, jittered to 50 to 100%. A provider's Retry-After (a header, or
   Gemini's `RetryInfo.retryDelay` in the 429 body) is a floor, and so is the cooldown the failure starts (30 s for a
@@ -201,18 +201,62 @@ hour (about four hours of a provider outage). In production a missing `SUPPORT_E
 job ends dead and shows in the jobs admin.
 
 `maintenance.purge` ([`kinds/maintenance-purge.ts`](../../../packages/core/src/jobs/kinds/maintenance-purge.ts))
-deletes data past its retention period: today `support_messages` 12 months after `closed_at`, or, while a message isn't
-closed, 12 months after the later of `created_at` and `updated_at`, so a reopened old message restarts its period
-(`purgeSupportMessages` in `support.ts`; the delete repeats the predicate, so a reopen committed meanwhile keeps the row).
+deletes data past its retention period, each table in turn:
+
+| Table                     | Deleted                                                                                                                                          | Function                                  |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| `support_messages`        | 12 months after `closed_at`, or, while a message isn't closed, 12 months after the later of `created_at` and `updated_at` (a reopen restarts it) | `purgeSupportMessages` (`support.ts`)     |
+| `step_up_codes`           | 1 day after `expires_at` (a code lives 10 minutes; the send limit counts the last 10 minutes)                                                    | `purgeStepUpCodes` (`step-up/store.ts`)   |
+| `jobs`, succeeded         | 30 days after `finished_at`: the Operations page's longest range                                                                                 | `purgeFinishedJobs` (`jobs/retention.ts`) |
+| `jobs`, dead or cancelled | 90 days after `finished_at`: what an admin investigates or re-runs                                                                               | `purgeFinishedJobs`                       |
+
+Each delete repeats its predicate on the locked rows, so a row changed meanwhile (a reopened message, a job an admin
+re-ran) is kept. Deleting a finished job frees no idempotency key: keys only dedupe against live jobs, and an email's
+provider key is `job:<id>`, a random id never reused. The one reader of finished jobs is `enqueueWelcomeEmail`
+(welcome a user once ever), so `email.welcome` jobs stay while their user exists; account deletion nulls `user_id` and
+they go with the rest. `step_up_events` has no retention yet. The run's event has `counts` per table.
+
 It runs once a day. The app has no scheduler of its own, so `drainQueue` (the drain route) first inserts the next day's
 run, due 00:00 UTC by the database clock and keyed `maintenance.purge:<that day>`; the key dedupes against the queued
 job, so every later drain's insert is a no-op, and keying by the next day stops a second run on the day one finished.
-Deletes go 500 rows per statement, at most 20 statements a run; the rest waits for the next day. Priority 9, 5
-attempts, payload `{}`.
+Deletes go 500 rows per statement, at most 20 statements per table a run (10,000 rows); the rest waits for the next
+day. Then it queues the day's [orphan sweep](#orphan-sweep). Priority 9, 5 attempts, payload `{}`.
 
 Cancelling a queued `maintenance.purge` doesn't stick: the key is free again, so the next drain queues it again. To stop
 it, pause the kind in `/admin/jobs`. After a rollback to a release without the kind, a due `maintenance.purge` job is
 never claimed (the old registry doesn't run it) and waits, queued, until the roll-forward.
+
+### Orphan sweep
+
+`storage.orphan_sweep` ([`kinds/storage-orphan-sweep.ts`](../../../packages/core/src/jobs/kinds/storage-orphan-sweep.ts))
+finds stored receipt files that no receipt row points at: an upload whose insert failed or may have committed
+(`receipt.ingest_unknown`), a `storage.delete` job that died, or an inline purge that failed (`admin.purge_failed`).
+Each `maintenance.purge` run queues the day's first part as its last step, keyed `storage.orphan_sweep:<day>::0`.
+
+```mermaid
+flowchart LR
+  purge["maintenance.purge<br/>(daily)"] -->|queues part 0| part["storage.orphan_sweep<br/>part n"]
+  part -->|"ListObjectsV2 users/,<br/>10 pages of 1,000 keys"| bucket[(Bucket)]
+  part -->|"select id from receipts<br/>where id in (ids from the keys)"| db[(Postgres)]
+  part -->|more to list| next["part n+1<br/>startAfter = last key"]
+  part -->|"STORAGE_ORPHAN_SWEEP_DELETE=true"| del["storage.delete<br/>(1,000 keys a job)"]
+```
+
+- **What counts.** Only keys `receiptObjectKey` makes (`users/<user>/receipts/<uuid>.<ext>`) whose `LastModified` is
+  more than 24 hours ago, so an upload in flight (file stored, row not yet committed) is never touched. A key carries
+  its receipt's id and only that row ever points at it, so a primary-key lookup per page decides. Any other key under
+  `users/` is counted as `unrecognised` and never deleted.
+- **Report-only by default.** The run's event has `counts` (`listed`, `recent`, `referenced`, `unrecognised`,
+  `orphaned`, `delete_jobs`, `part`), `flags` (`orphan_delete`, `more`, `capped`) and up to 20 orphaned keys in
+  `storage_keys`. With `STORAGE_ORPHAN_SWEEP_DELETE=true` the orphans go to `storage.delete` jobs (no workspace), which
+  retry on their own; any other value keeps it report-only.
+- **Bounded.** A part lists 10 pages of 1,000 keys, then queues the next part with `startAfter` set to its last key (a
+  key, not a continuation token, so a later job can resume). At most 20 parts a day (200,000 files); a sweep that
+  reaches the cap sets `capped` and starts over the next day.
+- **One bucket per database.** A file whose row lives in another database looks orphaned, so staging and production
+  must never share a bucket. The managed bucket only: BYOK buckets aren't listed.
+- Priority 9, 5 attempts, lease 120 s. Storage not configured is dead at once (`storage-off`); a listing or database
+  failure retries.
 
 ## Tables
 

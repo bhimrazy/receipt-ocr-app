@@ -4,6 +4,7 @@ import {
   eq,
   gt,
   gte,
+  inArray,
   isNull,
   passkey,
   session,
@@ -238,6 +239,30 @@ export const consumeStepUpCode = (input: { sessionId: string; codeHash: string; 
     await tx.update(stepUpCodes).set({ consumedAt: now }).where(eq(stepUpCodes.id, row.id));
     return "ok";
   });
+
+/**
+ * Kept a day past `expires_at`: far longer than the send window `issueStepUpCode` counts, and an
+ * expired code reads the same as a missing one to `consumeStepUpCode`.
+ */
+const STEP_UP_CODE_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+/** Deletes up to `limit` codes past their retention and returns how many. */
+export const purgeStepUpCodes = (limit: number) =>
+  Effect.flatMap(Db, ({ use }) =>
+    use(async (db) => {
+      const cutoff = sql`now() - make_interval(secs => ${STEP_UP_CODE_RETENTION_MS / 1000})`;
+      const expired = db
+        .select({ id: stepUpCodes.id })
+        .from(stepUpCodes)
+        .where(sql`${stepUpCodes.expiresAt} < ${cutoff}`)
+        .limit(limit);
+      const deleted = await db
+        .delete(stepUpCodes)
+        .where(inArray(stepUpCodes.id, expired))
+        .returning({ id: stepUpCodes.id });
+      return deleted.length;
+    }),
+  );
 
 /**
  * Stored identifiers of trusted-device rows start with this. Every other

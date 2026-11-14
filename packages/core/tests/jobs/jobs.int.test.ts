@@ -38,7 +38,11 @@ import { DEFAULT_PLANS } from "../../src/plans";
 
 import { ensurePersonalWorkspace } from "../../src/workspace";
 import { NonRetryableJobError, type JobDefinition } from "../../src/jobs/definition";
-import { EXTRACTION_CANCELLED_MESSAGE, receiptExtract } from "../../src/jobs/kinds/receipt-extract";
+import {
+  EXTRACTION_CANCELLED_MESSAGE,
+  EXTRACTION_FILE_MISSING_MESSAGE,
+  receiptExtract,
+} from "../../src/jobs/kinds/receipt-extract";
 import {
   enqueueWelcomeEmail,
   welcomeEmail,
@@ -664,6 +668,21 @@ describe.skipIf(!enabled)("job queue against Postgres", () => {
     const stats = await drain([jobId]);
     expect(stats.runs.map((r) => [r.outcome, r.errorKind])).toEqual([["dead", "bad-image"]]);
     expect((await receiptOf(receipt.id, a))?.status).toBe("failed");
+  });
+
+  it("a stored file missing from the bucket fails the receipt on the first attempt", async () => {
+    const { receipt, jobId } = await upload(a);
+    await run(Effect.flatMap(Storage, (s) => s.remove([receipt.imageObjectKey!])));
+    const stats = await drain([jobId]);
+    expect(stats.runs.map((r) => [r.outcome, r.errorKind])).toEqual([
+      ["dead", "stored-file-missing"],
+    ]);
+    expect(await receiptOf(receipt.id, a)).toMatchObject({
+      status: "failed",
+      errorMessage: EXTRACTION_FILE_MISSING_MESSAGE,
+    });
+    expect((await jobsOf(receipt.id))[0]).toMatchObject({ state: "dead", attempts: 1 });
+    expect(calls).toBe(0);
   });
 
   it("a 429 cools the provider down: the next attempt waits without spending one", async () => {

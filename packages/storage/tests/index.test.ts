@@ -1,5 +1,13 @@
+import { NoSuchKey } from "@aws-sdk/client-s3";
 import { describe, expect, it, vi } from "vitest";
-import { probeBucket, receiptObjectKey, s3Client, signedGetUrl } from "../src/index";
+import {
+  getObject,
+  ObjectNotFound,
+  probeBucket,
+  receiptObjectKey,
+  s3Client,
+  signedGetUrl,
+} from "../src/index";
 
 const config = {
   endpoint: "http://localhost:9000",
@@ -79,6 +87,21 @@ describe("probeBucket", () => {
     await expect(probeBucket(config)).rejects.toThrow("HTTP 403");
     send.mockRejectedValueOnce(new Error("ECONNREFUSED") as never);
     await expect(probeBucket(config)).rejects.toThrow("ECONNREFUSED");
+    send.mockRestore();
+  });
+});
+
+describe("getObject", () => {
+  it("throws ObjectNotFound for a missing key and passes other failures through", async () => {
+    const send = vi.spyOn(s3Client(config), "send");
+    send.mockRejectedValueOnce(new NoSuchKey({ message: "gone", $metadata: {} }) as never);
+    await expect(getObject(config, "users/u1/receipts/r1.jpg")).rejects.toBeInstanceOf(
+      ObjectNotFound,
+    );
+    send.mockRejectedValueOnce(new Error("ECONNRESET") as never);
+    const other = await getObject(config, "users/u1/receipts/r1.jpg").catch((e: unknown) => e);
+    expect(other).toBeInstanceOf(Error);
+    expect(other).not.toBeInstanceOf(ObjectNotFound);
     send.mockRestore();
   });
 });

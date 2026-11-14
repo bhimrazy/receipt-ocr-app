@@ -132,8 +132,8 @@ Steps are in [deployment.md](deployment.md).
 - **By 2027-04-14: update the Bikram Sambat table for 2084.** That day the guard test in
   `packages/calendar/tests/bs.test.ts` turns CI red. Do the update once the 2084 almanac is approved
   ([runbook](architecture/dates.md#yearly-table-update-runbook)).
-- Billing M1: run a Paddle sandbox test of an interval change with proration, a billing-date change and a cancel; read
-  the events back from `billing_events`.
+- Run the [Paddle sandbox tests](runbooks/paddle-sandbox-tests.md) again before the live switch and after billing
+  changes.
 - Before Paddle goes live ([10c](production-environment.md#10c-switch-from-sandbox-to-live)):
   1. In each Paddle account, set the **default payment link** (Checkout → Checkout settings; without it every checkout
      fails with `transaction_default_checkout_url_not_set`), the sales tax mode (exclusive), the API key's permissions
