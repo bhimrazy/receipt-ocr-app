@@ -37,8 +37,6 @@ The owner's standing decisions, and what has to happen later because of them. Op
 
 ### On a date
 
-- **After 2026-11-12 15:00 UTC:** delete `minimumReleaseAgeExcludes` from `bunfig.toml` (the Better Auth 1.7.18
-  cooldown exception).
 - **After 2026-11-18:** bump CI's `postgres:17.10-alpine` to 17.11 (what Supabase runs) by digest, once it
   clears the 7-day cooldown.
 

@@ -198,7 +198,7 @@ Nightly database backups (#131) were closed for now; the `ops/db-backups` branch
 
 ## In flight
 
-No pull requests are open. Tracks starting 2026-11-14:
+Tracks started 2026-11-14:
 
 - Support retention tweaks and one migration: `CHECK (closed_at >= created_at)`, an index for the purge, and an index
   on `step_up_codes (expires_at)`.
@@ -239,8 +239,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 ## Decisions waiting on the owner
 
 1. ~~Classic as the homepage (then delete `app/(lab)` and `components/marketing`)~~ Done: the lab landing variants are removed.
-2. Plan limits: daily per user (today) or monthly per workspace; prices; payment provider. See
-   [CEO](reviews/2026-11-06-ceo.md) and [market](reviews/2026-11-06-market.md) reviews.
+2. ~~Plan limits and payment provider~~ Decided: Free 30 scans a month (20 a day), Pro by workspace, Paddle. Still
+   open: the plan-limits review in Admin → Settings.
 3. Who sees estimated cost (recommended: platform admins only); whether customers see the model name; whether
    members see each other's usage; admin access to receipt photos (recommended: hidden, logged "Show photo").
 4. Default OCR chain: decided 2026-11-08. Claude Haiku 5.5, then Gemini 3.5 Flash-Lite, then Qwen 3.8 27B on Groq; steps
