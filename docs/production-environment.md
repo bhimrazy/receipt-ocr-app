@@ -781,6 +781,8 @@ payment recovery doesn't run there, so failed-renewal emails can't be checked in
 
 ### 10c. Switch from sandbox to live
 
+Run the [Paddle sandbox tests](runbooks/paddle-sandbox-tests.md) first.
+
 1. **Verify the account**: Paddle → **Get started** (an account administrator: your date of birth, home address, legal
    name, the website and what you sell), then **Business account → Payouts → Payout settings**. The automated review
    waits until at least one domain is approved.
