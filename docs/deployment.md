@@ -358,6 +358,10 @@ A release without migration changes deploys by itself after CI. For one with mig
   image tag.
 - **Database:** migrations only go forward. Old code runs against the newer schema, so a code rollback normally
   needs nothing else. If a migration damaged data, restore the backup from step 3.
+- **Password hashes:** from the release that introduced `$scrypt$` hashes (`apps/web/lib/password.ts`), roll forward
+  rather than back past it. Sign-in upgrades each password hash to that format, and the previous release can't read
+  it: its password sign-in answers 500 for those users even with the right password, until they reset the password
+  (the reset writes the old format). Social sign-in is unaffected. The same applies to the few minutes of deploy skew.
 
 ### Old deployments
 
