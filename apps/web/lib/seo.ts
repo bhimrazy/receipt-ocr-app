@@ -9,7 +9,7 @@ import { SITE_NAME, siteUrl } from "@/lib/site";
  */
 export const homeTitle = `Receipt Scanner: Extract Data to CSV & JSON · ${SITE_NAME}`;
 export const homeDescription =
-  "Free receipt scanner: turn photos and PDFs into structured data (merchant, date, line items, tax, total) with confidence scores. Export CSV or copy JSON.";
+  "Free receipt scanner: turn photos and PDFs into structured data (merchant, date, line items, tax, total) with review flags. Export CSV or copy JSON.";
 
 // The root opengraph-image. A page's own `openGraph` drops the inherited file image, so it is
 // named here; a segment with its own opengraph-image file still overrides this.
@@ -73,9 +73,9 @@ export function pageMetadata({
 /** Dates shown on the legal pages, also used as the sitemap's lastModified. */
 export const LEGAL_UPDATED = {
   privacy: "2026-11-17",
-  terms: "2026-11-13",
+  terms: "2026-11-17",
   refunds: "2026-11-08",
-  pricing: "2026-11-13",
+  pricing: "2026-11-17",
   cookies: "2026-11-09",
 } as const;
 
@@ -102,7 +102,7 @@ export function formatLegalDate(isoDate: string): string {
 const APP_FEATURES = [
   "Receipt photo and PDF upload (JPEG, PNG, WebP, HEIC, PDF)",
   "Merchant, date, line items, tax and total extracted",
-  "Confidence score per receipt, with lines that don't add up marked",
+  "Lines that don't add up are marked",
   "Totals that do not add up are flagged for review",
   "Searchable receipt history",
   "CSV export and JSON copy",

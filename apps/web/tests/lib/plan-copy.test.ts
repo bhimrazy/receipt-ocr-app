@@ -45,7 +45,7 @@ describe("plan card copy", () => {
       "Up to 5 members",
       "5 GB of receipt storage",
       "Own up to 2 workspaces, each upgraded separately",
-      "Never paused on busy days",
+      "Not limited by Free's shared daily capacity",
       "Everything in Free",
     ]);
     expect(pro.filter((line) => /workspaces?\b/.test(line) && /\d/.test(line))).toHaveLength(2);

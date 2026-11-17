@@ -55,7 +55,7 @@ export function freeFeatures(free: PlanPolicy): string[] {
     membersLine(free),
     storageLine(free),
     `${n(free.workspaces, "workspace")} to own`,
-    "Merchant, date, items, tax and totals, with confidence scores and review flags",
+    "Merchant, date, items, tax and totals, with review flags",
     "Searchable history, CSV export and JSON copy",
   ];
 }
@@ -66,7 +66,7 @@ export function proFeatures(pro: PlanPolicy): string[] {
     membersLine(pro),
     storageLine(pro),
     `Own up to ${n(pro.workspaces, "workspace")}, each upgraded separately`,
-    ...(pro.poolPerDay === null ? ["Never paused on busy days"] : []),
+    ...(pro.poolPerDay === null ? ["Not limited by Free's shared daily capacity"] : []),
     "Everything in Free",
   ];
 }

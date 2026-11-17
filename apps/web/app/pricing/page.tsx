@@ -81,7 +81,7 @@ export default async function PricingPage() {
     },
     {
       q: "Can I cancel any time?",
-      a: "Yes. Cancel from Settings, Plan and billing. Nothing more is charged, and Pro stays on until the end of the period you've paid for. Then the workspace moves to Free and keeps all its receipts.",
+      a: `Yes. Cancel from Settings, Plan and billing. Nothing more is charged, and Pro stays on until the end of the period you've paid for. Then the workspace moves to Free and keeps all its receipts. If they take more than Free's ${formatStorage(free.storageBytes)} of storage, uploads stop until receipts are deleted to make room; nothing is deleted for you.`,
     },
     {
       q: "Can I get a refund?",
@@ -106,7 +106,7 @@ export default async function PricingPage() {
     },
     {
       q: "What happens when I reach a limit?",
-      a: `Uploads pause until the limit resets: daily limits at 00:00 UTC, monthly limits on the 1st of each month at 00:00 UTC. Unused scans don't carry over. Free accounts also share a daily scanning capacity, and on a very busy day Free scanning may pause until 00:00 UTC. Pro workspaces aren't affected by that.`,
+      a: `For scans, uploads pause until the limit resets: daily limits at 00:00 UTC, monthly limits on the 1st of each month at 00:00 UTC. Unused scans don't carry over. Storage doesn't reset: once a workspace's storage is full, uploads stop until receipts are deleted to make room. Free accounts also share a daily scanning capacity, and on a very busy day Free scanning may pause until 00:00 UTC. Pro workspaces don't use that shared capacity.`,
     },
   ];
 
