@@ -13,7 +13,7 @@ export const FAILED_JOB_RETENTION_DAYS = 90;
  * Finished jobs past their retention. Idempotency keys only dedupe against live jobs, so deleting a
  * finished one frees nothing that wasn't free already. The exception is `enqueueWelcomeEmail`, which
  * reads finished welcome jobs to welcome a user once ever: those stay until the account is deleted
- * (which nulls `user_id`). So does each version's first `receipt.recheck` job, which `scheduleRecheck`
+ * (which nulls `user_id`). So do each version's first `receipt.recheck` job, which `scheduleRecheck`
  * reads to run that version once.
  */
 const expired = (states: readonly string[], days: number): SQL =>

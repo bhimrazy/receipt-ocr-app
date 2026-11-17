@@ -20,6 +20,8 @@ export type QuotaLimits = {
   planPoolPerDay?: number | null;
   /** The allowance this upload draws from. */
   plan?: PlanId;
+  /** The workspace's storage cap in bytes; omitted (tests, older callers) means no cap. */
+  storageBytes?: number | null;
 };
 
 export const quotaLimits = (plan: PlanId, policy: PlanPolicy): QuotaLimits => ({
@@ -29,6 +31,7 @@ export const quotaLimits = (plan: PlanId, policy: PlanPolicy): QuotaLimits => ({
   perDay: policy.receiptsPerDay,
   perMonth: policy.receiptsPerMonth,
   planPoolPerDay: policy.poolPerDay,
+  storageBytes: policy.storageBytes,
 });
 
 export type QuotaWindowName = "minute" | "day" | "month" | "pool" | "global";
@@ -146,6 +149,7 @@ export const quotaGate = (limits: QuotaLimits, now = new Date()) =>
   Effect.map(loadDailyOcrCap, (globalCap): QuotaGate => ({
     window: usageWindow(now, globalCap !== undefined, limits),
     decide: (counts) => decideQuota(counts, limits, globalCap, now),
+    storageBytes: limits.storageBytes ?? null,
   }));
 
 /** Read-only check, for the usage meter and to refuse early before storing a file. */

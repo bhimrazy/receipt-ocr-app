@@ -23,7 +23,12 @@ export function postReceipt(
       if (event.lengthComputable) onProgress(event.loaded / event.total);
     };
     xhr.onload = () => {
-      const body = (xhr.response ?? null) as { receiptId?: string; error?: string } | null;
+      const body = (xhr.response ?? null) as {
+        receiptId?: string;
+        error?: string;
+        kind?: string;
+        full?: boolean;
+      } | null;
       if (xhr.status >= 200 && xhr.status < 300 && body?.receiptId) {
         resolve({ ok: true, receiptId: body.receiptId });
         return;
@@ -34,6 +39,7 @@ export function postReceipt(
         status: xhr.status,
         error: body?.error ?? "The upload failed. Try again.",
         retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+        ...(body?.kind === "storage" ? { storage: body.full === true ? "full" : "no-fit" } : {}),
       });
     };
     xhr.onerror = () =>

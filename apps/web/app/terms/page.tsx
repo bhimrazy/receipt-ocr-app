@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 import { getPlanTable } from "@/lib/plan-limits";
+import { formatStorage } from "@receipt-ocr/core/plans";
 import { allowance } from "@/lib/plan-copy";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 import { authorName } from "@/lib/site";
@@ -54,6 +55,7 @@ export default async function TermsPage() {
             `The free plan currently includes ${allowance(free)} ${free.scope === "workspace" ? "for each workspace, shared by its members" : "per person, counted across every workspace they use"}, up to ${free.membersPerWorkspace} members in a workspace, and ${workspaces} to own, with no card required. Scans made in a workspace that is later deleted still count toward that day's and month's limits.`,
             `Pro is a subscription for one workspace, at ${PRO_PRICE_LABEL.month} a month or ${PRO_PRICE_LABEL.year} a year, plus any sales tax or VAT. It currently includes ${allowance(pro)} for that workspace, shared by its members, up to ${pro.membersPerWorkspace} members, and lets its owner own up to ${owned(pro.workspaces)}. Each workspace needs its own subscription to be on Pro.`,
             "Daily limits reset at 00:00 UTC and monthly limits on the 1st of each month at 00:00 UTC. Unused scans don't carry over.",
+            `Each workspace can store up to ${formatStorage(free.storageBytes)} of receipt files on Free and ${formatStorage(pro.storageBytes)} on Pro; storage doesn't reset, and once a workspace is full, uploads stop until receipts are deleted, while the receipts it already has are kept.`,
             "We may change these limits or prices. A price change applies from your next billing period, and we'll tell you by email before it does.",
           ],
         },

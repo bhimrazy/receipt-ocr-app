@@ -2,14 +2,23 @@
  * Uploads a batch with limited concurrency, per-item progress and retry. Framework-free:
  * the panel subscribes to snapshots. A 429 for the per-minute limit pauses the queue until
  * `Retry-After` and then resumes on its own; a 429 with a long wait (the daily limit) stops
- * it, leaving the rest waiting so nothing is lost.
+ * it, leaving the rest waiting so nothing is lost. A file too big for the room left is skipped
+ * and never sent again; once storage is full the queue stops, and that file waits with the rest.
  */
 
 export type UploadOutcome =
   | { ok: true; receiptId: string }
-  | { ok: false; error: string; status?: number; retryAfterSeconds?: number };
+  | {
+      ok: false;
+      error: string;
+      status?: number;
+      retryAfterSeconds?: number;
+      /** A storage refusal: the workspace is full, or only this file doesn't fit. */
+      storage?: "full" | "no-fit";
+    };
 
-export type ItemStatus = "waiting" | "uploading" | "done" | "error";
+/** `skipped`: too big for the room left; `start()` and `retry()` leave it alone. */
+export type ItemStatus = "waiting" | "uploading" | "done" | "error" | "skipped";
 export type QueueItem<T = unknown> = {
   id: string;
   /** What the uploader sends (the file). */
@@ -26,8 +35,10 @@ export type QueueSnapshot<T = unknown> = {
   running: boolean;
   /** Set while paused for the per-minute limit: when uploads resume (epoch ms). */
   pausedUntil: number | null;
-  /** Why the queue stopped early (the daily limit); cleared by `start()`. */
+  /** Why the queue stopped early (the daily limit, or full storage); cleared by `start()`. */
   stopped: string | null;
+  /** What stopped it: a scan limit, which resets, or storage, which doesn't. */
+  stoppedBy: "limit" | "storage" | null;
 };
 
 /** `mode` is whatever the last `start()` was given (for example instant or queued). */
@@ -63,8 +74,9 @@ export function createBatchQueue<T, M>({
   let wanted = false;
   let pausedUntil: number | null = null;
   let stopped: string | null = null;
+  let stoppedBy: QueueSnapshot["stoppedBy"] = null;
   let timer: unknown = null;
-  let snapshot: QueueSnapshot<T> = { items, running: false, pausedUntil, stopped };
+  let snapshot: QueueSnapshot<T> = { items, running: false, pausedUntil, stopped, stoppedBy };
   const listeners = new Set<() => void>();
 
   const settleListeners = new Set<() => void>();
@@ -76,6 +88,7 @@ export function createBatchQueue<T, M>({
       running: active > 0 || (wanted && pausedUntil !== null),
       pausedUntil,
       stopped,
+      stoppedBy,
     };
     for (const l of listeners) l();
     if (wasRunning && !snapshot.running) for (const l of settleListeners) l();
@@ -111,6 +124,13 @@ export function createBatchQueue<T, M>({
     if (!items.some((item) => item.id === id)) return pump();
     if (outcome.ok) {
       patch(id, { status: "done", progress: 1, receiptId: outcome.receiptId });
+    } else if (outcome.storage === "no-fit") {
+      patch(id, { status: "skipped", progress: 0, error: outcome.error });
+    } else if (outcome.storage === "full") {
+      patch(id, { status: "waiting", progress: 0 });
+      stopped = outcome.error;
+      stoppedBy = "storage";
+      wanted = false;
     } else if (outcome.status === 429) {
       const wait = outcome.retryAfterSeconds ?? MAX_AUTO_WAIT_SECONDS + 1;
       if (wait <= MAX_AUTO_WAIT_SECONDS) {
@@ -120,6 +140,7 @@ export function createBatchQueue<T, M>({
       } else {
         patch(id, { status: "error", progress: 0, error: outcome.error });
         stopped = outcome.error;
+        stoppedBy = "limit";
         wanted = false;
       }
     } else {
@@ -180,12 +201,15 @@ export function createBatchQueue<T, M>({
         item.status === "error" ? { ...item, status: "waiting" as const, error: undefined } : item,
       );
       stopped = null;
+      stoppedBy = null;
       wanted = true;
       pump();
     },
     retry(id: string) {
+      if (!items.some((item) => item.id === id && item.status === "error")) return;
       patch(id, { status: "waiting", error: undefined, progress: 0 });
       stopped = null;
+      stoppedBy = null;
       wanted = true;
       pump();
     },

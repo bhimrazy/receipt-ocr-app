@@ -11,7 +11,14 @@ import { ContactButton } from "@/components/contact-button";
 import { SettingsSection } from "@/components/settings-section";
 import { PlanBadge, UsageMeter, type Usage } from "@/components/usage-meter";
 import { formatDate } from "@/lib/format";
-import { freeFeatures, membersLine, scansLine, SEPARATE_UPGRADE } from "@/lib/plan-copy";
+import { formatStorage } from "@receipt-ocr/core/plans";
+import {
+  freeFeatures,
+  membersLine,
+  scansLine,
+  SEPARATE_UPGRADE,
+  storageLine,
+} from "@/lib/plan-copy";
 import type { PlanId, PlanPolicy, PlanTable } from "@/lib/plans";
 import { PRO_PRICE_LABEL } from "@/lib/pricing";
 
@@ -81,6 +88,8 @@ export type PlanAndBillingProps = {
   usage: Usage;
   /** May buy and manage this workspace's plan (`canManageBilling`). */
   owner: boolean;
+  /** May delete any receipt here (owner or admin), so storage says to delete rather than ask. */
+  manages: boolean;
   impersonating: boolean;
   /** The viewer owns another workspace that is on Pro. */
   ownsPro: boolean;
@@ -122,7 +131,7 @@ export function PlanAndBilling(props: PlanAndBillingProps) {
         title="Usage"
       >
         <div className="flex flex-col gap-3">
-          <UsageMeter className="p-5" detail plan={plan} usage={usage} />
+          <UsageMeter className="p-5" detail manages={props.manages} plan={plan} usage={usage} />
           <p className="font-mono text-xs text-muted-foreground tabular-nums">
             {limitsLine(policy)}
           </p>
@@ -289,7 +298,7 @@ function Plans(props: PlanAndBillingProps) {
               <Badge variant="secondary">Your plan</Badge>
             </div>
             <p className="font-mono text-2xl font-bold">$0</p>
-            <FeatureList features={freeFeatures(free).slice(0, 2)} />
+            <FeatureList features={freeFeatures(free).slice(0, 3)} />
           </Card>
           <Card className="flex flex-col gap-3 border-primary/30 p-5">
             <div className="flex items-center justify-between gap-2">
@@ -300,7 +309,9 @@ function Plans(props: PlanAndBillingProps) {
               {PRO_PRICE_LABEL.month}{" "}
               <span className="font-sans text-sm font-normal text-muted-foreground">a month</span>
             </p>
-            <FeatureList features={[scansLine(plans.pro), membersLine(plans.pro)]} />
+            <FeatureList
+              features={[scansLine(plans.pro), membersLine(plans.pro), storageLine(plans.pro)]}
+            />
             {proAction ? <div className="mt-auto pt-2">{proAction}</div> : null}
           </Card>
         </div>
@@ -322,13 +333,14 @@ function Plans(props: PlanAndBillingProps) {
   );
 }
 
-/** "50 a month · 20 a day · 2 members", the plan's limits under the meter. */
+/** "50 a month · 20 a day · 2 members · 100 MB storage", the plan's limits under the meter. */
 function limitsLine(policy: PlanPolicy): string {
   const members = `${policy.membersPerWorkspace} ${policy.membersPerWorkspace === 1 ? "member" : "members"}`;
   return [
     policy.receiptsPerMonth === null ? null : `${policy.receiptsPerMonth} a month`,
     `${policy.receiptsPerDay} a day`,
     members,
+    `${formatStorage(policy.storageBytes)} storage`,
   ]
     .filter(Boolean)
     .join(" · ");

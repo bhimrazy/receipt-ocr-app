@@ -3,6 +3,7 @@ import {
   drainOnce,
   JOB_REGISTRY,
   scheduleMaintenance,
+  scheduleFileSizeBackfill,
   scheduleRecheck,
   tick,
   type WideEventFields,
@@ -99,11 +100,11 @@ const DRAIN_CONCURRENCY = 3;
 /**
  * One bounded pass over the queue for the cron route; never sleeps for backoff. The cron is the
  * only clock the app has, so it also queues the daily maintenance run and, once per deploy, the
- * review-reasons recheck first.
+ * review-reasons recheck and the file-size backfill first.
  */
 export const drainQueue = (context: WideEventFields) =>
   Effect.zipRight(
-    Effect.zipRight(scheduleMaintenance(), scheduleRecheck()),
+    Effect.all([scheduleMaintenance(), scheduleRecheck(), scheduleFileSizeBackfill()]),
     drainOnce({
       worker: workerId(),
       registry: JOB_REGISTRY,

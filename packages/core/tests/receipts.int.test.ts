@@ -1006,6 +1006,38 @@ describe.skipIf(!enabled)("receipts against Postgres + S3", () => {
       expect(rows).toHaveLength(5);
     });
 
+    it("a parallel burst can't get past the workspace's storage, and deleting makes room", async () => {
+      const c = await createUser("storage");
+      const capped = { ...limits, storageBytes: 5 * JPEG.byteLength };
+      const exits = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          runExit(ingestUpload({ scope: c, fileName: "s.jpg", body: JPEG, limits: capped })),
+        ),
+      );
+      expect(exits.filter(Exit.isSuccess)).toHaveLength(5);
+      for (const exit of exits.filter(Exit.isFailure)) {
+        expect(JSON.stringify(exit.cause)).toContain('"kind":"storage"');
+      }
+      const rows = await db((d) =>
+        d
+          .select({ id: receipts.id, fileBytes: receipts.fileBytes, fileMeta: receipts.fileMeta })
+          .from(receipts)
+          .where(eq(receipts.organizationId, c.organizationId)),
+      );
+      expect(rows).toHaveLength(5);
+      expect(rows.every((row) => row.fileBytes === JPEG.byteLength)).toBe(true);
+      expect(rows[0]?.fileMeta).toEqual({ contentType: "image/jpeg" });
+      expect(await run(Effect.flatMap(ReceiptRepo, (r) => r.storageUsed(c.organizationId)))).toBe(
+        5 * JPEG.byteLength,
+      );
+
+      await run(deleteReceipt({ receiptId: rows[0]!.id, scope: c }));
+      const again = await runExit(
+        ingestUpload({ scope: c, fileName: "s.jpg", body: JPEG, limits: capped }),
+      );
+      expect(Exit.isSuccess(again)).toBe(true);
+    });
+
     it("rolls usage up by day, model and workspace", async () => {
       const c = await createUser("rollup");
       await readAndExtract(c);

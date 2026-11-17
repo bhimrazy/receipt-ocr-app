@@ -1,6 +1,8 @@
 import type { WorkspaceBilling } from "@receipt-ocr/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { MB } from "@receipt-ocr/core/plans";
+import type { Usage } from "@/components/usage-meter";
 import { DEFAULT_PLANS } from "@/lib/plans";
 import { PlanAndBilling, type PlanAndBillingProps } from "@/components/billing/plan-and-billing";
 
@@ -20,6 +22,17 @@ const subscription = (fields: Partial<WorkspaceBilling>): WorkspaceBilling => ({
   ...fields,
 });
 
+const usage = (usedBytes = 12.6 * MB): Usage => ({
+  period: "month",
+  scope: "user",
+  used: 3,
+  limit: 30,
+  resetsAt: new Date("2026-12-01T00:00:00Z"),
+  blocked: null,
+  opensAt: new Date("2026-12-01T00:00:00Z"),
+  storage: { usedBytes, limitBytes: 100 * MB },
+});
+
 const render = (
   fields: Partial<WorkspaceBilling> | null,
   over: Partial<PlanAndBillingProps> = {},
@@ -28,16 +41,9 @@ const render = (
     plan: "free",
     policy: DEFAULT_PLANS.free,
     plans: DEFAULT_PLANS,
-    usage: {
-      period: "month",
-      scope: "user",
-      used: 3,
-      limit: 30,
-      resetsAt: new Date("2026-12-01T00:00:00Z"),
-      blocked: null,
-      opensAt: new Date("2026-12-01T00:00:00Z"),
-    },
+    usage: usage(),
     owner: true,
+    manages: true,
     impersonating: false,
     ownsPro: false,
     subscription: fields ? subscription(fields) : null,
@@ -50,6 +56,29 @@ const render = (
   };
   return renderToStaticMarkup(<PlanAndBilling {...props} />);
 };
+
+describe("PlanAndBilling storage", () => {
+  it("always shows storage, in the limits line and on both plan cards", () => {
+    const html = render(null);
+    expect(html).toContain("12 MB of 100 MB used.");
+    expect(html).toContain("50 a month · 20 a day · 2 members · 100 MB storage");
+    expect(html).toContain("100 MB of receipt storage");
+    expect(html).toContain("5 GB of receipt storage");
+  });
+
+  it("says how to make room from 80%, and sends a member to the owner", () => {
+    expect(render(null, { usage: usage(86 * MB) })).toContain(
+      "86 MB of 100 MB used. Delete receipts to make room.",
+    );
+    expect(render(null, { usage: usage(100 * MB), manages: false })).toContain(
+      "This workspace&#x27;s 100 MB of storage is full. Ask the owner to make room.",
+    );
+  });
+
+  it("never reads as full before it is", () => {
+    expect(render(null, { usage: usage(99.99 * MB) })).toContain("99 MB of 100 MB used.");
+  });
+});
 
 describe("PlanAndBilling on Free", () => {
   it("offers the checkout when no subscription can charge", () => {

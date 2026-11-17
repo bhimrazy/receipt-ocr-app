@@ -40,7 +40,6 @@ const tables = [
   "support_messages",
   "two_factor",
   "user",
-  "user_credentials",
   "verification",
 ];
 
@@ -67,7 +66,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
     await admin.end();
   });
 
-  it("is the baseline, billing, receipt review, receipt fields, billing checkouts, billing plan, support messages, the dropped plan default, support retention, cleared OAuth tokens, the Data API grants, the app rate-limit table and the receipt duplicates", () => {
+  it("is the baseline, billing, receipt review, receipt fields, billing checkouts, billing plan, support messages, the dropped plan default, support retention, cleared OAuth tokens, the Data API grants, the app rate-limit table, the receipt duplicates and the storage cap", () => {
     const journal = JSON.parse(readFileSync(path.join(dir, "meta", "_journal.json"), "utf8"));
     expect(journal.entries.map((e: { tag: string }) => e.tag)).toEqual([
       "0000_baseline",
@@ -83,6 +82,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "0010_data_api_grants",
       "0011_app_rate_limits",
       "0012_receipt_duplicates",
+      "0013_storage_cap",
     ]);
   });
 
@@ -120,6 +120,7 @@ describe.skipIf(!enabled)("baseline migration on an empty database", () => {
       "receipts_attempts_check",
       "receipts_currency_check",
       "receipts_discount_check",
+      "receipts_file_bytes_check",
       "receipts_invoice_number_check",
       "receipts_merchant_tax_id_check",
       "receipts_receipt_date_calendar_check",

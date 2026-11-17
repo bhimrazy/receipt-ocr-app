@@ -92,6 +92,7 @@ describe("fromRecord", () => {
     expect(quota("minute")?.props).toEqual({ limit: "minute", plan: "free" });
     expect(quota("month")?.props).toEqual({ limit: "month", plan: "free" });
     expect(quota("pool")?.props).toEqual({ limit: "pool", plan: "free" });
+    expect(quota("storage")?.props).toEqual({ limit: "storage", plan: "free" });
     // The service-wide cap isn't the user's plan, and a repeat in the same minute isn't news.
     expect(quota("global")).toBeNull();
     expect(quota("day", { quota_repeat: true })).toBeNull();

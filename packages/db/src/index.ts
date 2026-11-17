@@ -71,6 +71,15 @@ export const receiptStatus = pgEnum("receipt_status", [
 export const identifierKey = (value: SQL | AnyPgColumn) =>
   sql`nullif(upper(regexp_replace(translate(normalize(${value}, NFKC), '०१२३४५६७८९', '0123456789'), '[^0-9A-Za-z]+', '', 'g')), '')`;
 
+/** Facts about a stored receipt file, read from its bytes at upload (never from the client). */
+export type ReceiptFileMeta = {
+  /** The sniffed media type it was stored with. */
+  contentType: string;
+  /** Pixel size, for images whose header gave one. */
+  width?: number;
+  height?: number;
+};
+
 /** Upload plus retries; `receipts_attempts_check` enforces it. */
 export const MAX_EXTRACTION_ATTEMPTS = 3;
 
@@ -128,6 +137,14 @@ export const receipts = pgTable(
     /** Original upload name; kept outside raw_json, which extraction overwrites. */
     fileName: text("file_name"),
     imageObjectKey: text("image_object_key"),
+    /**
+     * Size of the stored file, counted against the workspace's storage cap. Null for receipts
+     * stored before it was recorded, until the backfill job reads the object's size, and for
+     * those whose object is missing.
+     */
+    fileBytes: integer("file_bytes"),
+    /** What was known about the file at upload. Null for older receipts. */
+    fileMeta: jsonb("file_meta").$type<ReceiptFileMeta>(),
     // Which storage credentials the image was written with: "managed" | "byok".
     storageSource: text("storage_source").notNull().default("managed"),
     rawJson: jsonb("raw_json"),
@@ -184,6 +201,7 @@ export const receipts = pgTable(
     check("receipts_merchant_tax_id_check", sql`char_length(merchant_tax_id) between 1 and 32`),
     check("receipts_discount_check", sql`discount >= 0`),
     check("receipts_service_charge_check", sql`service_charge >= 0`),
+    check("receipts_file_bytes_check", sql`file_bytes >= 0`),
   ],
 ).enableRLS();
 
@@ -430,30 +448,6 @@ export const jobControls = pgTable("job_controls", {
   updatedBy: text("updated_by"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
-
-/**
- * Reserved for user-provided BYOK credentials. Nothing reads or writes this
- * table, and `ciphertext` has no encryption: add it (see docs/byok-key-management.md)
- * before storing any secret here.
- */
-export const userCredentials = pgTable(
-  "user_credentials",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    provider: text("provider").notNull(), // "gemini" | "s3"
-    label: text("label"),
-    last4: text("last4").notNull(),
-    ciphertext: text("ciphertext").notNull(), // base64(nonce ‖ ct ‖ tag)
-    status: text("status").notNull().default("active"), // active | invalid | revoked
-    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    revokedAt: timestamp("revoked_at", { withTimezone: true }),
-  },
-  (table) => [index("user_credentials_user_id_idx").on(table.userId)],
-).enableRLS();
 
 /**
  * One row per admin action: who did what to which target, and why. Actor and
@@ -835,7 +829,6 @@ export const schema = {
   jobState,
   jobs,
   jobControls,
-  userCredentials,
   adminAuditLog,
   appSettings,
   receiptGroups,
@@ -985,5 +978,3 @@ export type JobRow = typeof jobs.$inferSelect;
 export type NewJobRow = typeof jobs.$inferInsert;
 export type AdminAuditEntry = typeof adminAuditLog.$inferSelect;
 export type BillingSubscription = typeof billingSubscriptions.$inferSelect;
-export type UserCredential = typeof userCredentials.$inferSelect;
-export type NewUserCredential = typeof userCredentials.$inferInsert;

@@ -18,8 +18,9 @@ product; most other pages describe a part of it.
 
 The work is split into two stages in [`pipeline.ts`](../../../packages/core/src/pipeline.ts):
 
-1. **Ingest** (`ingestUpload`), always inside the request: validate the bytes, store the file, then in one
-   transaction under the quota lock insert the receipt, its first round and its `receipt.extract` job.
+1. **Ingest** (`ingestUpload`), always inside the request: validate the bytes, refuse a file the workspace's storage
+   can't hold, store the file, then in one transaction under the quota locks check the quota and the storage again
+   and insert the receipt (with `file_bytes` and `file_meta`), its first round and its `receipt.extract` job.
 2. **Extract**, as that job ([Background jobs](jobs.md)): each attempt (`runExtraction`) loads the file by receipt
    id, runs the model chain and writes the result, or records its calls and leaves the job to retry. Only a dead job
    marks the receipt failed.
@@ -144,8 +145,9 @@ sequenceDiagram
   R->>Q: enforceUploadQuota (read-only)
   R->>O: ocr.ready (any model with a key?)
   R->>R: sniff type from bytes, max 10 MB
+  R->>DB: sum the workspace's file_bytes (read-only)
   R->>S: put users/{userId}/receipts/{id}.{ext}
-  R->>DB: lock user, count usage, insert receipt (processing) + ocr_rounds round 1 + jobs row
+  R->>DB: lock user and workspace, count usage, sum file_bytes, insert receipt (processing) + ocr_rounds round 1 + jobs row
   R->>DB: claim that job (attempt 1, lease 90 s)
   R->>S: get file
   R->>O: extract (chain, 50 s deadline)
@@ -155,10 +157,16 @@ sequenceDiagram
   B->>B: navigate to /app/receipts/{id}
 ```
 
-Steps 3 and 4 refuse early, before anything is stored, when the user is over quota or no model can run. Step 7 is
-the check that counts: it runs inside the transaction that records the round, under
-`pg_advisory_xact_lock` on the user, so parallel uploads can't all pass. If step 7 refuses, the file stored in step 6
-is deleted.
+Steps 3, 4 and 6 refuse early, before anything is stored, when the user is over quota, no model can run or the file
+doesn't fit in the workspace's storage. Step 8 is the check that counts: it runs inside the transaction that records
+the round, under `pg_advisory_xact_lock` on the user and the workspace, so parallel uploads can't all pass. If step 8
+refuses, the file stored in step 7 is deleted.
+
+A storage refusal is a 429 with `{ error, kind: "storage", full }` and no `Retry-After`. The batch queue
+(`lib/capture/batch-queue.ts`) marks a file that doesn't fit `skipped` ("Doesn't fit", with a toast) and never
+sends it again. With `full` it stops instead, keeping that file and the rest waiting, and Scan stays off until the
+server's count shows room. While
+storage is full and nothing is picked, the panel shows its full state instead of the drop zone.
 
 ## 3. Queued mode
 

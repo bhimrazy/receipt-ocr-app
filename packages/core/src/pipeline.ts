@@ -1,4 +1,6 @@
 import { costOf, PROMPT_VERSION, type ModelId } from "@receipt-ocr/ai";
+import { imageSize } from "@receipt-ocr/ai/image-size";
+import type { ReceiptFileMeta } from "@receipt-ocr/db";
 import { receiptObjectKey } from "@receipt-ocr/storage";
 import { Duration, Effect } from "effect";
 import {
@@ -14,6 +16,7 @@ import {
 } from "./errors";
 import { sniffMediaType, validateUpload } from "./files";
 import {
+  canManageAnyReceipt,
   MAX_BULK_DELETE,
   MAX_EXTRACTION_ATTEMPTS,
   EXTRACTION_FAILED_MESSAGE,
@@ -25,6 +28,7 @@ import {
 import { Ocr, providerOf, type ProviderCooldowns } from "./ocr";
 import { quotaGate, refuseQuota, type QuotaLimits } from "./quota";
 import { Storage } from "./services";
+import { decideStorage, refuseStorage } from "./storage-quota";
 import { annotateEvent } from "./telemetry/current";
 import { errorFields, sqlState } from "./telemetry/redact";
 import type { WideEventFields } from "./telemetry/schema";
@@ -170,11 +174,20 @@ function mayHaveCommitted(error: { _tag: string; atCommit?: boolean; cause?: unk
   return state === undefined || state.startsWith("08");
 }
 
+/** What is recorded about a file at upload: its sniffed type, and an image's pixel size. */
+export function fileMetaOf(body: Uint8Array, contentType: string): ReceiptFileMeta {
+  const size = contentType.startsWith("image/") ? imageSize(body) : null;
+  return size && size.width > 0 && size.height > 0
+    ? { contentType, width: size.width, height: size.height }
+    : { contentType };
+}
+
 /**
  * Stage 1, always synchronous: validate the file, store it, create the row
- * and enqueue its extraction job. The quota is checked again where the row is
- * created, under the user's lock: a parallel burst can't all pass an earlier
- * check.
+ * and enqueue its extraction job. Storage is checked before the file is
+ * stored, so a full workspace uploads nothing. Both are checked again where
+ * the row is created, under the user's and the workspace's locks: a parallel
+ * burst can't all pass an earlier check.
  */
 export const ingestUpload = (input: {
   scope: ReceiptScope;
@@ -189,6 +202,14 @@ export const ingestUpload = (input: {
     const repo = yield* ReceiptRepo;
     const storage = yield* Storage;
     const timings: StepTiming[] = [];
+    const fileBytes = input.body.byteLength;
+    const storageCap = input.limits.storageBytes ?? null;
+    const manages = canManageAnyReceipt(input.scope.role);
+    if (storageCap !== null) {
+      const used = yield* repo.storageUsed(input.scope.organizationId);
+      const verdict = decideStorage(used, fileBytes, storageCap);
+      if (!verdict.allowed) return yield* refuseStorage(verdict, manages);
+    }
 
     const id = crypto.randomUUID();
     const imageObjectKey = receiptObjectKey(input.scope.userId, id, mediaType);
@@ -203,14 +224,23 @@ export const ingestUpload = (input: {
           scope: input.scope,
           fileName: input.fileName.slice(0, 200),
           imageObjectKey,
+          fileBytes,
+          fileMeta: fileMetaOf(input.body, mediaType),
           priority: input.priority,
         },
         gate,
       ),
     ).pipe(
-      Effect.flatMap((result) =>
-        result.kind === "inserted" ? Effect.succeed(result) : refuseQuota(result.verdict),
-      ),
+      Effect.flatMap((result) => {
+        switch (result.kind) {
+          case "inserted":
+            return Effect.succeed(result);
+          case "quota":
+            return refuseQuota(result.verdict);
+          case "storage":
+            return refuseStorage(result.verdict, manages);
+        }
+      }),
       // No row means nothing would ever delete the object, so it goes unless
       // the insert may have committed (see `mayHaveCommitted`); then it stays
       // and is logged, since deleting it would strand a committed receipt.

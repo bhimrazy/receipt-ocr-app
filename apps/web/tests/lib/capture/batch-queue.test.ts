@@ -163,9 +163,47 @@ describe("batch queue", () => {
     expect(statuses(q)).toEqual(["done", "error", "waiting"]);
     expect(q.getSnapshot()).toMatchObject({
       stopped: "You've reached today's limit",
+      stoppedBy: "limit",
       running: false,
     });
     expect(calls).toHaveLength(2);
+  });
+
+  it("skips a file that doesn't fit, carries on, and never sends it again", async () => {
+    const { calls, upload } = manualUploader();
+    const q = createBatchQueue({ mode: "queued", upload, concurrency: 1 });
+    q.add(entries(["big", "small"]));
+    q.start();
+    calls[0]!.settle({ ok: false, error: "This file doesn't fit", status: 429, storage: "no-fit" });
+    await flush();
+    expect(statuses(q)).toEqual(["skipped", "uploading"]);
+    expect(q.getSnapshot().stopped).toBeNull();
+    calls[1]!.settle({ ok: true, receiptId: "r-small" });
+    await flush();
+
+    q.start();
+    q.retry("big");
+    expect(calls.map((c) => c.id)).toEqual(["big", "small"]);
+    expect(q.getSnapshot().items[0]).toMatchObject({
+      status: "skipped",
+      error: "This file doesn't fit",
+    });
+  });
+
+  it("stops once storage is full, keeping that file and the rest waiting", async () => {
+    const { calls, upload } = manualUploader();
+    const q = createBatchQueue({ mode: "queued", upload, concurrency: 1 });
+    q.add(entries(["a", "b"]));
+    q.start();
+    calls[0]!.settle({ ok: false, error: "Storage is full", status: 429, storage: "full" });
+    await flush();
+    expect(statuses(q)).toEqual(["waiting", "waiting"]);
+    expect(q.getSnapshot()).toMatchObject({
+      stopped: "Storage is full",
+      stoppedBy: "storage",
+      running: false,
+    });
+    expect(calls).toHaveLength(1);
   });
 
   it("clears finished items and ignores results for removed ones", async () => {

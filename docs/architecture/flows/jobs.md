@@ -277,6 +277,32 @@ practice on the first drain after a deploy. A run does at most 10 batches of 200
 starts again from its own cursor, which changes nothing already written. Priority 9, 5 attempts. To run it again for
 the same version, re-run its job from `/admin/jobs`.
 
+### File-size backfill
+
+`receipt.file_size_backfill`
+([`kinds/receipt-file-size-backfill.ts`](../../../packages/core/src/jobs/kinds/receipt-file-size-backfill.ts)) fills
+`receipts.file_bytes` for receipts stored before uploads recorded it, so the [storage cap](billing.md) counts them.
+Like the recheck it has no `receipt_id`. On each process's first drain, `drainQueue` queues it keyed
+`receipt.file_size_backfill` when a receipt with a stored file has no size and no backfill job is queued or running. So
+each deploy picks up rows an older release wrote during the rollout, and a run that died is started again.
+
+- A batch takes up to 100 receipts by id, across every workspace, with a stored file and `file_bytes is null`. It
+  HEADs their objects through `Storage.size` (8 at a time, outside any transaction, nothing downloaded), each on its
+  own, then one `UPDATE` writes the sizes read `where file_bytes is null`, so an upload's own size is never
+  overwritten and a rerun changes nothing.
+- An object that can't be read (a 403, a 5xx) is counted in `counts.failed` and left out of the rest of the run, so
+  it never holds back the rows after it; the next process's first drain tries it again. A run that read rows but sized
+  none fails as retryable.
+- A missing object (404) gets `file_bytes = 0` and is counted in the run's `counts.missing`. Every row a batch reads
+  gets a value, so the next batch moves on without a cursor.
+- A run does at most 5 batches, then checks again for any unsized receipt it didn't fail on (including one written
+  during the run) and,
+  if there is one, queues a follow-up under the other of its two keys (`receipt.file_size_backfill` and
+  `receipt.file_size_backfill:next`): its own key is still live while it runs, and a retry after that enqueue finds
+  the follow-up already queued. Priority 9, 5 attempts, lease 120 s. Storage not configured is dead at once
+  (`storage-off`); a storage or database failure retries. Its finished jobs follow the usual 30 and 90 days: nothing
+  reads them.
+
 ## Tables
 
 `jobs` and `job_controls` come from migration

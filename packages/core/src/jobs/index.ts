@@ -7,6 +7,11 @@ export * from "./kinds/contact-reply";
 export { MAINTENANCE_PURGE, scheduleMaintenance } from "./kinds/maintenance-purge";
 export * from "./kinds/receipt-extract";
 export {
+  RECEIPT_FILE_SIZE_BACKFILL,
+  resetFileSizeBackfillSchedule,
+  scheduleFileSizeBackfill,
+} from "./kinds/receipt-file-size-backfill";
+export {
   RECEIPT_RECHECK,
   RECHECK_VERSION,
   receiptRecheckJob,

@@ -14,7 +14,7 @@ const valueProps = (freeAllowance: string | null) => [
   {
     icon: ScanLine,
     title: "Scans the whole receipt",
-    desc: "Merchant, date, line items, tax and total, with a confidence score.",
+    desc: "Merchant, date, line items, tax and total, as rows you can export.",
   },
   {
     icon: PencilLine,

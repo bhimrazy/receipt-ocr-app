@@ -41,6 +41,11 @@ export interface PlanPolicy {
    * invited and when an invitation is accepted; a workspace already past it keeps its members.
    */
   membersPerWorkspace: number;
+  /**
+   * Bytes of stored receipt files a workspace on this plan may hold, in decimal units. Checked at
+   * upload against the exact sum of `receipts.file_bytes`; deleting receipts frees room.
+   */
+  storageBytes: number;
 }
 
 /**
@@ -69,6 +74,32 @@ export const MAX_BATCH = 20;
  */
 export const MAX_MEMBERS = 100;
 
+/** Storage is counted and shown in decimal units, as storage is sold. */
+export const MB = 1_000_000;
+const GB = 1_000 * MB;
+
+/** The most `storageBytes` may be set to: 1 TB. */
+export const MAX_STORAGE_BYTES = 1_000 * GB;
+
+const KB = 1_000;
+
+/**
+ * One size format for storage and files, in decimal units: "84 KB" under 1 MB, "4.1 MB" under
+ * 10 MB, "86 MB" under 1 GB, then "4.1 GB" ("5 GB" when whole). Rounded down by default, so used
+ * space never reads as the cap before it is; `up` for the room a file needs.
+ */
+export function formatStorage(bytes: number, round: "down" | "up" = "down"): string {
+  const r = round === "down" ? Math.floor : Math.ceil;
+  const fixed = (value: number, unit: string) => `${r(value * 10) / 10} ${unit}`;
+  if (bytes <= 0) return "0 MB";
+  if (bytes < KB) return round === "down" ? "<1 KB" : "1 KB";
+  // Rounding up can reach 1000 of a unit; that is the next unit's 1.
+  if (bytes < MB) return r(bytes / KB) < 1000 ? `${r(bytes / KB)} KB` : "1 MB";
+  if (bytes < 10 * MB) return fixed(bytes / MB, "MB");
+  if (bytes < GB) return r(bytes / MB) < 1000 ? `${r(bytes / MB)} MB` : "1 GB";
+  return fixed(bytes / GB, "GB");
+}
+
 export const DEFAULT_PLANS: PlanTable = {
   // Per workspace, shared by its members: 50 a month, up to 20 a day, and 300 a day for every Free
   // workspace together.
@@ -81,6 +112,7 @@ export const DEFAULT_PLANS: PlanTable = {
     batchMax: DEFAULT_BATCH_MAX,
     workspaces: 1,
     membersPerWorkspace: 2,
+    storageBytes: 100 * MB,
   },
   // Per workspace, shared by its members: 500 a month, up to 200 a day.
   pro: {
@@ -92,6 +124,7 @@ export const DEFAULT_PLANS: PlanTable = {
     batchMax: DEFAULT_BATCH_MAX,
     workspaces: 2,
     membersPerWorkspace: 5,
+    storageBytes: 5 * GB,
   },
 };
 

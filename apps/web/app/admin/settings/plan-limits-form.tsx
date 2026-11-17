@@ -5,6 +5,8 @@ import {
   FREE_FAILED_ROUNDS,
   MAX_BATCH,
   MAX_MEMBERS,
+  MAX_STORAGE_BYTES,
+  MB,
   type PlanId,
   type PlanPolicy,
   type PlanTable,
@@ -25,6 +27,8 @@ const FIELDS: {
   /** Bounds the server also enforces, shown to the browser and assistive tech. */
   min?: number;
   max?: number;
+  /** The stored value is this many times the one typed (storage is typed in MB, stored in bytes). */
+  unit?: number;
 }[] = [
   {
     key: "receiptsPerMonth",
@@ -65,6 +69,14 @@ const FIELDS: {
     max: MAX_MEMBERS,
     hint: `Pending invitations count. Checked when someone is invited and when they accept; a workspace already over it keeps its members. At most ${MAX_MEMBERS}.`,
   },
+  {
+    key: "storageBytes",
+    label: "Storage per workspace (MB)",
+    min: 1,
+    max: MAX_STORAGE_BYTES / MB,
+    unit: MB,
+    hint: "Receipt files a workspace can keep, in MB (1 GB is 1000). An upload that would go past it is refused; deleting receipts makes room. A workspace already over it keeps its files.",
+  },
 ];
 const PLANS: { id: PlanId; label: string }[] = [
   { id: "free", label: "Free" },
@@ -77,7 +89,12 @@ const toDraft = (table: PlanTable): Draft =>
   Object.fromEntries(
     PLANS.map(({ id }) => [
       id,
-      Object.fromEntries(FIELDS.map(({ key }) => [key, String(table[id][key] ?? "")])),
+      Object.fromEntries(
+        FIELDS.map(({ key, unit = 1 }) => {
+          const value = table[id][key];
+          return [key, typeof value === "number" ? String(value / unit) : ""];
+        }),
+      ),
     ]),
   ) as Draft;
 
@@ -87,9 +104,9 @@ const toTable = (draft: Draft) =>
     PLANS.map(({ id }) => [
       id,
       Object.fromEntries(
-        FIELDS.map(({ key, optional }) => [
+        FIELDS.map(({ key, optional, unit = 1 }) => [
           key,
-          optional && draft[id][key] === "" ? null : Number(draft[id][key]),
+          optional && draft[id][key] === "" ? null : Number(draft[id][key]) * unit,
         ]),
       ),
     ]),

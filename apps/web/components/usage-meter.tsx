@@ -1,8 +1,10 @@
 import { Badge } from "@receipt-ocr/ui/components/badge";
 import { cn } from "@receipt-ocr/ui/lib/utils";
+import { formatStorage } from "@receipt-ocr/core/plans";
 import { CircleAlert } from "lucide-react";
 import { formatTime } from "@/lib/format";
 import { resetDay } from "@/lib/upgrade-copy";
+import { storageNote, storageRatio, storageShows, type StorageUsage } from "@/lib/storage-usage";
 import { NEAR_RATIO, usageRatio } from "@/lib/upgrade-level";
 
 export type Usage = {
@@ -23,6 +25,8 @@ export type Usage = {
   blocked: "day" | "month" | "pool" | "global" | null;
   /** When uploads open again while blocked: midnight UTC, or the month's reset. */
   opensAt: Date;
+  /** Bytes of receipt files the workspace keeps, against its plan's cap. Never resets. */
+  storage?: StorageUsage;
 };
 
 /** Scans the next upload batch can still use: the tighter of the month and the day. */
@@ -112,9 +116,66 @@ export function stripNote(usage: Usage): string | null {
 }
 
 /**
+ * Storage against the cap: label, count, bar and, when there is one, `storageNote`. Amber from
+ * NEAR_RATIO.
+ */
+function StorageRow({
+  storage,
+  manages,
+  detail,
+}: {
+  storage: StorageUsage;
+  manages: boolean;
+  detail: boolean;
+}) {
+  const warn = storageRatio(storage) >= NEAR_RATIO;
+  const note = storageNote(storage, manages, detail);
+  const used = formatStorage(storage.usedBytes);
+  const limit = formatStorage(storage.limitBytes);
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Storage</span>
+        <span className="font-mono whitespace-nowrap text-muted-foreground tabular-nums">
+          <span className="font-semibold text-foreground">{used}</span> / {limit}
+        </span>
+      </div>
+      <div
+        aria-label="Storage used"
+        aria-valuemax={storage.limitBytes}
+        aria-valuemin={0}
+        aria-valuenow={Math.min(storage.usedBytes, storage.limitBytes)}
+        aria-valuetext={`${used} of ${limit} of storage used`}
+        className="mt-2 h-1 overflow-hidden rounded-full bg-foreground/15"
+        role="meter"
+      >
+        <div
+          className={cn("h-full rounded-full", warn ? "bg-warning" : "bg-primary")}
+          style={{ width: `${storageRatio(storage) * 100}%` }}
+        />
+      </div>
+      {note ? (
+        <p
+          className={cn(
+            "mt-2 flex items-start gap-1.5 text-xs",
+            warn ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          {warn ? (
+            <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0 text-warning" />
+          ) : null}
+          <span>{note}</span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * Scans used against the plan limit: plan badge, count, bar and one line. Amber on the bar and
  * icon only, from NEAR_RATIO, and the words say it too. `detail` (Billing) gives the full
- * sentence; `action` goes under the note.
+ * sentence and always shows storage; the card shows it from NEAR_RATIO. `action` goes last.
+ * `manages`: the viewer may delete any receipt here (owner or admin).
  */
 export function UsageMeter({
   usage,
@@ -122,12 +183,14 @@ export function UsageMeter({
   className,
   action,
   detail = false,
+  manages = false,
 }: {
   usage: Usage;
   plan: "free" | "pro";
   className?: string;
   action?: React.ReactNode;
   detail?: boolean;
+  manages?: boolean;
 }) {
   const { used, limit } = usage;
   const ratio = usageRatio(usage);
@@ -168,6 +231,9 @@ export function UsageMeter({
         ) : null}
         <span>{detail ? usageNote(usage) : meterNote(usage)}</span>
       </p>
+      {usage.storage && (detail || storageShows(usage.storage)) ? (
+        <StorageRow detail={detail} manages={manages} storage={usage.storage} />
+      ) : null}
       {action ? <div className="mt-3 flex flex-col">{action}</div> : null}
     </div>
   );

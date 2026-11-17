@@ -4,6 +4,7 @@ import {
   enforceQuota,
   nextUtcMidnight,
   quotaLimits,
+  ReceiptRepo,
   workspacePlan,
   type UsageSubject,
 } from "@receipt-ocr/core";
@@ -29,13 +30,21 @@ export const enforceUploadQuota = (subject: UsageSubject) =>
 export type UsageSummary = Usage;
 
 /**
- * The usage meter for the active workspace, for its plan's scope and period. Deduplicated per
- * request. Windows are UTC.
+ * The usage meter for the active workspace, for its plan's scope and period, and its storage.
+ * Deduplicated per request. Windows are UTC.
  */
 export const getUsageSummary = cache(async (): Promise<UsageSummary> => {
   const scope = await requireActiveScope();
   const { plan, policy } = await getCurrentPlan();
-  const verdict = await runtime.runPromise(checkQuota(scope, quotaLimits(plan, policy)));
+  const [verdict, usedBytes] = await runtime.runPromise(
+    Effect.all(
+      [
+        checkQuota(scope, quotaLimits(plan, policy)),
+        Effect.flatMap(ReceiptRepo, (repo) => repo.storageUsed(scope.organizationId)),
+      ],
+      { concurrency: 2 },
+    ),
+  );
   const window = verdict.allowed || verdict.window === "minute" ? null : (verdict.window ?? "day");
   const opensAt = window === "month" ? verdict.resetsAt : nextUtcMidnight(new Date());
   return {
@@ -47,5 +56,6 @@ export const getUsageSummary = cache(async (): Promise<UsageSummary> => {
     ...(verdict.day ? { day: verdict.day } : {}),
     blocked: window,
     opensAt: window === null ? verdict.resetsAt : opensAt,
+    storage: { usedBytes, limitBytes: policy.storageBytes },
   };
 });

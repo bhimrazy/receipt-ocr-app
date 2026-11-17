@@ -6,6 +6,7 @@ import { DbError, NotConfigured, OcrError, StorageError } from "../src/errors";
 import {
   claimRetry,
   deleteReceipt,
+  fileMetaOf,
   ingestUpload,
   ocrCallRows,
   ocrFields,
@@ -20,7 +21,9 @@ import {
   type ReceiptWithItems,
 } from "../src/repository";
 import { Ocr } from "../src/ocr";
+import { MB } from "../src/plans";
 import { Storage } from "../src/services";
+import { decideStorage } from "../src/storage-quota";
 
 const scope = { organizationId: "org-a", userId: "user-a" };
 const limits = { perMinute: 10, perDay: 20 };
@@ -44,6 +47,10 @@ function harness(
     deleteDuringOcr?: boolean;
     /** Receipts the user has already used today, as the ledger would count them. */
     usedToday?: number;
+    /** Bytes the workspace already stores. */
+    storedBytes?: number;
+    /** Bytes another upload stores between the early check and the insert. */
+    racedBytes?: number;
   } = {},
 ) {
   const rows = new Map<string, ReceiptWithItems>();
@@ -58,14 +65,27 @@ function harness(
     globalDay: null,
   });
 
+  const stored = () =>
+    (options.storedBytes ?? 0) +
+    [...rows.values()].reduce((sum, row) => sum + (row.fileBytes ?? 0), 0);
+
   const repo = Layer.succeed(ReceiptRepo, {
-    insert: ({ id, scope, fileName, imageObjectKey }, quota) =>
+    insert: ({ id, scope, fileName, imageObjectKey, fileBytes, fileMeta }, quota) =>
       Effect.suspend((): Effect.Effect<InsertResult, DbError> => {
         if (options.insertFails) {
           return Effect.fail(new DbError({ message: "insert", ...options.insertFails }));
         }
         const verdict = quota.decide(counts());
         if (!verdict.allowed) return Effect.succeed({ kind: "quota" as const, verdict });
+        if (quota.storageBytes !== null) {
+          const storage = decideStorage(
+            stored() + (options.racedBytes ?? 0),
+            fileBytes,
+            quota.storageBytes,
+          );
+          if (!storage.allowed)
+            return Effect.succeed({ kind: "storage" as const, verdict: storage });
+        }
         const row = {
           id,
           organizationId: scope.organizationId,
@@ -73,6 +93,8 @@ function harness(
           status: "processing",
           fileName,
           imageObjectKey,
+          fileBytes,
+          fileMeta,
           errorMessage: null,
           attempts: 1,
           items: [],
@@ -147,6 +169,7 @@ function harness(
       }),
     objectKeys: () => Effect.sync(() => [...objects.keys()]),
     usage: () => Effect.die("unused"),
+    storageUsed: () => Effect.sync(stored),
   });
 
   const storage = Layer.succeed(Storage, {
@@ -158,6 +181,7 @@ function harness(
       const body = objects.get(key);
       return body ? Effect.succeed(body) : Effect.fail(new StorageError({ message: "missing" }));
     },
+    size: (key) => Effect.die(`unused: ${key}`),
     remove: (keys) => Effect.sync(() => keys.forEach((key) => objects.delete(key))),
     signedUrl: (key) => Effect.succeed(`https://signed/${key}`),
     list: () => Effect.succeed({ objects: [] }),
@@ -272,6 +296,59 @@ describe("ingestUpload", () => {
       expect(h.logs).toContain("receipt.ingest_unknown");
     },
   );
+
+  it("records the file's size and what its bytes say about it", async () => {
+    const h = harness();
+    const exit = await h.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits }));
+    expect(Exit.isSuccess(exit)).toBe(true);
+    const row = [...h.rows.values()][0];
+    expect(row?.fileBytes).toBe(JPEG.byteLength);
+    expect(row?.fileMeta).toEqual({ contentType: "image/jpeg" });
+  });
+
+  const capped = { ...limits, storageBytes: 100 * MB };
+
+  it("refuses a full workspace before storing anything", async () => {
+    const h = harness({ storedBytes: 100 * MB });
+    const exit = await h.run(
+      ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits: capped }),
+    );
+    const cause = Exit.isFailure(exit) ? JSON.stringify(exit.cause) : "";
+    expect(cause).toContain("QuotaExceeded");
+    expect(cause).toContain('"kind":"storage"');
+    expect(cause).toContain(
+      "This workspace's 100 MB of storage is full. Ask the owner to make room.",
+    );
+    expect(cause).toContain('"storageFull":true');
+    expect(h.objects.size).toBe(0);
+    expect(h.rows.size).toBe(0);
+  });
+
+  it("takes a file that fits exactly, and refuses one byte more", async () => {
+    const fits = harness({ storedBytes: 100 * MB - JPEG.byteLength });
+    expect(
+      Exit.isSuccess(
+        await fits.run(ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits: capped })),
+      ),
+    ).toBe(true);
+    const over = harness({ storedBytes: 100 * MB - JPEG.byteLength + 1 });
+    const exit = await over.run(
+      ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits: capped }),
+    );
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(
+      "This file (1 KB) doesn't fit: this workspace has <1 KB of its 100 MB storage left.",
+    );
+  });
+
+  it("refuses where the row is created when a parallel upload took the room, and removes the file", async () => {
+    const h = harness({ storedBytes: 100 * MB - JPEG.byteLength, racedBytes: 1 });
+    const exit = await h.run(
+      ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits: capped }),
+    );
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain('"kind":"storage"');
+    expect(h.rows.size).toBe(0);
+    expect(h.objects.size).toBe(0);
+  });
 
   it("creates no row when storage fails, so nothing points at a missing file", async () => {
     const h = harness({ storagePut: "fail" });
@@ -540,5 +617,22 @@ describe("ocrCallRows", () => {
       context,
     );
     expect(row).toMatchObject({ model: "anthropic:claude-haiku-5-5", latencyMs: 400 });
+  });
+});
+
+describe("fileMetaOf", () => {
+  it("keeps an image's pixel size from its header, and only the type for a PDF", () => {
+    const png = new Uint8Array(24);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+    png.set(new TextEncoder().encode("IHDR"), 12);
+    new DataView(png.buffer).setUint32(16, 1200);
+    new DataView(png.buffer).setUint32(20, 1600);
+    expect(fileMetaOf(png, "image/png")).toEqual({
+      contentType: "image/png",
+      width: 1200,
+      height: 1600,
+    });
+    const pdf = new TextEncoder().encode("%PDF-1.7");
+    expect(fileMetaOf(pdf, "application/pdf")).toEqual({ contentType: "application/pdf" });
   });
 });

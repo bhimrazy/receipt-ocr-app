@@ -92,6 +92,13 @@
       "when": 1794673177647,
       "tag": "0012_receipt_duplicates",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794675850194,
+      "tag": "0013_storage_cap",
+      "breakpoints": true
     }
   ]
 }

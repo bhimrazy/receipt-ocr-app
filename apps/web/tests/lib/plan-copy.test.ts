@@ -30,9 +30,10 @@ describe("account copy", () => {
 
 describe("plan card copy", () => {
   it("words Free from its limits", () => {
-    expect(freeFeatures(DEFAULT_PLANS.free).slice(0, 3)).toEqual([
+    expect(freeFeatures(DEFAULT_PLANS.free).slice(0, 4)).toEqual([
       "50 scans a month per workspace, up to 20 a day",
       "Up to 2 members",
+      "100 MB of receipt storage",
       "1 workspace to own",
     ]);
   });
@@ -42,8 +43,9 @@ describe("plan card copy", () => {
     expect(pro).toEqual([
       "500 scans a month per workspace, up to 200 a day",
       "Up to 5 members",
+      "5 GB of receipt storage",
       "Own up to 2 workspaces, each upgraded separately",
-      "Never paused on busy days",
+      "Not limited by Free's shared daily capacity",
       "Everything in Free",
     ]);
     expect(pro.filter((line) => /workspaces?\b/.test(line) && /\d/.test(line))).toHaveLength(2);
@@ -56,10 +58,12 @@ describe("plan card copy", () => {
       receiptsPerDay: 300,
       membersPerWorkspace: 1,
       workspaces: 4,
+      storageBytes: 2_500_000_000,
     };
     expect(proFeatures({ ...saved, poolPerDay: 1000 })).toEqual([
       "800 scans a month per workspace, up to 300 a day",
       "Up to 1 member",
+      "2.5 GB of receipt storage",
       "Own up to 4 workspaces, each upgraded separately",
       "Everything in Free",
     ]);

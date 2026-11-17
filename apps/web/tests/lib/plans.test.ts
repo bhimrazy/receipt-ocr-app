@@ -13,6 +13,7 @@ describe("policyFor", () => {
         receiptsPerMinute: 2,
         batchMax: 3,
         membersPerWorkspace: 3,
+        storageBytes: 50_000_000,
       },
       pro: DEFAULT_PLANS.pro,
     };

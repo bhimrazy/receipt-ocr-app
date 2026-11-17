@@ -16,8 +16,9 @@ import { SupportWidget } from "@/components/support-widget";
 import { UpgradeBanner } from "@/components/upgrade/upgrade-banner";
 import { UpgradeModal } from "@/components/upgrade/upgrade-modal";
 import { MeterActionView } from "@/components/upgrade/meter-action-view";
-import { meterAction } from "@/lib/meter-action";
-import { proOpensSoon } from "@/lib/upgrade-copy";
+import { usageAction } from "@/lib/meter-action";
+import { storageIsFull, storageShows } from "@/lib/storage-usage";
+import { proOpensSoon, proStorageOpensSoon } from "@/lib/upgrade-copy";
 import { getUpgradeOffer } from "@/lib/upgrade-offer";
 import type { UpgradeOffer } from "@/lib/upgrade-level";
 import { errorFields, logger } from "@/lib/log";
@@ -30,7 +31,7 @@ import Link from "next/link";
 import { getUsageSummary } from "@/lib/receipts";
 import { showSecurityPrompt } from "@/lib/security-prompt";
 import { runtime } from "@/lib/runtime";
-import { hasStrongFactor } from "@receipt-ocr/core";
+import { canManageAnyReceipt, hasStrongFactor } from "@receipt-ocr/core";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { Suspense } from "react";
 
@@ -46,23 +47,38 @@ async function loadUsage(): Promise<Usage | null> {
 
 /**
  * Streams in after the shell. The reads are per-request cached, and the layout has already
- * made them for the upgrade offer. What it offers under the note is `meterAction`'s.
+ * made them for the upgrade offer. What it offers under the note is `usageAction`'s.
  */
-async function Meter({ offer, owner }: { offer: UpgradeOffer | null; owner: boolean }) {
+async function Meter({
+  offer,
+  owner,
+  manages,
+}: {
+  offer: UpgradeOffer | null;
+  owner: boolean;
+  manages: boolean;
+}) {
   const [usage, { plan }, plans] = await Promise.all([
     loadUsage(),
     getCurrentPlan(),
     getPlanTable(),
   ]);
   if (!usage) return null;
-  const action = meterAction({ usage, plan, owner, audience: offer?.audience ?? null });
+  const picked = usageAction({ usage, plan, owner, audience: offer?.audience ?? null });
   return (
     <UsageMeter
       action={
-        action ? (
-          <MeterActionView action={action} opensSoon={proOpensSoon(plans.pro)} surface="meter" />
+        picked ? (
+          <MeterActionView
+            action={picked.action}
+            opensSoon={
+              picked.for === "storage" ? proStorageOpensSoon(plans.pro) : proOpensSoon(plans.pro)
+            }
+            surface="meter"
+          />
         ) : null
       }
+      manages={manages}
       plan={plan}
       usage={usage}
     />
@@ -76,16 +92,32 @@ const METER_SKELETON_HEIGHT = {
   button: "h-[8.25rem]",
   line: "h-[7rem] max-md:h-[8.75rem]",
 } as const;
+// The storage row from NEAR_RATIO, and its note once full.
+const STORAGE_SKELETON_HEIGHT = { none: "", near: "h-[3.3rem]", full: "h-[6.8rem]" } as const;
 
-function MeterSkeleton({ kind }: { kind: keyof typeof METER_SKELETON_HEIGHT }) {
+function MeterSkeleton({
+  kind,
+  storage,
+}: {
+  kind: keyof typeof METER_SKELETON_HEIGHT;
+  storage: keyof typeof STORAGE_SKELETON_HEIGHT;
+}) {
   return (
-    <Skeleton aria-hidden="true" className={`${METER_SKELETON_HEIGHT[kind]} w-full rounded-lg`} />
+    <Skeleton aria-hidden="true" className="w-full rounded-lg">
+      <div className={METER_SKELETON_HEIGHT[kind]} />
+      <div className={STORAGE_SKELETON_HEIGHT[storage]} />
+    </Skeleton>
   );
 }
 
-function skeletonKind(action: ReturnType<typeof meterAction>): keyof typeof METER_SKELETON_HEIGHT {
-  if (action === null) return "none";
-  return action === "upgrade-button" ? "button" : "line";
+function skeletonKind(picked: ReturnType<typeof usageAction>): keyof typeof METER_SKELETON_HEIGHT {
+  if (picked === null) return "none";
+  return picked.action === "upgrade-button" ? "button" : "line";
+}
+
+function skeletonStorage(usage: Usage | null): keyof typeof STORAGE_SKELETON_HEIGHT {
+  if (!storageShows(usage?.storage)) return "none";
+  return storageIsFull(usage.storage) ? "full" : "near";
 }
 
 // Signed-in pages are private; keep them out of search results even if a link leaks.
@@ -128,6 +160,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const blocked = usage?.blocked != null;
   const ownerOffer = offer?.audience === "owner" ? offer : null;
   const owner = scope.role === "owner";
+  const manages = canManageAnyReceipt(scope.role);
   const showAdmin = isAdmin(session);
   const user: MenuUser = {
     name: session.user.name ?? null,
@@ -150,13 +183,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               usage === null
                 ? "none"
                 : skeletonKind(
-                    meterAction({ usage, plan, owner, audience: offer?.audience ?? null }),
+                    usageAction({ usage, plan, owner, audience: offer?.audience ?? null }),
                   )
             }
+            storage={skeletonStorage(usage)}
           />
         }
       >
-        <Meter offer={offer} owner={owner} />
+        <Meter manages={manages} offer={offer} owner={owner} />
       </Suspense>
     </SectionBoundary>
   );

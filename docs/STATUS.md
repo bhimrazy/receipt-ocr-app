@@ -251,7 +251,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
    | Pool                          | 300 a day across all Free workspaces | none      |
 
    Scans in a deleted workspace still count against whoever made them. Members already over the new caps stay. The
-   storage cap needs a stored byte count (a migration); until it ships, storage is neither enforced nor listed.
+   storage cap is enforced at upload from `receipts.file_bytes` (`feat/storage-cap`, migration `0013`), and listed on
+   the plan cards from the same release.
 
 3. Who sees estimated cost (recommended: platform admins only); ~~whether customers see the model name~~ decided
    2026-11-14: customers don't see the model name; whether
@@ -262,8 +263,8 @@ refined emerald (the current one; light-context tile `#047857` with a white glyp
 6. ~~Members: free seats 3 or 5~~ Decided 2026-11-14: Free 2, Pro 5 members per workspace, pending invites count,
    admin-editable in the plan limits. Still open: single owner + transfer ([members plan](plans/2026-11-06-members-admin-plan.md)).
 7. Branch protection on `main` requiring CI.
-8. ~~BYOK tables (`user_credentials`, `storage_source`)~~ Decided 2026-11-14: drop `user_credentials` in a later
-   migration; keep `receipts.storage_source` for BYOK.
+8. ~~BYOK tables (`user_credentials`, `storage_source`)~~ Decided 2026-11-14: drop `user_credentials` (in `0013`,
+   `feat/storage-cap`); keep `receipts.storage_source` for BYOK.
 9. Usage ledger: retention period (suggested 13 months, then a purge job and a privacy-page line); whether the
    global cap needs a platform-wide lock (it can overshoot by the number of users uploading at the same moment).
 10. ~~Passkeys and two-factor~~ Decided 2026-11-08: go for #95 and migration `0002`; a recent sign-in no longer
@@ -427,9 +428,12 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 - Linking a new subscription looks up early revoking adjustments in `billing_events` with a sequential scan. Add a
   partial expression index `billing_events (provider, (payload->'adjustment'->>'subscriptionId')) where outcome =
 'unmatched'`; fold it into the next schema change.
-- Storage cap per workspace (decided 2026-11-14: Free 100 MB, Pro 5 GB, admin-editable): needs a stored byte count
-  per receipt (a migration; `receipts` has none), then enforcement at upload, the usage meter rows and the plan
-  lists. Uploads past the cap are refused with "delete receipts to make room" and the upgrade for a Free owner.
+- Storage cap per workspace (decided 2026-11-14: Free 100 MB, Pro 5 GB, admin-editable): `feat/storage-cap` adds
+  `receipts.file_bytes` and `file_meta` (migration `0013`, which also drops `user_credentials`), the exact sum at
+  upload under the workspace lock, the backfill job, and the storage UI in the same release (decided 2026-11-17): Billing
+  always, the usage card and phone strip from 80%, the upload panel's full state, the plan cards, the upgrade modal and
+  /terms. A file that doesn't fit is skipped and the batch carries on. Per-workspace overrides wait for a custom deal
+  (`workspace_limit_overrides`, see decisions). Re-measure `avg(file_bytes)` two weeks after the backfill.
 - The one-time "protect your receipts" card (after the fifth receipt) is dismissed with a per-browser cookie, so it
   shows once more on each new device. A per-user column (`user.security_prompt_dismissed_at`) needs a migration;
   fold it into the next schema change.
@@ -451,8 +455,8 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   challenge to find it.
 - Database review items not done in the schema-fixes PR (#127): backups and a restore drill (H1), revoking `anon` and
   `authenticated` grants and checking the Data API is off (H4), pool on `globalThis` and role-level timeouts (M3), the
-  quota statement profile (M4), an `ocr_call_status` lookup table (M1), dropping `user_credentials` and
-  `storage_source` with BYOK (M6, L5), trigram search and admin indexes when they slow down (L2, L3), lock ordering
+  quota statement profile (M4), an `ocr_call_status` lookup table (M1), dropping
+  `storage_source` with BYOK (M6, L5; `user_credentials` goes in `0013`), trigram search and admin indexes when they slow down (L2, L3), lock ordering
   between admin re-run and user retry (L4).
 - Support messages (from the [support data review](reviews/2026-11-13-support-data-cto.md)): stored, triaged in
   `/admin/support` and deleted by the daily `maintenance.purge` job 12 months after closing (or after sending or the

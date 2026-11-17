@@ -82,12 +82,21 @@ export function failureResponse(cause: Cause.Cause<AppError>, event?: WideEvent)
   }
   if (status >= 500 && !userInputFailure(error)) report(error, fields, status, event);
   const headers =
-    error._tag === "QuotaExceeded" ? { "Retry-After": String(error.retryAfterSeconds) } : undefined;
+    error._tag === "QuotaExceeded" && error.retryAfterSeconds !== undefined
+      ? { "Retry-After": String(error.retryAfterSeconds) }
+      : undefined;
   const message = PUBLIC.has(error._tag)
     ? error.message
     : error._tag === "NotConfigured"
       ? "This feature isn't available right now."
       : "Something went wrong. Try again.";
+  // A client can't tell a full workspace from a busy minute by the status alone.
+  if (error._tag === "QuotaExceeded" && error.kind === "storage") {
+    return NextResponse.json(
+      { error: message, kind: "storage", full: error.storageFull === true },
+      { status },
+    );
+  }
   return jsonError(status, message, headers);
 }
 

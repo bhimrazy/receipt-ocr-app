@@ -44,7 +44,7 @@ const features = [
   {
     icon: ScanLine,
     title: "Accurate extraction",
-    desc: "Merchant, date, line items, tax, and totals pulled into clean fields, with a confidence score for the receipt, so you know what to check.",
+    desc: "Merchant, date, line items, tax, and totals pulled into clean fields you can check and correct.",
   },
   {
     icon: ListChecks,
@@ -106,7 +106,7 @@ const useCases: Array<{ icon: typeof Users; title: string; href?: string; desc: 
     icon: Calculator,
     title: "Bookkeepers",
     href: "/use-cases/bookkeeping",
-    desc: "Tax, totals and confidence for every receipt in one CSV, with a Needs review filter for the ones to check.",
+    desc: "Tax and totals for every receipt in one CSV, with a Needs review filter for the ones to check.",
   },
   {
     icon: Code2,

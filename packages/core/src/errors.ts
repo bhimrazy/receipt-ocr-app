@@ -22,12 +22,15 @@ export class Conflict extends Data.TaggedError("Conflict")<{
 
 export class QuotaExceeded extends Data.TaggedError("QuotaExceeded")<{
   readonly message: string;
-  readonly retryAfterSeconds: number;
+  /** Unset when waiting won't help (storage is full). */
+  readonly retryAfterSeconds?: number;
   /**
    * The limit hit (`error.kind` on the wide event): the per-minute burst, the day, the month,
-   * the plan's platform pool, or the service cap.
+   * the plan's platform pool, the service cap, or the workspace's storage.
    */
-  readonly kind?: "minute" | "day" | "month" | "pool" | "global";
+  readonly kind?: "minute" | "day" | "month" | "pool" | "global" | "storage";
+  /** With `kind: "storage"`: nothing more fits, rather than only this file. */
+  readonly storageFull?: boolean;
 }> {}
 
 /** A dependency is not configured (missing env), so this feature is off. */

@@ -580,7 +580,7 @@ Previews and Docker builds emit no maps. Docker: pass `--build-arg SENTRY_DSN=..
 
 Events (server-side only, `lib/telemetry/analytics.ts`): `signed_up` (`method`, `standalone`), `receipt_uploaded` (`mode`, `plan`, `size_choice`),
 `receipt_scanned` (`trigger`, `model`, `fallback`, `calls`), `receipt_scan_failed` (`trigger`, `error_kind`),
-`csv_exported` (`count`), `plan_limit_hit` (`limit`: `day` or `minute`, `plan`; a user's first 3 a minute),
+`csv_exported` (`count`), `plan_limit_hit` (`limit`: `day`, `month`, `pool`, `minute` or `storage`, `plan`; a user's first 3 a minute),
 `install_offer` (`action`, `surface`, `platform`: the in-app install card, menu rows and Settings),
 `upgrade_cta` (`action`: opened or dismissed, `surface`, `level`) and `checkout_started` (`interval`, `via`, `level`;
 see [billing](architecture/flows/billing.md#upgrade-offer)). `signed_up` also

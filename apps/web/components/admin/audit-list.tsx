@@ -1,5 +1,6 @@
 import type { AdminAuditEntry } from "@receipt-ocr/db";
 import { ocrModel } from "@receipt-ocr/ai/models";
+import { formatStorage } from "@receipt-ocr/core/plans";
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 
@@ -50,7 +51,12 @@ const FIELDS: [string, string][] = [
   ["batchMax", "a batch"],
   ["workspaces", "workspaces"],
   ["membersPerWorkspace", "members"],
+  ["storageBytes", "storage"],
 ];
+
+/** Storage is stored in bytes and read as "100 MB". */
+const shown = (field: string, value: number | null | undefined) =>
+  field === "storageBytes" && typeof value === "number" ? formatStorage(value) : value;
 
 function planChanges(from: Record<string, Policy>, to: Record<string, Policy>): string {
   const parts: string[] = [];
@@ -59,7 +65,9 @@ function planChanges(from: Record<string, Policy>, to: Record<string, Policy>): 
       const before = from?.[plan]?.[field];
       const after = to[plan]?.[field];
       if (before !== after) {
-        parts.push(`${cap(plan)}: ${before ?? "–"} → ${after ?? "none"} ${unit}`);
+        parts.push(
+          `${cap(plan)}: ${shown(field, before) ?? "–"} → ${shown(field, after) ?? "none"} ${unit}`,
+        );
       }
     }
   }
