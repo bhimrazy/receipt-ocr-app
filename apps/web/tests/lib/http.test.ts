@@ -139,11 +139,17 @@ describe("failureResponse for QuotaExceeded", () => {
     expect(day.status).toBe(429);
     expect(day.headers.get("Retry-After")).toBe("600");
     const storage = failureResponse(
-      Cause.fail(new QuotaExceeded({ message: "Storage full", kind: "storage" })),
+      Cause.fail(
+        new QuotaExceeded({ message: "Storage full", kind: "storage", storageFull: true }),
+      ),
     );
     expect(storage.status).toBe(429);
     expect(storage.headers.get("Retry-After")).toBeNull();
-    expect(await storage.json()).toEqual({ error: "Storage full" });
+    expect(await storage.json()).toEqual({ error: "Storage full", kind: "storage", full: true });
+    const nofit = failureResponse(
+      Cause.fail(new QuotaExceeded({ message: "No fit", kind: "storage", storageFull: false })),
+    );
+    expect(await nofit.json()).toEqual({ error: "No fit", kind: "storage", full: false });
   });
 });
 

@@ -90,6 +90,13 @@ export function failureResponse(cause: Cause.Cause<AppError>, event?: WideEvent)
     : error._tag === "NotConfigured"
       ? "This feature isn't available right now."
       : "Something went wrong. Try again.";
+  // A client can't tell a full workspace from a busy minute by the status alone.
+  if (error._tag === "QuotaExceeded" && error.kind === "storage") {
+    return NextResponse.json(
+      { error: message, kind: "storage", full: error.storageFull === true },
+      { status },
+    );
+  }
   return jsonError(status, message, headers);
 }
 

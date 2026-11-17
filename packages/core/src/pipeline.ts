@@ -16,6 +16,7 @@ import {
 } from "./errors";
 import { sniffMediaType, validateUpload } from "./files";
 import {
+  canManageAnyReceipt,
   MAX_BULK_DELETE,
   MAX_EXTRACTION_ATTEMPTS,
   EXTRACTION_FAILED_MESSAGE,
@@ -203,10 +204,11 @@ export const ingestUpload = (input: {
     const timings: StepTiming[] = [];
     const fileBytes = input.body.byteLength;
     const storageCap = input.limits.storageBytes ?? null;
+    const manages = canManageAnyReceipt(input.scope.role);
     if (storageCap !== null) {
       const used = yield* repo.storageUsed(input.scope.organizationId);
       const verdict = decideStorage(used, fileBytes, storageCap);
-      if (!verdict.allowed) return yield* refuseStorage(verdict);
+      if (!verdict.allowed) return yield* refuseStorage(verdict, manages);
     }
 
     const id = crypto.randomUUID();
@@ -236,7 +238,7 @@ export const ingestUpload = (input: {
           case "quota":
             return refuseQuota(result.verdict);
           case "storage":
-            return refuseStorage(result.verdict);
+            return refuseStorage(result.verdict, manages);
         }
       }),
       // No row means nothing would ever delete the object, so it goes unless

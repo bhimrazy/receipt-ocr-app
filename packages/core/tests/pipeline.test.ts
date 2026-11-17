@@ -316,7 +316,10 @@ describe("ingestUpload", () => {
     const cause = Exit.isFailure(exit) ? JSON.stringify(exit.cause) : "";
     expect(cause).toContain("QuotaExceeded");
     expect(cause).toContain('"kind":"storage"');
-    expect(cause).toContain("This workspace's storage is full: 100 MB used.");
+    expect(cause).toContain(
+      "This workspace's 100 MB of storage is full. Ask the owner to make room.",
+    );
+    expect(cause).toContain('"storageFull":true');
     expect(h.objects.size).toBe(0);
     expect(h.rows.size).toBe(0);
   });
@@ -333,7 +336,7 @@ describe("ingestUpload", () => {
       ingestUpload({ scope, fileName: "r.jpg", body: JPEG, limits: capped }),
     );
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(
-      "This file doesn't fit in this workspace's storage: 100 MB of 100 MB used.",
+      "This file (1 KB) doesn't fit: this workspace has <1 KB of its 100 MB storage left.",
     );
   });
 

@@ -29,6 +29,8 @@ export class QuotaExceeded extends Data.TaggedError("QuotaExceeded")<{
    * the plan's platform pool, the service cap, or the workspace's storage.
    */
   readonly kind?: "minute" | "day" | "month" | "pool" | "global" | "storage";
+  /** With `kind: "storage"`: nothing more fits, rather than only this file. */
+  readonly storageFull?: boolean;
 }> {}
 
 /** A dependency is not configured (missing env), so this feature is off. */

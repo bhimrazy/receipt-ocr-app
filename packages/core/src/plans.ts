@@ -81,10 +81,22 @@ const GB = 1_000 * MB;
 /** The most `storageBytes` may be set to: 1 TB. */
 export const MAX_STORAGE_BYTES = 1_000 * GB;
 
-/** "86 MB" under 1 GB (whole MB), "4.1 GB" from 1 GB (one decimal, "5 GB" when whole). */
-export function formatStorage(bytes: number): string {
-  if (bytes < GB) return `${Math.round(bytes / MB)} MB`;
-  return `${Number((bytes / GB).toFixed(1))} GB`;
+const KB = 1_000;
+
+/**
+ * One size format for storage and files, in decimal units: "84 KB" under 1 MB, "4.1 MB" under
+ * 10 MB, "86 MB" under 1 GB, then "4.1 GB" ("5 GB" when whole). Rounded down by default, so used
+ * space never reads as the cap before it is; `up` for the room a file needs.
+ */
+export function formatStorage(bytes: number, round: "down" | "up" = "down"): string {
+  const r = round === "down" ? Math.floor : Math.ceil;
+  const fixed = (value: number, unit: string) => `${r(value * 10) / 10} ${unit}`;
+  if (bytes <= 0) return "0 MB";
+  if (bytes < KB) return round === "down" ? "<1 KB" : "1 KB";
+  if (bytes < MB) return `${r(bytes / KB)} KB`;
+  if (bytes < 10 * MB) return fixed(bytes / MB, "MB");
+  if (bytes < GB) return `${r(bytes / MB)} MB`;
+  return fixed(bytes / GB, "GB");
 }
 
 export const DEFAULT_PLANS: PlanTable = {
