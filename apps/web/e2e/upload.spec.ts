@@ -86,7 +86,7 @@ test("a PDF is accepted, and one over the body limit is refused before upload", 
 
   const tooBig = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(5_000_000, 0x20)]);
   await input.setInputFiles({ name: "huge.pdf", mimeType: "application/pdf", buffer: tooBig });
-  await expect(page.getByText(/huge\.pdf is 4\.8 MB/)).toBeVisible();
+  await expect(page.getByText(/huge\.pdf is 5\.1 MB \(4\.1 MB max\)/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Scan receipt" })).toHaveCount(0);
 
   await input.setInputFiles({
