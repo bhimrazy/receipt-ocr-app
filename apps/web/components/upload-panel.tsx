@@ -3,6 +3,7 @@
 import { Button, buttonVariants } from "@receipt-ocr/ui/components/button";
 import { Alert } from "@receipt-ocr/ui/components/alert";
 import { Card } from "@receipt-ocr/ui/components/card";
+import { toast } from "@receipt-ocr/ui/components/toast";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import {
   Camera,
@@ -10,6 +11,7 @@ import {
   CircleAlert,
   Clock,
   FileText,
+  HardDrive,
   ImageUp,
   Loader2,
   RotateCcw,
@@ -21,7 +23,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
+import { FREE_FAILED_ROUNDS, formatStorage } from "@receipt-ocr/core/plans";
 import type { ReviewImage } from "@/components/capture/review-sheet";
 import type { CropSource } from "@/lib/capture/crop-outcome";
 import { formatTime } from "@/lib/format";
@@ -33,7 +35,8 @@ import {
   type Usage,
 } from "@/components/usage-meter";
 import { MeterActionView } from "@/components/upgrade/meter-action-view";
-import { meterAction } from "@/lib/meter-action";
+import { meterAction, storageAction, usageAction } from "@/lib/meter-action";
+import { storageIsFull, storageStripNote } from "@/lib/storage-usage";
 import { fitBatch } from "@/lib/capture/batch-limit";
 import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
 import { browserCameraSupport, wantsCamera, type CameraSupport } from "@/lib/capture/camera";
@@ -44,7 +47,13 @@ import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upl
 import { SharedFilesNotice } from "@/components/shared-files-notice";
 import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
 import type { PlanId, PlanPolicy } from "@/lib/plans";
-import { ASK_OWNER, limitUpgradeLine, proOpensSoon, resetDay } from "@/lib/upgrade-copy";
+import {
+  ASK_OWNER,
+  limitUpgradeLine,
+  proOpensSoon,
+  proStorageOpensSoon,
+  resetDay,
+} from "@/lib/upgrade-copy";
 
 // Loaded on first use, so the camera and editor don't weigh on the upload page.
 const loadCamera = () => import("@/components/capture/camera-sheet");
@@ -59,12 +68,6 @@ const noSubscription = () => () => {};
 /** A file ready to upload, carried by its queue item. */
 type Queued = { file: File; preview: string };
 
-function formatSize(bytes: number) {
-  return bytes < 1024 * 1024
-    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 /** Rejects what the server would reject anyway, before spending a round trip on it. */
 function typeRejection(file: File): string | null {
   return acceptedType(file) ? null : `${file.name} isn't a photo or PDF`;
@@ -74,7 +77,7 @@ function typeRejection(file: File): string | null {
 function sizeRejection(file: File): string | null {
   if (file.size <= UPLOAD_LIMIT_BYTES) return null;
   const hint = acceptedType(file) === "application/pdf" ? " Try a smaller PDF or a photo." : "";
-  return `${file.name} is ${formatSize(file.size)} (${formatSize(UPLOAD_LIMIT_BYTES)} max).${hint}`;
+  return `${file.name} is ${formatStorage(file.size, "up")} (${formatStorage(UPLOAD_LIMIT_BYTES)} max).${hint}`;
 }
 
 function plural(n: number, word: string) {
@@ -90,6 +93,8 @@ export type LimitPlan = {
   plan: PlanId;
   /** The viewer owns the workspace. */
   owner: boolean;
+  /** The viewer may delete any receipt here (owner or admin); a member only their own. */
+  manages: boolean;
   pro: PlanPolicy | null;
   offer: "owner" | "member" | null;
 };
@@ -229,6 +234,66 @@ function limitCopy(
 }
 
 /**
+ * Shown instead of the drop zone while the workspace's storage is full and nothing is picked, so
+ * nobody crops ten photos only to have them refused. Storage never resets: the way on is making
+ * room, or Pro on Free.
+ */
+function StorageFull({ usage, plan }: { usage: Usage; plan: LimitPlan }) {
+  const limit = formatStorage(usage.storage?.limitBytes ?? 0);
+  const action = storageAction({
+    usage,
+    plan: plan.plan,
+    owner: plan.owner,
+    audience: plan.offer,
+  });
+  const upgradeButton = action === "upgrade-button";
+  return (
+    <Card className="flex flex-col items-center gap-4 border-warning/30 px-6 py-10 text-center sm:py-14">
+      <span className="flex size-12 items-center justify-center rounded-full border border-warning/30 bg-warning/10 text-warning">
+        <HardDrive aria-hidden="true" className="size-5" />
+      </span>
+      <div className="max-w-md">
+        <h2 className="text-lg font-semibold">This workspace&apos;s storage is full</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {plan.manages
+            ? `It has used all ${limit}. Delete receipts you no longer need to make room. Deleting doesn't give scans back.`
+            : `It has used all ${limit}. Ask the owner to make room.`}
+        </p>
+        {upgradeButton && plan.pro ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Pro gives this workspace {formatStorage(plan.pro.storageBytes)} of storage.
+          </p>
+        ) : action ? (
+          <div className="mt-3 text-sm">
+            <MeterActionView
+              action={action}
+              opensSoon={plan.pro ? proStorageOpensSoon(plan.pro) : ""}
+              surface="limit"
+            />
+          </div>
+        ) : null}
+      </div>
+      <div className="flex w-full max-w-xs flex-col gap-2">
+        {upgradeButton ? (
+          <UpgradeTrigger className="w-full" surface="limit">
+            Upgrade to Pro
+          </UpgradeTrigger>
+        ) : null}
+        <Link
+          className={cn(
+            buttonVariants({ variant: upgradeButton ? "outline" : "default" }),
+            "w-full",
+          )}
+          href="/app/receipts"
+        >
+          Review receipts
+        </Link>
+      </div>
+    </Card>
+  );
+}
+
+/**
  * On a phone, from NEAR_RATIO of either window: the room left and the usage card's action, so
  * the offer is one tap away without opening the account sheet.
  */
@@ -241,9 +306,11 @@ function PlanStrip({
   plan: LimitPlan;
   className?: string;
 }) {
-  const note = stripNote(usage);
-  if (!note) return null;
-  const action = meterAction({
+  const notes = [stripNote(usage), storageStripNote(usage.storage)].filter(
+    (note): note is string => note !== null,
+  );
+  if (notes.length === 0) return null;
+  const picked = usageAction({
     usage,
     plan: plan.plan,
     owner: plan.owner,
@@ -258,12 +325,18 @@ function PlanStrip({
     >
       <p className="flex items-center gap-1.5">
         <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
-        {note}
+        {notes.join(" · ")}
       </p>
-      {action ? (
+      {picked ? (
         <MeterActionView
-          action={action}
-          opensSoon={plan.pro ? proOpensSoon(plan.pro) : ""}
+          action={picked.action}
+          opensSoon={
+            plan.pro
+              ? picked.for === "storage"
+                ? proStorageOpensSoon(plan.pro)
+                : proOpensSoon(plan.pro)
+              : ""
+          }
           surface="home"
         />
       ) : null}
@@ -338,6 +411,16 @@ function ItemProgress({
       </>
     );
   }
+  if (item.status === "skipped") {
+    return (
+      <>
+        <CircleAlert aria-hidden="true" className="mt-px size-3 shrink-0" />
+        <span>
+          <span className="font-medium">Doesn&apos;t fit.</span> {item.error}
+        </span>
+      </>
+    );
+  }
   return (
     <>
       <CircleAlert aria-hidden="true" className="size-3 shrink-0" />
@@ -358,7 +441,7 @@ export function UploadPanel({
   usage,
   resetsIn,
   batchMax,
-  plan = { plan: "pro", owner: false, pro: null, offer: null },
+  plan = { plan: "pro", owner: false, manages: false, pro: null, offer: null },
 }: {
   usage: Usage | null;
   plan?: LimitPlan;
@@ -384,7 +467,17 @@ export function UploadPanel({
   const [queue] = useState(() =>
     createBatchQueue<Queued, "instant" | "queued">({
       mode: "queued",
-      upload: (item, mode, onProgress) => postReceipt(item.file, mode, onProgress),
+      upload: async (item, mode, onProgress) => {
+        const outcome = await postReceipt(item.file, mode, onProgress);
+        if (!outcome.ok && outcome.storage) {
+          toast.add({
+            title: `Skipped ${item.file.name}`,
+            description: outcome.error,
+            type: "warning",
+          });
+        }
+        return outcome;
+      },
     }),
   );
   const snapshot = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
@@ -440,7 +533,11 @@ export function UploadPanel({
     () =>
       queue.onSettle(() => {
         const done = queue.getSnapshot().items.filter((i) => i.status === "done");
-        if (done.length === 0) return;
+        if (done.length === 0) {
+          // The full state below comes from the server's count, so fetch it once storage is full.
+          if (queue.getSnapshot().stoppedBy === "storage") router.refresh();
+          return;
+        }
         if (queue.getMode() === "instant") {
           if (done[0]?.receiptId) router.push(`/app/receipts/${done[0].receiptId}`);
           return;
@@ -453,6 +550,10 @@ export function UploadPanel({
   );
 
   if (usage?.blocked) return <LimitReached plan={plan} resetsIn={resetsIn} usage={usage} />;
+  const storageFull = usage?.storage !== undefined && storageIsFull(usage.storage);
+  if (usage && storageFull && items.length === 0 && reviewing.length === 0) {
+    return <StorageFull plan={plan} usage={usage} />;
+  }
 
   const busy = snapshot.running;
   const remaining = usage ? usageRemaining(usage) : null;
@@ -578,6 +679,8 @@ export function UploadPanel({
   const locked = busy || preparing;
   const empty = items.length === 0;
   const count = snapshot.items.filter((i) => i.status === "waiting" || i.status === "error").length;
+  // Sending the rest would only be refused again until something is deleted.
+  const noRoom = snapshot.stoppedBy === "storage" && storageFull;
   const overLimit = remaining !== null && count > remaining;
   const single = items.length === 1;
   // Touch devices always get the camera button, falling back to the camera app when the
@@ -681,7 +784,7 @@ export function UploadPanel({
             </p>
             <p className="mt-1 text-sm text-muted-foreground" id="upload-hint">
               Photos of any size, which you can crop before they are shrunk and uploaded, or PDFs up
-              to {formatSize(UPLOAD_LIMIT_BYTES)}. Up to {batchMax} at a time.
+              to {formatStorage(UPLOAD_LIMIT_BYTES)}. Up to {batchMax} at a time.
             </p>
             <p aria-live="polite" className="mt-1 text-sm text-muted-foreground">
               {preparing ? (
@@ -729,7 +832,12 @@ export function UploadPanel({
       {snapshot.stopped ? (
         <Alert className="px-4 py-3" variant="destructive">
           <CircleAlert aria-hidden="true" />
-          <p>{snapshot.stopped} The rest are still here; scan them when your limit resets.</p>
+          <p>
+            {snapshot.stopped}{" "}
+            {snapshot.stoppedBy === "storage"
+              ? "The rest are still in the list; add them once there's room."
+              : "The rest are still here; scan them when your limit resets."}
+          </p>
         </Alert>
       ) : null}
       {success ? (
@@ -788,8 +896,11 @@ export function UploadPanel({
                     <p className="truncate font-mono text-xs">{item.payload.file.name}</p>
                     <p
                       className={cn(
-                        "mt-0.5 flex items-center gap-1.5 text-xs",
-                        item.status === "error" ? "text-destructive" : "text-muted-foreground",
+                        "mt-0.5 flex gap-1.5 text-xs",
+                        item.status === "skipped" ? "items-start" : "items-center",
+                        item.status === "error" || item.status === "skipped"
+                          ? "text-destructive"
+                          : "text-muted-foreground",
                       )}
                     >
                       {item.status !== "waiting" ? (
@@ -800,7 +911,7 @@ export function UploadPanel({
                         />
                       ) : (
                         <span className="font-mono tabular-nums">
-                          {formatSize(item.payload.file.size)}
+                          {formatStorage(item.payload.file.size, "up")}
                         </span>
                       )}
                     </p>
@@ -836,7 +947,7 @@ export function UploadPanel({
             </p>
             <Button
               className="max-sm:w-full"
-              disabled={busy || count === 0 || !online}
+              disabled={busy || count === 0 || !online || noRoom}
               onClick={read}
             >
               {busy ? (

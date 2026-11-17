@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { loadPaddleConfig } from "@receipt-ocr/core";
+import { canManageAnyReceipt, loadPaddleConfig } from "@receipt-ocr/core";
 import { Effect, Option } from "effect";
 import { PlanAndBilling } from "@/components/billing/plan-and-billing";
 import {
@@ -73,6 +73,7 @@ export default async function BillingPage({
         interval={params.interval === "year" ? "year" : "month"}
         // Only the buyer sees their card and invoices; nobody once the buyer's account is gone.
         isBuyer={buyer !== null && buyer.id === session.user.id}
+        manages={canManageAnyReceipt(scope.role)}
         owner={canManageBilling(scope.role)}
         ownsPro={account.plan === "pro"}
         plan={plan}

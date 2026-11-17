@@ -16,7 +16,7 @@ import { errorFields, logger } from "@/lib/log";
 import { Card } from "@receipt-ocr/ui/components/card";
 import { Skeleton } from "@receipt-ocr/ui/components/skeleton";
 import { cn } from "@receipt-ocr/ui/lib/utils";
-import type { ReceiptCounts } from "@receipt-ocr/core";
+import { canManageAnyReceipt, type ReceiptCounts } from "@receipt-ocr/core";
 import {
   ArrowRight,
   CircleAlert,
@@ -214,6 +214,7 @@ async function UploadSection() {
   const limitPlan: LimitPlan = {
     plan,
     owner: scope?.role === "owner",
+    manages: canManageAnyReceipt(scope?.role),
     pro: plan === "free" ? plans.pro : null,
     offer: offer?.audience ?? null,
   };

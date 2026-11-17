@@ -1,3 +1,4 @@
+import { formatStorage } from "@receipt-ocr/core/plans";
 import type { Usage } from "@/components/usage-meter";
 import { formatTime } from "./format";
 import { allowance } from "./plan-copy";
@@ -24,6 +25,10 @@ export const proScans = (pro: PlanPolicy) =>
 
 /** The line that replaces every upgrade action while checkout is closed. */
 export const proOpensSoon = (pro: PlanPolicy) => `Pro, with ${proScans(pro)}, opens soon.`;
+
+/** `proOpensSoon` where storage, not scans, prompted it. */
+export const proStorageOpensSoon = (pro: PlanPolicy) =>
+  `Pro, with ${formatStorage(pro.storageBytes)} of storage, opens soon.`;
 
 export type HomeCardCopy = { badge: string; title: string; body: string; action: string };
 
@@ -85,7 +90,10 @@ export type ComparisonRow = { label: string; free: string; pro: string };
 const scansCell = (policy: PlanPolicy, count: number | null) =>
   count === null ? "No limit" : `${count}${policy.scope === "workspace" ? "" : " per person"}`;
 
-/** The modal's Free and Pro comparison: five rows, every number from the saved plan table. */
+/**
+ * The modal's Free and Pro comparison, in /pricing's order: five rows, every number from the saved
+ * plan table.
+ */
 export function comparisonRows({ free, pro }: PlanTable): ComparisonRow[] {
   return [
     {
@@ -99,11 +107,11 @@ export function comparisonRows({ free, pro }: PlanTable): ComparisonRow[] {
       free: String(free.membersPerWorkspace),
       pro: String(pro.membersPerWorkspace),
     },
-    { label: "Workspaces you can own", free: String(free.workspaces), pro: String(pro.workspaces) },
     {
-      label: "Busy-day pauses",
-      free: free.poolPerDay === null ? "Never" : "Can pause",
-      pro: pro.poolPerDay === null ? "Never" : "Can pause",
+      label: "Storage",
+      free: formatStorage(free.storageBytes),
+      pro: formatStorage(pro.storageBytes),
     },
+    { label: "Workspaces you can own", free: String(free.workspaces), pro: String(pro.workspaces) },
   ];
 }

@@ -41,18 +41,17 @@ describe("upgrade copy", () => {
       { label: "Scans a month", free: "60", pro: "750" },
       { label: "Scans a day", free: "15", pro: "150" },
       { label: "Members", free: "3", pro: "12" },
+      { label: "Storage", free: "100 MB", pro: "5 GB" },
       { label: "Workspaces you can own", free: "1", pro: "3" },
-      { label: "Busy-day pauses", free: "Can pause", pro: "Never" },
     ]);
   });
 
-  it("says when a plan has no monthly limit or no pool", () => {
+  it("says when a plan has no monthly limit", () => {
     const rows = comparisonRows({
-      free: { ...edited.free, receiptsPerMonth: null, poolPerDay: null },
+      free: { ...edited.free, receiptsPerMonth: null },
       pro: edited.pro,
     });
     expect(rows[0]).toEqual({ label: "Scans a month", free: "No limit", pro: "750" });
-    expect(rows[4]).toEqual({ label: "Busy-day pauses", free: "Never", pro: "Never" });
   });
 
   it("tells the near card what is left, when it resets and what Pro gives", () => {

@@ -8,6 +8,7 @@ import {
   PageHeaderTitle,
 } from "@/components/page-header";
 import { SectionBoundary } from "@/components/section-error";
+import { canManageAnyReceipt } from "@receipt-ocr/core";
 import { UploadPanel } from "@/components/upload-panel";
 import { formatTimeUntil } from "@/lib/format";
 import { getCurrentPlan, getPlanTable } from "@/lib/plan-limits";
@@ -36,6 +37,7 @@ async function Panel() {
       plan={{
         plan,
         owner: scope?.role === "owner",
+        manages: canManageAnyReceipt(scope?.role),
         pro: plan === "free" ? plans.pro : null,
         offer: offer?.audience ?? null,
       }}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Usage } from "@/components/usage-meter";
-import { meterAction } from "@/lib/meter-action";
+import { meterAction, pickAction, storageAction } from "@/lib/meter-action";
 
 const usage = (used: number, over: Partial<Usage> = {}) => ({
   period: "month" as const,
@@ -56,5 +56,50 @@ describe("meterAction on Pro", () => {
 
   it("gives members nothing", () => {
     expect(pro(usage(500, { limit: 500, blocked: "month" }), false)).toBeNull();
+  });
+});
+
+describe("storageAction", () => {
+  const act = (
+    usedBytes: number,
+    plan: "free" | "pro",
+    audience: "owner" | "member" | null,
+    owner = audience === "owner",
+  ) => storageAction({ usage: { storage: { usedBytes, limitBytes: 100 } }, plan, owner, audience });
+
+  it("offers nothing under 80%, or without a storage count", () => {
+    expect(act(79, "free", "owner")).toBeNull();
+    expect(storageAction({ usage: {}, plan: "free", owner: true, audience: "owner" })).toBeNull();
+  });
+
+  it("gives a Free owner the link from 80% and the button once full", () => {
+    expect(act(80, "free", "owner")).toBe("upgrade-link");
+    expect(act(100, "free", "owner")).toBe("upgrade-button");
+  });
+
+  it("never says Upgrade while checkout is closed, and sends a member to the owner", () => {
+    expect(act(100, "free", null, true)).toBe("opens-soon");
+    expect(act(100, "free", "member")).toBe("ask-owner");
+  });
+
+  it("gives a full Pro workspace's owner Contact us, and its members nothing", () => {
+    expect(act(100, "pro", null, true)).toBe("contact");
+    expect(act(90, "pro", null, true)).toBeNull();
+    expect(act(100, "pro", null, false)).toBeNull();
+  });
+});
+
+describe("pickAction", () => {
+  it("shows the stronger of the scans and storage actions, and says which", () => {
+    expect(pickAction(null, null)).toBeNull();
+    expect(pickAction("upgrade-link", "upgrade-button")).toEqual({
+      action: "upgrade-button",
+      for: "storage",
+    });
+    expect(pickAction("upgrade-link", "upgrade-link")).toEqual({
+      action: "upgrade-link",
+      for: "scans",
+    });
+    expect(pickAction(null, "opens-soon")).toEqual({ action: "opens-soon", for: "storage" });
   });
 });
