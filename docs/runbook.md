@@ -284,6 +284,9 @@ To turn the worker back on, restore `public/sw.js` from git, bump `VERSION` in i
 - **Database:** migrations only go forward, and old code runs against the newer schema, so a code rollback normally
   needs nothing else. If a migration damaged data, restore the backup taken before the release (deployment.md,
   Every release, step 3) into a new database, check it, then point `DATABASE_URL` at it.
+- **Rolling back past the `$scrypt$` password hashes** (`apps/web/lib/password.ts`) locks out password sign-in for
+  every user who has signed in with a password since that release (500 instead of 401; social sign-in still works, and a password
+  reset fixes one user). Prefer a fix forward; if you must roll back, expect those users to need a reset.
 
 ## Secret rotation
 
