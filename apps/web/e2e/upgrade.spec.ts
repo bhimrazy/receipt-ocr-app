@@ -224,7 +224,9 @@ test("at the limit the banner shows on Receipts, not on Home or Upload", async (
   await expect(
     page.getByText("Pro allows up to 200 a day in this workspace.").first(),
   ).toBeVisible();
-  await expect(page.locator("main").getByRole("link", { name: "Upgrade to Pro" })).toBeVisible();
+  const limit = page.locator("main");
+  await expect(limit.getByRole("link", { name: "Upgrade", exact: true })).toBeVisible();
+  await expect(limit.getByRole("link", { name: "Upgrade to Pro" })).toHaveCount(0);
   await expect(banner).toHaveCount(0);
   await page.goto("/app/upload");
   await expect(page.getByRole("heading", { name: "Daily limit reached" })).toBeVisible();
