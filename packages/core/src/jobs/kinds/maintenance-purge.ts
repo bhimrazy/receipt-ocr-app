@@ -2,6 +2,12 @@ import { sql } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { z } from "zod";
 import { clearProviderTokens } from "../../account-security";
+import {
+  purgeAdminAuditLog,
+  purgeExpiredSessions,
+  purgeInvitations,
+  purgeStepUpEvents,
+} from "../../retention";
 import { Db } from "../../services";
 import { purgeRateLimits } from "../../workspace";
 import { purgeStepUpCodes } from "../../step-up/store";
@@ -101,6 +107,10 @@ export const maintenancePurge: JobDefinition<MaintenancePurgePayload, Db> = {
         step_up_codes: yield* inBatches(purgeStepUpCodes),
         jobs_succeeded: yield* inBatches((n) => purgeFinishedJobs("succeeded", n)),
         jobs_failed: yield* inBatches((n) => purgeFinishedJobs("failed", n)),
+        sessions: yield* inBatches(purgeExpiredSessions),
+        step_up_events: yield* inBatches(purgeStepUpEvents),
+        invitations: yield* inBatches(purgeInvitations),
+        admin_audit_log: yield* inBatches(purgeAdminAuditLog),
         rate_limits: yield* inBatches(purgeRateLimits),
         provider_tokens: yield* inBatches(clearProviderTokens),
       };

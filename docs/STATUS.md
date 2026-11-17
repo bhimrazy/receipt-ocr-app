@@ -449,9 +449,7 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   (`lib/auth-two-factor.ts`), so a TOTP user's second sign-in from the same browser doesn't replace the earlier
   session. The password step clears the session cookie first, so the earlier token has to be carried through the
   challenge to find it.
-- Database review items not done in the schema-fixes PR (#127): backups and a restore drill (H1), the
-  retention for `step_up_codes`, `step_up_events` and finished `jobs` in the `maintenance.purge` job (which only purges
-  `support_messages` so far) and the `step_up_codes (expires_at)` index (H2, M5), revoking `anon` and
+- Database review items not done in the schema-fixes PR (#127): backups and a restore drill (H1), revoking `anon` and
   `authenticated` grants and checking the Data API is off (H4), pool on `globalThis` and role-level timeouts (M3), the
   quota statement profile (M4), an `ocr_call_status` lookup table (M1), dropping `user_credentials` and
   `storage_source` with BYOK (M6, L5), trigram search and admin indexes when they slow down (L2, L3), lock ordering
@@ -460,9 +458,11 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
   `/admin/support` and deleted by the daily `maintenance.purge` job 12 months after closing (or after sending or the
   last status change, while not closed); the notification mail carries only a link. Migration `0008` indexes the
   purge's scan. Still to do: the Resend bounce webhook and suppression table (PR 4, owner: later).
-- Step-up audit retention: `step_up_events` (with each check's IP) is kept until the account is deleted. Proposed: prune
-  rows older than 90 days in the daily `maintenance.purge` job, keeping the last
-  pass and recent failures that the lockout reads; then update the privacy policy.
+- Retention: the daily `maintenance.purge` job deletes support messages, expired sessions (1 day after expiry, with
+  their step-up codes), `step_up_events` (90 days), invitations (30 days after expiry), finished jobs (30 days; dead or
+  cancelled 90) and the admin audit log (2 years); the privacy page states each period. The purges of `session.expires_at`,
+  `invitation.expires_at` and `step_up_events.created_at` have no index; fine at batches of 500 a day, add them before
+  scale.
 
 - Share target: a cross-site form can plant a share in a visitor's cache (the referrer can be hidden). The Keep and
   Discard prompt, the 10-minute expiry and the size caps are the guard.

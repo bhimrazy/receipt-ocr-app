@@ -1,10 +1,23 @@
 /**
- * Retention in `maintenance.purge` against real Postgres: expired step-up codes, finished jobs and stray provider
- * tokens.
+ * Retention in `maintenance.purge` against real Postgres: sessions, step-up codes and events, finished jobs,
+ * invitations, the admin audit log and stray provider tokens.
  * Skipped unless INTEGRATION=1.
  */
 import { randomUUID } from "node:crypto";
-import { account, eq, inArray, jobs, session, sql, stepUpCodes, user } from "@receipt-ocr/db";
+import {
+  account,
+  adminAuditLog,
+  eq,
+  inArray,
+  invitation,
+  jobs,
+  organization,
+  session,
+  sql,
+  stepUpCodes,
+  stepUpEvents,
+  user,
+} from "@receipt-ocr/db";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { clearProviderTokens, makeAppLayer, type AppServices } from "../../src/index";
@@ -22,6 +35,12 @@ import {
 } from "../../src/jobs";
 import { STORAGE_ORPHAN_SWEEP } from "../../src/jobs/kinds/storage-orphan-sweep";
 import { purgeFinishedJobs } from "../../src/jobs/retention";
+import {
+  purgeAdminAuditLog,
+  purgeExpiredSessions,
+  purgeInvitations,
+  purgeStepUpEvents,
+} from "../../src/retention";
 import { Db } from "../../src/services";
 import { purgeStepUpCodes } from "../../src/step-up/store";
 
@@ -202,6 +221,126 @@ describe.skipIf(!enabled)("maintenance.purge retention against Postgres", () => 
       ),
     ).toEqual({ duplicate: true });
     expect(await remainingJobs([old])).toEqual([]);
+  });
+
+  it("deletes sessions a day past expiry, with their step-up codes, and keeps live ones", async () => {
+    const seed = (expiresHoursAgo: number) =>
+      db((d) =>
+        d
+          .insert(session)
+          .values({
+            id: `${tag}-s-${expiresHoursAgo}`,
+            token: randomUUID(),
+            userId,
+            expiresAt: new Date(Date.now() - expiresHoursAgo * 3_600_000),
+          })
+          .returning({ id: session.id }),
+      ).then((rows) => rows[0]!.id);
+    const old = [await seed(25), await seed(24 * 40)];
+    const kept = [await seed(23), await seed(-24)];
+    await db((d) =>
+      d.insert(stepUpCodes).values({
+        sessionId: old[0]!,
+        userId,
+        codeHash: randomUUID(),
+        expiresAt: new Date(),
+      }),
+    );
+    expect(await run(purgeExpiredSessions(500))).toBeGreaterThanOrEqual(2);
+    const left = await db((d) =>
+      d
+        .select({ id: session.id })
+        .from(session)
+        .where(inArray(session.id, [...old, ...kept])),
+    );
+    expect(left.map((r) => r.id).sort()).toEqual([...kept].sort());
+    const codes = await db((d) =>
+      d.select().from(stepUpCodes).where(eq(stepUpCodes.sessionId, old[0]!)),
+    );
+    expect(codes).toEqual([]);
+  });
+
+  it("deletes step-up events after 90 days and keeps the recent ones the lockout reads", async () => {
+    const seed = (daysAgo_: number) =>
+      db((d) =>
+        d
+          .insert(stepUpEvents)
+          .values({
+            userId,
+            action: "account.delete",
+            method: "email",
+            outcome: "failed",
+            ip: "203.0.113.9",
+            createdAt: daysAgo(daysAgo_),
+          })
+          .returning({ id: stepUpEvents.id }),
+      ).then((rows) => rows[0]!.id);
+    const old = [await seed(91), await seed(400)];
+    const kept = [await seed(89), await seed(0)];
+    await run(purgeStepUpEvents(500));
+    const left = await db((d) =>
+      d
+        .select({ id: stepUpEvents.id })
+        .from(stepUpEvents)
+        .where(inArray(stepUpEvents.id, [...old, ...kept])),
+    );
+    expect(left.map((r) => r.id).sort()).toEqual([...kept].sort());
+  });
+
+  it("deletes invitations 30 days after they expire, whatever their status", async () => {
+    const orgId = `${tag}-org`;
+    await db((d) => d.insert(organization).values({ id: orgId, name: "R", slug: orgId }));
+    const seed = (status: string, expiredDaysAgo: number) =>
+      db((d) =>
+        d
+          .insert(invitation)
+          .values({
+            id: `${tag}-inv-${status}-${expiredDaysAgo}`,
+            organizationId: orgId,
+            email: "invitee@example.com",
+            role: "member",
+            status,
+            inviterId: userId,
+            expiresAt: daysAgo(expiredDaysAgo),
+          })
+          .returning({ id: invitation.id }),
+      ).then((rows) => rows[0]!.id);
+    const old = [await seed("accepted", 31), await seed("pending", 60)];
+    const kept = [await seed("canceled", 29), await seed("pending", -7)];
+    await run(purgeInvitations(500));
+    const left = await db((d) =>
+      d
+        .select({ id: invitation.id })
+        .from(invitation)
+        .where(inArray(invitation.id, [...old, ...kept])),
+    );
+    expect(left.map((r) => r.id).sort()).toEqual([...kept].sort());
+    await db((d) => d.delete(organization).where(eq(organization.id, orgId)));
+  });
+
+  it("deletes admin audit entries after two years", async () => {
+    const seed = (daysAgo_: number) =>
+      db((d) =>
+        d
+          .insert(adminAuditLog)
+          .values({
+            actorEmail: "admin@example.com",
+            action: "user.ban",
+            targetType: "user",
+            targetId: tag,
+            createdAt: daysAgo(daysAgo_),
+          })
+          .returning({ id: adminAuditLog.id }),
+      ).then((rows) => rows[0]!.id);
+    const old = await seed(2 * 366);
+    const kept = await seed(2 * 365 - 2);
+    await run(purgeAdminAuditLog(500));
+    const left = await db((d) =>
+      d.select({ id: adminAuditLog.id }).from(adminAuditLog).where(eq(adminAuditLog.targetId, tag)),
+    );
+    expect(left.map((r) => r.id)).toEqual([kept]);
+    expect(left.map((r) => r.id)).not.toContain(old);
+    await db((d) => d.delete(adminAuditLog).where(eq(adminAuditLog.targetId, tag)));
   });
 
   it("clears provider tokens an older release wrote, and leaves passwords alone", async () => {
