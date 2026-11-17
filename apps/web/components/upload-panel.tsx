@@ -25,7 +25,15 @@ import { FREE_FAILED_ROUNDS } from "@receipt-ocr/core/plans";
 import type { ReviewImage } from "@/components/capture/review-sheet";
 import type { CropSource } from "@/lib/capture/crop-outcome";
 import { formatTime } from "@/lib/format";
-import { remainingSpan, usageNote, usageRemaining, type Usage } from "@/components/usage-meter";
+import {
+  remainingSpan,
+  stripNote,
+  usageNote,
+  usageRemaining,
+  type Usage,
+} from "@/components/usage-meter";
+import { MeterActionView } from "@/components/upgrade/meter-action-view";
+import { meterAction } from "@/lib/meter-action";
 import { fitBatch } from "@/lib/capture/batch-limit";
 import { createBatchQueue, type QueueItem } from "@/lib/capture/batch-queue";
 import { browserCameraSupport, wantsCamera, type CameraSupport } from "@/lib/capture/camera";
@@ -35,9 +43,8 @@ import { useOnline } from "@/lib/use-online";
 import { ACCEPT, UPLOAD_LIMIT_BYTES, acceptedType, prepareFile } from "@/lib/upload-prep";
 import { SharedFilesNotice } from "@/components/shared-files-notice";
 import { UpgradeTrigger } from "@/components/upgrade/upgrade-trigger";
-import type { PlanPolicy } from "@/lib/plans";
-import { ASK_OWNER, limitUpgradeLine, proOpensSoon } from "@/lib/upgrade-copy";
-import { NEAR_RATIO, usageRatio } from "@/lib/upgrade-level";
+import type { PlanId, PlanPolicy } from "@/lib/plans";
+import { ASK_OWNER, limitUpgradeLine, proOpensSoon, resetDay } from "@/lib/upgrade-copy";
 
 // Loaded on first use, so the camera and editor don't weigh on the upload page.
 const loadCamera = () => import("@/components/capture/camera-sheet");
@@ -79,7 +86,13 @@ function plural(n: number, word: string) {
  * upgrade button) or a member (ask the owner); null while checkout is closed to this viewer,
  * when the card says Pro opens soon instead. `pro` is null on a Pro workspace.
  */
-export type LimitPlan = { pro: PlanPolicy | null; offer: "owner" | "member" | null };
+export type LimitPlan = {
+  plan: PlanId;
+  /** The viewer owns the workspace. */
+  owner: boolean;
+  pro: PlanPolicy | null;
+  offer: "owner" | "member" | null;
+};
 
 const linkClass =
   "font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:inline-flex max-md:min-h-11 max-md:items-center";
@@ -98,6 +111,13 @@ function LimitReached({
   const pro = usage.blocked === "global" ? null : plan.pro;
   const canBuy = pro !== null && plan.offer === "owner";
   const upgradeLine = pro ? limitUpgradeLine(usage, pro) : null;
+  const action = meterAction({
+    usage,
+    plan: plan.plan,
+    owner: plan.owner,
+    audience: plan.offer,
+  });
+  const upgradeButton = canBuy && action === "upgrade-button";
   return (
     <Card className="flex flex-col items-center gap-4 border-warning/30 px-6 py-10 text-center sm:py-14">
       <span className="flex size-12 items-center justify-center rounded-full border border-warning/30 bg-warning/10 text-warning">
@@ -119,17 +139,39 @@ function LimitReached({
             Only the workspace owner can upgrade this workspace. {ASK_OWNER}
           </p>
         ) : canBuy && upgradeLine ? (
-          <p className="mt-3 text-sm text-muted-foreground">{upgradeLine}</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            {upgradeLine}
+            {upgradeButton ? null : (
+              <>
+                {" "}
+                <UpgradeTrigger
+                  className="h-auto p-0 align-baseline max-md:min-h-11"
+                  surface="limit"
+                  variant="link"
+                >
+                  Upgrade
+                </UpgradeTrigger>
+              </>
+            )}
+          </p>
+        ) : null}
+        {action === "contact" ? (
+          <div className="mt-3">
+            <MeterActionView action="contact" opensSoon="" surface="limit" />
+          </div>
         ) : null}
       </div>
       <div className="flex w-full max-w-xs flex-col gap-2">
-        {canBuy ? (
+        {upgradeButton ? (
           <UpgradeTrigger className="w-full" surface="limit">
             Upgrade to Pro
           </UpgradeTrigger>
         ) : null}
         <Link
-          className={cn(buttonVariants({ variant: canBuy ? "outline" : "default" }), "w-full")}
+          className={cn(
+            buttonVariants({ variant: upgradeButton ? "outline" : "default" }),
+            "w-full",
+          )}
           href="/app/receipts"
         >
           Review receipts
@@ -138,10 +180,6 @@ function LimitReached({
     </Card>
   );
 }
-
-/** "1 December", the day a month reopens. */
-const monthDay = (date: Date) =>
-  date.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
 
 /** The limit state's words: what happened, when uploads open, and whose scans they were. */
 function limitCopy(
@@ -165,11 +203,11 @@ function limitCopy(
       return usage.scope === "workspace"
         ? {
             title: "This workspace has reached its monthly limit",
-            body: `Its ${plural(usage.limit, "scan")} for this month are used. Uploads open again on ${monthDay(usage.opensAt)}, ${resetsIn}. ${keep}`,
+            body: `Its ${plural(usage.limit, "scan")} for this month are used. Uploads open again on ${resetDay(usage.opensAt)}, ${resetsIn}. ${keep}`,
           }
         : {
             title: `You've used this month's ${usage.limit} free scans`,
-            body: `Uploads open again on ${monthDay(usage.opensAt)}, ${resetsIn}. ${keep}`,
+            body: `Uploads open again on ${resetDay(usage.opensAt)}, ${resetsIn}. ${keep}`,
             scope: "Free scans are counted per person, across every Free workspace you use.",
           };
     default: {
@@ -190,10 +228,47 @@ function limitCopy(
   }
 }
 
-/** From NEAR_RATIO used: the room left, under the phone's upload buttons. */
-function nearLimitLine(usage: Usage): string | null {
-  if (usage.blocked || usageRatio(usage) < NEAR_RATIO) return null;
-  return `${plural(usageRemaining(usage), "scan")} left ${remainingSpan(usage)}`;
+/**
+ * On a phone, from NEAR_RATIO of either window: the room left and the usage card's action, so
+ * the offer is one tap away without opening the account sheet.
+ */
+function PlanStrip({
+  usage,
+  plan,
+  className,
+}: {
+  usage: Usage;
+  plan: LimitPlan;
+  className?: string;
+}) {
+  const note = stripNote(usage);
+  if (!note) return null;
+  const action = meterAction({
+    usage,
+    plan: plan.plan,
+    owner: plan.owner,
+    audience: plan.offer,
+  });
+  return (
+    <div
+      className={cn(
+        "flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-warning/30 bg-warning/5 px-3 py-1.5 text-sm",
+        className,
+      )}
+    >
+      <p className="flex items-center gap-1.5">
+        <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
+        {note}
+      </p>
+      {action ? (
+        <MeterActionView
+          action={action}
+          opensSoon={plan.pro ? proOpensSoon(plan.pro) : ""}
+          surface="home"
+        />
+      ) : null}
+    </div>
+  );
 }
 
 /** The plan state without the drop zone, for Home on a phone: the limit card, or the usage line from NEAR_RATIO. */
@@ -207,14 +282,7 @@ export function PlanState({
   plan: LimitPlan;
 }) {
   if (usage.blocked) return <LimitReached plan={plan} resetsIn={resetsIn} usage={usage} />;
-  const line = nearLimitLine(usage);
-  if (!line) return null;
-  return (
-    <p className="flex items-center justify-center gap-1.5 text-sm">
-      <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
-      {line}
-    </p>
-  );
+  return <PlanStrip plan={plan} usage={usage} />;
 }
 
 /** Seconds until `until`, ticking while it's set. */
@@ -290,7 +358,7 @@ export function UploadPanel({
   usage,
   resetsIn,
   batchMax,
-  plan = { pro: null, offer: null },
+  plan = { plan: "pro", owner: false, pro: null, offer: null },
 }: {
   usage: Usage | null;
   plan?: LimitPlan;
@@ -388,7 +456,6 @@ export function UploadPanel({
 
   const busy = snapshot.running;
   const remaining = usage ? usageRemaining(usage) : null;
-  const nearLine = usage ? nearLimitLine(usage) : null;
   const inBatch = items.length + reviewing.length;
   const room = Math.max(0, batchMax - inBatch);
   /** What the batch holds right now, including adds not yet rendered. */
@@ -527,6 +594,9 @@ export function UploadPanel({
 
   return (
     <div className="flex flex-col gap-4" data-ready={hydrated ? "" : undefined}>
+      {usage ? (
+        <PlanStrip className="hidden max-md:flex pointer-coarse:flex" plan={plan} usage={usage} />
+      ) : null}
       <Card
         aria-describedby="upload-hint"
         aria-label="Add receipt photos or PDFs"
@@ -648,12 +718,6 @@ export function UploadPanel({
           <ImageUp aria-hidden="true" />
           Choose files
         </Button>
-        {nearLine ? (
-          <p className="flex items-center justify-center gap-1.5 text-sm">
-            <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
-            {nearLine}
-          </p>
-        ) : null}
       </div>
 
       <SharedFilesNotice input={inputRef} />

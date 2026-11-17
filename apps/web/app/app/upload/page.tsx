@@ -12,6 +12,7 @@ import { UploadPanel } from "@/components/upload-panel";
 import { formatTimeUntil } from "@/lib/format";
 import { getCurrentPlan, getPlanTable } from "@/lib/plan-limits";
 import { getUsageSummary } from "@/lib/receipts";
+import { getActiveScope } from "@/lib/session";
 import { getUpgradeOffer } from "@/lib/upgrade-offer";
 
 export const metadata: Metadata = { title: "Add receipts" };
@@ -22,16 +23,22 @@ export const metadata: Metadata = { title: "Add receipts" };
  * files land in review). Home has the same panel.
  */
 async function Panel() {
-  const [usage, { plan, policy }, offer, plans] = await Promise.all([
+  const [usage, { plan, policy }, offer, plans, scope] = await Promise.all([
     getUsageSummary(),
     getCurrentPlan(),
     getUpgradeOffer(),
     getPlanTable(),
+    getActiveScope(),
   ]);
   return (
     <UploadPanel
       batchMax={policy.batchMax}
-      plan={{ pro: plan === "free" ? plans.pro : null, offer: offer?.audience ?? null }}
+      plan={{
+        plan,
+        owner: scope?.role === "owner",
+        pro: plan === "free" ? plans.pro : null,
+        offer: offer?.audience ?? null,
+      }}
       resetsIn={formatTimeUntil(usage.opensAt)}
       usage={usage}
     />

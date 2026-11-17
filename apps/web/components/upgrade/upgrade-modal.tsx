@@ -286,7 +286,7 @@ function ModalBody({
         <caption className="sr-only">Free and Pro compared</caption>
         <thead>
           <tr className="border-b border-border">
-            <td />
+            <td className="pb-2 text-xs text-muted-foreground">Per workspace</td>
             <th className="pb-2 text-right text-xs font-medium text-muted-foreground" scope="col">
               Free
             </th>
