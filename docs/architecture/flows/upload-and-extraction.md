@@ -163,8 +163,9 @@ the round, under `pg_advisory_xact_lock` on the user and the workspace, so paral
 refuses, the file stored in step 7 is deleted.
 
 A storage refusal is a 429 with `{ error, kind: "storage", full }` and no `Retry-After`. The batch queue
-(`lib/capture/batch-queue.ts`) marks that file `skipped` ("Doesn't fit", with a toast) and never sends it again;
-with `full` it also stops, keeping the rest waiting, and Scan stays off until the server's count shows room. While
+(`lib/capture/batch-queue.ts`) marks a file that doesn't fit `skipped` ("Doesn't fit", with a toast) and never
+sends it again. With `full` it stops instead, keeping that file and the rest waiting, and Scan stays off until the
+server's count shows room. While
 storage is full and nothing is picked, the panel shows its full state instead of the drop zone.
 
 ## 3. Queued mode

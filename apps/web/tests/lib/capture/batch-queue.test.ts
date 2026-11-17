@@ -190,14 +190,14 @@ describe("batch queue", () => {
     });
   });
 
-  it("stops once storage is full, keeping the rest waiting", async () => {
+  it("stops once storage is full, keeping that file and the rest waiting", async () => {
     const { calls, upload } = manualUploader();
     const q = createBatchQueue({ mode: "queued", upload, concurrency: 1 });
     q.add(entries(["a", "b"]));
     q.start();
     calls[0]!.settle({ ok: false, error: "Storage is full", status: 429, storage: "full" });
     await flush();
-    expect(statuses(q)).toEqual(["skipped", "waiting"]);
+    expect(statuses(q)).toEqual(["waiting", "waiting"]);
     expect(q.getSnapshot()).toMatchObject({
       stopped: "Storage is full",
       stoppedBy: "storage",

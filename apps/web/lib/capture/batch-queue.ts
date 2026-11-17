@@ -2,8 +2,8 @@
  * Uploads a batch with limited concurrency, per-item progress and retry. Framework-free:
  * the panel subscribes to snapshots. A 429 for the per-minute limit pauses the queue until
  * `Retry-After` and then resumes on its own; a 429 with a long wait (the daily limit) stops
- * it, leaving the rest waiting so nothing is lost. A file the workspace's storage has no room
- * for is skipped and never sent again; once storage is full the queue stops.
+ * it, leaving the rest waiting so nothing is lost. A file too big for the room left is skipped
+ * and never sent again; once storage is full the queue stops, and that file waits with the rest.
  */
 
 export type UploadOutcome =
@@ -17,7 +17,7 @@ export type UploadOutcome =
       storage?: "full" | "no-fit";
     };
 
-/** `skipped`: refused for storage; `start()` and `retry()` leave it alone. */
+/** `skipped`: too big for the room left; `start()` and `retry()` leave it alone. */
 export type ItemStatus = "waiting" | "uploading" | "done" | "error" | "skipped";
 export type QueueItem<T = unknown> = {
   id: string;
@@ -124,13 +124,13 @@ export function createBatchQueue<T, M>({
     if (!items.some((item) => item.id === id)) return pump();
     if (outcome.ok) {
       patch(id, { status: "done", progress: 1, receiptId: outcome.receiptId });
-    } else if (outcome.storage) {
+    } else if (outcome.storage === "no-fit") {
       patch(id, { status: "skipped", progress: 0, error: outcome.error });
-      if (outcome.storage === "full") {
-        stopped = outcome.error;
-        stoppedBy = "storage";
-        wanted = false;
-      }
+    } else if (outcome.storage === "full") {
+      patch(id, { status: "waiting", progress: 0 });
+      stopped = outcome.error;
+      stoppedBy = "storage";
+      wanted = false;
     } else if (outcome.status === 429) {
       const wait = outcome.retryAfterSeconds ?? MAX_AUTO_WAIT_SECONDS + 1;
       if (wait <= MAX_AUTO_WAIT_SECONDS) {

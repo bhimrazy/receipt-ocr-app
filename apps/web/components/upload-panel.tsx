@@ -459,7 +459,7 @@ export function UploadPanel({
       mode: "queued",
       upload: async (item, mode, onProgress) => {
         const outcome = await postReceipt(item.file, mode, onProgress);
-        if (!outcome.ok && outcome.storage) {
+        if (!outcome.ok && outcome.storage === "no-fit") {
           toast.add({
             title: `Skipped ${item.file.name}`,
             description: outcome.error,
@@ -826,7 +826,7 @@ export function UploadPanel({
           <p>
             {snapshot.stopped}{" "}
             {snapshot.stoppedBy === "storage"
-              ? "The rest are still in the list; add them once there's room."
+              ? "These are still in the list; scan them once there's room."
               : "The rest are still here; scan them when your limit resets."}
           </p>
         </Alert>
