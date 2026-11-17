@@ -411,16 +411,6 @@ function ItemProgress({
       </>
     );
   }
-  if (item.status === "skipped") {
-    return (
-      <>
-        <CircleAlert aria-hidden="true" className="mt-px size-3 shrink-0" />
-        <span>
-          <span className="font-medium">Doesn&apos;t fit.</span> {item.error}
-        </span>
-      </>
-    );
-  }
   return (
     <>
       <CircleAlert aria-hidden="true" className="size-3 shrink-0" />
@@ -784,7 +774,8 @@ export function UploadPanel({
             </p>
             <p className="mt-1 text-sm text-muted-foreground" id="upload-hint">
               Photos of any size, which you can crop before they are shrunk and uploaded, or PDFs up
-              to {formatStorage(UPLOAD_LIMIT_BYTES)}. Up to {batchMax} at a time.
+              to <span className="whitespace-nowrap">{formatStorage(UPLOAD_LIMIT_BYTES)}</span>. Up
+              to {batchMax} at a time.
             </p>
             <p aria-live="polite" className="mt-1 text-sm text-muted-foreground">
               {preparing ? (
@@ -896,14 +887,22 @@ export function UploadPanel({
                     <p className="truncate font-mono text-xs">{item.payload.file.name}</p>
                     <p
                       className={cn(
-                        "mt-0.5 flex gap-1.5 text-xs",
-                        item.status === "skipped" ? "items-start" : "items-center",
+                        "mt-0.5 flex items-center gap-1.5 text-xs",
                         item.status === "error" || item.status === "skipped"
                           ? "text-destructive"
                           : "text-muted-foreground",
                       )}
                     >
-                      {item.status !== "waiting" ? (
+                      {item.status === "skipped" ? (
+                        // The reason was in the toast or the alert above; the row keeps the size.
+                        <>
+                          <CircleAlert aria-hidden="true" className="size-3 shrink-0" />
+                          Doesn&apos;t fit ·{" "}
+                          <span className="font-mono tabular-nums">
+                            {formatStorage(item.payload.file.size, "up")}
+                          </span>
+                        </>
+                      ) : item.status !== "waiting" ? (
                         <ItemProgress
                           instant={instant}
                           item={item}

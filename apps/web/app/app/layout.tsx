@@ -93,7 +93,7 @@ const METER_SKELETON_HEIGHT = {
   line: "h-[7rem] max-md:h-[8.75rem]",
 } as const;
 // The storage row from NEAR_RATIO, and its note once full.
-const STORAGE_SKELETON_HEIGHT = { none: "", near: "h-[3.3rem]", full: "h-[6.3rem]" } as const;
+const STORAGE_SKELETON_HEIGHT = { none: "", near: "h-[3.3rem]", full: "h-[6.8rem]" } as const;
 
 function MeterSkeleton({
   kind,
