@@ -16,6 +16,7 @@ import {
 import { backfillRun } from "../../src/jobs/kinds/receipt-file-size-backfill";
 import { ingestUpload, purgeReceiptFiles } from "../../src/pipeline";
 import type { ReceiptScope } from "../../src/repository";
+import { StorageError } from "../../src/errors";
 import { Db, Storage } from "../../src/services";
 import { ensurePersonalWorkspace } from "../../src/workspace";
 
@@ -203,5 +204,35 @@ describe.skipIf(!enabled)("receipt.file_size_backfill against Postgres and S3", 
     await schedule();
     await drainBackfill();
     expect(await sizes(ids)).toEqual([JPEG.byteLength]);
+  });
+
+  it("sizes the rest when one object can't be read, and retries only when nothing could be", async () => {
+    const scope = await createUser("eve");
+    scopes.push(scope);
+    const { ids, keys } = await unsized(scope, 4);
+    const bad = keys[1]!;
+    const flaky = Effect.flatMap(Storage, (real) =>
+      Effect.succeed({
+        ...real,
+        size: (key: string) =>
+          key === bad ? Effect.fail(new StorageError({ message: "HTTP 500" })) : real.size(key),
+      }),
+    );
+    const withFlaky = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      Effect.flatMap(flaky, (storage) => Effect.provideService(effect, Storage, storage));
+
+    const first = await run(
+      withFlaky(backfillRun(RECEIPT_FILE_SIZE_BACKFILL, { batch: 2, batches: 5 })),
+    );
+    expect(first).toMatchObject({ failed: 1, more: false, stalled: false });
+    expect(await sizes(ids)).toEqual([JPEG.byteLength, null, JPEG.byteLength, JPEG.byteLength]);
+    expect(await backfillJobs()).toEqual([]);
+
+    // Only the unreadable one is left: the run made no progress, so the job retries later.
+    const again = await run(withFlaky(backfillRun(RECEIPT_FILE_SIZE_BACKFILL)));
+    expect(again).toMatchObject({ scanned: 1, failed: 1, stalled: true });
+
+    await run(backfillRun(RECEIPT_FILE_SIZE_BACKFILL));
+    expect(await sizes(ids)).toEqual(Array(4).fill(JPEG.byteLength));
   });
 });

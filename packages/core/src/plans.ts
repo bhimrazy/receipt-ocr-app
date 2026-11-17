@@ -93,9 +93,10 @@ export function formatStorage(bytes: number, round: "down" | "up" = "down"): str
   const fixed = (value: number, unit: string) => `${r(value * 10) / 10} ${unit}`;
   if (bytes <= 0) return "0 MB";
   if (bytes < KB) return round === "down" ? "<1 KB" : "1 KB";
-  if (bytes < MB) return `${r(bytes / KB)} KB`;
+  // Rounding up can reach 1000 of a unit; that is the next unit's 1.
+  if (bytes < MB) return r(bytes / KB) < 1000 ? `${r(bytes / KB)} KB` : "1 MB";
   if (bytes < 10 * MB) return fixed(bytes / MB, "MB");
-  if (bytes < GB) return `${r(bytes / MB)} MB`;
+  if (bytes < GB) return r(bytes / MB) < 1000 ? `${r(bytes / MB)} MB` : "1 GB";
   return fixed(bytes / GB, "GB");
 }
 

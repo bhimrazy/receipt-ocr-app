@@ -1,6 +1,7 @@
 import { sql } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { z } from "zod";
+import { StorageError } from "../../errors";
 import { Db, Storage } from "../../services";
 import { annotateEvent } from "../../telemetry/current";
 import { logger } from "../../telemetry/logger";
@@ -81,35 +82,49 @@ export const resetFileSizeBackfillSchedule = () => {
   scheduled = false;
 };
 
-type BatchResult = { scanned: number; filled: number; missing: number };
+type BatchResult = { scanned: number; filled: number; missing: number; failed: string[] };
 
 /**
- * One batch: up to `limit` receipts (every workspace) with a stored file and no size. The HEADs run
- * outside any transaction; one UPDATE then writes each size, or 0 for a missing object, only where
- * none is set yet, so an upload's own size is never overwritten and a rerun changes nothing. Every
- * row it reads gets a value, so the next batch moves on without a cursor.
+ * One batch: up to `limit` receipts (every workspace, by id) with a stored file and no size,
+ * leaving out `skip`. The HEADs run outside any transaction and each on its own: a missing object
+ * gets 0, and one that can't be read (a 403, a 5xx) is returned in `failed` for the caller to skip,
+ * so it never holds back the rows after it. One UPDATE then writes the sizes found, only where none
+ * is set yet, so an upload's own size is never overwritten and a rerun changes nothing.
  */
-export const backfillBatch = (limit = BACKFILL_BATCH) =>
+export const backfillBatch = (limit = BACKFILL_BATCH, skip: readonly string[] = []) =>
   Effect.gen(function* () {
     const { use } = yield* Db;
     const storage = yield* Storage;
+    const skipped =
+      skip.length === 0
+        ? sql``
+        : sql`and id not in (${sql.join(
+            skip.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`;
     const { rows } = yield* use((db) =>
       db.execute<{ id: string; key: string }>(
-        sql`select id, image_object_key as key from receipts where ${UNSIZED} limit ${limit}`,
+        sql`select id, image_object_key as key from receipts where ${UNSIZED} ${skipped} order by id limit ${limit}`,
       ),
     );
-    const sizes = yield* Effect.forEach(
+    const results = yield* Effect.forEach(
       rows,
       (row) =>
         storage.size(row.key).pipe(
-          Effect.map((bytes) => ({ id: row.id, bytes, missing: false })),
+          Effect.map((bytes) => ({ id: row.id, bytes, missing: false, failed: false })),
           Effect.catchIf(
             (error) => error._tag === "StorageError" && error.kind === "not-found",
-            () => Effect.succeed({ id: row.id, bytes: 0, missing: true }),
+            () => Effect.succeed({ id: row.id, bytes: 0, missing: true, failed: false }),
+          ),
+          // Storage not configured fails the run; any other storage error fails only this row.
+          Effect.catchTag("StorageError", () =>
+            Effect.succeed({ id: row.id, bytes: 0, missing: false, failed: true }),
           ),
         ),
       { concurrency: CONCURRENCY },
     );
+    const sizes = results.filter((r) => !r.failed);
+    const failed = results.filter((r) => r.failed).map((r) => r.id);
     if (sizes.length > 0) {
       const values = sql.join(
         sizes.map(({ id, bytes }) => sql`(${id}::uuid, ${bytes}::int)`),
@@ -123,12 +138,19 @@ export const backfillBatch = (limit = BACKFILL_BATCH) =>
       );
     }
     const missing = sizes.filter((size) => size.missing).length;
-    return { scanned: rows.length, filled: rows.length - missing, missing } satisfies BatchResult;
+    return {
+      scanned: rows.length,
+      filled: sizes.length - missing,
+      missing,
+      failed,
+    } satisfies BatchResult;
   });
 
 /**
- * One run: batches until one comes back short or `batches` have run, then a follow-up job under
- * the other key if any receipt still has no size. `key` is the running job's idempotency key.
+ * One run: batches until one comes back short or `batches` have run, skipping rows whose object
+ * couldn't be read for the rest of the run, then a follow-up job under the other key if any other
+ * receipt still has no size. `stalled`: it read rows but sized none, so the job should retry later.
+ * `key` is the running job's idempotency key.
  */
 export const backfillRun = (
   key: string | null,
@@ -139,18 +161,28 @@ export const backfillRun = (
     let scanned = 0;
     let filled = 0;
     let missing = 0;
+    const failed: string[] = [];
     for (let i = 0; i < batches; i++) {
-      const result: BatchResult = yield* backfillBatch(batch);
+      const result: BatchResult = yield* backfillBatch(batch, failed);
       scanned += result.scanned;
       filled += result.filled;
       missing += result.missing;
+      failed.push(...result.failed);
       if (result.scanned < batch) break;
     }
     // Checked again rather than inferred from the last batch: an older release may have written a
-    // row during this run.
+    // row during this run. Rows that failed here wait for the next process's first drain, so a
+    // permanently unreadable object can't keep a chain of follow-ups going.
+    const exclude =
+      failed.length === 0
+        ? sql``
+        : sql`and id not in (${sql.join(
+            failed.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`;
     const { rows } = yield* use((db) =>
       db.execute<{ more: boolean }>(
-        sql`select exists (select 1 from receipts where ${UNSIZED}) as more`,
+        sql`select exists (select 1 from receipts where ${UNSIZED} ${exclude}) as more`,
       ),
     );
     const more = rows[0]?.more === true;
@@ -158,7 +190,8 @@ export const backfillRun = (
       const next = key === KEYS[0] ? KEYS[1] : KEYS[0];
       yield* use((db) => enqueueJob(db, fileSizeBackfillJob(next)));
     }
-    return { scanned, filled, missing, more };
+    const stalled = failed.length > 0 && filled + missing === 0;
+    return { scanned, filled, missing, failed: failed.length, more, stalled };
   });
 
 export const receiptFileSizeBackfill: JobDefinition<BackfillPayload, Db | Storage> = {
@@ -170,8 +203,15 @@ export const receiptFileSizeBackfill: JobDefinition<BackfillPayload, Db | Storag
 
   run: (_payload, { job }) =>
     backfillRun(job.idempotencyKey).pipe(
-      Effect.tap(({ scanned, filled, missing }) =>
-        annotateEvent({ counts: { scanned, filled, missing } }),
+      Effect.tap(({ scanned, filled, missing, failed }) =>
+        annotateEvent({ counts: { scanned, filled, missing, failed } }),
+      ),
+      Effect.flatMap((result) =>
+        result.stalled
+          ? Effect.fail(
+              new StorageError({ message: "No receipt file's size could be read in this run" }),
+            )
+          : Effect.succeed(result),
       ),
       Effect.tapError((error) => annotateEvent({ error: errorFields(error) })),
       Effect.mapError((error) => {

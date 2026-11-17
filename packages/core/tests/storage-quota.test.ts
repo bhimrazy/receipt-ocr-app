@@ -24,6 +24,15 @@ describe("formatStorage", () => {
     expect(formatStorage(4 * 1024 * 1024, "up")).toBe("4.2 MB");
     expect(formatStorage(412, "up")).toBe("1 KB");
   });
+
+  it("moves to the next unit when rounding up reaches 1000", () => {
+    expect(formatStorage(999_999, "up")).toBe("1 MB");
+    expect(formatStorage(999_999)).toBe("999 KB");
+    expect(formatStorage(999.9 * MB, "up")).toBe("1 GB");
+    expect(formatStorage(999.9 * MB)).toBe("999 MB");
+    expect(formatStorage(9.95 * MB, "up")).toBe("10 MB");
+    expect(formatStorage(1_000_000)).toBe("1 MB");
+  });
 });
 
 describe("storage cap", () => {
