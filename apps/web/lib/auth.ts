@@ -81,6 +81,8 @@ import {
 } from "./env";
 import { errorFields, logger } from "./log";
 import { mailer } from "./mailer";
+import { hashPassword, verifyPassword } from "./password";
+import { upgradePasswordHash } from "./password-upgrade";
 import { isEmailChangeVerification, queueWelcomeEmail, welcomeAtCreation } from "./welcome";
 import { runtime } from "./runtime";
 import { wantsProductUpdates, requestProductUpdates } from "./newsletter";
@@ -313,6 +315,7 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 8,
     maxPasswordLength: 128,
+    password: { hash: hashPassword, verify: verifyPassword },
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: RESET_LINK_SECONDS,
     requireEmailVerification,
@@ -468,7 +471,10 @@ export const auth = betterAuth({
       if (ctx.path === "/sign-in/email") {
         // Only a successful sign-in (the real password) resets the count.
         const email = signInEmail(ctx.body);
-        if (email && !isAPIError(ctx.context.returned)) await clearSignInAttempts(email);
+        if (email && !isAPIError(ctx.context.returned)) {
+          await clearSignInAttempts(email);
+          await upgradePasswordHash(db, email, (ctx.body as { password?: unknown }).password);
+        }
         return;
       }
       const returned = ctx.context.returned as
