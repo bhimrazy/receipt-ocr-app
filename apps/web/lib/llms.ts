@@ -30,7 +30,7 @@ export function llmsTxt(): string {
     "",
     summary,
     "",
-    "Upload a receipt photo or PDF (JPEG, PNG, WebP, HEIC, PDF) and get the merchant, date, line items, tax and total as rows you can check and export as CSV or copy as JSON. Each receipt has a confidence score, receipts with a missing total or date or totals that do not add up are flagged for review, and lines whose numbers do not add up are marked. Receipts are private to a workspace that can be shared with teammates. The web app installs as a PWA on iOS and Android.",
+    "Upload a receipt photo or PDF (JPEG, PNG, WebP, HEIC, PDF) and get the merchant, date, line items, tax and total as rows you can check and export as CSV or copy as JSON. Receipts with a missing total or date or totals that do not add up are flagged for review, and lines whose numbers do not add up are marked. Receipts are private to a workspace that can be shared with teammates. The web app installs as a PWA on iOS and Android.",
     "",
     "## Pages",
     "",

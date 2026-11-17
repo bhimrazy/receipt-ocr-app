@@ -9,7 +9,7 @@ export const useCasesCollection: ContentCollection = {
     "How expense claimants, bookkeepers, freelancers and small business teams use ReceiptOCR to turn receipt photos and PDFs into CSV rows they can check.",
   h1: "Receipt scanner use cases: who uses ReceiptOCR, and how",
   intro:
-    "The same extraction runs for everyone: merchant, date, category, line items, tax, tip and total, with a confidence score for the receipt. What changes is what happens next. Pick the workflow closest to yours.",
+    "The same extraction runs for everyone: merchant, date, category, line items, tax, tip and total. What changes is what happens next. Pick the workflow closest to yours.",
   heroArt: "pipeline",
   updated: "2026-11-08",
 };
@@ -173,10 +173,10 @@ export const useCasePages: ContentPage[] = [
     fact: "VAT or sales tax",
     title: "Receipt OCR for Bookkeepers and Accountants",
     description:
-      "Client receipts become CSV rows with subtotal, VAT or sales tax, total, category and a confidence score, plus a Needs review list of what to check first.",
+      "Client receipts become CSV rows with subtotal, VAT or sales tax, total and category, plus a Needs review list of what to check first.",
     h1: "Receipt data entry for bookkeepers, with the checking built in",
     intro:
-      "Clients send receipts as phone photos, scanned PDFs and crumpled paper. Typing them in is slow, and an OCR tool that reads them without saying how sure it is only moves the work to checking everything. ReceiptOCR gives every receipt and every line a confidence score, so you check the receipts that need it and sample the rest.",
+      "Clients send receipts as phone photos, scanned PDFs and crumpled paper. Typing them in is slow, and an OCR tool that reads them without saying how sure it is only moves the work to checking everything. ReceiptOCR flags receipts with a missing field or totals that do not add up, and marks lines whose numbers do not add up, so you check the receipts that need it and sample the rest.",
     updated: "2026-11-08",
     sections: [
       {
@@ -417,7 +417,7 @@ export const useCasePages: ContentPage[] = [
           "Keeps the original photo or PDF next to the extracted data",
           "Totals spending per currency, without mixing currencies",
           "Exports any date range as one CSV",
-          "Scores every receipt and every line for confidence",
+          "Exports a confidence column for every receipt and line",
         ],
         doesnt: [
           "Give tax advice",
@@ -537,7 +537,7 @@ export const useCasePages: ContentPage[] = [
       {
         heading: "What the person doing the books gets",
         paragraphs: [
-          "Every receipt arrives with merchant, date, category, line items, tax and total, and a confidence score for the receipt. The Needs review filter collects receipts with a missing field, totals that do not add up or an unclear date; each receipt's page also marks lines whose numbers do not add up and amounts that do not add up to the total. Corrections to the header fields are what gets exported.",
+          "Every receipt arrives with merchant, date, category, line items, tax and total. The Needs review filter collects receipts with a missing field, totals that do not add up or an unclear date; each receipt's page also marks lines whose numbers do not add up and amounts that do not add up to the total. Corrections to the header fields are what gets exported.",
           "The app's home screen shows the workspace's spending this month and over time, per currency. When it is time to update the books, the Receipts list exports any filtered set (a month, a category, a job) as one CSV.",
         ],
       },

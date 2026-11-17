@@ -507,7 +507,7 @@ const welcome: EmailDefinition = {
   slots: ["url", "urlLabel", "planLine"],
   render(v, shared) {
     const heading = "Your account is ready";
-    const intro = `Thanks for joining ${BRAND}. It turns receipt photos into spreadsheet rows: merchant, date, line items, tax and total, each with a confidence score.`;
+    const intro = `Thanks for joining ${BRAND}. It turns receipt photos into spreadsheet rows: merchant, date, line items, tax and total.`;
     const steps = [
       {
         lead: "Take a photo or upload a file.",
@@ -515,7 +515,7 @@ const welcome: EmailDefinition = {
       },
       {
         lead: "Check the fields.",
-        rest: "Low-confidence lines are marked so you know what to fix.",
+        rest: "Lines whose numbers don't add up are marked so you know what to fix.",
       },
       { lead: "Export a CSV,", rest: "for one receipt or your whole history." },
     ];
