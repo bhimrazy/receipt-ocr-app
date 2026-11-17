@@ -9,7 +9,7 @@ import { selectCurrency, ThisMonthCard } from "@/components/dashboard/spend-dash
 import { SectionBoundary } from "@/components/section-error";
 import { ListPoller } from "@/components/processing-poller";
 import { ReceiptList } from "@/components/receipt-list";
-import { PlanState, UploadPanel } from "@/components/upload-panel";
+import { PlanState, UploadPanel, type LimitPlan } from "@/components/upload-panel";
 import { UpgradeHomeCard } from "@/components/upgrade/upgrade-home-card";
 import { formatTimeUntil } from "@/lib/format";
 import { errorFields, logger } from "@/lib/log";
@@ -37,6 +37,7 @@ import { getReceiptCounts, getUsageSummary, listRecentReceipts } from "@/lib/rec
 import { logPageRender } from "@/lib/page-event";
 import { getSpendView } from "@/lib/spend";
 import { getUpgradeOffer } from "@/lib/upgrade-offer";
+import { getActiveScope } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -202,14 +203,20 @@ async function HomeDescription() {
 
 /** Below md the Scan tab replaces the panel, except in an empty workspace where it is the only action. */
 async function UploadSection() {
-  const [usage, { plan, policy }, offer, plans, counts] = await Promise.all([
+  const [usage, { plan, policy }, offer, plans, counts, scope] = await Promise.all([
     getUsageSummary(),
     getCurrentPlan(),
     getUpgradeOffer(),
     getPlanTable(),
     getReceiptCounts(),
+    getActiveScope(),
   ]);
-  const limitPlan = { pro: plan === "free" ? plans.pro : null, offer: offer?.audience ?? null };
+  const limitPlan: LimitPlan = {
+    plan,
+    owner: scope?.role === "owner",
+    pro: plan === "free" ? plans.pro : null,
+    offer: offer?.audience ?? null,
+  };
   const resetsIn = formatTimeUntil(usage.opensAt);
   return (
     <>

@@ -47,11 +47,11 @@ describe("meterNote", () => {
   });
 
   it("adds the reset date from 80% of the month", () => {
-    expect(meterNote(usage(40, 5))).toBe("10 left · resets 1 Dec");
+    expect(meterNote(usage(40, 5))).toBe("10 left · resets 1 December");
   });
 
   it("puts a used-up month before a used-up day, and gives the UTC opening time", () => {
-    expect(meterNote(usage(50, 20, { blocked: "month" }))).toBe("Limit reached · opens 1 Dec");
+    expect(meterNote(usage(50, 20, { blocked: "month" }))).toBe("Limit reached · opens 1 December");
     expect(
       meterNote(usage(30, 20, { blocked: "day", opensAt: new Date("2026-11-15T00:00:00Z") })),
     ).toBe("Today's limit reached · opens 00:00 UTC");
@@ -71,7 +71,7 @@ describe("meterNote", () => {
 describe("stripNote", () => {
   it("shows from 80% of either window while uploads are open", () => {
     expect(stripNote(usage(9, 5))).toBeNull();
-    expect(stripNote(usage(40, 5))).toBe("10 scans left this month · resets 1 Dec");
+    expect(stripNote(usage(40, 5))).toBe("10 scans left this month · resets 1 December");
     expect(stripNote(usage(25, 17))).toBe("3 scans left today");
     expect(stripNote(usage(50, 0, { blocked: "month" }))).toBeNull();
   });

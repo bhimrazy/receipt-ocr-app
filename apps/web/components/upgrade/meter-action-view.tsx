@@ -9,7 +9,7 @@ import { ASK_OWNER } from "@/lib/upgrade-copy";
 import { UpgradeTrigger } from "./upgrade-trigger";
 
 const textLink =
-  "font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:inline-flex max-md:min-h-11 max-md:items-center";
 
 /** What `meterAction` decided, drawn the same on the usage card and the phone strip. */
 export function MeterActionView({

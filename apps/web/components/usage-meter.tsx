@@ -2,6 +2,7 @@ import { Badge } from "@receipt-ocr/ui/components/badge";
 import { cn } from "@receipt-ocr/ui/lib/utils";
 import { CircleAlert } from "lucide-react";
 import { formatTime } from "@/lib/format";
+import { resetDay } from "@/lib/upgrade-copy";
 import { NEAR_RATIO, usageRatio } from "@/lib/upgrade-level";
 
 export type Usage = {
@@ -52,13 +53,6 @@ const barWarns = (usage: Usage) =>
 export const usageWarns = (usage: Usage) =>
   usage.blocked !== null || usageRatio(usage) >= NEAR_RATIO || dayNear(usage);
 
-const resetDay = (date: Date) =>
-  date.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
-
-/** "1 Dec", the meter's short date. */
-const shortDay = (date: Date) =>
-  date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-
 /** The full sentence about the room left, with the UTC reset time: Billing and the upload panel. */
 export function usageNote(usage: Usage): string {
   const { used, limit, blocked, period } = usage;
@@ -96,11 +90,11 @@ export function meterNote(usage: Usage): string {
       ? `Limit reached · opens ${formatTime(usage.resetsAt)}`
       : `${left} left today`;
   }
-  if (blocked === "month" || left === 0) return `Limit reached · opens ${shortDay(usage.resetsAt)}`;
+  if (blocked === "month" || left === 0) return `Limit reached · opens ${resetDay(usage.resetsAt)}`;
   if (blocked === "day") return `Today's limit reached · opens ${formatTime(usage.opensAt)}`;
   if (dayNear(usage)) return `${usageRemaining(usage)} left today`;
   return usageRatio(usage) >= NEAR_RATIO
-    ? `${left} left · resets ${shortDay(usage.resetsAt)}`
+    ? `${left} left · resets ${resetDay(usage.resetsAt)}`
     : `${left} left this month`;
 }
 
@@ -114,7 +108,7 @@ export function stripNote(usage: Usage): string | null {
   if (dayNear(usage) || (usage.period === "day" && usageRatio(usage) >= NEAR_RATIO))
     return `${scans(usageRemaining(usage))} left today`;
   if (usageRatio(usage) < NEAR_RATIO) return null;
-  return `${scans(Math.max(0, usage.limit - usage.used))} left this month · resets ${shortDay(usage.resetsAt)}`;
+  return `${scans(Math.max(0, usage.limit - usage.used))} left this month · resets ${resetDay(usage.resetsAt)}`;
 }
 
 /**
