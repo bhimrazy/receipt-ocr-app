@@ -23,7 +23,7 @@ export function UpgradeHomeCard({ offer }: { offer: UpgradeOffer }) {
   }
 
   return (
-    <Card className="border-primary/30 p-5 max-lg:-order-1">
+    <Card className="border-primary/30 p-5 max-lg:hidden">
       <div className="flex items-start gap-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary">
           <Sparkles aria-hidden="true" className="size-4" />

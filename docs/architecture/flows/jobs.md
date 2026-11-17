@@ -190,8 +190,9 @@ index and the stale rule ignore it.
 message is stored, and only within `allowContactReply` in `lib/email-limits.ts`: 1 reply per address and 3 per IP a
 day (hashed keys in `app_rate_limits`; a limiter failure skips the reply). The payload is the typed address, a first name
 already cleaned by `greetingName` and the topic id, never the message. It is sent through `ContactReplyMailer`
-(`lib/contact-reply-mailer.ts`), 3 attempts. The kind sets `scrubPayload`, so `settle` replaces the payload with `{}` when the job
-succeeds or dies (a retry keeps it); the address and name are not kept in the `jobs` row.
+(`lib/contact-reply-mailer.ts`), 3 attempts. The kind sets `scrubPayload`, so the payload becomes `{}` whenever the job
+ends: `settle` on success or death, `reap` when a lease expires on the last attempt, and both cancel paths (a retry
+or a reap back to queued keeps it). An admin re-run of a scrubbed job is refused.
 
 `email.support-notify` ([`kinds/support-notify.ts`](../../../packages/core/src/jobs/kinds/support-notify.ts)) mails a notice (kind, sender name, short id and a link to `/admin/support`, never the text) of a
 stored support message to `SUPPORT_EMAIL`, reply-to the sender. `submitSupportMessage` enqueues it in the transaction
@@ -210,6 +211,10 @@ deletes data past its retention period, each table in turn:
 | `step_up_codes`           | 1 day after `expires_at` (a code lives 10 minutes; the send limit counts the last 10 minutes)                                                    | `purgeStepUpCodes` (`step-up/store.ts`)       |
 | `jobs`, succeeded         | 30 days after `finished_at`: the Operations page's longest range                                                                                 | `purgeFinishedJobs` (`jobs/retention.ts`)     |
 | `jobs`, dead or cancelled | 90 days after `finished_at`: what an admin investigates or re-runs                                                                               | `purgeFinishedJobs`                           |
+| `session`                 | 1 day after `expires_at` (its `step_up_codes` cascade)                                                                                           | `purgeExpiredSessions` (`retention.ts`)       |
+| `step_up_events`          | 90 days after `created_at`; the lockout reads 15 minutes and the replay check the current TOTP step                                              | `purgeStepUpEvents` (`retention.ts`)          |
+| `invitation`              | 30 days after `expires_at`, any status (queries only read `pending` ones)                                                                        | `purgeInvitations` (`retention.ts`)           |
+| `admin_audit_log`         | 2 years after `created_at`                                                                                                                       | `purgeAdminAuditLog` (`retention.ts`)         |
 | `app_rate_limits`         | 2 days after `window_start` (the longest window is a day)                                                                                        | `purgeRateLimits` (`workspace.ts`)            |
 | `account`, tokens only    | Nulls Google and GitHub tokens on any row that has one (written by an older release during a deploy, or a path the account hooks miss)           | `clearProviderTokens` (`account-security.ts`) |
 
@@ -217,7 +222,7 @@ Each delete repeats its predicate on the locked rows, so a row changed meanwhile
 re-ran) is kept. Deleting a finished job frees no idempotency key: keys only dedupe against live jobs, and an email's
 provider key is `job:<id>`, a random id never reused. The one reader of finished jobs is `enqueueWelcomeEmail`
 (welcome a user once ever), so `email.welcome` jobs stay while their user exists; account deletion nulls `user_id` and
-they go with the rest. `step_up_events` has no retention yet. The run's event has `counts` per table.
+they go with the rest. The run's event has `counts` per table.
 
 It runs once a day. The app has no scheduler of its own, so `drainQueue` (the drain route) first inserts the next day's
 run, due 00:00 UTC by the database clock and keyed `maintenance.purge:<that day>`; the key dedupes against the queued

@@ -224,7 +224,9 @@ test("at the limit the banner shows on Receipts, not on Home or Upload", async (
   await expect(
     page.getByText("Pro allows up to 200 a day in this workspace.").first(),
   ).toBeVisible();
-  await expect(page.locator("main").getByRole("link", { name: "Upgrade to Pro" })).toBeVisible();
+  const limit = page.locator("main");
+  await expect(limit.getByRole("link", { name: "Upgrade", exact: true })).toBeVisible();
+  await expect(limit.getByRole("link", { name: "Upgrade to Pro" })).toHaveCount(0);
   await expect(banner).toHaveCount(0);
   await page.goto("/app/upload");
   await expect(page.getByRole("heading", { name: "Daily limit reached" })).toBeVisible();
@@ -370,8 +372,8 @@ test.describe("on a phone, Home keeps the plan state outside the upload panel", 
 
     await spendShare(page, email, 0.35);
     await page.reload();
-    await expect(plan.getByText(/^\d+ scans? left this month$/)).toBeVisible();
-    await expect(plan.getByRole("button")).toHaveCount(0);
+    await expect(plan.getByText(/^\d+ scans? left this month · resets \d+ \w+$/)).toBeVisible();
+    await expect(plan.getByRole("link", { name: /^Upgrade/ })).toBeVisible();
     await expect(upload).toBeHidden();
 
     await addScans(email, 20, "month");
