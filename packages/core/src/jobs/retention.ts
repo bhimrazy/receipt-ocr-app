@@ -1,7 +1,6 @@
 import { and, inArray, jobs, sql, type SQL } from "@receipt-ocr/db";
 import { Effect } from "effect";
 import { Db } from "../services";
-import { RECEIPT_FILE_SIZE_BACKFILL } from "./kinds/receipt-file-size-backfill";
 import { RECEIPT_RECHECK } from "./kinds/receipt-recheck";
 import { WELCOME_EMAIL } from "./kinds/welcome-email";
 
@@ -15,7 +14,7 @@ export const FAILED_JOB_RETENTION_DAYS = 90;
  * finished one frees nothing that wasn't free already. The exception is `enqueueWelcomeEmail`, which
  * reads finished welcome jobs to welcome a user once ever: those stay until the account is deleted
  * (which nulls `user_id`). So do each version's first `receipt.recheck` job, which `scheduleRecheck`
- * reads to run that version once, and the first `receipt.file_size_backfill` job, for the same reason.
+ * reads to run that version once.
  */
 const expired = (states: readonly string[], days: number): SQL =>
   sql`${jobs.state} in (${sql.join(
@@ -23,8 +22,7 @@ const expired = (states: readonly string[], days: number): SQL =>
     sql`, `,
   )}) and ${jobs.finishedAt} < now() - make_interval(days => ${days})
     and not (${jobs.kind} = ${WELCOME_EMAIL} and ${jobs.userId} is not null)
-    and not (${jobs.kind} = ${RECEIPT_RECHECK} and ${jobs.payload}->>'after' is null)
-    and not (${jobs.kind} = ${RECEIPT_FILE_SIZE_BACKFILL} and ${jobs.payload}->>'after' is null)`;
+    and not (${jobs.kind} = ${RECEIPT_RECHECK} and ${jobs.payload}->>'after' is null)`;
 
 const EXPIRED = {
   succeeded: expired(["succeeded"], SUCCEEDED_JOB_RETENTION_DAYS),
