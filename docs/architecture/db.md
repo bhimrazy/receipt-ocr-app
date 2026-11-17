@@ -160,8 +160,8 @@ It uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
   `0013_storage_cap` (decided 2026-11-14); BYOK adds its own table, with encryption, when it is built.
 - **`receipts.file_bytes` is what the storage cap sums.** Written at upload (an `integer`: one file is at most
   `MAX_UPLOAD_BYTES`, 10 MB; the sum is taken as `bigint`), `CHECK (file_bytes >= 0)`. Null for receipts stored before
-  `0013`, until `receipt.file_size_backfill` reads their objects' sizes, and for those whose object is missing; null
-  counts as 0. `receipts.file_meta` (`jsonb`, nullable) holds only what the upload read from the bytes:
+  `0013`, until `receipt.file_size_backfill` reads their objects' sizes (0 where the object is missing); null counts
+  as 0. `receipts.file_meta` (`jsonb`, nullable) holds only what the upload read from the bytes:
   `{ contentType, width?, height? }`. The per-workspace sum reads `receipts_org_receipt_date_idx` (its leading column
   is `organization_id`): about 9 ms for a full Pro workspace of 26,000 receipts, measured on a seeded local database,
   so no index of its own.

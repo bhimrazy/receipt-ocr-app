@@ -363,8 +363,8 @@ deleted. `target_id` is not a foreign key for the same reason.
 
 `receipts.file_bytes` is the stored file's size, summed per workspace for the storage cap
 ([Billing](flows/billing.md)); `file_meta` is what the upload read from the bytes (`contentType`, and `width` and
-`height` for an image). Both are null on receipts stored before `0013`; `receipt.file_size_backfill` fills
-`file_bytes` from the objects, and leaves it null where the object is missing.
+`height` for an image). Both are null on receipts stored before `0013` (or by an older release during its deploy);
+`receipt.file_size_backfill` fills `file_bytes` from the objects, and writes 0 where the object is missing.
 
 ## Billing
 

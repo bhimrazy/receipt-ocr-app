@@ -430,9 +430,10 @@ From the [combined plan](plans/2026-11-06-combined-plan.md):
 'unmatched'`; fold it into the next schema change.
 - Storage cap per workspace (decided 2026-11-14: Free 100 MB, Pro 5 GB, admin-editable): `feat/storage-cap` adds
   `receipts.file_bytes` and `file_meta` (migration `0013`, which also drops `user_credentials`), the exact sum at
-  upload under the workspace lock, the backfill job and the plan-card lines. Left for after #290 (the usage card):
-  the storage row on Billing (always) and on the usage card (from 80%), and the storage-full card state with the
-  upgrade for a Free owner. The terms page doesn't list storage yet (it needs a `LEGAL_UPDATED` change).
+  upload under the workspace lock, the backfill job, and the storage UI in the same release (decided 2026-11-17): Billing
+  always, the usage card and phone strip from 80%, the upload panel's full state, the plan cards, the upgrade modal and
+  /terms. A file that doesn't fit is skipped and the batch carries on. Per-workspace overrides wait for a custom deal
+  (`workspace_limit_overrides`, see decisions). Re-measure `avg(file_bytes)` two weeks after the backfill.
 - The one-time "protect your receipts" card (after the fifth receipt) is dismissed with a per-browser cookie, so it
   shows once more on each new device. A per-user column (`user.security_prompt_dismissed_at`) needs a migration;
   fold it into the next schema change.

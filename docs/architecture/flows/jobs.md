@@ -282,17 +282,21 @@ the same version, re-run its job from `/admin/jobs`.
 `receipt.file_size_backfill`
 ([`kinds/receipt-file-size-backfill.ts`](../../../packages/core/src/jobs/kinds/receipt-file-size-backfill.ts)) fills
 `receipts.file_bytes` for receipts stored before uploads recorded it, so the [storage cap](billing.md) counts them.
-Like the recheck it has no `receipt_id`, and `drainQueue` queues it once: an insert keyed `receipt.file_size_backfill`,
-skipped when any job ever had that key (retention keeps that first job), checked once per process.
+Like the recheck it has no `receipt_id`. On each process's first drain, `drainQueue` queues it keyed
+`receipt.file_size_backfill` when a receipt with a stored file has no size and no backfill job is queued or running. So
+each deploy picks up rows an older release wrote during the rollout, and a run that died is started again.
 
-- A batch selects the next 100 receipts by id, across every workspace, with a stored file and no size. It HEADs their
+- A batch takes up to 100 receipts, across every workspace, with a stored file and `file_bytes is null`. It HEADs their
   objects through `Storage.size` (8 at a time, outside any transaction, nothing downloaded), then one `UPDATE` writes
-  the sizes found `where file_bytes is null`, so an upload's own size is never overwritten and a rerun changes nothing.
-- A missing object (404) leaves the row null, which the cap counts as 0, and is counted in the run's
-  `counts.missing`; the cursor moves past it, so the run doesn't stall on it.
-- A run does at most 5 batches and queues the rest as `receipt.file_size_backfill:<last id>`. Priority 9, 5 attempts,
-  lease 120 s. Storage not configured is dead at once (`storage-off`); a storage or database failure retries from the
-  run's own cursor.
+  each size `where file_bytes is null`, so an upload's own size is never overwritten and a rerun changes nothing.
+- A missing object (404) gets `file_bytes = 0` and is counted in the run's `counts.missing`. Every row a batch reads
+  gets a value, so the next batch moves on without a cursor.
+- A run does at most 5 batches, then checks again for any unsized receipt (including one written during the run) and,
+  if there is one, queues a follow-up under the other of its two keys (`receipt.file_size_backfill` and
+  `receipt.file_size_backfill:next`): its own key is still live while it runs, and a retry after that enqueue finds
+  the follow-up already queued. Priority 9, 5 attempts, lease 120 s. Storage not configured is dead at once
+  (`storage-off`); a storage or database failure retries. Its finished jobs follow the usual 30 and 90 days: nothing
+  reads them.
 
 ## Tables
 

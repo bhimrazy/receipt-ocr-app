@@ -35,10 +35,8 @@ export const decideStorage = (
   limitBytes,
 });
 
-const storageFull = ({
-  usedBytes,
-  limitBytes,
-}: Pick<StorageVerdict, "usedBytes" | "limitBytes">) => usedBytes >= limitBytes;
+const storageFull = ({ usedBytes, limitBytes }: Pick<StorageVerdict, "usedBytes" | "limitBytes">) =>
+  usedBytes >= limitBytes;
 
 /**
  * What a refused upload is told. Like `quotaMessage`, never "upgrade": the text is shown without a
